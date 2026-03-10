@@ -388,7 +388,8 @@ function transformForDB(data, shopDomain) {
                     couponId,
                     displayCondition: ov.displayCondition || "all",
                 };
-                if (ov.couponCode) condition.couponCode = ov.couponCode;
+                // Only store real coupon codes (not numeric GID tails)
+                if (ov.couponCode && !/^\d+$/.test(ov.couponCode)) condition.couponCode = ov.couponCode;
                 if (ov.headingText !== undefined) condition.headingText = ov.headingText;
                 if (ov.subtextText !== undefined) condition.subtextText = ov.subtextText;
                 if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
@@ -396,18 +397,15 @@ function transformForDB(data, shopDomain) {
                 if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
                 couponConditions.push(condition);
 
-                // Build style override (including the label/description we mapped earlier)
+                // Build style override — only actual visual style properties (colors, sizes etc.)
+                // Text/code overrides (couponCode, headingText, subtextText) belong in conditions only
+                const TEXT_OVERRIDE_KEYS = ["couponCode", "headingText", "subtextText", "label", "description"];
                 const styleOv = {};
                 for (const [k, v] of Object.entries(ov)) {
-                    if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
+                    if (!CONDITION_KEYS.includes(k) && !TEXT_OVERRIDE_KEYS.includes(k)) {
                         styleOv[k] = v;
                     }
                 }
-                // Explicitly send back headingText and subtextText if they exist in the override
-                if (ov.label) styleOv.headingText = ov.label;
-                if (ov.description) styleOv.subtextText = ov.description;
-                if (ov.headingText) styleOv.headingText = ov.headingText;
-                if (ov.subtextText) styleOv.subtextText = ov.subtextText;
 
                 if (Object.keys(styleOv).length > 0) {
                     couponStyles[couponId] = styleOv;

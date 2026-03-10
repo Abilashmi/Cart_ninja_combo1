@@ -919,6 +919,16 @@ function CouponsSection({ config, onSave, saving }) {
     };
 
     const handleSave = () => {
+        // Block save if coupon API data is still loading
+        if (isLoadingActiveCoupons) {
+            shopify.toast.show("Loading coupon data, please wait a moment and try again.", { isError: true });
+            return;
+        }
+        // If coupons are selected but API hasn't returned results yet, warn and block
+        if (selectedActiveCoupons.length > 0 && activeCouponsFromAPI.length === 0) {
+            shopify.toast.show("Coupon data not loaded yet. Please wait for the page to fully load, then save.", { isError: true });
+            return;
+        }
         // Validate per-coupon display conditions
         for (const couponId of selectedActiveCoupons) {
             const id = typeof couponId === 'string' ? couponId : couponId.id;
@@ -949,18 +959,25 @@ function CouponsSection({ config, onSave, saving }) {
         const filledOverrides = {};
         couponIds.forEach(couponId => {
             const override = couponOverrides[couponId] || {};
-            const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+            // Match by full ID or numeric tail (handles DiscountNode vs DiscountCodeNode mismatch)
+            const couponNumericId = couponId.split('/').pop();
+            const coupon = activeCouponsFromAPI.find(c =>
+                c.id === couponId || c.id.split('/').pop() === couponNumericId
+            );
             const base = templates[activeTemplate] || {};
             filledOverrides[couponId] = {
                 ...override,
+                // couponCode: always use the real code string from API; never a numeric GID tail
+                couponCode: coupon ? (coupon.code || coupon.label) : (override.couponCode || couponId.split('/').pop()),
+                // headingText / subtextText: use per-coupon override if set, otherwise template default
                 headingText:
                     override.headingText !== undefined
                         ? override.headingText
-                        : (coupon ? (coupon.code || coupon.label) : base.headingText),
+                        : base.headingText,
                 subtextText:
                     override.subtextText !== undefined
                         ? override.subtextText
-                        : (coupon ? (coupon.description || coupon.label) : base.subtextText),
+                        : base.subtextText,
             };
         });
         onSave({
@@ -1764,7 +1781,7 @@ function CouponsSection({ config, onSave, saving }) {
                     {/* No App Coupons found */}
                     {!isLoadingActiveCoupons && activeCouponsFromAPI.length === 0 && (
                         <Banner tone="info">
-                            <p>No active coupons were found in your store. Please create a coupon from the **Coupon Dashboard** first.</p>
+                            <p>No discount codes were found in your store. Please create one in Shopify Admin → Discounts first.</p>
                         </Banner>
                     )}
 
@@ -1814,6 +1831,7 @@ function CouponsSection({ config, onSave, saving }) {
                                                     <InlineStack gap="200" blockAlign="center">
                                                         <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
                                                         <Badge tone="info" size="small">{coupon.discountType.replace('_', ' ')}</Badge>
+                                                        <Badge tone={coupon.status === 'active' ? 'success' : 'warning'} size="small">{coupon.status}</Badge>
                                                     </InlineStack>
                                                     <Text variant="bodySm" tone="subdued" truncate>
                                                         {coupon.label} — {coupon.discountType === 'percentage'
