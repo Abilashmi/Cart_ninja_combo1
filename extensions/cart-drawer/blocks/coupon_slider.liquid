@@ -151,7 +151,7 @@ function renderSlider(el,data){
     var s=Object.assign({},def,ov);
     var cond=conds.find(function(c){return c.couponId===id;})||{};
 
-    var code=storedCode||cond.couponCode||s.couponCode||id.split('/').pop();
+    var code=storedCode||cond.couponCode||ov.couponCode||s.couponCode||id.split('/').pop();
     /* Priority: embedded item.h → condition.headingText → override.headingText → template default headingText → coupon code */
     var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:(s.headingText||code)));
     var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||'')));
