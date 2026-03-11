@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template3",
+  "activeTemplate": "template2",
   "templateData": {
     "template1": {
       "name": "Classic Banner",
@@ -30,22 +30,13 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountCodeNode/1289947381827",
-    "gid://shopify/DiscountAutomaticNode/1291464638531",
-    "gid://shopify/DiscountCodeNode/1291464540227"
+    "gid://shopify/DiscountRedeemCode/21741594542373"
   ],
   "couponOverrides": {
-    "gid://shopify/DiscountCodeNode/1289947381827": {
-      "headingText": "velwo",
-      "subtextText": "velwo"
-    },
-    "gid://shopify/DiscountAutomaticNode/1291464638531": {
-      "headingText": "guoonftb",
-      "subtextText": "guoonftb"
-    },
-    "gid://shopify/DiscountCodeNode/1291464540227": {
-      "headingText": "PSQEP5W9",
-      "subtextText": "PSQEP5W9"
+    "gid://shopify/DiscountRedeemCode/21741594542373": {
+      "couponCode": "JLJW3J2M",
+      "headingText": "SPECIAL OFFER",
+      "subtextText": "Free shipping on orders over ₹500"
     }
   },
   "shop": "cartapp-2.myshopify.com",

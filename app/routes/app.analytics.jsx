@@ -105,7 +105,7 @@ export default function AppAnalytics() {
   const fetchAnalytics = useCallback(async () => {
     setAnalytics(prev => ({ ...prev, loading: true, error: false }));
     try {
-      const response = await fetch(`https://prefixal-turbanlike-britt.ngrok-free.dev/analytics.php?shop=${shop}`);
+      const response = await fetch(`https://7d56-103-130-91-50.ngrok-free.ap/analytics.php?shop=${shop}`);
       if (!response.ok) throw new Error("Fetch failed");
       const data = await response.json();
       setAnalytics({
@@ -623,7 +623,7 @@ export default function AppAnalytics() {
             <BlockStack gap="600">
               {analytics.error && (
                 <Banner tone="critical">
-                  <p>Unable to fetch real-time analytics from <b>{`https://prefixal-turbanlike-britt.ngrok-free.dev`}</b>. Please check your server and CORS settings.</p>
+                  <p>Unable to fetch real-time analytics from <b>{`https://7d56-103-130-91-50.ngrok-free.ap`}</b>. Please check your server and CORS settings.</p>
                 </Banner>
               )}
               {analytics.loading && (

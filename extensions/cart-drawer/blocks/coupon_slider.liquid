@@ -149,18 +149,21 @@ function renderSlider(el,data){
     var storedH=isObj&&item.h!==undefined?item.h:null;
     var storedSub=isObj&&item.s!==undefined?item.s:null;
 
+    /* ov = per-coupon style overrides from temp*CouponStyle (couponCode, headingText, subtextText + colors) */
     var ov=map[id]||{};
     var s=Object.assign({},def,ov);
+    /* cond = display condition rules only (displayCondition, productHandles etc.) — no text/code here */
     var cond=conds.find(function(c){return c.couponId===id;})||{};
-    /* Filter out any purely-numeric coupon codes from condition/style as well */
-    var condCode=(cond.couponCode&&!/^\d+$/.test(cond.couponCode))?cond.couponCode:null;
+
+    /* couponCode: item.code (selectedTemplateCoupon) → ov.couponCode (temp*CouponStyle) → fallback */
     var ovCode=(ov.couponCode&&!/^\d+$/.test(ov.couponCode))?ov.couponCode:null;
     var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
+    var code=storedCode||ovCode||sCode||id.split('/').pop();
 
-    var code=storedCode||condCode||ovCode||sCode||id.split('/').pop();
-    /* Priority: embedded item.h → condition.headingText → override.headingText → template default headingText → coupon code */
-    var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:(s.headingText||code)));
-    var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||'')));
+    /* headingText: item.h → ov.headingText (per-coupon) → template default */
+    var h=storedH!==null?storedH:(ov.headingText!==undefined?ov.headingText:(s.headingText||code));
+    /* subtextText: item.s → ov.subtextText (per-coupon) → template default */
+    var sub=storedSub!==null?storedSub:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||''));
 
     w.appendChild(buildCard(tpl,s,code,h,sub));
   });

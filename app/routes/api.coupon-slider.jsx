@@ -384,25 +384,20 @@ function transformForDB(data, shopDomain) {
 
                 // Build condition — also store couponCode + text overrides here since
                 // temp*CouponCondition reliably saves to PHP (temp*CouponStyle may not)
+                // Condition = display rules only (which product/collection/tag to show on)
                 const condition = {
                     couponId,
                     displayCondition: ov.displayCondition || "all",
                 };
-                // Only store real coupon codes (not numeric GID tails)
-                if (ov.couponCode && !/^\d+$/.test(ov.couponCode)) condition.couponCode = ov.couponCode;
-                if (ov.headingText !== undefined) condition.headingText = ov.headingText;
-                if (ov.subtextText !== undefined) condition.subtextText = ov.subtextText;
                 if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
                 if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
                 if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
                 couponConditions.push(condition);
 
-                // Build style override — only actual visual style properties (colors, sizes etc.)
-                // Text/code overrides (couponCode, headingText, subtextText) belong in conditions only
-                const TEXT_OVERRIDE_KEYS = ["couponCode", "headingText", "subtextText", "label", "description"];
+                // Style = per-coupon overrides: couponCode, headingText, subtextText + visual styles
                 const styleOv = {};
                 for (const [k, v] of Object.entries(ov)) {
-                    if (!CONDITION_KEYS.includes(k) && !TEXT_OVERRIDE_KEYS.includes(k)) {
+                    if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
                         styleOv[k] = v;
                     }
                 }

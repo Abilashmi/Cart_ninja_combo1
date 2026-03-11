@@ -72,7 +72,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
-                  codes(first: 1) { edges { node { code } } }
+                  codes(first: 1) { edges { node { id code } } }
                   summary
                   customerGets {
                     value {
@@ -99,7 +99,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
-                  codes(first: 1) { edges { node { code } } }
+                  codes(first: 1) { edges { node { id code } } }
                   summary
                 }
                 ... on DiscountCodeFreeShipping {
@@ -107,7 +107,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
-                  codes(first: 1) { edges { node { code } } }
+                  codes(first: 1) { edges { node { id code } } }
                   summary
                 }
                 ... on DiscountAutomaticFreeShipping {
@@ -148,8 +148,13 @@ export async function loader({ request }) {
             .map(({ node }) => {
                 const d = node.discount;
                 let code = "";
+                let codeNodeId = node.id; // fallback to DiscountNode ID
                 if (d.codes && d.codes.edges.length > 0) {
                     code = d.codes.edges[0].node.code;
+                    // Use DiscountCodeNode ID so it matches the resource picker
+                    if (d.codes.edges[0].node.id) {
+                        codeNodeId = d.codes.edges[0].node.id;
+                    }
                 }
 
                 // Parse discount type and value
@@ -174,7 +179,7 @@ export async function loader({ request }) {
                 }
 
                 return {
-                    id: node.id,
+                    id: codeNodeId,
                     code: code || d.title,
                     label: d.title,
                     description: d.summary || "",
@@ -183,8 +188,8 @@ export async function loader({ request }) {
                     expiryDate: d.endsAt ? d.endsAt.split("T")[0] : "",
                     status: (d.status || "").toLowerCase(),
                 };
-            })
-            .filter((coupon) => coupon.status === "active"); // ← Only active coupons
+            });
+        // Return all discounts so merchant can pick any (active, expired, scheduled)
 
         return new Response(
             JSON.stringify({
