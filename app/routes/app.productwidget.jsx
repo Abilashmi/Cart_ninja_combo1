@@ -699,12 +699,18 @@ function CouponsSection({ config, onSave, saving }) {
     const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
-    const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(
-        (config?.selectedActiveCoupons || []).map(item => typeof item === 'string' ? item : item.id)
-    );
+    const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(() => {
+        const raw = (config?.selectedActiveCoupons || []).map(item => typeof item === 'string' ? item : item.id);
+        return [...new Set(raw)]; // deduplicate in case of stale duplicate IDs in stored data
+    });
 
     // --- State and Logic ---
-    const [couponOverrides, setCouponOverrides] = useState(config?.couponOverrides || {});
+    // Option A: per-template coupon overrides — each template owns its coupon styling independently
+    const [allTemplateOverrides, setAllTemplateOverrides] = useState(
+        config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {}, template4: {} }
+    );
+    // Derived: active template's overrides (read-only — use setAllTemplateOverrides to update)
+    const couponOverrides = allTemplateOverrides[activeTemplate] || {};
     const [previousCouponTexts, setPreviousCouponTexts] = useState({});
     const [activePreviewCouponId, setActivePreviewCouponId] = useState(null);
     const [activeCouponsFromAPI, setActiveCouponsFromAPI] = useState([]);
@@ -745,7 +751,7 @@ function CouponsSection({ config, onSave, saving }) {
         subtextText: effectiveSubtext
     };
 
-    // Helper: update a specific coupon's override field
+    // Helper: update a specific coupon's override field for the currently active template
     const updateCouponOverride = (couponId, field, value) => {
         setPreviousCouponTexts((prevTexts) => {
             const prevOverride = couponOverrides[couponId] || {};
@@ -758,16 +764,23 @@ function CouponsSection({ config, onSave, saving }) {
                 [couponId]: { headingText: prevHeading, subtextText: prevSubtext },
             };
         });
-        setCouponOverrides((prev) => ({
+        // Write into the active template's slot only — other templates are untouched
+        setAllTemplateOverrides((prev) => ({
             ...prev,
-            [couponId]: { ...prev[couponId], [field]: value },
+            [activeTemplate]: {
+                ...prev[activeTemplate],
+                [couponId]: { ...(prev[activeTemplate]?.[couponId] || {}), [field]: value },
+            },
         }));
     };
 
     // Helper: get the effective template for a specific coupon
     const getCouponTemplate = (couponId) => {
         const override = couponOverrides[couponId] || {};
-        const coupon = activeCouponsFromAPI.find(c => String(c.id) === String(couponId));
+        const tail = couponId.split('/').pop();
+        const coupon = activeCouponsFromAPI.find(c =>
+            String(c.id) === String(couponId) || c.id.split('/').pop() === tail
+        );
         const heading = override.headingText !== undefined
             ? override.headingText
             : (coupon ? (coupon.code || coupon.label) : baseTemplate?.headingText);
@@ -901,16 +914,18 @@ function CouponsSection({ config, onSave, saving }) {
 
     const updateTemplate = (field, value) => {
         if (activePreviewCouponId) {
-            // Apply customization to the specific active coupon override
-            setCouponOverrides(prev => ({
+            // Apply customization to the specific coupon's override for the active template
+            setAllTemplateOverrides(prev => ({
                 ...prev,
-                [activePreviewCouponId]: {
-                    ...prev[activePreviewCouponId],
-                    [field]: value
-                }
+                [activeTemplate]: {
+                    ...prev[activeTemplate],
+                    [activePreviewCouponId]: {
+                        ...(prev[activeTemplate]?.[activePreviewCouponId] || {}),
+                        [field]: value,
+                    },
+                },
             }));
         } else {
-            // Fallback to global template update (though usually activePreviewCouponId is set if coupons exist)
             setTemplates({
                 ...templates,
                 [activeTemplate]: { ...templates[activeTemplate], [field]: value },
@@ -955,36 +970,35 @@ function CouponsSection({ config, onSave, saving }) {
             typeof item === 'string' ? item : item.id
         );
 
-        // Ensure every coupon override includes headingText and subtextText
-        const filledOverrides = {};
+        // Fill in couponCode/headingText/subtextText for the active template's overrides
+        // Other templates' overrides are passed through untouched
+        const filledActiveOverrides = {};
         couponIds.forEach(couponId => {
             const override = couponOverrides[couponId] || {};
-            // Match by full ID or numeric tail (handles DiscountNode vs DiscountCodeNode mismatch)
             const couponNumericId = couponId.split('/').pop();
             const coupon = activeCouponsFromAPI.find(c =>
                 c.id === couponId || c.id.split('/').pop() === couponNumericId
             );
             const base = templates[activeTemplate] || {};
-            filledOverrides[couponId] = {
+            filledActiveOverrides[couponId] = {
                 ...override,
-                // couponCode: always use the real code string from API; never a numeric GID tail
                 couponCode: coupon ? (coupon.code || coupon.label) : (override.couponCode || couponId.split('/').pop()),
-                // headingText / subtextText: use per-coupon override if set, otherwise template default
-                headingText:
-                    override.headingText !== undefined
-                        ? override.headingText
-                        : base.headingText,
-                subtextText:
-                    override.subtextText !== undefined
-                        ? override.subtextText
-                        : base.subtextText,
+                headingText: override.headingText !== undefined ? override.headingText : base.headingText,
+                subtextText: override.subtextText !== undefined ? override.subtextText : base.subtextText,
             };
         });
+
+        // Merge filled active overrides into full allTemplateOverrides
+        const finalAllTemplateOverrides = {
+            ...allTemplateOverrides,
+            [activeTemplate]: filledActiveOverrides,
+        };
+
         onSave({
             activeTemplate,
             templateData: templates,
             selectedActiveCoupons: couponIds,
-            couponOverrides: filledOverrides, // display conditions are now per-coupon inside overrides
+            allTemplateOverrides: finalAllTemplateOverrides,
         });
     };
 
@@ -992,7 +1006,9 @@ function CouponsSection({ config, onSave, saving }) {
         setActiveTemplate(config?.activeTemplate || "template1");
         setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
         setSelectedActiveCoupons(config?.selectedActiveCoupons || []);
-        setCouponOverrides(config?.couponOverrides || {});
+        setAllTemplateOverrides(
+            config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {}, template4: {} }
+        );
         setDisplayCondition(config?.displayCondition || "all");
         setProductHandles(config?.productHandles || []);
         setCollectionHandles(config?.collectionHandles || []);
@@ -1321,7 +1337,10 @@ function CouponsSection({ config, onSave, saving }) {
                                                     label="Customize Coupon"
                                                     labelHidden
                                                     options={selectedActiveCoupons.map(id => ({
-                                                        label: activeCouponsFromAPI.find(c => String(c.id) === String(id))?.code || id,
+                                                        // Priority: live API code → stored couponCode override → last numeric segment of GID
+                                                        label: activeCouponsFromAPI.find(c => String(c.id) === String(id))?.code
+                                                            || couponOverrides[id]?.couponCode
+                                                            || id.split('/').pop(),
                                                         value: id
                                                     }))}
                                                     value={currentlyEditingCouponId}
@@ -1370,8 +1389,13 @@ function CouponsSection({ config, onSave, saving }) {
                                     {/* Editor Content */}
                                     {currentlyEditingCouponId && (() => {
                                         const couponId = currentlyEditingCouponId;
-                                        const coupon = activeCouponsFromAPI.find(c => String(c.id) === String(couponId));
-                                        if (!coupon) return null;
+                                        const couponNumericTail = couponId.split('/').pop();
+                                        // Match by full ID or numeric tail to handle GID slash variants
+                                        const coupon = activeCouponsFromAPI.find(c =>
+                                            String(c.id) === String(couponId) ||
+                                            c.id.split('/').pop() === couponNumericTail
+                                        );
+                                        // Show editor even if API hasn't loaded yet — use stored override data
                                         const couponTpl = getCouponTemplate(couponId);
 
                                         return (
@@ -1866,8 +1890,11 @@ function FBTSection({ config, products, onSave, saving }) {
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "fbt1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_FBT_CONFIG.templates);
     const [mode, setMode] = useState(config?.mode || "manual");
-    const [openaiKey, setOpenaiKey] = useState(config?.openaiKey || "");
     const [manualRules, setManualRules] = useState(config?.manualRules || []);
+    const [aiSuggestions, setAiSuggestions] = useState([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState(null);
+    const [aiPendingSave, setAiPendingSave] = useState(false);
     const [simulatedTriggerId, setSimulatedTriggerId] = useState("");
 
     // --- New display scope state ---
@@ -1979,7 +2006,8 @@ function FBTSection({ config, products, onSave, saving }) {
     };
 
     const getRulesToSave = () => {
-        let rulesToSave = mode === "manual" ? [...manualRules] : [];
+        // Always include manualRules — AI-accepted suggestions are stored there too
+        let rulesToSave = [...manualRules];
 
         // Auto-save pending selection if valid
         const hasPendingFbt = ruleFbtProducts.length > 0;
@@ -2053,11 +2081,11 @@ function FBTSection({ config, products, onSave, saving }) {
             }
         }
 
+        setAiPendingSave(false);
         onSave({
             activeTemplate,
             templateData: templates,
             mode,
-            openaiKey: mode === "ai" ? openaiKey : "",
             configData: getRulesToSave(),
         });
     };
@@ -2067,7 +2095,6 @@ function FBTSection({ config, products, onSave, saving }) {
             activeTemplate,
             templateData: templates,
             mode,
-            openaiKey: mode === "ai" ? openaiKey : "",
             configData: getRulesToSave(),
             _toastMessage: "Template is saved!",
         });
@@ -2082,14 +2109,57 @@ function FBTSection({ config, products, onSave, saving }) {
         setActiveTemplate(config?.activeTemplate || "fbt1");
         setTemplates(config?.templates || FAKE_FBT_CONFIG.templates);
         setMode(config?.mode || "manual");
-        setOpenaiKey(config?.openaiKey || "");
         setManualRules(config?.manualRules || []);
+        setAiSuggestions([]);
+        setAiError(null);
         setDisplayScope("all");
         setScopeTriggerProducts([]);
         setRuleFbtProducts([]);
     };
 
     // Check if we can add a rule
+    // AI: call backend which calls OpenAI with the store's product catalog
+    const handleGenerateAI = async () => {
+        if (!products || products.length === 0) {
+            setAiError("No products found in your store.");
+            return;
+        }
+        setAiLoading(true);
+        setAiError(null);
+        setAiSuggestions([]);
+        try {
+            const res = await fetch("/api/fbt-ai", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ products }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                setAiError(data.error || "AI generation failed.");
+            } else {
+                setAiSuggestions(data.rules || []);
+            }
+        } catch (err) {
+            setAiError("Network error. Please try again.");
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    // Accept a single AI suggestion — move it into manualRules
+    const handleAcceptSuggestion = (rule) => {
+        setManualRules(prev => [...prev, { ...rule, aiGenerated: true }]);
+        setAiSuggestions(prev => prev.filter(r => r.id !== rule.id));
+        setAiPendingSave(true);
+    };
+
+    // Accept all AI suggestions at once
+    const handleAcceptAllSuggestions = () => {
+        setManualRules(prev => [...prev, ...aiSuggestions.map(r => ({ ...r, aiGenerated: true }))]);
+        setAiSuggestions([]);
+        setAiPendingSave(true);
+    };
+
     const canAddRule = useMemo(() => {
         if (ruleFbtProducts.length === 0) return false;
         if (displayScope === "all") return true;
@@ -2677,19 +2747,109 @@ function FBTSection({ config, products, onSave, saving }) {
             {/* AI Mode */}
             {mode === "ai" && (
                 <Card>
-                    <BlockStack gap="300">
-                        <Text as="h3" variant="headingMd">AI Configuration</Text>
-                        <Banner tone="info">
-                            AI mode uses OpenAI to analyze your catalog and suggest frequently bought together products.
-                        </Banner>
-                        <TextField
-                            label="OpenAI API Key"
-                            type="password"
-                            value={openaiKey}
-                            onChange={setOpenaiKey}
-                            placeholder="sk-..."
-                            helpText="Your API key is stored securely."
-                        />
+                    <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="100">
+                                <Text as="h3" variant="headingMd">AI Suggestions</Text>
+                                <Text tone="subdued" variant="bodySm">
+                                    Analyzes your {products.length} store products and suggests natural FBT pairings.
+                                </Text>
+                            </BlockStack>
+                            <Button
+                                variant="primary"
+                                onClick={handleGenerateAI}
+                                loading={aiLoading}
+                                disabled={aiLoading || products.length === 0}
+                            >
+                                {aiSuggestions.length > 0 ? "Regenerate" : "Generate Suggestions"}
+                            </Button>
+                        </InlineStack>
+
+                        {aiPendingSave && (
+                            <Banner tone="warning">
+                                Suggestions accepted — scroll down and click <strong>Save</strong> to apply them to your storefront.
+                            </Banner>
+                        )}
+
+                        {aiError && (
+                            <Banner tone="critical">{aiError}</Banner>
+                        )}
+
+                        {aiLoading && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 0" }}>
+                                <Spinner size="small" />
+                                <Text tone="subdued">Analyzing your product catalog with AI…</Text>
+                            </div>
+                        )}
+
+                        {aiSuggestions.length > 0 && (
+                            <BlockStack gap="300">
+                                <InlineStack align="space-between" blockAlign="center">
+                                    <Text variant="headingSm" fontWeight="semibold">
+                                        {aiSuggestions.length} suggestion{aiSuggestions.length !== 1 ? "s" : ""} — review and accept
+                                    </Text>
+                                    <Button size="slim" onClick={handleAcceptAllSuggestions}>
+                                        Accept All
+                                    </Button>
+                                </InlineStack>
+
+                                {aiSuggestions.map((rule) => {
+                                    const trigger = rule.triggerProducts?.[0];
+                                    return (
+                                        <div key={rule.id} style={{
+                                            border: "1px solid #e3e3e3",
+                                            borderRadius: "10px",
+                                            padding: "14px 16px",
+                                            background: "#fafafa"
+                                        }}>
+                                            <InlineStack align="space-between" blockAlign="center" gap="400">
+                                                <BlockStack gap="100">
+                                                    <InlineStack gap="200" blockAlign="center">
+                                                        <Text variant="bodySm" fontWeight="semibold" tone="subdued">Trigger:</Text>
+                                                        {trigger?.image && (
+                                                            <Thumbnail source={trigger.image} alt={trigger.title} size="extraSmall" />
+                                                        )}
+                                                        <Text variant="bodySm" fontWeight="semibold">{trigger?.title}</Text>
+                                                    </InlineStack>
+                                                    <InlineStack gap="200" blockAlign="center" wrap>
+                                                        <Text variant="bodySm" tone="subdued">FBT:</Text>
+                                                        {rule.fbtProducts.map(p => (
+                                                            <InlineStack key={p.id} gap="100" blockAlign="center">
+                                                                {p.image && <Thumbnail source={p.image} alt={p.title} size="extraSmall" />}
+                                                                <Badge>{p.title}</Badge>
+                                                            </InlineStack>
+                                                        ))}
+                                                    </InlineStack>
+                                                </BlockStack>
+                                                <InlineStack gap="200">
+                                                    <Button
+                                                        size="slim"
+                                                        variant="primary"
+                                                        onClick={() => handleAcceptSuggestion(rule)}
+                                                    >
+                                                        Accept
+                                                    </Button>
+                                                    <Button
+                                                        size="slim"
+                                                        tone="critical"
+                                                        onClick={() => setAiSuggestions(prev => prev.filter(r => r.id !== rule.id))}
+                                                    >
+                                                        Dismiss
+                                                    </Button>
+                                                </InlineStack>
+                                            </InlineStack>
+                                        </div>
+                                    );
+                                })}
+                            </BlockStack>
+                        )}
+
+                        {!aiLoading && aiSuggestions.length === 0 && !aiError && (
+                            <Banner tone="info">
+                                Click <strong>Generate Suggestions</strong> and our AI will analyze your product catalog
+                                and recommend FBT pairings. Accepted suggestions are added to your rules above.
+                            </Banner>
+                        )}
                     </BlockStack>
                 </Card>
             )}
@@ -2759,7 +2919,7 @@ export default function ProductWidgetPage() {
                 activeTemplate: data.activeTemplate,
                 templateData: data.templateData,
                 selectedActiveCoupons: data.selectedActiveCoupons,
-                couponOverrides: data.couponOverrides,
+                allTemplateOverrides: data.allTemplateOverrides,
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/coupon-slider" }
@@ -2809,7 +2969,6 @@ export default function ProductWidgetPage() {
                 activeTemplate: data.activeTemplate,
                 templateData: data.templateData,
                 mode: data.mode,
-                openaiKey: data.openaiKey || "",
                 configData: enrichedRules, // Send enriched rules with product details
                 shop,
             },

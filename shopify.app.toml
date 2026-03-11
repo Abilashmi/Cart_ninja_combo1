@@ -2,7 +2,7 @@
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Cart_app"
-application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
+application_url = "https://4999-103-130-91-50.ngrok-free.app"
 embedded = true
 
 [build]

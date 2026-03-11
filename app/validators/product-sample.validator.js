@@ -35,7 +35,7 @@ export function validateFBTConfig(data) {
     if (!data.activeTemplate) errors.push("activeTemplate is required");
     if (data.mode === undefined) errors.push("mode is required");
     else if (!VALID_MODES.includes(data.mode)) errors.push(`mode must be one of: ${VALID_MODES.join(", ")}`);
-    if (data.mode === "ai" && !data.openaiKey?.trim()) errors.push("openaiKey is required when mode is 'ai'");
+    // openaiKey is stored server-side in .env — no client validation needed
 
     // --- templateData ---
     let templates = data.templateData;

@@ -130,9 +130,18 @@
     fetch(API_URL)
       .then((r) => r.json())
       .then((response) => {
-        if (!response || response.status !== 'success') return;
+        console.log('[FBT] raw response:', response);
+
+        if (!response || response.status !== 'success') {
+          console.warn('[FBT] no success status, aborting');
+          return;
+        }
 
         const data = response.data;
+        console.log('[FBT] data keys:', Object.keys(data));
+        console.log('[FBT] selectedTemp:', data.selectedTemp);
+        console.log('[FBT] condition:', data.condition);
+        console.log('[FBT] current productId:', productId);
 
         const templateMap = {
           fbt1: data.temp1,
@@ -141,29 +150,39 @@
         };
 
         const config = templateMap[data.selectedTemp];
-        if (!config) return;
+        if (!config) {
+          console.warn('[FBT] no config for template:', data.selectedTemp, '— available:', Object.keys(templateMap));
+          return;
+        }
 
         const rules = data.condition || [];
+        console.log('[FBT] rules count:', rules.length);
 
         // -----------------------------
         // MULTI-RULE AGGREGATION
         // -----------------------------
         let matchedProducts = [];
 
-        rules.forEach((rule) => {
+        rules.forEach((rule, i) => {
+          console.log(`[FBT] rule[${i}] scope:`, rule.displayScope, 'triggers:', (rule.triggerProducts||[]).map(p=>p.id));
+
           if (rule.displayScope === 'all') {
             matchedProducts = matchedProducts.concat(rule.fbtProducts);
           }
 
-          if (rule.displayScope === 'single') {
-            const match = rule.triggerProducts.some((p) => p.id === productId);
+          if (rule.displayScope === 'single' || rule.displayScope === 'per_product') {
+            const match = (rule.triggerProducts || []).some((p) => p.id === productId);
+            console.log(`[FBT] rule[${i}] match:`, match);
             if (match) {
               matchedProducts = matchedProducts.concat(rule.fbtProducts);
             }
           }
         });
 
-        if (!matchedProducts.length) return;
+        if (!matchedProducts.length) {
+          console.warn('[FBT] no matched products for productId:', productId);
+          return;
+        }
 
         matchedProducts = dedupe(matchedProducts);
 

@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template3",
+  "activeTemplate": "template2",
   "templateData": {
     "template1": {
       "name": "Classic Banner",
@@ -30,33 +30,9 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountAutomaticNode/1291464638531",
-    "gid://shopify/DiscountRedeemCode/26833535139907",
-    "gid://shopify/DiscountRedeemCode/26805031010371",
-    "gid://shopify/DiscountRedeemCode/26805030813763"
+    "gid:/shopify/DiscountRedeemCode/21741594542373",
+    "gid:/shopify/DiscountRedeemCode/21314906652965"
   ],
-  "couponOverrides": {
-    "gid://shopify/DiscountAutomaticNode/1291464638531": {
-      "couponCode": "guoonftb",
-      "headingText": "FLASH SALE!",
-      "subtextText": "Use code: BOLD25 for extra 25% OFF"
-    },
-    "gid://shopify/DiscountRedeemCode/26833535139907": {
-      "couponCode": "PSQEP5W9",
-      "headingText": "FLASH SALE!",
-      "subtextText": "Use code: BOLD25 for extra 25% OFF"
-    },
-    "gid://shopify/DiscountRedeemCode/26805031010371": {
-      "couponCode": "velwo",
-      "headingText": "FLASH SALE!",
-      "subtextText": "Use code: BOLD25 for extra 25% OFF"
-    },
-    "gid://shopify/DiscountRedeemCode/26805030813763": {
-      "couponCode": "J62ZTBU1",
-      "headingText": "FLASH SALE!",
-      "subtextText": "Use code: BOLD25 for extra 25% OFF"
-    }
-  },
   "shop": "cartapp-2.myshopify.com",
   "templates": {
     "template1": {
@@ -148,5 +124,39 @@
         }
       }
     }
+  },
+  "allTemplateOverrides": {
+    "template1": {
+      "gid:/shopify/DiscountRedeemCode/21741594542373": {
+        "couponCode": "JLJW3J2M",
+        "headingText": "GET 10% OFF!",
+        "subtextText": "Use code: SAVE10 at checkout",
+        "displayCondition": "all"
+      },
+      "gid:/shopify/DiscountRedeemCode/21314906652965": {
+        "couponCode": "FREESHIPPING2025",
+        "headingText": "Get 10 rs off",
+        "subtextText": "Use code: SAVE10 at checkout",
+        "displayCondition": "product_handle",
+        "productHandles": [
+          "gift-card"
+        ]
+      }
+    },
+    "template2": {
+      "gid:/shopify/DiscountRedeemCode/21741594542373": {
+        "couponCode": "JLJW3J2M",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500",
+        "displayCondition": "all"
+      },
+      "gid:/shopify/DiscountRedeemCode/21314906652965": {
+        "headingText": "jkbnjnlk",
+        "couponCode": "FREESHIPPING2025",
+        "subtextText": "Free shipping on orders over ₹500"
+      }
+    },
+    "template3": {},
+    "template4": {}
   }
 }

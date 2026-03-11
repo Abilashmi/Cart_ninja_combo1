@@ -87,7 +87,13 @@ const DEFAULT_DATA = {
         },
     },
     selectedActiveCoupons: [],
-    couponOverrides: {},
+    // Option A: per-template coupon overrides — each template owns its own coupon styling independently
+    allTemplateOverrides: {
+        template1: {},
+        template2: {},
+        template3: {},
+        template4: {},
+    },
 };
 
 /* ---------------- FILE HELPERS ---------------- */
@@ -124,76 +130,69 @@ function transformFromDB(dbData) {
         try {
             return JSON.parse(val);
         } catch {
-            // If it's a truncated JSON string (e.g. ["gid://...","g), try to extract what we can
-            // Matches DiscountCodeNode, DiscountAutomaticNode, or just DiscountNode
-            // We use [\/\\]+ to handle both normal and escaped slashes in the raw string
             const matches = val.match(/gid:[\/\\]+shopify[\/\\]+(DiscountCodeNode|DiscountAutomaticNode|DiscountNode)[\/\\]+\d+/g);
             if (matches) {
-                // Return cleaned IDs (replace backslashes with forward slashes for consistency)
                 return matches.map(id => id.replace(/\\/g, '/'));
             }
             return [];
         }
     };
 
-    const temp1Style = parseJSON(dbData.temp1DefaultStyle);
-    const temp2Style = parseJSON(dbData.temp2DefaultStyle);
-    const temp3Style = parseJSON(dbData.temp3DefaultStyle);
-
-    const temp1CouponStyle = parseJSON(dbData.temp1CouponStyle);
-    const temp2CouponStyle = parseJSON(dbData.temp2CouponStyle);
-    const temp3CouponStyle = parseJSON(dbData.temp3CouponStyle);
-
-    const temp1CouponCondition = parseJSONArray(dbData.temp1CouponCondition);
-    const temp2CouponCondition = parseJSONArray(dbData.temp2CouponCondition);
-    const temp3CouponCondition = parseJSONArray(dbData.temp3CouponCondition);
+    // Normalize a GID to single forward slashes
+    const normalizeId = (id) => id.replace(/\\/g, '/').replace(/\/+/g, '/');
 
     const activeTemplate = dbData.selectedTemplate || "template1";
 
     // Build templates object with DEEP merging of defaults
     const templates = {
-        template1: {
-            ...DEFAULT_DATA.templates.template1,
-            ...temp1Style,
-        },
-        template2: {
-            ...DEFAULT_DATA.templates.template2,
-            ...temp2Style,
-        },
-        template3: {
-            ...DEFAULT_DATA.templates.template3,
-            ...temp3Style,
-        },
-        template4: {
-            ...DEFAULT_DATA.templates.template4,
-            ...parseJSON(dbData.temp4DefaultStyle),
-        },
+        template1: { ...DEFAULT_DATA.templates.template1, ...parseJSON(dbData.temp1DefaultStyle) },
+        template2: { ...DEFAULT_DATA.templates.template2, ...parseJSON(dbData.temp2DefaultStyle) },
+        template3: { ...DEFAULT_DATA.templates.template3, ...parseJSON(dbData.temp3DefaultStyle) },
+        template4: { ...DEFAULT_DATA.templates.template4, ...parseJSON(dbData.temp4DefaultStyle) },
     };
 
-    // Build couponOverrides by merging style overrides and conditions
-    const couponStyleMap = {
-        template1: temp1CouponStyle,
-        template2: temp2CouponStyle,
-        template3: temp3CouponStyle,
-        template4: parseJSON(dbData.temp4CouponStyle),
-    };
-    const couponConditionMap = {
-        template1: temp1CouponCondition,
-        template2: temp2CouponCondition,
-        template3: temp3CouponCondition,
-        template4: parseJSONArray(dbData.temp4CouponCondition),
+    // ── Option A: Build per-template coupon overrides independently ──
+    // Each template reads from its own DB columns (temp1CouponStyle/Condition, etc.)
+    const buildTemplateOverrides = (couponStyleField, couponCondField) => {
+        const couponStyles = parseJSON(dbData[couponStyleField]);
+        const couponConditions = parseJSONArray(dbData[couponCondField]);
+
+        const overrides = {};
+        const allIds = [...new Set([
+            ...Object.keys(couponStyles),
+            ...couponConditions.map(c => c.couponId).filter(Boolean),
+        ])];
+
+        for (const rawId of allIds) {
+            const couponId = normalizeId(rawId);
+            const styleOv = couponStyles[rawId] || couponStyles[couponId] || {};
+            const condEntry = couponConditions.find(c => normalizeId(c.couponId || "") === couponId) || {};
+
+            const override = { ...styleOv };
+            if (condEntry.displayCondition) override.displayCondition = condEntry.displayCondition;
+            if (!override.couponCode && condEntry.couponCode) override.couponCode = condEntry.couponCode;
+            if (condEntry.headingText !== undefined) override.headingText = condEntry.headingText;
+            if (condEntry.subtextText !== undefined) override.subtextText = condEntry.subtextText;
+            if (condEntry.productHandles?.length) override.productHandles = condEntry.productHandles;
+            if (condEntry.collectionHandles?.length) override.collectionHandles = condEntry.collectionHandles;
+            if (condEntry.displayTags?.length) override.displayTags = condEntry.displayTags;
+
+            if (Object.keys(override).length > 0) {
+                overrides[couponId] = override;
+            }
+        }
+        return overrides;
     };
 
-    const activeCouponStyles = couponStyleMap[activeTemplate] || {};
-    const activeCouponConditions = couponConditionMap[activeTemplate] || [];
+    const allTemplateOverrides = {
+        template1: buildTemplateOverrides("temp1CouponStyle", "temp1CouponCondition"),
+        template2: buildTemplateOverrides("temp2CouponStyle", "temp2CouponCondition"),
+        template3: buildTemplateOverrides("temp3CouponStyle", "temp3CouponCondition"),
+        template4: buildTemplateOverrides("temp4CouponStyle", "temp4CouponCondition"),
+    };
 
-    // Consolidate Selected Coupons:
-    // Some fields might be truncated in the DB (like selectedTemplateCoupon).
-    // We merge IDs from:
-    // 1. selectedTemplateCoupon (primary list)
-    // 2. IDs present in active template's style overrides
-    // 3. IDs present in active template's conditions
-    // Support both old string format ["gid://..."] and new object format [{id,code}]
+    // ── Enrich active template's overrides with embedded data from selectedTemplateCoupon ──
+    // selectedTemplateCoupon stores {id, code, h, s} objects — most reliable source for coupon text
     const rawSelectedItems = parseJSONArray(dbData.selectedTemplateCoupon);
     const embeddedCodes = {};
     const embeddedHeadings = {};
@@ -208,64 +207,46 @@ function transformFromDB(dbData) {
         }
         return item;
     }).filter(Boolean);
-    const idsFromStyles = Object.keys(activeCouponStyles);
-    const idsFromConditions = activeCouponConditions.map(c => c.couponId).filter(Boolean);
 
-    // ID Reconciliation: Prefer full IDs over truncated ones
-    const allFullIds = [...new Set([...idsFromStyles, ...idsFromConditions])];
+    // Merge embedded text/code into the active template's overrides
+    const activeOverrides = allTemplateOverrides[activeTemplate];
+    for (const rawId of idsFromSelected) {
+        const couponId = normalizeId(rawId);
+        const embedded = embeddedCodes[rawId] || embeddedCodes[couponId];
+        const embH = embeddedHeadings[rawId] ?? embeddedHeadings[couponId];
+        const embS = embeddedSubtexts[rawId] ?? embeddedSubtexts[couponId];
 
-    // Normalize a GID to single forward slashes
-    const normalizeId = (id) => id.replace(/\\/g, '/').replace(/\/+/g, '/');
+        if (embedded || embH !== undefined || embS !== undefined) {
+            if (!activeOverrides[couponId]) activeOverrides[couponId] = {};
+            if (embedded && !/^\d+$/.test(embedded)) activeOverrides[couponId].couponCode = embedded;
+            if (embH !== undefined) activeOverrides[couponId].headingText = embH;
+            if (embS !== undefined) activeOverrides[couponId].subtextText = embS;
+        }
+    }
+
+    // ── Build selectedCoupons list (merge from all sources for active template) ──
+    const activeIdsFromStyles = Object.keys(activeOverrides);
+    const allFullIds = [...new Set(activeIdsFromStyles)];
 
     const reconciledSelected = idsFromSelected.map(rawId => {
         const id = normalizeId(rawId);
-        // Find if this truncated ID matches the start of any full ID
         const match = allFullIds.find(f => normalizeId(f).startsWith(id) || id.startsWith(normalizeId(f)));
         return match || id;
     });
 
-    // Combine and deduplicate
-    const selectedCoupons = [...new Set([...reconciledSelected, ...allFullIds])];
-
-    const couponOverrides = {};
-    for (const rawCouponId of selectedCoupons) {
-        const couponId = normalizeId(rawCouponId);
-        const styleOv = activeCouponStyles[rawCouponId] || activeCouponStyles[couponId] || {};
-        const conditionEntry = activeCouponConditions.find(c => normalizeId(c.couponId || "") === couponId) || {};
-
-        const override = { ...styleOv };
-
-        // Map headingText -> label and subtextText -> description for the liquid block
-        if (styleOv.headingText) override.label = styleOv.headingText;
-        if (styleOv.subtextText) override.description = styleOv.subtextText;
-
-        // Embedded data from selectedTemplateCoupon (most reliable PHP storage)
-        // Skip codes that are purely numeric — those are GID tails saved by mistake, not real coupon codes
-        const embedded = embeddedCodes[rawCouponId] || embeddedCodes[couponId];
-        if (embedded && !/^\d+$/.test(embedded)) override.couponCode = embedded;
-        const embH = embeddedHeadings[rawCouponId] ?? embeddedHeadings[couponId];
-        if (embH !== undefined) override.headingText = embH;
-        const embS = embeddedSubtexts[rawCouponId] ?? embeddedSubtexts[couponId];
-        if (embS !== undefined) override.subtextText = embS;
-
-        if (conditionEntry.displayCondition) override.displayCondition = conditionEntry.displayCondition;
-        if (!override.couponCode && conditionEntry.couponCode) override.couponCode = conditionEntry.couponCode;
-        if (conditionEntry.headingText !== undefined) override.headingText = conditionEntry.headingText;
-        if (conditionEntry.subtextText !== undefined) override.subtextText = conditionEntry.subtextText;
-        if (conditionEntry.productHandles?.length) override.productHandles = conditionEntry.productHandles;
-        if (conditionEntry.collectionHandles?.length) override.collectionHandles = conditionEntry.collectionHandles;
-        if (conditionEntry.displayTags?.length) override.displayTags = conditionEntry.displayTags;
-
-        if (Object.keys(override).length > 0) {
-            couponOverrides[couponId] = override;
-        }
+    // Deduplicate by numeric tail (GID suffix) to handle double-slash vs single-slash variants
+    const seen = new Map();
+    for (const id of [...reconciledSelected, ...allFullIds]) {
+        const tail = id.split('/').pop();
+        if (!seen.has(tail)) seen.set(tail, id);
     }
+    const selectedCoupons = [...seen.values()];
 
     return {
         activeTemplate,
         templates,
         selectedActiveCoupons: selectedCoupons,
-        couponOverrides,
+        allTemplateOverrides,
     };
 }
 
@@ -355,7 +336,10 @@ const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles
 
 function transformForDB(data, shopDomain) {
     const templates = data.templates || {};
-    const overrides = data.couponOverrides || {};
+    const allTemplateOverrides = data.allTemplateOverrides || {};
+    const activeTemplate = data.activeTemplate || "template1";
+    // Active template's overrides are used to embed code/text into selectedTemplateCoupon
+    const activeOverrides = allTemplateOverrides[activeTemplate] || {};
     const selectedCoupons = data.selectedActiveCoupons || [];
 
     // Helper to build the style object for a template
@@ -373,38 +357,35 @@ function transformForDB(data, shopDomain) {
     }
 
     // Helper to build coupon styles & conditions for a template
+    // Option A: each template always saves its own overrides independently
     function buildCouponData(tplKey) {
-        const isActive = data.activeTemplate === tplKey;
         const couponConditions = [];
         const couponStyles = {};
 
-        if (isActive) {
-            for (const couponId of selectedCoupons) {
-                const ov = overrides[couponId] || {};
+        // Use this template's own overrides — never just the active template's
+        const tplOverrides = (data.allTemplateOverrides || {})[tplKey] || {};
 
-                // Build condition — also store couponCode + text overrides here since
-                // temp*CouponCondition reliably saves to PHP (temp*CouponStyle may not)
-                // Condition = display rules only (which product/collection/tag to show on)
-                const condition = {
-                    couponId,
-                    displayCondition: ov.displayCondition || "all",
-                };
-                if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
-                if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
-                if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
-                couponConditions.push(condition);
+        for (const couponId of Object.keys(tplOverrides)) {
+            const ov = tplOverrides[couponId];
 
-                // Style = per-coupon overrides: couponCode, headingText, subtextText + visual styles
-                const styleOv = {};
-                for (const [k, v] of Object.entries(ov)) {
-                    if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
-                        styleOv[k] = v;
-                    }
+            const condition = {
+                couponId,
+                displayCondition: ov.displayCondition || "all",
+            };
+            if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
+            if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
+            if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
+            couponConditions.push(condition);
+
+            const styleOv = {};
+            for (const [k, v] of Object.entries(ov)) {
+                if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
+                    styleOv[k] = v;
                 }
+            }
 
-                if (Object.keys(styleOv).length > 0) {
-                    couponStyles[couponId] = styleOv;
-                }
+            if (Object.keys(styleOv).length > 0) {
+                couponStyles[couponId] = styleOv;
             }
         }
 
@@ -424,10 +405,9 @@ function transformForDB(data, shopDomain) {
         shopDomain: shopDomain || "",
         selectedTemplate: data.activeTemplate || "template1",
         // Store {id, code, h, s} objects so storefront liquid reads them directly
-        // (bypasses unreliable temp*CouponStyle PHP storage)
+        // Uses the active template's overrides for embedded text (most current data)
         selectedTemplateCoupon: JSON.stringify(selectedCoupons.map(id => {
-            const ov = overrides[id] || {};
-            // Only write code if it's a real coupon string (not a numeric GID tail)
+            const ov = activeOverrides[id] || {};
             const realCode = ov.couponCode && !/^\d+$/.test(ov.couponCode) ? ov.couponCode : null;
             const item = { id };
             if (realCode) item.code = realCode;
@@ -484,6 +464,9 @@ export async function action({ request }) {
             if (typeof body.couponOverrides === "string") {
                 try { body.couponOverrides = JSON.parse(body.couponOverrides); } catch (e) { }
             }
+            if (typeof body.allTemplateOverrides === "string") {
+                try { body.allTemplateOverrides = JSON.parse(body.allTemplateOverrides); } catch (e) { }
+            }
         }
 
         console.log("Parsed body:", JSON.stringify(body, null, 2));
@@ -492,12 +475,23 @@ export async function action({ request }) {
         const existing = await readData();
 
         // Merge incoming fields onto existing data
+        // Option A: allTemplateOverrides is the source of truth; couponOverrides is legacy fallback
+        let incomingAllTemplateOverrides = body.allTemplateOverrides;
+        if (!incomingAllTemplateOverrides && body.couponOverrides) {
+            // Legacy upgrade path: promote flat couponOverrides into active template's slot
+            const activeTpl = body.activeTemplate || existing.activeTemplate || "template1";
+            incomingAllTemplateOverrides = {
+                ...(existing.allTemplateOverrides || DEFAULT_DATA.allTemplateOverrides),
+                [activeTpl]: body.couponOverrides,
+            };
+        }
+
         const updated = {
             ...existing,
             ...(body.activeTemplate !== undefined && { activeTemplate: body.activeTemplate }),
             ...(body.templateData !== undefined && { templates: { ...existing.templates, ...body.templateData } }),
             ...(body.selectedActiveCoupons !== undefined && { selectedActiveCoupons: body.selectedActiveCoupons }),
-            ...(body.couponOverrides !== undefined && { couponOverrides: body.couponOverrides }),
+            ...(incomingAllTemplateOverrides !== undefined && { allTemplateOverrides: incomingAllTemplateOverrides }),
         };
 
         // Remove stale legacy top-level fields
@@ -510,6 +504,7 @@ export async function action({ request }) {
         delete updated.textContent;
         delete updated.color;
         delete updated.styling;
+        delete updated.couponOverrides; // legacy flat field, replaced by allTemplateOverrides
 
         await writeData(updated);
 

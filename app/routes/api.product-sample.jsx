@@ -55,7 +55,6 @@ const DEFAULT_COUPON_DATA = {
 const DEFAULT_FBT_DATA = {
     activeTemplate: "fbt1",
     mode: "manual",
-    openaiKey: "",
     templates: {
         fbt1: {
             name: "Classic Grid",
@@ -173,7 +172,6 @@ export async function action({ request }) {
                 activeTemplate,
                 templateData: rawTemplateData,
                 mode,
-                openaiKey,
                 configData: rawConfigData
             } = data;
 
@@ -232,7 +230,6 @@ export async function action({ request }) {
                 activeTemplate,
                 templates,
                 mode,
-                openaiKey: openaiKey || "",
                 manualRules,
                 // New structured fields
                 selectedTemplate,
@@ -258,7 +255,11 @@ export async function action({ request }) {
                         },
                         body: JSON.stringify({
                             shop,
-                            fbt: storedData.fbt
+                            fbt: {
+                                ...storedData.fbt,
+                                // PHP reads "condition" for rules — map from manualConfiguration
+                                condition: storedData.fbt.manualConfiguration || [],
+                            }
                         })
                     }
                 );
