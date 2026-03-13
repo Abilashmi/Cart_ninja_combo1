@@ -66,25 +66,7 @@ const DEFAULT_DATA = {
             interactionType: "copy",
             layout: "horizontal"
         },
-        template4: {
-            name: "Modern Gradient",
-            headingText: "Inherit",
-            subtextText: "Free shipping on orders over ₹500",
-            bgColor: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-            textColor: "#ffffff",
-            accentColor: "#fbbf24",
-            buttonColor: "#fbbf24",
-            buttonTextColor: "#000000",
-            borderRadius: 20,
-            fontSize: 16,
-            padding: 20,
-            borderColor: "transparent",
-            priceColor: "#ffffff",
-            showPrices: true,
-            showAddAllButton: false,
-            interactionType: "apply",
-            layout: "horizontal"
-        },
+        
     },
     selectedActiveCoupons: [],
     // Option A: per-template coupon overrides — each template owns its own coupon styling independently
@@ -92,7 +74,7 @@ const DEFAULT_DATA = {
         template1: {},
         template2: {},
         template3: {},
-        template4: {},
+        
     },
 };
 
@@ -148,7 +130,7 @@ function transformFromDB(dbData) {
         template1: { ...DEFAULT_DATA.templates.template1, ...parseJSON(dbData.temp1DefaultStyle) },
         template2: { ...DEFAULT_DATA.templates.template2, ...parseJSON(dbData.temp2DefaultStyle) },
         template3: { ...DEFAULT_DATA.templates.template3, ...parseJSON(dbData.temp3DefaultStyle) },
-        template4: { ...DEFAULT_DATA.templates.template4, ...parseJSON(dbData.temp4DefaultStyle) },
+       
     };
 
     // ── Option A: Build per-template coupon overrides independently ──
@@ -188,7 +170,7 @@ function transformFromDB(dbData) {
         template1: buildTemplateOverrides("temp1CouponStyle", "temp1CouponCondition"),
         template2: buildTemplateOverrides("temp2CouponStyle", "temp2CouponCondition"),
         template3: buildTemplateOverrides("temp3CouponStyle", "temp3CouponCondition"),
-        template4: buildTemplateOverrides("temp4CouponStyle", "temp4CouponCondition"),
+       
     };
 
     // ── Enrich active template's overrides with embedded data from selectedTemplateCoupon ──
@@ -395,7 +377,7 @@ function transformForDB(data, shopDomain) {
     const t1Data = buildCouponData("template1");
     const t2Data = buildCouponData("template2");
     const t3Data = buildCouponData("template3");
-    const t4Data = buildCouponData("template4");
+   
 
     // Align with the DB fields shown in user's JSON
     // We STRINGIFY these objects because the PHP backend expects JSON strings in the DB
@@ -420,19 +402,19 @@ function transformForDB(data, shopDomain) {
         temp1DefaultStyle: JSON.stringify(buildStyle("template1")),
         temp2DefaultStyle: JSON.stringify(buildStyle("template2")),
         temp3DefaultStyle: JSON.stringify(buildStyle("template3")),
-        temp4DefaultStyle: JSON.stringify(buildStyle("template4")),
+       
 
         // Coupon Styles (Stringified for PHP DB)
         temp1CouponStyle: JSON.stringify(t1Data.couponStyles),
         temp2CouponStyle: JSON.stringify(t2Data.couponStyles),
         temp3CouponStyle: JSON.stringify(t3Data.couponStyles),
-        temp4CouponStyle: JSON.stringify(t4Data.couponStyles),
+       
 
         // Coupon Conditions (Stringified for PHP DB)
         temp1CouponCondition: JSON.stringify(t1Data.couponConditions),
         temp2CouponCondition: JSON.stringify(t2Data.couponConditions),
         temp3CouponCondition: JSON.stringify(t3Data.couponConditions),
-        temp4CouponCondition: JSON.stringify(t4Data.couponConditions),
+       
 
         // Explicitly include counts or other fields if required by PHP
         status: "success"

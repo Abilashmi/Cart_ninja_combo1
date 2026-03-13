@@ -1,9 +1,98 @@
 {% schema %}{"name":"Coupon Slider","target":"section","settings":[]}{% endschema %}
-<ps-coupon-slider id="ps-coupon-slider-{{ block.id }}" data-shop="{{ shop.permanent_domain }}"><div>Loading coupons...</div></ps-coupon-slider>
+<ps-coupon-slider id="ps-coupon-slider-{{ block.id }}" data-shop="{{ shop.permanent_domain }}" data-product-handle="{{ product.handle | default: '' | downcase | escape }}" data-collection-handles="{% if product %}{% for c in product.collections %}{{ c.handle | downcase | escape }}{% unless forloop.last %},{% endunless %}{% endfor %}{% endif %}" data-product-tags="{{ product.tags | join: ',' | downcase | escape }}"><div>Loading coupons...</div></ps-coupon-slider>
 <script>
 (function(){
 if(customElements.get('ps-coupon-slider'))return;
 var _cache={};
+var _cartHandlesPromise=null;
+
+function normalizeId(id){
+  if(!id)return '';
+  var clean=String(id).replace(/\\/g,'/').replace(/\/+/g,'/');
+  if(clean.indexOf('gid:/')===0&&clean.indexOf('gid://')!==0)clean=clean.replace('gid:/','gid://');
+  return clean;
+}
+
+function normalizeText(v){
+  return String(v||'').trim().toLowerCase();
+}
+
+function asArray(v){
+  if(Array.isArray(v))return v;
+  if(typeof v==='string'){
+    if(!v.trim())return [];
+    return v.indexOf(',')!==-1?v.split(','):[v];
+  }
+  return [];
+}
+
+function unique(arr){
+  var out=[];
+  (arr||[]).forEach(function(item){
+    if(item&&out.indexOf(item)===-1)out.push(item);
+  });
+  return out;
+}
+
+function getCartProductHandles(){
+  if(_cartHandlesPromise)return _cartHandlesPromise;
+  _cartHandlesPromise=fetch('/cart.js',{credentials:'same-origin'})
+    .then(function(r){return r.ok?r.json():{items:[]};})
+    .then(function(cart){
+      var handles=(cart&&Array.isArray(cart.items)?cart.items:[])
+        .map(function(item){return normalizeText(item&&item.handle);})
+        .filter(Boolean);
+      return unique(handles);
+    })
+    .catch(function(){return[];});
+  return _cartHandlesPromise;
+}
+
+function getDisplayContext(el){
+  var ctx={
+    productHandle:normalizeText(el.dataset.productHandle),
+    collectionHandles:asArray(el.dataset.collectionHandles).map(normalizeText).filter(Boolean),
+    tags:asArray(el.dataset.productTags).map(normalizeText).filter(Boolean),
+    cartProductHandles:[]
+  };
+  return getCartProductHandles().then(function(handles){
+    ctx.cartProductHandles=handles;
+    return ctx;
+  });
+}
+
+function findCondition(conds,id){
+  var nid=normalizeId(id);
+  return (conds||[]).find(function(c){
+    return normalizeId(c&&c.couponId)===nid;
+  })||{};
+}
+
+function matchesCondition(cond,ctx){
+  var mode=cond&&cond.displayCondition?cond.displayCondition:'all';
+  if(mode==='all')return true;
+
+  if(mode==='product_handle'){
+    var targets=asArray(cond.productHandles).map(normalizeText).filter(Boolean);
+    if(!targets.length)return false;
+    var current=unique([].concat(ctx.productHandle?[ctx.productHandle]:[],ctx.cartProductHandles||[]));
+    return targets.some(function(handle){return current.indexOf(handle)!==-1;});
+  }
+
+  if(mode==='collection_handle'){
+    var cTargets=asArray(cond.collectionHandles).map(normalizeText).filter(Boolean);
+    if(!cTargets.length)return false;
+    return cTargets.some(function(handle){return (ctx.collectionHandles||[]).indexOf(handle)!==-1;});
+  }
+
+  if(mode==='tag'){
+    var tTargets=asArray(cond.displayTags).map(normalizeText).filter(Boolean);
+    if(!tTargets.length)return false;
+    return tTargets.some(function(tag){return (ctx.tags||[]).indexOf(tag)!==-1;});
+  }
+
+  return true;
+}
 
 function getStyles(d,tpl){
   if(tpl==='template1')return{def:d.temp1DefaultStyle||{},map:d.temp1CouponStyle||{},conds:d.temp1CouponCondition||[]};
@@ -36,16 +125,16 @@ function buildCard(tpl,s,code,h,sub){
       +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
       +'display:flex;flex-direction:row;'
       +'justify-content:space-between;align-items:center;'
-      +'gap:12px;flex:1 1 280px;min-width:280px;box-sizing:border-box;';
+      +'gap:12px;flex:0 1 320px;min-width:320px;box-sizing:border-box;';
     card.innerHTML=
-      '<div style="min-width:0;flex:1;">'
-        +'<div style="font-weight:800;font-size:'+( fs+4 )+'px;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.55;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+sub+'</div>'
+      '<div style="flex:1;min-width:0;">'
+        +'<div style="font-weight:800;font-size:'+( fs+4 )+'px;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
+        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.55;color:'+tc+';word-wrap:break-word;margin-top:2px;line-height:1.2;">'+sub+'</div>'
       +'</div>'
       +'<button class="ps-btn" data-code="'+code+'" style="'
         +'background:'+bc+';color:'+btc+';border:none;'
         +'padding:10px 24px;border-radius:'+br+'px;'
-        +'font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;">'
+        +'font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
         +'Copy Code'
       +'</button>';
 
@@ -56,31 +145,28 @@ function buildCard(tpl,s,code,h,sub){
       'background:'+bg+';'
       +'border-radius:'+br+'px;'
       +'display:flex;flex-direction:row;'
-      +'overflow:hidden;'
+      +'overflow:visible;'
       +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
-      +'min-height:160px;'
-      +'flex:1 1 280px;min-width:280px;'
-      +'box-sizing:border-box;position:relative;';
+      +'flex:0 1 420px;min-width:420px;'
+      +'box-sizing:border-box;position:relative;align-items:center;';
     card.innerHTML=
       /* punch-out circles */
-      '<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;"></div>'
-      +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;"></div>'
+      '<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;left:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
+      +'<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;right:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
       /* left panel */
-      +'<div style="width:35%;background:'+ac+'08;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">'
-        +'<span style="font-size:10px;font-weight:700;opacity:0.6;text-transform:uppercase;letter-spacing:2px;color:'+ac+';margin-bottom:8px;display:block;">Your Code</span>'
-        +'<span style="font-size:18px;font-weight:900;font-family:monospace;letter-spacing:2px;color:'+ac+';word-break:break-all;">'+code+'</span>'
+      +'<div style="width:36%;min-height:160px;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'20 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;flex-shrink:0;border-right:2px dashed '+ac+'50;position:relative;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
+        +'<span style="font-size:9px;font-weight:700;opacity:0.75;text-transform:uppercase;letter-spacing:1.5px;color:'+ac+';margin-bottom:10px;display:block;white-space:nowrap;">Your Code</span>'
+        +'<span style="font-size:22px;font-weight:900;font-family:monospace;letter-spacing:2.5px;color:'+ac+';text-align:center;line-height:1.3;white-space:nowrap;overflow-wrap:break-word;word-wrap:break-word;">'+code+'</span>'
       +'</div>'
-      /* dashed divider */
-      +'<div style="width:0;border-left:2px dashed '+ac+'25;margin:16px 0;"></div>'
       /* right panel */
-      +'<div style="flex:1;padding:'+((p)+8)+'px '+((p)+14)+'px;display:flex;flex-direction:column;justify-content:center;min-width:0;">'
-        +'<div style="font-size:'+( fs+3 )+'px;font-weight:800;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;">'+h+'</div>'
-        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.5;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:14px;">'+sub+'</div>'
+      +'<div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;">'
+        +'<div style="font-size:'+( fs+3 )+'px;font-weight:900;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
+        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.6;color:'+tc+';word-wrap:break-word;line-height:1.3;margin-bottom:4px;">'+sub+'</div>'
         +'<button class="ps-btn" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
-          +'padding:9px 24px;border-radius:'+br+'px;'
-          +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;">'
-          +'Redeem Now'
+          +'padding:9px 26px;border-radius:'+br+'px;'
+          +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
+          +'Copy'
         +'</button>'
       +'</div>';
 
@@ -94,23 +180,23 @@ function buildCard(tpl,s,code,h,sub){
       +'display:flex;flex-direction:column;'
       +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
       +'border:1px solid '+ac+'15;'
-      +'flex:1 1 260px;min-width:260px;box-sizing:border-box;';
+      +'flex:0 1 300px;min-width:300px;box-sizing:border-box;';
     card.innerHTML=
       /* top row: icon + text */
       '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">'
         +'<div style="width:42px;height:42px;border-radius:10px;background:'+ac+'12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;">🏷️</div>'
         +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-size:'+( fs+1 )+'px;font-weight:700;color:'+tc+';line-height:1.3;margin-bottom:4px;">'+h+'</div>'
-          +'<div style="font-size:'+( fs-2 )+'px;opacity:0.5;color:'+tc+';">'+sub+'</div>'
+          +'<div style="font-size:'+( fs+1 )+'px;font-weight:700;color:'+tc+';line-height:1.3;margin-bottom:4px;word-wrap:break-word;">'+h+'</div>'
+          +'<div style="font-size:'+( fs-2 )+'px;opacity:0.5;color:'+tc+';word-wrap:break-word;line-height:1.3;">'+sub+'</div>'
         +'</div>'
       +'</div>'
       /* bottom row: code pill + Apply btn */
-      +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<div style="padding:6px 14px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;letter-spacing:1.5px;flex:1;text-align:center;">'+code+'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+        +'<div style="padding:6px 14px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;letter-spacing:1.5px;flex:1;min-width:120px;text-align:center;word-wrap:break-word;">'+code+'</div>'
         +'<button class="ps-btn" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:8px 20px;border-radius:'+br+'px;'
-          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;">'
+          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
           +'Apply'
         +'</button>'
       +'</div>';
@@ -120,17 +206,68 @@ function buildCard(tpl,s,code,h,sub){
   return card;
 }
 
-function renderSlider(el,data){
+function checkOverflow(el){
+  var w=el.querySelector('.ps-coupon-wrapper');
+  var navGroup=el.querySelector('.ps-nav-group');
+  if(!w||!navGroup)return;
+  var hasOverflow=w.scrollWidth>w.clientWidth;
+  navGroup.style.display=hasOverflow?'flex':'none';
+}
+
+function renderSlider(el,data,ctx){
   var tpl=data.selectedTemplate||'template1';
   var r=getStyles(data,tpl);
   var def=r.def,map=r.map,conds=r.conds||[];
+  var normalizedMap={};
+  Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
   var ids=data.selectedTemplateCoupon||[];
   if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
+
+  var itemsToRender=[];
+
+  ids.forEach(function(item){
+    var isObj=item&&typeof item==='object';
+    var id=isObj?item.id:item;
+    if(!id)return;
+
+    var nid=normalizeId(id);
+    /* ov = per-coupon style overrides from temp*CouponStyle (couponCode, headingText, subtextText + colors) */
+    var ov=(map&&map[id])||normalizedMap[nid]||{};
+    var s=Object.assign({},def,ov);
+
+    /* cond = display condition rules only (displayCondition, productHandles etc.) */
+    var cond=findCondition(conds,id);
+    if(!cond.displayCondition&&ov.displayCondition)cond=ov;
+    if(!matchesCondition(cond,ctx))return;
+
+    var rawStoredCode=isObj?item.code:null;
+    /* Ignore codes that are purely numeric - they are GID tails saved by mistake */
+    var storedCode=(rawStoredCode&&!/^\d+$/.test(rawStoredCode))?rawStoredCode:null;
+    var storedH=isObj&&item.h!==undefined?item.h:null;
+    var storedSub=isObj&&item.s!==undefined?item.s:null;
+
+    /* couponCode: item.code (selectedTemplateCoupon) -> ov.couponCode (temp*CouponStyle) -> fallback */
+    var ovCode=(ov.couponCode&&!/^\d+$/.test(ov.couponCode))?ov.couponCode:null;
+    var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
+    var code=storedCode||ovCode||sCode||nid.split('/').pop();
+
+    /* headingText: item.h -> ov.headingText (per-coupon) -> template default */
+    var h=storedH!==null?storedH:(ov.headingText!==undefined?ov.headingText:(s.headingText||code));
+    /* subtextText: item.s -> ov.subtextText (per-coupon) -> template default */
+    var sub=storedSub!==null?storedSub:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||''));
+
+    itemsToRender.push({style:s,code:code,heading:h,subtext:sub});
+  });
+
+  if(!itemsToRender.length){
+    el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available for this product.</p>';
+    return;
+  }
 
   el.innerHTML=
     '<div class="ps-slider">'
       +'<div class="ps-slider-header">'
-        +'<div class="ps-nav-group">'
+        +'<div class="ps-nav-group" style="display:none;">'
           +'<button class="ps-nav ps-prev">&#8592;</button>'
           +'<button class="ps-nav ps-next">&#8594;</button>'
         +'</div>'
@@ -140,33 +277,12 @@ function renderSlider(el,data){
 
   var w=el.querySelector('.ps-coupon-wrapper');
 
-  ids.forEach(function(item){
-    var isObj=item&&typeof item==='object';
-    var id=isObj?item.id:item;
-    var rawStoredCode=isObj?item.code:null;
-    /* Ignore codes that are purely numeric — they are GID tails saved by mistake */
-    var storedCode=(rawStoredCode&&!/^\d+$/.test(rawStoredCode))?rawStoredCode:null;
-    var storedH=isObj&&item.h!==undefined?item.h:null;
-    var storedSub=isObj&&item.s!==undefined?item.s:null;
-
-    /* ov = per-coupon style overrides from temp*CouponStyle (couponCode, headingText, subtextText + colors) */
-    var ov=map[id]||{};
-    var s=Object.assign({},def,ov);
-    /* cond = display condition rules only (displayCondition, productHandles etc.) — no text/code here */
-    var cond=conds.find(function(c){return c.couponId===id;})||{};
-
-    /* couponCode: item.code (selectedTemplateCoupon) → ov.couponCode (temp*CouponStyle) → fallback */
-    var ovCode=(ov.couponCode&&!/^\d+$/.test(ov.couponCode))?ov.couponCode:null;
-    var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
-    var code=storedCode||ovCode||sCode||id.split('/').pop();
-
-    /* headingText: item.h → ov.headingText (per-coupon) → template default */
-    var h=storedH!==null?storedH:(ov.headingText!==undefined?ov.headingText:(s.headingText||code));
-    /* subtextText: item.s → ov.subtextText (per-coupon) → template default */
-    var sub=storedSub!==null?storedSub:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||''));
-
-    w.appendChild(buildCard(tpl,s,code,h,sub));
+  itemsToRender.forEach(function(item){
+    w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext));
   });
+
+  /* Check overflow on initial render */
+  setTimeout(function(){checkOverflow(el);},0);
 
   /* Nav scroll */
   var nxt=el.querySelector('.ps-next'),prv=el.querySelector('.ps-prev');
@@ -174,6 +290,10 @@ function renderSlider(el,data){
     nxt.addEventListener('click',function(){w.scrollBy({left:320,behavior:'smooth'});});
     prv.addEventListener('click',function(){w.scrollBy({left:-320,behavior:'smooth'});});
   }
+
+  /* Monitor scroll and resize to update nav visibility */
+  w.addEventListener('scroll',function(){checkOverflow(el);});
+  window.addEventListener('resize',function(){checkOverflow(el);});
 
   /* Copy to clipboard */
   el.addEventListener('click',function(e){
@@ -196,14 +316,19 @@ function renderSlider(el,data){
 customElements.define('ps-coupon-slider',class extends HTMLElement{
   connectedCallback(){
     var el=this,shop=el.dataset.shop;
-    if(_cache[shop]){renderSlider(el,_cache[shop]);return;}
+    if(_cache[shop]){
+      getDisplayContext(el).then(function(ctx){renderSlider(el,_cache[shop],ctx);});
+      return;
+    }
     var API='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+shop;
     fetch(API,{headers:{'ngrok-skip-browser-warning':'true'}})
       .then(function(r){return r.json();})
       .then(function(res){
         if(!res||res.status!=='success'){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';return;}
         _cache[shop]=res.data;
-        renderSlider(el,res.data);
+        return getDisplayContext(el).then(function(ctx){
+          renderSlider(el,res.data,ctx);
+        });
       })
       .catch(function(){el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';});
   }

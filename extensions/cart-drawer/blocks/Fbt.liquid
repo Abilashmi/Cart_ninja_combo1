@@ -14,6 +14,7 @@
 
 <style>
   .ps-fbt-wrapper {
+    box-sizing: border-box;
     padding: 20px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   }
@@ -26,6 +27,12 @@
     display: flex;
     gap: 14px;
     flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .ps-fbt-products.horizontal {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
   }
   .ps-fbt-products.vertical {
     flex-direction: column;
@@ -37,23 +44,83 @@
     gap: 10px;
     transition: 0.2s;
     position: relative;
+    background: #fff;
+    box-sizing: border-box;
+    min-height: 132px;
   }
   .ps-product-card.horizontal {
-    width: 160px;
+    width: 100%;
     flex-direction: column;
-    text-align: center;
+    text-align: left;
+    gap: 12px;
   }
   .ps-product-card.vertical {
     width: 100%;
     flex-direction: row;
     align-items: center;
   }
+  .ps-product-main {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+  .ps-product-card.horizontal .ps-product-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .ps-product-image {
-    width: 60px;
-    height: 60px;
+    width: 72px;
+    height: 72px;
     background-size: cover;
     background-position: center;
     border-radius: 8px;
+    background-color: #f3f4f6;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 4px;
+    text-align: center;
+  }
+  .ps-product-card.horizontal .ps-product-image {
+    width: 100%;
+    height: 130px;
+  }
+  .ps-product-meta {
+    min-width: 0;
+    flex: 1;
+  }
+  .ps-product-title {
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+  }
+  .ps-product-price {
+    margin-top: 4px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .ps-product-action {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: auto;
+    gap: 8px;
+  }
+  .ps-product-card.vertical .ps-product-action {
+    margin-top: 0;
+    margin-left: auto;
   }
   .ps-fbt-footer {
     margin-top: 20px;
@@ -116,6 +183,19 @@
     font-weight: 700;
     padding: 2px 6px;
     border-radius: 4px;
+  }
+  @media (max-width: 640px) {
+    .ps-fbt-wrapper {
+      padding: 14px;
+    }
+    .ps-fbt-products.horizontal {
+      grid-template-columns: 1fr;
+    }
+    .ps-fbt-footer {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
   }
 </style>
 
@@ -195,6 +275,20 @@
       return Array.from(map.values());
     }
 
+    function toPriceNumber(value) {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function renderFBT(container, config, products) {
       container.innerHTML = `
       <div class="ps-fbt-wrapper"
@@ -254,22 +348,34 @@
         card.style.borderRadius = config.borderRadius + 'px';
         card.style.color = config.textColor;
 
-        card.innerHTML = `
-        <div class="ps-product-image"
-             style="background-image:url('${p.image}')"></div>
+        const safeTitle = escapeHtml(p.title || 'Product');
+        const imageUrl = String(p.image || '').replace(/'/g, '%27');
+        const price = toPriceNumber(p.price);
 
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:13px">${p.title}</div>
-          ${
-            config.showPrices
-              ? `
-            <div style="font-size:13px;font-weight:bold;color:${config.priceColor}">
-              ₹${parseFloat(p.price).toLocaleString('en-IN')}
-            </div>`
-              : ''
-          }
+        card.innerHTML = `
+        <div class="ps-product-main">
+          <div class="ps-product-image"
+               style="${imageUrl ? `background-image:url('${imageUrl}')` : ''}">
+            ${imageUrl ? '' : '<span>No image</span>'}
+          </div>
+
+          <div class="ps-product-meta">
+            <div class="ps-product-title">${safeTitle}</div>
+            ${
+              config.showPrices
+                ? `
+              <div class="ps-product-price" style="color:${config.priceColor}">
+                ₹${price.toLocaleString('en-IN')}
+              </div>`
+                : ''
+            }
+          </div>
         </div>
+
+        <div class="ps-product-action"></div>
       `;
+
+        const actionSlot = card.querySelector('.ps-product-action');
 
         // -------- CLASSIC --------
         if (config.interactionType === 'classic') {
@@ -293,7 +399,7 @@
             updateTotal();
           };
 
-          card.appendChild(btn);
+          if (actionSlot) actionSlot.appendChild(btn);
         }
 
         // -------- QUICK ADD --------
@@ -332,7 +438,7 @@
             updateTotal();
           };
 
-          card.appendChild(stepper);
+          if (actionSlot) actionSlot.appendChild(stepper);
         }
 
         // -------- BUNDLE --------
@@ -368,7 +474,7 @@
             card.appendChild(badge);
           }
 
-          card.appendChild(check);
+          if (actionSlot) actionSlot.appendChild(check);
         }
 
         wrapper.appendChild(card);
@@ -378,7 +484,7 @@
         let total = 0;
         products.forEach((p) => {
           const qty = selected.get(p.id) || 0;
-          total += qty * parseFloat(p.price);
+          total += qty * toPriceNumber(p.price);
         });
         totalEl.textContent = '₹' + total.toLocaleString('en-IN');
       }

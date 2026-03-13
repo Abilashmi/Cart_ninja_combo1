@@ -30,8 +30,9 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid:/shopify/DiscountRedeemCode/21741594542373",
-    "gid:/shopify/DiscountRedeemCode/21314906652965"
+    "gid:/shopify/DiscountRedeemCode/26805030813763",
+    "gid:/shopify/DiscountRedeemCode/26805031010371",
+    "gid:/shopify/DiscountRedeemCode/26833535139907"
   ],
   "shop": "cartapp-2.myshopify.com",
   "templates": {
@@ -126,37 +127,38 @@
     }
   },
   "allTemplateOverrides": {
-    "template1": {
-      "gid:/shopify/DiscountRedeemCode/21741594542373": {
-        "couponCode": "JLJW3J2M",
-        "headingText": "GET 10% OFF!",
-        "subtextText": "Use code: SAVE10 at checkout",
-        "displayCondition": "all"
-      },
-      "gid:/shopify/DiscountRedeemCode/21314906652965": {
-        "couponCode": "FREESHIPPING2025",
-        "headingText": "Get 10 rs off",
-        "subtextText": "Use code: SAVE10 at checkout",
+    "template1": {},
+    "template2": {
+      "gid:/shopify/DiscountRedeemCode/26805030813763": {
+        "buttonTextColor": "#b73737",
+        "buttonColor": "#040404",
+        "accentColor": "#000000",
+        "textColor": "#000000",
+        "bgColor": "#467099",
+        "fontSize": 12,
+        "padding": 23,
+        "borderRadius": 6,
+        "couponCode": "J62ZTBU1",
+        "headingText": "Hello Code ",
+        "subtextText": "offer 2%",
         "displayCondition": "product_handle",
         "productHandles": [
-          "gift-card"
+          "the-collection-snowboard-liquid"
         ]
-      }
-    },
-    "template2": {
-      "gid:/shopify/DiscountRedeemCode/21741594542373": {
-        "couponCode": "JLJW3J2M",
+      },
+      "gid:/shopify/DiscountRedeemCode/26805031010371": {
+        "couponCode": "velwo",
         "headingText": "SPECIAL OFFER",
         "subtextText": "Free shipping on orders over ₹500",
         "displayCondition": "all"
       },
-      "gid:/shopify/DiscountRedeemCode/21314906652965": {
-        "headingText": "jkbnjnlk",
-        "couponCode": "FREESHIPPING2025",
-        "subtextText": "Free shipping on orders over ₹500"
+      "gid:/shopify/DiscountRedeemCode/26833535139907": {
+        "couponCode": "PSQEP5W9",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500",
+        "displayCondition": "all"
       }
     },
-    "template3": {},
-    "template4": {}
+    "template3": {}
   }
 }

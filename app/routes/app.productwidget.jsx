@@ -115,6 +115,46 @@ function hexToHsb(hex) {
     return { hue: h * 360, saturation: s, brightness: v };
 }
 
+// Normalize product picker payloads to unique parent products.
+function normalizeProductSelection(selected = []) {
+    const seen = new Set();
+
+    return (selected || [])
+        .map((item) => {
+            const product = item?.product || item;
+            const id = product?.id || item?.productId;
+            const handle = product?.handle || item?.handle;
+
+            if (!id && !handle) {
+                return null;
+            }
+
+            const dedupeKey = id || handle;
+            if (seen.has(dedupeKey)) {
+                return null;
+            }
+            seen.add(dedupeKey);
+
+            return {
+                id: id || handle,
+                title: product?.title || item?.title || "",
+                handle: handle || "",
+                image:
+                    product?.images?.[0]?.originalSrc ||
+                    product?.image?.originalSrc ||
+                    item?.images?.[0]?.originalSrc ||
+                    item?.image?.originalSrc ||
+                    "",
+                price:
+                    product?.variants?.[0]?.price ||
+                    item?.variants?.[0]?.price ||
+                    item?.price ||
+                    "0.00",
+            };
+        })
+        .filter(Boolean);
+}
+
 // --- FAKE BACKEND DATA ---
 
 const FAKE_COUPON_CONFIG = {
@@ -162,19 +202,6 @@ const FAKE_COUPON_CONFIG = {
             buttonTextColor: "#111827",
             borderRadius: 16,
             fontSize: 18,
-            padding: 20,
-        },
-        template4: {
-            name: "Modern Gradient",
-            headingText: "Inherit",
-            subtextText: "Free shipping on orders over ₹500",
-            bgColor: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-            textColor: "#ffffff",
-            accentColor: "#fbbf24",
-            buttonColor: "#fbbf24",
-            buttonTextColor: "#000000",
-            borderRadius: 20,
-            fontSize: 16,
             padding: 20,
         },
     },
@@ -707,7 +734,7 @@ function CouponsSection({ config, onSave, saving }) {
     // --- State and Logic ---
     // Option A: per-template coupon overrides — each template owns its coupon styling independently
     const [allTemplateOverrides, setAllTemplateOverrides] = useState(
-        config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {}, template4: {} }
+        config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {} }
     );
     // Derived: active template's overrides (read-only — use setAllTemplateOverrides to update)
     const couponOverrides = allTemplateOverrides[activeTemplate] || {};
@@ -1007,7 +1034,7 @@ function CouponsSection({ config, onSave, saving }) {
         setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
         setSelectedActiveCoupons(config?.selectedActiveCoupons || []);
         setAllTemplateOverrides(
-            config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {}, template4: {} }
+            config?.allTemplateOverrides || { template1: {}, template2: {}, template3: {} }
         );
         setDisplayCondition(config?.displayCondition || "all");
         setProductHandles(config?.productHandles || []);
@@ -1036,10 +1063,13 @@ function CouponsSection({ config, onSave, saving }) {
             const selected = await shopify.resourcePicker({
                 type: "product",
                 multiple: true,
+                filter: { variants: false },
                 selectionIds: productHandles.map(h => ({ handle: h })),
             });
             if (selected) {
-                const handles = selected.map(item => item.handle).filter(Boolean);
+                const handles = normalizeProductSelection(selected)
+                    .map(item => item.handle)
+                    .filter(Boolean);
                 setProductHandles(handles);
             }
         } catch (e) {
@@ -1246,68 +1276,6 @@ function CouponsSection({ config, onSave, saving }) {
                                                 </div>
                                             </div>
                                         )}
-
-                                        {activeTemplate === "template4" && (
-                                            <div style={{
-                                                width: "100%",
-                                                background: currentTemplate.bgColor,
-                                                borderRadius: `${currentTemplate.borderRadius || 20}px`,
-                                                padding: `${currentTemplate.padding || 20}px`,
-                                                display: "flex",
-                                                flexDirection: "column",
-                                                gap: "16px",
-                                                boxShadow: "0 10px 25px rgba(99, 102, 241, 0.3)",
-                                                color: currentTemplate.textColor,
-                                                overflow: "hidden"
-                                            }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                                    <div style={{
-                                                        width: "50px",
-                                                        height: "50px",
-                                                        borderRadius: "12px",
-                                                        backgroundColor: "rgba(255, 255, 255, 0.2)",
-                                                        backdropFilter: "blur(4px)",
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        flexShrink: 0,
-                                                        fontSize: "24px"
-                                                    }}>🏷️</div>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 16) + 2}px`, fontWeight: 800, color: currentTemplate.textColor, marginBottom: "2px" }}>{currentTemplate.headingText}</div>
-                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 16) - 4}px`, opacity: 0.9, color: currentTemplate.textColor }}>{currentTemplate.subtextText}</div>
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                                    <div style={{
-                                                        flex: 1,
-                                                        padding: "10px",
-                                                        borderRadius: "10px",
-                                                        border: `1.5px dashed rgba(255, 255, 255, 0.5)`,
-                                                        background: "rgba(255, 255, 255, 0.1)",
-                                                        color: currentTemplate.textColor,
-                                                        fontSize: "14px",
-                                                        fontWeight: 700,
-                                                        fontFamily: "monospace",
-                                                        letterSpacing: "2px",
-                                                        textAlign: "center",
-                                                        minWidth: 0
-                                                    }}>{previewCoupon?.code || "VELWO"}</div>
-                                                    <button style={{
-                                                        width: "90px",
-                                                        backgroundColor: currentTemplate.buttonColor,
-                                                        color: currentTemplate.buttonTextColor,
-                                                        border: "none",
-                                                        padding: "10px 0",
-                                                        borderRadius: "30px",
-                                                        fontSize: "14px",
-                                                        fontWeight: 800,
-                                                        flexShrink: 0,
-                                                        boxShadow: "0 4px 10px rgba(0,0,0,0.1)"
-                                                    }}>Apply</button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1478,10 +1446,14 @@ function CouponsSection({ config, onSave, saving }) {
                                                                                                 type: "product",
                                                                                                 multiple: true,
                                                                                                 action: "select",
+                                                                                                filter: { variants: false },
                                                                                             });
                                                                                             if (selected && selected.length > 0) {
                                                                                                 const current = couponTpl.productHandles || [];
-                                                                                                const newHandles = selected.map(p => p.handle).filter(h => !current.includes(h));
+                                                                                                const newHandles = normalizeProductSelection(selected)
+                                                                                                    .map(p => p.handle)
+                                                                                                    .filter(Boolean)
+                                                                                                    .filter(h => !current.includes(h));
                                                                                                 if (newHandles.length > 0) {
                                                                                                     updateCouponOverride(couponId, "productHandles", [...current, ...newHandles]);
                                                                                                 }
@@ -1923,13 +1895,14 @@ function FBTSection({ config, products, onSave, saving }) {
             const selected = await shopify.resourcePicker({
                 type: "product",
                 multiple: displayScope === "per_product",
+                filter: { variants: false },
                 selectionIds: scopeTriggerProducts.map(p => ({ id: p.id })),
             });
             if (selected) {
-                const mapped = selected.map(item => ({
+                const mapped = normalizeProductSelection(selected).map(item => ({
                     id: item.id,
                     title: item.title,
-                    image: item.images?.[0]?.originalSrc || item.image?.originalSrc || "",
+                    image: item.image,
                     handle: item.handle,
                 }));
                 setScopeTriggerProducts(mapped);
@@ -1944,14 +1917,15 @@ function FBTSection({ config, products, onSave, saving }) {
             const selected = await shopify.resourcePicker({
                 type: "product",
                 multiple: true,
+                filter: { variants: false },
                 selectionIds: ruleFbtProducts.map(p => ({ id: p.id })),
             });
             if (selected) {
-                const mapped = selected.map(item => ({
+                const mapped = normalizeProductSelection(selected).map(item => ({
                     id: item.id,
                     title: item.title,
-                    image: item.images?.[0]?.originalSrc || item.image?.originalSrc || "",
-                    price: item.variants?.[0]?.price || "0.00",
+                    image: item.image,
+                    price: item.price || "0.00",
                 }));
                 setRuleFbtProducts(mapped);
             }
@@ -2802,26 +2776,42 @@ function FBTSection({ config, products, onSave, saving }) {
                                             padding: "14px 16px",
                                             background: "#fafafa"
                                         }}>
-                                            <InlineStack align="space-between" blockAlign="center" gap="400">
-                                                <BlockStack gap="100">
-                                                    <InlineStack gap="200" blockAlign="center">
-                                                        <Text variant="bodySm" fontWeight="semibold" tone="subdued">Trigger:</Text>
-                                                        {trigger?.image && (
-                                                            <Thumbnail source={trigger.image} alt={trigger.title} size="extraSmall" />
-                                                        )}
-                                                        <Text variant="bodySm" fontWeight="semibold">{trigger?.title}</Text>
-                                                    </InlineStack>
-                                                    <InlineStack gap="200" blockAlign="center" wrap>
-                                                        <Text variant="bodySm" tone="subdued">FBT:</Text>
-                                                        {rule.fbtProducts.map(p => (
-                                                            <InlineStack key={p.id} gap="100" blockAlign="center">
-                                                                {p.image && <Thumbnail source={p.image} alt={p.title} size="extraSmall" />}
-                                                                <Badge>{p.title}</Badge>
-                                                            </InlineStack>
-                                                        ))}
-                                                    </InlineStack>
-                                                </BlockStack>
-                                                <InlineStack gap="200">
+                                            <InlineStack align="space-between" blockAlign="start" gap="400" wrap>
+                                                <div style={{ flex: "1 1 340px", minWidth: 0 }}>
+                                                    <BlockStack gap="100">
+                                                        <InlineStack gap="200" blockAlign="center" wrap>
+                                                            <Text variant="bodySm" fontWeight="semibold" tone="subdued">Trigger:</Text>
+                                                            {trigger?.image && (
+                                                                <Thumbnail source={trigger.image} alt={trigger.title} size="extraSmall" />
+                                                            )}
+                                                            <Text variant="bodySm" fontWeight="semibold">{trigger?.title}</Text>
+                                                        </InlineStack>
+                                                        <InlineStack gap="200" blockAlign="center" wrap>
+                                                            <Text variant="bodySm" tone="subdued">FBT:</Text>
+                                                            {rule.fbtProducts.map(p => (
+                                                                <InlineStack key={p.id} gap="100" blockAlign="center">
+                                                                    {p.image && <Thumbnail source={p.image} alt={p.title} size="extraSmall" />}
+                                                                    <div
+                                                                        title={p.title}
+                                                                        style={{
+                                                                            fontSize: "12px",
+                                                                            border: "1px solid #d0d7de",
+                                                                            borderRadius: "999px",
+                                                                            padding: "2px 8px",
+                                                                            maxWidth: "220px",
+                                                                            whiteSpace: "nowrap",
+                                                                            overflow: "hidden",
+                                                                            textOverflow: "ellipsis",
+                                                                        }}
+                                                                    >
+                                                                        {p.title}
+                                                                    </div>
+                                                                </InlineStack>
+                                                            ))}
+                                                        </InlineStack>
+                                                    </BlockStack>
+                                                </div>
+                                                <InlineStack gap="200" wrap>
                                                     <Button
                                                         size="slim"
                                                         variant="primary"
