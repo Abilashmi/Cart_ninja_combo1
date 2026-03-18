@@ -1,0 +1,48 @@
+{
+    "timestamp": "2026-03-05 07:30:16",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawer\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\r\n    \"payload\":  {\r\n                    \"shopDomain\":  \"demo-shop.myshopify.com\",\r\n                    \"template3\":  {\r\n\r\n                                  },\r\n                    \"selectedCouponsGlobal\":  [\r\n                                                  {\r\n                                                      \"title\":  \"Save 10%\",\r\n                                                      \"code\":  \"SAVE10\",\r\n                                                      \"value\":  10,\r\n                                                      \"discountType\":  \"percentage\"\r\n                                                  }\r\n                                              ],\r\n                    \"selectedTemplate\":  \"template1\",\r\n                    \"template2\":  {\r\n\r\n                                  },\r\n                    \"template1\":  {\r\n                                      \"styles\":  {\r\n                                                     \"textColor\":  \"#ffffff\",\r\n                                                     \"bgColor\":  \"#111111\"\r\n                                                 },\r\n                                      \"couponStyles\":  {\r\n                                                           \"borderRadius\":  \"8px\",\r\n                                                           \"buttonText\":  \"Apply\"\r\n                                                       },\r\n                                      \"couponConditions\":  {\r\n                                                               \"customerTags\":  [\r\n                                                                                    \"vip\"\r\n                                                                                ],\r\n                                                               \"minAmount\":  500\r\n                                                           }\r\n                                  }\r\n                }\r\n}"
+    }
+}
+---
+{
+    "timestamp": "2026-03-05 07:30:31",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawer\/save_coupon_slider_widget.php?shopdomain=demo-shop.myshopify.com",
+        "query": {
+            "shopdomain": "demo-shop.myshopify.com"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-03-05 07:44:52",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawer\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-03-05 07:45:24",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawer\/save_coupon_slider_widget.php?shopdomain=cartapp-2.myshopify.com",
+        "query": {
+            "shopdomain": "cartapp-2.myshopify.com"
+        },
+        "payloadPreview": null
+    }
+}
+---

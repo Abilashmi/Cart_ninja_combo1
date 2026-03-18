@@ -1,0 +1,286 @@
+{
+    "timestamp": "2026-02-25 11:19:02",
+    "message": "STEP 1 \u2705 Database connection successful",
+    "context": []
+}
+---
+{
+    "timestamp": "2026-02-25 11:19:02",
+    "message": "STEP 2 \ud83d\udce5 Raw payload received",
+    "context": {
+        "raw_length": 817,
+        "raw": "{\"title\":\"digi\",\"code\":\"Q1SXB0IB\",\"type\":\"amount_off_products\",\"valueType\":\"percentage\",\"value\":50,\"startDate\":\"2026-02-25T06:30:00.000Z\",\"endDate\":null,\"selectionType\":\"all\",\"selectedResources\":[],\"minimumRequirementValue\":\"none\",\"minimumPurchaseAmount\":0,\"minimumQuantity\":0,\"limitTotalUses\":false,\"totalUsesLimit\":0,\"limitOnePerCustomer\":false,\"combineProduct\":false,\"combineOrder\":false,\"combineShipping\":false,\"oncePerOrder\":false,\"countriesType\":null,\"selectedCountries\":[],\"bxgyBuysType\":null,\"bxgyBuysResources\":[],\"bxgyBuysQuantity\":null,\"bxgyGetsType\":null,\"bxgyGetsResources\":[],\"bxgyGetsValueType\":null,\"bxgyGetsValue\":null,\"bxgyGetsQuantity\":null,\"bxgyRepeatOncePerOrder\":false,\"shopifyId\":\"gid:\/\/shopify\/DiscountCodeNode\/1289409331267\",\"id\":\"sample_1772014741777\",\"createdAt\":\"2026-02-25T10:19:01.777Z\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:19:02",
+    "message": "STEP 3 \u2705 JSON decoded successfully",
+    "context": {
+        "decoded_keys": [
+            "title",
+            "code",
+            "type",
+            "valueType",
+            "value",
+            "startDate",
+            "endDate",
+            "selectionType",
+            "selectedResources",
+            "minimumRequirementValue",
+            "minimumPurchaseAmount",
+            "minimumQuantity",
+            "limitTotalUses",
+            "totalUsesLimit",
+            "limitOnePerCustomer",
+            "combineProduct",
+            "combineOrder",
+            "combineShipping",
+            "oncePerOrder",
+            "countriesType",
+            "selectedCountries",
+            "bxgyBuysType",
+            "bxgyBuysResources",
+            "bxgyBuysQuantity",
+            "bxgyGetsType",
+            "bxgyGetsResources",
+            "bxgyGetsValueType",
+            "bxgyGetsValue",
+            "bxgyGetsQuantity",
+            "bxgyRepeatOncePerOrder",
+            "shopifyId",
+            "id",
+            "createdAt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:19:02",
+    "message": "STEP 4 \u2705 Using root data as payload (flat structure)",
+    "context": {
+        "payload_keys": [
+            "title",
+            "code",
+            "type",
+            "valueType",
+            "value",
+            "startDate",
+            "endDate",
+            "selectionType",
+            "selectedResources",
+            "minimumRequirementValue",
+            "minimumPurchaseAmount",
+            "minimumQuantity",
+            "limitTotalUses",
+            "totalUsesLimit",
+            "limitOnePerCustomer",
+            "combineProduct",
+            "combineOrder",
+            "combineShipping",
+            "oncePerOrder",
+            "countriesType",
+            "selectedCountries",
+            "bxgyBuysType",
+            "bxgyBuysResources",
+            "bxgyBuysQuantity",
+            "bxgyGetsType",
+            "bxgyGetsResources",
+            "bxgyGetsValueType",
+            "bxgyGetsValue",
+            "bxgyGetsQuantity",
+            "bxgyRepeatOncePerOrder",
+            "shopifyId",
+            "id",
+            "createdAt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:19:02",
+    "message": "STEP 5 \u274c Missing required fields",
+    "context": {
+        "missing": [
+            "shopDomain"
+        ],
+        "payload": {
+            "title": "digi",
+            "code": "Q1SXB0IB",
+            "type": "amount_off_products",
+            "valueType": "percentage",
+            "value": 50,
+            "startDate": "2026-02-25T06:30:00.000Z",
+            "endDate": null,
+            "selectionType": "all",
+            "selectedResources": [],
+            "minimumRequirementValue": "none",
+            "minimumPurchaseAmount": 0,
+            "minimumQuantity": 0,
+            "limitTotalUses": false,
+            "totalUsesLimit": 0,
+            "limitOnePerCustomer": false,
+            "combineProduct": false,
+            "combineOrder": false,
+            "combineShipping": false,
+            "oncePerOrder": false,
+            "countriesType": null,
+            "selectedCountries": [],
+            "bxgyBuysType": null,
+            "bxgyBuysResources": [],
+            "bxgyBuysQuantity": null,
+            "bxgyGetsType": null,
+            "bxgyGetsResources": [],
+            "bxgyGetsValueType": null,
+            "bxgyGetsValue": null,
+            "bxgyGetsQuantity": null,
+            "bxgyRepeatOncePerOrder": false,
+            "shopifyId": "gid:\/\/shopify\/DiscountCodeNode\/1289409331267",
+            "id": "sample_1772014741777",
+            "createdAt": "2026-02-25T10:19:01.777Z"
+        }
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 1 \u2705 Database connection successful",
+    "context": []
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 2 \ud83d\udce5 Raw payload received",
+    "context": {
+        "raw_length": 855,
+        "raw": "{\"shopDomain\":\"cartapp-2.myshopify.com\",\"title\":\"dww\",\"code\":\"9Y39OK68\",\"type\":\"amount_off_products\",\"valueType\":\"percentage\",\"value\":25,\"startDate\":\"2026-02-25T06:30:00.000Z\",\"endDate\":null,\"selectionType\":\"all\",\"selectedResources\":[],\"minimumRequirementValue\":\"none\",\"minimumPurchaseAmount\":0,\"minimumQuantity\":0,\"limitTotalUses\":false,\"totalUsesLimit\":0,\"limitOnePerCustomer\":false,\"combineProduct\":false,\"combineOrder\":false,\"combineShipping\":false,\"oncePerOrder\":false,\"countriesType\":null,\"selectedCountries\":[],\"bxgyBuysType\":null,\"bxgyBuysResources\":[],\"bxgyBuysQuantity\":null,\"bxgyGetsType\":null,\"bxgyGetsResources\":[],\"bxgyGetsValueType\":null,\"bxgyGetsValue\":null,\"bxgyGetsQuantity\":null,\"bxgyRepeatOncePerOrder\":false,\"shopifyId\":\"gid:\/\/shopify\/DiscountCodeNode\/1289409790019\",\"id\":\"sample_1772015128136\",\"createdAt\":\"2026-02-25T10:25:28.136Z\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 3 \u2705 JSON decoded successfully",
+    "context": {
+        "decoded_keys": [
+            "shopDomain",
+            "title",
+            "code",
+            "type",
+            "valueType",
+            "value",
+            "startDate",
+            "endDate",
+            "selectionType",
+            "selectedResources",
+            "minimumRequirementValue",
+            "minimumPurchaseAmount",
+            "minimumQuantity",
+            "limitTotalUses",
+            "totalUsesLimit",
+            "limitOnePerCustomer",
+            "combineProduct",
+            "combineOrder",
+            "combineShipping",
+            "oncePerOrder",
+            "countriesType",
+            "selectedCountries",
+            "bxgyBuysType",
+            "bxgyBuysResources",
+            "bxgyBuysQuantity",
+            "bxgyGetsType",
+            "bxgyGetsResources",
+            "bxgyGetsValueType",
+            "bxgyGetsValue",
+            "bxgyGetsQuantity",
+            "bxgyRepeatOncePerOrder",
+            "shopifyId",
+            "id",
+            "createdAt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 4 \u2705 Using root data as payload (flat structure)",
+    "context": {
+        "payload_keys": [
+            "shopDomain",
+            "title",
+            "code",
+            "type",
+            "valueType",
+            "value",
+            "startDate",
+            "endDate",
+            "selectionType",
+            "selectedResources",
+            "minimumRequirementValue",
+            "minimumPurchaseAmount",
+            "minimumQuantity",
+            "limitTotalUses",
+            "totalUsesLimit",
+            "limitOnePerCustomer",
+            "combineProduct",
+            "combineOrder",
+            "combineShipping",
+            "oncePerOrder",
+            "countriesType",
+            "selectedCountries",
+            "bxgyBuysType",
+            "bxgyBuysResources",
+            "bxgyBuysQuantity",
+            "bxgyGetsType",
+            "bxgyGetsResources",
+            "bxgyGetsValueType",
+            "bxgyGetsValue",
+            "bxgyGetsQuantity",
+            "bxgyRepeatOncePerOrder",
+            "shopifyId",
+            "id",
+            "createdAt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 5 \u2705 Required fields validated",
+    "context": {
+        "internalId": "sample_1772015128136",
+        "shopifyId": "gid:\/\/shopify\/DiscountCodeNode\/1289409790019",
+        "code": "9Y39OK68",
+        "shopDomain": "cartapp-2.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 6 \u2705 Discount config prepared",
+    "context": {
+        "config_length": 859,
+        "config": "{\"shopDomain\":\"cartapp-2.myshopify.com\",\"title\":\"dww\",\"code\":\"9Y39OK68\",\"type\":\"amount_off_products\",\"valueType\":\"percentage\",\"value\":25,\"startDate\":\"2026-02-25T06:30:00.000Z\",\"endDate\":null,\"selectionType\":\"all\",\"selectedResources\":[],\"minimumRequirementValue\":\"none\",\"minimumPurchaseAmount\":0,\"minimumQuantity\":0,\"limitTotalUses\":false,\"totalUsesLimit\":0,\"limitOnePerCustomer\":false,\"combineProduct\":false,\"combineOrder\":false,\"combineShipping\":false,\"oncePerOrder\":false,\"countriesType\":null,\"selectedCountries\":[],\"bxgyBuysType\":null,\"bxgyBuysResources\":[],\"bxgyBuysQuantity\":null,\"bxgyGetsType\":null,\"bxgyGetsResources\":[],\"bxgyGetsValueType\":null,\"bxgyGetsValue\":null,\"bxgyGetsQuantity\":null,\"bxgyRepeatOncePerOrder\":false,\"shopifyId\":\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1289409790019\",\"id\":\"sample_1772015128136\",\"createdAt\":\"2026-02-25T10:25:28.136Z\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 7 \ud83d\udd04 Executing SQL with params",
+    "context": {
+        ":internal_id": "sample_1772015128136",
+        ":shopify_id": "gid:\/\/shopify\/DiscountCodeNode\/1289409790019",
+        ":shop_domain": "cartapp-2.myshopify.com",
+        ":code": "9Y39OK68",
+        ":discount_config": "{\"shopDomain\":\"cartapp-2.myshopify.com\",\"title\":\"dww\",\"code\":\"9Y39OK68\",\"type\":\"amount_off_products\",\"valueType\":\"percentage\",\"value\":25,\"startDate\":\"2026-02-25T06:30:00.000Z\",\"endDate\":null,\"selectionType\":\"all\",\"selectedResources\":[],\"minimumRequirementValue\":\"none\",\"minimumPurchaseAmount\":0,\"minimumQuantity\":0,\"limitTotalUses\":false,\"totalUsesLimit\":0,\"limitOnePerCustomer\":false,\"combineProduct\":false,\"combineOrder\":false,\"combineShipping\":false,\"oncePerOrder\":false,\"countriesType\":null,\"selectedCountries\":[],\"bxgyBuysType\":null,\"bxgyBuysResources\":[],\"bxgyBuysQuantity\":null,\"bxgyGetsType\":null,\"bxgyGetsResources\":[],\"bxgyGetsValueType\":null,\"bxgyGetsValue\":null,\"bxgyGetsQuantity\":null,\"bxgyRepeatOncePerOrder\":false,\"shopifyId\":\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1289409790019\",\"id\":\"sample_1772015128136\",\"createdAt\":\"2026-02-25T10:25:28.136Z\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 11:25:28",
+    "message": "STEP 7 \u2705 Database operation successful",
+    "context": {
+        "rowCount": 1,
+        "action": "INSERTED"
+    }
+}
+---

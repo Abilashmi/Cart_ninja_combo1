@@ -1,0 +1,89 @@
+{
+    "time": "2026-02-24 12:10:43",
+    "ip": "::1",
+    "method": "POST",
+    "headers": {
+        "Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "User-Agent": "node",
+        "Content-Length": "1342",
+        "Accept": "*\/*",
+        "Accept-Encoding": "br, gzip, deflate",
+        "Accept-Language": "*",
+        "Content-Type": "application\/json",
+        "Sec-Fetch-Mode": "cors",
+        "X-Forwarded-For": "103.186.151.4",
+        "X-Forwarded-Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "X-Forwarded-Proto": "https"
+    },
+    "payload": {
+        "shop": "cartapp-2.myshopify.com",
+        "fbt": {
+            "activeTemplate": "fbt3",
+            "templates": {
+                "fbt1": {
+                    "name": "Classic Grid",
+                    "layout": "horizontal",
+                    "interactionType": "classic",
+                    "bgColor": "#ffffff",
+                    "textColor": "#111827",
+                    "priceColor": "#059669",
+                    "buttonColor": "#111827",
+                    "buttonTextColor": "#ffffff",
+                    "borderColor": "#e5e7eb",
+                    "borderRadius": 8,
+                    "showPrices": true,
+                    "showAddAllButton": true
+                },
+                "fbt2": {
+                    "name": "Modern Cards",
+                    "layout": "vertical",
+                    "interactionType": "classic",
+                    "bgColor": "#f9fafb",
+                    "textColor": "#374151",
+                    "priceColor": "#dc2626",
+                    "buttonColor": "#2c723b",
+                    "buttonTextColor": "#ffffff",
+                    "borderColor": "#d1d5db",
+                    "borderRadius": 12,
+                    "showPrices": true,
+                    "showAddAllButton": true
+                },
+                "fbt3": {
+                    "name": "Vertical List",
+                    "layout": "vertical",
+                    "interactionType": "quickAdd",
+                    "bgColor": "#000000",
+                    "textColor": "#86bf9e",
+                    "priceColor": "#427a55",
+                    "buttonColor": "#2e9472",
+                    "buttonTextColor": "#65ad95",
+                    "borderColor": "#f3f4f6",
+                    "borderRadius": 16,
+                    "showPrices": true,
+                    "showAddAllButton": true
+                }
+            },
+            "mode": "manual",
+            "openaiKey": "",
+            "manualRules": [],
+            "selectedTemplate": "fbt3",
+            "interactionStyle": "quickAdd",
+            "layoutAlignment": "vertical",
+            "color": {
+                "bgColor": "#000000",
+                "textColor": "#86bf9e",
+                "priceColor": "#427a55",
+                "buttonColor": "#2e9472",
+                "buttonText": "#65ad95",
+                "borderColor": "#f3f4f6"
+            },
+            "styling": {
+                "borderRadius": 16,
+                "showPrices": true,
+                "showAddAllButton": true
+            },
+            "configurationMode": "Manual Configuration",
+            "manualConfiguration": []
+        }
+    }
+}

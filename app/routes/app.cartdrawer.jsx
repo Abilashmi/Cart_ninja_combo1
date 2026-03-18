@@ -3270,6 +3270,17 @@ export default function CartDrawerAdmin() {
                   checked={upsellConfig.useAI}
                   onChange={(checked) => setUpsellConfig({ ...upsellConfig, useAI: checked })}
                 />
+                {upsellConfig.useAI && (
+                  <TextField
+                    label="OpenAI API Key"
+                    value={upsellConfig.aiApiKey || ''}
+                    onChange={(val) => setUpsellConfig({ ...upsellConfig, aiApiKey: val })}
+                    autoComplete="off"
+                    helpText="Required to fetch product recommendations. Keep this key secure."
+                    placeholder="sk-..."
+                    type="password"
+                  />
+                )}
               </BlockStack>
             </Card>
 

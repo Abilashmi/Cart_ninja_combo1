@@ -1,0 +1,29 @@
+{
+    "time": "2026-02-17 15:09:01",
+    "ip": "::1",
+    "method": "POST",
+    "headers": {
+        "Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "User-Agent": "node",
+        "Content-Length": "1061",
+        "Accept": "*\/*",
+        "Accept-Encoding": "br, gzip, deflate",
+        "Accept-Language": "*",
+        "Content-Type": "application\/json",
+        "Sec-Fetch-Mode": "cors",
+        "X-Forwarded-For": "103.186.151.131",
+        "X-Forwarded-Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "X-Forwarded-Proto": "https"
+    },
+    "payload": {
+        "Id": "cartapp-2.myshopify.com",
+        "shop": "cartapp-2.myshopify.com",
+        "cartstatus": "inactive",
+        "progress_data": "{\"enabled\":false,\"mode\":\"amount\",\"showOnEmpty\":true,\"barBackgroundColor\":\"#e2e8f0\",\"borderRadius\":8,\"completionText\":\"\ud83c\udf89 You've unlocked free shipping!\",\"maxTarget\":1000,\"tiers\":[{\"id\":1,\"minValue\":500,\"description\":\"Free Shipping\",\"products\":[],\"rewardType\":\"product\"},{\"id\":1771337140866,\"rewardType\":\"product\",\"minValue\":10,\"description\":\"\",\"titleBeforeAchieving\":\"You're {COUNT} away from ____\",\"products\":[]}]}",
+        "coupon_data": "{\"style\":\"style-2\",\"position\":\"top\",\"layout\":\"grid\",\"alignment\":\"horizontal\",\"selectedActiveCoupons\":[\"sample_1771324651718\",\"sample_1771330440125\"],\"couponOverrides\":{}}",
+        "upsell_data": "{\"enabled\":false,\"upsellTitle\":{\"text\":\"Frequently Bought Together\",\"color\":\"#111827\"},\"manualRules\":[],\"activeTemplate\":\"grid\",\"showOnEmptyCart\":false,\"upsellMode\":\"manual\"}",
+        "progress_status": 0,
+        "coupon_status": 0,
+        "upsell_status": 0
+    }
+}

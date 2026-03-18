@@ -1,0 +1,115 @@
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 1 \u2705 Database connection successful",
+    "context": []
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 2 \ud83d\udce5 Raw payload received",
+    "context": {
+        "raw_length": 2615,
+        "raw": "{\"shop\":\"cartapp-2.myshopify.com\",\"fbt\":{\"activeTemplate\":\"fbt3\",\"templates\":{\"fbt1\":{\"name\":\"Classic Grid\",\"layout\":\"horizontal\",\"interactionType\":\"classic\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"priceColor\":\"#059669\",\"buttonColor\":\"#111827\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#e5e7eb\",\"borderRadius\":8,\"showPrices\":true,\"showAddAllButton\":true},\"fbt2\":{\"name\":\"Modern Cards\",\"layout\":\"vertical\",\"interactionType\":\"classic\",\"bgColor\":\"#f9fafb\",\"textColor\":\"#374151\",\"priceColor\":\"#dc2626\",\"buttonColor\":\"#2c723b\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#d1d5db\",\"borderRadius\":12,\"showPrices\":true,\"showAddAllButton\":true},\"fbt3\":{\"name\":\"Vertical List\",\"layout\":\"vertical\",\"interactionType\":\"quickAdd\",\"bgColor\":\"#000000\",\"textColor\":\"#86bf9e\",\"priceColor\":\"#427a55\",\"buttonColor\":\"#2e9472\",\"buttonTextColor\":\"#65ad95\",\"borderColor\":\"#f3f4f6\",\"borderRadius\":16,\"showPrices\":true,\"showAddAllButton\":true}},\"mode\":\"manual\",\"openaiKey\":\"\",\"manualRules\":[{\"id\":\"rule-auto-1772012990972\",\"displayScope\":\"single\",\"triggerProducts\":[{\"id\":\"gid:\/\/shopify\/Product\/7545196806211\",\"title\":\"The Collection Snowboard: Hydrogen\",\"image\":\"https:\/\/cdn.shopify.com\/s\/files\/1\/0668\/0025\/5043\/files\/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575\",\"handle\":\"the-collection-snowboard-hydrogen\"}],\"fbtProducts\":[{\"id\":\"gid:\/\/shopify\/Product\/7545196970051\",\"title\":\"The Collection Snowboard: Oxygen\",\"image\":\"https:\/\/cdn.shopify.com\/s\/files\/1\/0668\/0025\/5043\/files\/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576\",\"price\":\"1025.00\"}]}],\"selectedTemplate\":\"fbt3\",\"interactionStyle\":\"quickAdd\",\"layoutAlignment\":\"vertical\",\"color\":{\"bgColor\":\"#000000\",\"textColor\":\"#86bf9e\",\"priceColor\":\"#427a55\",\"buttonColor\":\"#2e9472\",\"buttonText\":\"#65ad95\",\"borderColor\":\"#f3f4f6\"},\"styling\":{\"borderRadius\":16,\"showPrices\":true,\"showAddAllButton\":true},\"configurationMode\":\"Manual Configuration\",\"manualConfiguration\":[{\"ruleId\":\"rule-auto-1772012990972\",\"displayScope\":\"single\",\"triggeredProduct\":\"The Collection Snowboard: Hydrogen\",\"upsellProduct\":\"The Collection Snowboard: Oxygen\",\"triggerProducts\":[{\"id\":\"gid:\/\/shopify\/Product\/7545196806211\",\"title\":\"The Collection Snowboard: Hydrogen\",\"image\":\"https:\/\/cdn.shopify.com\/s\/files\/1\/0668\/0025\/5043\/files\/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575\",\"handle\":\"the-collection-snowboard-hydrogen\"}],\"fbtProducts\":[{\"id\":\"gid:\/\/shopify\/Product\/7545196970051\",\"title\":\"The Collection Snowboard: Oxygen\",\"image\":\"https:\/\/cdn.shopify.com\/s\/files\/1\/0668\/0025\/5043\/files\/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576\",\"price\":\"1025.00\"}]}]}}"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 3 \u2705 JSON decoded successfully",
+    "context": {
+        "decoded_keys": [
+            "shop",
+            "fbt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 4 \u2705 Using root data as payload (flat structure)",
+    "context": {
+        "payload_keys": [
+            "shop",
+            "fbt"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 5 \u2705 shopDomain validated",
+    "context": {
+        "shopDomain": "cartapp-2.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 6 \u2705 FBT data extracted",
+    "context": {
+        "fbt_keys": [
+            "activeTemplate",
+            "templates",
+            "mode",
+            "openaiKey",
+            "manualRules",
+            "selectedTemplate",
+            "interactionStyle",
+            "layoutAlignment",
+            "color",
+            "styling",
+            "configurationMode",
+            "manualConfiguration"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 6 \u2705 Templates extracted",
+    "context": {
+        "templates_keys": [
+            "fbt1",
+            "fbt2",
+            "fbt3"
+        ]
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 7 \u2705 Fields mapped for DB insert",
+    "context": {
+        "shopDomain": "cartapp-2.myshopify.com",
+        "temp1": "{\"name\":\"Classic Grid\",\"layout\":\"horizontal\",\"interactionType\":\"classic\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"priceColor\":\"#059669\",\"buttonColor\":\"#111827\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#e5e7eb\",\"borderRadius\":8,\"showPrices\":true,\"showAddAllButton\":true}",
+        "temp2": "{\"name\":\"Modern Cards\",\"layout\":\"vertical\",\"interactionType\":\"classic\",\"bgColor\":\"#f9fafb\",\"textColor\":\"#374151\",\"priceColor\":\"#dc2626\",\"buttonColor\":\"#2c723b\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#d1d5db\",\"borderRadius\":12,\"showPrices\":true,\"showAddAllButton\":true}",
+        "temp3": "{\"name\":\"Vertical List\",\"layout\":\"vertical\",\"interactionType\":\"quickAdd\",\"bgColor\":\"#000000\",\"textColor\":\"#86bf9e\",\"priceColor\":\"#427a55\",\"buttonColor\":\"#2e9472\",\"buttonTextColor\":\"#65ad95\",\"borderColor\":\"#f3f4f6\",\"borderRadius\":16,\"showPrices\":true,\"showAddAllButton\":true}",
+        "selectedTemp": "fbt3",
+        "selectedMode": "manual",
+        "condition": "[{\"id\":\"rule-auto-1772012990972\",\"displayScope\":\"single\",\"triggerProducts\":[{\"id\":\"gid:\\\/\\\/shopify\\\/Product\\\/7545196806211\",\"title\":\"The Collection Snowboard: Hydrogen\",\"image\":\"https:\\\/\\\/cdn.shopify.com\\\/s\\\/files\\\/1\\\/0668\\\/0025\\\/5043\\\/files\\\/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575\",\"handle\":\"the-collection-snowboard-hydrogen\"}],\"fbtProducts\":[{\"id\":\"gid:\\\/\\\/shopify\\\/Product\\\/7545196970051\",\"title\":\"The Collection Snowboard: Oxygen\",\"image\":\"https:\\\/\\\/cdn.shopify.com\\\/s\\\/files\\\/1\\\/0668\\\/0025\\\/5043\\\/files\\\/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576\",\"price\":\"1025.00\"}]}]"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 8 \ud83d\udd04 Executing SQL with params",
+    "context": {
+        ":shopDomain": "cartapp-2.myshopify.com",
+        ":temp1": "{\"name\":\"Classic Grid\",\"layout\":\"horizontal\",\"interactionType\":\"classic\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"priceColor\":\"#059669\",\"buttonColor\":\"#111827\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#e5e7eb\",\"borderRadius\":8,\"showPrices\":true,\"showAddAllButton\":true}",
+        ":temp2": "{\"name\":\"Modern Cards\",\"layout\":\"vertical\",\"interactionType\":\"classic\",\"bgColor\":\"#f9fafb\",\"textColor\":\"#374151\",\"priceColor\":\"#dc2626\",\"buttonColor\":\"#2c723b\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#d1d5db\",\"borderRadius\":12,\"showPrices\":true,\"showAddAllButton\":true}",
+        ":temp3": "{\"name\":\"Vertical List\",\"layout\":\"vertical\",\"interactionType\":\"quickAdd\",\"bgColor\":\"#000000\",\"textColor\":\"#86bf9e\",\"priceColor\":\"#427a55\",\"buttonColor\":\"#2e9472\",\"buttonTextColor\":\"#65ad95\",\"borderColor\":\"#f3f4f6\",\"borderRadius\":16,\"showPrices\":true,\"showAddAllButton\":true}",
+        ":selectedTemp": "fbt3",
+        ":selectedMode": "manual",
+        ":condition": "[{\"id\":\"rule-auto-1772012990972\",\"displayScope\":\"single\",\"triggerProducts\":[{\"id\":\"gid:\\\/\\\/shopify\\\/Product\\\/7545196806211\",\"title\":\"The Collection Snowboard: Hydrogen\",\"image\":\"https:\\\/\\\/cdn.shopify.com\\\/s\\\/files\\\/1\\\/0668\\\/0025\\\/5043\\\/files\\\/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575\",\"handle\":\"the-collection-snowboard-hydrogen\"}],\"fbtProducts\":[{\"id\":\"gid:\\\/\\\/shopify\\\/Product\\\/7545196970051\",\"title\":\"The Collection Snowboard: Oxygen\",\"image\":\"https:\\\/\\\/cdn.shopify.com\\\/s\\\/files\\\/1\\\/0668\\\/0025\\\/5043\\\/files\\\/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576\",\"price\":\"1025.00\"}]}]"
+    }
+}
+---
+{
+    "timestamp": "2026-02-25 10:49:52",
+    "message": "STEP 8 \u2705 Database operation successful",
+    "context": {
+        "rowCount": 1,
+        "action": "INSERTED"
+    }
+}
+---

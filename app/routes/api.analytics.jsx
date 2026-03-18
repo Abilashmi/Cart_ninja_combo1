@@ -124,7 +124,7 @@ async function getErrorBody(response) {
   try {
     const body = await response.clone().json();
     return body?.error || body?.message || JSON.stringify(body);
-  } catch {}
+  } catch { }
 
   try {
     const text = await response.text();
@@ -152,9 +152,20 @@ export async function loader({ request }) {
   const upstreams = getAnalyticsUpstreamUrls();
   const upstreamErrors = [];
 
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+
   for (const baseUrl of upstreams) {
     const separator = baseUrl.includes("?") ? "&" : "?";
-    const analyticsUrl = `${baseUrl}${separator}shop=${encodeURIComponent(shop)}`;
+    let analyticsUrl = `${baseUrl}${separator}shop=${encodeURIComponent(shop)}`;
+    
+    // Append date filters if they exist
+    if (startDate) {
+      analyticsUrl += `&startDate=${encodeURIComponent(startDate)}`;
+    }
+    if (endDate) {
+      analyticsUrl += `&endDate=${encodeURIComponent(endDate)}`;
+    }
 
     try {
       const response = await fetch(analyticsUrl, {
@@ -176,8 +187,6 @@ export async function loader({ request }) {
       return Response.json({
         success: true,
         data: normalizeAnalyticsPayload(payload),
-        shop,
-        source: baseUrl,
       });
     } catch (error) {
       upstreamErrors.push(`${baseUrl} -> ${error?.message || "Request failed"}`);

@@ -1,13 +1,27 @@
 import { useEffect } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
 
-  return null;
+  // Fire-and-forget request to register/activate the shop in the remote DB
+  try {
+    fetch("https://blueviolet-clam-512487.hostingersite.com/install_shop.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ shop }),
+    }).catch(console.error);
+  } catch (error) {
+    console.error("Failed to call install_shop.php", error);
+  }
+
+  return { shop };
 };
 
 export const action = async ({ request }) => {
@@ -78,6 +92,8 @@ export const action = async ({ request }) => {
 export default function Index() {
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const { shop } = useLoaderData();
+
   const isLoading =
     ["loading", "submitting"].includes(fetcher.state) &&
     fetcher.formMethod === "POST";
@@ -87,6 +103,32 @@ export default function Index() {
       shopify.toast.show("Product created");
     }
   }, [fetcher.data?.product?.id, shopify]);
+
+  // Log the app opening event on the client side so it appears in the network tab
+  useEffect(() => {
+    if (shop) {
+      console.log("Triggering shopify.fetch to /api/shophandler for shop:", shop);
+
+      // Use shopify.fetch instead of standard fetch to ensure Shopify session headers are included
+      fetch("/api/shophandler", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          shop,
+          action: "app_opened",
+          details: "User loaded the app dashboard"
+        }),
+      }).then(res => {
+        console.log("Response from /api/shophandler:", res.status);
+      }).catch(err => {
+        console.error("Error fetching /api/shophandler:", err);
+      });
+    } else {
+      console.log("No shop domain available from loader to send to /api/shophandler");
+    }
+  }, [shop, shopify]);
   const generateProduct = () => fetcher.submit({}, { method: "POST" });
 
   return (

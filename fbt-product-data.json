@@ -51,12 +51,12 @@
         "name": "Classic Grid",
         "layout": "vertical",
         "interactionType": "bundle",
-        "bgColor": "#932d2d",
-        "textColor": "#0b0c0f",
-        "priceColor": "#059669",
-        "buttonColor": "#cdddff",
-        "buttonTextColor": "#ff2e2e",
-        "borderColor": "#e5e7eb",
+        "bgColor": "#343a8e",
+        "textColor": "#dde6ff",
+        "priceColor": "#32c34d",
+        "buttonColor": "#e7e7e7",
+        "buttonTextColor": "#0c1d76",
+        "borderColor": "#6a97f1",
         "borderRadius": 18,
         "showPrices": true,
         "showAddAllButton": true
@@ -93,7 +93,7 @@
     "mode": "ai",
     "manualRules": [
       {
-        "id": "ai-rule-1773464920106-1",
+        "id": "ai-rule-1773839156315-1",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -115,18 +115,18 @@
             "price": "949.95"
           },
           {
-            "id": "gid://shopify/Product/7545196609603",
-            "title": "The Out of Stock Snowboard",
-            "handle": "the-out-of-stock-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_f44a9605-cd62-464d-b095-d45cdaa0d0d7.jpg?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795804328003",
-            "price": "885.95"
+            "id": "gid://shopify/Product/7545196707907",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
+            "variantId": "gid://shopify/ProductVariant/42795804131395",
+            "price": "699.95"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-2",
+        "id": "ai-rule-1773839156315-2",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -148,18 +148,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-3",
+        "id": "ai-rule-1773839156315-3",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -181,18 +181,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-4",
+        "id": "ai-rule-1773839156315-4",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -214,18 +214,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-5",
+        "id": "ai-rule-1773839156315-5",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -247,18 +247,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-6",
+        "id": "ai-rule-1773839156315-6",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -280,18 +280,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-7",
+        "id": "ai-rule-1773839156315-7",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -313,18 +313,18 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-8",
+        "id": "ai-rule-1773839156315-8",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -357,7 +357,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-9",
+        "id": "ai-rule-1773839156315-9",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -390,7 +390,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-10",
+        "id": "ai-rule-1773839156315-10",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -423,7 +423,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-11",
+        "id": "ai-rule-1773839156316-11",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -456,7 +456,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-12",
+        "id": "ai-rule-1773839156316-12",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -489,7 +489,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-13",
+        "id": "ai-rule-1773839156316-13",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -522,7 +522,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-14",
+        "id": "ai-rule-1773839156316-14",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -555,7 +555,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-15",
+        "id": "ai-rule-1773839156316-15",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -588,7 +588,7 @@
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-16",
+        "id": "ai-rule-1773839156316-16",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -602,26 +602,26 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-17",
+        "id": "ai-rule-1773839156316-17",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -635,26 +635,26 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-18",
+        "id": "ai-rule-1773839156316-18",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -668,26 +668,26 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-19",
+        "id": "ai-rule-1773839156316-19",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -701,26 +701,26 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-20",
+        "id": "ai-rule-1773839156316-20",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -734,26 +734,26 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
       },
       {
-        "id": "ai-rule-1773464920106-21",
+        "id": "ai-rule-1773839156316-21",
         "displayScope": "single",
         "triggerProducts": [
           {
@@ -767,20 +767,20 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ],
         "aiGenerated": true
@@ -796,12 +796,12 @@
     "interactionStyle": "bundle",
     "layoutAlignment": "vertical",
     "color": {
-      "bgColor": "#932d2d",
-      "textColor": "#0b0c0f",
-      "priceColor": "#059669",
-      "buttonColor": "#cdddff",
-      "buttonText": "#ff2e2e",
-      "borderColor": "#e5e7eb"
+      "bgColor": "#343a8e",
+      "textColor": "#dde6ff",
+      "priceColor": "#32c34d",
+      "buttonColor": "#e7e7e7",
+      "buttonText": "#0c1d76",
+      "borderColor": "#6a97f1"
     },
     "styling": {
       "borderRadius": 18,
@@ -811,10 +811,10 @@
     "configurationMode": "AI Configuration",
     "manualConfiguration": [
       {
-        "ruleId": "ai-rule-1773464920106-1",
+        "ruleId": "ai-rule-1773839156315-1",
         "displayScope": "single",
         "triggeredProduct": "Gift Card",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, The Out of Stock Snowboard",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196478531",
@@ -835,20 +835,20 @@
             "price": "949.95"
           },
           {
-            "id": "gid://shopify/Product/7545196609603",
-            "title": "The Out of Stock Snowboard",
-            "handle": "the-out-of-stock-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_f44a9605-cd62-464d-b095-d45cdaa0d0d7.jpg?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795804328003",
-            "price": "885.95"
+            "id": "gid://shopify/Product/7545196707907",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
+            "variantId": "gid://shopify/ProductVariant/42795804131395",
+            "price": "699.95"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-2",
+        "ruleId": "ai-rule-1773839156315-2",
         "displayScope": "single",
         "triggeredProduct": "The Inventory Not Tracked Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196511299",
@@ -869,20 +869,20 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-3",
+        "ruleId": "ai-rule-1773839156315-3",
         "displayScope": "single",
         "triggeredProduct": "The Out of Stock Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196609603",
@@ -903,20 +903,20 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-4",
+        "ruleId": "ai-rule-1773839156315-4",
         "displayScope": "single",
         "triggeredProduct": "The Minimal Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196642371",
@@ -937,20 +937,20 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-5",
+        "ruleId": "ai-rule-1773839156315-5",
         "displayScope": "single",
         "triggeredProduct": "The Videographer Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196675139",
@@ -971,20 +971,20 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-6",
+        "ruleId": "ai-rule-1773839156315-6",
         "displayScope": "single",
         "triggeredProduct": "The Complete Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Inventory Not Tracked Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196707907",
@@ -1005,20 +1005,20 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-7",
+        "ruleId": "ai-rule-1773839156315-7",
         "displayScope": "single",
         "triggeredProduct": "The Compare at Price Snowboard",
-        "upsellProduct": "Selling Plans Ski Wax, The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545196740675",
@@ -1039,17 +1039,17 @@
             "price": "24.95"
           },
           {
-            "id": "gid://shopify/Product/7545196707907",
-            "title": "The Complete Snowboard",
-            "handle": "the-complete-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1765536576",
-            "variantId": "gid://shopify/ProductVariant/42795804131395",
-            "price": "699.95"
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-8",
+        "ruleId": "ai-rule-1773839156315-8",
         "displayScope": "single",
         "triggeredProduct": "Selling Plans Ski Wax",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1083,7 +1083,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-9",
+        "ruleId": "ai-rule-1773839156315-9",
         "displayScope": "single",
         "triggeredProduct": "The Collection Snowboard: Hydrogen",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1117,7 +1117,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-10",
+        "ruleId": "ai-rule-1773839156315-10",
         "displayScope": "single",
         "triggeredProduct": "The Hidden Snowboard",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1151,7 +1151,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-11",
+        "ruleId": "ai-rule-1773839156316-11",
         "displayScope": "single",
         "triggeredProduct": "The Multi-location Snowboard",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1185,7 +1185,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-12",
+        "ruleId": "ai-rule-1773839156316-12",
         "displayScope": "single",
         "triggeredProduct": "The Multi-managed Snowboard",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1219,7 +1219,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-13",
+        "ruleId": "ai-rule-1773839156316-13",
         "displayScope": "single",
         "triggeredProduct": "The 3p Fulfilled Snowboard",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1253,7 +1253,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-14",
+        "ruleId": "ai-rule-1773839156316-14",
         "displayScope": "single",
         "triggeredProduct": "The Collection Snowboard: Oxygen",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1287,7 +1287,7 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-15",
+        "ruleId": "ai-rule-1773839156316-15",
         "displayScope": "single",
         "triggeredProduct": "The Collection Snowboard: Liquid",
         "upsellProduct": "The Inventory Not Tracked Snowboard, The Complete Snowboard",
@@ -1321,10 +1321,10 @@
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-16",
+        "ruleId": "ai-rule-1773839156316-16",
         "displayScope": "single",
         "triggeredProduct": "Green Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545197133891",
@@ -1337,28 +1337,28 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-17",
+        "ruleId": "ai-rule-1773839156316-17",
         "displayScope": "single",
         "triggeredProduct": "Yellow Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545199624259",
@@ -1371,28 +1371,28 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-18",
+        "ruleId": "ai-rule-1773839156316-18",
         "displayScope": "single",
         "triggeredProduct": "Yellow Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7545202671683",
@@ -1405,28 +1405,28 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-19",
+        "ruleId": "ai-rule-1773839156316-19",
         "displayScope": "single",
         "triggeredProduct": "Yellow Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7546087407683",
@@ -1439,28 +1439,28 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-20",
+        "ruleId": "ai-rule-1773839156316-20",
         "displayScope": "single",
         "triggeredProduct": "Red Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7569988059203",
@@ -1473,28 +1473,28 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       },
       {
-        "ruleId": "ai-rule-1773464920106-21",
+        "ruleId": "ai-rule-1773839156316-21",
         "displayScope": "single",
         "triggeredProduct": "Green Snowboard",
-        "upsellProduct": "The Inventory Not Tracked Snowboard, Selling Plans Ski Wax",
+        "upsellProduct": "Selling Plans Ski Wax, The Collection Snowboard: Hydrogen",
         "triggerProducts": [
           {
             "id": "gid://shopify/Product/7570275958851",
@@ -1507,20 +1507,20 @@
         ],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196511299",
-            "title": "The Inventory Not Tracked Snowboard",
-            "handle": "the-inventory-not-tracked-snowboard",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_purple_hydrogen.png?v=1765536575",
-            "variantId": "gid://shopify/ProductVariant/42795803639875",
-            "price": "949.95"
-          },
-          {
             "id": "gid://shopify/Product/7545196773443",
             "title": "Selling Plans Ski Wax",
             "handle": "selling-plans-ski-wax",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/snowboard_wax.png?v=1765536576",
             "variantId": "gid://shopify/ProductVariant/42795803902019",
             "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7545196806211",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
+            "variantId": "gid://shopify/ProductVariant/42795803869251",
+            "price": "600.00"
           }
         ]
       }

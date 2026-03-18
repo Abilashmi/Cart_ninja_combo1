@@ -220,7 +220,18 @@ function renderSlider(el,data,ctx){
   var def=r.def,map=r.map,conds=r.conds||[];
   var normalizedMap={};
   Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
-  var ids=data.selectedTemplateCoupon||[];
+  var explicitIds=asArray(
+    data&&Array.isArray(data.selectedCouponsGlobal)&&data.selectedCouponsGlobal.length
+      ?data.selectedCouponsGlobal
+      :data.selectedTemplateCoupon
+  ).map(function(id){return normalizeId(id);}).filter(Boolean);
+  var styleIds=Object.keys(map||{})
+    .map(function(key){return normalizeId(key);})
+    .filter(function(key){return key&&!/^\d+$/.test(key);});
+  var conditionIds=(conds||[])
+    .map(function(cond){return normalizeId(cond&&cond.couponId);})
+    .filter(Boolean);
+  var ids=unique([].concat(explicitIds,styleIds,conditionIds));
   if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
 
   var itemsToRender=[];
@@ -315,14 +326,32 @@ function renderSlider(el,data,ctx){
 
 customElements.define('ps-coupon-slider',class extends HTMLElement{
   connectedCallback(){
-    var el=this,shop=el.dataset.shop;
+    var el=this,shop=normalizeText(el.dataset.shop||(window.Shopify&&window.Shopify.shop));
+    if(!shop){
+      el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';
+      return;
+    }
     if(_cache[shop]){
       getDisplayContext(el).then(function(ctx){renderSlider(el,_cache[shop],ctx);});
       return;
     }
-    var API='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+shop;
-    fetch(API,{headers:{'ngrok-skip-browser-warning':'true'}})
-      .then(function(r){return r.json();})
+    var encodedShop=encodeURIComponent(shop);
+    var proxyAPI='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+encodedShop;
+    var directAPI='https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain='+encodedShop;
+
+    function requestJson(url){
+      return fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
+        .then(function(r){
+          if(!r.ok)throw new Error('HTTP '+r.status);
+          return r.text();
+        })
+        .then(function(body){
+          try{return JSON.parse(body);}catch(_e){throw new Error('Invalid JSON response');}
+        });
+    }
+
+    requestJson(proxyAPI)
+      .catch(function(){return requestJson(directAPI);})
       .then(function(res){
         if(!res||res.status!=='success'){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';return;}
         _cache[shop]=res.data;
@@ -330,7 +359,10 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
           renderSlider(el,res.data,ctx);
         });
       })
-      .catch(function(){el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';});
+      .catch(function(err){
+        console.error('[Coupon Slider] load failed:',err&&err.message?err.message:err);
+        el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';
+      });
   }
 });
 })();

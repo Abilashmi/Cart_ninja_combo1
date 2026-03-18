@@ -64,7 +64,7 @@
           if (couponJson.status === 'success' && Array.isArray(couponJson.data)) {
             COUPONS = couponJson.data;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     } catch (e) {
       console.error('[CartDrawer] Config load FAILED:', e);
@@ -173,8 +173,8 @@
         data.direction === 'block'
           ? 'vertical'
           : data.direction === 'row'
-          ? 'horizontal'
-          : data.direction || 'vertical',
+            ? 'horizontal'
+            : data.direction || 'vertical',
       showOnEmptyCart: data.showOnEmptyCart !== false,
       buttonText: data.buttonText || 'Add to cart',
       upsellTitle: {
@@ -312,7 +312,7 @@
       if (url.includes('/cart/add') && response.ok) {
         scheduleOpenDrawer(350);
       }
-    } catch (e) {}
+    } catch (e) { }
     return response;
   };
 
@@ -341,7 +341,7 @@
       .then(function (res) {
         if (res.ok) scheduleOpenDrawer(300);
       })
-      .catch(function () {});
+      .catch(function () { });
   }, true); // capture phase — fires before theme JS
 
   // 3b. Universal cart polling — checks /cart.js every 1.5s and opens drawer
@@ -361,7 +361,7 @@
           }
           _ccPollCount = count;
         })
-        .catch(function () {})
+        .catch(function () { })
         .finally(function () { _ccPollActive = false; });
     }
     ccPoll(); // set baseline immediately
@@ -868,9 +868,8 @@
       drawerHtml += `</div>`;
 
       // ---- PROGRESS TRACK with outline ----
-      drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${
-        progress.barBackgroundColor || '#e2e8f0'
-      };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
+      drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${progress.barBackgroundColor || '#e2e8f0'
+        };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
 
       // 1. The progress bar filler
       drawerHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
@@ -879,9 +878,8 @@
       pInfo.tiers.forEach((ms) => {
         const segPercent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
         const reached = pInfo.currentVal >= ms.target;
-        drawerHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${
-          reached ? fgColor : '#cbd5e180'
-        };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
+        drawerHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${reached ? fgColor : '#cbd5e180'
+          };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
       });
 
       // 3. The milestone nodes
@@ -898,19 +896,15 @@
         drawerHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
 
         // Node circle — filled with fgColor when completed, white with outline when not
-        drawerHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${
-          isCompleted ? fgColor : '#fff'
-        };border:2.5px solid ${
-          isCompleted ? fgColor : isNext ? fgColor : '#cbd5e1'
-        };display:flex;align-items:center;justify-content:center;box-shadow:${
-          isCompleted
+        drawerHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'
+          };border:2.5px solid ${isCompleted ? fgColor : isNext ? fgColor : '#cbd5e1'
+          };display:flex;align-items:center;justify-content:center;box-shadow:${isCompleted
             ? '0 4px 14px ' + fgColor + '55'
             : isNext
-            ? '0 0 0 3px ' + fgColor + '22'
-            : '0 2px 5px rgba(0,0,0,0.05)'
-        };color:${iconFill};${
-          isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''
-        }position:relative;transition:all .3s ease;">`;
+              ? '0 0 0 3px ' + fgColor + '22'
+              : '0 2px 5px rgba(0,0,0,0.05)'
+          };color:${iconFill};${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''
+          }position:relative;transition:all .3s ease;">`;
         drawerHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">${iconHtml}</span>`;
         // Completed checkmark badge
         if (isCompleted) {
@@ -920,11 +914,9 @@
 
         // Tooltip label
         const tooltipBottom = isCompleted ? '-48px' : '-32px';
-        drawerHtml += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${
-          isCompleted ? 12 : 11
-        }px;font-weight:700;color:${isCompleted ? fgColor : '#64748b'};opacity:${
-          isCompleted || isNext ? 1 : 0.7
-        };pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
+        drawerHtml += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${isCompleted ? 12 : 11
+          }px;font-weight:700;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7
+          };pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
         if (isCompleted) {
           drawerHtml += `<span style="color:${fgColor};">${ms.rewardText}</span>`;
         } else {
@@ -950,9 +942,20 @@
 
     /* ---- UPSELL (TOP POSITION) ---- */
     const upsell = CONFIG.upsell;
-    if (upsell.enabled && upsell.position === 'top' && (upsell.showOnEmptyCart || !isEmpty)) {
-      const upsellHtml = renderUpsellSection(cart, upsell);
-      drawerHtml += upsellHtml;
+    let topUpsellHtml = '';
+    let bottomUpsellHtml = '';
+
+    // Prepare upsell html asynchronously before concatenating
+    if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
+      if (upsell.position === 'top') {
+        topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+      } else if (upsell.position === 'bottom') {
+        bottomUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+      }
+    }
+
+    if (topUpsellHtml) {
+      drawerHtml += topUpsellHtml;
     }
 
     /* ---- CART ITEMS ---- */
@@ -974,13 +977,12 @@
         drawerHtml += `
     <div style="display:flex;gap:12px;padding:12px;background:#fff;border-radius:16px;border:1px solid #f1f5f9;transition:all .3s ease;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);position:relative;">
       <div style="width:70px;height:70px;background:#fff;border-radius:12px;flex-shrink:0;border:1px solid #f1f5f9;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-        ${
-          item.image
+        ${item.image
             ? `<img src="${item.image}" alt="${escapeHtml(
-                item.product_title
-              )}" style="width:100%;height:100%;object-fit:cover;">`
+              item.product_title
+            )}" style="width:100%;height:100%;object-fit:cover;">`
             : `<span style="font-size:32px;">📦</span>`
-        }
+          }
       </div>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -995,16 +997,15 @@
             <div style="display:flex;align-items:center;gap:6px;">
               <span style="font-size:14px;font-weight:700;color:#0f172a;">₹${unitPrice.toFixed(0)}</span>
               <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ₹${unitPrice.toFixed(
-          0
-        )})</span>
+            0
+          )})</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity - 1})">−</button>
-              <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${
-                item.quantity
-              }</span>
+              <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity
+          }</span>
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
             </div>
             <div style="text-align:right;min-width:60px;">
@@ -1025,9 +1026,8 @@
     }
 
     /* ---- UPSELL (BOTTOM POSITION) ---- */
-    if (upsell.enabled && upsell.position === 'bottom' && (upsell.showOnEmptyCart || !isEmpty)) {
-      const upsellHtml = renderUpsellSection(cart, upsell);
-      drawerHtml += upsellHtml;
+    if (bottomUpsellHtml) {
+      drawerHtml += bottomUpsellHtml;
     }
 
     drawerHtml += `</div>`; // end body
@@ -1248,66 +1248,53 @@
       if (style === 'style-1') {
         // Style 1: White card with colored left accent bar, grey icon box, dark text, outlined button
         html += `
-    <div data-coupon-card style="min-width:240px;flex:0 0 auto;scroll-snap-align:start;padding:12px 16px;background:#fff;border-radius:8px;border:${
-      isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-    };box-shadow:${
-          isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.02)'
-        };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:all 0.2s ease;">
+    <div data-coupon-card style="min-width:240px;flex:0 0 auto;scroll-snap-align:start;padding:12px 16px;background:#fff;border-radius:8px;border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+          };box-shadow:${isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.02)'
+          };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:all 0.2s ease;">
       <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${coupon.backgroundColor};"></div>
-      <div style="width:46px;height:46px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${
-        coupon.iconUrl
-      }</div>
+      <div style="width:46px;height:46px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${coupon.iconUrl
+          }</div>
       <div style="flex:1;min-width:0;">
         <p style="margin:0 0 2px 0;font-size:15px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
         <p style="margin:0;font-size:13px;color:#64748b;">${escapeHtml(coupon.label)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${
-          isApplied ? coupon.backgroundColor : 'transparent'
-        };color:${isApplied ? '#fff' : '#475569'};border:${
-          isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
-        };border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${
-          isApplied ? 'Applied' : 'Apply'
-        }</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${isApplied ? coupon.backgroundColor : 'transparent'
+          };color:${isApplied ? '#fff' : '#475569'};border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
+          };border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : 'Apply'
+          }</button>
     </div>
   `;
       } else if (style === 'style-2') {
         // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
         html += `
-    <div data-coupon-card style="min-width:180px;flex:0 0 auto;scroll-snap-align:start;padding:16px;background:#fff;border-radius:16px;border:${
-      isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-    };box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
-      <div style="width:56px;height:56px;border-radius:16px;background:${
-        coupon.backgroundColor
-      };display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 10px ${
-          coupon.backgroundColor
-        }60;">${coupon.iconUrl}</div>
+    <div data-coupon-card style="min-width:180px;flex:0 0 auto;scroll-snap-align:start;padding:16px;background:#fff;border-radius:16px;border:${isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+          };box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
+      <div style="width:56px;height:56px;border-radius:16px;background:${coupon.backgroundColor
+          };display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
+          }60;">${coupon.iconUrl}</div>
       <div>
         <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
         <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
       </div>
       <button onclick="ccApplyCoupon('${escapeHtml(
-        coupon.code
-      )}')" style="width:100%;padding:8px;margin-top:4px;background:${
-          isApplied ? '#10b981' : '#1e293b'
-        };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${
-          isApplied ? '✓ Applied' : 'Apply Coupon'
-        }</button>
+            coupon.code
+          )}')" style="width:100%;padding:8px;margin-top:4px;background:${isApplied ? '#10b981' : '#1e293b'
+          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'
+          }</button>
     </div>
   `;
       } else {
         // Style 3: Colored header + white body with dashed code box + text-link apply button
         html += `
     <div data-coupon-card style="min-width:280px;flex:0 0 auto;scroll-snap-align:start;padding:0;background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
-      <div style="background:${
-        coupon.backgroundColor
-      };padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
+      <div style="background:${coupon.backgroundColor
+          };padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:18px;">${coupon.iconUrl}</span>
           <span style="font-size:14px;font-weight:700;">${escapeHtml(coupon.label)}</span>
         </div>
-        <div style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;">${
-          coupon.discountValue
-        }% OFF</div>
+        <div style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;">${coupon.discountValue
+          }% OFF</div>
       </div>
       <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;">
@@ -1315,9 +1302,8 @@
             coupon.code
           )}</p>
         </div>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${
-          isApplied ? '#10b981' : '#2563eb'
-        };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
+        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'
+          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
       </div>
     </div>
   `;
@@ -1330,67 +1316,54 @@
 
   /* =================== UPSELL SECTION RENDERER =================== */
 
-  function renderUpsellSection(cart, upsellConfig) {
-    // For the storefront, we use manual rules to determine upsell products
-    const cartProductIds = cart.items.map((item) => {
-      // Extract numeric product ID from Shopify variant
-      return String(item.product_id);
-    });
-
+  async function renderUpsellSectionAsync(cart, upsellConfig) {
+    const cartProductIds = cart.items.map(item => String(item.product_id));
     let upsellProducts = [];
     let matchedUpsellDetails = [];
 
-    if (upsellConfig.manualRules && upsellConfig.manualRules.length > 0) {
-      // Collect products from ALL matching rules
-      for (const rule of upsellConfig.manualRules) {
-        if (!rule.enabled && rule.enabled !== undefined) {
-          continue;
+    if (upsellConfig.useAI && upsellConfig.aiApiKey) {
+      // Wait for AI recommendations
+      try {
+        const aiRes = await originalFetch('https://blueviolet-clam-512487.hostingersite.com/ai_upsell.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: upsellConfig.aiApiKey,
+            cartProducts: cart.items.map(i => ({ title: i.product_title, id: i.product_id })),
+            // Pass available manual rules pool as catalog to choose from, or a limited catalog
+            allProducts: (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || [])
+          })
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          if (aiData.success && aiData.recommendations) {
+            upsellProducts = aiData.recommendations;
+            // Build matched details from the existing details
+            const allDetails = (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || []);
+            upsellProducts.forEach(id => {
+              const detail = allDetails.find(d => String(d.id).includes(id) || String(d.variantId) == String(id));
+              if (detail) matchedUpsellDetails.push(detail);
+            });
+          }
         }
+      } catch (e) { console.warn('AI Upsell failed:', e); }
+    }
 
-        // Normalize trigger IDs by stripping GID prefix
-        const triggerIds = (rule.triggerProductIds || []).map((id) =>
-          String(id).replace('gid://shopify/Product/', '')
-        );
-        const triggerType = rule.triggerType || 'products';
-
-
-        const hasMatch = triggerIds.some((id) => cartProductIds.includes(id));
-        if (hasMatch || triggerType === 'all' || triggerIds.length === 0) {
-
-          // Add new products to our list
-          const ruleProducts = (rule.upsellProductIds || []).map((id) =>
-            String(id).replace('gid://shopify/Product/', '')
-          );
-
-          ruleProducts.forEach((pId, idx) => {
+    if (upsellProducts.length === 0 && upsellConfig.manualRules) {
+      for (const rule of upsellConfig.manualRules) {
+        if (rule.enabled === false) continue;
+        const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
+        if (rule.triggerType === 'all' || triggerIds.some(id => cartProductIds.includes(id)) || triggerIds.length === 0) {
+          (rule.upsellProductIds || []).forEach((id, idx) => {
+            const pId = String(id).replace('gid://shopify/Product/', '');
             if (!upsellProducts.includes(pId)) {
               upsellProducts.push(pId);
-              // Also collect details for this product
-              if (rule.upsellProductDetails && rule.upsellProductDetails[idx]) {
-                matchedUpsellDetails.push(rule.upsellProductDetails[idx]);
-              }
+              if (rule.upsellProductDetails?.[idx]) matchedUpsellDetails.push(rule.upsellProductDetails[idx]);
             }
           });
         }
       }
-    }
-
-    // Filter out products already in cart if setting says so
-    if (!upsellConfig.showIfInCart) {
-      const beforeFilter = upsellProducts.length;
-      upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
-      if (beforeFilter !== upsellProducts.length) {
-      }
-    }
-
-    // Apply limit
-    if (upsellConfig.limit) {
-      upsellProducts = upsellProducts.slice(0, upsellConfig.limit);
-    }
-
-
-    if (upsellProducts.length === 0) {
-      return '';
     }
 
     const dir = upsellConfig.direction || 'vertical';
@@ -1430,19 +1403,17 @@
     }
 
     let html = `
-<div style="padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${
-      upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
-    }flex-shrink:0;">
+<div style="padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
+      }flex-shrink:0;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
     <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text)}</p>
-    ${
-      showUpsellNav
+    ${showUpsellNav
         ? `<div style="display:flex;gap:6px;">
       <button id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="Scroll left" style="display:none;">←</button>
       <button id="upsell-nav-right" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','right')" title="Scroll right" style="display:none;">→</button>
     </div>`
         : ''
-    }
+      }
   </div>
   <div class="cc-hide-scrollbar" style="${listStyle}" id="cc-upsell-list">
 `;
@@ -1492,8 +1463,8 @@
             <div class="cc-upsell-content">
               <div class="cc-carousel-info" style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0; text-align: left;">
                 <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;line-height:1.3;word-break: break-word;">${escapeHtml(
-                  title
-                )}</p>
+          title
+        )}</p>
                 <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
               </div>
               <button onclick="ccAddToCart('${addToCartId}', true)" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">ADD</button>

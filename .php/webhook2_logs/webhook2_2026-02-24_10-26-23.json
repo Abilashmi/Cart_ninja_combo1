@@ -1,0 +1,111 @@
+{
+    "time": "2026-02-24 10:26:23",
+    "ip": "::1",
+    "method": "POST",
+    "headers": {
+        "Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "User-Agent": "node",
+        "Content-Length": "1850",
+        "Accept": "*\/*",
+        "Accept-Encoding": "br, gzip, deflate",
+        "Accept-Language": "*",
+        "Content-Type": "application\/json",
+        "Sec-Fetch-Mode": "cors",
+        "X-Forwarded-For": "103.186.151.4",
+        "X-Forwarded-Host": "prefixal-turbanlike-britt.ngrok-free.dev",
+        "X-Forwarded-Proto": "https"
+    },
+    "payload": {
+        "id": "",
+        "shopDomain": "cartapp-2.myshopify.com",
+        "template1": {
+            "name": "Classic Banner",
+            "headingText": "",
+            "subtextText": "ndvc sdm ",
+            "styles": {
+                "bgColor": "#ffffff",
+                "textColor": "#ffffff",
+                "accentColor": "#ffffff",
+                "buttonColor": "#4a5d7c",
+                "buttonTextColor": "#ffffff",
+                "borderRadius": 12,
+                "fontSize": 16,
+                "padding": 16
+            },
+            "couponConditions": [],
+            "selectedCoupons": [],
+            "couponStyles": []
+        },
+        "template2": {
+            "name": "Minimal Card",
+            "headingText": "SPECIAL OFFER",
+            "subtextText": "Free shipping on orders over \u20b9500",
+            "styles": {
+                "bgColor": "#f9fafb",
+                "textColor": "#374151",
+                "accentColor": "#10b981",
+                "buttonColor": "#10b981",
+                "buttonTextColor": "#ffffff",
+                "borderRadius": 8,
+                "fontSize": 14,
+                "padding": 14
+            },
+            "couponConditions": [
+                {
+                    "couponId": "gid:\/\/shopify\/DiscountCodeNode\/1287247921219",
+                    "displayCondition": "product_handle",
+                    "productHandles": [
+                        "green-snowboard"
+                    ]
+                },
+                {
+                    "couponId": "gid:\/\/shopify\/DiscountAutomaticNode\/1275746189379",
+                    "displayCondition": "all"
+                }
+            ],
+            "selectedCoupons": [
+                "gid:\/\/shopify\/DiscountCodeNode\/1287247921219",
+                "gid:\/\/shopify\/DiscountAutomaticNode\/1275746189379"
+            ],
+            "couponStyles": {
+                "gid:\/\/shopify\/DiscountCodeNode\/1287247921219": {
+                    "accentColor": "#338c6e",
+                    "buttonColor": "#334740",
+                    "bgColor": "#75a2cf",
+                    "fontSize": 13
+                },
+                "gid:\/\/shopify\/DiscountAutomaticNode\/1275746189379": {
+                    "subtextText": "Hell oooho",
+                    "accentColor": "#131816",
+                    "buttonColor": "#8a0b9d",
+                    "bgColor": "#53c3f4",
+                    "padding": 10,
+                    "fontSize": 13
+                }
+            }
+        },
+        "template3": {
+            "name": "Bold & Vibrant",
+            "headingText": "FLASH SALE!",
+            "subtextText": "Use code: BOLD25 for extra 25% OFF",
+            "styles": {
+                "bgColor": "#4f46e5",
+                "textColor": "#ffffff",
+                "accentColor": "#f59e0b",
+                "buttonColor": "#f59e0b",
+                "buttonTextColor": "#111827",
+                "borderRadius": 16,
+                "fontSize": 18,
+                "padding": 20
+            },
+            "couponConditions": [],
+            "selectedCoupons": [],
+            "couponStyles": []
+        },
+        "selectedTemplate": "template2",
+        "selectedCouponsGlobal": [
+            "gid:\/\/shopify\/DiscountCodeNode\/1287247921219",
+            "gid:\/\/shopify\/DiscountAutomaticNode\/1275746189379"
+        ]
+    }
+}

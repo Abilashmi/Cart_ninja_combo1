@@ -518,8 +518,20 @@
         }
 
         const upsell = CONFIG.upsell;
-        if (upsell.enabled && upsell.position === 'top' && (upsell.showOnEmptyCart || !isEmpty)) {
-            drawerHtml += renderUpsellSection(cart, upsell);
+        let topUpsellHtml = '';
+        let bottomUpsellHtml = '';
+
+        // Prepare upsell html asynchronously before concatenating
+        if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
+            if (upsell.position === 'top') {
+                topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+            } else if (upsell.position === 'bottom') {
+                bottomUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+            }
+        }
+
+        if (topUpsellHtml) {
+            drawerHtml += topUpsellHtml;
         }
 
         if (!isEmpty) {
@@ -558,8 +570,8 @@
             }
         }
 
-        if (upsell.enabled && upsell.position === 'bottom' && (upsell.showOnEmptyCart || !isEmpty)) {
-            drawerHtml += renderUpsellSection(cart, upsell);
+        if (bottomUpsellHtml) {
+            drawerHtml += bottomUpsellHtml;
         }
 
         drawerHtml += `</div>`; // end body
@@ -638,11 +650,41 @@
         return html;
     }
 
-    function renderUpsellSection(cart, upsellConfig) {
+    async function renderUpsellSectionAsync(cart, upsellConfig) {
         const cartProductIds = cart.items.map(item => String(item.product_id));
         let upsellProducts = [];
         let matchedUpsellDetails = [];
-        if (upsellConfig.manualRules) {
+
+        if (upsellConfig.useAI && upsellConfig.aiApiKey) {
+            // Wait for AI recommendations
+            try {
+                const aiRes = await originalFetch('https://blueviolet-clam-512487.hostingersite.com/ai_upsell.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiKey: upsellConfig.aiApiKey,
+                        cartProducts: cart.items.map(i => ({ title: i.product_title, id: i.product_id })),
+                        // Pass available manual rules pool as catalog to choose from, or a limited catalog
+                        allProducts: (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || [])
+                    })
+                });
+
+                if (aiRes.ok) {
+                    const aiData = await aiRes.json();
+                    if (aiData.success && aiData.recommendations) {
+                        upsellProducts = aiData.recommendations;
+                        // Build matched details from the existing details
+                        const allDetails = (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || []);
+                        upsellProducts.forEach(id => {
+                            const detail = allDetails.find(d => String(d.id).includes(id) || String(d.variantId) == String(id));
+                            if (detail) matchedUpsellDetails.push(detail);
+                        });
+                    }
+                }
+            } catch (e) { console.warn('AI Upsell failed:', e); }
+        }
+
+        if (upsellProducts.length === 0 && upsellConfig.manualRules) {
             for (const rule of upsellConfig.manualRules) {
                 if (rule.enabled === false) continue;
                 const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));

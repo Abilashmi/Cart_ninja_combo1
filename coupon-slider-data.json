@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template2",
+  "activeTemplate": "template3",
   "templateData": {
     "template1": {
       "name": "Classic Banner",
@@ -30,9 +30,8 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid:/shopify/DiscountRedeemCode/26805030813763",
-    "gid:/shopify/DiscountRedeemCode/26805031010371",
-    "gid:/shopify/DiscountRedeemCode/26833535139907"
+    "gid://shopify/DiscountRedeemCode/26805031010371",
+    "gid://shopify/DiscountRedeemCode/26833535139907"
   ],
   "shop": "cartapp-2.myshopify.com",
   "templates": {
@@ -159,6 +158,21 @@
         "displayCondition": "all"
       }
     },
-    "template3": {}
+    "template3": {
+      "gid://shopify/DiscountRedeemCode/26805031010371": {
+        "couponCode": "velwo",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      },
+      "gid://shopify/DiscountRedeemCode/26833535139907": {
+        "displayCondition": "product_handle",
+        "productHandles": [
+          "the-3p-fulfilled-snowboard"
+        ],
+        "couponCode": "PSQEP5W9",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      }
+    }
   }
 }

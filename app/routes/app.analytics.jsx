@@ -96,7 +96,9 @@ export const loader = async ({ request }) => {
 
   try {
     const requestUrl = new URL(request.url);
-    const apiUrl = `${requestUrl.origin}/api/analytics?shop=${encodeURIComponent(shop)}`;
+    // Fetch today's data instead of all-time data
+    const today = new Date().toISOString().split('T')[0];
+    const apiUrl = `${requestUrl.origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`;
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: {
@@ -117,7 +119,6 @@ export const loader = async ({ request }) => {
 
   return { shop, initialAnalytics, initialAnalyticsError };
 };
-
 // More granular mock data for professional feel
 const FEATURE_DATA = [
   { name: 'Feb 01', revenue: 240, clicks: 120, ctr: 5.2 },
@@ -140,10 +141,28 @@ export default function AppAnalytics() {
 
   const navigate = useNavigate();
   const [popoverActive, setPopoverActive] = useState(false);
-  const [{ month, year }, setMonth] = useState({ month: 2, year: 2026 });
+
+  // Dynamic date calculations
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const last7Days = new Date(today);
+  last7Days.setDate(last7Days.getDate() - 7);
+  
+  const last30Days = new Date(today);
+  last30Days.setDate(last30Days.getDate() - 30);
+  
+  const last90Days = new Date(today);
+  last90Days.setDate(last90Days.getDate() - 90);
+  
+  const last12Months = new Date(today);
+  last12Months.setFullYear(last12Months.getFullYear() - 1);
+
+  const [{ month, year }, setMonth] = useState({ month: today.getMonth(), year: today.getFullYear() });
   const [selectedDates, setSelectedDates] = useState({
-    start: new Date('2026-03-04'),
-    end: new Date('2026-03-04'),
+    start: today,
+    end: today,
   });
 
   // Advanced Date Picker State
@@ -152,12 +171,12 @@ export default function AppAnalytics() {
   const [selectionMode, setSelectionMode] = useState(0); // 0 for Fixed, 1 for Rolling
 
   const presets = [
-    { label: 'Today', range: { start: new Date('2026-03-04'), end: new Date('2026-03-04') } },
-    { label: 'Yesterday', range: { start: new Date('2026-03-03'), end: new Date('2026-03-03') } },
-    { label: 'Last 7 days', range: { start: new Date('2026-02-26'), end: new Date('2026-03-04') } },
-    { label: 'Last 30 days', range: { start: new Date('2026-02-02'), end: new Date('2026-03-04') } },
-    { label: 'Last 90 days', range: { start: new Date('2025-12-04'), end: new Date('2026-03-04') } },
-    { label: 'Last 12 months', range: { start: new Date('2025-03-04'), end: new Date('2026-03-04') } },
+    { label: 'Today', range: { start: today, end: today } },
+    { label: 'Yesterday', range: { start: yesterday, end: yesterday } },
+    { label: 'Last 7 days', range: { start: last7Days, end: today } },
+    { label: 'Last 30 days', range: { start: last30Days, end: today } },
+    { label: 'Last 90 days', range: { start: last90Days, end: today } },
+    { label: 'Last 12 months', range: { start: last12Months, end: today } },
   ];
 
   const [isClient, setIsClient] = useState(false);
@@ -168,36 +187,98 @@ export default function AppAnalytics() {
     error: Boolean(initialAnalyticsError)
   });
 
-  const fetchAnalytics = useCallback(async () => {
+  const fetchAnalytics = useCallback(async (start, end) => {
+    if (!shop) {
+      console.warn("[Analytics] No shop available, skipping fetch");
+      return;
+    }
+    
     setAnalytics(prev => ({ ...prev, loading: true, error: false }));
     try {
-      const response = await fetch(`/api/analytics?shop=${encodeURIComponent(shop)}`);
-      const payload = await response.json();
+      let url = `/api/analytics?shop=${encodeURIComponent(shop)}`;
+      
+      if (start && end) {
+        // Format dates as YYYY-MM-DD for the backend
+       function formatLocalDate(date) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-      if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || "Fetch failed");
+const startStr = formatLocalDate(start);
+const endStr = formatLocalDate(end);
+        url += `&startDate=${startStr}&endDate=${endStr}`;
+        console.log(`[Analytics] Fetching data for date range: ${startStr} to ${endStr}`);
+      } else {
+        console.log(`[Analytics] Fetching all-time data`);
+      }
+
+      console.log(`[Analytics] Request URL: ${url}`);
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error(`[Analytics] HTTP ${response.status} from API`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+      console.log(`[Analytics] Raw response:`, payload);
+
+      if (!payload?.success) {
+        throw new Error(payload?.error || "API returned success=false");
+      }
+
+      if (!payload?.data) {
+        throw new Error("API returned empty data");
       }
 
       const nextAnalytics = normalizeAnalyticsState(payload.data);
+      console.log(`[Analytics] Normalized data:`, nextAnalytics);
 
       setAnalytics({
-        ...nextAnalytics,
+        checkout_click: nextAnalytics.checkout_click,
+        coupon_click: nextAnalytics.coupon_click,
+        upsell_click: nextAnalytics.upsell_click,
+        upsell_revenue_generated: nextAnalytics.upsell_revenue_generated,
+        cartdrawer_total_revenue: nextAnalytics.cartdrawer_total_revenue,
+        cartdrawer_total_coupon_applied: nextAnalytics.cartdrawer_total_coupon_applied,
         loading: false,
         error: false
       });
     } catch (err) {
-      console.error("Client-side fetch error:", err);
-      setAnalytics(prev => ({ ...prev, loading: false, error: true }));
+      console.error("[Analytics] Fetch error:", err.message, err);
+      setAnalytics(prev => ({ 
+        ...prev, 
+        loading: false, 
+        error: true 
+      }));
     }
   }, [shop]);
 
   useEffect(() => {
     setIsClient(true);
-    if (initialAnalyticsError) {
-      fetchAnalytics();
+    // On mount, always fetch data for the selected date range (default: today)
+    // This ensures frontend displays date-specific data, not all-time data
+    if (selectedDates.start && selectedDates.end && shop) {
+      console.log("[Analytics] Component mounted, fetching today's data...");
+      fetchAnalytics(selectedDates.start, selectedDates.end);
     }
-  }, [fetchAnalytics, initialAnalyticsError]);
+  }, []); // Run only on mount
 
+  // Separate effect to handle selecte dates changes from presets
+  useEffect(() => {
+    setTempDates(selectedDates);
+  }, [selectedDates]);
+  // Ensure initial state has valid dates
+  useEffect(() => {
+    if (!selectedDates.start || !selectedDates.end) {
+      console.log("[Analytics] Fixing invalid selected dates");
+      setSelectedDates({ start: today, end: today });
+    }
+  }, []);
   const [setupSteps, setSetupSteps] = useState([
     { id: 1, title: 'Step 1: Create Coupon', icon: '🎫', content: 'Add coupons to your slide-out drawer to boost conversions.', completed: false, target: '/app/coupons' },
     { id: 2, title: 'Step 2: Configure Product Widget', icon: '🛍️', content: 'Setup Frequently Bought Together and Upsell widgets.', completed: false, target: '/app/productwidget' },
@@ -208,17 +289,30 @@ export default function AppAnalytics() {
   const handleMonthChange = useCallback((month, year) => setMonth({ month, year }), []);
 
   const handlePresetClick = (preset) => {
+    console.log("[Analytics] Preset clicked:", preset.label);
     setActivePreset(preset.label);
     setTempDates(preset.range);
     setMonth({ month: preset.range.start.getMonth(), year: preset.range.start.getFullYear() });
   };
 
   const handleApply = () => {
-    setSelectedDates(tempDates);
+    // Ensure dates are valid Date objects
+    const startDate = tempDates.start instanceof Date ? tempDates.start : new Date(tempDates.start);
+    const endDate = tempDates.end instanceof Date ? tempDates.end : new Date(tempDates.end);
+    
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    console.log(`[Analytics] Apply clicked with dates: ${startStr} to ${endStr}`);
+    console.log(`[Analytics] Start object:`, startDate, `End object:`, endDate);
+    
+    setSelectedDates({ start: startDate, end: endDate });
     setPopoverActive(false);
+    // Immediate fetch with new dates
+    fetchAnalytics(startDate, endDate);
   };
 
   const handleCancel = () => {
+    console.log("[Analytics] Cancel clicked");
     setTempDates(selectedDates);
     setPopoverActive(false);
   };
@@ -700,7 +794,6 @@ export default function AppAnalytics() {
           <Banner tone="info">
             <InlineStack align="space-between" blockAlign="center">
               <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
-              <Button variant="secondary" onClick={fetchAnalytics} loading={analytics.loading}>Refresh Stats</Button>
             </InlineStack>
           </Banner>
 

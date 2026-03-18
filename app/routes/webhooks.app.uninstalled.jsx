@@ -12,5 +12,22 @@ export const action = async ({ request }) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
+  // Make request to the remote DB to mark the shop as inactive
+  try {
+    const response = await fetch("https://blueviolet-clam-512487.hostingersite.com/uninstall_shop.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ shop }),
+    });
+    
+    if (!response.ok) {
+        console.error(`Failed to mark shop inactive in remote DB: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error("Error calling uninstall_shop.php", error);
+  }
+
   return new Response();
 };
