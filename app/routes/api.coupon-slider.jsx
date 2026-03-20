@@ -6,8 +6,48 @@ const EXTERNAL_API = "https://blueviolet-clam-512487.hostingersite.com/save_coup
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 
 /* ---------------- DEFAULTS ---------------- */
+const DEFAULT_TITLE = {
+    text: "Apply Coupon",
+    fontSize: 14,
+    textColor: "#111827",
+    alignment: "left",
+};
+
+function normalizeTitle(rawTitle) {
+    const t = (rawTitle && typeof rawTitle === "object") ? rawTitle : {};
+    const text = (typeof t.text === "string" && t.text.trim()) ? t.text : DEFAULT_TITLE.text;
+    const fontSize = Number.isFinite(Number(t.fontSize)) ? Number(t.fontSize) : DEFAULT_TITLE.fontSize;
+    const textColor = (typeof t.textColor === "string" && t.textColor.trim()) ? t.textColor : DEFAULT_TITLE.textColor;
+    const alignment = ["left", "center", "right"].includes(t.alignment) ? t.alignment : DEFAULT_TITLE.alignment;
+    return { text, fontSize, textColor, alignment };
+}
+
+function normalizeConfig(raw) {
+    const data = (raw && typeof raw === "object") ? raw : {};
+    const rawTemplates = (data.templates && typeof data.templates === "object") ? data.templates : {};
+    const rawAllOverrides = (data.allTemplateOverrides && typeof data.allTemplateOverrides === "object") ? data.allTemplateOverrides : {};
+
+    return {
+        ...DEFAULT_DATA,
+        ...data,
+        title: normalizeTitle(data.title),
+        templates: {
+            template1: { ...DEFAULT_DATA.templates.template1, ...(rawTemplates.template1 || {}) },
+            template2: { ...DEFAULT_DATA.templates.template2, ...(rawTemplates.template2 || {}) },
+            template3: { ...DEFAULT_DATA.templates.template3, ...(rawTemplates.template3 || {}) },
+        },
+        selectedActiveCoupons: Array.isArray(data.selectedActiveCoupons) ? data.selectedActiveCoupons : [],
+        allTemplateOverrides: {
+            template1: { ...(rawAllOverrides.template1 || {}) },
+            template2: { ...(rawAllOverrides.template2 || {}) },
+            template3: { ...(rawAllOverrides.template3 || {}) },
+        },
+    };
+}
+
 const DEFAULT_DATA = {
     activeTemplate: "template1",
+    title: DEFAULT_TITLE,
     templates: {
         template1: {
             name: "Classic Banner",
@@ -83,9 +123,9 @@ const DEFAULT_DATA = {
 async function readData() {
     try {
         const raw = await fs.readFile(DATA_FILE, "utf-8");
-        return JSON.parse(raw);
+        return normalizeConfig(JSON.parse(raw));
     } catch {
-        return { ...DEFAULT_DATA };
+        return normalizeConfig({});
     }
 }
 
@@ -132,6 +172,13 @@ function transformFromDB(dbData) {
         template3: { ...DEFAULT_DATA.templates.template3, ...parseJSON(dbData.temp3DefaultStyle) },
        
     };
+
+    const titleCandidate = templates[activeTemplate]?.title
+        || templates.template1?.title
+        || templates.template2?.title
+        || templates.template3?.title
+        || dbData.title;
+    const title = normalizeTitle(titleCandidate);
 
     // ── Option A: Build per-template coupon overrides independently ──
     // Each template reads from its own DB columns (temp1CouponStyle/Condition, etc.)
@@ -228,6 +275,7 @@ function transformFromDB(dbData) {
         templates,
         selectedActiveCoupons: selectedCoupons,
         allTemplateOverrides,
+        title,
     };
 }
 
@@ -238,10 +286,14 @@ export async function loader({ request }) {
     const rawShop = url.searchParams.get("shop") || url.searchParams.get("shopdomain") || "";
     const shopDomain = rawShop.toLowerCase();
 
-    // If no shopDomain provided, fall back to local defaults
+    // Local file is the authoritative fallback (and is what the action writes to).
+    // If the external API is unavailable or returns incomplete data, use this.
+    const localConfig = await readData();
+
+    // If no shopDomain provided, fall back to locally-stored config (or defaults if none)
     if (!shopDomain) {
         console.warn("No shop domain provided to coupon-slider loader, returning defaults");
-        return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+        return new Response(JSON.stringify({ success: true, config: localConfig }), {
             headers: { "Content-Type": "application/json" },
         });
     }
@@ -259,7 +311,27 @@ export async function loader({ request }) {
         console.log(`External API GET response [${extRes.status}]:`, JSON.stringify(extBody));
 
         if (extBody.status === "success" && extBody.data) {
-            const config = transformFromDB(extBody.data);
+            const config = normalizeConfig(transformFromDB(extBody.data));
+
+            // If external doesn't have our title saved yet, prefer the locally-saved title.
+            const externalHasTitle = Boolean(
+                (extBody.data.temp1DefaultStyle && typeof extBody.data.temp1DefaultStyle === "object" && extBody.data.temp1DefaultStyle.title) ||
+                (extBody.data.temp2DefaultStyle && typeof extBody.data.temp2DefaultStyle === "object" && extBody.data.temp2DefaultStyle.title) ||
+                (extBody.data.temp3DefaultStyle && typeof extBody.data.temp3DefaultStyle === "object" && extBody.data.temp3DefaultStyle.title)
+            );
+            if (!externalHasTitle && localConfig?.title) {
+                config.title = normalizeTitle(localConfig.title);
+            }
+
+            // If external returns a config that looks incomplete (common when save/sync fails),
+            // prefer the locally-saved config so the admin UI shows what was last saved.
+            const externalHasSelections = Array.isArray(config.selectedActiveCoupons) && config.selectedActiveCoupons.length > 0;
+            const localHasSelections = Array.isArray(localConfig.selectedActiveCoupons) && localConfig.selectedActiveCoupons.length > 0;
+            if (!externalHasSelections && localHasSelections) {
+                return new Response(JSON.stringify({ success: true, config: localConfig }), {
+                    headers: { "Content-Type": "application/json" },
+                });
+            }
 
             // AUTO-SYNC LOGIC:
             // Check if any template style is empty or malformed
@@ -293,13 +365,13 @@ export async function loader({ request }) {
             });
         } else {
             console.warn("External API returned non-success, using defaults");
-            return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+            return new Response(JSON.stringify({ success: true, config: localConfig }), {
                 headers: { "Content-Type": "application/json" },
             });
         }
     } catch (error) {
         console.error("Failed to fetch from external API:", error.message);
-        return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+        return new Response(JSON.stringify({ success: true, config: localConfig }), {
             headers: { "Content-Type": "application/json" },
         });
     }
@@ -316,6 +388,7 @@ const STYLE_KEYS = [
 const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
 
 function transformForDB(data, shopDomain) {
+    const normalizedTitle = normalizeTitle(data?.title);
     const templates = data.templates || {};
     const allTemplateOverrides = data.allTemplateOverrides || {};
     const activeTemplate = data.activeTemplate || "template1";
@@ -334,6 +407,8 @@ function transformForDB(data, shopDomain) {
             const defVal = defaultTpl[k] !== undefined ? defaultTpl[k] : "";
             merged[k] = (currentVal !== undefined && currentVal !== "") ? currentVal : defVal;
         }
+        // Persist the section title config inside the style JSON so the storefront block can render it.
+        merged.title = normalizedTitle;
         return merged;
     }
 
@@ -448,6 +523,9 @@ export async function action({ request }) {
             if (typeof body.allTemplateOverrides === "string") {
                 try { body.allTemplateOverrides = JSON.parse(body.allTemplateOverrides); } catch (e) { }
             }
+            if (typeof body.title === "string") {
+                try { body.title = JSON.parse(body.title); } catch (e) { }
+            }
         }
 
         console.log("Parsed body:", JSON.stringify(body, null, 2));
@@ -467,12 +545,17 @@ export async function action({ request }) {
             };
         }
 
+        const mergedTitle = body.title !== undefined
+            ? normalizeTitle({ ...(existing.title || DEFAULT_TITLE), ...(body.title || {}) })
+            : normalizeTitle(existing.title || DEFAULT_TITLE);
+
         const updated = {
             ...existing,
             ...(body.activeTemplate !== undefined && { activeTemplate: body.activeTemplate }),
             ...(body.templateData !== undefined && { templates: { ...existing.templates, ...body.templateData } }),
             ...(body.selectedActiveCoupons !== undefined && { selectedActiveCoupons: body.selectedActiveCoupons }),
             ...(incomingAllTemplateOverrides !== undefined && { allTemplateOverrides: incomingAllTemplateOverrides }),
+            title: mergedTitle,
         };
 
         // Remove stale legacy top-level fields

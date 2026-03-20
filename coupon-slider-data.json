@@ -1,39 +1,11 @@
 {
-  "actionType": "saveCouponConfig",
-  "activeTemplate": "template3",
-  "templateData": {
-    "template1": {
-      "name": "Classic Banner",
-      "headingText": "GET 10% OFF!",
-      "subtextText": "Apply at checkout for savings",
-      "bgColor": "#ffffff",
-      "textColor": "#111827",
-      "accentColor": "#3b82f6",
-      "buttonColor": "#3b82f6",
-      "buttonTextColor": "#ffffff",
-      "borderRadius": 12,
-      "fontSize": 16,
-      "padding": 16
-    },
-    "template2": {
-      "name": "Minimal Card",
-      "headingText": "SPECIAL OFFER",
-      "subtextText": "Free shipping on qualifying orders",
-      "bgColor": "#f9fafb",
-      "textColor": "#374151",
-      "accentColor": "#10b981",
-      "buttonColor": "#10b981",
-      "buttonTextColor": "#ffffff",
-      "borderRadius": 8,
-      "fontSize": 14,
-      "padding": 14
-    }
+  "activeTemplate": "template2",
+  "title": {
+    "text": "Apply Coupon",
+    "fontSize": 12,
+    "textColor": "#4d83f8",
+    "alignment": "center"
   },
-  "selectedActiveCoupons": [
-    "gid:/shopify/DiscountRedeemCode/26805031010371",
-    "gid:/shopify/DiscountRedeemCode/26833535139907"
-  ],
-  "shop": "cartapp-2.myshopify.com",
   "templates": {
     "template1": {
       "name": "Classic Banner",
@@ -57,7 +29,7 @@
     "template2": {
       "name": "Minimal Card",
       "headingText": "SPECIAL OFFER",
-      "subtextText": "Free shipping on qualifying orders",
+      "subtextText": "Free shipping on orders over ₹500",
       "bgColor": "#f9fafb",
       "textColor": "#374151",
       "accentColor": "#10b981",
@@ -91,27 +63,106 @@
       "showAddAllButton": false,
       "interactionType": "copy",
       "layout": "horizontal"
-    },
-    "template4": {
-      "name": "Modern Gradient",
-      "headingText": "Inherit",
-      "subtextText": "Free shipping on qualifying orders",
-      "bgColor": "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-      "textColor": "#ffffff",
-      "accentColor": "#fbbf24",
-      "buttonColor": "#fbbf24",
-      "buttonTextColor": "#000000",
-      "borderRadius": 20,
-      "fontSize": 16,
-      "padding": 20,
-      "borderColor": "transparent",
-      "priceColor": "#ffffff",
-      "showPrices": true,
-      "showAddAllButton": false,
-      "interactionType": "apply",
-      "layout": "horizontal"
     }
   },
+  "selectedActiveCoupons": [
+    "gid://shopify/DiscountRedeemCode/26805031010371",
+    "gid://shopify/DiscountRedeemCode/26805030813763",
+    "gid://shopify/DiscountRedeemCode/26800703766595",
+    "gid://shopify/DiscountRedeemCode/26799448817731",
+    "gid://shopify/DiscountRedeemCode/26833535139907"
+  ],
+  "allTemplateOverrides": {
+    "template1": {},
+    "template2": {
+      "gid://shopify/DiscountRedeemCode/26805031010371": {
+        "couponCode": "velwo",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
+      },
+      "gid://shopify/DiscountRedeemCode/26805030813763": {
+        "couponCode": "J62ZTBU1",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
+      },
+      "gid://shopify/DiscountRedeemCode/26800703766595": {
+        "couponCode": "3E3OHTM4",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
+      },
+      "gid://shopify/DiscountRedeemCode/26799448817731": {
+        "couponCode": "9Y39OK68",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
+      },
+      "gid://shopify/DiscountRedeemCode/26833535139907": {
+        "displayCondition": "product_handle",
+        "productHandles": [
+          "the-3p-fulfilled-snowboard"
+        ],
+        "couponCode": "PSQEP5W9",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
+      }
+    },
+    "template3": {
+      "gid://shopify/DiscountRedeemCode/26805031010371": {
+        "couponCode": "velwo",
+        "headingText": "how are you",
+        "subtextText": "hello"
+      },
+      "gid://shopify/DiscountRedeemCode/26805030813763": {
+        "couponCode": "J62ZTBU1",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      },
+      "gid://shopify/DiscountRedeemCode/26800703766595": {
+        "couponCode": "3E3OHTM4",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      },
+      "gid://shopify/DiscountRedeemCode/26799448817731": {
+        "couponCode": "9Y39OK68",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      },
+      "gid://shopify/DiscountRedeemCode/26833535139907": {
+        "couponCode": "PSQEP5W9",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      }
+    }
+  },
+  "actionType": "saveCouponConfig",
+  "templateData": {
+    "template1": {
+      "name": "Classic Banner",
+      "headingText": "GET 10% OFF!",
+      "subtextText": "Apply at checkout for savings",
+      "bgColor": "#ffffff",
+      "textColor": "#111827",
+      "accentColor": "#3b82f6",
+      "buttonColor": "#3b82f6",
+      "buttonTextColor": "#ffffff",
+      "borderRadius": 12,
+      "fontSize": 16,
+      "padding": 16
+    },
+    "template2": {
+      "name": "Minimal Card",
+      "headingText": "SPECIAL OFFER",
+      "subtextText": "Free shipping on qualifying orders",
+      "bgColor": "#f9fafb",
+      "textColor": "#374151",
+      "accentColor": "#10b981",
+      "buttonColor": "#10b981",
+      "buttonTextColor": "#ffffff",
+      "borderRadius": 8,
+      "fontSize": 14,
+      "padding": 14
+    }
+  },
+  "shop": "cartapp-2.myshopify.com",
   "allTemplateData": {
     "template3": {
       "selectedActiveCoupons": [
@@ -122,27 +173,6 @@
           "headingText": "velwo",
           "subtextText": "velwo"
         }
-      }
-    }
-  },
-  "allTemplateOverrides": {
-    "template1": {},
-    "template2": {},
-    "template3": {
-      "gid:/shopify/DiscountRedeemCode/26805031010371": {
-        "couponCode": "velwo",
-        "headingText": "Velwo",
-        "subtextText": "Heloo",
-        "displayCondition": "all"
-      },
-      "gid:/shopify/DiscountRedeemCode/26833535139907": {
-        "couponCode": "PSQEP5W9",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF",
-        "displayCondition": "product_handle",
-        "productHandles": [
-          "the-3p-fulfilled-snowboard"
-        ]
       }
     }
   }

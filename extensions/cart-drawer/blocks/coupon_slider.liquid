@@ -218,25 +218,27 @@ function renderSlider(el,data,ctx){
   var tpl=data.selectedTemplate||'template1';
   var r=getStyles(data,tpl);
   var def=r.def,map=r.map,conds=r.conds||[];
+  var titleCfg=(def&&typeof def.title==='object')?def.title:{};
+  var titleText=(titleCfg&&titleCfg.text!==undefined)?String(titleCfg.text):'Apply Coupon';
+  var titleFontSize=parseInt(titleCfg&&titleCfg.fontSize,10);
+  if(!titleFontSize||isNaN(titleFontSize))titleFontSize=14;
+  var titleColor=(titleCfg&&titleCfg.textColor)?String(titleCfg.textColor):'#111827';
+  var titleAlign=(titleCfg&&titleCfg.alignment)?String(titleCfg.alignment):'left';
+  if(['left','center','right'].indexOf(titleAlign)===-1)titleAlign='left';
   var normalizedMap={};
   Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
-  var explicitCoupons=asArray(
+  var explicitIds=asArray(
     data&&Array.isArray(data.selectedCouponsGlobal)&&data.selectedCouponsGlobal.length
       ?data.selectedCouponsGlobal
       :data.selectedTemplateCoupon
-  );
-  var ids=[];
-  var seenIds={};
-  explicitCoupons.forEach(function(item){
-    var idObj = item&&typeof item==='object'?item.id:item;
-    if(!idObj) return;
-    var nId = normalizeId(idObj);
-    if(nId && !seenIds[nId]){
-      seenIds[nId] = true;
-      ids.push(item);
-    }
-  });
-
+  ).map(function(id){return normalizeId(id);}).filter(Boolean);
+  var styleIds=Object.keys(map||{})
+    .map(function(key){return normalizeId(key);})
+    .filter(function(key){return key&&!/^\d+$/.test(key);});
+  var conditionIds=(conds||[])
+    .map(function(cond){return normalizeId(cond&&cond.couponId);})
+    .filter(Boolean);
+  var ids=unique([].concat(explicitIds,styleIds,conditionIds));
   if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
 
   var itemsToRender=[];
@@ -282,6 +284,7 @@ function renderSlider(el,data,ctx){
 
   el.innerHTML=
     '<div class="ps-slider">'
+      +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
       +'<div class="ps-slider-header">'
         +'<div class="ps-nav-group" style="display:none;">'
           +'<button class="ps-nav ps-prev">&#8592;</button>'

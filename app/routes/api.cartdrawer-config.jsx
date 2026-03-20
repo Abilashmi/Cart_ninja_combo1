@@ -1,10 +1,33 @@
 import { authenticate } from "../shopify.server";
 import { getStoredCoupons } from "./api.create_coupon-sample";
+import { promises as fs } from "fs";
+import path from "path";
 
 // ---------------- EXTERNAL API ----------------
 // Single source of truth for the external PHP backend URL.
 // Update this when the ngrok tunnel URL changes.
 const EXTERNAL_CART_API = "https://blueviolet-clam-512487.hostingersite.com/save_cart_drawer.php";
+
+// Local fallback persistence (used when external API is unavailable or incomplete)
+const LOCAL_DATA_FILE = path.resolve("cartdrawer-config-data.json");
+
+function normalizeShopDomain(shopDomain) {
+    return (shopDomain || "").toString().trim().toLowerCase();
+}
+
+async function readLocalConfigMap() {
+    try {
+        const raw = await fs.readFile(LOCAL_DATA_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+async function writeLocalConfigMap(map) {
+    await fs.writeFile(LOCAL_DATA_FILE, JSON.stringify(map, null, 2));
+}
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {
@@ -38,7 +61,13 @@ const DEFAULT_SETTINGS = {
         selectedStyle: "style-2",
         position: "top",
         layout: "grid",
-        alignment: "horizontal"
+        alignment: "horizontal",
+        title: {
+            text: "Apply Coupon",
+            fontSize: 14,
+            textColor: "#1e293b",
+            alignment: "left"
+        }
     },
     upsell: {
         enabled: false,
@@ -99,6 +128,28 @@ function transformFromDB(dbData) {
             position: couponData.position || DEFAULT_SETTINGS.coupons.position,
             layout: couponData.layout || DEFAULT_SETTINGS.coupons.layout,
             alignment: couponData.alignment || DEFAULT_SETTINGS.coupons.alignment,
+            title: {
+                text:
+                    (couponData.title && typeof couponData.title === 'object' ? couponData.title.text : null) ||
+                    couponData.titleText ||
+                    DEFAULT_SETTINGS.coupons.title.text,
+                fontSize:
+                    Number(
+                        (couponData.title && typeof couponData.title === 'object'
+                            ? (couponData.title.fontSize ?? couponData.title.font_size)
+                            : null) ??
+                        couponData.titleFontSize ??
+                        couponData.title_font_size
+                    ) || DEFAULT_SETTINGS.coupons.title.fontSize,
+                textColor:
+                    (couponData.title && typeof couponData.title === 'object' ? couponData.title.textColor : null) ||
+                    couponData.titleTextColor ||
+                    DEFAULT_SETTINGS.coupons.title.textColor,
+                alignment:
+                    (couponData.title && typeof couponData.title === 'object' ? couponData.title.alignment : null) ||
+                    couponData.titleAlignment ||
+                    DEFAULT_SETTINGS.coupons.title.alignment,
+            },
         },
         upsell: {
             ...DEFAULT_SETTINGS.upsell,
@@ -130,6 +181,11 @@ function transformFromDB(dbData) {
 export async function loader({ request }) {
     const url = new URL(request.url);
     const shopDomain = url.searchParams.get("shop") || url.searchParams.get("shopdomain") || "";
+    const shopKey = normalizeShopDomain(shopDomain);
+
+    // Local fallback config (per-shop)
+    const localConfigMap = shopKey ? await readLocalConfigMap() : {};
+    const localDbData = shopKey && localConfigMap[shopKey] ? localConfigMap[shopKey] : null;
 
     const storedCoupons = await getStoredCoupons(shopDomain);
 
@@ -236,6 +292,27 @@ export async function loader({ request }) {
         console.log(`External Cart API GET response [${extRes.status}]:`, JSON.stringify(extBody));
         if (extBody.status === "success" && extBody.data) {
             const { settings, couponSelections, cartActive } = transformFromDB(extBody.data);
+
+            // If the external API returns an apparently empty selection but we have a locally-saved
+            // selection, prefer the local data so the admin UI reflects the last saved state.
+            if (
+                (!couponSelections?.selectedCouponIds || couponSelections.selectedCouponIds.length === 0) &&
+                localDbData
+            ) {
+                const localTransformed = transformFromDB(localDbData);
+                if (localTransformed?.couponSelections?.selectedCouponIds?.length) {
+                    return Response.json({
+                        success: true,
+                        settings: localTransformed.settings,
+                        couponSelections: localTransformed.couponSelections,
+                        cartStatus: localTransformed.cartActive,
+                        cartData: { ...DEFAULT_CART_DATA },
+                        coupons: formattedCoupons,
+                        shopifyProducts,
+                        shopifyCollections
+                    });
+                }
+            }
             return Response.json({
                 success: true,
                 settings,
@@ -248,6 +325,34 @@ export async function loader({ request }) {
             });
         } else {
             console.warn("External Cart API returned non-success, using defaults");
+            if (localDbData) {
+                const localTransformed = transformFromDB(localDbData);
+                return Response.json({
+                    success: true,
+                    settings: localTransformed.settings,
+                    couponSelections: localTransformed.couponSelections,
+                    cartStatus: localTransformed.cartActive,
+                    cartData: { ...DEFAULT_CART_DATA },
+                    coupons: formattedCoupons,
+                    shopifyProducts,
+                    shopifyCollections
+                });
+            }
+
+            if (savedSettings && normalizeShopDomain(savedSettings.shop || savedSettings.shopDomain) === shopKey) {
+                const localTransformed = transformFromDB(savedSettings);
+                return Response.json({
+                    success: true,
+                    settings: localTransformed.settings,
+                    couponSelections: localTransformed.couponSelections,
+                    cartStatus: localTransformed.cartActive,
+                    cartData: { ...DEFAULT_CART_DATA },
+                    coupons: formattedCoupons,
+                    shopifyProducts,
+                    shopifyCollections
+                });
+            }
+
             return Response.json({
                 success: true,
                 settings: { ...DEFAULT_SETTINGS },
@@ -259,6 +364,34 @@ export async function loader({ request }) {
         }
     } catch (error) {
         console.error("Failed to fetch from external Cart API:", error.message);
+        if (localDbData) {
+            const localTransformed = transformFromDB(localDbData);
+            return Response.json({
+                success: true,
+                settings: localTransformed.settings,
+                couponSelections: localTransformed.couponSelections,
+                cartStatus: localTransformed.cartActive,
+                cartData: { ...DEFAULT_CART_DATA },
+                coupons: formattedCoupons,
+                shopifyProducts,
+                shopifyCollections
+            });
+        }
+
+        if (savedSettings && normalizeShopDomain(savedSettings.shop || savedSettings.shopDomain) === shopKey) {
+            const localTransformed = transformFromDB(savedSettings);
+            return Response.json({
+                success: true,
+                settings: localTransformed.settings,
+                couponSelections: localTransformed.couponSelections,
+                cartStatus: localTransformed.cartActive,
+                cartData: { ...DEFAULT_CART_DATA },
+                coupons: formattedCoupons,
+                shopifyProducts,
+                shopifyCollections
+            });
+        }
+
         return Response.json({
             success: true,
             settings: { ...DEFAULT_SETTINGS },
@@ -290,54 +423,78 @@ export async function action({ request }) {
         console.log(JSON.stringify(data, null, 2));
         console.log("------------------------------------------");
 
-        // Save to in-memory store
-        savedSettings = data;
-
-        // Normalize shop identifier for external API
-        const shop = data.shop || data.shopDomain || data.Id || "";
+        // Normalize shop identifier for local persistence and external API
+        const rawShop = data.shop || data.shopDomain || data.Id || "";
+        const shopKey = normalizeShopDomain(rawShop);
         const payload = {
             ...data,
-            shop: shop,
-            shopDomain: shop, // Send both to satisfy different PHP backend versions
+            shop: rawShop,
+            shopDomain: rawShop, // Send both to satisfy different PHP backend versions
         };
 
-        // Attempt to forward to external PHP endpoint (optional, non-blocking)
-        try {
-            const externalResponse = await fetch(
-                EXTERNAL_CART_API,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                }
-            );
+        // Save to in-memory store (fast refresh fallback)
+        savedSettings = payload;
 
-            if (externalResponse.ok) {
-                const externalResult = await externalResponse.json();
-                console.log("External sync successful:", externalResult);
-                return Response.json({
-                    success: true,
-                    message: "Configuration saved successfully",
-                    external: externalResult
-                });
-            } else {
-                const errorText = await externalResponse.text();
-                console.warn(`External sync warning (${externalResponse.status}):`, errorText);
-                return Response.json({
-                    success: false,
-                    error: `External API error: ${errorText}`,
-                    status: externalResponse.status
-                });
+        // Save to local JSON file (refresh + server restart fallback)
+        if (shopKey) {
+            try {
+                const map = await readLocalConfigMap();
+                map[shopKey] = payload;
+                await writeLocalConfigMap(map);
+            } catch (fileErr) {
+                console.warn("Failed to persist cart drawer config locally:", fileErr.message);
             }
-        } catch (externalError) {
-            // External endpoint is optional - log but don't fail the request
-            console.warn("External sync unavailable (data saved locally):", externalError.message);
+        } else {
+            console.warn("No shop domain found in payload. Local persistence skipped.");
         }
 
-        // Always return success to the client
+        // Attempt to forward to external PHP endpoint (best-effort)
+        let externalOk = false;
+        let externalStatus = null;
+        let externalResult = null;
+        let externalError = null;
+
+        try {
+            const externalResponse = await fetch(EXTERNAL_CART_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    ...payload,
+                    shop: rawShop,
+                    shopDomain: rawShop,
+                })
+            });
+
+            externalStatus = externalResponse.status;
+
+            if (externalResponse.ok) {
+                externalOk = true;
+                try {
+                    externalResult = await externalResponse.json();
+                } catch {
+                    externalResult = await externalResponse.text();
+                }
+                console.log("External sync successful:", externalResult);
+            } else {
+                externalError = await externalResponse.text();
+                console.warn(`External sync warning (${externalResponse.status}):`, externalError);
+            }
+        } catch (externalErr) {
+            externalError = externalErr.message;
+            console.warn("External sync unavailable (data saved locally):", externalErr.message);
+        }
+
+        // Always return success if local save succeeded (external sync is optional)
         return Response.json({
             success: true,
-            message: "Configuration saved successfully",
+            message: externalOk
+                ? "Configuration saved successfully"
+                : "Configuration saved locally (external sync failed)",
+            shop: rawShop,
+            externalOk,
+            externalStatus,
+            external: externalResult,
+            externalError,
             receivedAt: new Date().toISOString()
         });
 

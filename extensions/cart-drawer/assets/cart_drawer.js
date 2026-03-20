@@ -152,12 +152,23 @@
     function parseCouponData(d) {
         const data = parseJSON(d.coupon_data || d.couponData);
         const enabled = isEnabled(d.coupon_status) || isEnabled(d.couponStatus) || isEnabled(data.enabled);
+
+        const title = data && typeof data.title === 'object' && data.title ? data.title : {};
+        const rawAlign = title.alignment || data.titleAlignment || 'left';
+        const safeAlign = rawAlign === 'center' || rawAlign === 'right' || rawAlign === 'left' ? rawAlign : 'left';
+
         return {
             enabled,
             style: data.style || data.selectedStyle || 'style-2',
             position: data.position || 'top',
             layout: data.layout || 'grid',
             alignment: data.alignment || 'horizontal',
+            title: {
+                text: title.text || data.titleText || 'Apply Coupon',
+                fontSize: parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
+                textColor: title.textColor || data.titleTextColor || '#1e293b',
+                alignment: safeAlign,
+            },
             selectedActiveCoupons: data.selectedActiveCoupons || [],
             couponOverrides: data.couponOverrides || {},
             allCouponDetails: data.allCouponDetails || [],
@@ -659,6 +670,13 @@
     function renderCouponSection(couponConfig, cartTotal) {
         const selectedIds = couponConfig.selectedActiveCoupons || [];
         const savedDetails = couponConfig.allCouponDetails || [];
+
+        const title = couponConfig.title || {};
+        const titleText = title.text || 'Apply Coupon';
+        const titleFontSize = parseInt(title.fontSize ?? 14, 10) || 14;
+        const titleTextColor = title.textColor || '#1e293b';
+        const titleAlign = title.alignment === 'center' || title.alignment === 'right' || title.alignment === 'left' ? title.alignment : 'left';
+
         const couponsToShow = selectedIds.map(id => {
             const saved = savedDetails.find(d => d.id === id);
             if (saved) {
@@ -670,9 +688,9 @@
         }).filter(c => c);
 
         if (couponsToShow.length === 0) return '';
-        let html = `<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">Available Offers</p></div>
-      <div id="cc-coupon-list" class="cc-hide-scrollbar" style="display:flex;gap:12px;overflow-x:auto;">`;
+                let html = `<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p></div>
+            <div id="cc-coupon-list" class="cc-hide-scrollbar" style="display:flex;gap:12px;overflow-x:auto;">`;
 
         couponsToShow.forEach(coupon => {
             const isApplied = appliedCouponCodes.includes(coupon.code);

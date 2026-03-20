@@ -762,12 +762,24 @@ export default function CartDrawerAdmin() {
   const [couponLayout, setCouponLayout] = useState('grid'); // 'grid' or 'carousel'
   const [couponAlignment, setCouponAlignment] = useState('horizontal'); // 'horizontal' or 'vertical'
   const [couponShowOnEmpty, setCouponShowOnEmpty] = useState(true);
+
+  // Coupon Section Title (header above the coupon list)
+  const [couponTitleText, setCouponTitleText] = useState('Apply Coupon');
+  const [couponTitleFontSize, setCouponTitleFontSize] = useState(14);
+  const [couponTitleTextColor, setCouponTitleTextColor] = useState('#1e293b');
+  const [couponTitleAlignment, setCouponTitleAlignment] = useState('left'); // left | center | right
   const [initialCouponSettings, setInitialCouponSettings] = useState({
     style: COUPON_STYLES.STYLE_2,
     position: 'top',
     layout: 'grid',
     alignment: 'horizontal',
-    showOnEmpty: true
+    showOnEmpty: true,
+    title: {
+      text: 'Apply Coupon',
+      fontSize: 14,
+      textColor: '#1e293b',
+      alignment: 'left'
+    }
   });
 
   // ==========================================
@@ -944,16 +956,33 @@ export default function CartDrawerAdmin() {
 
           // 5. Update Style Settings
           if (settings.coupons) {
+            const title = settings.coupons.title || {};
+            const nextTitleText = title.text || 'Apply Coupon';
+            const nextTitleFontSize = Number(title.fontSize) || 14;
+            const nextTitleTextColor = title.textColor || '#1e293b';
+            const nextTitleAlignment = title.alignment || 'left';
+
             setInitialCouponSettings({
               style: settings.coupons.selectedStyle || COUPON_STYLES.STYLE_2,
               position: settings.coupons.position || 'top',
               layout: settings.coupons.layout || 'grid',
-              alignment: settings.coupons.alignment || 'horizontal'
+              alignment: settings.coupons.alignment || 'horizontal',
+              title: {
+                text: nextTitleText,
+                fontSize: nextTitleFontSize,
+                textColor: nextTitleTextColor,
+                alignment: nextTitleAlignment
+              }
             });
             setSelectedCouponStyle(settings.coupons.selectedStyle || COUPON_STYLES.STYLE_2);
             setCouponPosition(settings.coupons.position || 'top');
             setCouponLayout(settings.coupons.layout || 'grid');
             setCouponAlignment(settings.coupons.alignment || 'horizontal');
+
+            setCouponTitleText(nextTitleText);
+            setCouponTitleFontSize(nextTitleFontSize);
+            setCouponTitleTextColor(nextTitleTextColor);
+            setCouponTitleAlignment(nextTitleAlignment);
           }
 
           // 6. Load Coupon Selections (IDs + Overrides)
@@ -1497,9 +1526,11 @@ export default function CartDrawerAdmin() {
 
     // Save to DB via handleSaveAll
     setAllCoupons(JSON.parse(JSON.stringify(couponsToSave)));
-    await handleSaveAll();
-    setSaveToastMessage('Coupon saved');
-    setShowSaveToast(true);
+    const saveResult = await handleSaveAll();
+    if (saveResult?.success) {
+      setSaveToastMessage('Coupon saved');
+      setShowSaveToast(true);
+    }
   };
 
   const handleCancelCoupon = () => {
@@ -1516,7 +1547,13 @@ export default function CartDrawerAdmin() {
       style: selectedCouponStyle,
       position: couponPosition,
       layout: couponLayout,
-      alignment: couponAlignment
+      alignment: couponAlignment,
+      title: {
+        text: couponTitleText,
+        fontSize: couponTitleFontSize,
+        textColor: couponTitleTextColor,
+        alignment: couponTitleAlignment
+      }
     });
 
     await handleSaveAll();
@@ -1527,6 +1564,13 @@ export default function CartDrawerAdmin() {
     setCouponPosition(initialCouponSettings.position);
     setCouponLayout(initialCouponSettings.layout);
     setCouponAlignment(initialCouponSettings.alignment);
+
+    const title = initialCouponSettings.title || {};
+    setCouponTitleText(title.text || 'Apply Coupon');
+    setCouponTitleFontSize(Number(title.fontSize) || 14);
+    setCouponTitleTextColor(title.textColor || '#1e293b');
+    setCouponTitleAlignment(title.alignment || 'left');
+
     setSaveToastMessage('Changes discarded');
     setShowSaveToast(true);
   };
@@ -1670,6 +1714,12 @@ export default function CartDrawerAdmin() {
         position: couponPosition,
         layout: couponLayout,
         alignment: couponAlignment,
+        title: {
+          text: couponTitleText,
+          fontSize: couponTitleFontSize,
+          textColor: couponTitleTextColor,
+          alignment: couponTitleAlignment,
+        },
         selectedActiveCoupons,
         couponOverrides,
         allCouponDetails: selectedActiveCoupons.map(id => {
@@ -1728,15 +1778,18 @@ export default function CartDrawerAdmin() {
       if (response.ok && responseBody.success) {
         setSaveToastMessage(`✅ Configuration synced (${targetStatus})`);
         setShowSaveToast(true);
+        return { success: true, responseBody };
       } else {
         const errorMsg = responseBody.error || responseBody.message || `Status ${response.status}`;
         setSaveToastMessage(`❌ Error: ${errorMsg}`);
         setShowSaveToast(true);
+        return { success: false, responseBody };
       }
     } catch (error) {
       console.error('[Sample API] Fetch error:', error);
       setSaveToastMessage('❌ Failed to connect to sample API');
       setShowSaveToast(true);
+      return { success: false, error };
     } finally {
       setIsSaving(false);
     }
@@ -2843,6 +2896,46 @@ export default function CartDrawerAdmin() {
                           onChange={() => setCouponAlignment('vertical')}
                         />
                       </InlineStack>
+                    </BlockStack>
+
+                    <Divider />
+
+                    {/* Section Title */}
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Section Title</Text>
+                      <TextField
+                        label="Title text"
+                        value={couponTitleText}
+                        onChange={setCouponTitleText}
+                        autoComplete="off"
+                      />
+
+                      <InlineStack gap="300">
+                        <TextField
+                          label="Font size (px)"
+                          type="number"
+                          value={String(couponTitleFontSize)}
+                          onChange={(value) => setCouponTitleFontSize(Number(value) || 14)}
+                          autoComplete="off"
+                        />
+
+                        <Select
+                          label="Text alignment"
+                          options={[
+                            { label: 'Left', value: 'left' },
+                            { label: 'Center', value: 'center' },
+                            { label: 'Right', value: 'right' },
+                          ]}
+                          value={couponTitleAlignment}
+                          onChange={setCouponTitleAlignment}
+                        />
+                      </InlineStack>
+
+                      <ColorPickerField
+                        label="Title text color"
+                        value={couponTitleTextColor}
+                        onChange={setCouponTitleTextColor}
+                      />
                     </BlockStack>
 
 
@@ -4393,9 +4486,11 @@ export default function CartDrawerAdmin() {
                     backgroundColor: '#fff',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <Text as="h3" variant="headingSm" fontWeight="bold">
-                        Available Offers
-                      </Text>
+                      <div style={{ flex: 1, textAlign: couponTitleAlignment }}>
+                        <p style={{ margin: 0, fontSize: `${Number(couponTitleFontSize) || 14}px`, fontWeight: 700, color: couponTitleTextColor }}>
+                          {couponTitleText || 'Apply Coupon'}
+                        </p>
+                      </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button
                           onClick={() => handleScrollCoupons('left')}

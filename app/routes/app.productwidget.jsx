@@ -165,6 +165,12 @@ function normalizeProductSelection(selected = []) {
 
 const FAKE_COUPON_CONFIG = {
     activeTemplate: "template1",
+    title: {
+        text: "Apply Coupon",
+        fontSize: 14,
+        textColor: "#111827",
+        alignment: "left",
+    },
     selectedActiveCoupons: [],
     displayCondition: "all",
     productHandles: [],
@@ -742,6 +748,19 @@ function CouponsSection({ config, onSave, saving }) {
     };
     const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
+    const initialTitle = {
+        ...(FAKE_COUPON_CONFIG.title || {}),
+        ...((config && typeof config === "object" && config.title && typeof config.title === "object") ? config.title : {}),
+    };
+    const normalizedInitialTitleAlignment = ["left", "center", "right"].includes(initialTitle.alignment)
+        ? initialTitle.alignment
+        : "left";
+    const [sectionTitleText, setSectionTitleText] = useState(initialTitle.text || "Apply Coupon");
+    const [sectionTitleFontSize, setSectionTitleFontSize] = useState(
+        Number.isFinite(Number(initialTitle.fontSize)) ? Number(initialTitle.fontSize) : 14
+    );
+    const [sectionTitleTextColor, setSectionTitleTextColor] = useState(initialTitle.textColor || "#111827");
+    const [sectionTitleAlignment, setSectionTitleAlignment] = useState(normalizedInitialTitleAlignment);
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
     const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(() => {
         const raw = (config?.selectedActiveCoupons || []).map(item => typeof item === 'string' ? item : item.id);
@@ -1043,11 +1062,25 @@ function CouponsSection({ config, onSave, saving }) {
             templateData: templates,
             selectedActiveCoupons: couponIds,
             allTemplateOverrides: finalAllTemplateOverrides,
+            title: {
+                text: sectionTitleText,
+                fontSize: sectionTitleFontSize,
+                textColor: sectionTitleTextColor,
+                alignment: sectionTitleAlignment,
+            },
         });
     };
 
     const handleDiscard = () => {
         setActiveTemplate(config?.activeTemplate || "template1");
+        const discardTitle = {
+            ...(FAKE_COUPON_CONFIG.title || {}),
+            ...((config && typeof config === "object" && config.title && typeof config.title === "object") ? config.title : {}),
+        };
+        setSectionTitleText(discardTitle.text || "Apply Coupon");
+        setSectionTitleFontSize(Number.isFinite(Number(discardTitle.fontSize)) ? Number(discardTitle.fontSize) : 14);
+        setSectionTitleTextColor(discardTitle.textColor || "#111827");
+        setSectionTitleAlignment(["left", "center", "right"].includes(discardTitle.alignment) ? discardTitle.alignment : "left");
         setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
         setSelectedActiveCoupons(config?.selectedActiveCoupons || []);
         setAllTemplateOverrides(
@@ -1194,6 +1227,17 @@ function CouponsSection({ config, onSave, saving }) {
                                 {/* Single Card Preview (Old UI) */}
                                 <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
                                     <div style={{ width: "100%", maxWidth: "450px" }}>
+                                        <div style={{ textAlign: sectionTitleAlignment, marginBottom: "12px" }}>
+                                            <div
+                                                style={{
+                                                    fontSize: `${sectionTitleFontSize}px`,
+                                                    fontWeight: 700,
+                                                    color: sectionTitleTextColor,
+                                                }}
+                                            >
+                                                {sectionTitleText}
+                                            </div>
+                                        </div>
                                         {activeTemplate === "template1" && (
                                             <div style={{
                                                 backgroundColor: currentTemplate.bgColor,
@@ -1310,6 +1354,75 @@ function CouponsSection({ config, onSave, saving }) {
                     <div style={{ height: "550px", overflowY: "auto", position: "relative" }}>
                         <BlockStack gap="300">
                             <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
+
+                            <Divider />
+
+                            {/* Section Title (Collapsible) */}
+                            <BlockStack gap="200">
+                                <div
+                                    onClick={() => toggleSection("sectionTitle")}
+                                    style={{
+                                        cursor: "pointer",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        width: "100%",
+                                        padding: "8px 0",
+                                    }}
+                                >
+                                    <Text variant="headingSm" as="h4" fontWeight="semibold">
+                                        <InlineStack gap="100" blockAlign="center">
+                                            <Icon source={MagicIcon} tone="base" />
+                                            Section Title
+                                        </InlineStack>
+                                    </Text>
+                                    <div style={{ marginLeft: "auto" }}>
+                                        <Icon
+                                            source={openSections.includes("sectionTitle") ? ChevronUpIcon : ChevronDownIcon}
+                                            tone="base"
+                                        />
+                                    </div>
+                                </div>
+                                {openSections.includes("sectionTitle") && (
+                                    <div style={{ paddingBottom: "16px" }}>
+                                        <BlockStack gap="200">
+                                            <TextField
+                                                label="Title"
+                                                value={sectionTitleText}
+                                                onChange={setSectionTitleText}
+                                                placeholder="Apply Coupon"
+                                            />
+                                            <RangeSlider
+                                                label={`Font Size: ${sectionTitleFontSize}px`}
+                                                value={sectionTitleFontSize}
+                                                onChange={setSectionTitleFontSize}
+                                                min={10}
+                                                max={40}
+                                                output
+                                            />
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                                <Select
+                                                    label="Alignment"
+                                                    options={[
+                                                        { label: "Left", value: "left" },
+                                                        { label: "Center", value: "center" },
+                                                        { label: "Right", value: "right" },
+                                                    ]}
+                                                    value={sectionTitleAlignment}
+                                                    onChange={setSectionTitleAlignment}
+                                                />
+                                                <ColorPickerField
+                                                    label="Text Color"
+                                                    value={sectionTitleTextColor}
+                                                    onChange={setSectionTitleTextColor}
+                                                />
+                                            </div>
+                                        </BlockStack>
+                                    </div>
+                                )}
+                            </BlockStack>
+
+                            <Divider />
 
                             {/* Header: Select & Switching (Restructured based on format) */}
                             <BlockStack gap="400">
@@ -2907,6 +3020,7 @@ export default function ProductWidgetPage() {
                 templateData: data.templateData,
                 selectedActiveCoupons: data.selectedActiveCoupons,
                 allTemplateOverrides: data.allTemplateOverrides,
+                title: data.title,
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/coupon-slider" }

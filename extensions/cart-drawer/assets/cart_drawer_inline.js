@@ -89,7 +89,7 @@
         CONFIG = {
           cartStatus: true,
           progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
-          coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', couponOverrides: {}, allCouponDetails: [] },
+          coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', title: { text: 'Apply Coupon', fontSize: 14, textColor: '#1e293b', alignment: 'left' }, couponOverrides: {}, allCouponDetails: [] },
           upsell: { enabled: false, manualRules: [], direction: 'vertical', layout: 'carousel', position: 'bottom', showOnEmptyCart: false, showIfInCart: false, limit: 3, buttonText: 'Add to cart', upsellTitle: { text: 'Recommended for you', color: '#111827', bold: false, italic: false, underline: false }, activeTemplate: 'grid' },
         };
       }
@@ -162,12 +162,23 @@
   function parseCouponData(d) {
     const data = parseJSON(d.coupon_data || d.couponData);
     const enabled = isEnabled(d.coupon_status) || isEnabled(d.couponStatus) || isEnabled(data.enabled);
+
+    const title = data && typeof data.title === 'object' && data.title ? data.title : {};
+    const rawAlign = title.alignment || data.titleAlignment || 'left';
+    const safeAlign = rawAlign === 'center' || rawAlign === 'right' || rawAlign === 'left' ? rawAlign : 'left';
+
     return {
       enabled,
       style: data.style || data.selectedStyle || 'style-2',
       position: data.position || 'top',
       layout: data.layout || 'grid',
       alignment: data.alignment || 'horizontal',
+      title: {
+        text: title.text || data.titleText || 'Apply Coupon',
+        fontSize: parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
+        textColor: title.textColor || data.titleTextColor || '#1e293b',
+        alignment: safeAlign,
+      },
       selectedActiveCoupons: data.selectedActiveCoupons || [],
       couponOverrides: data.couponOverrides || {},
       allCouponDetails: data.allCouponDetails || [],
@@ -1157,6 +1168,12 @@
     const layout = couponConfig.layout || 'grid';
     const alignment = couponConfig.alignment || 'horizontal';
 
+    const title = couponConfig.title || {};
+    const titleText = title.text || 'Apply Coupon';
+    const titleFontSize = parseInt(title.fontSize ?? 14, 10) || 14;
+    const titleTextColor = title.textColor || '#1e293b';
+    const titleAlign = title.alignment === 'center' || title.alignment === 'right' || title.alignment === 'left' ? title.alignment : 'left';
+
     // Use allCouponDetails from DB as primary source (has all visual styles saved)
     // Fall back to COUPONS API + overrides only if allCouponDetails is empty
     const couponsToShow = selectedIds
@@ -1249,7 +1266,7 @@
     let html = `
 <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">Available Offers</p>
+    <p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p>
     <div style="display:flex;gap:6px;">
       <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="Previous coupon">←</button>
       <button class="cc-nav-btn" onclick="ccCouponNav('right')" title="Next coupon">→</button>

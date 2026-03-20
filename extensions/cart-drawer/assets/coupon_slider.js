@@ -139,8 +139,16 @@
             });
 
         function renderTemplate(container, template, defaultStyle, couponIds, couponStyleMap) {
+                        const titleCfg = (defaultStyle && typeof defaultStyle.title === 'object') ? defaultStyle.title : {};
+                        const titleText = (titleCfg && titleCfg.text !== undefined) ? String(titleCfg.text) : 'Apply Coupon';
+                        const titleFontSize = Number.isFinite(Number(titleCfg && titleCfg.fontSize)) ? Number(titleCfg.fontSize) : 14;
+                        const titleColor = (titleCfg && titleCfg.textColor) ? String(titleCfg.textColor) : '#111827';
+                        const titleAlignRaw = (titleCfg && titleCfg.alignment) ? String(titleCfg.alignment) : 'left';
+                        const titleAlign = ['left', 'center', 'right'].includes(titleAlignRaw) ? titleAlignRaw : 'left';
+
             container.innerHTML = `
         <div class="ps-list-container">
+                    <div class="ps-section-title" style="text-align:${titleAlign};color:${titleColor};font-size:${titleFontSize}px;font-weight:700;margin-bottom:10px;line-height:1.2;">${titleText}</div>
           <div class="ps-nav-group">
             <button class="ps-nav-btn prev" onclick="psScroll(-1)" aria-label="Previous">&#8249;</button>
             <button class="ps-nav-btn next" onclick="psScroll(1)" aria-label="Next">&#8250;</button>
