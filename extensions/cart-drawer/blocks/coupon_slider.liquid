@@ -1,4 +1,4 @@
-﻿{% schema %}{"name":"Coupon Slider","target":"section","settings":[]}{% endschema %}
+{% schema %}{"name":"Coupon Slider","target":"section","settings":[]}{% endschema %}
 <ps-coupon-slider id="ps-coupon-slider-{{ block.id }}" data-shop="{{ shop.permanent_domain }}" data-product-handle="{{ product.handle | default: '' | downcase | escape }}" data-collection-handles="{% if product %}{% for c in product.collections %}{{ c.handle | downcase | escape }}{% unless forloop.last %},{% endunless %}{% endfor %}{% endif %}" data-product-tags="{{ product.tags | join: ',' | downcase | escape }}"><div>Loading coupons...</div></ps-coupon-slider>
 <script>
 (function(){
@@ -197,7 +197,7 @@ function buildCard(tpl,s,code,h,sub){
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:8px 20px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
-          +'Apply'
+          +'Copy Code'
         +'</button>'
       +'</div>';
 
@@ -321,7 +321,7 @@ function renderSlider(el,data,ctx){
     var c=btn.dataset.code,t=btn.innerText;
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(c).then(function(){
-        btn.innerText='Copied!';setTimeout(function(){btn.innerText=t;},1500);
+        btn.innerText='Copied to clipboard';setTimeout(function(){btn.innerText=t;},2000);
       });
     }else{
       var ta=document.createElement('textarea');

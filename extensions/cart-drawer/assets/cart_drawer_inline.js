@@ -27,6 +27,7 @@
   let CONFIG = null;
   let COUPONS = [];
   let appliedCouponCodes = [];
+  let _lastCopiedCode = null;
   let _ccConfigLoading = false;
 
   const CC_AI_UPSELL_CACHE_TTL_MS = 60 * 1000;
@@ -930,13 +931,17 @@
   }
 
   function applyCoupon(code) {
-    if (appliedCouponCodes.includes(code)) {
-      // Toggle off — remove the coupon
-      appliedCouponCodes = [];
-    } else {
-      // Replace any existing coupon with the new one (only 1 at a time)
-      appliedCouponCodes = [code];
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).catch(() => { });
     }
+    _lastCopiedCode = code;
+    setTimeout(() => {
+      if (_lastCopiedCode === code) {
+        _lastCopiedCode = null;
+        renderDrawer();
+      }
+    }, 2000);
+
     sendClickEvent('coupon_click');
     renderDrawer();
   }
@@ -1047,6 +1052,17 @@
   /* =================== RENDER =================== */
 
   async function renderDrawer() {
+    if (!document.getElementById('cc-drawer-styles')) {
+      const style = document.createElement('style');
+      style.id = 'cc-drawer-styles';
+      style.innerHTML = `
+        @keyframes cc-fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes cc-pop { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes cc-pulse-ring { 0% { box-shadow: 0 0 0 0 var(--cc-fg-color66); } 70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+      `;
+      document.head.appendChild(style);
+    }
+
     const cart = await originalFetch('/cart.js').then((r) => r.json());
     const cartTotal = cart.total_price / 100;
     const cartQty = cart.item_count;
@@ -1493,7 +1509,7 @@
 
     /* -- Coupon list is always a horizontal carousel so nav arrows work -- */
     const couponListStyle =
-      'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 4px 4px;';
+      'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
 
     let html = `
 <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
@@ -1508,30 +1524,30 @@
 `;
 
     couponsToShow.forEach((coupon) => {
-      const isApplied = appliedCouponCodes.includes(coupon.code);
 
       if (style === 'style-1') {
-        // Style 1: White card with colored left accent bar, grey icon box, dark text, outlined button
+        // Style 1: Classic banner layout, but colors/icon come from coupon config.
+        const baseColor = coupon.backgroundColor || '#1a1a2e';
+        const icon = coupon.iconUrl || '☀️';
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:12px 16px;background:#fff;border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };box-shadow:${isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.04)'
-          };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;">
-      <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${coupon.backgroundColor};"></div>
-      <div style="width:42px;height:42px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${coupon.iconUrl}</div>
-      <div style="flex:1;min-width:0;">
-        <p style="margin:0 0 2px 0;font-size:14px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0 0 4px 0;font-size:12px;font-weight:600;color:#64748b;">${escapeHtml(coupon.label)}</p>
-        <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.2;">${escapeHtml(coupon.description)}</p>
+    <div data-coupon-card class="cc-coupon-card" style="min-width:220px;width:100%;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;align-items:center;gap:10px;position:relative;">
+      <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${baseColor};"></div>
+      <div style="width:40px;height:40px;border-radius:8px;background:${baseColor}20;display:flex;align-items:center;justify-content:center;font-size:20px;color:${baseColor};flex-shrink:0;">
+        ${icon}
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${isApplied ? coupon.backgroundColor : 'transparent'
-          };color:${isApplied ? '#fff' : '#475569'};border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
-          };border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : 'Apply'}</button>
+      <div style="flex:1;min-width:0;">
+        <p style="margin:0;font-size:13px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+        <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.label || coupon.description)}</p>
+      </div>
+      <div style="padding:4px 8px;background:#f8fafc;color:#475569;border-radius:6px;font-size:10px;font-weight:600;border:1px solid #e2e8f0;white-space:nowrap;cursor:pointer;" onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')">
+        ${coupon.code === _lastCopiedCode ? 'Copied' : 'Apply'}
+      </div>
     </div>
   `;
       } else if (style === 'style-2') {
         // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${coupon.code === _lastCopiedCode ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
           };box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;">
       <div style="width:48px;height:48px;border-radius:14px;background:${coupon.backgroundColor
           };display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
@@ -1540,14 +1556,17 @@
         <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
         <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${isApplied ? '#10b981' : '#1e293b'
-          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${coupon.code === _lastCopiedCode ? '#10b981' : '#1e293b'
+          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;">
+        ${coupon.code === _lastCopiedCode ? '✓ Copied!' : 'Copy Coupon'}
+        ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied to clipboard</div>` : ''}
+      </button>
     </div>
   `;
       } else {
         // Style 3: Colored header + white body with dashed code box + text-link apply button
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
+    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:visible;">
       <div style="background:${coupon.backgroundColor
           };padding:10px 14px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -1564,8 +1583,11 @@
         <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 10px;background:#f8fafc;">
           <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
         </div>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'
-          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
+        <div style="position:relative;">
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${coupon.code === _lastCopiedCode ? '#10b981' : '#2563eb'
+            };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${coupon.code === _lastCopiedCode ? 'COPIED' : 'COPY'}</button>
+          ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-14px;right:0;font-size:8px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied to clipboard</div>` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -1582,6 +1604,7 @@
     const cartProductIds = cart.items.map(item => String(item.product_id));
     let upsellProducts = [];
     let matchedUpsellDetails = [];
+    let storeDetailsById = null;
 
     if (upsellConfig.useAI) {
       const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
@@ -1589,8 +1612,6 @@
         .filter((d) => d && d.id && d.title)
         .map((d) => ({ id: ccExtractNumericId(d.id) || d.id, title: d.title }))
         .filter((d) => d && ccExtractNumericId(d.id));
-
-      let storeDetailsById = null;
       if (candidateCatalog.length === 0) {
         const storeCatalog = await ccGetStoreCatalog();
         if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
@@ -1692,6 +1713,15 @@
       }
     }
 
+    // Ensure we have a full store catalog fallback so AI/manual
+    // recommendations can always be enriched with real title/image/price.
+    if (!storeDetailsById) {
+      const storeCatalog = await ccGetStoreCatalog();
+      if (storeCatalog && storeCatalog.detailsById) {
+        storeDetailsById = storeCatalog.detailsById;
+      }
+    }
+
     // Apply storefront conditions (match cart_drawer.js behavior)
     if (!upsellConfig.showIfInCart) {
       upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
@@ -1761,10 +1791,21 @@
 `;
 
     upsellProducts.forEach((productId) => {
-      const detail =
+      let detail =
         (matchedUpsellDetails || []).find(
           (d) => String(d.id).replace('gid://shopify/Product/', '') === productId
-        ) || {};
+        ) || null;
+
+      // Fallback: if manual/AI details are missing or incomplete,
+      // enrich from the store catalog by product ID.
+      if ((!detail || !detail.title || !detail.price || !detail.image) && storeDetailsById) {
+        const storeDetail = storeDetailsById[String(productId)];
+        if (storeDetail) {
+          detail = { ...storeDetail, ...(detail || {}) };
+        }
+      }
+
+      detail = detail || {};
       const title = detail.title || 'Product';
       const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
       const imageHtml =

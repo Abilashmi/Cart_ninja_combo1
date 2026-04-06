@@ -183,19 +183,19 @@
                     card.style.padding = (finalStyle.padding || 12) + 'px ' + ((finalStyle.padding || 12) + 4) + 'px';
                 } else if (template === 'template2') {
                     card.className = 'ps-template2';
-                    card.innerHTML = `<div class="ps-notch left"></div><div class="ps-notch right"></div><div class="ps-t2-left"><span class="ps-label">Your Code</span><span class="ps-code">${code}</span><div class="ps-line"></div></div><div class="ps-divider"></div><div class="ps-t2-right"><h2>${heading}</h2><p>${subtext}</p><button class="ps-btn" data-code="${code}">Redeem Now</button></div>`;
+                    card.innerHTML = `<div class="ps-notch left"></div><div class="ps-notch right"></div><div class="ps-t2-left"><span class="ps-label">Your Code</span><span class="ps-code">${code}</span><div class="ps-line"></div></div><div class="ps-divider"></div><div class="ps-t2-right"><h2>${heading}</h2><p>${subtext}</p><button class="ps-btn" data-code="${code}">Copy Code</button></div>`;
                     card.style.background = finalStyle.bgColor;
                     card.style.borderRadius = finalStyle.borderRadius + 'px';
                 } else if (template === 'template3') {
                     card.className = 'ps-template3';
-                    card.innerHTML = `<div class="ps-icon">🏷️</div><div class="ps-text"><h3>${heading}</h3><p>${subtext}</p></div><div class="ps-code-pill">${code}</div><button class="ps-btn" data-code="${code}">Apply</button>`;
+                    card.innerHTML = `<div class="ps-icon">🏷️</div><div class="ps-text"><h3>${heading}</h3><p>${subtext}</p></div><div class="ps-code-pill">${code}</div><button class="ps-btn" data-code="${code}">Copy Code</button>`;
                     card.style.background = finalStyle.bgColor;
                     card.style.borderRadius = finalStyle.borderRadius + 'px';
                     card.style.border = `1px solid ${finalStyle.accentColor}22`;
                     card.style.padding = '12px 16px';
                 } else if (template === 'template4') {
                     card.className = 'ps-template4';
-                    card.innerHTML = `<div class="ps-t4-top"><div class="ps-t4-icon">🏷️</div><div class="ps-t4-info"><h3>${heading}</h3><p>${subtext}</p></div></div><div class="ps-t4-action"><div class="ps-t4-code">${code}</div><button class="ps-btn ps-t4-btn" data-code="${code}">Apply</button></div>`;
+                    card.innerHTML = `<div class="ps-t4-top"><div class="ps-t4-icon">🏷️</div><div class="ps-t4-info"><h3>${heading}</h3><p>${subtext}</p></div></div><div class="ps-t4-action"><div class="ps-t4-code">${code}</div><button class="ps-btn ps-t4-btn" data-code="${code}">Copy Code</button></div>`;
                     card.style.background = finalStyle.bgColor;
                     card.style.borderRadius = finalStyle.borderRadius + 'px';
                     card.style.color = finalStyle.textColor;
@@ -213,7 +213,7 @@
                     const code = e.target.dataset.code;
                     navigator.clipboard.writeText(code);
                     const originalText = e.target.innerText;
-                    e.target.innerText = 'Copied!';
+                    e.target.innerText = 'Copied to clipboard';
                     setTimeout(() => { e.target.innerText = originalText; }, 2000);
                 }
             });

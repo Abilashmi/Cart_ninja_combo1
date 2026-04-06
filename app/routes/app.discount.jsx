@@ -12,26 +12,20 @@ import {
   EmptyState,
   Icon,
   ChoiceList,
-  LegacyCard,
   Modal,
   RadioButton,
   InlineStack,
   Box,
-  InlineGrid,
   Toast,
   Frame,
 } from "@shopify/polaris";
 import {
   ExportIcon,
   DiscountIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  AlertCircleIcon
 } from "@shopify/polaris-icons";
 import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "react-router";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
-
 import { useCurrency } from "../components/CurrencyContext";
 
 /* ---------------- LOADER & ACTION ---------------- */
@@ -91,7 +85,7 @@ export async function action({ request }) {
       ? `Successfully ${intent}d ${successCount} discount${successCount !== 1 ? 's' : ''}`
       : "Failed to perform action",
     errors,
-    intent
+    intent,
   };
 }
 
@@ -104,7 +98,6 @@ function statusBadge(status) {
     EXPIRED: { tone: "subdued", label: "Expired" },
   };
   const { tone, label } = badgeMap[status] || { tone: "default", label: status };
-
   return <Badge tone={tone}>{label}</Badge>;
 }
 
@@ -117,12 +110,8 @@ function discountTypeLabel(type) {
 }
 
 function formatDiscountValue(coupon, currencySymbol) {
-  if (coupon.discountType === "percentage" && coupon.discountValue) {
-    return `${coupon.discountValue}% off`;
-  }
-  if (coupon.discountType === "fixed" && coupon.discountValue) {
-    return `${currencySymbol}${coupon.discountValue} off`;
-  }
+  if (coupon.discountType === "percentage" && coupon.discountValue) return `${coupon.discountValue}% off`;
+  if (coupon.discountType === "fixed" && coupon.discountValue) return `${currencySymbol}${coupon.discountValue} off`;
   if (coupon.discountType === "free_shipping") return "Free shipping";
   if (coupon.discountType === "bxgy") return "BXGY";
   return "-";
@@ -158,7 +147,6 @@ function buildCSV(coupons, format, currencySymbol) {
       : str;
   };
 
-  // For "excel" format, prepend BOM so Excel opens it correctly
   const bom = format === "excel" ? "\uFEFF" : "";
   const csv = bom + [headers, ...rows].map((row) => row.map(escapeCSV).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -169,7 +157,6 @@ function buildCSV(coupons, format, currencySymbol) {
   a.click();
   URL.revokeObjectURL(url);
 }
-
 
 /* ========================================== */
 /*              MAIN COMPONENT                */
@@ -196,18 +183,12 @@ export default function AppDiscounts() {
       setToastContent(actionData.message || (actionData.success ? "Success" : "Error"));
       setIsErrorToast(!actionData.success);
       setShowToast(true);
-      if (actionData.success) {
-        clearSelection();
-      }
+      if (actionData.success) clearSelection();
     }
   }, [actionData, isLoading]);
 
   const toastMarkup = showToast ? (
-    <Toast
-      content={toastContent}
-      error={isErrorToast}
-      onDismiss={() => setShowToast(false)}
-    />
+    <Toast content={toastContent} error={isErrorToast} onDismiss={() => setShowToast(false)} />
   ) : null;
 
   // ── IndexFilters mode ──
@@ -236,7 +217,6 @@ export default function AppDiscounts() {
 
   // ── Tabs ──
   const tabs = [
-
     { id: "all", content: `All (${counts.total})`, index: 0 },
     { id: "active", content: `Active (${counts.active})`, index: 1 },
     { id: "scheduled", content: `Scheduled (${counts.scheduled})`, index: 2 },
@@ -268,11 +248,8 @@ export default function AppDiscounts() {
     handleQueryClear();
   }, [handleTypeFilterRemove, handleStatusFilterRemove, handleQueryClear]);
 
-  const onHandleCancel = () => { };
-  const onHandleSave = async () => {
-    await sleep(1);
-    return true;
-  };
+  const onHandleCancel = () => {};
+  const onHandleSave = async () => { await sleep(1); return true; };
 
   // ── Filters config ──
   const filters = [
@@ -356,9 +333,7 @@ export default function AppDiscounts() {
     }
 
     if (typeFilter && typeFilter.length > 0) {
-      result = result.filter((c) =>
-        typeFilter.some((t) => c.type && c.type.includes(t))
-      );
+      result = result.filter((c) => typeFilter.some((t) => c.type && c.type.includes(t)));
     }
 
     if (statusFilter && statusFilter.length > 0) {
@@ -369,135 +344,120 @@ export default function AppDiscounts() {
     const dir = sortDir === "asc" ? 1 : -1;
     result.sort((a, b) => {
       switch (sortKey) {
-        case "date":
-          return dir * (new Date(a.starts_at) - new Date(b.starts_at));
-        case "code":
-          return dir * (a.code || "").localeCompare(b.code || "");
-        case "usage":
-          return dir * ((a.used || 0) - (b.used || 0));
-        case "value":
-          return dir * ((a.discountValue || 0) - (b.discountValue || 0));
-        default:
-          return dir * (new Date(a.starts_at) - new Date(b.starts_at));
+        case "date":   return dir * (new Date(a.starts_at) - new Date(b.starts_at));
+        case "code":   return dir * (a.code || "").localeCompare(b.code || "");
+        case "usage":  return dir * ((a.used || 0) - (b.used || 0));
+        case "value":  return dir * ((a.discountValue || 0) - (b.discountValue || 0));
+        default:       return dir * (new Date(a.starts_at) - new Date(b.starts_at));
       }
     });
 
     return result;
   }, [coupons, selected, queryValue, typeFilter, statusFilter, sortSelected]);
 
-  // ── useIndexResourceState ──
+  // ── Resource state ──
   const resourceName = { singular: "coupon", plural: "coupons" };
   const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
     useIndexResourceState(filteredCoupons);
 
-  // ── Determine if search/filter is active ──
+  const hasActiveSearch =
+    queryValue.length > 0 ||
+    (typeFilter && typeFilter.length > 0) ||
+    (statusFilter && statusFilter.length > 0) ||
+    selected !== 0;
+
+  const selectedCount = selectedResources.length;
+
   // ── Bulk Actions ──
   const promotedBulkActions = [
     {
       content: "Activate discounts",
       loading: isLoading && navigation.formData?.get("intent") === "activate",
       disabled: isLoading,
-      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "activate" }, { method: "POST" }),
+      onAction: () =>
+        submit({ ids: JSON.stringify(selectedResources), intent: "activate" }, { method: "POST" }),
     },
     {
       content: "Deactivate discounts",
       loading: isLoading && navigation.formData?.get("intent") === "deactivate",
       disabled: isLoading,
-      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "deactivate" }, { method: "POST" }),
+      onAction: () =>
+        submit({ ids: JSON.stringify(selectedResources), intent: "deactivate" }, { method: "POST" }),
     },
     {
       content: "Delete discounts",
       destructive: true,
       loading: isLoading && navigation.formData?.get("intent") === "delete",
       disabled: isLoading,
-      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "delete" }, { method: "POST" }),
+      onAction: () =>
+        submit({ ids: JSON.stringify(selectedResources), intent: "delete" }, { method: "POST" }),
     },
   ];
-
-  const hasActiveSearch = queryValue.length > 0 || (typeFilter && typeFilter.length > 0) || (statusFilter && statusFilter.length > 0) || selected !== 0;
-  const selectedCount = selectedResources.length;
 
   // ── Export handler ──
   const handleExport = useCallback(() => {
     let dataToExport;
     switch (exportScope) {
-      case "all":
-        dataToExport = coupons;
-        break;
-      case "selected":
-        dataToExport = filteredCoupons.filter((c) =>
-          selectedResources.includes(c.id)
-        );
-        break;
-      case "search":
-        dataToExport = filteredCoupons;
-        break;
+      case "all":      dataToExport = coupons; break;
+      case "selected": dataToExport = filteredCoupons.filter((c) => selectedResources.includes(c.id)); break;
+      case "search":   dataToExport = filteredCoupons; break;
       case "current_page":
-      default:
-        dataToExport = filteredCoupons;
-        break;
+      default:         dataToExport = filteredCoupons; break;
     }
     buildCSV(dataToExport, exportFormat, currencySymbol);
     setExportModalOpen(false);
   }, [exportScope, exportFormat, coupons, filteredCoupons, selectedResources, currencySymbol]);
 
   // ── Row markup ──
-  const rowMarkup = filteredCoupons.map(
-    (coupon, index) => (
-      <IndexTable.Row
-        id={coupon.id}
-        key={coupon.id}
-        selected={selectedResources.includes(coupon.id)}
-        position={index}
-        onClick={() =>
-          navigate(`/app/discounts/${encodeURIComponent(coupon.id)}`)
-        }
-      >
-        <IndexTable.Cell>
-          <div style={{ padding: '12px 0' }}>
-            <Text variant="bodyMd" fontWeight="bold" as="span">
-              {coupon.heading || coupon.code}
-            </Text>
-          </div>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <div style={{ padding: '12px 0' }}>
-            <span style={{
-              fontSize: "14px",
-              fontWeight: "600",
-              color: "#334155",
-              letterSpacing: "0.2px"
-            }}>
-              {coupon.code}
-            </span>
-          </div>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text variant="bodyMd" tone="subdued">{discountTypeLabel(coupon.type)}</Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text as="span" variant="bodyMd" fontWeight="bold">
-            {formatDiscountValue(coupon, currencySymbol)}
+  const rowMarkup = filteredCoupons.map((coupon, index) => (
+    <IndexTable.Row
+      id={coupon.id}
+      key={coupon.id}
+      selected={selectedResources.includes(coupon.id)}
+      position={index}
+      onClick={() => {
+        const encodedId = encodeURIComponent(coupon.id || "");
+        const encodedCode = encodeURIComponent(coupon.code || "");
+        navigate(`/app/discounts/create?discountId=${encodedId}&code=${encodedCode}`);
+      }}
+    >
+      <IndexTable.Cell>
+        <div style={{ padding: "12px 0" }}>
+          <Text variant="bodyMd" fontWeight="bold" as="span">
+            {coupon.heading || coupon.code}
           </Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>{statusBadge(coupon.status)}</IndexTable.Cell>
-        <IndexTable.Cell>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Text as="span" fontWeight="semibold" numeric>
-              {coupon.used ?? 0}
-            </Text>
-            <Text variant="bodySm" tone="subdued">/ {coupon.limit || "∞"}</Text>
-          </div>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text variant="bodyMd" tone="subdued">{formatDate(coupon.starts_at)}</Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Text variant="bodyMd" tone="subdued">{formatDate(coupon.ends_at)}</Text>
-        </IndexTable.Cell>
-      </IndexTable.Row>
-    ),
-  );
+        </div>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <div style={{ padding: "12px 0" }}>
+          <span style={{ fontSize: "14px", fontWeight: "600", color: "#334155", letterSpacing: "0.2px" }}>
+            {coupon.code}
+          </span>
+        </div>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Text variant="bodyMd" tone="subdued">{discountTypeLabel(coupon.type)}</Text>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Text as="span" variant="bodyMd" fontWeight="bold">
+          {formatDiscountValue(coupon, currencySymbol)}
+        </Text>
+      </IndexTable.Cell>
+      <IndexTable.Cell>{statusBadge(coupon.status)}</IndexTable.Cell>
+      <IndexTable.Cell>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <Text as="span" fontWeight="semibold" numeric>{coupon.used ?? 0}</Text>
+          <Text variant="bodySm" tone="subdued">/ {coupon.limit || "∞"}</Text>
+        </div>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Text variant="bodyMd" tone="subdued">{formatDate(coupon.starts_at)}</Text>
+      </IndexTable.Cell>
+      <IndexTable.Cell>
+        <Text variant="bodyMd" tone="subdued">{formatDate(coupon.ends_at)}</Text>
+      </IndexTable.Cell>
+    </IndexTable.Row>
+  ));
 
   // ── Export Modal ──
   const exportModal = (
@@ -505,16 +465,8 @@ export default function AppDiscounts() {
       open={exportModalOpen}
       onClose={() => setExportModalOpen(false)}
       title="Export discounts"
-      primaryAction={{
-        content: "Export discounts",
-        onAction: handleExport,
-      }}
-      secondaryActions={[
-        {
-          content: "Cancel",
-          onAction: () => setExportModalOpen(false),
-        },
-      ]}
+      primaryAction={{ content: "Export discounts", onAction: handleExport }}
+      secondaryActions={[{ content: "Cancel", onAction: () => setExportModalOpen(false) }]}
     >
       <Modal.Section>
         <BlockStack gap="400">
@@ -599,26 +551,17 @@ export default function AppDiscounts() {
         <Card>
           <EmptyState
             heading="Create your first coupon"
-            action={{
-              content: "Create Coupon",
-              onAction: () => navigate("/app/discounts/create"),
-            }}
+            action={{ content: "Create Coupon", onAction: () => navigate("/app/discounts/create") }}
             image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
           >
-            <p>
-              Start offering discounts to boost conversions and drive more
-              sales. Your coupons will appear here once created.
-            </p>
+            <p>Start offering discounts to boost conversions and drive more sales.</p>
           </EmptyState>
         </Card>
       </Page>
     );
   }
 
-  // ══════════════════════════════════════════
-  //                  RENDER
-  // ══════════════════════════════════════════
-
+  // ── Render ──
   return (
     <Frame>
       <Page
@@ -641,19 +584,9 @@ export default function AppDiscounts() {
 
         <BlockStack gap="600">
           <Card>
-            <Box
-              padding="600"
-              background="bg-surface-secondary"
-              borderRadius="300"
-              style={{
-                background: "linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)",
-                border: "1px solid rgba(0,0,0,0.03)"
-              }}
-            >
+            <Box padding="600" background="bg-surface-secondary" borderRadius="300">
               <BlockStack gap="100">
-                <Text variant="headingXl" as="h1" fontWeight="bold">
-                  Coupon Engine
-                </Text>
+                <Text variant="headingXl" as="h1" fontWeight="bold">Coupon Engine</Text>
                 <Text variant="bodyMd" tone="subdued">
                   Manage, create, and view your store coupons in one place.
                 </Text>
@@ -670,11 +603,7 @@ export default function AppDiscounts() {
               onQueryChange={handleQueryChange}
               onQueryClear={handleQueryClear}
               onSort={setSortSelected}
-              cancelAction={{
-                onAction: onHandleCancel,
-                disabled: false,
-                loading: false,
-              }}
+              cancelAction={{ onAction: onHandleCancel, disabled: false, loading: false }}
               tabs={tabs}
               selected={selected}
               onSelect={setSelected}
@@ -687,9 +616,7 @@ export default function AppDiscounts() {
             <IndexTable
               resourceName={resourceName}
               itemCount={filteredCoupons.length}
-              selectedItemsCount={
-                allResourcesSelected ? "All" : selectedResources.length
-              }
+              selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
               onSelectionChange={handleSelectionChange}
               promotedBulkActions={promotedBulkActions}
               headings={[

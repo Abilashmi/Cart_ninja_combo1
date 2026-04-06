@@ -889,13 +889,15 @@ export default function CartDrawerAdmin() {
 
           // 1. Update Coupons (Normalize data from backend)
           if (coupons && coupons.length > 0) {
-            const normalizedCoupons = coupons.map(c => ({
-              ...c,
-              enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
-              code: c.code || c.coupon_code_text || 'CODE',
-              label: c.label || 'Coupon',
-              description: c.description || c.description_text || '',
-            }));
+            const normalizedCoupons = coupons
+              .map(c => ({
+                ...c,
+                enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
+                code: c.code || c.coupon_code_text || 'CODE',
+                label: c.label || 'Coupon',
+                description: c.description || c.description_text || '',
+              }))
+              .filter(c => Number(c.discountValue || c.discount_value || 0) > 0);
 
             setAllCoupons(normalizedCoupons);
             if (normalizedCoupons.length > 0) {
@@ -1212,8 +1214,9 @@ export default function CartDrawerAdmin() {
           console.log('[Coupon] Shopify coupons response:', data);
           if (data.coupons && data.coupons.length > 0) {
             // Filter only ACTIVE coupons and normalize the format
+            // Added condition: filter out 0% coupons
             const activeCoupons = data.coupons
-              .filter(c => (c.status === 'active' || c.status === 'ACTIVE'))
+              .filter(c => (c.status === 'active' || c.status === 'ACTIVE') && Number(c.discountValue || 0) > 0)
               .map(c => ({
                 id: c.id,
                 code: c.code || c.heading,
@@ -1226,6 +1229,17 @@ export default function CartDrawerAdmin() {
               }));
             console.log('[Coupon] Filtered active coupons:', activeCoupons.length);
             setActiveCouponsFromAPI(activeCoupons);
+
+            // SYNC SELECTION: Automatically remove IDs that no longer exist or are filtered out
+            setSelectedActiveCoupons(prev => {
+              const validIds = activeCoupons.map(ac => ac.id);
+              const filtered = prev.filter(id => validIds.includes(id));
+              if (filtered.length !== prev.length) {
+                console.log('[Coupon] Cleaned up selection:', prev.length, '->', filtered.length);
+                return filtered;
+              }
+              return prev;
+            });
           } else {
             setActiveCouponsFromAPI([]);
           }
@@ -3106,7 +3120,7 @@ export default function CartDrawerAdmin() {
                             <InlineStack align="space-between" blockAlign="center">
                               <BlockStack gap="100">
                                 <Text variant="bodyMd" fontWeight="semibold">
-                                  {selectedActiveCoupons.length} coupon{selectedActiveCoupons.length !== 1 ? 's' : ''} selected
+                                  {selectedActiveCoupons.filter(id => activeCouponsFromAPI.some(c => c.id === id)).length} coupon{selectedActiveCoupons.filter(id => activeCouponsFromAPI.some(c => c.id === id)).length !== 1 ? 's' : ''} selected
                                 </Text>
                                 <Text variant="bodySm" tone="subdued">
                                   Coupons selected here will appear in the cart slider.
@@ -3182,7 +3196,7 @@ export default function CartDrawerAdmin() {
                           </Banner>
                         ) : (
                           <BlockStack gap="200">
-                            {activeCouponsFromAPI.map(coupon => {
+                            {activeCouponsFromAPI.filter(c => Number(c.discountValue) > 0).map(coupon => {
                               const isSelected = tempSelectedCouponIds.includes(coupon.id);
                               return (
                                 <div
@@ -3357,7 +3371,7 @@ export default function CartDrawerAdmin() {
                           <Text variant="headingSm">Save Coupon Selections</Text>
                           <Text variant="bodySm" tone="subdued">
                             {canSaveCoupons
-                              ? `${selectedActiveCoupons.length} active coupon${selectedActiveCoupons.length > 1 ? 's' : ''} selected`
+                              ? `${selectedActiveCoupons.filter(id => activeCouponsFromAPI.some(c => c.id === id)).length} active coupon${selectedActiveCoupons.filter(id => activeCouponsFromAPI.some(c => c.id === id)).length > 1 ? 's' : ''} selected`
                               : 'No active coupons selected — select at least one to save'
                             }
                           </Text>
@@ -4547,7 +4561,8 @@ export default function CartDrawerAdmin() {
                       label: override.label || apiCoupon.title || apiCoupon.label || 'Coupon',
                       enabled: true
                     };
-                  });
+                  })
+                  .filter(c => Number(c.discountValue || 0) > 0);
 
                 return (
                   <div style={{

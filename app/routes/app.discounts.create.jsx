@@ -9,12 +9,10 @@ import {
     Toast,
     Layout,
     Box,
-    ChoiceList,
     Divider,
     Icon,
     Banner,
     List,
-    Grid,
     Thumbnail,
     DatePicker,
     Popover,
@@ -24,6 +22,7 @@ import {
     Scrollable,
     ButtonGroup,
     Frame,
+    Badge,
 } from "@shopify/polaris";
 import {
     DiscountIcon,
@@ -31,7 +30,14 @@ import {
     CollectionIcon,
     CalendarIcon,
 } from "@shopify/polaris-icons";
-import { useNavigate, useActionData, useNavigation, useSubmit, useLoaderData } from "react-router";
+import {
+    useNavigate,
+    useActionData,
+    useNavigation,
+    useSubmit,
+    useLoaderData,
+    useSearchParams,
+} from "react-router";
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -51,266 +57,300 @@ const COUNTRIES = [
     { label: "Brazil", value: "BR", flag: "🇧🇷" },
 ];
 
-/* ---------------- SERVER-SIDE ACTION ---------------- */
+/* ─────────────────────────────────────────────────────────── */
+/*                     SERVER ACTION                           */
+/* ─────────────────────────────────────────────────────────── */
 
 export const action = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
     const formData = await request.formData();
 
-    const title = formData.get("title");
-    const code = formData.get("code");
-    const type = formData.get("type"); // amount_off_products, amount_off_order, bxgy, free_shipping
-    const valueType = formData.get("valueType"); // percentage, fixed_amount
-    const value = parseFloat(formData.get("value") || "0");
+    const intent   = formData.get("intent");   // "create" | "update"
+    const shopifyId = formData.get("shopifyId") || null;
+
+    const title    = formData.get("title");
+    const code     = formData.get("code");
+    const type     = formData.get("type");
+    const valueType = formData.get("valueType");
+    const value    = parseFloat(formData.get("value") || "0");
     const startDate = formData.get("startDate");
-    const endDate = formData.get("endDate");
+    const endDate  = formData.get("endDate");
 
-    // Resource IDs
-    const selectionType = formData.get("selectionType"); // all, collections, products
-    const selectedResources = JSON.parse(formData.get("selectedResources") || "[]");
+    const selectionType       = formData.get("selectionType");
+    const selectedResources   = JSON.parse(formData.get("selectedResources") || "[]");
+    const minimumRequirementValue  = formData.get("minimumRequirement");
+    const minimumPurchaseAmount    = parseFloat(formData.get("minimumPurchaseAmount") || "0");
+    const minimumQuantity          = parseInt(formData.get("minimumQuantity") || "0");
+    const limitTotalUses           = formData.get("limitTotalUses") === "true";
+    const totalUsesLimit           = parseInt(formData.get("totalUsesLimit") || "0");
+    const limitOnePerCustomer      = formData.get("limitOnePerCustomer") === "true";
+    const combineProduct           = formData.get("combineProduct") === "true";
+    const combineOrder             = formData.get("combineOrder") === "true";
+    const combineShipping          = formData.get("combineShipping") === "true";
+    const oncePerOrder             = formData.get("oncePerOrder") === "true";
 
-    const minimumRequirementValue = formData.get("minimumRequirement");
-    const minimumPurchaseAmount = parseFloat(formData.get("minimumPurchaseAmount") || "0");
-    const minimumQuantity = parseInt(formData.get("minimumQuantity") || "0");
-    const limitTotalUses = formData.get("limitTotalUses") === "true";
-    const totalUsesLimit = parseInt(formData.get("totalUsesLimit") || "0");
-    const limitOnePerCustomer = formData.get("limitOnePerCustomer") === "true";
-    const combineProduct = formData.get("combineProduct") === "true";
-    const combineOrder = formData.get("combineOrder") === "true";
-    const combineShipping = formData.get("combineShipping") === "true";
-    const oncePerOrder = formData.get("oncePerOrder") === "true";
+    const startsAt = new Date(startDate).toISOString();
+    const endsAt   = endDate ? new Date(endDate).toISOString() : null;
+
+    const isCode   = shopifyId ? shopifyId.includes("DiscountCodeNode") : true;
+    const isUpdate = intent === "update" && !!shopifyId;
+
+    /* ── Shared minimum requirement builder ── */
+    const buildMinimumRequirement = () => {
+        if (minimumRequirementValue === "amount") {
+            return { subtotal: { greaterThanOrEqualToSubtotal: { amount: minimumPurchaseAmount, currencyCode: "INR" } } };
+        }
+        if (minimumRequirementValue === "quantity") {
+            return { quantity: { greaterThanOrEqualToQuantity: minimumQuantity } };
+        }
+        return undefined;
+    };
+
+    const combinesWith = {
+        productDiscounts: combineProduct,
+        orderDiscounts:   combineOrder,
+        shippingDiscounts: combineShipping,
+    };
+
+    /* ── Shared customerGets items ── */
+    const buildCustomerGetsItems = () => {
+        if (type === "amount_off_order" && selectionType === "all") return { all: true };
+        if (selectionType === "collections") return { collections: { add: selectedResources.map(r => r.id) } };
+        if (selectionType === "products")    return { products: { productsToAdd: selectedResources.map(r => r.id) } };
+        return { all: true };
+    };
 
     let mutation = "";
     let variables = {};
 
-    const startsAt = new Date(startDate).toISOString();
-    const endsAt = endDate ? new Date(endDate).toISOString() : null;
-
+    /* ════════════════════════════════════════════════════════════
+       AMOUNT OFF PRODUCTS / ORDER
+    ════════════════════════════════════════════════════════════ */
     if (type === "amount_off_products" || type === "amount_off_order") {
-        mutation = `#graphql
-            mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-                discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-                    codeDiscountNode { id }
-                    userErrors { field message }
-                }
-            }
-        `;
-
-        variables = {
-            basicCodeDiscount: {
-                title: title || code,
-                code,
-                startsAt,
-                ...(endsAt && { endsAt }),
-                customerSelection: { all: true },
-                customerGets: {
-                    value: {
-                        [valueType === "percentage" ? "percentage" : "discountAmount"]: valueType === "percentage"
+        const discountInput = {
+            title: title || code,
+            code,
+            startsAt,
+            ...(endsAt && { endsAt }),
+            customerSelection: { all: true },
+            customerGets: {
+                value: {
+                    [valueType === "percentage" ? "percentage" : "discountAmount"]:
+                        valueType === "percentage"
                             ? value / 100
-                            : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder }
-                    },
-                    items: (type === "amount_off_order" && selectionType === "all")
-                        ? { all: true }
-                        : (selectionType === "collections")
-                            ? { collections: { add: selectedResources.map(r => r.id) } }
-                            : (selectionType === "products")
-                                ? { products: { productsToAdd: selectedResources.map(r => r.id) } }
-                                : { all: true }
+                            : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder },
                 },
-                appliesOncePerCustomer: limitOnePerCustomer,
-                ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
-                combinesWith: {
-                    productDiscounts: combineProduct,
-                    orderDiscounts: combineOrder,
-                    shippingDiscounts: combineShipping
-                },
-                ...(minimumRequirementValue === "amount" && {
-                    minimumRequirement: {
-                        subtotal: { greaterThanOrEqualToSubtotal: { amount: minimumPurchaseAmount, currencyCode: "INR" } }
-                    }
-                }),
-                ...(minimumRequirementValue === "quantity" && {
-                    minimumRequirement: {
-                        quantity: { greaterThanOrEqualToQuantity: minimumQuantity }
-                    }
-                })
-            }
+                items: buildCustomerGetsItems(),
+            },
+            appliesOncePerCustomer: limitOnePerCustomer,
+            ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
+            combinesWith,
+            ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
         };
-    } else if (type === "free_shipping") {
-        mutation = `#graphql
-            mutation discountCodeFreeShippingCreate($freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
-                discountCodeFreeShippingCreate(freeShippingCodeDiscount: $freeShippingCodeDiscount) {
-                    codeDiscountNode { id }
-                    userErrors { field message }
-                }
-            }
-        `;
 
-        const countriesType = formData.get("countriesType");
-        const selectedCountries = JSON.parse(formData.get("selectedCountries") || "[]");
-
-        variables = {
-            freeShippingCodeDiscount: {
-                title: title || code,
-                code,
-                startsAt,
-                ...(endsAt && { endsAt }),
-                customerSelection: { all: true },
-                destinationSelection: countriesType === "all" ? { all: true } : {
-                    countries: { add: selectedCountries }
-                },
-                appliesOncePerCustomer: limitOnePerCustomer,
-                ...(limitTotalUses && { usageLimit: totalUsesLimit }),
-                combinesWith: {
-                    productDiscounts: combineProduct,
-                    orderDiscounts: combineOrder,
-                    shippingDiscounts: combineShipping
-                },
-                ...(minimumRequirementValue === "amount" && {
-                    minimumRequirement: {
-                        subtotal: { greaterThanOrEqualToSubtotal: { amount: minimumPurchaseAmount, currencyCode: "INR" } }
+        if (isUpdate) {
+            mutation = `#graphql
+                mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
+                    discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
                     }
-                }),
-                ...(minimumRequirementValue === "quantity" && {
-                    minimumRequirement: {
-                        quantity: { greaterThanOrEqualToQuantity: minimumQuantity }
+                }
+            `;
+            variables = { id: shopifyId, basicCodeDiscount: discountInput };
+        } else {
+            mutation = `#graphql
+                mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+                    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
                     }
-                })
-            }
-        };
-    } else if (type === "bxgy") {
-        mutation = `#graphql
-            mutation discountCodeBxgyCreate($bxgyCodeDiscount: DiscountCodeBxgyInput!) {
-                discountCodeBxgyCreate(bxgyCodeDiscount: $bxgyCodeDiscount) {
-                    codeDiscountNode { id }
-                    userErrors { field message }
                 }
-            }
-        `;
-
-        const buysType = formData.get("bxgyBuysType") === "collections" ? "collections" : "products";
-        const buysResources = JSON.parse(formData.get("bxgyBuysResources") || "[]");
-        const buysQuantity = parseInt(formData.get("bxgyBuysQuantity") || "1");
-
-        const getsType = formData.get("bxgyGetsType"); // same, products, collections
-        const getsResources = JSON.parse(formData.get("bxgyGetsResources") || "[]");
-        const getsValueType = formData.get("bxgyGetsValueType");
-        const getsValue = parseFloat(formData.get("bxgyGetsValue") || "0");
-        const getsQuantity = parseInt(formData.get("bxgyGetsQuantity") || "1");
-        const repeatOncePerOrder = formData.get("bxgyRepeatOncePerOrder") === "true";
-
-        variables = {
-            bxgyCodeDiscount: {
-                title: title || code,
-                code,
-                startsAt,
-                ...(endsAt && { endsAt }),
-                customerSelection: { all: true },
-                usesPerCustomerLimit: limitOnePerCustomer ? 1 : null,
-                buys: {
-                    items: buysType === "collections"
-                        ? { collections: { add: buysResources.map(r => r.id) } }
-                        : { products: { productsToAdd: buysResources.map(r => r.id) } },
-                    value: { quantity: buysQuantity }
-                },
-                gets: {
-                    items: getsType === "same"
-                        ? (buysType === "collections"
-                            ? { collections: { add: buysResources.map(r => r.id) } }
-                            : { products: { productsToAdd: buysResources.map(r => r.id) } })
-                        : (getsType === "collections"
-                            ? { collections: { add: getsResources.map(r => r.id) } }
-                            : { products: { productsToAdd: getsResources.map(r => r.id) } }),
-                    value: {
-                        [getsValueType === "free" ? "percentage" : getsValueType === "percentage" ? "percentage" : "discountAmount"]:
-                            getsValueType === "free" ? 1.0 : getsValueType === "percentage" ? getsValue / 100 : { amount: getsValue }
-                    },
-                    quantity: { quantity: getsQuantity }
-                },
-                appliesOncePerOrder: repeatOncePerOrder,
-                combinesWith: {
-                    productDiscounts: combineProduct,
-                    orderDiscounts: combineOrder,
-                    shippingDiscounts: combineShipping
-                }
-            }
-        };
+            `;
+            variables = { basicCodeDiscount: discountInput };
+        }
     }
 
+    /* ════════════════════════════════════════════════════════════
+       FREE SHIPPING
+    ════════════════════════════════════════════════════════════ */
+    else if (type === "free_shipping") {
+        const countriesType      = formData.get("countriesType");
+        const selectedCountries  = JSON.parse(formData.get("selectedCountries") || "[]");
+
+        const shippingInput = {
+            title: title || code,
+            code,
+            startsAt,
+            ...(endsAt && { endsAt }),
+            customerSelection: { all: true },
+            destinationSelection:
+                countriesType === "all" ? { all: true } : { countries: { add: selectedCountries } },
+            appliesOncePerCustomer: limitOnePerCustomer,
+            ...(limitTotalUses && { usageLimit: totalUsesLimit }),
+            combinesWith,
+            ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+        };
+
+        if (isUpdate) {
+            mutation = `#graphql
+                mutation discountCodeFreeShippingUpdate($id: ID!, $freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
+                    discountCodeFreeShippingUpdate(id: $id, freeShippingCodeDiscount: $freeShippingCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
+                    }
+                }
+            `;
+            variables = { id: shopifyId, freeShippingCodeDiscount: shippingInput };
+        } else {
+            mutation = `#graphql
+                mutation discountCodeFreeShippingCreate($freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
+                    discountCodeFreeShippingCreate(freeShippingCodeDiscount: $freeShippingCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
+                    }
+                }
+            `;
+            variables = { freeShippingCodeDiscount: shippingInput };
+        }
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       BUY X GET Y
+    ════════════════════════════════════════════════════════════ */
+    else if (type === "bxgy") {
+        const buysType         = formData.get("bxgyBuysType") === "collections" ? "collections" : "products";
+        const buysResources    = JSON.parse(formData.get("bxgyBuysResources") || "[]");
+        const buysQuantity     = parseInt(formData.get("bxgyBuysQuantity") || "1");
+        const getsType         = formData.get("bxgyGetsType");
+        const getsResources    = JSON.parse(formData.get("bxgyGetsResources") || "[]");
+        const getsValueType    = formData.get("bxgyGetsValueType");
+        const getsValue        = parseFloat(formData.get("bxgyGetsValue") || "0");
+        const getsQuantity     = parseInt(formData.get("bxgyGetsQuantity") || "1");
+        const repeatOncePerOrder = formData.get("bxgyRepeatOncePerOrder") === "true";
+
+        const buysItems = buysType === "collections"
+            ? { collections: { add: buysResources.map(r => r.id) } }
+            : { products: { productsToAdd: buysResources.map(r => r.id) } };
+
+        const getsItems = getsType === "same"
+            ? buysItems
+            : getsType === "collections"
+                ? { collections: { add: getsResources.map(r => r.id) } }
+                : { products: { productsToAdd: getsResources.map(r => r.id) } };
+
+        const getsDiscountValue = {
+            [getsValueType === "free" || getsValueType === "percentage" ? "percentage" : "discountAmount"]:
+                getsValueType === "free"
+                    ? 1.0
+                    : getsValueType === "percentage"
+                        ? getsValue / 100
+                        : { amount: getsValue },
+        };
+
+        const bxgyInput = {
+            title: title || code,
+            code,
+            startsAt,
+            ...(endsAt && { endsAt }),
+            customerSelection: { all: true },
+            usesPerCustomerLimit: limitOnePerCustomer ? 1 : null,
+            buys:  { items: buysItems, value: { quantity: buysQuantity } },
+            gets:  { items: getsItems, value: getsDiscountValue, quantity: { quantity: getsQuantity } },
+            appliesOncePerOrder: repeatOncePerOrder,
+            combinesWith,
+        };
+
+        if (isUpdate) {
+            mutation = `#graphql
+                mutation discountCodeBxgyUpdate($id: ID!, $bxgyCodeDiscount: DiscountCodeBxgyInput!) {
+                    discountCodeBxgyUpdate(id: $id, bxgyCodeDiscount: $bxgyCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
+                    }
+                }
+            `;
+            variables = { id: shopifyId, bxgyCodeDiscount: bxgyInput };
+        } else {
+            mutation = `#graphql
+                mutation discountCodeBxgyCreate($bxgyCodeDiscount: DiscountCodeBxgyInput!) {
+                    discountCodeBxgyCreate(bxgyCodeDiscount: $bxgyCodeDiscount) {
+                        codeDiscountNode { id }
+                        userErrors { field message }
+                    }
+                }
+            `;
+            variables = { bxgyCodeDiscount: bxgyInput };
+        }
+    }
+
+    /* ── Run mutation ── */
     try {
-        const response = await admin.graphql(mutation, { variables });
+        const response     = await admin.graphql(mutation, { variables });
         const responseJson = await response.json();
 
-        if (responseJson.errors) {
-            return { errors: responseJson.errors };
-        }
-
-        if (!responseJson.data) {
-            return { errors: [{ message: "Unexpected response from Shopify" }] };
-        }
+        if (responseJson.errors) return { errors: responseJson.errors };
+        if (!responseJson.data)  return { errors: [{ message: "Unexpected response from Shopify" }] };
 
         const mutationKey = Object.keys(responseJson.data)[0];
-        const result = responseJson.data[mutationKey];
+        const result      = responseJson.data[mutationKey];
 
-        if (!result) {
-            return { errors: [{ message: "Mutation result not found" }] };
-        }
+        if (!result)                            return { errors: [{ message: "Mutation result not found" }] };
+        if (result.userErrors?.length > 0)      return { errors: result.userErrors };
 
-        if (result.userErrors && result.userErrors.length > 0) {
-            return { errors: result.userErrors };
-        }
+        const discountId = result.codeDiscountNode?.id || shopifyId;
 
-        const createdDiscountId = result.codeDiscountNode?.id;
+        /* ── Persist locally ── */
+        if (!isUpdate) {
+            try {
+                const samplePayload = {
+                    shopDomain: session.shop,
+                    title, code, type, valueType, value, startDate, endDate,
+                    selectionType, selectedResources,
+                    minimumRequirementValue, minimumPurchaseAmount, minimumQuantity,
+                    limitTotalUses, totalUsesLimit, limitOnePerCustomer,
+                    combineProduct, combineOrder, combineShipping, oncePerOrder,
+                    countriesType:         formData.get("countriesType"),
+                    selectedCountries:     JSON.parse(formData.get("selectedCountries") || "[]"),
+                    bxgyBuysType:          formData.get("bxgyBuysType"),
+                    bxgyBuysResources:     JSON.parse(formData.get("bxgyBuysResources") || "[]"),
+                    bxgyBuysQuantity:      formData.get("bxgyBuysQuantity"),
+                    bxgyGetsType:          formData.get("bxgyGetsType"),
+                    bxgyGetsResources:     JSON.parse(formData.get("bxgyGetsResources") || "[]"),
+                    bxgyGetsValueType:     formData.get("bxgyGetsValueType"),
+                    bxgyGetsValue:         formData.get("bxgyGetsValue"),
+                    bxgyGetsQuantity:      formData.get("bxgyGetsQuantity"),
+                    bxgyRepeatOncePerOrder: formData.get("bxgyRepeatOncePerOrder") === "true",
+                    shopifyId:             discountId,
+                };
 
-        // Send to the API route (stores locally + forwards to PHP)
-        try {
-            const samplePayload = {
-                shopDomain: session.shop,
-                title, code, type, valueType, value, startDate, endDate,
-                selectionType, selectedResources,
-                minimumRequirementValue, minimumPurchaseAmount, minimumQuantity,
-                limitTotalUses, totalUsesLimit, limitOnePerCustomer,
-                combineProduct, combineOrder, combineShipping, oncePerOrder,
-                // Extract conditional fields
-                countriesType: formData.get("countriesType"),
-                selectedCountries: JSON.parse(formData.get("selectedCountries") || "[]"),
-                bxgyBuysType: formData.get("bxgyBuysType"),
-                bxgyBuysResources: JSON.parse(formData.get("bxgyBuysResources") || "[]"),
-                bxgyBuysQuantity: formData.get("bxgyBuysQuantity"),
-                bxgyGetsType: formData.get("bxgyGetsType"),
-                bxgyGetsResources: JSON.parse(formData.get("bxgyGetsResources") || "[]"),
-                bxgyGetsValueType: formData.get("bxgyGetsValueType"),
-                bxgyGetsValue: formData.get("bxgyGetsValue"),
-                bxgyGetsQuantity: formData.get("bxgyGetsQuantity"),
-                bxgyRepeatOncePerOrder: formData.get("bxgyRepeatOncePerOrder") === "true",
-                shopifyId: createdDiscountId
-            };
+                const apiUrl = new URL("/api/create_coupon-sample", request.url).href;
+                const apiResponse = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(samplePayload),
+                });
 
-            const apiUrl = new URL("/api/create_coupon-sample", request.url).href;
-            const apiResponse = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(samplePayload),
-            });
-
-            if (!apiResponse.ok) {
-                console.error("API responded with status:", apiResponse.status);
-            } else {
-                const apiResult = await apiResponse.json();
-                console.log("Coupon saved via API:", apiResult);
+                if (!apiResponse.ok) {
+                    console.error("API responded with status:", apiResponse.status);
+                } else {
+                    console.log("Coupon saved via API:", await apiResponse.json());
+                }
+            } catch (err) {
+                console.error("Error sending to coupon API:", err);
             }
-        } catch (sampleErr) {
-            console.error("Error sending to coupon API:", sampleErr);
         }
 
-        return { success: true, discountId: createdDiscountId };
+        return { success: true, discountId, intent };
     } catch (error) {
-        console.error("Error creating discount:", error);
-        return { errors: [{ message: error.message || "Failed to create discount" }] };
+        console.error("Error saving discount:", error);
+        return { errors: [{ message: error.message || "Failed to save discount" }] };
     }
 };
 
-/* ---------------- SERVER-SIDE LOADER ---------------- */
+/* ─────────────────────────────────────────────────────────── */
+/*                     SERVER LOADER                           */
+/* ─────────────────────────────────────────────────────────── */
 
 export const loader = async ({ request }) => {
     const { session } = await authenticate.admin(request);
@@ -318,129 +358,186 @@ export const loader = async ({ request }) => {
     return { coupons };
 };
 
-/* ---------------- COMPONENT ---------------- */
+/* ─────────────────────────────────────────────────────────── */
+/*                      COMPONENT                             */
+/* ─────────────────────────────────────────────────────────── */
 
 export default function CreateDiscount() {
     const { currencySymbol } = useCurrency();
-    const navigate = useNavigate();
-    const actionData = useActionData();
+    const navigate    = useNavigate();
+    const actionData  = useActionData();
     const { coupons } = useLoaderData() || { coupons: [] };
-    const navigation = useNavigation();
-    const submit = useSubmit();
-    const shopify = useAppBridge();
+    const [searchParams] = useSearchParams();
+    const discountIdFromQuery = searchParams.get("discountId");
+    const codeFromQuery       = searchParams.get("code");
+    const navigation  = useNavigation();
+    const submit      = useSubmit();
+    const shopify     = useAppBridge();
     const isSubmitting = navigation.state === "submitting";
 
-    // Form State
-    const [title, setTitle] = useState("");
-    const [code, setCode] = useState("");
-    const [type, setType] = useState(["amount_off_products"]); // amount_off_products, amount_off_order, bxgy, free_shipping
-    const [value, setValue] = useState("");
+    /* ── Find existing coupon (edit mode) ── */
+    const rawExistingCoupon = useMemo(() => {
+        if (!discountIdFromQuery && !codeFromQuery) return null;
 
-    // Discount Value
-    const [discountValueType, setDiscountValueType] = useState("percentage");
+        if (discountIdFromQuery) {
+            const byId = coupons.find(c =>
+                c.id === discountIdFromQuery ||
+                c.shopifyId === discountIdFromQuery ||
+                c.shopify_id === discountIdFromQuery
+            );
+            if (byId) return byId;
+        }
 
-    // Applies To
-    const [appliesTo, setAppliesTo] = useState("all_products");
-    const [selectedResources, setSelectedResources] = useState([]);
+        if (codeFromQuery) {
+            return coupons.find(c => c.code === codeFromQuery) || null;
+        }
+
+        return null;
+    }, [coupons, discountIdFromQuery, codeFromQuery]);
+
+    /* ── Normalize coupon fields ── */
+    const existingCoupon = useMemo(() => {
+        if (!rawExistingCoupon) return null;
+        const c = rawExistingCoupon;
+
+        const parseMaybeJsonArray = (val) => {
+            if (Array.isArray(val)) return val;
+            if (typeof val === "string") {
+                try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; }
+                catch { return []; }
+            }
+            return [];
+        };
+
+        return {
+            ...c,
+            type:                    c.type || c.discount_type || "amount_off_products",
+            valueType:               c.valueType || c.value_type || "percentage",
+            value:                   c.value ?? c.discount_value ?? "",
+            selectionType:           c.selectionType || c.selection_type || "all",
+            selectedResources:       parseMaybeJsonArray(c.selectedResources ?? c.selected_resources),
+            minimumRequirementValue: c.minimumRequirementValue || c.minimum_requirement_value || "none",
+            minimumPurchaseAmount:   c.minimumPurchaseAmount ?? c.minimum_purchase_amount ?? "",
+            minimumQuantity:         c.minimumQuantity ?? c.minimum_quantity ?? "",
+            limitTotalUses:          c.limitTotalUses ?? c.limit_total_uses ?? false,
+            totalUsesLimit:          c.totalUsesLimit ?? c.total_uses_limit ?? "",
+            limitOnePerCustomer:     c.limitOnePerCustomer ?? c.limit_one_per_customer ?? false,
+            combineProduct:          c.combineProduct ?? c.combine_product ?? false,
+            combineOrder:            c.combineOrder ?? c.combine_order ?? false,
+            combineShipping:         c.combineShipping ?? c.combine_shipping ?? false,
+            oncePerOrder:            c.oncePerOrder ?? c.once_per_order ?? false,
+            countriesType:           c.countriesType || c.countries_type || "all",
+            selectedCountries:       parseMaybeJsonArray(c.selectedCountries ?? c.selected_countries),
+            bxgyBuysType:            c.bxgyBuysType || c.bxgy_buys_type || "products",
+            bxgyBuysResources:       parseMaybeJsonArray(c.bxgyBuysResources ?? c.bxgy_buys_resources),
+            bxgyBuysQuantity:        c.bxgyBuysQuantity ?? c.bxgy_buys_quantity ?? "1",
+            bxgyGetsType:            c.bxgyGetsType || c.bxgy_gets_type || "same",
+            bxgyGetsResources:       parseMaybeJsonArray(c.bxgyGetsResources ?? c.bxgy_gets_resources),
+            bxgyGetsValueType:       c.bxgyGetsValueType || c.bxgy_gets_value_type || "free",
+            bxgyGetsValue:           c.bxgyGetsValue ?? c.bxgy_gets_value ?? "",
+            bxgyGetsQuantity:        c.bxgyGetsQuantity ?? c.bxgy_gets_quantity ?? "1",
+            bxgyRepeatOncePerOrder:  c.bxgyRepeatOncePerOrder ?? c.bxgy_repeat_once_per_order ?? true,
+            startDate:               c.startDate || c.start_date || c.starts_at,
+            endDate:                 c.endDate || c.end_date || c.ends_at,
+            shopifyId:               c.shopifyId || c.shopify_id || discountIdFromQuery,
+        };
+    }, [rawExistingCoupon, discountIdFromQuery]);
+
+    const isEditMode = !!existingCoupon;
+
+    /* ── Form State ── */
+    const [title, setTitle] = useState(existingCoupon?.title || existingCoupon?.heading || "");
+    const [code,  setCode]  = useState(existingCoupon?.code  || "");
+    const [type,  setType]  = useState([existingCoupon?.type || "amount_off_products"]);
+    const [value, setValue] = useState(existingCoupon?.value !== undefined ? String(existingCoupon.value) : "");
+    const [discountValueType, setDiscountValueType] = useState(existingCoupon?.valueType || "percentage");
+
+    /* Applies to */
+    const [appliesTo, setAppliesTo] = useState(
+        existingCoupon?.selectionType === "collections" ? "specific_collections"
+            : existingCoupon?.selectionType === "products" ? "specific_products"
+                : "all_products"
+    );
+    const [selectedResources, setSelectedResources] = useState(existingCoupon?.selectedResources || []);
     const [resourceSearch, setResourceSearch] = useState("");
 
-    // Buy X Get Y Specific State
-    const [bxgyBuysType, setBxgyBuysType] = useState(["products"]);
-    const [bxgyBuysResources, setBxgyBuysResources] = useState([]);
-    const [bxgyBuysQuantity, setBxgyBuysQuantity] = useState("1");
-    const [bxgyGetsType, setBxgyGetsType] = useState(["same"]);
-    const [bxgyGetsResources, setBxgyGetsResources] = useState([]);
-    const [bxgyGetsValueType, setBxgyGetsValueType] = useState("free");
-    const [bxgyGetsValue, setBxgyGetsValue] = useState("");
-    const [bxgyGetsQuantity, setBxgyGetsQuantity] = useState("1");
-    const [bxgyRepeatOncePerOrder, setBxgyRepeatOncePerOrder] = useState(true);
+    /* BXGY */
+    const [bxgyBuysType,           setBxgyBuysType]           = useState([existingCoupon?.bxgyBuysType || "products"]);
+    const [bxgyBuysResources,      setBxgyBuysResources]      = useState(existingCoupon?.bxgyBuysResources || []);
+    const [bxgyBuysQuantity,       setBxgyBuysQuantity]       = useState(existingCoupon?.bxgyBuysQuantity || "1");
+    const [bxgyGetsType,           setBxgyGetsType]           = useState([existingCoupon?.bxgyGetsType || "same"]);
+    const [bxgyGetsResources,      setBxgyGetsResources]      = useState(existingCoupon?.bxgyGetsResources || []);
+    const [bxgyGetsValueType,      setBxgyGetsValueType]      = useState(existingCoupon?.bxgyGetsValueType || "free");
+    const [bxgyGetsValue,          setBxgyGetsValue]          = useState(existingCoupon?.bxgyGetsValue || "");
+    const [bxgyGetsQuantity,       setBxgyGetsQuantity]       = useState(existingCoupon?.bxgyGetsQuantity || "1");
+    const [bxgyRepeatOncePerOrder, setBxgyRepeatOncePerOrder] = useState(existingCoupon?.bxgyRepeatOncePerOrder ?? true);
 
-    // Minimum Purchase Requirements
-    const [minimumRequirement, setMinimumRequirement] = useState(["none"]);
-    const [minimumPurchaseAmount, setMinimumPurchaseAmount] = useState("");
-    const [minimumQuantity, setMinimumQuantity] = useState("");
+    /* Minimum requirements */
+    const [minimumRequirement,    setMinimumRequirement]    = useState([existingCoupon?.minimumRequirementValue || "none"]);
+    const [minimumPurchaseAmount, setMinimumPurchaseAmount] = useState(existingCoupon?.minimumPurchaseAmount !== undefined ? String(existingCoupon.minimumPurchaseAmount) : "");
+    const [minimumQuantity,       setMinimumQuantity]       = useState(existingCoupon?.minimumQuantity !== undefined ? String(existingCoupon.minimumQuantity) : "");
 
-    // Free Shipping Specific State
-    const [shippingRatesType, setShippingRatesType] = useState(["all"]);
-    const [selectedShippingRates, setSelectedShippingRates] = useState([]);
-    const [countriesType, setCountriesType] = useState(["all"]);
-    const [selectedCountries, setSelectedCountries] = useState([]);
-    const [countrySearch, setCountrySearch] = useState("");
-    const [countryModalActive, setCountryModalActive] = useState(false);
+    /* Free shipping */
+    const [countriesType,        setCountriesType]        = useState([existingCoupon?.countriesType || "all"]);
+    const [selectedCountries,    setSelectedCountries]    = useState(existingCoupon?.selectedCountries || []);
+    const [countrySearch,        setCountrySearch]        = useState("");
+    const [countryModalActive,   setCountryModalActive]   = useState(false);
     const [tempSelectedCountries, setTempSelectedCountries] = useState([]);
 
-    // Maximum Discount Uses
-    const [limitTotalUses, setLimitTotalUses] = useState(false);
-    const [totalUsesLimit, setTotalUsesLimit] = useState("");
-    const [limitOnePerCustomer, setLimitOnePerCustomer] = useState(false);
+    /* Max uses */
+    const [limitTotalUses,      setLimitTotalUses]      = useState(!!existingCoupon?.limitTotalUses);
+    const [totalUsesLimit,      setTotalUsesLimit]      = useState((existingCoupon?.totalUsesLimit ?? "").toString?.() || "");
+    const [limitOnePerCustomer, setLimitOnePerCustomer] = useState(!!existingCoupon?.limitOnePerCustomer);
 
-    // Combinations
-    const [combineProduct, setCombineProduct] = useState(false);
-    const [combineOrder, setCombineOrder] = useState(false);
-    const [combineShipping, setCombineShipping] = useState(false);
-    const [oncePerOrder, setOncePerOrder] = useState(false);
+    /* Combinations */
+    const [combineProduct,  setCombineProduct]  = useState(!!existingCoupon?.combineProduct);
+    const [combineOrder,    setCombineOrder]    = useState(!!existingCoupon?.combineOrder);
+    const [combineShipping, setCombineShipping] = useState(!!existingCoupon?.combineShipping);
+    const [oncePerOrder,    setOncePerOrder]    = useState(!!existingCoupon?.oncePerOrder);
 
-    // Dates — using Date objects + Polaris DatePicker
+    /* Dates */
     const today = useMemo(() => new Date(), []);
-    const [startDate, setStartDate] = useState(today);
-    const [startTime, setStartTime] = useState("12:00");
+    const initialStartDate = existingCoupon?.startDate;
+    const initialEndDate   = existingCoupon?.endDate;
+
+    const [startDate, setStartDate] = useState(initialStartDate ? new Date(initialStartDate) : today);
+    const [startTime, setStartTime] = useState("00:00");
     const [{ startMonth, startYear }, setStartMonthYear] = useState({
-        startMonth: today.getMonth(),
-        startYear: today.getFullYear(),
+        startMonth: (initialStartDate ? new Date(initialStartDate) : today).getMonth(),
+        startYear:  (initialStartDate ? new Date(initialStartDate) : today).getFullYear(),
     });
     const [startPopoverActive, setStartPopoverActive] = useState(false);
 
-    const [endDate, setEndDate] = useState(today);
-    const [endTime, setEndTime] = useState("12:00");
+    const [endDate, setEndDate] = useState(initialEndDate ? new Date(initialEndDate) : today);
+    const [endTime, setEndTime] = useState("23:59");
     const [{ endMonth, endYear }, setEndMonthYear] = useState({
-        endMonth: today.getMonth(),
-        endYear: today.getFullYear(),
+        endMonth: (initialEndDate ? new Date(initialEndDate) : today).getMonth(),
+        endYear:  (initialEndDate ? new Date(initialEndDate) : today).getFullYear(),
     });
     const [endPopoverActive, setEndPopoverActive] = useState(false);
-    const [hasEndDate, setHasEndDate] = useState(false);
+    const [hasEndDate, setHasEndDate] = useState(!!initialEndDate);
 
-    const [showToast, setShowToast] = useState(false);
+    /* Toast */
+    const [showToast,    setShowToast]    = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
 
-    useEffect(() => {
-        console.log("Loaded coupons for verification:", coupons);
-    }, [coupons]);
-
+    /* ── Redirect after success ── */
     useEffect(() => {
         if (actionData?.success) {
+            setToastMessage(isEditMode ? "Discount updated successfully!" : "Discount created successfully!");
             setShowToast(true);
             setTimeout(() => navigate("/app/discount"), 2000);
         }
-    }, [actionData, navigate]);
+    }, [actionData, navigate, isEditMode]);
 
-    /* ------------ DATE HELPERS ------------ */
+    /* ── Date helpers ── */
+    const formatDate = useCallback((date) =>
+        date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), []);
 
-    const formatDate = useCallback((date) => {
-        return date.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-        });
-    }, []);
-
-    const handleStartDateChange = useCallback((range) => {
-        setStartDate(range.start);
-        setStartPopoverActive(false);
-    }, []);
-
-    const handleEndDateChange = useCallback((range) => {
-        setEndDate(range.start);
-        setEndPopoverActive(false);
-    }, []);
-
-    const handleStartMonthChange = useCallback(
-        (month, year) => setStartMonthYear({ startMonth: month, startYear: year }),
-        [],
-    );
-
-    const handleEndMonthChange = useCallback(
-        (month, year) => setEndMonthYear({ endMonth: month, endYear: year }),
-        [],
-    );
+    const handleStartDateChange = useCallback((range) => { setStartDate(range.start); setStartPopoverActive(false); }, []);
+    const handleEndDateChange   = useCallback((range) => { setEndDate(range.start);   setEndPopoverActive(false);   }, []);
+    const handleStartMonthChange = useCallback((month, year) => setStartMonthYear({ startMonth: month, startYear: year }), []);
+    const handleEndMonthChange   = useCallback((month, year) => setEndMonthYear({ endMonth: month, endYear: year }),       []);
 
     const combineDateAndTime = useCallback((date, time) => {
         const [hours, minutes] = time.split(":").map(Number);
@@ -449,42 +546,40 @@ export default function CreateDiscount() {
         return combined.toISOString();
     }, []);
 
-    /* ---------------- HANDLERS ---------------- */
-
+    /* ── Resource picker ── */
     const selectResources = async (context = "standard") => {
         let resourceType = appliesTo === "specific_collections" ? "collection" : "product";
         if (context === "buys") resourceType = bxgyBuysType[0] === "collections" ? "collection" : "product";
         if (context === "gets") resourceType = bxgyGetsType[0] === "collections" ? "collection" : "product";
 
-        const selected = await shopify.resourcePicker({
-            type: resourceType,
-            multiple: true,
-            selectionIds: context === "buys" ? bxgyBuysResources.map(r => ({ id: r.id })) : context === "gets" ? bxgyGetsResources.map(r => ({ id: r.id })) : selectedResources.map(r => ({ id: r.id }))
-        });
+        const selectionIds =
+            context === "buys" ? bxgyBuysResources.map(r => ({ id: r.id }))
+                : context === "gets" ? bxgyGetsResources.map(r => ({ id: r.id }))
+                    : selectedResources.map(r => ({ id: r.id }));
+
+        const selected = await shopify.resourcePicker({ type: resourceType, multiple: true, selectionIds });
 
         if (selected) {
             const mapped = selected.map(item => ({
-                id: item.id,
-                title: item.title,
+                id:     item.id,
+                title:  item.title,
                 handle: item.handle,
-                image: item.images?.[0]?.originalSrc || item.image?.originalSrc
+                image:  item.images?.[0]?.originalSrc || item.image?.originalSrc,
             }));
-
-            if (context === "buys") setBxgyBuysResources(mapped);
+            if (context === "buys")      setBxgyBuysResources(mapped);
             else if (context === "gets") setBxgyGetsResources(mapped);
-            else setSelectedResources(mapped);
+            else                         setSelectedResources(mapped);
         }
     };
 
-    /* ---------------- SUMMARY ---------------- */
-
+    /* ── Summary ── */
     const summaryItems = useMemo(() => {
         const items = [];
         const typeLabels = {
             amount_off_products: "Amount off products",
-            amount_off_order: "Amount off order",
-            bxgy: "Buy X Get Y",
-            free_shipping: "Free shipping"
+            amount_off_order:    "Amount off order",
+            bxgy:                "Buy X Get Y",
+            free_shipping:       "Free shipping",
         };
         items.push(`Type: ${typeLabels[type[0]]}`);
 
@@ -493,16 +588,14 @@ export default function CreateDiscount() {
         } else if (type[0] === "free_shipping") {
             items.push("Free shipping");
         } else {
-            if (discountValueType === "percentage" && value) {
-                items.push(`${value}% off`);
-            } else if (value) {
-                items.push(`${currencySymbol}${value} off`);
-            }
+            if (discountValueType === "percentage" && value) items.push(`${value}% off`);
+            else if (value) items.push(`${currencySymbol}${value} off`);
         }
 
         if (type[0] === "amount_off_products" || type[0] === "amount_off_order") {
-            if (appliesTo === "all_products") items.push(type[0] === "amount_off_order" ? "Applies to entire order" : "Applies to all products");
-            else if (selectedResources.length > 0) {
+            if (appliesTo === "all_products") {
+                items.push(type[0] === "amount_off_order" ? "Applies to entire order" : "Applies to all products");
+            } else if (selectedResources.length > 0) {
                 items.push(`Applies to ${selectedResources.length} ${appliesTo === "specific_collections" ? "collections" : "products"}`);
             }
         }
@@ -512,106 +605,123 @@ export default function CreateDiscount() {
         if (hasEndDate && endDate) items.push(`Ends ${formatDate(endDate)} at ${endTime}`);
 
         return items;
-    }, [type, value, discountValueType, appliesTo, selectedResources, code, startDate, startTime, endDate, endTime, hasEndDate, formatDate]);
+    }, [type, value, discountValueType, appliesTo, selectedResources, code, startDate, startTime, endDate, endTime, hasEndDate, formatDate, bxgyBuysQuantity, bxgyGetsQuantity, bxgyGetsValueType, bxgyGetsValue, currencySymbol]);
 
-    /* ---------------- UI ---------------- */
+    /* ── Submit handler ── */
+    const handleSave = () => {
+        const formData = new FormData();
+
+        // Intent & IDs
+        formData.append("intent",    isEditMode ? "update" : "create");
+        formData.append("shopifyId", isEditMode ? (existingCoupon.shopifyId || discountIdFromQuery || "") : "");
+
+        // Core fields
+        formData.append("title",     title || code);
+        formData.append("code",      code);
+        formData.append("type",      type[0]);
+        formData.append("startDate", combineDateAndTime(startDate, startTime));
+        if (hasEndDate) formData.append("endDate", combineDateAndTime(endDate, endTime));
+
+        // Type-specific fields
+        if (type[0] === "bxgy") {
+            formData.append("bxgyBuysType",          bxgyBuysType[0]);
+            formData.append("bxgyBuysResources",     JSON.stringify(bxgyBuysResources));
+            formData.append("bxgyBuysQuantity",      bxgyBuysQuantity);
+            formData.append("bxgyGetsType",          bxgyGetsType[0]);
+            formData.append("bxgyGetsResources",     JSON.stringify(bxgyGetsResources));
+            formData.append("bxgyGetsValueType",     bxgyGetsValueType);
+            formData.append("bxgyGetsValue",         bxgyGetsValue);
+            formData.append("bxgyGetsQuantity",      bxgyGetsQuantity);
+            formData.append("bxgyRepeatOncePerOrder", bxgyRepeatOncePerOrder);
+        } else if (type[0] === "free_shipping") {
+            formData.append("countriesType",     countriesType[0]);
+            formData.append("selectedCountries", JSON.stringify(selectedCountries));
+            formData.append("minimumRequirement",    minimumRequirement[0]);
+            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
+            formData.append("minimumQuantity",       minimumQuantity);
+        } else {
+            formData.append("valueType", discountValueType);
+            formData.append("value",     value);
+            const selType =
+                type[0] === "amount_off_order" ? "all"
+                    : appliesTo === "all_products" ? "all"
+                        : appliesTo === "specific_collections" ? "collections"
+                            : "products";
+            formData.append("selectionType",     selType);
+            formData.append("selectedResources", JSON.stringify(selectedResources));
+            formData.append("minimumRequirement",    minimumRequirement[0]);
+            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
+            formData.append("minimumQuantity",       minimumQuantity);
+            formData.append("oncePerOrder",          oncePerOrder);
+        }
+
+        // Shared
+        formData.append("limitTotalUses",      limitTotalUses);
+        formData.append("totalUsesLimit",      totalUsesLimit);
+        formData.append("limitOnePerCustomer", limitOnePerCustomer);
+        formData.append("combineProduct",      combineProduct);
+        formData.append("combineOrder",        combineOrder);
+        formData.append("combineShipping",     combineShipping);
+
+        submit(formData, { method: "post" });
+    };
+
+    /* ── Save button disabled logic ── */
+    const isSaveDisabled =
+        !code ||
+        (type[0] !== "bxgy" && type[0] !== "free_shipping" && !value) ||
+        (type[0] === "amount_off_products" && appliesTo !== "all_products" && selectedResources.length === 0);
+
+    /* ─────────────────────────────────────────────────────────── */
+    /*                         RENDER                             */
+    /* ─────────────────────────────────────────────────────────── */
 
     return (
         <Frame>
             <Page
-                title="Create discount"
+                title={isEditMode ? "Edit discount" : "Create discount"}
                 backAction={{ content: "Discounts", onAction: () => navigate("/app/discount") }}
+                titleMetadata={isEditMode ? <Badge tone="info">Editing</Badge> : null}
                 primaryAction={{
-                    content: "Save discount",
-                    onAction: () => {
-                        const formData = new FormData();
-                        formData.append("title", title || code);
-                        formData.append("code", code);
-                        formData.append("type", type[0]);
-                        formData.append("startDate", combineDateAndTime(startDate, startTime));
-                        if (hasEndDate) formData.append("endDate", combineDateAndTime(endDate, endTime));
-
-                        if (type[0] === "bxgy") {
-                            formData.append("bxgyBuysType", bxgyBuysType[0]);
-                            formData.append("bxgyBuysResources", JSON.stringify(bxgyBuysResources));
-                            formData.append("bxgyBuysQuantity", bxgyBuysQuantity);
-                            formData.append("bxgyGetsType", bxgyGetsType[0]);
-                            formData.append("bxgyGetsResources", JSON.stringify(bxgyGetsResources));
-                            formData.append("bxgyGetsValueType", bxgyGetsValueType);
-                            formData.append("bxgyGetsValue", bxgyGetsValue);
-                            formData.append("bxgyGetsQuantity", bxgyGetsQuantity);
-                            formData.append("bxgyRepeatOncePerOrder", bxgyRepeatOncePerOrder);
-                        } else if (type[0] === "free_shipping") {
-                            formData.append("countriesType", countriesType[0]);
-                            formData.append("selectedCountries", JSON.stringify(selectedCountries));
-                            formData.append("minimumRequirement", minimumRequirement[0]);
-                            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
-                            formData.append("minimumQuantity", minimumQuantity);
-                        } else {
-                            formData.append("valueType", discountValueType);
-                            formData.append("value", value);
-                            const selType = (type[0] === "amount_off_order") ? "all" : (appliesTo === "all_products" ? "all" : appliesTo === "specific_collections" ? "collections" : "products");
-                            formData.append("selectionType", selType);
-                            formData.append("selectedResources", JSON.stringify(selectedResources));
-                            formData.append("minimumRequirement", minimumRequirement[0]);
-                            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
-                            formData.append("minimumQuantity", minimumQuantity);
-                            formData.append("oncePerOrder", oncePerOrder);
-                        }
-
-                        formData.append("limitTotalUses", limitTotalUses);
-                        formData.append("totalUsesLimit", totalUsesLimit);
-                        formData.append("limitOnePerCustomer", limitOnePerCustomer);
-                        formData.append("combineProduct", combineProduct);
-                        formData.append("combineOrder", combineOrder);
-                        formData.append("combineShipping", combineShipping);
-                        submit(formData, { method: "post" });
-                    },
-                    loading: isSubmitting,
-                    disabled: !code || (type[0] !== "bxgy" && type[0] !== "free_shipping" && !value) || (type[0] === "amount_off_products" && appliesTo !== "all_products" && selectedResources.length === 0),
+                    content:  isEditMode ? "Save changes" : "Save discount",
+                    onAction: handleSave,
+                    loading:  isSubmitting,
+                    disabled: isSaveDisabled,
                 }}
             >
                 <Layout>
                     <Layout.Section>
                         <BlockStack gap="400">
+
+                            {/* ── Errors ── */}
                             {actionData?.errors && (
                                 <Banner tone="critical" title="There were issues saving this discount">
                                     <List>
-                                        {actionData.errors.map((error, index) => (
-                                            <List.Item key={index}>{error.message}</List.Item>
+                                        {actionData.errors.map((error, i) => (
+                                            <List.Item key={i}>{error.message}</List.Item>
                                         ))}
                                     </List>
                                 </Banner>
                             )}
-                            {/* DISCOUNT TYPE CARD */}
+
+                            {/* ── Edit mode notice ── */}
+                            {isEditMode && (
+                                <Banner tone="info" title="You are editing an existing discount">
+                                    <p>Changes will be saved to Shopify immediately when you click "Save changes".</p>
+                                </Banner>
+                            )}
+
+                            {/* ══════════════════════════════
+                                DISCOUNT TYPE + CODE
+                            ══════════════════════════════ */}
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Discount type</Text>
                                     <ButtonGroup segmented>
-                                        <Button
-                                            pressed={type[0] === "amount_off_products"}
-                                            onClick={() => setType(["amount_off_products"])}
-                                        >
-                                            Amount off products
-                                        </Button>
-                                        <Button
-                                            pressed={type[0] === "amount_off_order"}
-                                            onClick={() => setType(["amount_off_order"])}
-                                        >
-                                            Amount off order
-                                        </Button>
-                                        <Button
-                                            pressed={type[0] === "bxgy"}
-                                            onClick={() => setType(["bxgy"])}
-                                        >
-                                            Buy X get Y
-                                        </Button>
-                                        <Button
-                                            pressed={type[0] === "free_shipping"}
-                                            onClick={() => setType(["free_shipping"])}
-                                        >
-                                            Free shipping
-                                        </Button>
+                                        <Button pressed={type[0] === "amount_off_products"} onClick={() => setType(["amount_off_products"])}>Amount off products</Button>
+                                        <Button pressed={type[0] === "amount_off_order"}    onClick={() => setType(["amount_off_order"])}>Amount off order</Button>
+                                        <Button pressed={type[0] === "bxgy"}                onClick={() => setType(["bxgy"])}>Buy X get Y</Button>
+                                        <Button pressed={type[0] === "free_shipping"}       onClick={() => setType(["free_shipping"])}>Free shipping</Button>
                                     </ButtonGroup>
                                     <Divider />
                                     <TextField
@@ -620,13 +730,19 @@ export default function CreateDiscount() {
                                         onChange={setCode}
                                         autoComplete="off"
                                         placeholder="e.g. SUMMER2024"
-                                        suffix={<Button onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>Generate</Button>}
+                                        suffix={
+                                            <Button onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>
+                                                Generate
+                                            </Button>
+                                        }
                                     />
                                     <TextField label="Internal title" value={title} onChange={setTitle} autoComplete="off" />
                                 </BlockStack>
                             </Card>
 
-                            {/* DISCOUNT VALUE CARD */}
+                            {/* ══════════════════════════════
+                                DISCOUNT VALUE
+                            ══════════════════════════════ */}
                             {type[0] !== "bxgy" && type[0] !== "free_shipping" && (
                                 <Card>
                                     <BlockStack gap="400">
@@ -634,8 +750,8 @@ export default function CreateDiscount() {
                                         <Select
                                             label="Discount type"
                                             options={[
-                                                { label: "Percentage", value: "percentage" },
-                                                { label: "Fixed amount", value: "fixed_amount" },
+                                                { label: "Percentage",    value: "percentage" },
+                                                { label: "Fixed amount",  value: "fixed_amount" },
                                             ]}
                                             value={discountValueType}
                                             onChange={setDiscountValueType}
@@ -650,20 +766,11 @@ export default function CreateDiscount() {
                                                     suffix="%"
                                                     autoComplete="off"
                                                 />
-                                                {type[0] === "amount_off_products" ? (
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Applies a percentage discount to each eligible product.
-                                                    </Text>
-                                                ) : type[0] === "amount_off_order" ? (
-                                                    <BlockStack gap="100">
-                                                        <Text variant="bodySm" tone="subdued">
-                                                            Applies a percentage discount to the total order value.
-                                                        </Text>
-                                                        <Text variant="bodySm" tone="subdued">
-                                                            Example: 10% off means 10% is deducted from the cart total at checkout.
-                                                        </Text>
-                                                    </BlockStack>
-                                                ) : null}
+                                                <Text variant="bodySm" tone="subdued">
+                                                    {type[0] === "amount_off_order"
+                                                        ? "Applies a percentage discount to the total order value."
+                                                        : "Applies a percentage discount to each eligible product."}
+                                                </Text>
                                             </BlockStack>
                                         ) : (
                                             <BlockStack gap="200">
@@ -675,66 +782,44 @@ export default function CreateDiscount() {
                                                     prefix={currencySymbol}
                                                     autoComplete="off"
                                                 />
-                                                {type[0] === "amount_off_products" ? (
-                                                    <>
-                                                        <Text variant="bodySm" tone="subdued">
-                                                            Applies a fixed discount to each eligible product. Example: {currencySymbol}100 off means {currencySymbol}100 is deducted from every qualifying product.
-                                                        </Text>
-                                                        <Checkbox
-                                                            label="Once per order"
-                                                            helpText="If not selected, the amount will be taken off each eligible item in an order."
-                                                            checked={oncePerOrder}
-                                                            onChange={setOncePerOrder}
-                                                        />
-                                                    </>
-                                                ) : type[0] === "amount_off_order" ? (
-                                                    <BlockStack gap="100">
-                                                        <Text variant="bodySm" tone="subdued">
-                                                            Applies a fixed discount to the total order value.
-                                                        </Text>
-                                                        <Text variant="bodySm" tone="subdued">
-                                                            Example: {currencySymbol}200 off means {currencySymbol}200 is deducted from the cart total at checkout.
-                                                        </Text>
-                                                    </BlockStack>
-                                                ) : null}
+                                                {type[0] === "amount_off_products" && (
+                                                    <Checkbox
+                                                        label="Once per order"
+                                                        helpText="If not selected, the amount will be taken off each eligible item."
+                                                        checked={oncePerOrder}
+                                                        onChange={setOncePerOrder}
+                                                    />
+                                                )}
+                                                <Text variant="bodySm" tone="subdued">
+                                                    {type[0] === "amount_off_order"
+                                                        ? `Applies a fixed discount to the total order value.`
+                                                        : `Applies a fixed discount to each eligible product.`}
+                                                </Text>
                                             </BlockStack>
                                         )}
                                     </BlockStack>
                                 </Card>
                             )}
 
-                            {/* BUY X GET Y: CUSTOMER BUYS (X) */}
+                            {/* ══════════════════════════════
+                                BXGY: CUSTOMER BUYS
+                            ══════════════════════════════ */}
                             {type[0] === "bxgy" && (
                                 <Card>
                                     <BlockStack gap="400">
                                         <Text variant="headingMd" as="h2">Customer buys</Text>
                                         <ButtonGroup segmented>
-                                            <Button
-                                                pressed={bxgyBuysType[0] === "products"}
-                                                onClick={() => setBxgyBuysType(["products"])}
-                                            >
-                                                Specific products
-                                            </Button>
-                                            <Button
-                                                pressed={bxgyBuysType[0] === "collections"}
-                                                onClick={() => setBxgyBuysType(["collections"])}
-                                            >
-                                                Specific collections
-                                            </Button>
+                                            <Button pressed={bxgyBuysType[0] === "products"}    onClick={() => setBxgyBuysType(["products"])}>Specific products</Button>
+                                            <Button pressed={bxgyBuysType[0] === "collections"} onClick={() => setBxgyBuysType(["collections"])}>Specific collections</Button>
                                         </ButtonGroup>
                                         <InlineStack gap="200">
                                             <div style={{ flex: 1 }}>
-                                                <TextField
-                                                    placeholder={`Search ${bxgyBuysType[0]}`}
-                                                    value={resourceSearch}
-                                                    onChange={setResourceSearch}
-                                                    autoComplete="off"
-                                                />
+                                                <TextField placeholder={`Search ${bxgyBuysType[0]}`} value={resourceSearch} onChange={setResourceSearch} autoComplete="off" />
                                             </div>
                                             <Button onClick={() => selectResources("buys")}>Browse</Button>
                                         </InlineStack>
                                         {bxgyBuysResources.length > 0 && (
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: "8px" }}>
                                                 {bxgyBuysResources.map(res => (
                                                     <Box key={res.id} padding="100" border="divider" borderRadius="200">
                                                         <BlockStack align="center" gap="100">
@@ -750,53 +835,35 @@ export default function CreateDiscount() {
                                             type="number"
                                             value={bxgyBuysQuantity}
                                             onChange={setBxgyBuysQuantity}
-                                            helpText="The customer must buy at least this quantity to qualify for the discount."
+                                            helpText="The customer must buy at least this quantity to qualify."
                                             autoComplete="off"
                                         />
                                     </BlockStack>
                                 </Card>
                             )}
 
-                            {/* BUY X GET Y: CUSTOMER GETS (Y) */}
+                            {/* ══════════════════════════════
+                                BXGY: CUSTOMER GETS
+                            ══════════════════════════════ */}
                             {type[0] === "bxgy" && (
                                 <Card>
                                     <BlockStack gap="400">
                                         <Text variant="headingMd" as="h2">Customer gets</Text>
                                         <ButtonGroup segmented>
-                                            <Button
-                                                pressed={bxgyGetsType[0] === "same"}
-                                                onClick={() => setBxgyGetsType(["same"])}
-                                            >
-                                                Same products as X
-                                            </Button>
-                                            <Button
-                                                pressed={bxgyGetsType[0] === "products"}
-                                                onClick={() => setBxgyGetsType(["products"])}
-                                            >
-                                                Specific products
-                                            </Button>
-                                            <Button
-                                                pressed={bxgyGetsType[0] === "collections"}
-                                                onClick={() => setBxgyGetsType(["collections"])}
-                                            >
-                                                Specific collections
-                                            </Button>
+                                            <Button pressed={bxgyGetsType[0] === "same"}        onClick={() => setBxgyGetsType(["same"])}>Same products as X</Button>
+                                            <Button pressed={bxgyGetsType[0] === "products"}    onClick={() => setBxgyGetsType(["products"])}>Specific products</Button>
+                                            <Button pressed={bxgyGetsType[0] === "collections"} onClick={() => setBxgyGetsType(["collections"])}>Specific collections</Button>
                                         </ButtonGroup>
                                         {bxgyGetsType[0] !== "same" && (
                                             <>
                                                 <InlineStack gap="200">
                                                     <div style={{ flex: 1 }}>
-                                                        <TextField
-                                                            placeholder={`Search ${bxgyGetsType[0]}`}
-                                                            value={resourceSearch}
-                                                            onChange={setResourceSearch}
-                                                            autoComplete="off"
-                                                        />
+                                                        <TextField placeholder={`Search ${bxgyGetsType[0]}`} value={resourceSearch} onChange={setResourceSearch} autoComplete="off" />
                                                     </div>
                                                     <Button onClick={() => selectResources("gets")}>Browse</Button>
                                                 </InlineStack>
                                                 {bxgyGetsResources.length > 0 && (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: "8px" }}>
                                                         {bxgyGetsResources.map(res => (
                                                             <Box key={res.id} padding="100" border="divider" borderRadius="200">
                                                                 <BlockStack align="center" gap="100">
@@ -813,9 +880,9 @@ export default function CreateDiscount() {
                                         <Select
                                             label="Discount value"
                                             options={[
-                                                { label: "Free", value: "free" },
+                                                { label: "Free",           value: "free" },
                                                 { label: "Percentage off", value: "percentage" },
-                                                { label: "Amount off", value: "fixed_amount" },
+                                                { label: "Amount off",     value: "fixed_amount" },
                                             ]}
                                             value={bxgyGetsValueType}
                                             onChange={setBxgyGetsValueType}
@@ -836,12 +903,12 @@ export default function CreateDiscount() {
                                             type="number"
                                             value={bxgyGetsQuantity}
                                             onChange={setBxgyGetsQuantity}
-                                            helpText="Number of items the customer will receive at a discount."
+                                            helpText="Number of items the customer receives at a discount."
                                             autoComplete="off"
                                         />
                                         <Checkbox
                                             label="Apply discount once per order"
-                                            helpText="If unchecked, the discount repeats for every eligible group of items."
+                                            helpText="If unchecked, the discount repeats for every eligible group."
                                             checked={bxgyRepeatOncePerOrder}
                                             onChange={setBxgyRepeatOncePerOrder}
                                         />
@@ -849,24 +916,16 @@ export default function CreateDiscount() {
                                 </Card>
                             )}
 
-                            {/* FREE SHIPPING: COUNTRIES */}
+                            {/* ══════════════════════════════
+                                FREE SHIPPING: COUNTRIES
+                            ══════════════════════════════ */}
                             {type[0] === "free_shipping" && (
                                 <Card>
                                     <BlockStack gap="400">
                                         <Text variant="headingMd" as="h2">Countries</Text>
                                         <ButtonGroup segmented>
-                                            <Button
-                                                pressed={countriesType[0] === "all"}
-                                                onClick={() => setCountriesType(["all"])}
-                                            >
-                                                All countries
-                                            </Button>
-                                            <Button
-                                                pressed={countriesType[0] === "specific"}
-                                                onClick={() => setCountriesType(["specific"])}
-                                            >
-                                                Specific countries
-                                            </Button>
+                                            <Button pressed={countriesType[0] === "all"}      onClick={() => setCountriesType(["all"])}>All countries</Button>
+                                            <Button pressed={countriesType[0] === "specific"} onClick={() => setCountriesType(["specific"])}>Specific countries</Button>
                                         </ButtonGroup>
                                         {countriesType[0] === "specific" && (
                                             <BlockStack gap="300">
@@ -874,40 +933,28 @@ export default function CreateDiscount() {
                                                     <div style={{ flex: 1 }}>
                                                         <TextField
                                                             placeholder="Search countries"
-                                                            value={""}
+                                                            value=""
                                                             autoComplete="off"
                                                             readOnly
-                                                            onFocus={() => {
-                                                                setTempSelectedCountries(selectedCountries);
-                                                                setCountryModalActive(true);
-                                                            }}
+                                                            onFocus={() => { setTempSelectedCountries(selectedCountries); setCountryModalActive(true); }}
                                                         />
                                                     </div>
-                                                    <Button onClick={() => {
-                                                        setTempSelectedCountries(selectedCountries);
-                                                        setCountryModalActive(true);
-                                                    }}>Browse</Button>
+                                                    <Button onClick={() => { setTempSelectedCountries(selectedCountries); setCountryModalActive(true); }}>Browse</Button>
                                                 </InlineStack>
 
                                                 {selectedCountries.length > 0 && (
                                                     <Box border="divider" borderRadius="200" padding="0">
-                                                        <Scrollable style={{ maxHeight: '150px' }}>
+                                                        <Scrollable style={{ maxHeight: "150px" }}>
                                                             <BlockStack gap="0">
-                                                                {selectedCountries.map(code => {
-                                                                    const country = COUNTRIES.find(c => c.value === code);
+                                                                {selectedCountries.map(c => {
+                                                                    const country = COUNTRIES.find(x => x.value === c);
                                                                     return (
-                                                                        <div key={code} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                        <div key={c} style={{ padding: "8px 12px", borderBottom: "1px solid #f1f1f1", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                                                             <InlineStack gap="200" blockAlign="center">
                                                                                 <Text variant="bodyMd">{country?.flag || "🏳️"}</Text>
-                                                                                <Text variant="bodyMd">{country?.label || code}</Text>
+                                                                                <Text variant="bodyMd">{country?.label || c}</Text>
                                                                             </InlineStack>
-                                                                            <Button
-                                                                                variant="tertiary"
-                                                                                icon={DiscountIcon} // Using a placeholder for cross or just text
-                                                                                onClick={() => setSelectedCountries(prev => prev.filter(c => c !== code))}
-                                                                            >
-                                                                                Remove
-                                                                            </Button>
+                                                                            <Button variant="tertiary" onClick={() => setSelectedCountries(prev => prev.filter(x => x !== c))}>Remove</Button>
                                                                         </div>
                                                                     );
                                                                 })}
@@ -922,17 +969,9 @@ export default function CreateDiscount() {
                                                     title="Select countries"
                                                     primaryAction={{
                                                         content: `Add (${tempSelectedCountries.length})`,
-                                                        onAction: () => {
-                                                            setSelectedCountries(tempSelectedCountries);
-                                                            setCountryModalActive(false);
-                                                        }
+                                                        onAction: () => { setSelectedCountries(tempSelectedCountries); setCountryModalActive(false); },
                                                     }}
-                                                    secondaryActions={[
-                                                        {
-                                                            content: "Cancel",
-                                                            onAction: () => setCountryModalActive(false)
-                                                        }
-                                                    ]}
+                                                    secondaryActions={[{ content: "Cancel", onAction: () => setCountryModalActive(false) }]}
                                                 >
                                                     <Modal.Section>
                                                         <BlockStack gap="400">
@@ -943,21 +982,12 @@ export default function CreateDiscount() {
                                                                 onChange={setCountrySearch}
                                                                 autoComplete="off"
                                                             />
-                                                            <Scrollable style={{ height: '300px' }}>
-                                                                <div style={{ padding: '8px 0' }}>
+                                                            <Scrollable style={{ height: "300px" }}>
+                                                                <div style={{ padding: "8px 0" }}>
                                                                     {COUNTRIES.filter(c => c.label.toLowerCase().includes(countrySearch.toLowerCase())).map(country => {
                                                                         const isSelected = tempSelectedCountries.includes(country.value);
                                                                         return (
-                                                                            <div
-                                                                                key={country.value}
-                                                                                style={{
-                                                                                    padding: '8px 12px',
-                                                                                    display: 'flex',
-                                                                                    justifyContent: 'space-between',
-                                                                                    alignItems: 'center',
-                                                                                    borderBottom: '1px solid #f1f1f1'
-                                                                                }}
-                                                                            >
+                                                                            <div key={country.value} style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f1f1" }}>
                                                                                 <InlineStack gap="200" blockAlign="center">
                                                                                     <Text variant="bodyMd">{country.flag}</Text>
                                                                                     <Text variant="bodyMd">{country.label}</Text>
@@ -965,11 +995,8 @@ export default function CreateDiscount() {
                                                                                 <Button
                                                                                     variant={isSelected ? "primary" : "secondary"}
                                                                                     onClick={() => {
-                                                                                        if (isSelected) {
-                                                                                            setTempSelectedCountries(prev => prev.filter(c => c !== country.value));
-                                                                                        } else {
-                                                                                            setTempSelectedCountries(prev => [...prev, country.value]);
-                                                                                        }
+                                                                                        if (isSelected) setTempSelectedCountries(prev => prev.filter(c => c !== country.value));
+                                                                                        else            setTempSelectedCountries(prev => [...prev, country.value]);
                                                                                     }}
                                                                                 >
                                                                                     {isSelected ? "Remove" : "Add"}
@@ -988,7 +1015,9 @@ export default function CreateDiscount() {
                                 </Card>
                             )}
 
-                            {/* APPLIES TO CARD (UNIFIED) */}
+                            {/* ══════════════════════════════
+                                APPLIES TO
+                            ══════════════════════════════ */}
                             {(type[0] === "amount_off_products" || type[0] === "amount_off_order") && (
                                 <Card>
                                     <BlockStack gap="400">
@@ -998,7 +1027,7 @@ export default function CreateDiscount() {
                                             options={[
                                                 { label: type[0] === "amount_off_order" ? "Entire order" : "All products", value: "all_products" },
                                                 { label: "Specific collections", value: "specific_collections" },
-                                                { label: "Specific products", value: "specific_products" },
+                                                { label: "Specific products",    value: "specific_products" },
                                             ]}
                                             value={appliesTo}
                                             onChange={(val) => { setAppliesTo(val); setSelectedResources([]); }}
@@ -1008,55 +1037,25 @@ export default function CreateDiscount() {
                                                 {type[0] === "amount_off_order" ? "This discount applies to the entire order." : "This discount applies to all products."}
                                             </Text>
                                         )}
-                                        {appliesTo === "specific_collections" && (
+                                        {(appliesTo === "specific_collections" || appliesTo === "specific_products") && (
                                             <BlockStack gap="300">
                                                 <InlineStack gap="200">
                                                     <div style={{ flex: 1 }}>
                                                         <TextField
-                                                            placeholder="Search collections"
+                                                            placeholder={appliesTo === "specific_collections" ? "Search collections" : "Search products"}
                                                             value={resourceSearch}
                                                             onChange={setResourceSearch}
                                                             autoComplete="off"
                                                         />
                                                     </div>
-                                                    <Button onClick={selectResources}>Browse</Button>
+                                                    <Button onClick={() => selectResources()}>Browse</Button>
                                                 </InlineStack>
-                                                <Text variant="bodySm" tone="subdued">
-                                                    The discount is applied per eligible product, not on the total order.
-                                                </Text>
                                                 {selectedResources.length > 0 && (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
+                                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "10px" }}>
                                                         {selectedResources.map(res => (
                                                             <Box key={res.id} padding="100" border="divider" borderRadius="200">
                                                                 <BlockStack align="center" gap="100">
-                                                                    <Thumbnail source={res.image || CollectionIcon} size="small" />
-                                                                    <Text variant="bodyXs" truncate>{res.title}</Text>
-                                                                </BlockStack>
-                                                            </Box>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </BlockStack>
-                                        )}
-                                        {appliesTo === "specific_products" && (
-                                            <BlockStack gap="300">
-                                                <InlineStack gap="200">
-                                                    <div style={{ flex: 1 }}>
-                                                        <TextField
-                                                            placeholder="Search products"
-                                                            value={resourceSearch}
-                                                            onChange={setResourceSearch}
-                                                            autoComplete="off"
-                                                        />
-                                                    </div>
-                                                    <Button onClick={selectResources}>Browse</Button>
-                                                </InlineStack>
-                                                {selectedResources.length > 0 && (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
-                                                        {selectedResources.map(res => (
-                                                            <Box key={res.id} padding="100" border="divider" borderRadius="200">
-                                                                <BlockStack align="center" gap="100">
-                                                                    <Thumbnail source={res.image || ProductIcon} size="small" />
+                                                                    <Thumbnail source={res.image || (appliesTo === "specific_collections" ? CollectionIcon : ProductIcon)} size="small" />
                                                                     <Text variant="bodyXs" truncate>{res.title}</Text>
                                                                 </BlockStack>
                                                             </Box>
@@ -1069,32 +1068,17 @@ export default function CreateDiscount() {
                                 </Card>
                             )}
 
-
-
-                            {/* MINIMUM PURCHASE REQUIREMENTS CARD (STANDARD) */}
+                            {/* ══════════════════════════════
+                                MINIMUM PURCHASE REQUIREMENTS
+                            ══════════════════════════════ */}
                             {type[0] !== "bxgy" && (
                                 <Card>
                                     <BlockStack gap="400">
                                         <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
                                         <ButtonGroup segmented>
-                                            <Button
-                                                pressed={minimumRequirement[0] === "none"}
-                                                onClick={() => setMinimumRequirement(["none"])}
-                                            >
-                                                No minimum
-                                            </Button>
-                                            <Button
-                                                pressed={minimumRequirement[0] === "amount"}
-                                                onClick={() => setMinimumRequirement(["amount"])}
-                                            >
-                                                Purchase amount (₹)
-                                            </Button>
-                                            <Button
-                                                pressed={minimumRequirement[0] === "quantity"}
-                                                onClick={() => setMinimumRequirement(["quantity"])}
-                                            >
-                                                Quantity of items
-                                            </Button>
+                                            <Button pressed={minimumRequirement[0] === "none"}     onClick={() => setMinimumRequirement(["none"])}>No minimum</Button>
+                                            <Button pressed={minimumRequirement[0] === "amount"}   onClick={() => setMinimumRequirement(["amount"])}>Purchase amount ({currencySymbol})</Button>
+                                            <Button pressed={minimumRequirement[0] === "quantity"} onClick={() => setMinimumRequirement(["quantity"])}>Quantity of items</Button>
                                         </ButtonGroup>
                                         {minimumRequirement[0] === "amount" && (
                                             <TextField
@@ -1102,13 +1086,10 @@ export default function CreateDiscount() {
                                                 type="number"
                                                 value={minimumPurchaseAmount}
                                                 onChange={setMinimumPurchaseAmount}
-                                                prefix="₹"
+                                                prefix={currencySymbol}
                                                 autoComplete="off"
                                             />
                                         )}
-                                        <Text variant="bodySm" tone="subdued">
-                                            The discount is applied only if the order meets the selected requirement.
-                                        </Text>
                                         {minimumRequirement[0] === "quantity" && (
                                             <TextField
                                                 label="Minimum quantity of items"
@@ -1118,11 +1099,16 @@ export default function CreateDiscount() {
                                                 autoComplete="off"
                                             />
                                         )}
+                                        <Text variant="bodySm" tone="subdued">
+                                            The discount is applied only if the order meets the selected requirement.
+                                        </Text>
                                     </BlockStack>
                                 </Card>
                             )}
 
-                            {/* MAXIMUM DISCOUNT USES CARD */}
+                            {/* ══════════════════════════════
+                                MAXIMUM DISCOUNT USES
+                            ══════════════════════════════ */}
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Maximum discount uses</Text>
@@ -1152,29 +1138,22 @@ export default function CreateDiscount() {
                                 </BlockStack>
                             </Card>
 
-                            {/* COMBINATIONS CARD */}
+                            {/* ══════════════════════════════
+                                COMBINATIONS
+                            ══════════════════════════════ */}
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Combinations</Text>
-                                    <Checkbox
-                                        label="Product discounts"
-                                        checked={combineProduct}
-                                        onChange={setCombineProduct}
-                                    />
-                                    <Checkbox
-                                        label="Order discounts"
-                                        checked={combineOrder}
-                                        onChange={setCombineOrder}
-                                    />
-                                    <Checkbox
-                                        label="Shipping discounts"
-                                        checked={combineShipping}
-                                        onChange={setCombineShipping}
-                                    />
+                                    <Text variant="bodySm" tone="subdued">This discount can be combined with:</Text>
+                                    <Checkbox label="Product discounts"  checked={combineProduct}  onChange={setCombineProduct} />
+                                    <Checkbox label="Order discounts"    checked={combineOrder}    onChange={setCombineOrder} />
+                                    <Checkbox label="Shipping discounts" checked={combineShipping} onChange={setCombineShipping} />
                                 </BlockStack>
                             </Card>
 
-                            {/* ACTIVE DATES CARD */}
+                            {/* ══════════════════════════════
+                                ACTIVE DATES
+                            ══════════════════════════════ */}
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Active dates</Text>
@@ -1187,12 +1166,7 @@ export default function CreateDiscount() {
                                                 <Popover
                                                     active={startPopoverActive}
                                                     activator={
-                                                        <Button
-                                                            onClick={() => setStartPopoverActive(prev => !prev)}
-                                                            icon={CalendarIcon}
-                                                            fullWidth
-                                                            textAlign="left"
-                                                        >
+                                                        <Button onClick={() => setStartPopoverActive(p => !p)} icon={CalendarIcon} fullWidth textAlign="left">
                                                             {formatDate(startDate)}
                                                         </Button>
                                                     }
@@ -1213,23 +1187,12 @@ export default function CreateDiscount() {
                                             </BlockStack>
                                         </Box>
                                         <Box minWidth="140px">
-                                            <TextField
-                                                label="Start time"
-                                                type="time"
-                                                value={startTime}
-                                                onChange={setStartTime}
-                                            />
+                                            <TextField label="Start time" type="time" value={startTime} onChange={setStartTime} />
                                         </Box>
                                     </InlineStack>
 
-                                    {/* End Date Toggle */}
-                                    <Checkbox
-                                        label="Set end date"
-                                        checked={hasEndDate}
-                                        onChange={setHasEndDate}
-                                    />
+                                    <Checkbox label="Set end date" checked={hasEndDate} onChange={setHasEndDate} />
 
-                                    {/* End Date (conditional) */}
                                     {hasEndDate && (
                                         <InlineStack gap="300" blockAlign="end">
                                             <Box minWidth="220px">
@@ -1238,12 +1201,7 @@ export default function CreateDiscount() {
                                                     <Popover
                                                         active={endPopoverActive}
                                                         activator={
-                                                            <Button
-                                                                onClick={() => setEndPopoverActive(prev => !prev)}
-                                                                icon={CalendarIcon}
-                                                                fullWidth
-                                                                textAlign="left"
-                                                            >
+                                                            <Button onClick={() => setEndPopoverActive(p => !p)} icon={CalendarIcon} fullWidth textAlign="left">
                                                                 {formatDate(endDate)}
                                                             </Button>
                                                         }
@@ -1265,18 +1223,14 @@ export default function CreateDiscount() {
                                                 </BlockStack>
                                             </Box>
                                             <Box minWidth="140px">
-                                                <TextField
-                                                    label="End time"
-                                                    type="time"
-                                                    value={endTime}
-                                                    onChange={setEndTime}
-                                                />
+                                                <TextField label="End time" type="time" value={endTime} onChange={setEndTime} />
                                             </Box>
                                         </InlineStack>
                                     )}
                                 </BlockStack>
                             </Card>
 
+                            {/* Bottom error repeat */}
                             {actionData?.errors && (
                                 <Banner tone="critical">
                                     <List>
@@ -1289,7 +1243,9 @@ export default function CreateDiscount() {
                         </BlockStack>
                     </Layout.Section>
 
-                    {/* SIDEBAR SUMMARY */}
+                    {/* ══════════════════════════════
+                        SIDEBAR SUMMARY
+                    ══════════════════════════════ */}
                     <Layout.Section variant="oneThird">
                         <BlockStack gap="400">
                             <Card>
@@ -1312,18 +1268,19 @@ export default function CreateDiscount() {
                                 </BlockStack>
                             </Card>
 
-                            <Banner title="Discount Tip" tone="info">
-                                <p>Code-based discounts allow you to track specific marketing campaigns.</p>
+                            <Banner title={isEditMode ? "Editing discount" : "Discount tip"} tone={isEditMode ? "warning" : "info"}>
+                                <p>
+                                    {isEditMode
+                                        ? "You are modifying an existing discount. Shopify will reflect the changes immediately after saving."
+                                        : "Code-based discounts allow you to track specific marketing campaigns."}
+                                </p>
                             </Banner>
                         </BlockStack>
                     </Layout.Section>
-                </Layout>
+                </Layout>10
 
                 {showToast && (
-                    <Toast
-                        content="Discount created successfully"
-                        onDismiss={() => setShowToast(false)}
-                    />
+                    <Toast content={toastMessage} onDismiss={() => setShowToast(false)} />
                 )}
             </Page>
         </Frame>

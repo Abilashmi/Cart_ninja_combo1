@@ -85,7 +85,7 @@
   },
   "selectedActiveCoupons": [
     "gid:/shopify/DiscountAutomaticNode/1161690120399",
-    "gid://shopify/DiscountRedeemCode/14012371206351"
+    "gid://shopify/DiscountRedeemCode/14023873364175"
   ],
   "allTemplateOverrides": {
     "template1": {},
@@ -99,18 +99,22 @@
         "couponCode": "Buy three, get 30 percent off",
         "headingText": "Grab Now!",
         "subtextText": "Offfer Ends Soon",
-        "displayCondition": "product_handle",
         "fontSize": 12,
         "borderRadius": 0,
         "accentColor": "#a59270",
+        "displayCondition": "product_handle",
         "productHandles": [
           "the-collection-snowboard-hydrogen"
         ]
       },
-      "gid://shopify/DiscountRedeemCode/14012371206351": {
-        "couponCode": "FREESHIPPING2026",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      "gid://shopify/DiscountRedeemCode/14023873364175": {
+        "displayCondition": "collection_handle",
+        "collectionHandles": [
+          "automated-collection"
+        ],
+        "headingText": "Hi Grab",
+        "subtextText": "Yours",
+        "couponCode": "6R0P6IXP"
       }
     }
   },
