@@ -23,7 +23,7 @@ export default function App() {
                 <CurrencyProvider symbol={currencySymbol}>
                     <s-app-nav>
                        
-                        <s-link href="/app/analytics">Analytics</s-link>
+                       
                         <s-link href="/app/discount">Create coupons</s-link>
                         <s-link href="/app/productwidget">Productwidget</s-link>
                         <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>

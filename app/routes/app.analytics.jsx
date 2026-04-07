@@ -477,7 +477,7 @@ const endStr = formatLocalDate(end);
               <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '8px', overflow: 'hidden' }}>
                 <iframe
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-                  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                  src="https://www.youtube.com/embed/1yL1t0M1pOc"
                   title="App Setup Tutorial"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
