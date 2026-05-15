@@ -1790,17 +1790,31 @@
 `;
 
     upsellProducts.forEach((productId) => {
+      // Looser ID match: numeric tail or GID-contains check
       let detail =
         (matchedUpsellDetails || []).find(
-          (d) => String(d.id).replace('gid://shopify/Product/', '') === productId
+          (d) => String(d.id).replace('gid://shopify/Product/', '') === productId ||
+                 String(d.id).includes(productId)
         ) || null;
 
-      // Fallback: if manual/AI details are missing or incomplete,
-      // enrich from the store catalog by product ID.
-      if ((!detail || !detail.title || !detail.price || !detail.image) && storeDetailsById) {
+      // Always try to enrich from the live store catalog (/products.json).
+      // This fixes: saved details with only {id}, image:"📦" placeholder, or
+      // data saved when loadedShopifyProducts was empty in admin.
+      if (storeDetailsById) {
         const storeDetail = storeDetailsById[String(productId)];
         if (storeDetail) {
-          detail = { ...storeDetail, ...(detail || {}) };
+          const savedImage = detail?.image;
+          const useSavedImage = savedImage && savedImage !== '📦' && savedImage !== null;
+          detail = {
+            ...storeDetail,
+            ...(detail || {}),
+            // Always take live image when saved value is missing or placeholder
+            image: useSavedImage ? savedImage : storeDetail.image,
+            // Always take live title/price when saved value is missing
+            title: (detail?.title && detail.title !== 'Product') ? detail.title : storeDetail.title,
+            price: detail?.price || storeDetail.price,
+            variantId: detail?.variantId || storeDetail.variantId,
+          };
         }
       }
 
