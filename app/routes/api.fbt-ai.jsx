@@ -139,7 +139,7 @@ JSON array:`;
             // Quota exceeded — return empty rules so UI degrades gracefully
             if (openaiRes.status === 429) {
                 return new Response(
-                    JSON.stringify({ rules: [], warning: "AI quota exceeded. Please update your OpenAI API key." }),
+                    JSON.stringify({ success: true, rules: [], warning: "AI quota exceeded. Please update your OpenAI API key." }),
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
