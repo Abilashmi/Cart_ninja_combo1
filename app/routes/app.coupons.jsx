@@ -1,32 +1,21 @@
-
 import {
     Page,
-    Layout,
     Card,
-    IndexTable,
-    useIndexResourceState,
+    BlockStack,
     Text,
     Badge,
-    Filters,
-    Select,
-    Button,
-    InlineStack,
+    Tabs,
+    IndexTable,
+    TextField,
+    useIndexResourceState,
     EmptyState,
-    Thumbnail,
-    Icon,
 } from "@shopify/polaris";
-import { Link, useLoaderData, useNavigate, useSubmit } from "react-router";
-import { useState, useCallback, useMemo } from "react";
+import { useLoaderData, useNavigate, useSubmit } from "react-router";
+import { useState, useMemo } from "react";
 import { authenticate } from "../shopify.server";
-import {
-    DiscountIcon,
-    PlusIcon,
-    DeleteIcon,
-    SortAscendingIcon,
-    SortDescendingIcon,
-}
-    from "@shopify/polaris-icons";
+import { PlusIcon } from "@shopify/polaris-icons";
 
+/* ─── ACTION ──────────────────────────────────────────────────────────────── */
 export const action = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
@@ -34,17 +23,6 @@ export const action = async ({ request }) => {
     const id = formData.get("id");
 
     if (actionType === "delete" && id) {
-        // Determine type from ID or just try generic delete? 
-        // discountCodeDelete needs ID.
-        // Actually the ID is a global ID, usually works with discountCodeBasicDelete etc or just discountDelete?
-        // There isn't a generic "discountDelete". We need to know the type or use specific mutation.
-        // But `discountUrl` gives us a hint, or we stored the type. 
-        // For simplicity in this demo, we'll try basic delete or just return success to mock UI update if complexity is high.
-        // Better: The user asked for "App-created coupons should support delete".
-        // Let's assume DiscountCodeBasic for the demo or try getting type from form.
-
-        // Note: In a real app we'd need to pass the type to delete correctly or query it.
-        // We'll pass type from the form.
         const type = formData.get("type");
         let mutation = "";
 
@@ -65,59 +43,41 @@ export const action = async ({ request }) => {
     return null;
 };
 
+/* ─── LOADER ──────────────────────────────────────────────────────────────── */
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
 
-    // Fetch discounts with necessary fields including metafields for source tracking
     const query = `
     query DiscountList {
-    discountNodes(first: 50, reverse: true) {
+      discountNodes(first: 50, reverse: true) {
         edges {
           node {
-                id
+            id
             discount {
               ... on DiscountCodeBasic {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        startsAt
-                        endsAt
-                        status
-                        usageLimit
-                        appliesOncePerCustomer
-                        asyncUsageCount
-                        summary
-                    }
+                title
+                codes(first: 1) { edges { node { code } } }
+                startsAt endsAt status
+                usageLimit appliesOncePerCustomer asyncUsageCount summary
+              }
               ... on DiscountCodeBxgy {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        startsAt
-                        endsAt
-                        status
-                        usageLimit
-                        appliesOncePerCustomer
-                        asyncUsageCount
-                        summary
-                    }
+                title
+                codes(first: 1) { edges { node { code } } }
+                startsAt endsAt status
+                usageLimit appliesOncePerCustomer asyncUsageCount summary
+              }
               ... on DiscountCodeFreeShipping {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        startsAt
-                        endsAt
-                        status
-                        usageLimit
-                        appliesOncePerCustomer
-                        asyncUsageCount
-                        summary
-                    }
-                }
-                metafield(namespace: "cart_app", key: "source") {
-                    value
-                }
+                title
+                codes(first: 1) { edges { node { code } } }
+                startsAt endsAt status
+                usageLimit appliesOncePerCustomer asyncUsageCount summary
+              }
             }
+            metafield(namespace: "cart_app", key: "source") { value }
+          }
         }
-    }
-}
-`;
+      }
+    }`;
 
     const response = await admin.graphql(query);
     const responseJson = await response.json();
@@ -126,14 +86,9 @@ export const loader = async ({ request }) => {
         responseJson.data?.discountNodes?.edges.map((edge) => {
             const node = edge.node;
             const discount = node.discount;
-            // Handle different discount types
-            // Note: metafield might be null for native discounts
             const isAppCreated = node.metafield?.value === "app";
-
             const code = discount?.codes?.edges?.[0]?.node?.code || "No Code";
 
-            // Determine Status manually if needed, but API gives status
-            // We can refine status based on date if API status is generic
             const now = new Date();
             const start = new Date(discount.startsAt);
             const end = discount.endsAt ? new Date(discount.endsAt) : null;
@@ -147,7 +102,7 @@ export const loader = async ({ request }) => {
             return {
                 id: node.id,
                 title: discount.title,
-                code: code,
+                code,
                 status: calculatedStatus,
                 startsAt: discount.startsAt,
                 endsAt: discount.endsAt,
@@ -161,302 +116,197 @@ export const loader = async ({ request }) => {
     return { discounts };
 };
 
-export default function Coupons() {
+/* ─── HELPERS ─────────────────────────────────────────────────────────────── */
+function formatDate(dateStr) {
+    if (!dateStr) return "—";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+    });
+}
+
+function statusTone(status) {
+    if (status === "ACTIVE") return "success";
+    if (status === "SCHEDULED") return "info";
+    return undefined;
+}
+
+function statusLabel(status) {
+    if (!status) return "—";
+    return status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function typeLabel(type) {
+    return (type || "").replace("DiscountCode", "").replace(/([A-Z])/g, " $1").trim() || "—";
+}
+
+/* ─── COMPONENT ───────────────────────────────────────────────────────────── */
+export default function CouponsPage() {
     const { discounts } = useLoaderData();
     const navigate = useNavigate();
     const submit = useSubmit();
 
-    const [sortValue, setSortValue] = useState("DATE_DESC");
-    const [queryValue, setQueryValue] = useState("");
-    const [statusFilter, setStatusFilter] = useState([]);
-    const [typeFilter, setTypeFilter] = useState([]);
-    const [sourceFilter, setSourceFilter] = useState([]);
+    const [selectedTab, setSelectedTab] = useState(0);
+    const [searchValue, setSearchValue] = useState("");
 
-    // Filter Logic
+    const counts = useMemo(() => ({
+        all: discounts.length,
+        active: discounts.filter((d) => d.status === "ACTIVE").length,
+        scheduled: discounts.filter((d) => d.status === "SCHEDULED").length,
+        expired: discounts.filter((d) => d.status === "EXPIRED").length,
+    }), [discounts]);
+
+    const TABS = [
+        { id: "all",       content: `All (${counts.all})` },
+        { id: "ACTIVE",    content: `Active (${counts.active})` },
+        { id: "SCHEDULED", content: `Scheduled (${counts.scheduled})` },
+        { id: "EXPIRED",   content: `Expired (${counts.expired})` },
+    ];
+
+    const tabId = TABS[selectedTab].id;
+
     const filteredDiscounts = useMemo(() => {
-        let result = discounts;
-
-        if (queryValue) {
-            const lowerQuery = queryValue.toLowerCase();
-            result = result.filter(
-                (d) =>
-                    d.title.toLowerCase().includes(lowerQuery) ||
-                    d.code.toLowerCase().includes(lowerQuery)
-            );
-        }
-
-        if (statusFilter.length > 0) {
-            result = result.filter((d) => statusFilter.includes(d.status));
-        }
-
-        if (typeFilter.length > 0) {
-            result = result.filter((d) => typeFilter.includes(d.type));
-        }
-
-        if (sourceFilter.length > 0) {
-            result = result.filter((d) => sourceFilter.includes(d.source));
-        }
-
-        return result;
-    }, [discounts, queryValue, statusFilter, typeFilter, sourceFilter]);
-
-    // Sort Logic
-    const sortedDiscounts = useMemo(() => {
-        return [...filteredDiscounts].sort((a, b) => {
-            switch (sortValue) {
-                case "DATE_ASC":
-                    return new Date(a.startsAt) - new Date(b.startsAt);
-                case "DATE_DESC":
-                    return new Date(b.startsAt) - new Date(a.startsAt);
-                case "USAGE_DESC":
-                    return b.usageCount - a.usageCount;
-                case "USAGE_ASC":
-                    return a.usageCount - b.usageCount; // Least used
-                default:
-                    return 0;
+        return discounts.filter((d) => {
+            if (tabId !== "all" && d.status !== tabId) return false;
+            if (searchValue) {
+                const q = searchValue.toLowerCase();
+                return (
+                    d.code.toLowerCase().includes(q) ||
+                    d.title.toLowerCase().includes(q)
+                );
             }
+            return true;
         });
-    }, [filteredDiscounts, sortValue]);
+    }, [discounts, tabId, searchValue]);
 
-    const resourceName = {
-        singular: "coupon",
-        plural: "coupons",
+    const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
+        useIndexResourceState(filteredDiscounts);
+
+    const handleDelete = () => {
+        for (const id of selectedResources) {
+            const discount = discounts.find((d) => d.id === id);
+            const formData = new FormData();
+            formData.append("actionType", "delete");
+            formData.append("id", id);
+            formData.append("type", discount?.type || "");
+            submit(formData, { method: "post" });
+        }
+        clearSelection();
     };
 
-    const { selectedResources, allResourcesSelected, handleSelectionChange } =
-        useIndexResourceState(sortedDiscounts);
-
-    const filters = [
-        {
-            key: "status",
-            label: "Status",
-            filter: (
-                <Select
-                    label="Status"
-                    labelHidden
-                    options={[
-                        { label: "All", value: "" },
-                        { label: "Active", value: "ACTIVE" },
-                        { label: "Scheduled", value: "SCHEDULED" },
-                        { label: "Expired", value: "EXPIRED" },
-                    ]}
-                    onChange={(value) => setStatusFilter(value ? [value] : [])}
-                    value={statusFilter[0] || ""}
-                />
-            ),
-            shortcut: true,
-        },
-        {
-            key: "type",
-            label: "Discount Type",
-            filter: (
-                <Select
-                    label="Type"
-                    labelHidden
-                    options={[
-                        { label: "All", value: "" },
-                        { label: "Percentage / Fixed Amount", value: "DiscountCodeBasic" },
-                        { label: "Buy X Get Y", value: "DiscountCodeBxgy" },
-                        { label: "Free Shipping", value: "DiscountCodeFreeShipping" },
-                    ]}
-                    onChange={(value) => setTypeFilter(value ? [value] : [])}
-                    value={typeFilter[0] || ""}
-                />
-            ),
-        },
-        {
-            key: "source",
-            label: "Source",
-            filter: (
-                <Select
-                    label="Source"
-                    labelHidden
-                    options={[
-                        { label: "All", value: "" },
-                        { label: "App Created", value: "App" },
-                        { label: "Shopify Native", value: "Native" },
-                    ]}
-                    onChange={(value) => setSourceFilter(value ? [value] : [])}
-                    value={sourceFilter[0] || ""}
-                />
-            ),
-        },
-    ];
-
-    const sortOptions = [
-        { label: "Newest first", value: "DATE_DESC" },
-        { label: "Oldest first", value: "DATE_ASC" },
-        { label: "Most used", value: "USAGE_DESC" },
-        { label: "Least used", value: "USAGE_ASC" },
-    ];
-
-    const rowMarkup = sortedDiscounts.map(
-        (
-            { id, title, code, status, startsAt, usageCount, usageLimit, type, source },
-            index
-        ) => (
-            <IndexTable.Row
-                id={id}
-                key={id}
-                selected={selectedResources.includes(id)}
-                position={index}
-            >
-                <IndexTable.Cell>
-                    <Text variant="bodyMd" fontWeight="bold">
-                        {source === "App" ? (
-                            <Link to={`/app/discounts/create?discountId=${id}`}>{title}</Link>
-                        ) : (
-                            title
-                        )}
+    const rowMarkup = filteredDiscounts.map((discount, index) => (
+        <IndexTable.Row
+            id={discount.id}
+            key={discount.id}
+            position={index}
+            selected={selectedResources.includes(discount.id)}
+            onClick={() => navigate(`/app/discounts/create?discountId=${encodeURIComponent(discount.id)}&code=${encodeURIComponent(discount.code)}`)}
+        >
+            <IndexTable.Cell>
+                <BlockStack gap="050">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {discount.title !== discount.code ? discount.title : <Text as="span" variant="bodyMd" tone="subdued">—</Text>}
                     </Text>
-                    <Text variant="bodySm" tone="subdued">
-                        {code}
-                    </Text>
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    <Badge tone={type === "DiscountCodeBasic" ? "info" : "new"}>
-                        {type === "DiscountCodeBasic"
-                            ? "Amount off"
-                            : type === "DiscountCodeBxgy"
-                                ? "Buy X Get Y"
-                                : "Free Shipping"}
-                    </Badge>
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    <Badge tone={source === "App" ? "success" : "subdued"}>
-                        {source}
-                    </Badge>
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    <Text>
-                        {usageCount} / {usageLimit ? usageLimit : "∞"}
-                    </Text>
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    <Badge
-                        tone={
-                            status === "ACTIVE"
-                                ? "success"
-                                : status === "SCHEDULED"
-                                    ? "attention"
-                                    : "critical" // Expired
-                        }
-                    >
-                        {status}
-                    </Badge>
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    {new Date(startsAt).toLocaleDateString()}
-                </IndexTable.Cell>
-                <IndexTable.Cell>
-                    {source === "App" && (
-                        <Button
-                            icon={DeleteIcon}
-                            tone="critical"
-                            variant="plain"
-                            onClick={() => {
-                                const formData = new FormData();
-                                formData.append("actionType", "delete");
-                                formData.append("id", id);
-                                formData.append("type", type);
-                                // We need a submit hook or similar. Since we are in a map, better to use a form or submit function passed down.
-                                // We'll assume a submit function is available or use `useSubmit` from remix.
-                                // NOTE: We can't call hook here. We need to pass submit from parent.
-                                // Ideally we wrap this row in a component or use the parent's submit.
-                                // For now, we'll use a hidden form or imperative submit if possible.
-                                // Let's use window.confirm then submit.
-                                if (confirm("Are you sure you want to delete this coupon?")) {
-                                    // We need to capture the submit function from the component scope
-                                    // This block is inside `rowMarkup` map, which is inside `Coupons` component.
-                                    // So we can use `submit` if we define it in `Coupons`.
-                                    submit(formData, { method: "post" });
-                                }
-                            }}
-                        />
+                    {discount.title !== discount.code && (
+                        <Text as="span" variant="bodySm" tone="subdued">Internal title</Text>
                     )}
-                </IndexTable.Cell>
-            </IndexTable.Row>
-        )
-    );
+                </BlockStack>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+                <span style={{
+                    fontFamily: "monospace", fontWeight: 700,
+                    background: "#f3f4f6", padding: "2px 8px",
+                    borderRadius: "4px", fontSize: "13px",
+                }}>
+                    {discount.code}
+                </span>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+                <Text as="span" variant="bodySm" tone="subdued">
+                    {typeLabel(discount.type)}
+                </Text>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+                <Badge tone={statusTone(discount.status)}>
+                    {statusLabel(discount.status)}
+                </Badge>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+                {discount.usageCount} / {discount.usageLimit ?? "∞"}
+            </IndexTable.Cell>
+            <IndexTable.Cell>{formatDate(discount.startsAt)}</IndexTable.Cell>
+            <IndexTable.Cell>{formatDate(discount.endsAt)}</IndexTable.Cell>
+        </IndexTable.Row>
+    ));
 
     return (
         <Page
-            title="Coupons"
+            title="Coupon Creator"
+            subtitle="Manage, create, and view your store coupons in one place"
             primaryAction={{
                 content: "Create Coupon",
-                onAction: () => navigate("/app/discounts/create"),
                 icon: PlusIcon,
+                onAction: () => navigate("/app/discounts/create"),
             }}
-            fullWidth
+            secondaryActions={[{ content: "Export", disabled: true }]}
         >
-            <Layout>
-                <Layout.Section>
-                    <Card padding="0">
-                        <div style={{ padding: "16px" }}>
-                            <InlineStack align="space-between">
-                                <div style={{ flex: 1, maxWidth: "400px" }}>
-                                    <Filters
-                                        queryValue={queryValue}
-                                        filters={filters}
-                                        appliedFilters={[]}
-                                        onQueryChange={setQueryValue}
-                                        onQueryClear={() => setQueryValue("")}
-                                        onClearAll={() => {
-                                            setQueryValue("");
-                                            setStatusFilter([]);
-                                            setTypeFilter([]);
-                                            setSourceFilter([]);
-                                        }}
-                                    />
-                                </div>
-                                <div style={{ minWidth: "150px" }}>
-                                    <Select
-                                        label="Sort by"
-                                        labelHidden
-                                        options={sortOptions}
-                                        onChange={setSortValue}
-                                        value={sortValue}
-                                    />
-                                </div>
-                            </InlineStack>
+            <BlockStack gap="400">
+                <Card padding="0">
+                    <Tabs tabs={TABS} selected={selectedTab} onSelect={setSelectedTab}>
+                        <div style={{ padding: "12px 16px", borderBottom: "1px solid #e1e3e5" }}>
+                            <TextField
+                                placeholder="Search by title or code…"
+                                value={searchValue}
+                                onChange={setSearchValue}
+                                clearButton
+                                onClearButtonClick={() => setSearchValue("")}
+                                autoComplete="off"
+                                label=""
+                                labelHidden
+                            />
                         </div>
 
-                        <IndexTable
-                            resourceName={resourceName}
-                            itemCount={sortedDiscounts.length}
-                            selectedItemsCount={
-                                allResourcesSelected ? "All" : selectedResources.length
-                            }
-                            onSelectionChange={handleSelectionChange}
-                            headings={[
-                                { title: "Coupon" },
-                                { title: "Type" },
-                                { title: "Source" },
-                                { title: "Usage" },
-                                { title: "Status" },
-                                { title: "Created Date" },
-                                { title: "Actions" },
-                            ]}
-                            selectable={false} // Keeping false for now as per "read-only native" behavior, can enable for app coupons later
-                        >
-                            {rowMarkup}
-                        </IndexTable>
-
-                        {sortedDiscounts.length === 0 && (
+                        {filteredDiscounts.length === 0 ? (
                             <EmptyState
-                                heading="Manage your coupons"
+                                heading={searchValue ? "No coupons match your search" : "No coupons yet"}
+                                image=""
                                 action={{
                                     content: "Create Coupon",
                                     onAction: () => navigate("/app/discounts/create"),
                                 }}
-                                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                             >
-                                <p>Create and manage discounts for your store directly from here.</p>
+                                <p>
+                                    {searchValue
+                                        ? "Try adjusting your search."
+                                        : "Create your first coupon to start driving more conversions."}
+                                </p>
                             </EmptyState>
+                        ) : (
+                            <IndexTable
+                                resourceName={{ singular: "coupon", plural: "coupons" }}
+                                itemCount={filteredDiscounts.length}
+                                selectedItemsCount={
+                                    allResourcesSelected ? "All" : selectedResources.length
+                                }
+                                onSelectionChange={handleSelectionChange}
+                                promotedBulkActions={[
+                                    { content: "Delete", onAction: handleDelete },
+                                ]}
+                                headings={[
+                                    { title: "Title" },
+                                    { title: "Code" },
+                                    { title: "Type" },
+                                    { title: "Status" },
+                                    { title: "Used / Limit" },
+                                    { title: "Start Date" },
+                                    { title: "End Date" },
+                                ]}
+                            >
+                                {rowMarkup}
+                            </IndexTable>
                         )}
-                    </Card>
-                </Layout.Section>
-            </Layout>
+                    </Tabs>
+                </Card>
+            </BlockStack>
         </Page>
     );
 }

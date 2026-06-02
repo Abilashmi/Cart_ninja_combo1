@@ -26,6 +26,9 @@ import {
 } from "@shopify/polaris";
 import {
     DiscountIcon,
+    DeliveryIcon,
+    GiftCardIcon,
+    RefreshIcon,
     ProductIcon,
     CollectionIcon,
     CalendarIcon,
@@ -239,14 +242,21 @@ export const action = async ({ request }) => {
                 ? { collections: { add: getsResources.map(r => r.id) } }
                 : { products: { productsToAdd: getsResources.map(r => r.id) } };
 
-        const getsDiscountValue = {
-            [getsValueType === "free" || getsValueType === "percentage" ? "percentage" : "discountAmount"]:
-                getsValueType === "free"
-                    ? 1.0
-                    : getsValueType === "percentage"
-                        ? getsValue / 100
-                        : { amount: getsValue },
-        };
+        // customerGets.value: quantity is now inside discountOnQuantity, not top-level
+        let customerGetsValue;
+        if (getsValueType === "free" || getsValueType === "percentage") {
+            customerGetsValue = {
+                discountOnQuantity: {
+                    quantity: { quantity: getsQuantity },
+                    effect: { percentage: getsValueType === "free" ? 1.0 : getsValue / 100 },
+                },
+            };
+        } else {
+            // fixed_amount — discountAmount doesn't carry a quantity in the current API
+            customerGetsValue = {
+                discountAmount: { amount: getsValue, appliesOnEachItem: true },
+            };
+        }
 
         const bxgyInput = {
             title: title || code,
@@ -254,10 +264,11 @@ export const action = async ({ request }) => {
             startsAt,
             ...(endsAt && { endsAt }),
             customerSelection: { all: true },
-            usesPerCustomerLimit: limitOnePerCustomer ? 1 : null,
-            buys:  { items: buysItems, value: { quantity: buysQuantity } },
-            gets:  { items: getsItems, value: getsDiscountValue, quantity: { quantity: getsQuantity } },
-            appliesOncePerOrder: repeatOncePerOrder,
+            appliesOncePerCustomer: limitOnePerCustomer,
+            ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
+            customerBuys: { items: buysItems, value: { quantity: { quantity: buysQuantity } } },
+            customerGets: { items: getsItems, value: customerGetsValue },
+            ...(repeatOncePerOrder && { usesPerOrderLimit: 1 }),
             combinesWith,
         };
 
@@ -353,20 +364,269 @@ export const action = async ({ request }) => {
 /* ─────────────────────────────────────────────────────────── */
 
 export const loader = async ({ request }) => {
-    const { session } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    const url = new URL(request.url);
+    const discountId = url.searchParams.get("discountId");
+
     const coupons = await getStoredCoupons(session.shop);
-    return { coupons };
+
+    let shopifyDiscount = null;
+    if (discountId) {
+        try {
+            const res = await admin.graphql(
+                `#graphql
+                query GetDiscount($id: ID!) {
+                    discountNode(id: $id) {
+                        id
+                        discount {
+                            __typename
+                            ... on DiscountCodeBasic {
+                                title
+                                codes(first: 1) { edges { node { code } } }
+                                startsAt endsAt usageLimit appliesOncePerCustomer
+                                combinesWith { productDiscounts orderDiscounts shippingDiscounts }
+                                customerGets {
+                                    value {
+                                        ... on DiscountPercentage { percentage }
+                                        ... on DiscountAmount { amount { amount } appliesOnEachItem }
+                                    }
+                                    items {
+                                        ... on AllDiscountItems { allItems }
+                                        ... on DiscountProducts { products(first: 20) { edges { node { id title } } } }
+                                        ... on DiscountCollections { collections(first: 20) { edges { node { id title } } } }
+                                    }
+                                }
+                                minimumRequirement {
+                                    ... on DiscountMinimumSubtotal { greaterThanOrEqualToSubtotal { amount } }
+                                    ... on DiscountMinimumQuantity { greaterThanOrEqualToQuantity }
+                                }
+                            }
+                            ... on DiscountCodeBxgy {
+                                title
+                                codes(first: 1) { edges { node { code } } }
+                                startsAt endsAt usageLimit appliesOncePerCustomer usesPerOrderLimit
+                                combinesWith { productDiscounts orderDiscounts shippingDiscounts }
+                                customerBuys {
+                                    value { ... on DiscountQuantity { quantity } }
+                                    items {
+                                        ... on DiscountProducts { products(first: 20) { edges { node { id title } } } }
+                                        ... on DiscountCollections { collections(first: 20) { edges { node { id title } } } }
+                                    }
+                                }
+                                customerGets {
+                                    value {
+                                        ... on DiscountOnQuantity {
+                                            effect { ... on DiscountPercentage { percentage } }
+                                            quantity { quantity }
+                                        }
+                                        ... on DiscountAmount { amount { amount } appliesOnEachItem }
+                                    }
+                                    items {
+                                        ... on DiscountProducts { products(first: 20) { edges { node { id title } } } }
+                                        ... on DiscountCollections { collections(first: 20) { edges { node { id title } } } }
+                                    }
+                                }
+                            }
+                            ... on DiscountCodeFreeShipping {
+                                title
+                                codes(first: 1) { edges { node { code } } }
+                                startsAt endsAt usageLimit appliesOncePerCustomer
+                                combinesWith { productDiscounts orderDiscounts shippingDiscounts }
+                                destinationSelection {
+                                    ... on DiscountCountryAll { allCountries }
+                                    ... on DiscountCountries { countries { code } }
+                                }
+                                minimumRequirement {
+                                    ... on DiscountMinimumSubtotal { greaterThanOrEqualToSubtotal { amount } }
+                                    ... on DiscountMinimumQuantity { greaterThanOrEqualToQuantity }
+                                }
+                            }
+                        }
+                    }
+                }`,
+                { variables: { id: discountId } }
+            );
+            const json = await res.json();
+            const node = json.data?.discountNode;
+            if (node) shopifyDiscount = { id: node.id, ...node.discount };
+        } catch (e) {
+            console.error("Failed to fetch discount from Shopify:", e.message);
+        }
+    }
+
+    return { coupons, shopifyDiscount };
 };
 
 /* ─────────────────────────────────────────────────────────── */
 /*                      COMPONENT                             */
 /* ─────────────────────────────────────────────────────────── */
 
+/* ─────────────────────────────────────────────────────────── */
+/*          SHOPIFY DISCOUNT → FORM STATE NORMALIZER           */
+/* ─────────────────────────────────────────────────────────── */
+
+function normalizeShopifyDiscount(sd, discountId) {
+    if (!sd) return null;
+    const typename = sd.__typename;
+    const code = sd.codes?.edges?.[0]?.node?.code || "";
+
+    let type = "amount_off_products";
+    let valueType = "percentage";
+    let value = "";
+    let selectionType = "all";
+    let selectedResources = [];
+    let minimumRequirementValue = "none";
+    let minimumPurchaseAmount = "";
+    let minimumQuantity = "";
+    let oncePerOrder = false;
+    let bxgyBuysType = "products";
+    let bxgyBuysResources = [];
+    let bxgyBuysQuantity = "1";
+    let bxgyGetsType = "products";
+    let bxgyGetsResources = [];
+    let bxgyGetsValueType = "free";
+    let bxgyGetsValue = "";
+    let bxgyGetsQuantity = "1";
+    let bxgyRepeatOncePerOrder = false;
+    let countriesType = "all";
+    let selectedCountries = [];
+
+    const mapProducts = (edges) => (edges || []).map(e => ({ id: e.node.id, title: e.node.title }));
+
+    if (typename === "DiscountCodeBasic") {
+        const gv = sd.customerGets?.value;
+        const gi = sd.customerGets?.items;
+
+        if (gv?.__typename === "DiscountPercentage") {
+            valueType = "percentage";
+            value = String(Math.round((gv.percentage || 0) * 100));
+        } else if (gv?.__typename === "DiscountAmount") {
+            valueType = "fixed_amount";
+            value = String(gv.amount?.amount || "");
+            oncePerOrder = gv.appliesOnEachItem === false;
+        }
+
+        if (gi?.__typename === "AllDiscountItems") {
+            selectionType = "all";
+            type = (gv?.appliesOnEachItem === false) ? "amount_off_order" : "amount_off_products";
+        } else if (gi?.__typename === "DiscountProducts") {
+            type = "amount_off_products";
+            selectionType = "products";
+            selectedResources = mapProducts(gi.products?.edges);
+        } else if (gi?.__typename === "DiscountCollections") {
+            type = "amount_off_products";
+            selectionType = "collections";
+            selectedResources = mapProducts(gi.collections?.edges);
+        }
+
+        const mr = sd.minimumRequirement;
+        if (mr?.__typename === "DiscountMinimumSubtotal") {
+            minimumRequirementValue = "amount";
+            minimumPurchaseAmount = String(mr.greaterThanOrEqualToSubtotal?.amount || "");
+        } else if (mr?.__typename === "DiscountMinimumQuantity") {
+            minimumRequirementValue = "quantity";
+            minimumQuantity = String(mr.greaterThanOrEqualToQuantity || "");
+        }
+
+    } else if (typename === "DiscountCodeBxgy") {
+        type = "bxgy";
+
+        const bi = sd.customerBuys?.items;
+        if (bi?.__typename === "DiscountProducts") {
+            bxgyBuysType = "products";
+            bxgyBuysResources = mapProducts(bi.products?.edges);
+        } else if (bi?.__typename === "DiscountCollections") {
+            bxgyBuysType = "collections";
+            bxgyBuysResources = mapProducts(bi.collections?.edges);
+        }
+        bxgyBuysQuantity = String(sd.customerBuys?.value?.quantity || "1");
+
+        const gi = sd.customerGets?.items;
+        if (gi?.__typename === "DiscountProducts") {
+            bxgyGetsType = "products";
+            bxgyGetsResources = mapProducts(gi.products?.edges);
+        } else if (gi?.__typename === "DiscountCollections") {
+            bxgyGetsType = "collections";
+            bxgyGetsResources = mapProducts(gi.collections?.edges);
+        }
+
+        const gv = sd.customerGets?.value;
+        if (gv?.__typename === "DiscountOnQuantity") {
+            bxgyGetsQuantity = String(gv.quantity?.quantity || "1");
+            const pct = gv.effect?.percentage;
+            if (pct === 1) { bxgyGetsValueType = "free"; }
+            else if (pct) { bxgyGetsValueType = "percentage"; bxgyGetsValue = String(Math.round(pct * 100)); }
+        } else if (gv?.__typename === "DiscountAmount") {
+            bxgyGetsValueType = "fixed_amount";
+            bxgyGetsValue = String(gv.amount?.amount || "");
+        }
+        bxgyRepeatOncePerOrder = !!(sd.usesPerOrderLimit && Number(sd.usesPerOrderLimit) <= 1);
+
+    } else if (typename === "DiscountCodeFreeShipping") {
+        type = "free_shipping";
+
+        const dest = sd.destinationSelection;
+        if (dest?.__typename === "DiscountCountryAll") {
+            countriesType = "all";
+        } else if (dest?.__typename === "DiscountCountries") {
+            countriesType = "specific";
+            selectedCountries = (dest.countries || []).map(c => c.code);
+        }
+
+        const mr = sd.minimumRequirement;
+        if (mr?.__typename === "DiscountMinimumSubtotal") {
+            minimumRequirementValue = "amount";
+            minimumPurchaseAmount = String(mr.greaterThanOrEqualToSubtotal?.amount || "");
+        } else if (mr?.__typename === "DiscountMinimumQuantity") {
+            minimumRequirementValue = "quantity";
+            minimumQuantity = String(mr.greaterThanOrEqualToQuantity || "");
+        }
+    }
+
+    return {
+        shopifyId: discountId,
+        title: sd.title || "",
+        code,
+        type,
+        valueType,
+        value,
+        selectionType,
+        selectedResources,
+        minimumRequirementValue,
+        minimumPurchaseAmount,
+        minimumQuantity,
+        limitTotalUses: !!sd.usageLimit,
+        totalUsesLimit: sd.usageLimit ? String(sd.usageLimit) : "",
+        limitOnePerCustomer: !!sd.appliesOncePerCustomer,
+        combineProduct: !!sd.combinesWith?.productDiscounts,
+        combineOrder: !!sd.combinesWith?.orderDiscounts,
+        combineShipping: !!sd.combinesWith?.shippingDiscounts,
+        oncePerOrder,
+        countriesType,
+        selectedCountries,
+        bxgyBuysType,
+        bxgyBuysResources,
+        bxgyBuysQuantity,
+        bxgyGetsType,
+        bxgyGetsResources,
+        bxgyGetsValueType,
+        bxgyGetsValue,
+        bxgyGetsQuantity,
+        bxgyRepeatOncePerOrder,
+        startDate: sd.startsAt,
+        endDate: sd.endsAt,
+    };
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*                         COMPONENT                           */
+/* ─────────────────────────────────────────────────────────── */
+
 export default function CreateDiscount() {
     const { currencySymbol } = useCurrency();
     const navigate    = useNavigate();
     const actionData  = useActionData();
-    const { coupons } = useLoaderData() || { coupons: [] };
+    const { coupons, shopifyDiscount } = useLoaderData() || { coupons: [], shopifyDiscount: null };
     const [searchParams] = useSearchParams();
     const discountIdFromQuery = searchParams.get("discountId");
     const codeFromQuery       = searchParams.get("code");
@@ -379,6 +639,12 @@ export default function CreateDiscount() {
     const rawExistingCoupon = useMemo(() => {
         if (!discountIdFromQuery && !codeFromQuery) return null;
 
+        // Priority 1: live Shopify data fetched in loader (most reliable)
+        if (shopifyDiscount && discountIdFromQuery) {
+            return normalizeShopifyDiscount(shopifyDiscount, discountIdFromQuery);
+        }
+
+        // Priority 2: locally-stored coupon (has BXGY product selections etc.)
         if (discountIdFromQuery) {
             const byId = coupons.find(c =>
                 c.id === discountIdFromQuery ||
@@ -393,7 +659,7 @@ export default function CreateDiscount() {
         }
 
         return null;
-    }, [coupons, discountIdFromQuery, codeFromQuery]);
+    }, [coupons, shopifyDiscount, discountIdFromQuery, codeFromQuery]);
 
     /* ── Normalize coupon fields ── */
     const existingCoupon = useMemo(() => {
@@ -711,32 +977,81 @@ export default function CreateDiscount() {
                                 </Banner>
                             )}
 
-                            {/* ══════════════════════════════
-                                DISCOUNT TYPE + CODE
-                            ══════════════════════════════ */}
+                            {/* ── Discount type + code ── */}
                             <Card>
                                 <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Discount type</Text>
-                                    <ButtonGroup segmented>
-                                        <Button pressed={type[0] === "amount_off_products"} onClick={() => setType(["amount_off_products"])}>Amount off products</Button>
-                                        <Button pressed={type[0] === "amount_off_order"}    onClick={() => setType(["amount_off_order"])}>Amount off order</Button>
-                                        <Button pressed={type[0] === "bxgy"}                onClick={() => setType(["bxgy"])}>Buy X get Y</Button>
-                                        <Button pressed={type[0] === "free_shipping"}       onClick={() => setType(["free_shipping"])}>Free shipping</Button>
-                                    </ButtonGroup>
+                                    <Text as="h2" variant="headingMd">Discount type</Text>
+
+                                    {/* Solaris 2×2 type selector */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        {[
+                                            { id: 'pct',   label: 'Percentage',   icon: DiscountIcon,  desc: '% off products or order',        t: 'amount_off_products', vt: 'percentage'  },
+                                            { id: 'fixed', label: 'Fixed amount', icon: DiscountIcon,  desc: 'Fixed amount off products',       t: 'amount_off_products', vt: 'fixed_amount' },
+                                            { id: 'ship',  label: 'Free shipping',icon: DeliveryIcon,  desc: 'Free delivery on eligible orders', t: 'free_shipping',       vt: null          },
+                                            { id: 'bxgy',  label: 'Buy X get Y',  icon: GiftCardIcon,  desc: 'Free or discounted products',      t: 'bxgy',                vt: null          },
+                                        ].map((opt) => {
+                                            const active =
+                                                type[0] === opt.t &&
+                                                (opt.vt == null || discountValueType === opt.vt);
+                                            return (
+                                                <button
+                                                    key={opt.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setType([opt.t]);
+                                                        if (opt.vt) setDiscountValueType(opt.vt);
+                                                    }}
+                                                    style={{
+                                                        padding: '16px', borderRadius: '8px', cursor: 'pointer',
+                                                        border: `2px solid ${active ? '#008060' : '#c9cccf'}`,
+                                                        background: active ? '#f1f8f5' : '#ffffff',
+                                                        textAlign: 'left', display: 'flex', gap: '12px', alignItems: 'flex-start',
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
+                                                        background: active ? '#008060' : '#f3f4f6',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    }}>
+                                                        <Icon source={opt.icon} tone={active ? 'base' : 'subdued'} />
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '14px', fontWeight: 600, color: active ? '#008060' : '#111827', marginBottom: '2px' }}>{opt.label}</div>
+                                                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{opt.desc}</div>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
                                     <Divider />
+
+                                    <InlineStack gap="200" blockAlign="end">
+                                        <div style={{ flex: 1 }}>
+                                            <TextField
+                                                label="Discount code"
+                                                value={code}
+                                                onChange={setCode}
+                                                autoComplete="off"
+                                                placeholder="e.g. SUMMER2024"
+                                                helpText="Customers will enter this code at checkout"
+                                            />
+                                        </div>
+                                        <Button
+                                            icon={RefreshIcon}
+                                            onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
+                                        >
+                                            Generate
+                                        </Button>
+                                    </InlineStack>
+
                                     <TextField
-                                        label="Discount code"
-                                        value={code}
-                                        onChange={setCode}
+                                        label="Internal title (optional)"
+                                        value={title}
+                                        onChange={setTitle}
                                         autoComplete="off"
-                                        placeholder="e.g. SUMMER2024"
-                                        suffix={
-                                            <Button onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>
-                                                Generate
-                                            </Button>
-                                        }
+                                        helpText="For internal tracking only. Shown in the Title column on the Coupons page. Customers see the code, not this title."
                                     />
-                                    <TextField label="Internal title" value={title} onChange={setTitle} autoComplete="off" />
                                 </BlockStack>
                             </Card>
 

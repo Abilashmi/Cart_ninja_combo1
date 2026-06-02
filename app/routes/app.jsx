@@ -36,11 +36,14 @@ export default function App() {
                 <CurrencyProvider symbol={currencySymbol}>
                     <PlanProvider isPro={isPro}>
                         <s-app-nav>
-                            {/* <s-link href="/app/setup">Setup Guide</s-link> */}
-                            <s-link href="/app/discount">Create coupons</s-link>
-                            <s-link href="/app/productwidget">Productwidget</s-link>
-                            <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>
-                            {/* <s-link href="/app/subscribe">Upgrade to Pro</s-link> */}
+                            <s-link href="/app">Home</s-link>
+                            <s-link href="/app/analytics">Analytics</s-link>
+                            <s-link href="/app/cartdrawer">Cart Editor</s-link>
+                            <s-link href="/app/fbt">Frequently Bought Together</s-link>
+                            <s-link href="/app/productwidget">Coupon Banner</s-link>
+                            <s-link href="/app/coupons">Coupon Creator</s-link>
+                            <s-link href="/app/subscribe">Plans</s-link>
+                            <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
                         <Outlet context={{ currencySymbol }} />
                     </PlanProvider>
@@ -50,7 +53,6 @@ export default function App() {
     );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
     return boundary.error(useRouteError());
 }

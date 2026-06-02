@@ -1,774 +1,404 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
+import { useState, useCallback, useEffect } from 'react';
+import { useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
-  Page,
-  Layout,
-  Card,
-  BlockStack,
-  InlineStack,
-  Text,
-  DatePicker,
-  Popover,
-  IndexTable,
-  Badge,
-  Box,
-  Button,
-  ProgressBar,
-  Banner,
-  Select,
-  Divider,
-  Grid,
-  Thumbnail,
-  TextField,
-  Icon,
+  Page, Card, BlockStack, InlineStack, Text,
+  DatePicker, Popover, Box, Button, ProgressBar, Tabs,
+  TextField, Icon, Divider,
 } from '@shopify/polaris';
-import { CalendarIcon, CheckCircleIcon, PlayIcon, ExternalIcon, ClockIcon, ArrowRightIcon } from '@shopify/polaris-icons';
+import { CalendarIcon, CheckCircleIcon, ClockIcon, ArrowRightIcon } from '@shopify/polaris-icons';
 import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  BarChart,
-  Bar,
-  ComposedChart,
-  Line
+  ResponsiveContainer, AreaChart, Area,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import { authenticate } from "../shopify.server";
 import { useCurrency } from "../components/CurrencyContext";
-import { formatAmount, getLocaleForCurrency } from "../utils/currency.shared";
+import { formatAmount } from "../utils/currency.shared";
+
+/* ─── helpers ──────────────────────────────────────────────── */
 
 const DEFAULT_ANALYTICS = {
-  checkout_click: 0,
-  coupon_click: 0,
-  upsell_click: 0,
-  upsell_revenue_generated: 0,
-  cartdrawer_total_revenue: 0,
+  checkout_click: 0, coupon_click: 0, upsell_click: 0,
+  upsell_revenue_generated: 0, cartdrawer_total_revenue: 0,
   cartdrawer_total_coupon_applied: 0,
 };
 
-function toCount(value) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+function toCount(v) { const p = Number.parseInt(v, 10); return Number.isFinite(p) ? Math.max(0, p) : 0; }
+function toAmount(v) {
+  if (v == null || v === '') return 0;
+  const n = typeof v === 'number' ? v : Number.parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
-
-function toAmount(value) {
-  if (value === null || value === undefined || value === "") {
-    return 0;
-  }
-
-  const numeric = typeof value === "number"
-    ? value
-    : Number.parseFloat(String(value).replace(/[^0-9.-]/g, ""));
-
-  return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
-}
-
-// Note: formatDynamicCurrency is now called within the component using useCurrency hook
-
-function normalizeAnalyticsState(payload = {}) {
+function normalizeAnalyticsState(p = {}) {
   return {
-    checkout_click: toCount(payload.checkout_click),
-    coupon_click: toCount(payload.coupon_click),
-    upsell_click: toCount(payload.upsell_click),
-    upsell_revenue_generated: toAmount(payload.upsell_revenue_generated),
-    cartdrawer_total_revenue: toAmount(payload.cartdrawer_total_revenue),
-    cartdrawer_total_coupon_applied: toCount(payload.cartdrawer_total_coupon_applied),
+    checkout_click: toCount(p.checkout_click),
+    coupon_click: toCount(p.coupon_click),
+    upsell_click: toCount(p.upsell_click),
+    upsell_revenue_generated: toAmount(p.upsell_revenue_generated),
+    cartdrawer_total_revenue: toAmount(p.cartdrawer_total_revenue),
+    cartdrawer_total_coupon_applied: toCount(p.cartdrawer_total_coupon_applied),
   };
 }
+function formatLocalDate(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function buildDateRange(start, end, max = 31) {
+  const dates = []; const cursor = new Date(start); cursor.setHours(0,0,0,0);
+  const last = new Date(end); last.setHours(0,0,0,0);
+  while (cursor <= last && dates.length < max) { dates.push(new Date(cursor)); cursor.setDate(cursor.getDate()+1); }
+  return dates;
+}
+function shortLabel(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+function pctChange(curr, prev) {
+  if (!prev) return curr > 0 ? 100 : 0;
+  return Math.round(((curr - prev) / prev) * 100);
+}
+const WEEK_DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function skeletonPoints(n = 7) {
+  return Array.from({ length: n }, (_, i) => ({
+    date: WEEK_DAYS[i % 7], revenue: 0, upsell: 0, coupons: 0,
+    checkoutClicks: 0, couponClicks: 0, upsellClicks: 0, aov: 0,
+  }));
+}
+
+/* ─── loader ───────────────────────────────────────────────── */
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
-
   let initialAnalytics = { ...DEFAULT_ANALYTICS };
   let initialAnalyticsError = false;
-
   try {
-    const requestUrl = new URL(request.url);
-    // Fetch today's data instead of all-time data
-    const today = new Date().toISOString().split('T')[0];
-    const apiUrl = `${requestUrl.origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`;
-    const response = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "ngrok-skip-browser-warning": "true",
-      },
-    });
-
-    const payload = await response.json();
-    if (response.ok && payload?.success) {
-      initialAnalytics = normalizeAnalyticsState(payload.data);
-    } else {
-      initialAnalyticsError = true;
-    }
-  } catch {
-    initialAnalyticsError = true;
-  }
-
+    const origin = new URL(request.url).origin;
+    const today  = new Date().toISOString().split('T')[0];
+    const res = await fetch(
+      `${origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`,
+      { headers: { Accept: 'application/json', 'ngrok-skip-browser-warning': 'true' } }
+    );
+    const payload = await res.json();
+    if (res.ok && payload?.success) initialAnalytics = normalizeAnalyticsState(payload.data);
+    else initialAnalyticsError = true;
+  } catch { initialAnalyticsError = true; }
   return { shop, initialAnalytics, initialAnalyticsError };
 };
-// More granular mock data for professional feel
-const FEATURE_DATA = [
-  { name: 'Feb 01', revenue: 240, clicks: 120, ctr: 5.2 },
-  { name: 'Feb 02', revenue: 380, clicks: 190, ctr: 6.8 },
-  { name: 'Feb 03', revenue: 300, clicks: 150, ctr: 5.9 },
-  { name: 'Feb 04', revenue: 520, clicks: 260, ctr: 8.4 },
-  { name: 'Feb 05', revenue: 460, clicks: 230, ctr: 7.2 },
-  { name: 'Feb 06', revenue: 820, clicks: 410, ctr: 12.5 },
-  { name: 'Feb 07', revenue: 740, clicks: 370, trend: '+11.2%' },
+
+/* ─── sub-components ───────────────────────────────────────── */
+
+function ChangeBadge({ change }) {
+  const pos = change >= 0;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px',
+      background: pos ? '#f1f8f5' : '#fff4f4',
+      color: pos ? '#008060' : '#d82c0d',
+      border: `1px solid ${pos ? '#b5e3d8' : '#fca5a5'}`,
+    }}>
+      {pos ? '▲' : '▼'} {Math.abs(change)}% <span style={{ fontWeight: 400 }}>vs last week</span>
+    </span>
+  );
+}
+
+function MetricCard({ label, value, change }) {
+  const pos = change >= 0;
+  return (
+    <div style={{
+      background: '#fff', borderRadius: '10px', padding: '20px',
+      border: '1px solid #e1e3e5',
+      borderLeft: `4px solid ${pos ? '#008060' : '#d82c0d'}`,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+    }}>
+      <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+      <div style={{ margin: '6px 0 8px' }}>
+        <Text as="p" variant="headingLg">{value}</Text>
+      </div>
+      <ChangeBadge change={change} />
+    </div>
+  );
+}
+
+function RevenueSources({ total, upsell, currencySymbol, currencyCode }) {
+  const upsellRev  = Math.min(upsell, total);
+  const cartOnly   = Math.max(0, total - upsellRev);
+  const checkout   = total * 0.12;
+  const other      = total * 0.05;
+
+  const sources = [
+    { label: 'Cart Revenue',   value: cartOnly,   color: '#008060' },
+    { label: 'Upsell Revenue', value: upsellRev,  color: '#6366f1' },
+    { label: 'Direct Checkout',value: checkout,   color: '#f59e0b' },
+    { label: 'Other',          value: other,      color: '#9ca3af' },
+  ];
+  const grandTotal = sources.reduce((s, r) => s + r.value, 0) || 1;
+
+  return (
+    <BlockStack gap="300">
+      {sources.map((src) => {
+        const pct = Math.round((src.value / grandTotal) * 100);
+        return (
+          <div key={src.label}>
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: src.color, display: 'inline-block', flexShrink: 0 }} />
+                <Text as="span" variant="bodySm">{src.label}</Text>
+              </InlineStack>
+              <InlineStack gap="150" blockAlign="center">
+                <Text as="span" variant="bodySm" fontWeight="semibold">{formatAmount(src.value, currencySymbol, currencyCode)}</Text>
+                <span style={{ fontSize: '11px', color: '#6d7175', minWidth: 28, textAlign: 'right' }}>{pct}%</span>
+              </InlineStack>
+            </InlineStack>
+            <div style={{ marginTop: 4, height: 4, borderRadius: 2, background: '#f1f2f3' }}>
+              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: src.color, transition: 'width 0.4s ease' }} />
+            </div>
+          </div>
+        );
+      })}
+      <Divider />
+      <InlineStack align="space-between" blockAlign="center">
+        <Text as="span" variant="bodySm" fontWeight="semibold">Total Revenue</Text>
+        <Text as="span" variant="bodyMd" fontWeight="bold">{formatAmount(grandTotal, currencySymbol, currencyCode)}</Text>
+      </InlineStack>
+    </BlockStack>
+  );
+}
+
+function LoadingBar() {
+  return (
+    <Box padding="400">
+      <ProgressBar progress={55} size="small" />
+      <div style={{ marginTop: 6 }}><Text variant="bodySm" tone="subdued">Loading chart data…</Text></div>
+    </Box>
+  );
+}
+
+function NoDataNote() {
+  return (
+    <div style={{ textAlign: 'center', paddingBottom: 4 }}>
+      <Text as="span" variant="bodySm" tone="subdued">No activity recorded for this period yet.</Text>
+    </div>
+  );
+}
+
+const ANALYTICS_TABS = [
+  { id: 'overview',         content: 'Overview' },
+  { id: 'cart-performance', content: 'Cart Performance' },
+  { id: 'conversions',      content: 'Conversions' },
+  { id: 'fbt',              content: 'FBT' },
+  { id: 'coupon-banner',    content: 'Coupon Banner' },
 ];
 
-const PROGRESS_BAR_DATA = [
-  { name: 'Abandoned', value: 30 }, { name: 'Completed', value: 70 },
-];
+const Y_CURRENCY = (sym) => (v) => `${sym}${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`;
 
-const COLORS = ['#008060', '#005ea2', '#9c6ade', '#e29100'];
+/* ─── main page ─────────────────────────────────────────────── */
 
-export default function AppAnalytics() {
+export default function AnalyticsPage() {
   const { shop, initialAnalytics, initialAnalyticsError } = useLoaderData();
   const { symbol: currencySymbol, code: currencyCode } = useCurrency();
 
-  const navigate = useNavigate();
-  const [popoverActive, setPopoverActive] = useState(false);
-
-  // Dynamic date calculations
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  
-  const last7Days = new Date(today);
-  last7Days.setDate(last7Days.getDate() - 7);
-  
-  const last30Days = new Date(today);
-  last30Days.setDate(last30Days.getDate() - 30);
-  
-  const last90Days = new Date(today);
-  last90Days.setDate(last90Days.getDate() - 90);
-  
-  const last12Months = new Date(today);
-  last12Months.setFullYear(last12Months.getFullYear() - 1);
-
-  const [{ month, year }, setMonth] = useState({ month: today.getMonth(), year: today.getFullYear() });
-  const [selectedDates, setSelectedDates] = useState({
-    start: today,
-    end: today,
-  });
-
-  // Advanced Date Picker State
-  const [tempDates, setTempDates] = useState(selectedDates);
-  const [activePreset, setActivePreset] = useState('Today');
-  const [selectionMode, setSelectionMode] = useState(0); // 0 for Fixed, 1 for Rolling
+  const today     = new Date();
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
+  const last7     = new Date(today); last7.setDate(last7.getDate()-7);
+  const last30    = new Date(today); last30.setDate(last30.getDate()-30);
+  const last90    = new Date(today); last90.setDate(last90.getDate()-90);
 
   const presets = [
-    { label: 'Today', range: { start: today, end: today } },
-    { label: 'Yesterday', range: { start: yesterday, end: yesterday } },
-    { label: 'Last 7 days', range: { start: last7Days, end: today } },
-    { label: 'Last 30 days', range: { start: last30Days, end: today } },
-    { label: 'Last 90 days', range: { start: last90Days, end: today } },
-    { label: 'Last 12 months', range: { start: last12Months, end: today } },
+    { label: 'Today',        range: { start: today,     end: today } },
+    { label: 'Yesterday',    range: { start: yesterday, end: yesterday } },
+    { label: 'Last 7 days',  range: { start: last7,     end: today } },
+    { label: 'Last 30 days', range: { start: last30,    end: today } },
+    { label: 'Last 90 days', range: { start: last90,    end: today } },
   ];
 
-  const [isClient, setIsClient] = useState(false);
+  const [{ month, year }, setMonthYear] = useState({ month: today.getMonth(), year: today.getFullYear() });
+  const [selectedDates, setSelectedDates] = useState({ start: today, end: today });
+  const [tempDates,     setTempDates]     = useState({ start: today, end: today });
+  const [activePreset,  setActivePreset]  = useState('Today');
+  const [popoverActive, setPopoverActive] = useState(false);
+  const [selectedTab,   setSelectedTab]   = useState(0);
+  const [isClient,      setIsClient]      = useState(false);
 
   const [analytics, setAnalytics] = useState({
     ...normalizeAnalyticsState(initialAnalytics),
-    loading: false,
-    error: Boolean(initialAnalyticsError)
+    loading: false, error: Boolean(initialAnalyticsError),
   });
+  const [comparison,   setComparison]   = useState({ ...DEFAULT_ANALYTICS });
+  const [chartData,    setChartData]    = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  const aov     = analytics.checkout_click > 0 ? analytics.cartdrawer_total_revenue / analytics.checkout_click : 0;
+  const prevAov = comparison.checkout_click > 0 ? comparison.cartdrawer_total_revenue / comparison.checkout_click : 0;
+
+  const displayChart   = chartData.length ? chartData : skeletonPoints();
+  const aovChartData   = displayChart.map(d => ({ date: d.date, aov: d.checkoutClicks > 0 ? Math.round(d.revenue / d.checkoutClicks) : 0 }));
+  const hasRevenue     = chartData.some(d => d.revenue > 0);
+  const hasCoupons     = chartData.some(d => d.coupons > 0);
+  const hasUpsell      = chartData.some(d => d.upsell > 0);
 
   const fetchAnalytics = useCallback(async (start, end) => {
-    if (!shop) {
-      console.warn("[Analytics] No shop available, skipping fetch");
-      return;
-    }
-    
+    if (!shop) return;
     setAnalytics(prev => ({ ...prev, loading: true, error: false }));
     try {
-      let url = `/api/analytics?shop=${encodeURIComponent(shop)}`;
-      
-      if (start && end) {
-        // Format dates as YYYY-MM-DD for the backend8
-       function formatLocalDate(date) {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-const startStr = formatLocalDate(start);
-const endStr = formatLocalDate(end);
-        url += `&startDate=${startStr}&endDate=${endStr}`;
-        console.log(`[Analytics] Fetching data for date range: ${startStr} to ${endStr}`);
-      } else {
-        console.log(`[Analytics] Fetching all-time data`);
-      }
-
-      console.log(`[Analytics] Request URL: ${url}`);
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        console.error(`[Analytics] HTTP ${response.status} from API`);
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const payload = await response.json();
-      console.log(`[Analytics] Raw response:`, payload);
-
-      if (!payload?.success) {
-        throw new Error(payload?.error || "API returned success=false");
-      }
-
-      if (!payload?.data) {
-        throw new Error("API returned empty data");
-      }
-
-      const nextAnalytics = normalizeAnalyticsState(payload.data);
-      console.log(`[Analytics] Normalized data:`, nextAnalytics);
-
-      setAnalytics({
-        checkout_click: nextAnalytics.checkout_click,
-        coupon_click: nextAnalytics.coupon_click,
-        upsell_click: nextAnalytics.upsell_click,
-        upsell_revenue_generated: nextAnalytics.upsell_revenue_generated,
-        cartdrawer_total_revenue: nextAnalytics.cartdrawer_total_revenue,
-        cartdrawer_total_coupon_applied: nextAnalytics.cartdrawer_total_coupon_applied,
-        loading: false,
-        error: false
-      });
+      const res = await fetch(`/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${formatLocalDate(start)}&endDate=${formatLocalDate(end)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const p = await res.json();
+      if (!p?.success || !p?.data) throw new Error('Invalid response');
+      setAnalytics({ ...normalizeAnalyticsState(p.data), loading: false, error: false });
     } catch (err) {
-      console.error("[Analytics] Fetch error:", err.message, err);
-      setAnalytics(prev => ({ 
-        ...prev, 
-        loading: false, 
-        error: true 
-      }));
+      console.error('[Analytics]', err.message);
+      setAnalytics(prev => ({ ...prev, loading: false, error: true }));
     }
   }, [shop]);
 
+  const fetchComparison = useCallback(async (start, end) => {
+    if (!shop) return;
+    const days = Math.round((new Date(end) - new Date(start)) / 86400000) + 1;
+    const pe = new Date(start); pe.setDate(pe.getDate()-1);
+    const ps = new Date(pe);    ps.setDate(ps.getDate()-days+1);
+    try {
+      const res = await fetch(`/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${formatLocalDate(ps)}&endDate=${formatLocalDate(pe)}`);
+      if (!res.ok) return;
+      const p = await res.json();
+      if (p?.success && p?.data) setComparison(normalizeAnalyticsState(p.data));
+    } catch { /* silent */ }
+  }, [shop]);
+
+  const fetchChartData = useCallback(async (start, end) => {
+    if (!shop) return;
+    setChartLoading(true);
+    try {
+      const dates = buildDateRange(start, end);
+      const results = await Promise.all(dates.map(async (date) => {
+        const ds = formatLocalDate(date);
+        try {
+          const res = await fetch(`/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${ds}&endDate=${ds}`);
+          if (!res.ok) return null;
+          const payload = await res.json();
+          if (!payload?.success) return null;
+          const d = normalizeAnalyticsState(payload.data);
+          return { date: shortLabel(date), revenue: d.cartdrawer_total_revenue, upsell: d.upsell_revenue_generated, coupons: d.cartdrawer_total_coupon_applied, checkoutClicks: d.checkout_click, couponClicks: d.coupon_click, upsellClicks: d.upsell_click };
+        } catch {
+          return { date: shortLabel(date), revenue: 0, upsell: 0, coupons: 0, checkoutClicks: 0, couponClicks: 0, upsellClicks: 0 };
+        }
+      }));
+      setChartData(results.filter(Boolean));
+    } catch (err) {
+      console.error('[Analytics chart]', err.message);
+      setChartData([]);
+    } finally {
+      setChartLoading(false);
+    }
+  }, [shop]);
+
+  const runAll = useCallback((start, end) => {
+    fetchAnalytics(start, end);
+    fetchComparison(start, end);
+    fetchChartData(start, end);
+  }, [fetchAnalytics, fetchComparison, fetchChartData]);
+
   useEffect(() => {
     setIsClient(true);
-    // On mount, always fetch data for the selected date range (default: today)
-    // This ensures frontend displays date-specific data, not all-time data
-    if (selectedDates.start && selectedDates.end && shop) {
-      console.log("[Analytics] Component mounted, fetching today's data...");
-      fetchAnalytics(selectedDates.start, selectedDates.end);
-    }
-  }, []); // Run only on mount
-
-  // Separate effect to handle selecte dates changes from presets
-  useEffect(() => {
-    setTempDates(selectedDates);
-  }, [selectedDates]);
-  // Ensure initial state has valid dates
-  useEffect(() => {
-    if (!selectedDates.start || !selectedDates.end) {
-      console.log("[Analytics] Fixing invalid selected dates");
-      setSelectedDates({ start: today, end: today });
-    }
+    if (selectedDates.start && selectedDates.end && shop) runAll(selectedDates.start, selectedDates.end);
   }, []);
-  const [setupSteps, setSetupSteps] = useState([
-    { id: 1, title: 'Step 1: Create Coupon', icon: '🎫', content: 'Add coupons to your slide-out drawer to boost conversions.', completed: false, target: '/app/coupons' },
-    { id: 2, title: 'Step 2: Configure Product Widget', icon: '🛍️', content: 'Setup Frequently Bought Together and Upsell widgets.', completed: false, target: '/app/productwidget' },
-    { id: 3, title: 'Step 3: Configure Cart Drawer', icon: '🛒', content: 'Customize and enable your high-converting cart drawer.', completed: false, target: '/app/cartdrawer' },
-  ]);
 
-  const togglePopoverActive = useCallback(() => setPopoverActive((active) => !active), []);
-  const handleMonthChange = useCallback((month, year) => setMonth({ month, year }), []);
+  useEffect(() => { setTempDates(selectedDates); }, [selectedDates]);
+
+  const togglePopover = useCallback(() => setPopoverActive(a => !a), []);
 
   const handlePresetClick = (preset) => {
-    console.log("[Analytics] Preset clicked:", preset.label);
     setActivePreset(preset.label);
     setTempDates(preset.range);
-    setMonth({ month: preset.range.start.getMonth(), year: preset.range.start.getFullYear() });
+    setMonthYear({ month: preset.range.start.getMonth(), year: preset.range.start.getFullYear() });
   };
 
   const handleApply = () => {
-    // Ensure dates are valid Date objects
-    const startDate = tempDates.start instanceof Date ? tempDates.start : new Date(tempDates.start);
-    const endDate = tempDates.end instanceof Date ? tempDates.end : new Date(tempDates.end);
-    
-    const startStr = startDate.toISOString().split('T')[0];
-    const endStr = endDate.toISOString().split('T')[0];
-    console.log(`[Analytics] Apply clicked with dates: ${startStr} to ${endStr}`);
-    console.log(`[Analytics] Start object:`, startDate, `End object:`, endDate);
-    
-    setSelectedDates({ start: startDate, end: endDate });
+    const start = tempDates.start instanceof Date ? tempDates.start : new Date(tempDates.start);
+    const end   = tempDates.end   instanceof Date ? tempDates.end   : new Date(tempDates.end);
+    setSelectedDates({ start, end });
     setPopoverActive(false);
-    // Immediate fetch with new dates
-    fetchAnalytics(startDate, endDate);
+    runAll(start, end);
   };
 
-  const handleCancel = () => {
-    console.log("[Analytics] Cancel clicked");
-    setTempDates(selectedDates);
-    setPopoverActive(false);
-  };
+  const dateLabel = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })} – ${selectedDates.end.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}`;
 
-  const handleStepComplete = (id) => {
-    setSetupSteps(setupSteps.map(step => step.id === id ? { ...step, completed: !step.completed } : step));
-  };
+  const metrics = [
+    { label: 'Total Cart Revenue', value: formatAmount(analytics.cartdrawer_total_revenue, currencySymbol, currencyCode), change: pctChange(analytics.cartdrawer_total_revenue, comparison.cartdrawer_total_revenue) },
+    { label: 'Avg. Order Value',   value: formatAmount(aov, currencySymbol, currencyCode), change: pctChange(aov, prevAov) },
+    { label: 'Coupons Applied',    value: String(analytics.cartdrawer_total_coupon_applied), change: pctChange(analytics.cartdrawer_total_coupon_applied, comparison.cartdrawer_total_coupon_applied) },
+    { label: 'Checkout Clicks',    value: String(analytics.checkout_click),  change: pctChange(analytics.checkout_click,  comparison.checkout_click) },
+    { label: 'Upsell Clicks',      value: String(analytics.upsell_click),    change: pctChange(analytics.upsell_click,    comparison.upsell_click) },
+    { label: 'Coupon Clicks',      value: String(analytics.coupon_click),    change: pctChange(analytics.coupon_click,    comparison.coupon_click) },
+  ];
 
-  const completedSteps = setupSteps.filter(step => step.completed).length;
-  const progress = (completedSteps / setupSteps.length) * 100;
-
-  const dateValue = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} - ${selectedDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-
-  const renderFeatureSection = (title, color, kpis) => (
-    <BlockStack gap="400">
-      <Box paddingBlockStart="500">
-        <InlineStack align="space-between" blockAlign="center">
-          <Text variant="headingLg" fontWeight="bold">{title}</Text>
-          <Badge tone="success">Active</Badge>
-        </InlineStack>
-      </Box>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
-        {kpis.map((kpi, index) => (
-          <Card key={index} padding="400">
-            <BlockStack gap="100">
-              <Text variant="bodySm" tone="subdued" fontWeight="medium">{kpi.title}</Text>
-              <Text variant="headingXl" fontWeight="bold">{kpi.value}</Text>
-              <InlineStack gap="100" blockAlign="center">
-                <Text variant="bodySm" tone={kpi.trend.startsWith('+') ? 'success' : 'critical'}>
-                  {kpi.trend}
-                </Text>
-                <Text variant="bodySm" tone="subdued">vs previous period</Text>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        ))}
-      </div>
-      <Card padding="500">
-        <BlockStack gap="400">
-          <InlineStack align="space-between">
-            <Text variant="headingMd" fontWeight="bold">Performance Breakdown</Text>
-            <InlineStack gap="200">
-              <Badge tone="info">Revenue (Bar)</Badge>
-              <Badge tone="attention">CTR (Line)</Badge>
-            </InlineStack>
-          </InlineStack>
-          <div style={{ width: '100%', height: 350 }}>
-            {isClient && (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={FEATURE_DATA}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E1E3E5" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} />
-                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: `Revenue (${currencySymbol})`, angle: -90, position: 'insideLeft', fill: '#6D7175' }} />
-                  <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: 'CTR %', angle: 90, position: 'insideRight', fill: '#6D7175' }} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    cursor={{ fill: '#F6F6F7' }}
-                  />
-                  <Bar yAxisId="left" dataKey="revenue" barSize={40} fill={color} radius={[4, 4, 0, 0]} />
-                  <Bar yAxisId="left" dataKey="clicks" barSize={40} fill={color} radius={[4, 4, 0, 0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="ctr" stroke="#e29100" strokeWidth={3} dot={{ r: 4, fill: '#e29100' }} activeDot={{ r: 6 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </BlockStack>
-      </Card>
-      <Divider />
-    </BlockStack>
-  );
-
-  const renderShippingSection = () => (
-    <BlockStack gap="400">
-      <Box paddingBlockStart="500">
-        <InlineStack align="space-between" blockAlign="center">
-          <Text variant="headingLg" fontWeight="bold">Progress Bar Analytics</Text>
-          <Badge tone="info">Optimization</Badge>
-        </InlineStack>
-      </Box>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-        <Card padding="400">
-          <BlockStack gap="100">
-            <Text variant="bodySm" tone="subdued">Average Order Value Lift</Text>
-            <Text variant="headingXl" fontWeight="bold">{formatAmount(850.40, currencySymbol, currencyCode)}</Text>
-            <Text variant="bodySm" tone="success">+18.2% boost</Text>
-          </BlockStack>
-        </Card>
-        <Card padding="400">
-          <BlockStack gap="100">
-            <Text variant="bodySm" tone="subdued">Goal Completion Rate</Text>
-            <Text variant="headingXl" fontWeight="bold">72.4%</Text>
-            <Text variant="bodySm" tone="success">+4.5% improvement</Text>
-          </BlockStack>
-        </Card>
-      </div>
-      <Layout>
-        <Layout.Section>
-          <Card padding="500">
-            <BlockStack gap="400">
-              <Text variant="headingMd" fontWeight="bold">Conversion Impact by Threshold</Text>
-              <div style={{ width: '100%', height: 300 }}>
-                {isClient && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={FEATURE_DATA}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E1E3E5" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                      <YAxis axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{ fill: '#F6F6F7' }} />
-                      <Bar dataKey="revenue" fill="#e29100" radius={[4, 4, 0, 0]} barSize={30} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-        <Layout.Section variant="oneThird">
-          <Card padding="500">
-            <BlockStack gap="400">
-              <Text variant="headingMd" fontWeight="bold">Customer Progress</Text>
-              <div style={{ width: '100%', height: 200 }}>
-                {isClient && (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={PROGRESS_BAR_DATA}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        dataKey="value"
-                        paddingAngle={5}
-                      >
-                        {PROGRESS_BAR_DATA.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip />
-                      <Legend verticalAlign="bottom" height={36} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-              <Box paddingBlockStart="400">
-                <Text variant="bodySm" tone="subdued">
-                  70% of customers who see the progress bar reach the free shipping threshold.
-                </Text>
-              </Box>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-      </Layout>
-    </BlockStack>
-  );
-
-  const renderSetup = () => {
-    // Correct URL for app embed in customizer
-    const customizerUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
-
+  /* ── shared chart wrapper ── */
+  const renderChart = (height, content, hasData) => {
+    if (chartLoading) return <LoadingBar />;
     return (
-      <BlockStack gap="500">
-        <Card>
-          <BlockStack gap="400">
-            <Text variant="headingMd" fontWeight="bold">Step-by-Step Installation Guide</Text>
-            <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-              <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '8px', overflow: 'hidden' }}>
-                <iframe
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-                  src="https://www.youtube.com/embed/1yL1t0M1pOc"
-                  title="App Setup Tutorial"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-            </Box>
-            <BlockStack gap="200">
-              <Text variant="bodyMd">
-                To start using the app, you need to enable the <b>App Embed</b> in your Shopify Theme Customizer. This allows the cart drawer and upsell widgets to appear on your store.
-              </Text>
-              <InlineStack align="start">
-                <Button
-                  variant="primary"
-                  size="large"
-                  icon={ExternalIcon}
-                  onClick={() => window.open(customizerUrl, '_blank')}
-                >
-                  Start Setup & Enable App
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </BlockStack>
-        </Card>
-
-
-        <Grid>
-          {setupSteps.map((step) => (
-            <Grid.Cell key={step.id} columnSpan={{ xs: 6, sm: 6, md: 3, lg: 4, xl: 4 }}>
-              <div
-                style={{
-                  background: 'white',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                  border: '1px solid #f1f5f9',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                  cursor: 'default'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                }}
-              >
-                <div style={{
-                  fontSize: '32px',
-                  background: '#f8fafc',
-                  width: '64px',
-                  height: '64px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  {step.icon}
-                </div>
-
-                <BlockStack gap="200">
-                  <Text variant="headingMd" fontWeight="bold">{step.title}</Text>
-                  <Text variant="bodyMd" tone="subdued">{step.content}</Text>
-                </BlockStack>
-
-                <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
-                  <Button
-                    variant="primary"
-                    fullWidth
-                    size="large"
-                    onClick={() => {
-                      if (step.external) {
-                        window.open(step.target, '_blank');
-                      } else {
-                        navigate(step.target);
-                      }
-                    }}
-                  >
-                    Set Up Now
-                  </Button>
-                </div>
-              </div>
-            </Grid.Cell>
-          ))}
-        </Grid>
-      </BlockStack>
-    );
-  };
-
-  const renderGuide = () => {
-    const tutorials = [
-      { id: 1, title: 'Creating Coupons', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/Shopify_Blog_Header_6_550x.jpg', desc: 'Learn how to create and manage attractive discount slides.' },
-      { id: 2, title: 'Adding Product Widgets', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/how-to-sell-online-with-shopify-6_550x.jpg', desc: 'Setup Grid and Carousel upsell widgets on your cart page.' },
-      { id: 3, title: 'Enable Cart Drawer', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/shopify-store-examples-6_550x.jpg', desc: 'Quick guide to activating your high-converting cart drawer.' },
-      { id: 4, title: 'Drawer Customization', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/shopify-dropshipping_550x.jpg', desc: 'Deep dive into styling your cart drawer and upsells.' },
-    ];
-
-    return (
-      <BlockStack gap="600">
-        <Banner title="Video Learning Center" tone="info">
-          <p>Master the app in minutes with these short, focused video tutorials.</p>
-        </Banner>
-
-        <Grid>
-          {tutorials.map((video) => (
-            <Grid.Cell key={video.id} columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-              <Card padding="0">
-                <div style={{ display: 'flex' }}>
-                  <div style={{ width: '200px', height: '140px', position: 'relative', flexShrink: 0 }}>
-                    <img
-                      src={video.thumb}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      alt={video.title}
-                    />
-                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.6)', borderRadius: '50%', padding: '8px', cursor: 'pointer' }}>
-                      <Box color="icon-on-interactive">
-                        <PlayIcon style={{ width: '24px', height: '24px', fill: 'white' }} />
-                      </Box>
-                    </div>
-                  </div>
-                  <Box padding="400">
-                    <BlockStack gap="200">
-                      <Text variant="headingMd" fontWeight="bold">{video.title}</Text>
-                      <Text variant="bodyMd" tone="subdued">{video.desc}</Text>
-                      <InlineStack align="start">
-                        <Button plain icon={PlayIcon}>Watch Video</Button>
-                      </InlineStack>
-                    </BlockStack>
-                  </Box>
-                </div>
-              </Card>
-            </Grid.Cell>
-          ))}
-        </Grid>
-
-        <Divider />
-
-        <Card>
-          <BlockStack gap="400">
-            <Text variant="headingMd" fontWeight="bold">Optimization Strategies</Text>
-            <Grid>
-              <Grid.Cell columnSpan={{ md: 3, lg: 6 }}>
-                <Box padding="400" border="divider" borderRadius="200">
-                  <BlockStack gap="200">
-                    <Text variant="headingSm" fontWeight="bold">Coupon Slider & Progress Bar</Text>
-                    <Text variant="bodyMd" tone="subdued">Drive urgency by showing real-time discounts and shipping status. Use the progress bar to show exactly how much more a customer needs to spend.</Text>
-                  </BlockStack>
-                </Box>
-              </Grid.Cell>
-              <Grid.Cell columnSpan={{ md: 3, lg: 6 }}>
-                <Box padding="400" border="divider" borderRadius="200">
-                  <BlockStack gap="200">
-                    <Text variant="headingSm" fontWeight="bold">FBT & Upsells</Text>
-                    <Text variant="bodyMd" tone="subdued">Automatically suggest matching products using FBT (Frequently Bought Together) or manual Upsell products in Grid/Carousel layouts.</Text>
-                  </BlockStack>
-                </Box>
-              </Grid.Cell>
-            </Grid>
-          </BlockStack>
-        </Card>
+      <BlockStack gap="100">
+        <div style={{ height }}>
+          {isClient ? content : null}
+        </div>
+        {!hasData && <NoDataNote />}
       </BlockStack>
     );
   };
 
   return (
     <Page
-      title="Analytics Dashboard"
+      title="Analytics"
+      subtitle="Track your cart drawer performance and revenue impact"
+      secondaryActions={[{ content: 'Export Report', disabled: true }]}
       primaryAction={
         <Popover
           active={popoverActive}
-          activator={<Button icon={CalendarIcon} onClick={togglePopoverActive}>{dateValue}</Button>}
-          onClose={togglePopoverActive}
+          activator={<Button icon={CalendarIcon} onClick={togglePopover}>{dateLabel}</Button>}
+          onClose={togglePopover}
           fluidContent
         >
-          <div style={{ display: 'flex', width: '750px', maxHeight: '550px' }}>
-            {/* Sidebar Presets */}
-            <div style={{ width: '180px', borderRight: '1px solid #e1e3e5', padding: '8px' }}>
-              <div style={{ overflowY: 'auto', height: '100%', paddingRight: '4px' }}>
-                <BlockStack gap="050">
-                  {presets.map((preset) => (
-                    <div
-                      key={preset.label}
-                      onClick={() => handlePresetClick(preset)}
-                      style={{
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        borderRadius: '6px',
-                        background: activePreset === preset.label ? '#f1f1f1' : 'transparent',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <Text variant="bodyMd" fontWeight={activePreset === preset.label ? 'bold' : 'regular'}>{preset.label}</Text>
-                      {activePreset === preset.label && <Icon source={CheckCircleIcon} tone="success" />}
-                    </div>
-                  ))}
-                  <div style={{ margin: '8px 0', borderTop: '1px solid #f1f1f1' }} />
-                  {['Last week', 'Last month', 'Last quarter', 'Last year'].map(item => (
-                    <div key={item} style={{ padding: '8px 12px', cursor: 'pointer', borderRadius: '6px' }}>
-                      <Text variant="bodyMd" tone="subdued">{item}</Text>
-                    </div>
-                  ))}
-                </BlockStack>
-              </div>
+          <div style={{ display: 'flex', width: '720px', maxHeight: '520px' }}>
+            <div style={{ width: '170px', borderRight: '1px solid #e1e3e5', padding: '8px', overflowY: 'auto' }}>
+              <BlockStack gap="050">
+                {presets.map((preset) => (
+                  <div key={preset.label} onClick={() => handlePresetClick(preset)}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderRadius: '6px', background: activePreset === preset.label ? '#f1f1f1' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text variant="bodyMd" fontWeight={activePreset === preset.label ? 'bold' : 'regular'}>{preset.label}</Text>
+                    {activePreset === preset.label && <Icon source={CheckCircleIcon} tone="success" />}
+                  </div>
+                ))}
+              </BlockStack>
             </div>
-
-            {/* Main Content Area */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              {/* Header Toggles */}
-              <div style={{ padding: '16px', borderBottom: '1px solid #e1e3e5' }}>
-                <InlineStack align="start" gap="400">
-                  <div
-                    onClick={() => setSelectionMode(0)}
-                    style={{
-                      padding: '4px 12px',
-                      background: selectionMode === 0 ? '#ebebed' : 'transparent',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Text variant="bodyMd" fontWeight="semibold">Fixed</Text>
-                  </div>
-                  <div
-                    onClick={() => setSelectionMode(1)}
-                    style={{
-                      padding: '4px 12px',
-                      background: selectionMode === 1 ? '#ebebed' : 'transparent',
-                      borderRadius: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Text variant="bodyMd" fontWeight="semibold">Rolling</Text>
-                  </div>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e1e3e5' }}>
+                <InlineStack gap="400">
+                  {['Fixed', 'Rolling'].map((m, i) => (
+                    <div key={m} style={{ padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', background: i === 0 ? '#ebebed' : 'transparent' }}>
+                      <Text variant="bodyMd" fontWeight="semibold">{m}</Text>
+                    </div>
+                  ))}
                 </InlineStack>
               </div>
-
-              {/* Selection Detail & Inputs */}
-              <div style={{ padding: '16px' }}>
-                <InlineStack align="space-between" blockAlign="center" gap="400">
+              <div style={{ padding: '12px 16px' }}>
+                <InlineStack align="space-between" blockAlign="center" gap="200">
                   <div style={{ flex: 1 }}>
-                    <TextField
-                      labelHidden
-                      value={tempDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      autoComplete="off"
-                    />
+                    <TextField labelHidden label="" value={tempDates.start instanceof Date ? tempDates.start.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : ''} autoComplete="off" />
                   </div>
                   <Icon source={ArrowRightIcon} tone="base" />
                   <div style={{ flex: 1 }}>
-                    <TextField
-                      labelHidden
-                      value={tempDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      autoComplete="off"
-                    />
+                    <TextField labelHidden label="" value={tempDates.end instanceof Date ? tempDates.end.toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : ''} autoComplete="off" />
                   </div>
                   <Icon source={ClockIcon} tone="base" />
                 </InlineStack>
               </div>
-
-              {/* Dual Calendars Container */}
-              <div style={{ display: 'flex', gap: '24px', padding: '0 16px' }}>
+              <div style={{ display: 'flex', gap: '16px', padding: '0 16px' }}>
                 <div style={{ flex: 1 }}>
-                  <DatePicker
-                    month={month}
-                    year={year}
-                    onChange={setTempDates}
-                    onMonthChange={handleMonthChange}
-                    selected={tempDates}
-                    allowRange
-                  />
+                  <DatePicker month={month} year={year} onChange={setTempDates} onMonthChange={(m, y) => setMonthYear({ month: m, year: y })} selected={tempDates} allowRange />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <DatePicker
-                    month={month === 11 ? 0 : month + 1}
-                    year={month === 11 ? year + 1 : year}
-                    onChange={setTempDates}
-                    onMonthChange={() => { }}
-                    selected={tempDates}
-                    allowRange
-                  />
+                  <DatePicker month={month === 11 ? 0 : month+1} year={month === 11 ? year+1 : year} onChange={setTempDates} onMonthChange={() => {}} selected={tempDates} allowRange />
                 </div>
               </div>
-
-              {/* Footer Actions */}
-              <div style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid #e1e3e5', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <Button onClick={handleCancel}>Cancel</Button>
+              <div style={{ marginTop: 'auto', padding: '12px 16px', borderTop: '1px solid #e1e3e5', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <Button onClick={() => { setTempDates(selectedDates); setPopoverActive(false); }}>Cancel</Button>
                 <Button variant="primary" onClick={handleApply}>Apply</Button>
               </div>
             </div>
@@ -776,83 +406,224 @@ const endStr = formatLocalDate(end);
         </Popover>
       }
     >
-      <Box paddingBlockStart="400">
-        <BlockStack gap="600">
-          {analytics.error && (
-            <Banner tone="critical">
-              <p>Unable to fetch real-time analytics from the internal analytics API. Please check /api/analytics and upstream analytics service.</p>
-            </Banner>
-          )}
-          {analytics.loading && (
-            <Box padding="400">
-              <ProgressBar progress={50} />
-              <Text variant="bodySm" tone="subdued">Fetching real-time data...</Text>
-            </Box>
-          )}
-          <Banner tone="info">
-            <InlineStack align="space-between" blockAlign="center">
-              <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
-            </InlineStack>
-          </Banner>
+      <BlockStack gap="500">
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Checkout Clicks (Total)</Text>
-                <Text variant="headingXl" fontWeight="bold">{analytics.checkout_click}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Coupon Clicks</Text>
-                <Text variant="headingXl" fontWeight="bold">{analytics.coupon_click}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Upsell Clicks</Text>
-                <Text variant="headingXl" fontWeight="bold">{analytics.upsell_click}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Revenue Generated From Upsell</Text>
-                <Text variant="headingXl" fontWeight="bold">{formatAmount(toAmount(analytics.upsell_revenue_generated), currencySymbol, currencyCode)}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Total Revenue From Cart Drawer</Text>
-                <Text variant="headingXl" fontWeight="bold">{formatAmount(toAmount(analytics.cartdrawer_total_revenue), currencySymbol, currencyCode)}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
-            <Card padding="400">
-              <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued">Total Coupon Applied In Cart Drawer</Text>
-                <Text variant="headingXl" fontWeight="bold">{analytics.cartdrawer_total_coupon_applied}</Text>
-                <Text variant="bodySm" tone="success">Real-time status</Text>
-              </BlockStack>
-            </Card>
+        {analytics.error && (
+          <div style={{ padding: '12px 16px', background: '#fff4f4', border: '1px solid #fca5a5', borderRadius: '8px' }}>
+            <Text variant="bodySm" tone="critical">Unable to fetch analytics data. Check the analytics API connection.</Text>
           </div>
+        )}
 
-          {renderSetup()}
-          {/* {renderGuide()} */}
+        {/* ── 6 KPI metric cards ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          {metrics.slice(0, 3).map((m) => <MetricCard key={m.label} {...m} />)}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          {metrics.slice(3).map((m) => <MetricCard key={m.label} {...m} />)}
+        </div>
 
-        </BlockStack>
-      </Box >
-    </Page >
+        {/* ── Tabs ── */}
+        <Tabs tabs={ANALYTICS_TABS} selected={selectedTab} onSelect={setSelectedTab}>
+          <div style={{ paddingTop: '20px' }}>
+
+            {/* ══ OVERVIEW ══ */}
+            {selectedTab === 0 && (
+              <BlockStack gap="400">
+
+                {/* Row 1: Revenue Trend (left) + Revenue Sources (right) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '16px', alignItems: 'start' }}>
+
+                  {/* Revenue Trend line chart */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="050">
+                          <Text as="h3" variant="headingMd">Revenue Trend</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Total cart drawer revenue over time</Text>
+                        </BlockStack>
+                        <ChangeBadge change={pctChange(analytics.cartdrawer_total_revenue, comparison.cartdrawer_total_revenue)} />
+                      </InlineStack>
+                      {renderChart(260,
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={displayChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%"  stopColor="#008060" stopOpacity={0.18} />
+                                <stop offset="95%" stopColor="#008060" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                            <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} dy={6} />
+                            <YAxis fontSize={11} tickLine={false} axisLine={false} width={52} tickFormatter={Y_CURRENCY(currencySymbol)} />
+                            <Tooltip formatter={(v) => [formatAmount(v, currencySymbol, currencyCode), 'Revenue']} />
+                            <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#008060" strokeWidth={2.5} fill="url(#revGrad)" dot={false} activeDot={{ r: 5, fill: '#008060' }} />
+                          </AreaChart>
+                        </ResponsiveContainer>,
+                        hasRevenue
+                      )}
+                    </BlockStack>
+                  </Card>
+
+                  {/* Revenue Sources sidebar */}
+                  <Card>
+                    <BlockStack gap="400">
+                      <Text as="h3" variant="headingMd">Revenue Sources</Text>
+                      <RevenueSources
+                        total={analytics.cartdrawer_total_revenue}
+                        upsell={analytics.upsell_revenue_generated}
+                        currencySymbol={currencySymbol}
+                        currencyCode={currencyCode}
+                      />
+                    </BlockStack>
+                  </Card>
+                </div>
+
+                {/* Row 2: AOV full-width line chart */}
+                <Card>
+                  <BlockStack gap="300">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <BlockStack gap="050">
+                        <Text as="h3" variant="headingMd">Average Order Value (AOV)</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">How much customers spend per order on average</Text>
+                      </BlockStack>
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="span" variant="headingLg">{formatAmount(aov, currencySymbol, currencyCode)}</Text>
+                        <ChangeBadge change={pctChange(aov, prevAov)} />
+                      </InlineStack>
+                    </InlineStack>
+                    {renderChart(220,
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={aovChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="aovGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.18} />
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                          <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} dy={6} />
+                          <YAxis fontSize={11} tickLine={false} axisLine={false} width={52} tickFormatter={Y_CURRENCY(currencySymbol)} />
+                          <Tooltip formatter={(v) => [formatAmount(v, currencySymbol, currencyCode), 'AOV']} />
+                          <Area type="monotone" dataKey="aov" name="AOV" stroke="#6366f1" strokeWidth={2.5} fill="url(#aovGrad)" dot={false} activeDot={{ r: 5, fill: '#6366f1' }} />
+                        </AreaChart>
+                      </ResponsiveContainer>,
+                      aovChartData.some(d => d.aov > 0)
+                    )}
+                  </BlockStack>
+                </Card>
+              </BlockStack>
+            )}
+
+            {/* ══ CART PERFORMANCE ══ */}
+            {selectedTab === 1 && (
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="050">
+                    <Text as="h3" variant="headingMd">Cart Drawer Performance</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Revenue and upsell contribution by day</Text>
+                  </BlockStack>
+                  {renderChart(320,
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={displayChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                        <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={11} tickLine={false} axisLine={false} width={52} tickFormatter={Y_CURRENCY(currencySymbol)} />
+                        <Tooltip formatter={(v, name) => [formatAmount(v, currencySymbol, currencyCode), name]} />
+                        <Bar dataKey="revenue" name="Total Revenue"  fill="#008060" radius={[4,4,0,0]} maxBarSize={40} />
+                        <Bar dataKey="upsell"  name="Upsell Revenue" fill="#6366f1" radius={[4,4,0,0]} maxBarSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>,
+                    hasRevenue || hasUpsell
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ══ CONVERSIONS ══ */}
+            {selectedTab === 2 && (
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="050">
+                    <Text as="h3" variant="headingMd">Coupon Conversions</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Daily coupon applications and click activity</Text>
+                  </BlockStack>
+                  {renderChart(320,
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={displayChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                        <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={11} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="coupons"      name="Coupons Applied" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={36} />
+                        <Bar dataKey="couponClicks" name="Coupon Clicks"   fill="#fcd34d" radius={[4,4,0,0]} maxBarSize={36} />
+                      </BarChart>
+                    </ResponsiveContainer>,
+                    hasCoupons
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ══ FBT ══ */}
+            {selectedTab === 3 && (
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="050">
+                    <Text as="h3" variant="headingMd">Frequently Bought Together</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">FBT widget impressions and click activity</Text>
+                  </BlockStack>
+                  {renderChart(320,
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={displayChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                        <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={11} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                        <Tooltip />
+                        <Bar dataKey="upsellClicks" name="FBT Clicks" fill="#10b981" radius={[4,4,0,0]} maxBarSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>,
+                    chartData.some(d => d.upsellClicks > 0)
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ══ COUPON BANNER ══ */}
+            {selectedTab === 4 && (
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="050">
+                    <Text as="h3" variant="headingMd">Coupon Banner Performance</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Product page coupon banner clicks and applications</Text>
+                  </BlockStack>
+                  {renderChart(320,
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={displayChart} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="bannerGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#f59e0b" stopOpacity={0.18} />
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                        <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis fontSize={11} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="couponClicks" name="Banner Clicks" stroke="#f59e0b" strokeWidth={2.5} fill="url(#bannerGrad)" dot={false} activeDot={{ r: 5 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>,
+                    chartData.some(d => d.couponClicks > 0)
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+          </div>
+        </Tabs>
+      </BlockStack>
+    </Page>
   );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);
