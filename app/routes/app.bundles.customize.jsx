@@ -247,107 +247,201 @@ export const action = async ({ request }) => {
       templateId = Number(lastId[0]?.id ?? 0);
     }
 
-    // ── Build Shopify page HTML with embedded config ─────────────────────────
+    // ── Fetch products from selected collections ─────────────────────────────
+    const collectionIds = (data.selectedCollections || [])
+      .map(c => c.id)
+      .filter(Boolean);
+
+    let products = [];
+    if (collectionIds.length > 0) {
+      try {
+        const seen = new Set();
+        for (const colId of collectionIds) {
+          const res = await admin.graphql(`
+            query GetCollectionProducts($id: ID!, $first: Int!) {
+              collection(id: $id) {
+                products(first: $first) {
+                  edges {
+                    node {
+                      id title handle
+                      featuredImage { url altText }
+                      priceRangeV2 { minVariantPrice { amount currencyCode } }
+                      variants(first: 1) { edges { node { id } } }
+                    }
+                  }
+                }
+              }
+            }
+          `, { variables: { id: colId, first: Number(data.maxProducts) || 12 } });
+
+          const json = await res.json();
+          const edges = json.data?.collection?.products?.edges || [];
+          for (const { node: p } of edges) {
+            if (!seen.has(p.id)) {
+              seen.add(p.id);
+              products.push({
+                id: p.id,
+                title: p.title,
+                handle: p.handle,
+                image: p.featuredImage?.url || '',
+                imageAlt: p.featuredImage?.altText || p.title,
+                price: parseFloat(p.priceRangeV2?.minVariantPrice?.amount || 0).toFixed(2),
+                currency: p.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
+                variantId: p.variants?.edges?.[0]?.node?.id || '',
+              });
+            }
+            if (products.length >= (Number(data.maxProducts) || 12)) break;
+          }
+          if (products.length >= (Number(data.maxProducts) || 12)) break;
+        }
+      } catch (productErr) {
+        console.error('[combo-forge] product fetch failed:', productErr.message);
+      }
+    }
+
+    // ── Generate fully-static page HTML (renders without JavaScript) ─────────
+    const s = {
+      bg: data.bgColor || '#ffffff',
+      cardBg: data.cardBgColor || '#f9fafb',
+      text: data.textColor || '#111827',
+      border: data.borderColor || '#e5e7eb',
+      radius: `${data.borderRadius || 8}px`,
+      font: data.fontFamily || 'inherit',
+      ctaBg: data.ctaBgColor || '#008060',
+      ctaText: data.ctaTextColor || '#ffffff',
+      ctaRadius: `${data.ctaBorderRadius || 6}px`,
+      cols: Math.min(Math.max(Number(data.productsPerRow) || 3, 1), 6),
+      gap: `${data.spacing || 16}px`,
+      shadow: { none: 'none', soft: '0 1px 4px rgba(0,0,0,.08)', medium: '0 4px 12px rgba(0,0,0,.12)', strong: '0 8px 24px rgba(0,0,0,.18)' }[data.shadowLevel || 'soft'],
+    };
+
+    const bannerHtml = data.bannerEnabled && data.bannerDesktopImage ? `
+      <div style="width:100%;height:${data.bannerDesktopHeight || '320px'};background:url('${data.bannerDesktopImage}') center/cover no-repeat #f3f4f6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;margin-bottom:${s.gap};">
+        ${data.bannerDesktopHeading ? `<h2 style="color:#fff;font-size:28px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.4);margin:0 0 8px">${data.bannerDesktopHeading}</h2>` : ''}
+        ${data.bannerDesktopSubtitle ? `<p style="color:rgba(255,255,255,.85);font-size:16px;margin:0">${data.bannerDesktopSubtitle}</p>` : ''}
+      </div>` : '';
+
+
+    const progressHtml = data.progressBarEnabled ? `
+      <div style="margin-bottom:${s.gap};">
+        <div style="height:8px;border-radius:4px;background:${data.barColor || '#e1e3e5'};overflow:hidden;">
+          <div style="height:100%;width:0%;border-radius:4px;background:${data.filledColor || '#008060'};"></div>
+        </div>
+        <p style="font-size:12px;color:${s.text};opacity:.6;margin:4px 0 0;">Add more items to unlock rewards</p>
+      </div>` : '';
+
+
+    // Use div+flexbox — works in every Shopify theme without CSS grid support
+    const cardWidth = `calc(${Math.floor(100 / s.cols)}% - ${s.gap})`;
+
+    const pageBody = `<div id="combo-forge-bundle" style="background:${s.bg};font-family:${s.font};padding:32px 16px;box-sizing:border-box;">${
+      bannerHtml
+    }${data.discountBadge ? `<div style="display:inline-block;padding:3px 14px;border-radius:20px;background:#667eea;color:#fff;font-size:12px;font-weight:600;margin-bottom:12px;">${data.discountBadge}</div>` : ''
+    }${data.mainTitle ? `<h2 style="margin:0 0 8px;font-size:26px;font-weight:700;color:${s.text};">${data.mainTitle}</h2>` : ''
+    }${data.subtitle ? `<p style="margin:0 0 20px;font-size:15px;color:${s.text};opacity:.7;">${data.subtitle}</p>` : ''
+    }${progressHtml
+    }<div style="display:flex;flex-wrap:wrap;gap:${s.gap};max-width:${data.contentWidth || '1200px'};margin:0 auto;">${
+      products.length > 0
+        ? products.map(p => `<div style="flex:0 0 ${cardWidth};min-width:160px;background:${s.cardBg};border:1px solid ${s.border};border-radius:${s.radius};overflow:hidden;box-shadow:${s.shadow};"><a href="/products/${p.handle}" style="text-decoration:none;color:inherit;display:block;">${
+            p.image
+              ? `<img src="${p.image}" alt="${p.imageAlt}" loading="lazy" style="width:100%;height:200px;object-fit:cover;display:block;">`
+              : `<div style="width:100%;height:200px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:36px;color:#9ca3af;">◫</div>`
+          }<div style="padding:14px;"><p style="margin:0 0 4px;font-weight:600;font-size:14px;color:${s.text};line-height:1.3;">${p.title}</p><p style="margin:0 0 10px;font-size:13px;color:${s.text};opacity:.65;">$${p.price}</p><div style="background:${s.ctaBg};color:${s.ctaText};border-radius:${s.ctaRadius};padding:8px 12px;text-align:center;font-size:13px;font-weight:600;">${data.ctaLabel || 'Shop Now'}</div></div></a></div>`
+          ).join('')
+        : `<div style="width:100%;text-align:center;padding:48px;color:#9ca3af;font-size:15px;">No products found — select collections in the Combo Forge builder and re-save.</div>`
+    }</div>${
+      data.footerText ? `<p style="text-align:center;margin:24px 0 0;font-size:13px;color:${s.text};opacity:.5;">${data.footerText}</p>` : ''
+    }</div>${data.cssContent ? `<style>${data.cssContent}</style>` : ''}`;
+
     const pageTitle = data.pageTitle || name;
-    const pageHandle = slug;
-    const shopDomain = shop;
+    const pageHandle = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-{2,}/g, '-');
 
-    // Inline config so the storefront script can pick it up without an API call
-    const configJson = JSON.stringify({
-      templateId,
-      shop: shopDomain,
-      layout: templateType,
-      settings: {
-        title: data.mainTitle || '',
-        subtitle: data.subtitle || '',
-        ctaLabel: data.ctaLabel || 'Shop Now',
-        ctaBgColor: data.ctaBgColor || '#008060',
-        ctaTextColor: data.ctaTextColor || '#ffffff',
-        bgColor: data.bgColor || '#ffffff',
-        textColor: data.textColor || '#111827',
-        borderRadius: data.borderRadius || '8',
-        fontFamily: data.fontFamily || 'Inter',
-        productsPerRow: data.productsPerRow || 3,
-        maxProducts: data.maxProducts || 12,
-        collections: (data.selectedCollections || []).map(c => c.handle),
-        discountCode: data.linkedDiscount || '',
-        bannerEnabled: data.bannerEnabled || false,
-        bannerImage: data.bannerDesktopImage || '',
-        bannerHeading: data.bannerDesktopHeading || '',
-        progressBarEnabled: data.progressBarEnabled || false,
-        cssContent: data.cssContent || '',
-      },
-    }).replace(/<\/script>/gi, '<\\/script>');
+    // ── Create or Update Shopify page (2025-10 API) ───────────────────────────
+    // pageCreate: body (not bodyHtml), isPublished (not published)
+    // pageUpdate: same fields, uses existing page id — avoids creating duplicate pages on re-save
 
-    const pageBodyHtml = `
-<div id="combo-forge-bundle" data-template-id="${templateId}" data-shop="${shopDomain}"></div>
-<script>
-  window.ComboForgeConfig = ${configJson};
-</script>
-<style>
-  #combo-forge-bundle { min-height: 200px; }
-  .combo-forge-loading { display: flex; align-items: center; justify-content: center; padding: 48px; color: #6b7280; }
-</style>
-<noscript>
-  <p style="text-align:center;padding:40px;color:#6b7280;">
-    Please enable JavaScript to view this bundle.
-  </p>
-</noscript>`.trim();
+    const existingPageId = data.existingPageId || null;
 
-    // ── Create / update Shopify page ─────────────────────────────────────────
-    const esc = s => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, ' ');
+    const PAGE_CREATE = `#graphql
+      mutation pageCreate($page: PageCreateInput!) {
+        pageCreate(page: $page) {
+          page { id handle title }
+          userErrors { field message code }
+        }
+      }`;
+
+    const PAGE_UPDATE = `#graphql
+      mutation pageUpdate($id: ID!, $page: PageUpdateInput!) {
+        pageUpdate(id: $id, page: $page) {
+          page { id handle title }
+          userErrors { field message code }
+        }
+      }`;
 
     let page = null;
     let pageError = null;
+
     try {
-      const gqlRes = await admin.graphql(`#graphql
-        mutation pageCreate($page: PageCreateInput!) {
-          pageCreate(page: $page) {
-            page { id handle title }
-            userErrors { field message }
-          }
+      let rj;
+
+      if (existingPageId) {
+        // ── UPDATE existing page ───────────────────────────────────────────
+        const res = await admin.graphql(PAGE_UPDATE, {
+          variables: { id: existingPageId, page: { title: pageTitle, body: pageBody, isPublished: true } },
+        });
+        rj = await res.json();
+        if (rj.errors?.length) throw new Error(rj.errors.map(e => e.message).join('; '));
+        const ue = rj.data?.pageUpdate?.userErrors || [];
+        if (ue.length) throw new Error(ue.map(e => e.message).join('; '));
+        page = rj.data?.pageUpdate?.page;
+      } else {
+        // ── CREATE new page ────────────────────────────────────────────────
+        const tryCreate = async (handle) => {
+          const res = await admin.graphql(PAGE_CREATE, {
+            variables: { page: { title: pageTitle, handle, body: pageBody, isPublished: true } },
+          });
+          return res.json();
+        };
+
+        rj = await tryCreate(pageHandle);
+        if (rj.errors?.length) throw new Error(rj.errors.map(e => e.message).join('; '));
+
+        let ue = rj.data?.pageCreate?.userErrors || [];
+        if (ue.some(e => e.code === 'TAKEN' || e.message?.toLowerCase().includes('handle'))) {
+          // Handle taken — retry with random suffix
+          rj = await tryCreate(pageHandle + '-' + Math.random().toString(36).slice(2, 6));
+          ue = rj.data?.pageCreate?.userErrors || [];
         }
-      `, {
-        variables: {
-          page: {
-            title: pageTitle,
-            handle: pageHandle,
-            bodyHtml: pageBodyHtml,
-            published: true,
-          },
-        },
-      });
+        if (ue.length) throw new Error(ue.map(e => `[${e.code}] ${e.message}`).join('; '));
+        page = rj.data?.pageCreate?.page;
+      }
 
-      const rj = await gqlRes.json();
-      const userErrors = rj.data?.pageCreate?.userErrors || [];
-      if (userErrors.length > 0) throw new Error(userErrors.map(e => e.message).join('; '));
-      page = rj.data?.pageCreate?.page;
-
-      // Store page info back to template
+      // ── Save page info back to template row ────────────────────────────────
       if (page) {
-        const pageUrl = `https://${shop.replace('.myshopify.com', '')}.myshopify.com/pages/${page.handle}`;
+        const pageUrl = `https://${shop}/pages/${page.handle}`;
         await prisma.$executeRawUnsafe(
-          `UPDATE combo_templates SET page_id = ?, page_handle = ?, page_url = ?, status = 'active', updated_at = datetime('now') WHERE id = ?`,
+          `UPDATE combo_templates SET page_id=?, page_handle=?, page_url=?, status='active', updated_at=datetime('now') WHERE id=?`,
           page.id, page.handle, pageUrl, templateId
         );
         return Response.json({
           success: true,
-          message: `Template saved & page published!`,
+          message: existingPageId ? 'Template & page updated!' : 'Template saved & page published!',
           templateId,
-          page: { ...page, url: pageUrl },
+          page: { id: page.id, handle: page.handle, title: page.title, url: pageUrl },
         });
       }
-    } catch (pageErr) {
-      pageError = pageErr.message;
+    } catch (err) {
+      pageError = err.message;
     }
 
+    // Template was saved even if page creation failed — return partial success
     return Response.json({
       success: true,
       message: pageError
-        ? `Template saved! Page creation failed: ${pageError}`
-        : 'Template saved!',
+        ? `Template saved. Page creation failed: ${pageError}`
+        : 'Template saved.',
       templateId,
-      pageError,
+      pageError: pageError || null,
     });
 
   } catch (err) {
@@ -420,6 +514,7 @@ export default function AppBundlesCustomize() {
   const [pageHandle, setPageHandle] = useState(template?.slug || 'bundle-page');
   const [toastActive, setToastActive] = useState(false);
   const [pageUrl, setPageUrl] = useState(template?.page_url || null);
+  const [existingPageId, setExistingPageId] = useState(template?.page_id || null);
   const [toastMsg, setToastMsg] = useState('');
   const [collectionPickerOpen, setCollectionPickerOpen] = useState(false);
   const [products, setProducts] = useState([]);
@@ -445,13 +540,14 @@ export default function AppBundlesCustomize() {
     if (!fetcher.data) return;
     if (fetcher.data.success) {
       const msg = fetcher.data.message || 'Saved!';
-      const pageUrl = fetcher.data.page?.url;
-      showToast(pageUrl ? `${msg} → /pages/${fetcher.data.page?.handle}` : msg);
-      if (pageUrl) setPageUrl(pageUrl);
+      const newPage = fetcher.data.page;
+      showToast(newPage?.url ? `${msg} → /pages/${newPage.handle}` : msg);
+      if (newPage?.url) setPageUrl(newPage.url);
+      if (newPage?.id) setExistingPageId(newPage.id);
     } else {
       showToast('Error: ' + (fetcher.data.error || 'Save failed'));
     }
-  }, [fetcher.data, showToast]);
+  }, [fetcher.data, showToast, setExistingPageId]);
 
   const handleAiGenerate = useCallback(async (field) => {
     setAiLoading(field);
@@ -475,12 +571,12 @@ export default function AppBundlesCustomize() {
 
   const handleSave = useCallback(() => {
     fetcher.submit(
-      JSON.stringify({ ...settings, name: pageTitle, pageTitle, pageHandle }),
+      JSON.stringify({ ...settings, name: pageTitle, pageTitle, pageHandle, existingPageId }),
       { method: 'POST', encType: 'application/json' }
     );
     setSaveModalOpen(false);
     showToast('Saving template…');
-  }, [settings, pageTitle, pageHandle, fetcher, showToast]);
+  }, [settings, pageTitle, pageHandle, existingPageId, fetcher, showToast]);
 
   const addCollection = useCallback((col) => {
     setSettings(p => ({ ...p, selectedCollections: [...(p.selectedCollections || []), col] }));
@@ -1011,13 +1107,18 @@ export default function AppBundlesCustomize() {
                   href={pageUrl}
                   target="_blank"
                   rel="noreferrer"
+                  title="View live page"
                   style={{
-                    padding: '7px 14px', borderRadius: '6px', fontSize: '13px', fontWeight: '500',
-                    background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0',
-                    textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    width: '34px', height: '34px', borderRadius: '6px',
+                    background: '#f0fdf4', border: '1px solid #bbf7d0',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    textDecoration: 'none', flexShrink: 0,
                   }}
                 >
-                  ↗ View Live Page
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 4C5.5 4 2 10 2 10s3.5 6 8 6 8-6 8-6-3.5-6-8-6z" stroke="#059669" strokeWidth="1.5" fill="none"/>
+                    <circle cx="10" cy="10" r="2.5" stroke="#059669" strokeWidth="1.5" fill="none"/>
+                  </svg>
                 </a>
               )}
               <Button
