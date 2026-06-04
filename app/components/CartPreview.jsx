@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCartEditor } from '../context/CartEditorContext';
 import { Icon, Button } from '@shopify/polaris';
 import {
@@ -34,6 +34,28 @@ const SECTION_LABELS = {
   customCSS: 'Custom CSS',
 };
 
+const POSITIONED_SECTIONS = {
+  progressBar: 'position',
+  couponSlider: 'position',
+  upsellProducts: 'position',
+};
+
+function getPositionLabel(position) {
+  if (position === 'top') return 'Top';
+  if (position === 'bottom') return 'Bottom';
+  return '';
+}
+
+function getSectionLabel(section, body) {
+  const baseLabel = SECTION_LABELS[section] ?? section;
+  const positionKey = POSITIONED_SECTIONS[section];
+  if (!positionKey) return baseLabel;
+
+  const sectionState = body?.[section];
+  const positionLabel = getPositionLabel(sectionState?.[positionKey]);
+  return positionLabel ? `${baseLabel} - ${positionLabel}` : baseLabel;
+}
+
 const COUPON_ICON_MAP = {
   discount: DiscountCodeIcon,
   gift: GiftCardFilledIcon,
@@ -67,17 +89,17 @@ const MOCK_PREVIEW_COUPONS = [
 const CART_TOTAL = 489;
 const MOCK_CART_COUNT = 1;
 
-function HighlightZone({ sectionId, activeSection, children, className, style }) {
+function HighlightZone({ sectionId, activeSection, label, children, className, style }) {
   const ids = Array.isArray(sectionId) ? sectionId : [sectionId];
   const isActive = activeSection !== '' && ids.includes(activeSection);
-  const label = SECTION_LABELS[activeSection] ?? activeSection;
+  const highlightLabel = label ?? SECTION_LABELS[activeSection] ?? activeSection;
 
   return (
-    <div className={`preview-highlight-zone ${className ?? ''}`} style={style}>
+    <div className={`preview-highlight-zone ${isActive ? 'is-active' : ''} ${className ?? ''}`} style={style}>
       {children}
       {isActive && (
         <div className="preview-highlight-overlay">
-          <span className="preview-highlight-tag">{label}</span>
+          <span className="preview-highlight-tag">{highlightLabel}</span>
         </div>
       )}
     </div>
@@ -314,9 +336,11 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 
 export function CartPreview({ onSave, onDiscard, isDirty }) {
   const { previewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer } = useCartEditor();
+  const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
   const activeTip = activeSection ? SECTION_TIPS[activeSection] : null;
+  const activeSectionLabel = getSectionLabel(activeSection, body);
 
   const pb = body.progressBar;
   const cs = body.couponSlider;
@@ -326,8 +350,37 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
   const showCouponSlider = cs.enabled && (!isEmpty || cs.showWhenEmpty);
   const showUpsell = up.enabled && (!isEmpty || up.showWhenEmpty);
 
+  useEffect(() => {
+    if (!activeSection || !previewRootRef.current) return;
+
+    const activeZone = previewRootRef.current.querySelector('.preview-highlight-zone.is-active');
+    if (!activeZone) return;
+
+    const scrollActiveZoneIntoView = () => {
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      activeZone.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      });
+    };
+
+    const frameId = window.requestAnimationFrame(scrollActiveZoneIntoView);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [
+    activeSection,
+    previewDevice,
+    previewMode,
+    pb.position,
+    cs.position,
+    up.position,
+    showProgressBar,
+    showCouponSlider,
+    showUpsell,
+  ]);
+
   return (
-    <div className="cart-editor-right">
+    <div className="cart-editor-right" ref={previewRootRef}>
       {/* Preview Stage Header */}
       <div className="cart-preview-stage-header">
         <span className="cart-preview-stage-title">Live Preview</span>
@@ -381,12 +434,12 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
               <div className={`cart-preview-drawer ${isDesktop ? 'desktop' : 'mobile'}`} style={{ position: 'relative' }}>
                 {['design', 'general', 'customCSS'].includes(activeSection) && (
                   <div className="preview-highlight-overlay">
-                    <span className="preview-highlight-tag">{SECTION_LABELS[activeSection]}</span>
+                    <span className="preview-highlight-tag">{activeSectionLabel}</span>
                   </div>
                 )}
 
                 {/* Header */}
-                <HighlightZone sectionId="header" activeSection={activeSection} className="cart-preview-header-zone">
+                <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} className="cart-preview-header-zone">
                   <div
                     className="cart-preview-header"
                     style={{ backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none' }}
@@ -401,7 +454,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
                 <div className="cart-preview-body">
                   {/* Announcements */}
                   {body.announcements.enabled && (
-                    <HighlightZone sectionId="announcements" activeSection={activeSection}>
+                    <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel}>
                       <div
                         className="cart-preview-announcement"
                         style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px` }}
@@ -413,28 +466,28 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
-                    <HighlightZone sectionId="progressBar" activeSection={activeSection}>
+                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel}>
                       <ProgressBarPreview pb={pb} />
                     </HighlightZone>
                   )}
 
                   {/* Coupon Slider — TOP */}
                   {showCouponSlider && cs.position === 'top' && (
-                    <HighlightZone sectionId="couponSlider" activeSection={activeSection}>
+                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
                   )}
 
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
                     </HighlightZone>
                   )}
 
                   {/* Empty state OR Cart items */}
                   {isEmpty ? (
-                    <HighlightZone sectionId="emptyCart" activeSection={activeSection} className="cart-preview-empty-zone">
+                    <HighlightZone sectionId="emptyCart" activeSection={activeSection} label={activeSectionLabel} className="cart-preview-empty-zone">
                       <div className="cart-preview-empty">
                         <div className="cart-preview-empty-icon"><Icon source={CartIcon} /></div>
                         <h4>{body.emptyCart.message}</h4>
@@ -472,7 +525,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
                     </HighlightZone>
                   )}
@@ -498,14 +551,14 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
-                    <HighlightZone sectionId="progressBar" activeSection={activeSection}>
+                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel}>
                       <ProgressBarPreview pb={pb} />
                     </HighlightZone>
                   )}
 
                   {/* Coupon Slider — BOTTOM */}
                   {showCouponSlider && cs.position === 'bottom' && (
-                    <HighlightZone sectionId="couponSlider" activeSection={activeSection}>
+                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
                   )}
@@ -513,7 +566,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                 {/* Footer */}
                 {!isEmpty && (
-                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection}>
+                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel}>
                     <div className="cart-preview-footer">
                       <div className="cart-preview-totals">
                         <span className="cart-preview-subtotal-label">Subtotal</span>

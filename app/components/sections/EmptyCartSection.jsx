@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card, FormLayout, TextField, Checkbox, BlockStack, Text } from '@shopify/polaris';
+import { Card, FormLayout, TextField, BlockStack, Text } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
+import { FeatureToggle } from '../shared/FeatureToggle';
 
 export function EmptyCartSection() {
   const { body, updateEmptyCart } = useCartEditor();
@@ -19,15 +20,15 @@ export function EmptyCartSection() {
             onChange={(v) => updateEmptyCart({ message: v })}
             autoComplete="off"
           />
-          <Checkbox
+          <FeatureToggle
             label='Show "Continue shopping" button'
-            checked={emptyCart.showContinueShopping}
-            onChange={(v) => updateEmptyCart({ showContinueShopping: v })}
+            enabled={emptyCart.showContinueShopping}
+            onToggle={(v) => updateEmptyCart({ showContinueShopping: v })}
           />
-          <Checkbox
+          <FeatureToggle
             label="Show recommended products"
-            checked={emptyCart.showRecommendations}
-            onChange={(v) => updateEmptyCart({ showRecommendations: v })}
+            enabled={emptyCart.showRecommendations}
+            onToggle={(v) => updateEmptyCart({ showRecommendations: v })}
           />
         </FormLayout>
       </Card>

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useLoaderData, useFetcher, useRouteError } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
-  Card, BlockStack, InlineGrid, Text, Button, Badge, Modal, Spinner, Toast, Frame, Divider,
+  Card, BlockStack, InlineGrid, Text, Button, Badge, Modal, Toast, Frame,
 } from '@shopify/polaris';
 import { authenticate } from '../shopify.server';
 
@@ -186,9 +186,15 @@ function FeatureRow({ text, included }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: included ? '#d1fae5' : '#f3f4f6',
       }}>
-        <span style={{ fontSize: '10px', fontWeight: '700', color: included ? '#059669' : '#9ca3af' }}>
-          {included ? '✓' : '✕'}
-        </span>
+        {included ? (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+            <path d="M1 3.5l2.5 2.5 5.5-5" stroke="#059669" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        ) : (
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+            <path d="M1 1l6 6M7 1L1 7" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        )}
       </div>
       <Text variant="bodySm" as="span" tone={included ? 'base' : 'subdued'}>{text}</Text>
     </div>

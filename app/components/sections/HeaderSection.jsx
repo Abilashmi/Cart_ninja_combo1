@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card, FormLayout, TextField, Select, Checkbox, BlockStack, Text, InlineStack } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
+import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 
 export function HeaderSection() {
@@ -38,10 +39,10 @@ export function HeaderSection() {
               onChange={(v) => updateHeader({ textColor: v })}
             />
           </InlineStack>
-          <Checkbox
+          <FeatureToggle
             label="Show bottom border"
-            checked={header.borderBottom}
-            onChange={(v) => updateHeader({ borderBottom: v })}
+            enabled={header.borderBottom}
+            onToggle={(v) => updateHeader({ borderBottom: v })}
           />
         </FormLayout>
       </Card>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, FormLayout, TextField, Select, RangeSlider, Checkbox, BlockStack, Text, InlineStack, Button, Divider, Badge } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Select, RangeSlider, BlockStack, Text, InlineStack, Button, Divider, Badge } from '@shopify/polaris';
 import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, DiscountFilledIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -64,10 +64,10 @@ export function ProgressBarSection() {
           <Card>
             <FormLayout>
               <Text as="h3" variant="headingMd">Display Settings</Text>
-              <Checkbox
+              <FeatureToggle
                 label="Show when cart is empty"
-                checked={progressBar.showWhenEmpty}
-                onChange={(v) => updateProgressBar({ showWhenEmpty: v })}
+                enabled={progressBar.showWhenEmpty}
+                onToggle={(v) => updateProgressBar({ showWhenEmpty: v })}
               />
               <Select
                 label="Progress Mode"
@@ -276,10 +276,10 @@ export function ProgressBarSection() {
                 onChange={(v) => updateProgressBar({ completionMessage: v })}
                 autoComplete="off"
               />
-              <Checkbox
+              <FeatureToggle
                 label="Enable confetti popup on completion"
-                checked={progressBar.confetti}
-                onChange={(v) => updateProgressBar({ confetti: v })}
+                enabled={progressBar.confetti}
+                onToggle={(v) => updateProgressBar({ confetti: v })}
               />
             </FormLayout>
           </Card>

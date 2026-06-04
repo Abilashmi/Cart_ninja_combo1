@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card, FormLayout, Checkbox, Select, BlockStack, Text } from '@shopify/polaris';
+import { Card, FormLayout, Select, BlockStack, Text } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
+import { FeatureToggle } from '../shared/FeatureToggle';
 
 export function GeneralSection() {
   const { settings, updateGeneral } = useCartEditor();
@@ -11,20 +12,20 @@ export function GeneralSection() {
       <Text as="p" variant="bodyMd" tone="subdued">Configure how the cart drawer behaves on your store.</Text>
       <Card>
         <FormLayout>
-          <Checkbox
+          <FeatureToggle
             label="Open Cart Drawer when an item is added to the cart"
-            checked={general.openOnAdd}
-            onChange={(v) => updateGeneral({ openOnAdd: v })}
+            enabled={general.openOnAdd}
+            onToggle={(v) => updateGeneral({ openOnAdd: v })}
           />
-          <Checkbox
+          <FeatureToggle
             label="Open Cart Drawer when the cart icon is clicked"
-            checked={general.openOnIconClick}
-            onChange={(v) => updateGeneral({ openOnIconClick: v })}
+            enabled={general.openOnIconClick}
+            onToggle={(v) => updateGeneral({ openOnIconClick: v })}
           />
-          <Checkbox
+          <FeatureToggle
             label='Show "Continue shopping" button'
-            checked={general.showContinueShopping}
-            onChange={(v) => updateGeneral({ showContinueShopping: v })}
+            enabled={general.showContinueShopping}
+            onToggle={(v) => updateGeneral({ showContinueShopping: v })}
           />
           <Select
             label="Cart Drawer Position"

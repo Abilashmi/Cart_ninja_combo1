@@ -2,13 +2,12 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLoaderData, useActionData, useNavigation, useSubmit, useRouteError } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
-  Page, Card, Layout, BlockStack, InlineStack, Text, Button, Badge,
+  Page, Card, Layout, BlockStack, InlineStack, Text, Button, Badge, Icon,
   TextField, Select, Checkbox, Divider, Toast, Frame, Box,
-  Banner, List, Popover, DatePicker, ButtonGroup, Modal, Scrollable,
+  Banner, List, Popover, DatePicker, ButtonGroup,
 } from '@shopify/polaris';
 import {
-  DiscountIcon, DeliveryIcon, GiftCardIcon, RefreshIcon,
-  ProductIcon, CollectionIcon, CalendarIcon,
+  DiscountIcon, DeliveryIcon, GiftCardIcon, RefreshIcon, CalendarIcon,
 } from '@shopify/polaris-icons';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
@@ -169,10 +168,10 @@ export const action = async ({ request }) => {
         customerSelection: { all: true },
         appliesOncePerCustomer: limitOnePerCustomer,
         ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
-        customerBuys: { items: { all: true }, value: { quantity: { quantity: buysQty } } },
+        customerBuys: { items: { all: true }, value: { quantity: { quantity: String(buysQty) } } },
         customerGets: {
           items: { all: true },
-          value: { discountOnQuantity: { quantity: { quantity: getsQty }, effect: { percentage: getsValueType === 'free' ? 1.0 : getsValue / 100 } } },
+          value: { discountOnQuantity: { quantity: { quantity: String(getsQty) }, effect: { percentage: getsValueType === 'free' ? 1.0 : getsValue / 100 } } },
         },
         combinesWith,
       };
@@ -386,7 +385,7 @@ export default function AppBundlesDiscountEngine() {
                             background: active ? 'linear-gradient(135deg,#667eea,#764ba2)' : '#f3f4f6',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>
-                            <opt.icon style={{ color: active ? '#fff' : '#6b7280', width: 18, height: 18 }} />
+                            <Icon source={opt.icon} tone={active ? 'base' : 'subdued'} />
                           </div>
                           <div>
                             <div style={{ fontSize: '14px', fontWeight: 600, color: active ? '#667eea' : '#111827', marginBottom: '2px' }}>{opt.label}</div>

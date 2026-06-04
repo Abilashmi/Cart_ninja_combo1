@@ -1,6 +1,7 @@
 import React from 'react';
-import { Card, FormLayout, Select, RangeSlider, Checkbox, BlockStack, Text } from '@shopify/polaris';
+import { Card, FormLayout, Select, RangeSlider, BlockStack, Text } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
+import { FeatureToggle } from '../shared/FeatureToggle';
 
 export function DesignSection() {
   const { settings, updateDesign } = useCartEditor();
@@ -29,10 +30,10 @@ export function DesignSection() {
             output
             onChange={(v) => updateDesign({ borderRadius: v })}
           />
-          <Checkbox
+          <FeatureToggle
             label="Drop Shadow"
-            checked={design.shadow}
-            onChange={(v) => updateDesign({ shadow: v })}
+            enabled={design.shadow}
+            onToggle={(v) => updateDesign({ shadow: v })}
           />
           <Select
             label="Open Animation"

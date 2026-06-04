@@ -1,5 +1,13 @@
 import { Outlet, useLocation, useNavigate, useRouteError } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
+import { Icon } from '@shopify/polaris';
+import {
+  HomeIcon,
+  PageIcon,
+  PaintBrushFlatIcon,
+  DiscountIcon,
+  ChartVerticalIcon,
+} from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 
 export const loader = async ({ request }) => {
@@ -8,13 +16,21 @@ export const loader = async ({ request }) => {
 };
 
 const NAV_TABS = [
-  { id: 'dashboard', label: 'Dashboard', href: '/app/bundles', icon: '⊞' },
-  { id: 'templates', label: 'Templates', href: '/app/bundles/templates', icon: '◫' },
-  { id: 'customize', label: 'Customize', href: '/app/bundles/customize', icon: '✦' },
-  { id: 'discountengine', label: 'Discount Engine', href: '/app/bundles/discountengine', icon: '⬡' },
-  { id: 'analytics', label: 'Analytics', href: '/app/bundles/analytics', icon: '↗' },
-  { id: 'plan', label: 'Plans', href: '/app/bundles/plan', icon: '◈' },
+  { id: 'dashboard',     label: 'Dashboard',       href: '/app/bundles',                  icon: HomeIcon          },
+  { id: 'templates',     label: 'Templates',        href: '/app/bundles/templates',         icon: PageIcon          },
+  { id: 'customize',     label: 'Customize',        href: '/app/bundles/customize',         icon: PaintBrushFlatIcon},
+  { id: 'discountengine',label: 'Discount Engine',  href: '/app/bundles/discountengine',    icon: DiscountIcon      },
+  { id: 'analytics',     label: 'Analytics',        href: '/app/bundles/analytics',         icon: ChartVerticalIcon },
 ];
+
+// Inline bolt SVG — Polaris doesn't ship a lightning icon
+function BoltIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  );
+}
 
 export default function AppBundlesLayout() {
   const location = useLocation();
@@ -28,6 +44,7 @@ export default function AppBundlesLayout() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f4f5f7' }}>
+
       {/* Branded header */}
       <div style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -42,10 +59,10 @@ export default function AppBundlesLayout() {
             width: '40px', height: '40px', borderRadius: '12px',
             background: 'rgba(255,255,255,0.22)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '22px', backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(4px)',
             border: '1px solid rgba(255,255,255,0.3)',
           }}>
-            ⚡
+            <BoltIcon />
           </div>
           <div>
             <div style={{
@@ -59,6 +76,7 @@ export default function AppBundlesLayout() {
             </div>
           </div>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
             padding: '4px 14px', borderRadius: '20px',
@@ -70,11 +88,17 @@ export default function AppBundlesLayout() {
           </div>
           <div style={{
             padding: '4px 14px', borderRadius: '20px',
-            background: 'rgba(52, 211, 153, 0.25)',
+            background: 'rgba(52,211,153,0.25)',
             color: '#6ee7b7', fontSize: '12px', fontWeight: '600',
             border: '1px solid rgba(52,211,153,0.3)',
+            display: 'flex', alignItems: 'center', gap: '5px',
           }}>
-            ● Live
+            {/* CSS green dot instead of emoji */}
+            <span style={{
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: '#6ee7b7', display: 'inline-block',
+            }} />
+            Live
           </div>
         </div>
       </div>
@@ -109,10 +133,16 @@ export default function AppBundlesLayout() {
                 outline: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '7px',
               }}
             >
-              <span style={{ fontSize: '15px' }}>{tab.icon}</span>
+              <span style={{
+                display: 'flex',
+                color: active ? '#667eea' : '#9ca3af',
+                transition: 'color 0.15s',
+              }}>
+                <Icon source={tab.icon} tone={active ? 'base' : 'subdued'} />
+              </span>
               {tab.label}
             </button>
           );

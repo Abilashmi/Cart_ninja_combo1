@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Card, FormLayout, TextField, Select, Checkbox, BlockStack, Text,
+  Card, FormLayout, TextField, Select, BlockStack, Text,
   InlineStack, Button, Tabs, ChoiceList, Divider, Icon,
 } from '@shopify/polaris';
 import { ChevronDownIcon } from '@shopify/polaris-icons';
@@ -111,10 +111,10 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
         </InlineStack>
         <Divider />
         <Text as="h4" variant="headingSm">Countdown Timer</Text>
-        <Checkbox
+        <FeatureToggle
           label="Enable timer for this coupon"
-          checked={item.timerEnabled ?? false}
-          onChange={(v) => onUpdate({ timerEnabled: v })}
+          enabled={item.timerEnabled ?? false}
+          onToggle={(v) => onUpdate({ timerEnabled: v })}
         />
         {item.timerEnabled && (
           <>
@@ -168,10 +168,10 @@ function CouponStylesTab() {
       <Card>
         <FormLayout>
           <Text as="h3" variant="headingMd">Display Settings</Text>
-          <Checkbox
+          <FeatureToggle
             label="Show when cart is empty"
-            checked={couponSlider.showWhenEmpty}
-            onChange={(v) => updateCouponSlider({ showWhenEmpty: v })}
+            enabled={couponSlider.showWhenEmpty}
+            onToggle={(v) => updateCouponSlider({ showWhenEmpty: v })}
           />
           <Select
             label="Position in Cart"

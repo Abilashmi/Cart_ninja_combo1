@@ -6,8 +6,9 @@ import {
   RangeSlider, Icon, Modal, TextField, Toast, Frame, Popover, ActionList,
 } from '@shopify/polaris';
 import {
-  MagicIcon, ProductIcon, ImageIcon, TextIcon, ViewIcon,
+  MagicIcon, ProductIcon, ImageIcon, TextIcon, ViewIcon, RefreshIcon,
   CodeIcon, MobileIcon, DesktopIcon, TabletIcon, PlusIcon, DeleteIcon,
+  ListBulletedIcon, PageIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 
@@ -25,28 +26,22 @@ const FONTS = [
 
 const LAYOUTS = [
   {
-    id: 'guided',
-    label: 'Guided Architect',
-    description: 'Step-by-step multi-stage bundle flow with progress indicators',
-    icon: '◎',
+    id: 'fmcg',
+    label: 'FMCG Quick Commerce',
+    description: 'Instamart-style: category sidebar + product grid with quantity controls',
+    icon: ListBulletedIcon,
   },
   {
-    id: 'velocity',
-    label: 'Velocity Stream',
-    description: 'High-speed carousel optimised for fast-moving product lines',
-    icon: '⚡',
+    id: 'tabs',
+    label: 'Tab Collections',
+    description: 'Scrollable tab bar — each tab shows a different collection',
+    icon: RefreshIcon,
   },
   {
-    id: 'editorial',
-    label: 'Editorial Split',
-    description: 'Magazine-style hero + supporting products layout',
-    icon: '◫',
-  },
-  {
-    id: 'custom',
-    label: 'Custom Bundle',
-    description: 'Blank canvas with full CSS and HTML control',
-    icon: '✦',
+    id: 'single',
+    label: 'Single Collection',
+    description: 'Clean product grid from one collection with sticky checkout bar',
+    icon: PageIcon,
   },
 ];
 
@@ -63,7 +58,7 @@ const SIDEBAR_TABS = [
 
 const DEFAULT_SETTINGS = {
   // Layout
-  selectedLayout: 'guided',
+  selectedLayout: 'fmcg',
   selectedCollections: [],
   selectedProducts: [],
   // Display
@@ -210,6 +205,506 @@ async function ensureComboTemplatesTable(prisma) {
   }
 }
 
+// ─── HTML Generators (run server-side, produce standalone Shopify page HTML) ──
+
+// Local-state cart: never touches Shopify cart API during shopping.
+// Only batch-adds to Shopify cart on checkout click then immediately navigates,
+// so the Cart Ninja drawer has no time to open.
+function buildCartJs() {
+  return `
+<script>
+(function(){
+  // _local = { variantId: { qty, price } }  — all state is client-side only
+  var _local = {};
+
+  function _calcTotals() {
+    var count = 0, total = 0;
+    Object.keys(_local).forEach(function(vid) {
+      var item = _local[vid];
+      count += item.qty;
+      total += item.qty * item.price;
+    });
+    return { count: count, total: total.toFixed(2) };
+  }
+
+  function _updateDisplay() {
+    var t = _calcTotals();
+    // Use data-combo-count / data-combo-total — NOT data-combo-count which Cart Ninja's
+    // MutationObserver watches and uses to trigger the cart drawer.
+    document.querySelectorAll('[data-combo-count]').forEach(function(el) {
+      el.textContent = t.count;
+    });
+    document.querySelectorAll('[data-combo-total]').forEach(function(el) {
+      el.textContent = t.count > 0 ? '$ ' + t.total : '';
+    });
+    var bar = document.getElementById('combo-checkout-bar');
+    if (bar) bar.style.display = t.count > 0 ? 'flex' : 'none';
+  }
+
+  // add(variantId, price, qty, cb)
+  function _add(variantId, price, qty, cb) {
+    var vid = String(variantId);
+    if (!_local[vid]) _local[vid] = { qty: 0, price: parseFloat(price) || 0 };
+    _local[vid].qty += (qty || 1);
+    _updateDisplay();
+    if (cb) cb(_local[vid].qty);
+  }
+
+  // update(variantId, newQty, cb)
+  function _update(variantId, newQty, cb) {
+    var vid = String(variantId);
+    if (newQty <= 0) {
+      delete _local[vid];
+    } else {
+      if (!_local[vid]) _local[vid] = { qty: 0, price: 0 };
+      _local[vid].qty = newQty;
+    }
+    _updateDisplay();
+    if (cb) cb(newQty);
+  }
+
+  // On checkout: use an iframe's NATIVE fetch to add items to the Shopify cart.
+  // Cart Ninja patches window.fetch, XMLHttpRequest, AND document 'submit' events
+  // on the main window — but it does NOT patch fetch inside a dynamically created
+  // iframe, because that iframe runs in a separate window context.
+  // After the batch add succeeds we navigate to /checkout. The page leaves before
+  // Cart Ninja's scheduleOpenDrawer timeout (350-500 ms) ever fires.
+  function _checkout() {
+    var vids = Object.keys(_local).filter(function(vid) { return _local[vid].qty > 0; });
+    if (vids.length === 0) return;
+
+    var btn = document.getElementById('combo-cta-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Going to checkout...'; }
+
+    var items = vids.map(function(vid) {
+      return { id: parseInt(vid, 10), quantity: _local[vid].qty };
+    });
+
+    // Create a hidden same-origin iframe whose window.fetch is the real browser fetch,
+    // not Cart Ninja's patched version.
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    var nativeFetch = iframe.contentWindow.fetch.bind(iframe.contentWindow);
+    document.body.removeChild(iframe);
+
+    // Step 1: Clear the existing Shopify cart so only bundle items go to checkout.
+    // Step 2: Add only the selected bundle items.
+    // Step 3: Navigate to /checkout.
+    nativeFetch('/cart/clear.js', { method: 'POST' })
+      .then(function() {
+        return nativeFetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: items }),
+        });
+      })
+      .then(function() {
+        window.location.href = '/checkout';
+      })
+      .catch(function() {
+        window.location.href = '/checkout';
+      });
+  }
+
+  window.ComboCart = { add: _add, update: _update, checkout: _checkout, state: _local };
+})();
+</script>`;
+}
+
+function generateFMCGHtml(collectionGroups, settings) {
+  const color = settings.ctaBgColor || '#2d8c4e';
+  const font = settings.fontFamily || '-apple-system,sans-serif';
+  const maxP = Number(settings.maxProducts) || 20;
+
+  const groupsJson = JSON.stringify(collectionGroups.map(g => ({
+    title: g.title,
+    products: g.products.slice(0, maxP).map(p => ({
+      title: p.title, handle: p.handle, image: p.image,
+      price: p.price, variantId: p.variantId, available: p.available,
+    })),
+  }))).replace(/<\/script>/gi, '<\\/script>');
+
+  return `
+<style>
+  #combo-fmcg{max-width:1200px;margin:0 auto;font-family:${font};padding-bottom:70px;}
+  .cfmcg-header{background:${color};color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-radius:12px;margin-bottom:12px;}
+  .cfmcg-layout{display:flex;gap:12px;}
+  .cfmcg-sidebar{width:96px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;}
+  .cfmcg-cat{padding:8px 6px;border:2px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;text-align:center;color:#374151;transition:all .15s;}
+  .cfmcg-cat.active{border-color:${color};background:${color}12;color:${color};font-weight:700;}
+  .cfmcg-grid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;}
+  .cfmcg-card{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;display:flex;flex-direction:column;}
+  .cfmcg-img{width:100%;height:140px;object-fit:cover;display:block;background:#f3f4f6;}
+  .cfmcg-img-ph{width:100%;height:140px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;}
+  .cfmcg-body{padding:10px;display:flex;flex-direction:column;flex:1;}
+  .cfmcg-name{font-size:13px;font-weight:600;margin:0 0 4px;line-height:1.3;color:#111827;}
+  .cfmcg-price{font-size:14px;font-weight:700;color:${color};margin:0 0 8px;}
+  .cfmcg-add{width:100%;padding:7px;background:${color};color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;}
+  .cfmcg-add:disabled{background:#9ca3af;cursor:not-allowed;}
+  .cfmcg-qty{display:flex;align-items:center;gap:8px;justify-content:center;}
+  .cfmcg-qbtn{width:30px;height:30px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;line-height:1;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .cfmcg-qnum{font-size:15px;font-weight:700;min-width:20px;text-align:center;color:#111827;}
+  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:10px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,.15);}
+  .cfmcg-cta{background:#fff;color:${color};padding:9px 22px;border-radius:6px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
+  @media(max-width:600px){.cfmcg-sidebar{display:flex;flex-direction:row;overflow-x:auto;width:100%}.cfmcg-layout{flex-direction:column}.cfmcg-cat{white-space:nowrap;flex-shrink:0}}
+</style>
+
+<div id="combo-fmcg">
+  <div class="cfmcg-header">
+    <div>
+      <div style="font-size:18px;font-weight:700">${settings.mainTitle || 'Quick Commerce'}</div>
+      <div style="font-size:12px;opacity:.8">${settings.subtitle || 'Add items and checkout'}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px" data-combo-count>0</div>
+      <div style="font-size:11px;opacity:.75" data-combo-total></div>
+    </div>
+  </div>
+
+  <div class="cfmcg-layout">
+    <div class="cfmcg-sidebar" id="cfmcg-sidebar"></div>
+    <div class="cfmcg-grid" id="cfmcg-grid"></div>
+  </div>
+</div>
+
+<div id="combo-checkout-bar">
+  <div>
+    <div style="font-weight:700;font-size:14px"><span data-combo-count>0</span> items</div>
+    <div style="font-size:12px;opacity:.85" data-combo-total></div>
+  </div>
+  <button id="combo-cta-btn" class="cfmcg-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
+</div>
+
+<script>
+var CFMCG_DATA = ${groupsJson};
+var cfmcgQty = {};
+
+// Price lookup so local cart can calculate totals without API calls
+var CFMCG_PRICES = {};
+CFMCG_DATA.forEach(function(col) {
+  col.products.forEach(function(p) { CFMCG_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
+});
+
+function cfmcgRenderSidebar() {
+  var sb = document.getElementById('cfmcg-sidebar');
+  CFMCG_DATA.forEach(function(col, i) {
+    var btn = document.createElement('button');
+    btn.className = 'cfmcg-cat' + (i === 0 ? ' active' : '');
+    btn.textContent = col.title;
+    btn.onclick = function() {
+      document.querySelectorAll('.cfmcg-cat').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      cfmcgRenderProducts(col.products);
+    };
+    sb.appendChild(btn);
+  });
+  if (CFMCG_DATA.length > 0) cfmcgRenderProducts(CFMCG_DATA[0].products);
+}
+
+function cfmcgRenderProducts(products) {
+  var grid = document.getElementById('cfmcg-grid');
+  grid.innerHTML = '';
+  products.forEach(function(p) {
+    var card = document.createElement('div');
+    card.className = 'cfmcg-card';
+    card.innerHTML = (p.image
+      ? '<img class="cfmcg-img" src="' + p.image + '" alt="' + p.title + '" loading="lazy">'
+      : '<div class="cfmcg-img-ph"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>'
+    ) + '<div class="cfmcg-body">'
+      + '<p class="cfmcg-name">' + p.title + '</p>'
+      + '<p class="cfmcg-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
+      + '<div id="cfa-' + p.variantId + '">'
+      + (p.available
+          ? '<button class="cfmcg-add" onclick="cfmcgAdd(\\'' + p.variantId + '\\',' + p.price + ')">+ Add</button>'
+          : '<button class="cfmcg-add" disabled>Out of Stock</button>')
+      + '</div></div>';
+    grid.appendChild(card);
+  });
+}
+
+function cfmcgAdd(vid, price) {
+  ComboCart.add(vid, price || CFMCG_PRICES[String(vid)] || 0, 1, function() {
+    cfmcgQty[vid] = (cfmcgQty[vid] || 0) + 1;
+    cfmcgUpdateCard(vid);
+  });
+}
+
+function cfmcgChange(vid, delta) {
+  var n = (cfmcgQty[vid] || 0) + delta;
+  if (n < 0) n = 0;
+  cfmcgQty[vid] = n;
+  ComboCart.update(vid, n, function() { cfmcgUpdateCard(vid); });
+}
+
+function cfmcgUpdateCard(vid) {
+  var el = document.getElementById('cfa-' + vid);
+  if (!el) return;
+  var q = cfmcgQty[vid] || 0;
+  if (q <= 0) {
+    el.innerHTML = '<button class="cfmcg-add" onclick="cfmcgAdd(\\'' + vid + '\\',' + (CFMCG_PRICES[String(vid)] || 0) + ')">+ Add</button>';
+  } else {
+    el.innerHTML = '<div class="cfmcg-qty">'
+      + '<button class="cfmcg-qbtn" onclick="cfmcgChange(\\'' + vid + '\\',-1)">-</button>'
+      + '<span class="cfmcg-qnum">' + q + '</span>'
+      + '<button class="cfmcg-qbtn" onclick="cfmcgChange(\\'' + vid + '\\',1)">+</button>'
+      + '</div>';
+  }
+}
+
+cfmcgRenderSidebar();
+</script>
+${buildCartJs()}`;
+}
+
+function generateTabsHtml(collectionGroups, settings) {
+  const color = settings.ctaBgColor || '#667eea';
+  const font = settings.fontFamily || '-apple-system,sans-serif';
+  const maxP = Number(settings.maxProducts) || 20;
+
+  const groupsJson = JSON.stringify(collectionGroups.map(g => ({
+    title: g.title, handle: g.handle,
+    products: g.products.slice(0, maxP).map(p => ({
+      title: p.title, handle: p.handle, image: p.image,
+      price: p.price, variantId: p.variantId, available: p.available,
+    })),
+  }))).replace(/<\/script>/gi, '<\\/script>');
+
+  return `
+<style>
+  #combo-tabs{max-width:1200px;margin:0 auto;font-family:${font};padding-bottom:80px;}
+  .ctab-bar{display:flex;gap:6px;overflow-x:auto;padding:12px 0;scrollbar-width:none;border-bottom:2px solid #e5e7eb;margin-bottom:20px;}
+  .ctab-bar::-webkit-scrollbar{display:none;}
+  .ctab-btn{padding:9px 18px;border-radius:20px;border:2px solid #e5e7eb;background:#fff;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap;color:#374151;transition:all .15s;}
+  .ctab-btn.active{background:${color};border-color:${color};color:#fff;font-weight:700;}
+  .ctab-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;}
+  .ctab-card{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;display:flex;flex-direction:column;}
+  .ctab-img{width:100%;height:160px;object-fit:cover;display:block;background:#f3f4f6;}
+  .ctab-img-ph{width:100%;height:160px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;}
+  .ctab-body{padding:12px;display:flex;flex-direction:column;flex:1;gap:4px;}
+  .ctab-name{font-size:13px;font-weight:600;margin:0;line-height:1.3;color:#111827;}
+  .ctab-price{font-size:14px;font-weight:700;color:${color};margin:0;}
+  .ctab-add{width:100%;padding:8px;background:${color};color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;margin-top:auto;}
+  .ctab-add:disabled{background:#9ca3af;cursor:not-allowed;}
+  .ctab-qty{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:auto;}
+  .ctab-qbtn{width:30px;height:30px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:12px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,.15);}
+  .ctab-cta{background:#fff;color:${color};padding:9px 22px;border-radius:6px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
+</style>
+
+<div id="combo-tabs">
+  <div style="padding:16px 0 8px">
+    <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:#111827">${settings.mainTitle || 'Browse Collections'}</h2>
+    <p style="margin:0;font-size:14px;color:#6b7280">${settings.subtitle || 'Select a category and add items to cart'}</p>
+  </div>
+
+  <div class="ctab-bar" id="ctab-bar"></div>
+  <div class="ctab-grid" id="ctab-grid"></div>
+</div>
+
+<div id="combo-checkout-bar">
+  <div>
+    <div style="font-weight:700;font-size:14px"><span data-combo-count>0</span> items in cart</div>
+    <div style="font-size:12px;opacity:.85" data-combo-total></div>
+  </div>
+  <button id="combo-cta-btn" class="ctab-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
+</div>
+
+<script>
+var CTAB_DATA = ${groupsJson};
+var ctabQty = {};
+var ctabActive = 0;
+
+var CTAB_PRICES = {};
+CTAB_DATA.forEach(function(col) {
+  col.products.forEach(function(p) { CTAB_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
+});
+
+function ctabRender() {
+  var bar = document.getElementById('ctab-bar');
+  CTAB_DATA.forEach(function(col, i) {
+    var btn = document.createElement('button');
+    btn.className = 'ctab-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = col.title + ' (' + col.products.length + ')';
+    btn.onclick = function() {
+      document.querySelectorAll('.ctab-btn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      ctabActive = i;
+      ctabRenderProducts(col.products);
+    };
+    bar.appendChild(btn);
+  });
+  if (CTAB_DATA.length > 0) ctabRenderProducts(CTAB_DATA[0].products);
+}
+
+function ctabRenderProducts(products) {
+  var grid = document.getElementById('ctab-grid');
+  grid.innerHTML = '';
+  products.forEach(function(p) {
+    var card = document.createElement('div');
+    card.className = 'ctab-card';
+    card.innerHTML = (p.image
+      ? '<img class="ctab-img" src="' + p.image + '" alt="' + p.title + '" loading="lazy">'
+      : '<div class="ctab-img-ph"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>'
+    ) + '<div class="ctab-body">'
+      + '<p class="ctab-name">' + p.title + '</p>'
+      + '<p class="ctab-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
+      + '<div id="cta-' + p.variantId + '">'
+      + (p.available
+          ? '<button class="ctab-add" onclick="ctabAdd(\\'' + p.variantId + '\\',' + p.price + ')">Add to Cart</button>'
+          : '<button class="ctab-add" disabled>Out of Stock</button>')
+      + '</div></div>';
+    grid.appendChild(card);
+  });
+}
+
+function ctabAdd(vid, price) {
+  ComboCart.add(vid, price || CTAB_PRICES[String(vid)] || 0, 1, function() {
+    ctabQty[vid] = (ctabQty[vid] || 0) + 1;
+    ctabUpdateCard(vid);
+  });
+}
+
+function ctabChange(vid, delta) {
+  var n = (ctabQty[vid] || 0) + delta;
+  if (n < 0) n = 0;
+  ctabQty[vid] = n;
+  ComboCart.update(vid, n, function() { ctabUpdateCard(vid); });
+}
+
+function ctabUpdateCard(vid) {
+  var el = document.getElementById('cta-' + vid);
+  if (!el) return;
+  var q = ctabQty[vid] || 0;
+  if (q <= 0) {
+    el.innerHTML = '<button class="ctab-add" onclick="ctabAdd(\\'' + vid + '\\',' + (CTAB_PRICES[String(vid)] || 0) + ')">Add to Cart</button>';
+  } else {
+    el.innerHTML = '<div class="ctab-qty">'
+      + '<button class="ctab-qbtn" onclick="ctabChange(\\'' + vid + '\\',-1)">-</button>'
+      + '<span style="font-size:15px;font-weight:700;min-width:20px;text-align:center">' + q + '</span>'
+      + '<button class="ctab-qbtn" onclick="ctabChange(\\'' + vid + '\\',1)">+</button>'
+      + '</div>';
+  }
+}
+
+ctabRender();
+</script>
+${buildCartJs()}`;
+}
+
+function generateSingleHtml(collectionGroups, settings) {
+  const color = settings.ctaBgColor || '#f59e0b';
+  const font = settings.fontFamily || '-apple-system,sans-serif';
+  const maxP = Number(settings.maxProducts) || 24;
+  const cols = Math.min(Math.max(Number(settings.productsPerRow) || 3, 2), 6);
+
+  const group = collectionGroups[0] || { title: 'Products', products: [] };
+  const products = group.products.slice(0, maxP);
+  const productsJson = JSON.stringify(products.map(p => ({
+    title: p.title, handle: p.handle, image: p.image,
+    price: p.price, variantId: p.variantId, available: p.available,
+  }))).replace(/<\/script>/gi, '<\\/script>');
+
+  return `
+<style>
+  #combo-single{max-width:1200px;margin:0 auto;font-family:${font};padding-bottom:80px;}
+  .csingle-header{padding:16px 0 20px;border-bottom:1px solid #e5e7eb;margin-bottom:20px;}
+  .csingle-grid{display:grid;grid-template-columns:repeat(${cols},1fr);gap:16px;}
+  .csingle-card{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;flex-direction:column;}
+  .csingle-img{width:100%;height:190px;object-fit:cover;display:block;background:#f3f4f6;}
+  .csingle-img-ph{width:100%;height:190px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;}
+  .csingle-body{padding:12px;display:flex;flex-direction:column;flex:1;gap:6px;}
+  .csingle-name{font-size:14px;font-weight:600;margin:0;line-height:1.3;color:#111827;}
+  .csingle-price{font-size:15px;font-weight:700;color:${color};margin:0;}
+  .csingle-add{width:100%;padding:9px;background:${color};color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-top:auto;}
+  .csingle-add:disabled{background:#9ca3af;cursor:not-allowed;}
+  .csingle-qty{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:auto;}
+  .csingle-qbtn{width:32px;height:32px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:12px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 16px rgba(0,0,0,.18);}
+  .csingle-cta{background:#fff;color:${color};padding:10px 26px;border-radius:7px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
+  @media(max-width:640px){.csingle-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+
+<div id="combo-single">
+  <div class="csingle-header">
+    <h2 style="margin:0 0 4px;font-size:26px;font-weight:700;color:#111827">${settings.mainTitle || group.title}</h2>
+    <p style="margin:0;font-size:14px;color:#6b7280">${settings.subtitle || (products.length + ' products')}</p>
+  </div>
+
+  <div class="csingle-grid" id="csingle-grid"></div>
+</div>
+
+<div id="combo-checkout-bar">
+  <div>
+    <div style="font-weight:700;font-size:15px"><span data-combo-count>0</span> items in cart</div>
+    <div style="font-size:13px;opacity:.9" data-combo-total></div>
+  </div>
+  <button id="combo-cta-btn" class="csingle-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
+</div>
+
+<script>
+var CSINGLE_DATA = ${productsJson};
+var csingleQty = {};
+
+var CSINGLE_PRICES = {};
+CSINGLE_DATA.forEach(function(p) { CSINGLE_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
+
+function csingleRender() {
+  var grid = document.getElementById('csingle-grid');
+  CSINGLE_DATA.forEach(function(p) {
+    var card = document.createElement('div');
+    card.className = 'csingle-card';
+    card.innerHTML = (p.image
+      ? '<img class="csingle-img" src="' + p.image + '" alt="' + p.title + '" loading="lazy">'
+      : '<div class="csingle-img-ph"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>'
+    ) + '<div class="csingle-body">'
+      + '<p class="csingle-name">' + p.title + '</p>'
+      + '<p class="csingle-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
+      + '<div id="csi-' + p.variantId + '">'
+      + (p.available
+          ? '<button class="csingle-add" onclick="csingleAdd(\\'' + p.variantId + '\\',' + p.price + ')">Add to Cart</button>'
+          : '<button class="csingle-add" disabled>Out of Stock</button>')
+      + '</div></div>';
+    grid.appendChild(card);
+  });
+}
+
+function csingleAdd(vid, price) {
+  ComboCart.add(vid, price || CSINGLE_PRICES[String(vid)] || 0, 1, function() {
+    csingleQty[vid] = (csingleQty[vid] || 0) + 1;
+    csingleUpdateCard(vid);
+  });
+}
+
+function csingleChange(vid, delta) {
+  var n = (csingleQty[vid] || 0) + delta;
+  if (n < 0) n = 0;
+  csingleQty[vid] = n;
+  ComboCart.update(vid, n, function() { csingleUpdateCard(vid); });
+}
+
+function csingleUpdateCard(vid) {
+  var el = document.getElementById('csi-' + vid);
+  if (!el) return;
+  var q = csingleQty[vid] || 0;
+  if (q <= 0) {
+    el.innerHTML = '<button class="csingle-add" onclick="csingleAdd(\\'' + vid + '\\',' + (CSINGLE_PRICES[String(vid)] || 0) + ')">Add to Cart</button>';
+  } else {
+    el.innerHTML = '<div class="csingle-qty">'
+      + '<button class="csingle-qbtn" onclick="csingleChange(\\'' + vid + '\\',-1)">-</button>'
+      + '<span style="font-size:15px;font-weight:700;min-width:22px;text-align:center">' + q + '</span>'
+      + '<button class="csingle-qbtn" onclick="csingleChange(\\'' + vid + '\\',1)">+</button>'
+      + '</div>';
+  }
+}
+
+csingleRender();
+</script>
+${buildCartJs()}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -247,111 +742,64 @@ export const action = async ({ request }) => {
       templateId = Number(lastId[0]?.id ?? 0);
     }
 
-    // ── Fetch products from selected collections ─────────────────────────────
-    const collectionIds = (data.selectedCollections || [])
-      .map(c => c.id)
-      .filter(Boolean);
-
-    let products = [];
-    if (collectionIds.length > 0) {
+    // ── Fetch products grouped by collection ─────────────────────────────────
+    const collectionGroups = [];
+    for (const col of (data.selectedCollections || [])) {
+      if (!col.id) continue;
       try {
-        const seen = new Set();
-        for (const colId of collectionIds) {
-          const res = await admin.graphql(`
-            query GetCollectionProducts($id: ID!, $first: Int!) {
-              collection(id: $id) {
-                products(first: $first) {
-                  edges {
-                    node {
-                      id title handle
-                      featuredImage { url altText }
-                      priceRangeV2 { minVariantPrice { amount currencyCode } }
-                      variants(first: 1) { edges { node { id } } }
-                    }
+        const res = await admin.graphql(`
+          query($id: ID!, $first: Int!) {
+            collection(id: $id) {
+              title handle
+              products(first: $first) {
+                edges {
+                  node {
+                    id title handle
+                    featuredImage { url }
+                    priceRangeV2 { minVariantPrice { amount currencyCode } }
+                    variants(first: 1) { edges { node { id availableForSale } } }
                   }
                 }
               }
             }
-          `, { variables: { id: colId, first: Number(data.maxProducts) || 12 } });
-
-          const json = await res.json();
-          const edges = json.data?.collection?.products?.edges || [];
-          for (const { node: p } of edges) {
-            if (!seen.has(p.id)) {
-              seen.add(p.id);
-              products.push({
-                id: p.id,
-                title: p.title,
-                handle: p.handle,
-                image: p.featuredImage?.url || '',
-                imageAlt: p.featuredImage?.altText || p.title,
-                price: parseFloat(p.priceRangeV2?.minVariantPrice?.amount || 0).toFixed(2),
-                currency: p.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
-                variantId: p.variants?.edges?.[0]?.node?.id || '',
-              });
-            }
-            if (products.length >= (Number(data.maxProducts) || 12)) break;
           }
-          if (products.length >= (Number(data.maxProducts) || 12)) break;
-        }
-      } catch (productErr) {
-        console.error('[combo-forge] product fetch failed:', productErr.message);
+        `, { variables: { id: col.id, first: Number(data.maxProducts) || 20 } });
+
+        const json = await res.json();
+        const collection = json.data?.collection;
+        if (!collection) continue;
+
+        const products = (collection.products?.edges || []).map(e => ({
+          id: e.node.id,
+          title: e.node.title,
+          handle: e.node.handle,
+          image: e.node.featuredImage?.url || '',
+          price: parseFloat(e.node.priceRangeV2?.minVariantPrice?.amount || 0).toFixed(2),
+          // Numeric variant ID required by Shopify cart AJAX API
+          variantId: (e.node.variants?.edges?.[0]?.node?.id || '').split('/').pop(),
+          available: e.node.variants?.edges?.[0]?.node?.availableForSale ?? true,
+        }));
+
+        collectionGroups.push({
+          id: col.id,
+          title: col.title || collection.title,
+          handle: col.handle || collection.handle,
+          products,
+        });
+      } catch (err) {
+        console.error('[combo-forge] collection fetch failed:', col.id, err.message);
       }
     }
 
-    // ── Generate fully-static page HTML (renders without JavaScript) ─────────
-    const s = {
-      bg: data.bgColor || '#ffffff',
-      cardBg: data.cardBgColor || '#f9fafb',
-      text: data.textColor || '#111827',
-      border: data.borderColor || '#e5e7eb',
-      radius: `${data.borderRadius || 8}px`,
-      font: data.fontFamily || 'inherit',
-      ctaBg: data.ctaBgColor || '#008060',
-      ctaText: data.ctaTextColor || '#ffffff',
-      ctaRadius: `${data.ctaBorderRadius || 6}px`,
-      cols: Math.min(Math.max(Number(data.productsPerRow) || 3, 1), 6),
-      gap: `${data.spacing || 16}px`,
-      shadow: { none: 'none', soft: '0 1px 4px rgba(0,0,0,.08)', medium: '0 4px 12px rgba(0,0,0,.12)', strong: '0 8px 24px rgba(0,0,0,.18)' }[data.shadowLevel || 'soft'],
-    };
-
-    const bannerHtml = data.bannerEnabled && data.bannerDesktopImage ? `
-      <div style="width:100%;height:${data.bannerDesktopHeight || '320px'};background:url('${data.bannerDesktopImage}') center/cover no-repeat #f3f4f6;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;margin-bottom:${s.gap};">
-        ${data.bannerDesktopHeading ? `<h2 style="color:#fff;font-size:28px;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.4);margin:0 0 8px">${data.bannerDesktopHeading}</h2>` : ''}
-        ${data.bannerDesktopSubtitle ? `<p style="color:rgba(255,255,255,.85);font-size:16px;margin:0">${data.bannerDesktopSubtitle}</p>` : ''}
-      </div>` : '';
-
-
-    const progressHtml = data.progressBarEnabled ? `
-      <div style="margin-bottom:${s.gap};">
-        <div style="height:8px;border-radius:4px;background:${data.barColor || '#e1e3e5'};overflow:hidden;">
-          <div style="height:100%;width:0%;border-radius:4px;background:${data.filledColor || '#008060'};"></div>
-        </div>
-        <p style="font-size:12px;color:${s.text};opacity:.6;margin:4px 0 0;">Add more items to unlock rewards</p>
-      </div>` : '';
-
-
-    // Use div+flexbox — works in every Shopify theme without CSS grid support
-    const cardWidth = `calc(${Math.floor(100 / s.cols)}% - ${s.gap})`;
-
-    const pageBody = `<div id="combo-forge-bundle" style="background:${s.bg};font-family:${s.font};padding:32px 16px;box-sizing:border-box;">${
-      bannerHtml
-    }${data.discountBadge ? `<div style="display:inline-block;padding:3px 14px;border-radius:20px;background:#667eea;color:#fff;font-size:12px;font-weight:600;margin-bottom:12px;">${data.discountBadge}</div>` : ''
-    }${data.mainTitle ? `<h2 style="margin:0 0 8px;font-size:26px;font-weight:700;color:${s.text};">${data.mainTitle}</h2>` : ''
-    }${data.subtitle ? `<p style="margin:0 0 20px;font-size:15px;color:${s.text};opacity:.7;">${data.subtitle}</p>` : ''
-    }${progressHtml
-    }<div style="display:flex;flex-wrap:wrap;gap:${s.gap};max-width:${data.contentWidth || '1200px'};margin:0 auto;">${
-      products.length > 0
-        ? products.map(p => `<div style="flex:0 0 ${cardWidth};min-width:160px;background:${s.cardBg};border:1px solid ${s.border};border-radius:${s.radius};overflow:hidden;box-shadow:${s.shadow};"><a href="/products/${p.handle}" style="text-decoration:none;color:inherit;display:block;">${
-            p.image
-              ? `<img src="${p.image}" alt="${p.imageAlt}" loading="lazy" style="width:100%;height:200px;object-fit:cover;display:block;">`
-              : `<div style="width:100%;height:200px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:36px;color:#9ca3af;">◫</div>`
-          }<div style="padding:14px;"><p style="margin:0 0 4px;font-weight:600;font-size:14px;color:${s.text};line-height:1.3;">${p.title}</p><p style="margin:0 0 10px;font-size:13px;color:${s.text};opacity:.65;">$${p.price}</p><div style="background:${s.ctaBg};color:${s.ctaText};border-radius:${s.ctaRadius};padding:8px 12px;text-align:center;font-size:13px;font-weight:600;">${data.ctaLabel || 'Shop Now'}</div></div></a></div>`
-          ).join('')
-        : `<div style="width:100%;text-align:center;padding:48px;color:#9ca3af;font-size:15px;">No products found — select collections in the Combo Forge builder and re-save.</div>`
-    }</div>${
-      data.footerText ? `<p style="text-align:center;margin:24px 0 0;font-size:13px;color:${s.text};opacity:.5;">${data.footerText}</p>` : ''
-    }</div>${data.cssContent ? `<style>${data.cssContent}</style>` : ''}`;
+    // ── Choose HTML generator based on template type ──────────────────────────
+    let pageBody = '';
+    if (templateType === 'fmcg') {
+      pageBody = generateFMCGHtml(collectionGroups, data);
+    } else if (templateType === 'tabs' || templateType === 'carousel') {
+      pageBody = generateTabsHtml(collectionGroups, data);
+    } else {
+      pageBody = generateSingleHtml(collectionGroups, data);
+    }
 
     const pageTitle = data.pageTitle || name;
     const pageHandle = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-{2,}/g, '-');
@@ -463,7 +911,10 @@ function AiButton({ onGenerate, field, loading }) {
         opacity: loading ? 0.7 : 1,
       }}
     >
-      {loading ? '…' : '✦ AI'}
+      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <Icon source={MagicIcon} tone="base" />
+        {loading ? 'AI...' : 'AI'}
+      </span>
     </button>
   );
 }
@@ -502,7 +953,7 @@ export default function AppBundlesCustomize() {
     if (template?.customization_data && typeof template.customization_data === 'object') {
       return { ...DEFAULT_SETTINGS, ...template.customization_data };
     }
-    if (presetType) return { ...DEFAULT_SETTINGS, selectedLayout: presetType, displayType: presetType === 'velocity' ? 'carousel' : 'grid' };
+    if (presetType) return { ...DEFAULT_SETTINGS, selectedLayout: presetType };
     return { ...DEFAULT_SETTINGS };
   }, [template, presetType]);
 
@@ -541,7 +992,7 @@ export default function AppBundlesCustomize() {
     if (fetcher.data.success) {
       const msg = fetcher.data.message || 'Saved!';
       const newPage = fetcher.data.page;
-      showToast(newPage?.url ? `${msg} → /pages/${newPage.handle}` : msg);
+      showToast(newPage?.url ? `${msg} — /pages/${newPage.handle}` : msg);
       if (newPage?.url) setPageUrl(newPage.url);
       if (newPage?.id) setExistingPageId(newPage.id);
     } else {
@@ -561,7 +1012,7 @@ export default function AppBundlesCustomize() {
         discountBadge: ['Save 15%', 'Bundle Deal', '3-for-2'][Math.floor(Math.random() * 3)],
       };
       update(field, suggestions[field] || '');
-      showToast(`✦ AI generated ${field}`);
+      showToast(`AI generated: ${field}`);
     } catch {
       showToast('AI generation failed — try again');
     } finally {
@@ -575,7 +1026,7 @@ export default function AppBundlesCustomize() {
       { method: 'POST', encType: 'application/json' }
     );
     setSaveModalOpen(false);
-    showToast('Saving template…');
+    showToast('Saving template...');
   }, [settings, pageTitle, pageHandle, existingPageId, fetcher, showToast]);
 
   const addCollection = useCallback((col) => {
@@ -608,7 +1059,13 @@ export default function AppBundlesCustomize() {
                   }}
                 >
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: '20px', lineHeight: 1 }}>{l.icon}</span>
+                    <div style={{
+                      width: '32px', height: '32px', flexShrink: 0, borderRadius: '6px',
+                      background: settings.selectedLayout === l.id ? 'rgba(102,126,234,0.15)' : '#f3f4f6',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Icon source={l.icon} tone={settings.selectedLayout === l.id ? 'base' : 'subdued'} />
+                    </div>
                     <div>
                       <Text variant="bodySm" as="p" fontWeight="semibold">{l.label}</Text>
                       <Text variant="bodyXs" as="p" tone="subdued">{l.description}</Text>
@@ -834,7 +1291,7 @@ export default function AppBundlesCustomize() {
             )}
             <Divider />
             <Text variant="headingSm" as="h3">Generate Content with AI</Text>
-            <Text variant="bodyXs" as="p" tone="subdued">Click any ✦ AI button next to content fields to generate copy with AI</Text>
+            <Text variant="bodyXs" as="p" tone="subdued">Click any AI button next to content fields to generate copy automatically</Text>
             <BlockStack gap="200">
               {['mainTitle', 'subtitle', 'description', 'ctaLabel', 'discountBadge'].map(field => (
                 <div key={field} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -957,7 +1414,7 @@ export default function AppBundlesCustomize() {
                     border: `1px solid ${settings.borderColor || '#e5e7eb'}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: '#9ca3af', fontSize: '12px',
-                  }}>Loading…</div>
+                  }}>Loading...</div>
                 ))
               : products.slice(0, settings.maxProducts || 12).map(p => (
                   <div key={p.id} style={{
@@ -970,7 +1427,7 @@ export default function AppBundlesCustomize() {
                     <div style={{ height: '120px', background: '#f3f4f6', overflow: 'hidden' }}>
                       {p.image
                         ? <img src={p.image.url} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '24px' }}>◫</div>
+                        : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={ProductIcon} tone="subdued" /></div>
                       }
                     </div>
                     <div style={{ padding: '8px' }}>
@@ -992,7 +1449,7 @@ export default function AppBundlesCustomize() {
               }}>
                 {settings.selectedCollections?.length > 0
                   ? 'No products found in selected collections'
-                  : '← Select collections to preview products'}
+                  : 'Select collections in the Layout tab to preview products'}
               </div>
             )}
           </div>
@@ -1148,7 +1605,7 @@ export default function AppBundlesCustomize() {
         onClose={() => setSaveModalOpen(false)}
         title="Save & Publish Bundle Page"
         primaryAction={{
-          content: fetcher.state !== 'idle' ? 'Publishing…' : 'Save & Publish',
+          content: fetcher.state !== 'idle' ? 'Publishing...' : 'Save & Publish',
           onAction: handleSave,
           loading: fetcher.state !== 'idle',
         }}
@@ -1178,11 +1635,11 @@ export default function AppBundlesCustomize() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}>
                 <Text variant="bodyXs" as="span" tone="success">
-                  ✓ Page is live: /pages/{fetcher.data?.page?.handle || pageHandle}
+                  Page is live: /pages/{fetcher.data?.page?.handle || pageHandle}
                 </Text>
                 <a href={pageUrl} target="_blank" rel="noreferrer"
                   style={{ fontSize: '12px', color: '#059669', fontWeight: '600' }}>
-                  View →
+                  View
                 </a>
               </div>
             )}

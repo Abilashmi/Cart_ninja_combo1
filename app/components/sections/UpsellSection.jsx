@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FormLayout, TextField, Select, Checkbox, BlockStack, Text, InlineStack, Button, Icon, Divider, Card } from '@shopify/polaris';
+import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Card } from '@shopify/polaris';
 import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -195,9 +195,9 @@ export function UpsellSection() {
           <BlockStack gap="300">
             <Text as="h3" variant="headingSm">Upsell Settings</Text>
             <FormLayout>
-              <Checkbox label="Show when cart is empty" checked={upsellProducts.showWhenEmpty} onChange={(v) => updateUpsellProducts({ showWhenEmpty: v })} />
-              <Checkbox label="Show upsell offer if item already in cart" checked={upsellProducts.showIfInCart} onChange={(v) => updateUpsellProducts({ showIfInCart: v })} />
-              <Checkbox label="Show product reviews on upsells" checked={upsellProducts.showReviews} onChange={(v) => updateUpsellProducts({ showReviews: v })} />
+              <FeatureToggle label="Show when cart is empty" enabled={upsellProducts.showWhenEmpty} onToggle={(v) => updateUpsellProducts({ showWhenEmpty: v })} />
+              <FeatureToggle label="Show upsell offer if item already in cart" enabled={upsellProducts.showIfInCart} onToggle={(v) => updateUpsellProducts({ showIfInCart: v })} />
+              <FeatureToggle label="Show product reviews on upsells" enabled={upsellProducts.showReviews} onToggle={(v) => updateUpsellProducts({ showReviews: v })} />
             </FormLayout>
           </BlockStack>
 
