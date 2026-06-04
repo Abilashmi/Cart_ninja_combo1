@@ -42,6 +42,7 @@ export default function App() {
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Coupon Creator</s-link>
+                            <s-link href="/app/bundles">Combo Forge</s-link>
                             <s-link href="/app/subscribe">Plans</s-link>
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
