@@ -3,7 +3,7 @@ import { defaultCartEditorState } from '../types/cartEditorTypes';
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [] }) {
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [] }) {
   const [state, setState] = useState(defaultCartEditorState);
 
   const setActiveSection = useCallback((section) => {
@@ -165,6 +165,7 @@ export function CartEditorProvider({ children, availableCoupons = [] }) {
   const value = {
     ...state,
     availableCoupons,
+    allProducts,
     setActiveSection,
     setPreviewMode,
     setPreviewDevice,

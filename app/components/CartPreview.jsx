@@ -148,6 +148,11 @@ function ProgressBarPreview({ pb }) {
   const tiers = pb.tiers;
   if (!tiers.length) return null;
 
+  const colors = pb.colors || {};
+  const bgColor = colors.background || '#e5e7eb';
+  const fillColor = colors.fill || '#10b981';
+  const iconColor = colors.icon || '#2563eb';
+  const msgColor = colors.message || '#10b981';
   const isCount = pb.mode === 'count';
   const currentValue = isCount ? MOCK_CART_COUNT : CART_TOTAL;
   const maxThreshold = tiers[tiers.length - 1].minimumSpend;
@@ -169,19 +174,19 @@ function ProgressBarPreview({ pb }) {
       <div style={{ textAlign: 'center', marginBottom: '14px' }}>
         {nextTier ? (
           <>
-            <div style={{ fontSize: '13px', fontWeight: 500, color: pb.colors.message, lineHeight: 1.5 }}>{buildMessageLine()}</div>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>{buildMessageLine()}</div>
             {nextTier.title && (
-              <div style={{ fontSize: '12px', fontWeight: 700, color: pb.colors.icon, lineHeight: 1.4 }}>Unlock: {nextTier.title}</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: iconColor, lineHeight: 1.4 }}>Unlock: {nextTier.title}</div>
             )}
           </>
         ) : (
-          <div style={{ fontSize: '13px', fontWeight: 700, color: pb.colors.message }}>{pb.completionMessage}</div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor }}>{pb.completionMessage}</div>
         )}
       </div>
 
       <div style={{ position: 'relative', paddingBottom: '52px', margin: '0 12px' }}>
-        <div style={{ height: '8px', borderRadius: `${radius}px`, backgroundColor: pb.colors.background, position: 'relative', overflow: 'visible' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, backgroundColor: pb.colors.fill, borderRadius: `${radius}px`, transition: 'width 0.3s ease' }} />
+        <div style={{ height: '8px', borderRadius: `${radius}px`, backgroundColor: bgColor, position: 'relative', overflow: 'visible' }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, backgroundColor: fillColor, borderRadius: `${radius}px`, transition: 'width 0.3s ease' }} />
         </div>
 
         {tiers.map((tier) => {
@@ -190,8 +195,8 @@ function ProgressBarPreview({ pb }) {
           const IconComp = TIER_ICON_MAP[tier.icon] ?? GiftCardFilledIcon;
           return (
             <div key={tier.id} style={{ position: 'absolute', left: `${pct}%`, top: '4px', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1 }}>
-              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: unlocked ? pb.colors.fill : '#ffffff', border: `2px solid ${pb.colors.fill}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.15)', flexShrink: 0 }}>
-                <span style={{ color: unlocked ? '#ffffff' : pb.colors.icon, display: 'flex', lineHeight: 0 }}>
+              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: unlocked ? fillColor : '#ffffff', border: `2px solid ${fillColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.15)', flexShrink: 0 }}>
+                <span style={{ color: unlocked ? '#ffffff' : iconColor, display: 'flex', lineHeight: 0 }}>
                   <IconComp width="13" height="13" fill="currentColor" />
                 </span>
               </div>
@@ -200,7 +205,7 @@ function ProgressBarPreview({ pb }) {
                   <>
                     <div style={{ fontSize: '7px', fontWeight: 700, color: '#059669', background: '#d1fae5', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>REACHED</div>
                     {(tier.title || tier.description) && (
-                      <div style={{ fontSize: '8px', color: pb.colors.icon, fontWeight: 600, whiteSpace: 'nowrap' }}>{tier.title || tier.description}</div>
+                      <div style={{ fontSize: '8px', color: iconColor, fontWeight: 600, whiteSpace: 'nowrap' }}>{tier.title || tier.description}</div>
                     )}
                   </>
                 ) : (
@@ -335,7 +340,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 }
 
 export function CartPreview({ onSave, onDiscard, isDirty }) {
-  const { previewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer } = useCartEditor();
+  const { previewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer, settings } = useCartEditor();
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
@@ -492,7 +497,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
                         <div className="cart-preview-empty-icon"><Icon source={CartIcon} /></div>
                         <h4>{body.emptyCart.message}</h4>
                         <p>Add items to unlock rewards</p>
-                        {body.emptyCart.showContinueShopping && (
+                        {settings.general.showContinueShopping && (
                           <button className="cart-preview-continue-btn">Continue shopping</button>
                         )}
                       </div>

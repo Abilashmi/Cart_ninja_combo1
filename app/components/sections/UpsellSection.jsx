@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Card } from '@shopify/polaris';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Card, Modal } from '@shopify/polaris';
 import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -15,6 +15,120 @@ const MOCK_AI_SUGGESTIONS = [
   { id: 'ai-2', name: 'Ayurvedic Skincare Oil', reason: 'Perfectly pairs with White Kasturi Manjal to enhance hydration and overall skin health.', description: 'A nourishing oil that complements your skincare ritual, promoting healthy skin.', priceRange: '₹250–₹500' },
   { id: 'ai-3', name: 'Herbal Cleansing Brush', reason: 'Enhances the application and effectiveness of White Kasturi Manjal for deeper cleansing.', description: 'A gentle cleansing brush designed to effectively use with herbal products.', priceRange: '₹100–₹200' },
 ];
+
+const PRODUCT_CACHE_KEY = 'cached_products';
+
+function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
+  const { allProducts: contextProducts } = useCartEditor();
+  const [allProducts, setAllProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(initialSelectedIds || []);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedIds(initialSelectedIds || []);
+    if (initialized && allProducts.length > 0) return;
+    if (contextProducts && contextProducts.length > 0) {
+      setAllProducts(contextProducts);
+      try { sessionStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(contextProducts)); } catch {}
+      setInitialized(true);
+      return;
+    }
+    const cached = sessionStorage.getItem(PRODUCT_CACHE_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.length > 0) {
+          setAllProducts(parsed);
+          setInitialized(true);
+          return;
+        }
+      } catch {}
+    }
+    setLoading(true);
+    setFetchError(false);
+    fetch('/api/upsell')
+      .then(r => r.json())
+      .then(data => {
+        if (!data?.success) {
+          setFetchError(true);
+          setAllProducts([]);
+          setLoading(false);
+          setInitialized(true);
+          return;
+        }
+        const products = data?.data?.allProducts || [];
+        setAllProducts(products);
+        if (products.length > 0) {
+          try { sessionStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(products)); } catch {}
+        }
+        setLoading(false);
+        setInitialized(true);
+      })
+      .catch(() => {
+        setFetchError(true);
+        setLoading(false);
+        setInitialized(true);
+      });
+  }, [open, initialSelectedIds, contextProducts]);
+
+  const toggle = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  return (
+    <Modal open={open} onClose={onClose} title={title || 'Select Products'}
+      primaryAction={{ content: 'Save Selection', onAction: () => { onSave(selectedIds); onClose(); } }}
+      secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
+    >
+      <Modal.Section>
+        <BlockStack gap="400">
+          <Text variant="bodyMd" tone="subdued">Select products.</Text>
+          {loading ? (
+            <Text as="p" variant="bodyMd">Loading products...</Text>
+          ) : fetchError ? (
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd" tone="critical">Failed to load products.</Text>
+              <Button size="slim" onClick={() => { setLoading(true); setFetchError(false); fetch('/api/upsell').then(r=>r.json()).then(data=>{if (!data?.success) { setFetchError(true); setAllProducts([]); setLoading(false); return; } setAllProducts(data?.data?.allProducts || []); try { sessionStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(data?.data?.allProducts || [])); } catch {} setLoading(false); }).catch(()=>{ setFetchError(true); setLoading(false); }) }}>Retry</Button>
+            </BlockStack>
+          ) : allProducts.length === 0 ? (
+            <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
+              {allProducts.map(product => {
+                const sel = selectedIds.includes(product.id);
+                return (
+                  <div key={product.id} onClick={() => toggle(product.id)}
+                    style={{
+                      padding: '8px 10px', border: sel ? '2px solid #2c6ecb' : '1px solid #e5e7eb',
+                      borderRadius: '8px', background: sel ? '#f0f7ff' : '#fff',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                    }}
+                  >
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden',
+                      flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: '#f8fafc', border: '1px solid #f1f5f9',
+                    }}>
+                      {product.image ? (
+                        <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : <span>📦</span>}
+                    </div>
+                    <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
+                      <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
+                      <Text tone="subdued" variant="bodyXs">₹{product.price}</Text>
+                    </BlockStack>
+                    {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
+  );
+}
 
 function LimitPicker({ value, onChange }) {
   return (
@@ -45,6 +159,7 @@ export function UpsellSection() {
   const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule } = useCartEditor();
   const { upsellProducts } = body;
   const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
+  const [pickerConfig, setPickerConfig] = useState(null);
 
   const handleModeChange = (mode) => {
     setConfigMode(mode);
@@ -55,10 +170,14 @@ export function UpsellSection() {
     const newRule = {
       id: `rule-${Date.now()}`,
       triggerProductCount: 1,
+      triggerProductIds: [],
       upsellProductCount: 1,
+      upsellProductIds: [],
     };
     addUpsellRule(newRule);
   };
+
+  const closePicker = () => setPickerConfig(null);
 
   return (
     <BlockStack gap="400">
@@ -162,18 +281,22 @@ export function UpsellSection() {
                           <Text as="p" variant="bodySm" tone="subdued">If this product is in cart:</Text>
                           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #c9cccf', background: '#ffffff', fontSize: '13px', color: '#202223' }}>
-                              {rule.triggerProductCount} Trigger Product{rule.triggerProductCount !== 1 ? 's' : ''}
+                              {rule.triggerProductIds?.length > 0
+                                ? `${rule.triggerProductIds.length} product${rule.triggerProductIds.length !== 1 ? 's' : ''} selected`
+                                : `${rule.triggerProductCount} Trigger Product${rule.triggerProductCount !== 1 ? 's' : ''}`}
                             </div>
-                            <Button size="slim" onClick={() => updateUpsellRule(rule.id, { triggerProductCount: rule.triggerProductCount + 1 })}>Select</Button>
+                            <Button size="slim" onClick={() => setPickerConfig({ ruleId: rule.id, type: 'trigger', selectedIds: rule.triggerProductIds || [] })}>Select</Button>
                           </div>
                         </div>
                         <div>
                           <Text as="p" variant="bodySm" tone="subdued">Then recommend these products:</Text>
                           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #c9cccf', background: '#ffffff', fontSize: '13px', color: '#202223' }}>
-                              {rule.upsellProductCount} Upsell Product{rule.upsellProductCount !== 1 ? 's' : ''}
+                              {rule.upsellProductIds?.length > 0
+                                ? `${rule.upsellProductIds.length} product${rule.upsellProductIds.length !== 1 ? 's' : ''} selected`
+                                : `${rule.upsellProductCount} Upsell Product${rule.upsellProductCount !== 1 ? 's' : ''}`}
                             </div>
-                            <Button size="slim" onClick={() => updateUpsellRule(rule.id, { upsellProductCount: rule.upsellProductCount + 1 })}>Select</Button>
+                            <Button size="slim" onClick={() => setPickerConfig({ ruleId: rule.id, type: 'upsell', selectedIds: rule.upsellProductIds || [] })}>Select</Button>
                           </div>
                         </div>
                       </BlockStack>
@@ -248,6 +371,24 @@ export function UpsellSection() {
           </BlockStack>
         </BlockStack>
       )}
+
+      <ProductPickerModal
+        open={pickerConfig !== null}
+        onClose={closePicker}
+        onSave={(selectedIds) => {
+          if (pickerConfig) {
+            const key = pickerConfig.type === 'trigger' ? 'triggerProductIds' : 'upsellProductIds';
+            const countKey = pickerConfig.type === 'trigger' ? 'triggerProductCount' : 'upsellProductCount';
+            updateUpsellRule(pickerConfig.ruleId, {
+              [key]: selectedIds,
+              [countKey]: selectedIds.length,
+            });
+          }
+          closePicker();
+        }}
+        initialSelectedIds={pickerConfig?.selectedIds || []}
+        title={pickerConfig?.type === 'trigger' ? 'Select Trigger Products' : 'Select Upsell Products'}
+      />
     </BlockStack>
   );
 }

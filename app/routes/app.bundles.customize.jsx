@@ -214,100 +214,31 @@ function buildCartJs() {
   return `
 <script>
 (function(){
-  // _local = { variantId: { qty, price } }  — all state is client-side only
-  var _local = {};
+  var _fetch;
 
-  function _calcTotals() {
-    var count = 0, total = 0;
-    Object.keys(_local).forEach(function(vid) {
-      var item = _local[vid];
-      count += item.qty;
-      total += item.qty * item.price;
-    });
-    return { count: count, total: total.toFixed(2) };
-  }
-
-  function _updateDisplay() {
-    var t = _calcTotals();
-    // Use data-combo-count / data-combo-total — NOT data-combo-count which Cart Ninja's
-    // MutationObserver watches and uses to trigger the cart drawer.
-    document.querySelectorAll('[data-combo-count]').forEach(function(el) {
-      el.textContent = t.count;
-    });
-    document.querySelectorAll('[data-combo-total]').forEach(function(el) {
-      el.textContent = t.count > 0 ? '$ ' + t.total : '';
-    });
-    var bar = document.getElementById('combo-checkout-bar');
-    if (bar) bar.style.display = t.count > 0 ? 'flex' : 'none';
-  }
-
-  // add(variantId, price, qty, cb)
-  function _add(variantId, price, qty, cb) {
-    var vid = String(variantId);
-    if (!_local[vid]) _local[vid] = { qty: 0, price: parseFloat(price) || 0 };
-    _local[vid].qty += (qty || 1);
-    _updateDisplay();
-    if (cb) cb(_local[vid].qty);
-  }
-
-  // update(variantId, newQty, cb)
-  function _update(variantId, newQty, cb) {
-    var vid = String(variantId);
-    if (newQty <= 0) {
-      delete _local[vid];
-    } else {
-      if (!_local[vid]) _local[vid] = { qty: 0, price: 0 };
-      _local[vid].qty = newQty;
-    }
-    _updateDisplay();
-    if (cb) cb(newQty);
-  }
-
-  // On checkout: use an iframe's NATIVE fetch to add items to the Shopify cart.
-  // Cart Ninja patches window.fetch, XMLHttpRequest, AND document 'submit' events
-  // on the main window — but it does NOT patch fetch inside a dynamically created
-  // iframe, because that iframe runs in a separate window context.
-  // After the batch add succeeds we navigate to /checkout. The page leaves before
-  // Cart Ninja's scheduleOpenDrawer timeout (350-500 ms) ever fires.
-  function _checkout() {
-    var vids = Object.keys(_local).filter(function(vid) { return _local[vid].qty > 0; });
-    if (vids.length === 0) return;
-
-    var btn = document.getElementById('combo-cta-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Going to checkout...'; }
-
-    var items = vids.map(function(vid) {
-      return { id: parseInt(vid, 10), quantity: _local[vid].qty };
-    });
-
-    // Create a hidden same-origin iframe whose window.fetch is the real browser fetch,
-    // not Cart Ninja's patched version.
+  function _getNativeFetch() {
+    if (_fetch) return _fetch;
     var iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     document.body.appendChild(iframe);
-    var nativeFetch = iframe.contentWindow.fetch.bind(iframe.contentWindow);
+    _fetch = iframe.contentWindow.fetch.bind(iframe.contentWindow);
     document.body.removeChild(iframe);
-
-    // Step 1: Clear the existing Shopify cart so only bundle items go to checkout.
-    // Step 2: Add only the selected bundle items.
-    // Step 3: Navigate to /checkout.
-    nativeFetch('/cart/clear.js', { method: 'POST' })
-      .then(function() {
-        return nativeFetch('/cart/add.js', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: items }),
-        });
-      })
-      .then(function() {
-        window.location.href = '/checkout';
-      })
-      .catch(function() {
-        window.location.href = '/checkout';
-      });
+    return _fetch;
   }
 
-  window.ComboCart = { add: _add, update: _update, checkout: _checkout, state: _local };
+  // Add variant and go straight to checkout
+  window.comboBuyNow = function(variantId, qty) {
+    var f = _getNativeFetch();
+    f('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ id: parseInt(variantId, 10), quantity: qty || 1 }] }),
+    }).then(function() {
+      window.location.href = '/checkout';
+    }).catch(function() {
+      window.location.href = '/checkout';
+    });
+  };
 })();
 </script>`;
 }
@@ -342,11 +273,6 @@ function generateFMCGHtml(collectionGroups, settings) {
   .cfmcg-price{font-size:14px;font-weight:700;color:${color};margin:0 0 8px;}
   .cfmcg-add{width:100%;padding:7px;background:${color};color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;}
   .cfmcg-add:disabled{background:#9ca3af;cursor:not-allowed;}
-  .cfmcg-qty{display:flex;align-items:center;gap:8px;justify-content:center;}
-  .cfmcg-qbtn{width:30px;height:30px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;line-height:1;font-weight:700;display:flex;align-items:center;justify-content:center;}
-  .cfmcg-qnum{font-size:15px;font-weight:700;min-width:20px;text-align:center;color:#111827;}
-  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:10px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,.15);}
-  .cfmcg-cta{background:#fff;color:${color};padding:9px 22px;border-radius:6px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
   @media(max-width:600px){.cfmcg-sidebar{display:flex;flex-direction:row;overflow-x:auto;width:100%}.cfmcg-layout{flex-direction:column}.cfmcg-cat{white-space:nowrap;flex-shrink:0}}
 </style>
 
@@ -354,11 +280,7 @@ function generateFMCGHtml(collectionGroups, settings) {
   <div class="cfmcg-header">
     <div>
       <div style="font-size:18px;font-weight:700">${settings.mainTitle || 'Quick Commerce'}</div>
-      <div style="font-size:12px;opacity:.8">${settings.subtitle || 'Add items and checkout'}</div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:13px" data-combo-count>0</div>
-      <div style="font-size:11px;opacity:.75" data-combo-total></div>
+      <div style="font-size:12px;opacity:.8">${settings.subtitle || 'Shop now'}</div>
     </div>
   </div>
 
@@ -368,23 +290,8 @@ function generateFMCGHtml(collectionGroups, settings) {
   </div>
 </div>
 
-<div id="combo-checkout-bar">
-  <div>
-    <div style="font-weight:700;font-size:14px"><span data-combo-count>0</span> items</div>
-    <div style="font-size:12px;opacity:.85" data-combo-total></div>
-  </div>
-  <button id="combo-cta-btn" class="cfmcg-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
-</div>
-
 <script>
 var CFMCG_DATA = ${groupsJson};
-var cfmcgQty = {};
-
-// Price lookup so local cart can calculate totals without API calls
-var CFMCG_PRICES = {};
-CFMCG_DATA.forEach(function(col) {
-  col.products.forEach(function(p) { CFMCG_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
-});
 
 function cfmcgRenderSidebar() {
   var sb = document.getElementById('cfmcg-sidebar');
@@ -414,42 +321,13 @@ function cfmcgRenderProducts(products) {
     ) + '<div class="cfmcg-body">'
       + '<p class="cfmcg-name">' + p.title + '</p>'
       + '<p class="cfmcg-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
-      + '<div id="cfa-' + p.variantId + '">'
+      + '<div>'
       + (p.available
-          ? '<button class="cfmcg-add" onclick="cfmcgAdd(\\'' + p.variantId + '\\',' + p.price + ')">+ Add</button>'
+          ? '<button class="cfmcg-add" onclick="comboBuyNow(\\'' + p.variantId + '\\')">Buy Now</button>'
           : '<button class="cfmcg-add" disabled>Out of Stock</button>')
       + '</div></div>';
     grid.appendChild(card);
   });
-}
-
-function cfmcgAdd(vid, price) {
-  ComboCart.add(vid, price || CFMCG_PRICES[String(vid)] || 0, 1, function() {
-    cfmcgQty[vid] = (cfmcgQty[vid] || 0) + 1;
-    cfmcgUpdateCard(vid);
-  });
-}
-
-function cfmcgChange(vid, delta) {
-  var n = (cfmcgQty[vid] || 0) + delta;
-  if (n < 0) n = 0;
-  cfmcgQty[vid] = n;
-  ComboCart.update(vid, n, function() { cfmcgUpdateCard(vid); });
-}
-
-function cfmcgUpdateCard(vid) {
-  var el = document.getElementById('cfa-' + vid);
-  if (!el) return;
-  var q = cfmcgQty[vid] || 0;
-  if (q <= 0) {
-    el.innerHTML = '<button class="cfmcg-add" onclick="cfmcgAdd(\\'' + vid + '\\',' + (CFMCG_PRICES[String(vid)] || 0) + ')">+ Add</button>';
-  } else {
-    el.innerHTML = '<div class="cfmcg-qty">'
-      + '<button class="cfmcg-qbtn" onclick="cfmcgChange(\\'' + vid + '\\',-1)">-</button>'
-      + '<span class="cfmcg-qnum">' + q + '</span>'
-      + '<button class="cfmcg-qbtn" onclick="cfmcgChange(\\'' + vid + '\\',1)">+</button>'
-      + '</div>';
-  }
 }
 
 cfmcgRenderSidebar();
@@ -486,16 +364,12 @@ function generateTabsHtml(collectionGroups, settings) {
   .ctab-price{font-size:14px;font-weight:700;color:${color};margin:0;}
   .ctab-add{width:100%;padding:8px;background:${color};color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;margin-top:auto;}
   .ctab-add:disabled{background:#9ca3af;cursor:not-allowed;}
-  .ctab-qty{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:auto;}
-  .ctab-qbtn{width:30px;height:30px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;}
-  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:12px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 12px rgba(0,0,0,.15);}
-  .ctab-cta{background:#fff;color:${color};padding:9px 22px;border-radius:6px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
 </style>
 
 <div id="combo-tabs">
   <div style="padding:16px 0 8px">
     <h2 style="margin:0 0 4px;font-size:24px;font-weight:700;color:#111827">${settings.mainTitle || 'Browse Collections'}</h2>
-    <p style="margin:0;font-size:14px;color:#6b7280">${settings.subtitle || 'Select a category and add items to cart'}</p>
+    <p style="margin:0;font-size:14px;color:#6b7280">${settings.subtitle || 'Shop now'}</p>
   </div>
 
   <div class="ctab-bar" id="ctab-bar"></div>
@@ -509,16 +383,8 @@ function generateTabsHtml(collectionGroups, settings) {
   </div>
   <button id="combo-cta-btn" class="ctab-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
 </div>
-
-<script>
 var CTAB_DATA = ${groupsJson};
-var ctabQty = {};
 var ctabActive = 0;
-
-var CTAB_PRICES = {};
-CTAB_DATA.forEach(function(col) {
-  col.products.forEach(function(p) { CTAB_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
-});
 
 function ctabRender() {
   var bar = document.getElementById('ctab-bar');
@@ -549,42 +415,13 @@ function ctabRenderProducts(products) {
     ) + '<div class="ctab-body">'
       + '<p class="ctab-name">' + p.title + '</p>'
       + '<p class="ctab-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
-      + '<div id="cta-' + p.variantId + '">'
+      + '<div>'
       + (p.available
-          ? '<button class="ctab-add" onclick="ctabAdd(\\'' + p.variantId + '\\',' + p.price + ')">Add to Cart</button>'
+          ? '<button class="ctab-add" onclick="comboBuyNow(\\'' + p.variantId + '\\')">Buy Now</button>'
           : '<button class="ctab-add" disabled>Out of Stock</button>')
       + '</div></div>';
     grid.appendChild(card);
   });
-}
-
-function ctabAdd(vid, price) {
-  ComboCart.add(vid, price || CTAB_PRICES[String(vid)] || 0, 1, function() {
-    ctabQty[vid] = (ctabQty[vid] || 0) + 1;
-    ctabUpdateCard(vid);
-  });
-}
-
-function ctabChange(vid, delta) {
-  var n = (ctabQty[vid] || 0) + delta;
-  if (n < 0) n = 0;
-  ctabQty[vid] = n;
-  ComboCart.update(vid, n, function() { ctabUpdateCard(vid); });
-}
-
-function ctabUpdateCard(vid) {
-  var el = document.getElementById('cta-' + vid);
-  if (!el) return;
-  var q = ctabQty[vid] || 0;
-  if (q <= 0) {
-    el.innerHTML = '<button class="ctab-add" onclick="ctabAdd(\\'' + vid + '\\',' + (CTAB_PRICES[String(vid)] || 0) + ')">Add to Cart</button>';
-  } else {
-    el.innerHTML = '<div class="ctab-qty">'
-      + '<button class="ctab-qbtn" onclick="ctabChange(\\'' + vid + '\\',-1)">-</button>'
-      + '<span style="font-size:15px;font-weight:700;min-width:20px;text-align:center">' + q + '</span>'
-      + '<button class="ctab-qbtn" onclick="ctabChange(\\'' + vid + '\\',1)">+</button>'
-      + '</div>';
-  }
 }
 
 ctabRender();
@@ -618,10 +455,6 @@ function generateSingleHtml(collectionGroups, settings) {
   .csingle-price{font-size:15px;font-weight:700;color:${color};margin:0;}
   .csingle-add{width:100%;padding:9px;background:${color};color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-top:auto;}
   .csingle-add:disabled{background:#9ca3af;cursor:not-allowed;}
-  .csingle-qty{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:auto;}
-  .csingle-qbtn{width:32px;height:32px;border:2px solid ${color};background:#fff;color:${color};border-radius:50%;cursor:pointer;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;}
-  #combo-checkout-bar{display:none;position:fixed;bottom:0;left:0;right:0;background:${color};color:#fff;padding:12px 20px;align-items:center;justify-content:space-between;z-index:9999;box-shadow:0 -4px 16px rgba(0,0,0,.18);}
-  .csingle-cta{background:#fff;color:${color};padding:10px 26px;border-radius:7px;border:none;font-weight:700;cursor:pointer;font-size:14px;}
   @media(max-width:640px){.csingle-grid{grid-template-columns:repeat(2,1fr);}}
 </style>
 
@@ -634,20 +467,8 @@ function generateSingleHtml(collectionGroups, settings) {
   <div class="csingle-grid" id="csingle-grid"></div>
 </div>
 
-<div id="combo-checkout-bar">
-  <div>
-    <div style="font-weight:700;font-size:15px"><span data-combo-count>0</span> items in cart</div>
-    <div style="font-size:13px;opacity:.9" data-combo-total></div>
-  </div>
-  <button id="combo-cta-btn" class="csingle-cta" onclick="ComboCart.checkout()">Proceed to Checkout</button>
-</div>
-
 <script>
 var CSINGLE_DATA = ${productsJson};
-var csingleQty = {};
-
-var CSINGLE_PRICES = {};
-CSINGLE_DATA.forEach(function(p) { CSINGLE_PRICES[String(p.variantId)] = parseFloat(p.price) || 0; });
 
 function csingleRender() {
   var grid = document.getElementById('csingle-grid');
@@ -660,42 +481,13 @@ function csingleRender() {
     ) + '<div class="csingle-body">'
       + '<p class="csingle-name">' + p.title + '</p>'
       + '<p class="csingle-price">$' + parseFloat(p.price).toFixed(2) + '</p>'
-      + '<div id="csi-' + p.variantId + '">'
+      + '<div>'
       + (p.available
-          ? '<button class="csingle-add" onclick="csingleAdd(\\'' + p.variantId + '\\',' + p.price + ')">Add to Cart</button>'
+          ? '<button class="csingle-add" onclick="comboBuyNow(\\'' + p.variantId + '\\')">Buy Now</button>'
           : '<button class="csingle-add" disabled>Out of Stock</button>')
       + '</div></div>';
     grid.appendChild(card);
   });
-}
-
-function csingleAdd(vid, price) {
-  ComboCart.add(vid, price || CSINGLE_PRICES[String(vid)] || 0, 1, function() {
-    csingleQty[vid] = (csingleQty[vid] || 0) + 1;
-    csingleUpdateCard(vid);
-  });
-}
-
-function csingleChange(vid, delta) {
-  var n = (csingleQty[vid] || 0) + delta;
-  if (n < 0) n = 0;
-  csingleQty[vid] = n;
-  ComboCart.update(vid, n, function() { csingleUpdateCard(vid); });
-}
-
-function csingleUpdateCard(vid) {
-  var el = document.getElementById('csi-' + vid);
-  if (!el) return;
-  var q = csingleQty[vid] || 0;
-  if (q <= 0) {
-    el.innerHTML = '<button class="csingle-add" onclick="csingleAdd(\\'' + vid + '\\',' + (CSINGLE_PRICES[String(vid)] || 0) + ')">Add to Cart</button>';
-  } else {
-    el.innerHTML = '<div class="csingle-qty">'
-      + '<button class="csingle-qbtn" onclick="csingleChange(\\'' + vid + '\\',-1)">-</button>'
-      + '<span style="font-size:15px;font-weight:700;min-width:22px;text-align:center">' + q + '</span>'
-      + '<button class="csingle-qbtn" onclick="csingleChange(\\'' + vid + '\\',1)">+</button>'
-      + '</div>';
-  }
 }
 
 csingleRender();
@@ -1045,34 +837,19 @@ export default function AppBundlesCustomize() {
       case 'layout':
         return (
           <BlockStack gap="400">
-            <Text variant="headingMd" as="h2">Layout Type</Text>
             <BlockStack gap="200">
-              {LAYOUTS.map(l => (
-                <div
-                  key={l.id}
-                  onClick={() => update('selectedLayout', l.id)}
-                  style={{
-                    padding: '12px', borderRadius: '10px', cursor: 'pointer',
-                    border: `2px solid ${settings.selectedLayout === l.id ? '#667eea' : '#e5e7eb'}`,
-                    background: settings.selectedLayout === l.id ? 'rgba(102,126,234,0.06)' : '#fff',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: '32px', height: '32px', flexShrink: 0, borderRadius: '6px',
-                      background: settings.selectedLayout === l.id ? 'rgba(102,126,234,0.15)' : '#f3f4f6',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Icon source={l.icon} tone={settings.selectedLayout === l.id ? 'base' : 'subdued'} />
-                    </div>
-                    <div>
-                      <Text variant="bodySm" as="p" fontWeight="semibold">{l.label}</Text>
-                      <Text variant="bodyXs" as="p" tone="subdued">{l.description}</Text>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <Text variant="headingMd" as="h2">Layout Type</Text>
+              <div style={{
+                padding: '10px 14px', borderRadius: '8px', background: 'rgba(102,126,234,0.08)',
+                border: '1px solid rgba(102,126,234,0.2)',
+              }}>
+                <Text variant="bodySm" as="p" fontWeight="semibold" tone="subdued">
+                  {LAYOUTS.find(l => l.id === settings.selectedLayout)?.label || settings.selectedLayout}
+                </Text>
+              </div>
+              <Text variant="bodyXs" as="p" tone="subdued">
+                To change the layout, go back to Templates and select a different template.
+              </Text>
             </BlockStack>
             <Divider />
             <Text variant="headingMd" as="h2">Collections</Text>

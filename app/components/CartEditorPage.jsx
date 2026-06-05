@@ -30,9 +30,10 @@ function CartEditorContent() {
 export default function CartEditorPage() {
   const data = useLoaderData();
   const coupons = data?.coupons ?? [];
+  const allProducts = data?.allProducts ?? [];
 
   return (
-    <CartEditorProvider availableCoupons={coupons}>
+    <CartEditorProvider availableCoupons={coupons} allProducts={allProducts}>
       <CartEditorContent />
     </CartEditorProvider>
   );
