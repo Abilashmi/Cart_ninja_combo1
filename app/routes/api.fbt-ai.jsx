@@ -7,8 +7,9 @@
 import { authenticate } from "../shopify.server";
 import { getCurrencySymbolFromCode } from "../utils/currency.server";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = "gpt-4o-mini";
+const NVIDIA_API_KEY = process.env.OPENAI_API_KEY || "";
+const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
+const NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const DEFAULT_PRODUCTS_PER_TRIGGER = 3;
 const MIN_PRODUCTS_PER_TRIGGER = 1;
 const MAX_PRODUCTS_PER_TRIGGER = 10;
@@ -119,40 +120,40 @@ Return one object for every triggerIndex from 1 to ${products.length}. Do not sk
 JSON array:`;
 
     try {
-        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        const nvidiaRes = await fetch(NVIDIA_API_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                "Authorization": `Bearer ${NVIDIA_API_KEY}`,
             },
             body: JSON.stringify({
-                model: OPENAI_MODEL,
+                model: NVIDIA_MODEL,
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.3,
                 max_tokens: 1500,
             }),
         });
 
-        if (!openaiRes.ok) {
-            const errText = await openaiRes.text();
-            console.error("OpenAI API error:", openaiRes.status, errText);
+        if (!nvidiaRes.ok) {
+            const errText = await nvidiaRes.text();
+            console.error("NVIDIA API error:", nvidiaRes.status, errText);
             // Quota exceeded — return empty rules so UI degrades gracefully
-            if (openaiRes.status === 429) {
+            if (nvidiaRes.status === 429) {
                 return new Response(
-                    JSON.stringify({ success: true, rules: [], warning: "AI quota exceeded. Please update your OpenAI API key." }),
+                    JSON.stringify({ success: true, rules: [], warning: "AI quota exceeded. Please update your NVIDIA API key." }),
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
             let errDetail = errText;
             try { errDetail = JSON.parse(errText)?.error?.message || errText; } catch {}
             return new Response(
-                JSON.stringify({ error: `OpenAI error (${openaiRes.status}): ${errDetail}` }),
+                JSON.stringify({ error: `NVIDIA API error (${nvidiaRes.status}): ${errDetail}` }),
                 { status: 502, headers: { "Content-Type": "application/json" } }
             );
         }
 
-        const openaiData = await openaiRes.json();
-        const rawContent = openaiData.choices?.[0]?.message?.content || "[]";
+        const nvidiaData = await nvidiaRes.json();
+        const rawContent = nvidiaData.choices?.[0]?.message?.content || "[]";
 
         // Extract JSON from the response (strip any markdown code fences)
         const jsonMatch = rawContent.match(/\[[\s\S]*\]/);

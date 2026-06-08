@@ -11,8 +11,9 @@ import { authenticate } from "../shopify.server";
 import { getCurrencySymbolFromCode } from "../utils/currency.server";
 import process from "node:process";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = "gpt-4o-mini";
+const NVIDIA_API_KEY = process.env.OPENAI_API_KEY || "";
+const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
+const NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 const MIN_RECOMMENDATIONS = 3;
 const MAX_RECOMMENDATIONS = 5;
@@ -142,9 +143,9 @@ export async function action({ request }) {
         });
     }
 
-    if (!OPENAI_API_KEY) {
+    if (!NVIDIA_API_KEY) {
         return new Response(
-            JSON.stringify({ error: "OpenAI API key not configured on the server." }),
+            JSON.stringify({ error: "NVIDIA API key not configured on the server." }),
             { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
@@ -258,14 +259,14 @@ Return ONLY a valid JSON array of ${limit} objects. Each object must include:
 JSON array:`;
 
     try {
-        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        const nvidiaRes = await fetch(NVIDIA_API_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                "Authorization": `Bearer ${NVIDIA_API_KEY}`,
             },
             body: JSON.stringify({
-                model: OPENAI_MODEL,
+                model: NVIDIA_MODEL,
                 messages: [
                     { role: "system", content: "You output only valid JSON with no extra commentary." },
                     { role: "user", content: prompt },
@@ -275,13 +276,12 @@ JSON array:`;
             }),
         });
 
-        if (!openaiRes.ok) {
-            const errText = await openaiRes.text();
-            console.error("[AI-UPSELL] OpenAI API error:", openaiRes.status, errText);
-            // Quota exceeded — return empty recommendations so UI degrades gracefully
-            if (openaiRes.status === 429) {
+        if (!nvidiaRes.ok) {
+            const errText = await nvidiaRes.text();
+            console.error("[AI-UPSELL] NVIDIA API error:", nvidiaRes.status, errText);
+            if (nvidiaRes.status === 429) {
                 return new Response(
-                    JSON.stringify({ success: true, recommendations: [], warning: "AI quota exceeded. Please update your OpenAI API key." }),
+                    JSON.stringify({ success: true, recommendations: [], warning: "AI quota exceeded. Please update your NVIDIA API key." }),
                     { status: 200, headers: { "Content-Type": "application/json" } }
                 );
             }
@@ -292,13 +292,13 @@ JSON array:`;
                 void e;
             }
             return new Response(
-                JSON.stringify({ error: `OpenAI error (${openaiRes.status}): ${errDetail}` }),
+                JSON.stringify({ error: `NVIDIA API error (${nvidiaRes.status}): ${errDetail}` }),
                 { status: 502, headers: { "Content-Type": "application/json" } }
             );
         }
 
-        const openaiData = await openaiRes.json();
-        const rawContent = openaiData.choices?.[0]?.message?.content || "[]";
+        const nvidiaData = await nvidiaRes.json();
+        const rawContent = nvidiaData.choices?.[0]?.message?.content || "[]";
         const jsonArrayText = stripCodeFencesToJsonArray(rawContent);
         if (!jsonArrayText) {
             return new Response(

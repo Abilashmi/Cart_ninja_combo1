@@ -1,0 +1,48 @@
+
+> dev
+> shopify app dev
+
+╭─ info ───────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  Using shopify.app.toml for default values:                                  │
+│                                                                              │
+│    • Org:             DF Technologies                                        │
+│    • App:             The Cart Ninja                                         │
+│    • Dev store:       cartstoreviewer.myshopify.com                          │
+│    • Update URLs:     Yes                                                    │
+│                                                                              │
+│   You can pass `--reset` to your command to reset your app configuration.    │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Configuring host theme for theme app extension ...
+[2K[1A[2K[G
+╭─ info ───────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  The theme app extension development server is ready.                        │
+│                                                                              │
+│  Next steps                                                                  │
+│    1. Install your app in your development store [1]                         │
+│    2. Setup your theme app extension in the host theme [2]                   │
+│    3. Preview your theme app extension at http://127.0.0.1:9293              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+[1] https://admin.shopify.com/?organization_id=191505508&no_redirect=true&redire
+ct=/oauth/redirect_from_developer_dashboard?client_id%3D9f7189f9faf11f0771c1ef2f
+81c42b8d
+[2] https://cartstoreviewer.myshopify.com/admin/themes/135854424271/editor
+
+Running pre-dev command: "npx prisma generate"Preparing dev preview on cartstoreviewer.myshopify.comGraphiQL server started on port 3457Proxy server started on port 59015 Running theme check on your Theme app extension...
+[warning]: OrphanedSnippet 
+This snippet is not referenced by any other files 
+
+1  {{ 'ratings.stars.label' | t }}: Bundling theme extension cart-ninja...✅ Ready, watching for changes in your app │ Access scopes auto-granted: read_content, read_discounts, read_online_store_pages, write_content, write_discounts, write_online_store_pages, write_products│ Using URL: https://students-freebsd-stroke-providing.trycloudflare.com│ Any changes to prefix and subpath will only apply to new installs└ Using URL: https://students-freebsd-stroke-providing.trycloudflare.comPrisma schema loaded from prisma\schema.prisma
+Datasource "db": SQLite database "dev.sqlite" at "file:dev.sqlite"
+
+1 migration found in prisma/migrations
+
+
+No pending migrations to apply.
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m59019[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[shopify-api/INFO] version 12.3.0, environment React Router

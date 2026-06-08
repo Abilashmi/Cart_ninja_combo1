@@ -5,7 +5,7 @@ import {
   InlineGrid, ProgressBar, Divider,
 } from '@shopify/polaris';
 import {
-  MagicIcon, PaintBrushFlatIcon, ProductIcon, DiscountIcon,
+  MagicIcon, PaintBrushFlatIcon, ProductIcon,
   ChartVerticalIcon, CheckCircleIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
@@ -15,14 +15,12 @@ const ONBOARDING_STEPS = [
   { id: 'products',  title: 'Pick Collections',   description: 'Select which product collections to display in your bundle', icon: ProductIcon,        href: '/app/bundles/customize'      },
   { id: 'content',   title: 'Customize Content',  description: 'Add titles, subtitles, CTAs and AI-generated copy',          icon: MagicIcon,          href: '/app/bundles/customize'      },
   { id: 'style',     title: 'Style Your Bundle',  description: 'Adjust colors, fonts, banners, and spacing',                 icon: PaintBrushFlatIcon, href: '/app/bundles/customize'      },
-  { id: 'discount',  title: 'Add Discounts',      description: 'Set up bundle pricing rules and discount codes',              icon: DiscountIcon,       href: '/app/bundles/discountengine' },
   { id: 'publish',   title: 'Save & Publish',     description: 'Publish your bundle as a Shopify page — no embed needed',    icon: CheckCircleIcon,    href: '/app/bundles/customize'      },
 ];
 
 const QUICK_NAV_ITEMS = [
   { label: 'Template Library',  description: 'Browse preset & saved templates',   href: '/app/bundles/templates',      icon: PaintBrushFlatIcon, color: '#667eea' },
   { label: 'Customize Builder', description: 'Design your bundle page layout',     href: '/app/bundles/customize',      icon: MagicIcon,          color: '#8b5cf6' },
-  { label: 'Discount Engine',   description: 'Create bundle discount codes',       href: '/app/bundles/discountengine', icon: DiscountIcon,       color: '#f59e0b' },
   { label: 'Analytics',         description: 'View impressions, clicks & revenue', href: '/app/bundles/analytics',      icon: ChartVerticalIcon,  color: '#10b981' },
 ];
 

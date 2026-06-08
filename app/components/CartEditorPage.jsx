@@ -31,9 +31,10 @@ export default function CartEditorPage() {
   const data = useLoaderData();
   const coupons = data?.coupons ?? [];
   const allProducts = data?.allProducts ?? [];
+  const initialStatus = data?.drawerEnabled === false ? 'inactive' : 'active';
 
   return (
-    <CartEditorProvider availableCoupons={coupons} allProducts={allProducts}>
+    <CartEditorProvider availableCoupons={coupons} allProducts={allProducts} initialStatus={initialStatus}>
       <CartEditorContent />
     </CartEditorProvider>
   );

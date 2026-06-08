@@ -340,7 +340,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 }
 
 export function CartPreview({ onSave, onDiscard, isDirty }) {
-  const { previewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer, settings } = useCartEditor();
+  const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer, settings } = useCartEditor();
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
@@ -497,8 +497,8 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
                         <div className="cart-preview-empty-icon"><Icon source={CartIcon} /></div>
                         <h4>{body.emptyCart.message}</h4>
                         <p>Add items to unlock rewards</p>
-                        {settings.general.showContinueShopping && (
-                          <button className="cart-preview-continue-btn">Continue shopping</button>
+                        {body.emptyCart.showContinueShopping && (
+                          <button className="cart-preview-continue-btn" onClick={() => setPreviewMode('items')}>Continue shopping</button>
                         )}
                       </div>
                     </HighlightZone>

@@ -5,7 +5,6 @@ import {
   HomeIcon,
   PageIcon,
   PaintBrushFlatIcon,
-  DiscountIcon,
   ChartVerticalIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
@@ -19,7 +18,6 @@ const NAV_TABS = [
   { id: 'dashboard',     label: 'Dashboard',       href: '/app/bundles',                  icon: HomeIcon          },
   { id: 'templates',     label: 'Templates',        href: '/app/bundles/templates',         icon: PageIcon          },
   { id: 'customize',     label: 'Customize',        href: '/app/bundles/customize',         icon: PaintBrushFlatIcon},
-  { id: 'discountengine',label: 'Discount Engine',  href: '/app/bundles/discountengine',    icon: DiscountIcon      },
   { id: 'analytics',     label: 'Analytics',        href: '/app/bundles/analytics',         icon: ChartVerticalIcon },
 ];
 

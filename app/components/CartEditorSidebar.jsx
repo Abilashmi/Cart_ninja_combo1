@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useFetcher } from 'react-router';
 import { useCartEditor } from '../context/CartEditorContext';
 import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
@@ -15,7 +16,7 @@ import {
   CashDollarIcon,
   CodeIcon,
 } from '@shopify/polaris-icons';
-import { Icon } from '@shopify/polaris';
+import { Icon, Modal, Text } from '@shopify/polaris';
 
 import { DesignSection } from './sections/DesignSection';
 import { GeneralSection } from './sections/GeneralSection';
@@ -57,6 +58,43 @@ const SECTION_COMPONENT_MAP = {
 export function CartEditorSidebar({ onDiscard }) {
   const { status, setStatus, setActiveSection, previewMode, setPreviewMode, body } = useCartEditor();
   const [openSection, setOpenSection] = useState(null);
+  const [statusError, setStatusError] = useState('');
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const statusFetcher = useFetcher();
+  const isTogglingStatus = statusFetcher.state !== 'idle';
+
+  useEffect(() => {
+    const data = statusFetcher.data;
+    if (!data || data.intent !== 'toggleDrawerStatus') return;
+
+    if (data.success) {
+      setStatus(data.drawerEnabled ? 'active' : 'inactive');
+      setStatusError(data.synced ? '' : 'Saved locally — will sync to your storefront shortly.');
+    } else {
+      setStatusError(data.error || 'Could not update the cart drawer status. Please try again.');
+    }
+  }, [statusFetcher.data, setStatus]);
+
+  const submitStatusToggle = (enabled) => {
+    setStatusError('');
+    statusFetcher.submit(
+      { intent: 'toggleDrawerStatus', enabled },
+      { method: 'POST', encType: 'application/json' }
+    );
+  };
+
+  const handleToggleStatus = () => {
+    if (status === 'active') {
+      setShowDeactivateModal(true);
+      return;
+    }
+    submitStatusToggle(true);
+  };
+
+  const handleConfirmDeactivate = () => {
+    setShowDeactivateModal(false);
+    submitStatusToggle(false);
+  };
 
   const toggleSection = (id) => {
     const next = openSection === id ? null : id;
@@ -75,6 +113,26 @@ export function CartEditorSidebar({ onDiscard }) {
 
   return (
     <div className="cart-editor-left">
+      <Modal
+        open={showDeactivateModal}
+        onClose={() => setShowDeactivateModal(false)}
+        title="Deactivate cart drawer"
+        primaryAction={{
+          content: 'Deactivate',
+          onAction: handleConfirmDeactivate,
+          destructive: true,
+        }}
+        secondaryActions={[
+          { content: 'Cancel', onAction: () => setShowDeactivateModal(false) },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            Turning the cart drawer off will hide it on your live storefront immediately. You can switch it back on at any time.
+          </Text>
+        </Modal.Section>
+      </Modal>
+
       {/* Header */}
       <div className="cart-editor-left-header">
         <div className="cart-editor-left-header-top">
@@ -90,12 +148,14 @@ export function CartEditorSidebar({ onDiscard }) {
             <span className="cart-editor-control-label">Status</span>
             <button
               className={`cart-editor-status-pill ${status === 'active' ? 'active' : ''}`}
-              onClick={() => setStatus(status === 'active' ? 'inactive' : 'active')}
+              onClick={handleToggleStatus}
+              disabled={isTogglingStatus}
             >
               <span className="status-dot" />
-              {status === 'active' ? 'Active' : 'Inactive'}
+              {isTogglingStatus ? 'Saving…' : (status === 'active' ? 'Active' : 'Inactive')}
             </button>
           </div>
+          {statusError && <p className="cart-editor-status-hint">{statusError}</p>}
 
           <div className="cart-editor-control-row">
             <span className="cart-editor-control-label">Preview</span>

@@ -3,8 +3,10 @@ import { defaultCartEditorState } from '../types/cartEditorTypes';
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [], allProducts = [] }) {
-  const [state, setState] = useState(defaultCartEditorState);
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus }) {
+  const [state, setState] = useState(() => (
+    initialStatus ? { ...defaultCartEditorState, status: initialStatus } : defaultCartEditorState
+  ));
 
   const setActiveSection = useCallback((section) => {
     setState(prev => ({ ...prev, activeSection: section }));
@@ -19,7 +21,9 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
   }, []);
 
   const setStatus = useCallback((status) => {
-    setState(prev => ({ ...prev, status, isDirty: true }));
+    // Status changes are persisted immediately by the toggle (not via the Save flow),
+    // so this does not mark the editor dirty.
+    setState(prev => ({ ...prev, status }));
   }, []);
 
   const updateDesign = useCallback((design) => {

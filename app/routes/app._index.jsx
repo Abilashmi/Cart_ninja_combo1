@@ -146,8 +146,8 @@ export default function DashboardPage() {
       description: 'Enable the app embed in your Shopify theme to activate the cart drawer.',
       action: 'Enable App',
       onClick: () => {
-        markComplete('appEmbedEnabled');
         window.open(`https://${shop}/admin/themes/current/editor?context=apps`, '_blank');
+        markComplete('appEmbedEnabled');
       },
     },
     {
@@ -156,8 +156,8 @@ export default function DashboardPage() {
       description: 'Open the Cart Editor to design your perfect cart experience.',
       action: 'Open Cart Editor',
       onClick: () => {
-        markComplete('cartEditorVisited');
         navigate('/app/cartdrawer');
+        markComplete('cartEditorVisited');
       },
     },
     {
@@ -166,8 +166,8 @@ export default function DashboardPage() {
       description: 'Add upsell products to increase your average order value.',
       action: 'Configure Upsells',
       onClick: () => {
-        markComplete('firstUpsellCreated');
         navigate('/app/upsell');
+        markComplete('firstUpsellCreated');
       },
     },
     {
@@ -176,8 +176,8 @@ export default function DashboardPage() {
       description: 'Set up a discount coupon to drive more conversions from your store.',
       action: 'Create Coupon',
       onClick: () => {
-        markComplete('firstCouponCreated');
         navigate('/app/coupons');
+        markComplete('firstCouponCreated');
       },
     },
   ];

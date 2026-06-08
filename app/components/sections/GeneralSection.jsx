@@ -22,11 +22,6 @@ export function GeneralSection() {
             enabled={general.openOnIconClick}
             onToggle={(v) => updateGeneral({ openOnIconClick: v })}
           />
-          <FeatureToggle
-            label='Show "Continue shopping" button'
-            enabled={general.showContinueShopping}
-            onToggle={(v) => updateGeneral({ showContinueShopping: v })}
-          />
           <Select
             label="Cart Drawer Position"
             options={[

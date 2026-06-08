@@ -1,0 +1,70 @@
+{
+  "cartstoreviewer.myshopify.com": [
+    {
+      "id": "bc8fa1a5-0728-4cd7-94f3-3fc3879c1d27",
+      "prompt": "Enable the cart drawer for my store.",
+      "summary": "Enable cart drawer for your store",
+      "response": {
+        "summary": "Enable cart drawer for your store",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-08T10:29:47.201Z"
+    },
+    {
+      "id": "dddcfa88-feaa-4bed-9826-ee19b77c0216",
+      "prompt": "Enable the cart drawer for my store.",
+      "summary": "Enable cart drawer for your store",
+      "response": {
+        "summary": "Enable cart drawer for your store",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-08T10:28:52.090Z"
+    },
+    {
+      "id": "4efafa4b-d094-423b-a8f8-6de6cd3823a7",
+      "prompt": "Enable the cart drawer for my store.and design the cart drawer according to my theme",
+      "summary": "Enable cart drawer and apply store theme styling",
+      "response": {
+        "summary": "Enable cart drawer and apply store theme styling",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {
+          "template": "premium",
+          "primaryColor": "#008060",
+          "secondaryColor": "#1a1a1a",
+          "fontFamily": "Inter",
+          "buttonRadius": 8
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-08T10:24:22.379Z"
+    }
+  ]
+}

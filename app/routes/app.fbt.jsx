@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useLoaderData, useRouteError, useFetcher } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
@@ -13,10 +13,44 @@ import { authenticate } from '../shopify.server';
 
 /* ─── LOADER ──────────────────────────────────────────────────────────────── */
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
+  /* fetch products from Shopify */
+  let allProducts = [];
+  try {
+    const prodRes = await admin.graphql(`
+      query getProducts {
+        products(first: 50) {
+          edges {
+            node {
+              id
+              title
+              handle
+              featuredImage { url }
+              variants(first: 1) {
+                edges {
+                  node { id price }
+                }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const prodData = await prodRes.json();
+    allProducts = (prodData?.data?.products?.edges || []).map(e => ({
+      id: e.node.id,
+      title: e.node.title,
+      handle: e.node.handle,
+      image: e.node.featuredImage?.url || '',
+      price: e.node.variants?.edges?.[0]?.node?.price || '0',
+    }));
+  } catch (e) { console.error('[FBT loader] products:', e); }
+
+  /* fetch FBT config from PHP backend */
   let fbtConfig = null;
+  let manualRules = [];
   try {
     const res = await fetch(
       `https://int.thecartninja.com/save_fbt_widget.php?shopdomain=${encodeURIComponent(shop)}`,
@@ -44,12 +78,15 @@ export const loader = async ({ request }) => {
           aiEnabled: Boolean(row.aiEnabled),
           aiProductCount: row.aiProductCount || 3,
         };
+        manualRules = Array.isArray(row.condition) ? row.condition : [];
       }
     }
   } catch (e) { console.error('[FBT loader]', e); }
 
   return {
     shop,
+    allProducts,
+    manualRules,
     fbtConfig: fbtConfig ?? {
       activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal',
       interactionType: 'classic', showPrices: true, showAddAllButton: true,
@@ -66,10 +103,20 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const body = await request.json();
   try {
+    const payload = {
+      shop,
+      fbt: {
+        selectedTemplate: body.selectedTemplate,
+        mode: body.mode,
+        manualRules: body.manualRules || [],
+        templates: body.templates || {},
+        aiProductCount: body.aiProductCount != null ? Number(body.aiProductCount) : null,
+      },
+    };
     const res = await fetch('https://int.thecartninja.com/save_fbt_widget.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-      body: JSON.stringify({ shop, ...body }),
+      body: JSON.stringify(payload),
     });
     if (res.ok) { const d = await res.json(); return { success: d.status === 'success' }; }
   } catch (e) { console.error('[FBT action]', e); }
@@ -119,6 +166,90 @@ function apiKeyToTemplateId(apiKey) {
 }
 function templateIdToApiKey(id) {
   return TEMPLATES.find(t => t.id === id)?.apiKey ?? 'fbt1';
+}
+
+/* ─── PRODUCT PICKER MODAL ────────────────────────────────────────────────── */
+function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, title }) {
+  const [localSelected, setLocalSelected] = useState([]);
+
+  /* reset selection when modal opens or external selectedIds change */
+  const prevOpen = usePrevious(open);
+  useEffect(() => {
+    if (open && !prevOpen) {
+      setLocalSelected(selectedIds || []);
+    }
+  }, [open, prevOpen, selectedIds]);
+
+  const toggle = (id) => setLocalSelected(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
+
+  return (
+    <Modal open={open} onClose={onClose} title={title || 'Browse Products'}
+      primaryAction={{ content: `Save Selection (${localSelected.length})`, onAction: () => { onSave(localSelected); onClose(); } }}
+      secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
+    >
+      <Modal.Section>
+        <BlockStack gap="400">
+          <Text variant="bodyMd" tone="subdued">Select the products to include.</Text>
+          {allProducts.length === 0 ? (
+            <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
+              {allProducts.map(product => {
+                const sel = localSelected.includes(product.id);
+                return (
+                  <div key={product.id} onClick={() => toggle(product.id)}
+                    style={{
+                      padding: '8px 10px', border: sel ? '2px solid #2c6ecb' : '1px solid #e5e7eb',
+                      borderRadius: '8px', background: sel ? '#f0f7ff' : '#fff',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                    }}
+                  >
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden',
+                      flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: '#f8fafc', border: '1px solid #f1f5f9',
+                    }}>
+                      {product.image ? (
+                        <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : <span>📦</span>}
+                    </div>
+                    <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
+                      <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
+                      <Text tone="subdued" variant="bodyXs">₹{product.price}</Text>
+                    </BlockStack>
+                    {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
+  );
+}
+
+/* small hook to track previous value */
+function usePrevious(value) {
+  const ref = useRef();
+  useEffect(() => { ref.current = value; });
+  return ref.current;
+}
+
+/* ─── RULE HELPERS ────────────────────────────────────────────────────────── */
+function findProductsByIds(allProducts, ids) {
+  return allProducts.filter(p => ids.includes(p.id)).map(p => ({
+    id: p.id, title: p.title, handle: p.handle,
+    image: p.image, price: p.price,
+  }));
+}
+
+function scopeLabel(scope) {
+  if (scope === 'all') return 'All product pages';
+  if (scope === 'single') return 'Specific product page';
+  return 'Per-product rules';
 }
 
 /* ─── ACCORDION SECTION ───────────────────────────────────────────────────── */
@@ -175,7 +306,7 @@ function ColorField({ label, value, onChange }) {
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
-  const { shop, fbtConfig } = useLoaderData();
+  const { shop, fbtConfig, allProducts, manualRules: initialRules } = useLoaderData();
   const fetcher = useFetcher();
 
   /* state */
@@ -201,6 +332,10 @@ export default function FBTPage() {
   const [productStates,     setProductStates]     = useState(defaultProductStates());
   const [hasChanges,        setHasChanges]        = useState(false);
   const [toastActive,       setToastActive]       = useState(false);
+  const [manualRules,       setManualRules]       = useState(initialRules || []);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [pickerTarget,      setPickerTarget]      = useState(null); /* 'trigger' | 'fbt' */
+  const [draftRule,         setDraftRule]         = useState(null); /* rule being built */
 
   const isSaving = fetcher.state !== 'idle';
 
@@ -234,14 +369,32 @@ export default function FBTPage() {
   const activeCount = MOCK_PRODUCTS.filter((_, i) => isActive(i)).length;
 
   const handleSave = () => {
+    const curSettings = {
+      layout,
+      interactionType: interactionStyle === 'quick-add' ? 'quickAdd' : interactionStyle,
+      showPrices, showAddAllButton: showAddAll,
+      bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
+    };
+    /* build template objects so PHP saves them into temp1/temp2/temp3 columns */
+    const templates = {};
+    for (const t of TEMPLATES) {
+      if (t.id === selectedTemplate) {
+        templates[t.apiKey] = { name: t.name, ...curSettings };
+      } else {
+        templates[t.apiKey] = { name: t.name, layout: 'horizontal', interactionType: 'classic',
+          showPrices: true, showAddAllButton: true, ...t.colors, borderRadius: t.borderRadius };
+      }
+    }
     fetcher.submit(
       {
-        selectedTemp: templateIdToApiKey(selectedTemplate),
-        selectedMode: configMode,
-        interactionType: interactionStyle === 'quick-add' ? 'quickAdd' : interactionStyle,
-        layout, showPrices, showAddAllButton: showAddAll,
-        bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
-        aiEnabled: configMode === 'ai', aiProductCount: Number(fbtCount), shop,
+        selectedTemplate: templateIdToApiKey(selectedTemplate),
+        mode: configMode,
+        templates,
+        manualRules,
+        aiEnabled: configMode === 'ai',
+        aiProductCount: Number(fbtCount),
+        ...curSettings,
+        shop,
       },
       { method: 'POST', encType: 'application/json' }
     );
@@ -495,37 +648,86 @@ export default function FBTPage() {
                   <Divider />
 
                   <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">Step 2: Select FBT products to recommend</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Choose products to show as "Frequently Bought Together" recommendations.</Text>
+                    <Text as="h3" variant="headingSm">Step 2: Create a rule</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Pick trigger products (pages where FBT shows) and FBT products (what to recommend).</Text>
+
+                    {/* draft status badges */}
                     <InlineStack gap="200">
-                      <Button>Browse Products</Button>
-                      <Button variant="primary" disabled>Add Rule</Button>
+                      <div style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${draftRule?.triggerIds?.length ? '#008060' : '#e1e3e5'}`, background: draftRule?.triggerIds?.length ? '#f1f8f5' : '#fff', cursor: 'pointer' }} onClick={() => { setPickerTarget('trigger'); setShowProductPicker(true); }}>
+                        <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.triggerIds?.length || 0} trigger products</Text>
+                        <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
+                      </div>
+                      <div style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${draftRule?.fbtIds?.length ? '#008060' : '#e1e3e5'}`, background: draftRule?.fbtIds?.length ? '#f1f8f5' : '#fff', cursor: 'pointer' }} onClick={() => { setPickerTarget('fbt'); setShowProductPicker(true); }}>
+                        <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.fbtIds?.length || 0} FBT products</Text>
+                        <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
+                      </div>
+                    </InlineStack>
+
+                    <InlineStack gap="200">
+                      <Button variant="primary" disabled={!draftRule?.triggerIds?.length || !draftRule?.fbtIds?.length}
+                        onClick={() => {
+                          const rule = {
+                            id: `rule-${Date.now()}`,
+                            displayScope: placement === 'different' ? 'per_product' : placement,
+                            triggerProducts: findProductsByIds(allProducts, draftRule.triggerIds),
+                            fbtProducts: findProductsByIds(allProducts, draftRule.fbtIds),
+                            aiGenerated: false,
+                          };
+                          setManualRules(prev => [...prev, rule]);
+                          setDraftRule(null);
+                          mark();
+                        }}
+                      >Add Rule</Button>
+                      {draftRule && (draftRule.triggerIds?.length || draftRule.fbtIds?.length) ? (
+                        <Button onClick={() => setDraftRule(null)}>Clear</Button>
+                      ) : null}
                     </InlineStack>
                   </BlockStack>
 
                   <Divider />
 
                   <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">Saved Rules</Text>
-                    <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
-                      {[
-                        { tag: 'Specific product page', trigger: 'Trigger page(s): Organic Kajal, Castor Oil' },
-                        { tag: 'All product pages',     trigger: 'Applies to all products'                    },
-                      ].map((rule, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: i > 0 ? '1px solid #e1e3e5' : 'none' }}>
-                          <BlockStack gap="100">
-                            <span style={{ fontSize: '12px', padding: '2px 10px', borderRadius: '4px', background: '#f1f8f5', color: '#008060', border: '1px solid #b5e3d8', display: 'inline-block' }}>{rule.tag}</span>
-                            <Text as="p" variant="bodySm" tone="subdued">{rule.trigger}</Text>
-                          </BlockStack>
-                          <Button variant="plain" tone="critical">Remove</Button>
-                        </div>
-                      ))}
-                    </div>
+                    <Text as="h3" variant="headingSm">Saved Rules ({manualRules.length})</Text>
+                    {manualRules.length === 0 ? (
+                      <Text as="p" variant="bodySm" tone="subdued">No rules yet. Select trigger and FBT products above to create one.</Text>
+                    ) : (
+                      <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
+                        {manualRules.map((rule, i) => (
+                          <div key={rule.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: i > 0 ? '1px solid #e1e3e5' : 'none' }}>
+                            <BlockStack gap="100">
+                              <span style={{ fontSize: '12px', padding: '2px 10px', borderRadius: '4px', background: '#f1f8f5', color: '#008060', border: '1px solid #b5e3d8', display: 'inline-block' }}>{scopeLabel(rule.displayScope)}</span>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Trigger: {(rule.triggerProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.triggerProducts || []).length > 2 ? ` +${rule.triggerProducts.length - 2} more` : ''}
+                                {' | '}FBT: {(rule.fbtProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.fbtProducts || []).length > 2 ? ` +${rule.fbtProducts.length - 2} more` : ''}
+                              </Text>
+                            </BlockStack>
+                            <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </BlockStack>
                 </BlockStack>
               </Modal.Section>
             )}
           </Modal>
+
+          {/* ── Product Picker Modal ── */}
+          <ProductPickerModal
+            open={showProductPicker}
+            onClose={() => { setShowProductPicker(false); setPickerTarget(null); }}
+            allProducts={allProducts}
+            selectedIds={[]}
+            onSave={(ids) => {
+              if (pickerTarget === 'trigger') {
+                setDraftRule(prev => ({ triggerIds: ids, fbtIds: prev?.fbtIds || [] }));
+              } else if (pickerTarget === 'fbt') {
+                setDraftRule(prev => ({ triggerIds: prev?.triggerIds || [], fbtIds: ids }));
+              }
+              mark();
+            }}
+            title={pickerTarget === 'trigger' ? 'Select Trigger Products' : 'Select FBT Products'}
+          />
 
           {/* ── Select Template + Customize  |  Preview ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'stretch' }}>

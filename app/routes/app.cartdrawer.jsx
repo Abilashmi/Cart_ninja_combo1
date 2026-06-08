@@ -1,10 +1,11 @@
 import { authenticate } from '../shopify.server';
 import CartEditorPage from '../components/CartEditorPage';
+import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/ai-agent-actions.server';
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const [discountQuery, productsQuery] = await Promise.all([
+  const [discountQuery, productsQuery, cartRecord] = await Promise.all([
     admin.graphql(`
       query DiscountList {
         discountNodes(first: 100, reverse: true) {
@@ -51,6 +52,7 @@ export const loader = async ({ request }) => {
         }
       }
     `),
+    fetchCartDrawerRecord(session.shop),
   ]);
 
   const discountJson = await discountQuery.json();
@@ -79,7 +81,28 @@ export const loader = async ({ request }) => {
     price: node.variants.edges[0]?.node?.price || "0.00",
   })) || [];
 
-  return { coupons, allProducts };
+  const drawerEnabled = cartRecord
+    ? truthyFlag(cartRecord.cartStatus ?? cartRecord.cart_status)
+    : true;
+
+  return { coupons, allProducts, drawerEnabled };
+};
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const body = await request.json();
+
+  if (body?.intent === 'toggleDrawerStatus') {
+    const enabled = Boolean(body?.enabled);
+    const record = (await fetchCartDrawerRecord(shop)) || {};
+    record.cartStatus = enabled ? 1 : 0;
+    record.cart_status = enabled ? 1 : 0;
+    const synced = await persistCartDrawerRecord(shop, record);
+    return Response.json({ intent: 'toggleDrawerStatus', success: true, drawerEnabled: enabled, synced });
+  }
+
+  return Response.json({ success: false, error: 'Unknown action' }, { status: 400 });
 };
 
 export default CartEditorPage;

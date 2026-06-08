@@ -1,7 +1,8 @@
 import process from "node:process";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = "gpt-4o-mini";
+const NVIDIA_API_KEY = process.env.OPENAI_API_KEY || "";
+const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
+const NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 function extractNumericId(value) {
     if (!value) return "";
@@ -40,8 +41,7 @@ export async function action({ request }) {
         );
     }
 
-    // No OpenAI key — return empty gracefully
-    if (!OPENAI_API_KEY) {
+    if (!NVIDIA_API_KEY) {
         return new Response(
             JSON.stringify({ success: true, recommendations: [] }),
             { headers: { "Content-Type": "application/json" } }
@@ -63,14 +63,14 @@ ${catalogList}
 Return format: ["ID1","ID2","ID3"]`;
 
     try {
-        const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        const nvidiaRes = await fetch(NVIDIA_API_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${OPENAI_API_KEY}`,
+                "Authorization": `Bearer ${NVIDIA_API_KEY}`,
             },
             body: JSON.stringify({
-                model: OPENAI_MODEL,
+                model: NVIDIA_MODEL,
                 messages: [
                     { role: "system", content: "You output only valid JSON arrays of numeric IDs. No explanation, no markdown." },
                     { role: "user", content: prompt },
@@ -81,22 +81,22 @@ Return format: ["ID1","ID2","ID3"]`;
         });
 
         // Quota exceeded — degrade gracefully
-        if (openaiRes.status === 429) {
+        if (nvidiaRes.status === 429) {
             return new Response(
                 JSON.stringify({ success: true, recommendations: [] }),
                 { headers: { "Content-Type": "application/json" } }
             );
         }
 
-        if (!openaiRes.ok) {
+        if (!nvidiaRes.ok) {
             return new Response(
                 JSON.stringify({ success: true, recommendations: [] }),
                 { headers: { "Content-Type": "application/json" } }
             );
         }
 
-        const openaiData = await openaiRes.json();
-        const rawContent = openaiData.choices?.[0]?.message?.content || "[]";
+        const nvidiaData = await nvidiaRes.json();
+        const rawContent = nvidiaData.choices?.[0]?.message?.content || "[]";
 
         const jsonMatch = rawContent.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {

@@ -25,7 +25,6 @@ const PLANS = [
       { text: 'Community Support', included: true },
       { text: 'AI Content Generation', included: false },
       { text: 'Carousel & Editorial Layouts', included: false },
-      { text: 'Discount Engine', included: false },
       { text: 'Analytics Dashboard', included: false },
       { text: 'Custom CSS Editor', included: false },
     ],
@@ -46,8 +45,6 @@ const PLANS = [
       { text: 'All Layouts (Grid, Carousel, Editorial)', included: true },
       { text: 'Full Styling & Custom CSS', included: true },
       { text: 'AI Content Generation', included: true },
-      { text: 'Discount Engine (All Types)', included: true },
-      { text: 'Analytics Dashboard', included: true },
       { text: 'Banner Configuration', included: true },
       { text: 'Priority Email Support', included: true },
       { text: 'Advanced Analytics', included: false },
@@ -69,8 +66,6 @@ const PLANS = [
       { text: 'All Layouts + Custom Bundle Layout', included: true },
       { text: 'Full Styling & Custom CSS', included: true },
       { text: 'AI Content Generation (Unlimited)', included: true },
-      { text: 'Discount Engine (All Types)', included: true },
-      { text: 'Advanced Analytics & AI Usage Reports', included: true },
       { text: 'Multi-Store Support', included: true },
       { text: 'Dedicated Slack Support', included: true },
       { text: 'White-label Option', included: true },
@@ -360,7 +355,7 @@ export default function AppBundlesPlan() {
                 border: '1px solid rgba(102,126,234,0.15)',
               }}>
                 <Text variant="bodySm" as="p" tone="subdued">
-                  <strong>Build</strong> is perfect for growing stores that want AI-powered bundles and a full discount engine.
+                  <strong>Build</strong> is perfect for growing stores that want AI-powered bundles and advanced layouts.
                 </Text>
               </div>
               <div style={{
