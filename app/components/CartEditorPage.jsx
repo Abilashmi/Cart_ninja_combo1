@@ -6,10 +6,20 @@ import '../styles/cart-editor.css';
 
 function CartEditorContent() {
   const navigate = useNavigate();
-  const { isDirty, resetDirty } = useCartEditor();
+  const { isDirty, resetDirty, state } = useCartEditor();
 
   const handleSave = async () => {
-    resetDirty();
+    try {
+      const res = await fetch('/api/cartdrawer-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.settings || state),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      resetDirty();
+    } catch (err) {
+      console.error('Save failed:', err);
+    }
   };
 
   const handleDiscard = () => {

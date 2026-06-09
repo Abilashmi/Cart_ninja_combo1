@@ -239,6 +239,9 @@ function transformFromDB(dbData) {
     };
 }
 
+// In-memory store for cart drawer settings (per-shop, used as fallback in loader)
+const savedSettingsMap = new Map();
+
 // ---------------- LOADER ----------------
 export async function loader({ request }) {
     const url = new URL(request.url);
@@ -407,8 +410,9 @@ export async function loader({ request }) {
                 });
             }
 
-            if (savedSettings && normalizeShopDomain(savedSettings.shop || savedSettings.shopDomain) === shopKey) {
-                const localTransformed = transformFromDB(savedSettings);
+            const memCached = savedSettingsMap.get(shopKey);
+            if (memCached) {
+                const localTransformed = transformFromDB(memCached);
                 return Response.json({
                     success: true,
                     settings: localTransformed.settings,
@@ -446,8 +450,9 @@ export async function loader({ request }) {
             });
         }
 
-        if (savedSettings && normalizeShopDomain(savedSettings.shop || savedSettings.shopDomain) === shopKey) {
-            const localTransformed = transformFromDB(savedSettings);
+        const memCached2 = savedSettingsMap.get(shopKey);
+        if (memCached2) {
+            const localTransformed = transformFromDB(memCached2);
             return Response.json({
                 success: true,
                 settings: localTransformed.settings,
@@ -470,9 +475,6 @@ export async function loader({ request }) {
         });
     }
 }
-
-// In-memory store for cart drawer settings
-let savedSettings = null;
 
 // ---------------- ACTION ----------------
 export async function action({ request }) {
@@ -512,7 +514,7 @@ export async function action({ request }) {
         };
 
         // Save to in-memory store (fast refresh fallback)
-        savedSettings = payload;
+        if (shopKey) savedSettingsMap.set(shopKey, payload);
 
         // Save to local JSON file (refresh + server restart fallback)
         if (shopKey) {

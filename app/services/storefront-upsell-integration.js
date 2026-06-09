@@ -205,7 +205,7 @@ function buildUpsellHTML(config, products) {
           <h4 class="upsell-product-title">${product.title}</h4>
           ${
             config.ui.showPrice
-              ? \`<p class="upsell-product-price">\${window.Shopify?.currency?.active || '$'}\${product.price}</p>\`
+              ? '<p class="upsell-product-price">${window.Shopify?.currency?.active || \'$\'}${product.price}</p>'
               : ''
           }
           ${

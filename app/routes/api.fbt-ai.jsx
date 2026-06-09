@@ -27,7 +27,7 @@ export async function action({ request }) {
         return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
     }
 
-    if (!OPENAI_API_KEY) {
+    if (!NVIDIA_API_KEY) {
         return new Response(
             JSON.stringify({ error: "OpenAI API key not configured on the server." }),
             { status: 500, headers: { "Content-Type": "application/json" } }

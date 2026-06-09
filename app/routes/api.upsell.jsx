@@ -96,9 +96,9 @@ export async function loader({ request }) {
     if (rules.length > 0) {
       // Reconstruct a config object that matches the structure expected by the UI
       // We'll map the first 3 rules to rule1, rule2, rule3 for compatibility
-      const rule1 = rules.find(r => r.id === 'rule-1' || r.priority === 0) || rules[0];
-      const rule2 = rules.find(r => r.id === 'rule-2' || r.priority === 1);
-      const rule3 = rules.find(r => r.id === 'rule-3' || r.priority === 2);
+      const rule1 = rules.find(r => r.priority === 0) || rules[0];
+      const rule2 = rules.find(r => r.priority === 1);
+      const rule3 = rules.find(r => r.priority === 2);
 
       config = {
         ...DEFAULT_UPSELL_CONFIG,
@@ -170,33 +170,32 @@ export async function action({ request }) {
 
     const body = await request.json();
 
-    // Validate configuration
-    const validation = validateUpsellRule(body);
-    if (!validation.valid) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: validation.error || 'Invalid upsell configuration',
-        }),
-        {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        }
-      );
-    }
-
-    // Map rules to their database equivalents
+    // Validate each rule individually
     const rulesToSave = [
-      { id: 'rule-1', priority: 0, data: body.rule1, ruleType: 'GLOBAL' },
-      { id: 'rule-2', priority: 1, data: body.rule2, ruleType: 'TRIGGERED' },
-      { id: 'rule-3', priority: 2, data: body.rule3, ruleType: 'CART_CONDITIONS' },
+      { id: `${shopId}-rule-1`, priority: 0, data: body.rule1, ruleType: 'GLOBAL' },
+      { id: `${shopId}-rule-2`, priority: 1, data: body.rule2, ruleType: 'TRIGGERED' },
+      { id: `${shopId}-rule-3`, priority: 2, data: body.rule3, ruleType: 'CART_CONDITIONS' },
     ];
 
     for (const rule of rulesToSave) {
       if (!rule.data) continue;
+
+      const validation = validateUpsellRule(rule.data);
+      if (!validation.valid) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: validation.error || `Invalid configuration for rule: ${rule.ruleType}`,
+          }),
+          {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          }
+        );
+      }
 
       await db.upsellRule.upsert({
         where: { id: rule.id },

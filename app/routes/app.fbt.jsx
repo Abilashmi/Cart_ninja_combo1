@@ -340,8 +340,9 @@ export default function FBTPage() {
   const isSaving = fetcher.state !== 'idle';
 
   // toast on save
-  useState(() => { });
-  if (fetcher.data?.success && !toastActive) setToastActive(true);
+  useEffect(() => {
+    if (fetcher.data?.success && !toastActive) setToastActive(true);
+  }, [fetcher.data?.success, toastActive]);
 
   const mark = () => setHasChanges(true);
   const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);

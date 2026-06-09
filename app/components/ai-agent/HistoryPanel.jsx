@@ -16,7 +16,7 @@ function formatTimestamp(iso) {
 export default function HistoryPanel({ history, restoringId, onRestore }) {
     return (
         <Card>
-            <BlockStack gap="300">
+            <BlockStack gap="200">
                 <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                     <Icon source={ClockIcon} />
                     <Text as="h3" variant="headingMd">AI History</Text>
@@ -30,42 +30,36 @@ export default function HistoryPanel({ history, restoringId, onRestore }) {
                         <p>Once you apply AI recommendations, they&apos;ll show up here so you can review or restore them anytime.</p>
                     </EmptyState>
                 ) : (
-                    <BlockStack gap="200">
+                    <BlockStack gap="100">
                         {history.map((entry) => (
-                            <Box key={entry.id} background="bg-surface-secondary" borderRadius="200" padding="300">
-                                <BlockStack gap="150">
-                                    <InlineStack align="space-between" blockAlign="start" wrap={false}>
-                                        <BlockStack gap="050">
-                                            <Text as="span" variant="bodyMd" fontWeight="medium">
-                                                {entry.summary || entry.prompt || "AI cart update"}
-                                            </Text>
-                                            {entry.prompt && (
-                                                <Text as="span" variant="bodySm" tone="subdued">“{entry.prompt}”</Text>
+                            <Box key={entry.id} background="bg-surface-secondary" borderRadius="200" padding="200">
+                                <BlockStack gap="100">
+                                    <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                                        <Text as="span" variant="bodySm" fontWeight="medium">
+                                            {entry.summary || entry.prompt || "AI cart update"}
+                                        </Text>
+                                        <InlineStack gap="100" blockAlign="center">
+                                            {Array.isArray(entry.appliedActions) && entry.appliedActions.length > 0 && (
+                                                <span style={{ fontSize: "11px", color: "#65676b" }}>
+                                                    {entry.appliedActions.map(a => a.action).join(", ")}
+                                                </span>
                                             )}
-                                        </BlockStack>
-                                        <Badge tone={STATUS_TONE[entry.status] || "subdued"}>
-                                            {entry.status === "restored" ? "Restored" : entry.status === "applied" ? "Applied" : "Previewed"}
-                                        </Badge>
+                                            <Badge tone={STATUS_TONE[entry.status] || "subdued"} size="small">
+                                                {entry.status === "restored" ? "Restored" : entry.status === "applied" ? "Applied" : "Previewed"}
+                                            </Badge>
+                                        </InlineStack>
                                     </InlineStack>
 
-                                    {Array.isArray(entry.appliedActions) && entry.appliedActions.length > 0 && (
-                                        <InlineStack gap="100" wrap>
-                                            {entry.appliedActions.map((a) => (
-                                                <Badge key={a.action}>{a.action}</Badge>
-                                            ))}
-                                        </InlineStack>
-                                    )}
-
                                     <InlineStack align="space-between" blockAlign="center">
-                                        <Text as="span" variant="bodySm" tone="subdued">{formatTimestamp(entry.timestamp)}</Text>
+                                        <Text as="span" variant="bodyXs" tone="subdued">{formatTimestamp(entry.timestamp)}</Text>
                                         <Button
-                                            size="slim"
+                                            size="micro"
                                             icon={ReplayIcon}
                                             loading={restoringId === entry.id}
                                             disabled={Boolean(restoringId) && restoringId !== entry.id}
                                             onClick={() => onRestore(entry.id)}
                                         >
-                                            Restore these changes
+                                            Restore
                                         </Button>
                                     </InlineStack>
                                 </BlockStack>

@@ -2,12 +2,12 @@
   "cartstoreviewer.myshopify.com": [
     {
       "shopDomain": "cartstoreviewer.myshopify.com",
-      "title": "Bold ",
-      "code": "UKM4XZMA",
+      "title": "Combo",
+      "code": "FVYK0S51",
       "type": "amount_off_products",
       "valueType": "percentage",
-      "value": 10,
-      "startDate": "2026-06-01T18:30:00.000Z",
+      "value": 100,
+      "startDate": "2026-06-08T18:30:00.000Z",
       "endDate": null,
       "selectionType": "all",
       "selectedResources": [],
@@ -32,9 +32,9 @@
       "bxgyGetsValue": null,
       "bxgyGetsQuantity": null,
       "bxgyRepeatOncePerOrder": false,
-      "shopifyId": "gid://shopify/DiscountCodeNode/1166185398479",
-      "id": "sample_1780381345099",
-      "createdAt": "2026-06-02T06:22:25.099Z"
+      "shopifyId": "gid://shopify/DiscountCodeNode/1166560690383",
+      "id": "sample_1780989157198",
+      "createdAt": "2026-06-09T07:12:37.198Z"
     }
   ]
 }

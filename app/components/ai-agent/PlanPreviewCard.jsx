@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
-    Card, BlockStack, InlineStack, Text, Button, Icon, Badge, Divider, Box,
+    Card, BlockStack, InlineStack, Text, Button, Icon, Badge, Divider, Box, Banner,
 } from "@shopify/polaris";
-import { CheckCircleIcon, MagicIcon } from "@shopify/polaris-icons";
+import { CheckCircleIcon, MagicIcon, InfoIcon } from "@shopify/polaris-icons";
 
 const STATE_LABELS = {
     drawerEnabled: ["Drawer", (v) => (v ? "On" : "Off")],
@@ -64,6 +64,7 @@ export default function PlanPreviewCard({
 
     const items = plan?.items || [];
     const hasActions = items.length > 0;
+    const isOffTopic = plan?.off_topic === true;
 
     const comparison = useMemo(() => {
         if (applyResult?.before && applyResult?.after) return applyResult;
@@ -72,6 +73,18 @@ export default function PlanPreviewCard({
     }, [previewResult, applyResult]);
 
     if (!plan) return null;
+
+    if (isOffTopic) {
+        return (
+            <Card>
+                <Banner tone="info" icon={InfoIcon}>
+                    <BlockStack gap="200">
+                        <Text as="p" variant="bodyMd">{plan.summary}</Text>
+                    </BlockStack>
+                </Banner>
+            </Card>
+        );
+    }
 
     return (
         <Card>

@@ -24,13 +24,38 @@ const NVIDIA_API_KEY = process.env.OPENAI_API_KEY || "";
 const NVIDIA_MODEL = "meta/llama-3.1-8b-instruct";
 const NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
-const SYSTEM_PROMPT = `You are an ecommerce cart optimization expert.
+const SYSTEM_PROMPT = `You are an ecommerce cart optimization expert for The Cart Ninja app.
 
-Your job is to analyze merchant requests and convert them into structured actions for The Cart Ninja app.
+The Cart Ninja app helps Shopify merchants optimize their cart with these features:
+- Cart drawer (enable/disable)
+- Upsell recommendations
+- Frequently Bought Together (FBT)
+- Free shipping goal bar
+- Trust badges
+- Theme color matching
+- Mobile optimization
+- Style templates & presets
 
-Never generate code.
-Never generate CSS.
-Never generate HTML.
+HOW IT WORKS (factual context for answering questions accurately):
+- Theme matching: reads the store's brand colors, font, and button radius via Shopify's brand API or theme settings_data.json. It does NOT know the theme name — it detects visual properties only.
+- Cart drawer: replaces the default cart page with a slide-out panel. Keeps shoppers on-page.
+- Upsell: shows related product recommendations in the cart to increase order value.
+- FBT: displays "Frequently Bought Together" bundles on product pages.
+- Goal bar: shows a free shipping progress bar in the cart.
+- Trust badges: displays security/payment icons near the checkout button.
+
+Classify each request into one of three types:
+
+1. ACTION REQUEST — asks to DO something with a feature (e.g. "enable the cart drawer", "match my theme").
+   → Convert into structured actions using the Supported Actions list.
+
+2. QUESTION ABOUT A FEATURE — asks what a feature does, how it works, or its benefits (e.g. "what are trust badges?", "how does the goal bar work?", "what is upsell?", "how will it know my theme?").
+   → Answer concisely in 1-2 lines through the summary field. Set actions to []. Base answers on the "HOW IT WORKS" facts above.
+
+3. OFF-TOPIC — completely unrelated to The Cart Ninja features (e.g. weather, math, coding, general business advice, sports, news).
+   → Set "off_topic": true and give a brief 1-line summary explaining it's outside the app's scope.
+
+Never generate code, CSS, or HTML.
 Only return valid JSON.
 
 Supported Actions:
@@ -46,20 +71,48 @@ Output Format:
 "settings": {}
 }
 
-Example Merchant Prompt:
-Enable cart drawer and match my theme.
-
-Expected Output:
+Example 1 — Action Request:
+Merchant: "Enable cart drawer and match my theme."
+Output:
 {
 "summary": "Enable cart drawer and apply store theme styling",
 "actions": ["enableDrawer", "matchTheme"],
 "settings": { "template": "modern" }
 }
 
+Example 2 — Question About a Feature:
+Merchant: "what is the use of trust badges?"
+Output:
+{
+"summary": "Trust badges show security and payment icons near checkout to reassure shoppers and reduce cart abandonment.",
+"actions": [],
+"settings": {}
+}
+
+Example 2b — Question About How a Feature Works:
+Merchant: "how will it customize according to my theme? it doesn't know my theme name"
+Output:
+{
+"summary": "The app reads your store's brand colors, font, and button radius from Shopify's brand API or theme settings — it detects visual properties, not the theme name.",
+"actions": [],
+"settings": {}
+}
+
+Example 3 — Off-Topic:
+Merchant: "What is the weather today?"
+Output:
+{
+"summary": "This request is outside the scope of The Cart Ninja app. I can only help with cart optimization features.",
+"actions": [],
+"settings": {},
+"off_topic": true
+}
+
 Rules:
 - "actions" must only contain values from the Supported Actions list above.
 - "settings.template" (if present) must only be one of the Supported Templates.
-- Keep "summary" to a single short sentence merchants can understand.
+- Keep "summary" to 1-2 lines max.
+- For off-topic prompts, set "off_topic": true and give a brief 1-line summary.
 - Return JSON only — no markdown fences, no commentary.`;
 
 function asTrimmedString(value, maxLen = 2000) {
@@ -218,6 +271,22 @@ Convert this request into the JSON plan described in your instructions. Only use
         }
 
         const summary = asTrimmedString(parsed.summary, 240) || "Here's what I'll change in your cart.";
+        const isOffTopic = parsed.off_topic === true;
+
+        if (isOffTopic) {
+            return Response.json({
+                success: true,
+                plan: {
+                    summary: summary || "This request is outside the scope of The Cart Ninja app. I can only help with cart drawer, upsells, FBT, goal bar, trust badges, theme matching, and styling.",
+                    actions: [],
+                    settings: {},
+                    items: [],
+                    off_topic: true,
+                },
+                themeColors,
+            });
+        }
+
         const actions = Array.isArray(parsed.actions)
             ? parsed.actions.filter((a) => SUPPORTED_ACTIONS.includes(a))
             : [];
@@ -233,7 +302,7 @@ Convert this request into the JSON plan described in your instructions. Only use
             return Response.json({
                 success: true,
                 plan: {
-                    summary: "I couldn't map that request to a supported cart action yet — try one of the quick actions or be more specific (e.g. \"enable the cart drawer and match my theme\").",
+                    summary: summary || "I couldn't map that request to a supported cart action yet — try one of the quick actions or be more specific (e.g. \"enable the cart drawer and match my theme\").",
                     actions: [],
                     settings: {},
                     items: [],

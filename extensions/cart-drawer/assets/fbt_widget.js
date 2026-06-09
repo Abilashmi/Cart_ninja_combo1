@@ -401,7 +401,7 @@
               config.showPrices
                 ? `
             <div class="ps-product-price" style="color:${config.priceColor}">
-              ${currencySymbol}${price.toLocaleString('en-IN')}
+              ${currencySymbol}${Number(price).toLocaleString()}
             </div>`
                 : ''
             }
@@ -543,7 +543,7 @@
           const qty = selected.get(p.id) || 0;
           total += qty * toPriceNumber(p.price);
         });
-        totalEl.textContent = currencySymbol + total.toLocaleString('en-IN');
+        totalEl.textContent = currencySymbol + Number(total).toLocaleString();
       }
 
       updateTotal();
