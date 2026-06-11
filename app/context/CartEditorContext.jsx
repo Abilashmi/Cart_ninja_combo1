@@ -1,12 +1,73 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
+
+function mergeConfigIntoState(base, cfg) {
+  if (!cfg) return base;
+  let next = { ...base };
+  if (cfg.checkoutButtonStyle) {
+    next = {
+      ...next,
+      footer: {
+        ...next.footer,
+        checkoutButton: {
+          ...next.footer.checkoutButton,
+          bgColor: cfg.checkoutButtonStyle.backgroundColor || next.footer.checkoutButton.bgColor,
+          textColor: cfg.checkoutButtonStyle.textColor || next.footer.checkoutButton.textColor,
+          borderRadius: cfg.checkoutButtonStyle.borderRadius ?? next.footer.checkoutButton.borderRadius,
+        },
+      },
+    };
+  }
+  if (cfg.drawerTheme || cfg.drawerBorderRadius != null) {
+    next = {
+      ...next,
+      settings: {
+        ...next.settings,
+        design: {
+          ...next.settings.design,
+          ...(cfg.drawerTheme ? { theme: cfg.drawerTheme } : {}),
+          ...(cfg.drawerBorderRadius != null ? { borderRadius: cfg.drawerBorderRadius } : {}),
+        },
+      },
+    };
+  }
+  if (cfg.moduleStates) {
+    const bodyKeyMap = { progress_bar: 'progressBar', coupon_slider: 'couponSlider', upsells: 'upsellProducts' };
+    for (const [storeKey, bodyKey] of Object.entries(bodyKeyMap)) {
+      if (storeKey in cfg.moduleStates && next.body?.[bodyKey]) {
+        next = { ...next, body: { ...next.body, [bodyKey]: { ...next.body[bodyKey], enabled: cfg.moduleStates[storeKey] } } };
+      }
+    }
+  }
+  return next;
+}
+
+function loadCartConfig() {
+  try {
+    const raw = localStorage.getItem("cartninja_cart_config");
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
 
 const CartEditorContext = createContext();
 
 export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus }) {
-  const [state, setState] = useState(() => (
-    initialStatus ? { ...defaultCartEditorState, status: initialStatus } : defaultCartEditorState
-  ));
+  const [state, setState] = useState(() => {
+    let base = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
+    return mergeConfigIntoState(base, loadCartConfig());
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
+    };
+    window.addEventListener("featureStateChanged", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("featureStateChanged", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   const setActiveSection = useCallback((section) => {
     setState(prev => ({ ...prev, activeSection: section }));

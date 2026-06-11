@@ -7,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import { getShopCurrencySymbol } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
+import AiAgentFloating from "../components/ai-agent/AiAgentFloating";
 
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
@@ -48,6 +49,7 @@ export default function App() {
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
                         <Outlet context={{ currencySymbol }} />
+                        <AiAgentFloating />
                     </PlanProvider>
                 </CurrencyProvider>
             </PolarisAppProvider>

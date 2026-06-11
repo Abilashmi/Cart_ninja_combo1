@@ -1,26 +1,17 @@
-import { useRouteError } from "react-router";
+import { useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { analyzeThemeColors } from "../services/ai-agent-theme.server";
-import { getCurrentSettingsSnapshot } from "../services/ai-agent-actions.server";
-import { listAiAgentHistory } from "../services/ai-agent-history.server";
-import AiAgentWorkspace from "../components/ai-agent/AiAgentWorkspace";
+import AiAgent from "../components/ai-agent/AiAgent";
 
 export const loader = async ({ request }) => {
-    const { admin, session } = await authenticate.admin(request);
-    const shop = session.shop;
-
-    const themeColors = await analyzeThemeColors(admin);
-    const [currentSettings, history] = await Promise.all([
-        getCurrentSettingsSnapshot(shop, themeColors),
-        listAiAgentHistory(shop),
-    ]);
-
-    return { shop, themeColors, currentSettings, history };
+    const { session } = await authenticate.admin(request);
+    return { shop: session.shop };
 };
 
 export default function AiAgentRoute() {
-    return <AiAgentWorkspace />;
+    const [params] = useSearchParams();
+    const initialQuery = params.get("q") || "";
+    return <AiAgent appName="Cart Ninja AI" initialQuery={initialQuery} />;
 }
 
 export function ErrorBoundary() {

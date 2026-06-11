@@ -341,6 +341,11 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 
 export function CartPreview({ onSave, onDiscard, isDirty }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer, settings } = useCartEditor();
+
+  const designTheme = settings.design?.theme;
+  const isDarkTheme = designTheme === "dark";
+  const drawerBg = isDarkTheme ? "#1a1a2e" : "#ffffff";
+  const drawerTextColor = isDarkTheme ? "#e0e0e0" : "#1a1a1a";
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
@@ -436,7 +441,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
               </div>
 
               {/* Cart Drawer */}
-              <div className={`cart-preview-drawer ${isDesktop ? 'desktop' : 'mobile'}`} style={{ position: 'relative' }}>
+              <div className={`cart-preview-drawer ${isDesktop ? 'desktop' : 'mobile'}${isDarkTheme ? ' cart-preview-drawer--dark' : ''}`} style={{ position: 'relative', background: drawerBg, color: drawerTextColor }}>
                 {['design', 'general', 'customCSS'].includes(activeSection) && (
                   <div className="preview-highlight-overlay">
                     <span className="preview-highlight-tag">{activeSectionLabel}</span>

@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLoaderData, useRevalidator } from "react-router";
-import {
-    Frame, Toast, Page, Layout, Card, BlockStack, InlineStack, Text, TextField,
-    Button, Icon, Banner,
-} from "@shopify/polaris";
-import { MagicIcon, SendIcon, MicrophoneIcon } from "@shopify/polaris-icons";
-
+import { Toast, Icon, Text } from "@shopify/polaris";
+import { MagicIcon, ChatIcon, SendIcon, XIcon } from "@shopify/polaris-icons";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import QuickActionChips from "./QuickActionChips";
 import OnboardingModal from "./OnboardingModal";
 import PlanPreviewCard from "./PlanPreviewCard";
@@ -13,262 +10,345 @@ import HelpAndLearnSection from "./HelpAndLearnSection";
 import HistoryPanel from "./HistoryPanel";
 import { ONBOARDING_STORAGE_KEY } from "./constants";
 
-const PLACEHOLDER = "Example: Enable cart drawer and design it according to my theme.";
+const WELCOME = "Hi! How can I help you today?";
+const SAMPLE_CHART_DATA = [
+  { name: "Mon", value: 400 }, { name: "Tue", value: 300 }, { name: "Wed", value: 600 },
+  { name: "Thu", value: 800 }, { name: "Fri", value: 500 }, { name: "Sat", value: 900 },
+  { name: "Sun", value: 700 },
+];
 
 export default function AiAgentWorkspace() {
-    const { themeColors, currentSettings, history: initialHistory } = useLoaderData();
-    const revalidator = useRevalidator();
+  const { themeColors, currentSettings, history: initialHistory } = useLoaderData();
+  const revalidator = useRevalidator();
 
-    const [prompt, setPrompt] = useState("");
-    const [plan, setPlan] = useState(null);
-    const [planLoading, setPlanLoading] = useState(false);
-    const [planError, setPlanError] = useState("");
-    const [actionLoading, setActionLoading] = useState(""); // '' | 'preview' | 'apply'
-    const [previewResult, setPreviewResult] = useState(null);
-    const [applyResult, setApplyResult] = useState(null);
-    const [history, setHistory] = useState(initialHistory || []);
-    const [restoringId, setRestoringId] = useState("");
-    const [toast, setToast] = useState(null);
-    const [showOnboarding, setShowOnboarding] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [inputValue, setInputValue] = useState("");
+  const [plan, setPlan] = useState(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
+  const [previewResult, setPreviewResult] = useState(null);
+  const [applyResult, setApplyResult] = useState(null);
+  const [history, setHistory] = useState(initialHistory || []);
+  const [restoringId, setRestoringId] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [activeDetail, setActiveDetail] = useState(null);
 
-    useEffect(() => {
-        try {
-            const seen = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-            if (!seen) setShowOnboarding(true);
-        } catch { /* ignore storage errors */ }
-    }, []);
+  const chatBodyRef = useRef(null);
+  const inputRef = useRef(null);
 
-    const dismissOnboarding = useCallback(() => {
-        setShowOnboarding(false);
-        try { localStorage.setItem(ONBOARDING_STORAGE_KEY, "1"); } catch { /* ignore */ }
-    }, []);
+  useEffect(() => {
+    try { if (!localStorage.getItem(ONBOARDING_STORAGE_KEY)) setShowOnboarding(true); } catch { /* */ }
+  }, []);
 
-    const handleUsePromptText = useCallback((text) => {
-        setPrompt(text);
-    }, []);
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false);
+    try { localStorage.setItem(ONBOARDING_STORAGE_KEY, "1"); } catch { /* */ }
+  }, []);
 
-    const handleSelectOnboardingGoal = useCallback((goal) => {
-        setPrompt(goal.prompt);
-        dismissOnboarding();
-    }, [dismissOnboarding]);
+  useEffect(() => {
+    if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+  }, [messages, planLoading]);
 
-    const resetPlanState = useCallback(() => {
-        setPlan(null);
-        setPlanError("");
-        setPreviewResult(null);
-        setApplyResult(null);
-        setActionLoading("");
-    }, []);
+  useEffect(() => {
+    if (chatOpen && inputRef.current) inputRef.current.focus();
+  }, [chatOpen]);
 
-    const handleGenerate = useCallback(async () => {
-        const trimmed = prompt.trim();
-        if (!trimmed) {
-            setPlanError("Describe what you'd like to change first.");
-            return;
-        }
+  const resetPlanState = useCallback(() => {
+    setPlan(null); setPlanError(""); setPreviewResult(null); setApplyResult(null); setActionLoading("");
+  }, []);
 
-        setPlanLoading(true);
-        setPlanError("");
-        setPreviewResult(null);
-        setApplyResult(null);
-        setPlan(null);
+  const handleSend = useCallback(async () => {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+    setMessages((p) => [...p, { role: "user", content: trimmed }]);
+    setInputValue("");
+    setPlanLoading(true);
+    setPlanError("");
 
-        try {
-            const res = await fetch("/api/ai-agent/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: trimmed }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data?.success) {
-                throw new Error(data?.error || `Request failed (${res.status})`);
-            }
-            setPlan(data.plan);
-        } catch (e) {
-            setPlanError(e?.message || "Couldn't generate a plan. Please try again.");
-        } finally {
-            setPlanLoading(false);
-        }
-    }, [prompt]);
+    const hasDataQuery = /conversion|rate|aov|revenue|analytics|chart|graph|data|performance|trend/i.test(trimmed);
 
-    const runApplyRequest = useCallback(async (mode) => {
-        if (!plan) return;
-        setActionLoading(mode);
-        try {
-            const res = await fetch("/api/ai-agent/apply", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: prompt.trim(), plan, mode }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data?.success) {
-                throw new Error(data?.error || `Request failed (${res.status})`);
-            }
+    try {
+      const res = await fetch("/api/ai-agent/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || `Request failed (${res.status})`);
 
-            if (mode === "preview") {
-                setPreviewResult(data);
-                setToast({ message: "Preview ready — review the before/after below.", error: false });
-            } else {
-                setApplyResult(data);
-                if (data.history) setHistory((prev) => [data.history, ...prev]);
-                setToast({ message: data.synced ? "Changes applied to your cart!" : "Changes saved locally — will sync shortly.", error: false });
-                revalidator.revalidate();
-            }
-        } catch (e) {
-            setToast({ message: e?.message || "Something went wrong. Please try again.", error: true });
-        } finally {
-            setActionLoading("");
-        }
-    }, [plan, prompt, revalidator]);
+      setPlan(data.plan);
+      setMessages((p) => [...p, { role: "assistant", content: data.plan.summary, plan: data.plan }]);
 
-    const handleCancel = useCallback(() => {
-        resetPlanState();
-        setToast({ message: "Discarded — nothing was changed.", error: false });
-    }, [resetPlanState]);
+      if (hasDataQuery && data.plan?.summary) {
+        setActiveDetail({ type: "chart", data: SAMPLE_CHART_DATA, summary: data.plan.summary });
+      } else if (data.plan && !data.plan?.off_topic) {
+        setActiveDetail({ type: "plan", plan: data.plan });
+      }
+    } catch (e) {
+      setPlanError(e?.message || "Couldn't generate a plan.");
+      setMessages((p) => [...p, { role: "assistant", content: "Sorry, I couldn't process that. Please try again." }]);
+    } finally {
+      setPlanLoading(false);
+    }
+  }, [inputValue]);
 
-    const handleRestore = useCallback(async (entryId) => {
-        setRestoringId(entryId);
-        try {
-            const res = await fetch("/api/ai-agent/history", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ entryId }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data?.success) {
-                throw new Error(data?.error || `Request failed (${res.status})`);
-            }
-            if (data.history) setHistory((prev) => [data.history, ...prev]);
-            setToast({ message: "Previous AI changes restored.", error: false });
-            revalidator.revalidate();
-        } catch (e) {
-            setToast({ message: e?.message || "Couldn't restore those changes.", error: true });
-        } finally {
-            setRestoringId("");
-        }
-    }, [revalidator]);
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  }, [handleSend]);
 
-    return (
-        <Frame>
-            {toast && (
-                <Toast content={toast.message} error={toast.error} onDismiss={() => setToast(null)} />
-            )}
+  const handleUsePrompt = useCallback((text) => {
+    setInputValue(text);
+    if (!chatOpen) setChatOpen(true);
+    else if (inputRef.current) inputRef.current.focus();
+  }, [chatOpen]);
 
-            <OnboardingModal
-                open={showOnboarding}
-                onClose={dismissOnboarding}
-                onSelectGoal={handleSelectOnboardingGoal}
-            />
+  const handleSelectOnboardingGoal = useCallback((goal) => {
+    setInputValue(goal.prompt); dismissOnboarding(); if (!chatOpen) setChatOpen(true);
+  }, [dismissOnboarding, chatOpen]);
 
-            <Page
-                title="The Cart Ninja AI"
-                subtitle="Describe what you want and let AI optimize your cart automatically."
+  const runApplyRequest = useCallback(async (mode) => {
+    if (!plan) return;
+    setActionLoading(mode);
+    try {
+      const res = await fetch("/api/ai-agent/apply", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: inputValue.trim(), plan, mode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || `Request failed (${res.status})`);
+      if (mode === "preview") {
+        setPreviewResult(data);
+        setToast({ message: "Preview ready — review the before/after below.", error: false });
+      } else {
+        setApplyResult(data);
+        if (data.history) setHistory((p) => [data.history, ...p]);
+        setToast({ message: data.synced ? "Changes applied to your cart!" : "Changes saved locally.", error: false });
+        revalidator.revalidate();
+      }
+    } catch (e) {
+      setToast({ message: e?.message || "Something went wrong.", error: true });
+    } finally { setActionLoading(""); }
+  }, [plan, inputValue, revalidator]);
+
+  const handleCancel = useCallback(() => {
+    resetPlanState();
+    setToast({ message: "Discarded — nothing was changed.", error: false });
+  }, [resetPlanState]);
+
+  const handleRestore = useCallback(async (entryId) => {
+    setRestoringId(entryId);
+    try {
+      const res = await fetch("/api/ai-agent/history", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entryId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) throw new Error(data?.error || `Request failed (${res.status})`);
+      if (data.history) setHistory((p) => [data.history, ...p]);
+      setToast({ message: "Previous AI changes restored.", error: false });
+      revalidator.revalidate();
+    } catch (e) {
+      setToast({ message: e?.message || "Couldn't restore those changes.", error: true });
+    } finally { setRestoringId(""); }
+  }, [revalidator]);
+
+  return (
+    <>
+      {toast && <Toast content={toast.message} error={toast.error} onDismiss={() => setToast(null)} />}
+      <OnboardingModal open={showOnboarding} onClose={dismissOnboarding} onSelectGoal={handleSelectOnboardingGoal} />
+
+      <div className="ai-agent-layout">
+        <div className="ai-agent-main">
+          <div className="ai-agent-toolbar">
+            <button
+              className={`toolbar-btn ${showHistory ? "active" : ""}`}
+              onClick={() => setShowHistory((v) => !v)}
+              title="History"
             >
-                <Layout>
-                    <Layout.Section>
-                        <BlockStack gap="400">
-                            <Card>
-                                <BlockStack gap="300">
-                                    <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                        <Icon source={MagicIcon} tone="magic" />
-                                        <Text as="h2" variant="headingMd">Quick actions</Text>
-                                    </div>
-                                    <Text as="p" variant="bodySm" tone="subdued">
-                                        Tap a suggestion to drop it into the prompt box below — you can edit it before sending.
-                                    </Text>
-                                    <QuickActionChips onSelect={handleUsePromptText} disabled={planLoading} />
-                                </BlockStack>
-                            </Card>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="10" cy="10" r="8" />
+                <path d="M10 6v4l3 2" />
+              </svg>
+            </button>
+          </div>
 
-                            <Card>
-                                <BlockStack gap="300">
-                                    <Text as="h2" variant="headingMd">Tell the AI what you want</Text>
-                                    <TextField
-                                        label="Prompt"
-                                        labelHidden
-                                        value={prompt}
-                                        onChange={setPrompt}
-                                        placeholder={PLACEHOLDER}
-                                        multiline={4}
-                                        autoComplete="off"
-                                    />
-                                    {planError && (
-                                        <Banner tone="critical" onDismiss={() => setPlanError("")}>
-                                            <p>{planError}</p>
-                                        </Banner>
-                                    )}
-                                    <InlineStack align="space-between" blockAlign="center">
-                                        <Button icon={MicrophoneIcon} disabled accessibilityLabel="Voice input (coming soon)">
-                                            Voice input
-                                        </Button>
-                                        <Button
-                                            variant="primary"
-                                            icon={SendIcon}
-                                            onClick={handleGenerate}
-                                            loading={planLoading}
-                                            disabled={!prompt.trim()}
-                                        >
-                                            Generate Changes
-                                        </Button>
-                                    </InlineStack>
-                                </BlockStack>
-                            </Card>
+          <div className="ai-agent-content">
+            {activeDetail?.type === "chart" ? (
+              <div className="detail-panel">
+                <div className="detail-panel-header">
+                  <Text as="h2" variant="headingLg">Analytics Overview</Text>
+                  <button className="close-detail-btn" onClick={() => setActiveDetail(null)}>
+                    <Icon source={XIcon} />
+                  </button>
+                </div>
+                <div className="chart-container">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={activeDetail.data}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#008060" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="detail-summary">
+                  <Text as="p" variant="bodyMd">{activeDetail.summary}</Text>
+                </div>
+              </div>
+            ) : activeDetail?.type === "plan" ? (
+              <div className="detail-panel">
+                <div className="detail-panel-header">
+                  <Text as="h2" variant="headingLg">AI Recommendations</Text>
+                  <button className="close-detail-btn" onClick={() => setActiveDetail(null)}>
+                    <Icon source={XIcon} />
+                  </button>
+                </div>
+                <PlanPreviewCard
+                  plan={activeDetail.plan}
+                  loading={actionLoading}
+                  applying={actionLoading === "apply"}
+                  previewResult={previewResult}
+                  applyResult={applyResult}
+                  onPreview={() => runApplyRequest("preview")}
+                  onApply={() => runApplyRequest("apply")}
+                  onCancel={handleCancel}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="content-header">
+                  <div>
+                    <Text as="h1" variant="heading2xl">The Cart Ninja AI</Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">Describe what you want and let AI optimize your cart.</Text>
+                  </div>
+                </div>
 
-                            <PlanPreviewCard
-                                plan={plan}
-                                loading={actionLoading}
-                                applying={actionLoading === "apply"}
-                                previewResult={previewResult}
-                                applyResult={applyResult}
-                                onPreview={() => runApplyRequest("preview")}
-                                onApply={() => runApplyRequest("apply")}
-                                onCancel={handleCancel}
-                            />
+                <div className="content-section">
+                  <div className="section-label">
+                    <Icon source={MagicIcon} tone="magic" />
+                    <Text as="h3" variant="headingMd">Quick actions</Text>
+                  </div>
+                  <Text as="p" variant="bodySm" tone="subdued">Pick a suggestion or type your own in the chat.</Text>
+                  <QuickActionChips onSelect={handleUsePrompt} disabled={planLoading} />
+                </div>
 
-                            <HelpAndLearnSection onUsePrompt={handleUsePromptText} />
-                        </BlockStack>
-                    </Layout.Section>
+                <div className="content-section">
+                  <HelpAndLearnSection onUsePrompt={handleUsePrompt} />
+                </div>
 
-                    <Layout.Section variant="oneThird">
-                        <BlockStack gap="400">
-                            <Card>
-                                <BlockStack gap="200">
-                                    <Text as="h3" variant="headingSm">Your store at a glance</Text>
-                                    <InlineStack gap="150" blockAlign="center">
-                                        <div
-                                            aria-hidden="true"
-                                            style={{ background: themeColors.primaryColor, width: 20, height: 20, borderRadius: 6, border: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}
-                                        />
-                                        <Text as="span" variant="bodySm" tone="subdued">
-                                            Theme color {themeColors.primaryColor} · {themeColors.font} · {themeColors.borderRadius}px radius
-                                        </Text>
-                                    </InlineStack>
-                                    <BlockStack gap="100">
-                                        <SettingRow label="Cart drawer" enabled={currentSettings.drawerEnabled} />
-                                        <SettingRow label="Upsell recommendations" enabled={currentSettings.upsell.enabled} />
-                                        <SettingRow label="Frequently bought together" enabled={currentSettings.fbt.enabled} />
-                                        <SettingRow label="Free shipping goal bar" enabled={currentSettings.goalBar.enabled} />
-                                        <SettingRow label="Trust badges" enabled={currentSettings.trustBadges.enabled} />
-                                    </BlockStack>
-                                </BlockStack>
-                            </Card>
+                {plan && (
+                  <div className="content-section">
+                    <PlanPreviewCard
+                      plan={plan}
+                      loading={actionLoading}
+                      applying={actionLoading === "apply"}
+                      previewResult={previewResult}
+                      applyResult={applyResult}
+                      onPreview={() => runApplyRequest("preview")}
+                      onApply={() => runApplyRequest("apply")}
+                      onCancel={handleCancel}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
 
-                            <HistoryPanel history={history} restoringId={restoringId} onRestore={handleRestore} />
-                        </BlockStack>
-                    </Layout.Section>
-                </Layout>
-            </Page>
-        </Frame>
-    );
-}
+        <div className="ai-agent-chat">
+          {!chatOpen ? (
+            <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open chat">
+              <Icon source={ChatIcon} />
+            </button>
+          ) : (
+            <div className="chat-window">
+              <div className="chat-header">
+                <div className="chat-header-left">
+                  <div className="chat-avatar">
+                    <Icon source={MagicIcon} tone="magic" />
+                  </div>
+                  <div>
+                    <Text as="span" variant="headingSm" fontWeight="bold">Cart Ninja AI</Text>
+                    <Text as="p" variant="bodyXs" tone="subdued">Online</Text>
+                  </div>
+                </div>
+                <div className="chat-header-actions">
+                  <button className="chat-header-btn" onClick={() => setChatOpen(false)} aria-label="Close">
+                    <Icon source={XIcon} />
+                  </button>
+                </div>
+              </div>
 
-function SettingRow({ label, enabled }) {
-    return (
-        <InlineStack align="space-between" blockAlign="center">
-            <Text as="span" variant="bodySm">{label}</Text>
-            <Text as="span" variant="bodySm" tone={enabled ? "success" : "subdued"} fontWeight="medium">
-                {enabled ? "On" : "Off"}
-            </Text>
-        </InlineStack>
-    );
+              <div className="chat-body" ref={chatBodyRef}>
+                <div className="msg assistant">
+                  <div className="msg-avatar">
+                    <Icon source={MagicIcon} tone="magic" />
+                  </div>
+                  <div className="msg-bubble">{WELCOME}</div>
+                </div>
+                {messages.map((msg, i) => (
+                  <div key={i} className={`msg ${msg.role}`}>
+                    {msg.role === "assistant" && (
+                      <div className="msg-avatar">
+                        <Icon source={MagicIcon} tone="magic" />
+                      </div>
+                    )}
+                    <div className="msg-bubble">{msg.content}</div>
+                  </div>
+                ))}
+                {planLoading && (
+                  <div className="msg assistant">
+                    <div className="msg-avatar">
+                      <Icon source={MagicIcon} tone="magic" />
+                    </div>
+                    <div className="msg-bubble thinking">
+                      <span className="dot-pulse" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="chat-footer">
+                <div className="chat-input-wrapper">
+                  <textarea
+                    ref={inputRef}
+                    className="chat-input"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type your message..."
+                    rows={1}
+                    disabled={planLoading}
+                  />
+                  <button
+                    className="chat-send-btn"
+                    onClick={handleSend}
+                    disabled={!inputValue.trim() || planLoading}
+                    aria-label="Send"
+                  >
+                    <Icon source={SendIcon} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className={`history-overlay ${showHistory ? "visible" : ""}`} onClick={() => setShowHistory(false)} />
+      <div className={`history-slide-panel ${showHistory ? "open" : ""}`}>
+        <div className="history-slide-header">
+          <Text as="h3" variant="headingMd">AI History</Text>
+          <button className="history-close-btn" onClick={() => setShowHistory(false)}>
+            <Icon source={XIcon} />
+          </button>
+        </div>
+        <div className="history-slide-body">
+          <HistoryPanel history={history} restoringId={restoringId} onRestore={handleRestore} />
+        </div>
+      </div>
+    </>
+  );
 }

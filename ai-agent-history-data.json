@@ -1,6 +1,138 @@
 {
   "cartstoreviewer.myshopify.com": [
     {
+      "id": "946bb27d-657d-4620-a1ca-fc96e4a5826d",
+      "prompt": "disable the cart drawer for my store.",
+      "summary": "Restored: Disable cart drawer for CartStoreViewer store",
+      "response": {
+        "summary": "Disable cart drawer for CartStoreViewer store",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "restored",
+      "timestamp": "2026-06-11T05:00:43.798Z"
+    },
+    {
+      "id": "f5b9ce7e-fa4f-4b71-b0c2-b23fd660b2e3",
+      "prompt": "change the cart checkout buttton color into red",
+      "summary": "Update cart checkout button color to red",
+      "response": {
+        "summary": "Update cart checkout button color to red",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-11T04:58:22.693Z"
+    },
+    {
+      "id": "e0915e88-400f-4477-9595-47e07ec36347",
+      "prompt": "change the cart checkout buttton color into red",
+      "summary": "Update cart checkout button color to red",
+      "response": {
+        "summary": "Update cart checkout button color to red",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-11T04:58:12.572Z"
+    },
+    {
+      "id": "17804889-07eb-410d-b604-91c625b7de70",
+      "prompt": "change my cart drawer theme into red",
+      "summary": "Update cart drawer theme to red",
+      "response": {
+        "summary": "Update cart drawer theme to red",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-11T04:56:22.971Z"
+    },
+    {
+      "id": "e3eb6236-ff6f-4626-9f8c-8092e49df45c",
+      "prompt": "change my cart drawer theme into red",
+      "summary": "Update cart drawer theme to red",
+      "response": {
+        "summary": "Update cart drawer theme to red",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-11T04:56:12.422Z"
+    },
+    {
+      "id": "5c25af41-e9db-4c0d-934e-1f887fe88557",
+      "prompt": "disable the cart drawer for my store.",
+      "summary": "Disable cart drawer for CartStoreViewer store",
+      "response": {
+        "summary": "Disable cart drawer for CartStoreViewer store",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {
+          "template": "premium"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-11T04:54:38.364Z"
+    },
+    {
       "id": "12ee4773-05d4-4506-a56f-364b775a3187",
       "prompt": "Enable the cart drawer for my store.",
       "summary": "Enable cart drawer for your store",
