@@ -64,9 +64,12 @@ export function CartEditorSidebar({ onDiscard }) {
   const statusFetcher = useFetcher();
   const isTogglingStatus = statusFetcher.state !== 'idle';
 
-  // Sync featureStore with context on mount
+  // Sync featureStore with context on mount + reactively
   useEffect(() => {
-    setStatus(featureStore.get("cart_drawer") ? "active" : "inactive");
+    const sync = () => setStatus(featureStore.get("cart_drawer") ? "active" : "inactive");
+    sync();
+    window.addEventListener("featureStateChanged", sync);
+    return () => window.removeEventListener("featureStateChanged", sync);
   }, [setStatus]);
 
   useEffect(() => {

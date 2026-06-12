@@ -1,5 +1,3 @@
-import { authenticate } from '../shopify.server';
-
 const AI_API_KEY = process.env.OPENAI_API_KEY || '';
 const AI_MODEL = 'gpt-4o-mini';
 const AI_API_URL = 'https://api.openai.com/v1/chat/completions';

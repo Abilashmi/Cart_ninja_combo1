@@ -58,7 +58,7 @@ export default function GreetingPopover({ input, onInputChange, onActivate, onCl
           </InlineStack>
 
           <Text as="p" variant="bodyMd">
-            Hi there! {"\u{1F44B}"} How can I help you today with your store?
+            Connected to Store. Ready for instructions.
           </Text>
 
           <InlineStack gap="200" wrap>

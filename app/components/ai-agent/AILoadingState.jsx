@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { BlockStack, Text, InlineStack } from "@shopify/polaris";
 
 const PHASES = [
   "Analyzing your request...",
@@ -12,20 +11,14 @@ export default function AILoadingState() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 2000);
+    const t = setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 2500);
     return () => clearInterval(t);
   }, []);
 
   return (
-    <div className="aia-loading">
-      <BlockStack gap="200" inlineAlign="center">
-        <InlineStack gap="100" align="center">
-          <span className="aia-loading-spinner" />
-          <Text as="span" variant="bodyMd" tone="subdued">
-            {PHASES[phase]}
-          </Text>
-        </InlineStack>
-      </BlockStack>
+    <div className="aif-loading">
+      <div className="aif-loading-spinner" />
+      <span className="aif-loading-text">{PHASES[phase]}</span>
     </div>
   );
 }

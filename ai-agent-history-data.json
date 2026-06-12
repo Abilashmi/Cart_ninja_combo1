@@ -1,6 +1,66 @@
 {
   "cartstoreviewer.myshopify.com": [
     {
+      "id": "90e61451-3697-45d6-9721-abeecca22ca7",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-12T13:28:41.624Z"
+    },
+    {
+      "id": "29d8b317-0c47-4376-9c9d-65931e9afd20",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-12T13:21:10.158Z"
+    },
+    {
+      "id": "36f9e867-08e6-4d49-9606-82216fdfa21e",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-12T13:16:05.872Z"
+    },
+    {
       "id": "946bb27d-657d-4620-a1ca-fc96e4a5826d",
       "prompt": "disable the cart drawer for my store.",
       "summary": "Restored: Disable cart drawer for CartStoreViewer store",

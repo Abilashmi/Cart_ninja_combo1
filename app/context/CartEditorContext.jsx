@@ -42,22 +42,30 @@ function mergeConfigIntoState(base, cfg) {
   return next;
 }
 
-function loadCartConfig() {
-  try {
-    const raw = localStorage.getItem("cartninja_cart_config");
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
 const CartEditorContext = createContext();
 
 export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus }) {
   const [state, setState] = useState(() => {
-    let base = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
-    return mergeConfigIntoState(base, loadCartConfig());
+    return initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
   });
 
   useEffect(() => {
+    function loadCartConfig() {
+      try {
+        const raw = localStorage.getItem("cartninja_cart_config");
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    }
+    setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
+  }, [initialStatus]);
+
+  useEffect(() => {
+    function loadCartConfig() {
+      try {
+        const raw = localStorage.getItem("cartninja_cart_config");
+        return raw ? JSON.parse(raw) : null;
+      } catch { return null; }
+    }
     const handler = () => {
       setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
     };

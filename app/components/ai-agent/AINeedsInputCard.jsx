@@ -1,14 +1,12 @@
 import { useState, useMemo } from "react";
-import {
-  Card,
-  BlockStack,
-  InlineStack,
-  Text,
-  Button,
-  TextField,
-  Icon,
-} from "@shopify/polaris";
-import { QuestionCircleIcon } from "@shopify/polaris-icons";
+
+const Q_ICON = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#FF6B35" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8" cy="8" r="7" />
+    <path d="M6 6a2 2 0 114 0c0 1-2 1.5-2 2.5" />
+    <circle cx="8" cy="11.5" r=".5" fill="#FF6B35" stroke="none" />
+  </svg>
+);
 
 function parseOptions(question) {
   const match = question.match(/\(([^)]+)\)/);
@@ -30,63 +28,44 @@ export default function AINeedsInputCard({ question, onSubmit }) {
 
   if (options && options.length > 0) {
     return (
-      <div className="aia-needs-input aia-slide-in">
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack gap="200" align="start">
-              <Icon source={QuestionCircleIcon} tone="info" />
-              <Text as="span" variant="bodyMd">
-                {question}
-              </Text>
-            </InlineStack>
-            <div className="aia-option-grid">
-              {options.map((opt) => (
-                <Button
-                  key={opt}
-                  onClick={() => onSubmit(opt)}
-                  variant="secondary"
-                >
-                  {opt.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                </Button>
-              ))}
-            </div>
-          </BlockStack>
-        </Card>
+      <div className="aif-nic">
+        <div className="aif-nic-header">
+          {Q_ICON}
+          <span className="aif-nic-question">{question}</span>
+        </div>
+        <div className="aif-nic-options">
+          {options.map((opt) => (
+            <button key={opt} className="aif-nic-opt" onClick={() => onSubmit(opt)}>
+              {opt.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="aia-needs-input aia-slide-in">
-      <Card>
-        <BlockStack gap="300">
-          <InlineStack gap="200" align="start">
-            <Icon source={QuestionCircleIcon} tone="info" />
-            <Text as="span" variant="bodyMd">
-              {question}
-            </Text>
-          </InlineStack>
-          <InlineStack gap="200" align="start" blockAlign="end">
-            <div style={{ flex: 1 }}>
-              <TextField
-                label={labelForQuestion(question)}
-                labelHidden
-                value={textVal}
-                onChange={setTextVal}
-                autoComplete="off"
-                placeholder={labelForQuestion(question)}
-              />
-            </div>
-            <Button
-              variant="primary"
-              disabled={!textVal.trim()}
-              onClick={() => { onSubmit(textVal.trim()); setTextVal(""); }}
-            >
-              Submit
-            </Button>
-          </InlineStack>
-        </BlockStack>
-      </Card>
+    <div className="aif-nic">
+      <div className="aif-nic-header">
+        {Q_ICON}
+        <span className="aif-nic-question">{question}</span>
+      </div>
+      <div className="aif-nic-input-row">
+        <input
+          className="aif-nic-input"
+          type="text"
+          value={textVal}
+          onChange={(e) => setTextVal(e.target.value)}
+          placeholder={labelForQuestion(question)}
+        />
+        <button
+          className="aif-nic-submit"
+          disabled={!textVal.trim()}
+          onClick={() => { onSubmit(textVal.trim()); setTextVal(""); }}
+        >
+          Submit
+        </button>
+      </div>
     </div>
   );
 }

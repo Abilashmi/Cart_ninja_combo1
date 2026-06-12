@@ -1,0 +1,86 @@
+[
+  {
+    "id": "mqahq2ds2gxli",
+    "name": "enable_cart_drawer",
+    "description": "Enable the cart drawer with slide-in panel",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2ds71ev7",
+    "name": "disable_cart_drawer",
+    "description": "Disable the cart drawer, revert to default cart",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dse2w4z",
+    "name": "enable_upsell",
+    "description": "Enable upsell recommendations in cart",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dsffaab",
+    "name": "disable_upsell",
+    "description": "Disable upsell recommendations",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dse9y1q",
+    "name": "enable_fbt",
+    "description": "Enable Frequently Bought Together on product pages",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dst20dc",
+    "name": "disable_fbt",
+    "description": "Disable Frequently Bought Together",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dsx2che",
+    "name": "enable_goal_bar",
+    "description": "Enable free shipping goal bar in cart",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2ds458ss",
+    "name": "disable_goal_bar",
+    "description": "Disable free shipping goal bar",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2ds6b6eu",
+    "name": "enable_trust_badges",
+    "description": "Enable trust badges near checkout",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dscmalx",
+    "name": "disable_trust_badges",
+    "description": "Disable trust badges",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dspdzly",
+    "name": "match_theme",
+    "description": "Match cart styling to store theme colors",
+    "parameters": "{}",
+    "active": true
+  },
+  {
+    "id": "mqahq2dsd4nmm",
+    "name": "optimize_mobile",
+    "description": "Optimize cart for mobile shoppers",
+    "parameters": "{}",
+    "active": true
+  }
+]

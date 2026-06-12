@@ -1,0 +1,82 @@
+[
+  {
+    "id": "mqahq2dknudmw",
+    "page": "/app",
+    "title": "Enable Cart Drawer",
+    "prompt": "Enable the cart drawer with modern style",
+    "priority": 1,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkk9v1i",
+    "page": "/app",
+    "title": "Analyze Revenue",
+    "prompt": "Show me my revenue trends",
+    "priority": 2,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkus678",
+    "page": "/app",
+    "title": "Increase AOV",
+    "prompt": "How can I increase my average order value?",
+    "priority": 3,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkqfjho",
+    "page": "/app",
+    "title": "Optimize Mobile Layout",
+    "prompt": "Optimize my cart for mobile shoppers",
+    "priority": 4,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkmhz75",
+    "page": "/app/cartdrawer",
+    "title": "Match My Theme",
+    "prompt": "Match the cart drawer to my store theme",
+    "priority": 1,
+    "active": true
+  },
+  {
+    "id": "mqahq2dk9l9aj",
+    "page": "/app/cartdrawer",
+    "title": "Add Trust Badges",
+    "prompt": "Add trust badges to my cart",
+    "priority": 2,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkih4jw",
+    "page": "/app/analytics",
+    "title": "Conversion Rate",
+    "prompt": "What's my conversion rate this month?",
+    "priority": 1,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkikd7m",
+    "page": "/app/analytics",
+    "title": "Cart Abandonment",
+    "prompt": "Why are people abandoning cart?",
+    "priority": 2,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkdek5n",
+    "page": "/app/upsell",
+    "title": "Enable Upsells",
+    "prompt": "Set up upsell recommendations",
+    "priority": 1,
+    "active": true
+  },
+  {
+    "id": "mqahq2dkupopm",
+    "page": "/app/fbt",
+    "title": "Enable FBT",
+    "prompt": "Enable Frequently Bought Together",
+    "priority": 1,
+    "active": true
+  }
+]

@@ -1,8 +1,22 @@
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { featureStore } from "./featureStore";
 import AILoadingState from "./AILoadingState";
+
+function syncAfterToFeatureStore(after) {
+  if (!after) return;
+  const cart = after.cart;
+  const fbt = after.fbt;
+  if (cart) {
+    if (cart.drawerEnabled != null) featureStore.set("cart_drawer", cart.drawerEnabled);
+    if (cart.upsell?.enabled != null) featureStore.set("upsells", cart.upsell.enabled);
+    if (cart.goalBar?.enabled != null) featureStore.set("progress_bar", cart.goalBar.enabled);
+    if (cart.trustBadges?.enabled != null) featureStore.set("trust_badges", cart.trustBadges.enabled);
+  }
+  if (fbt?.widgetEnabled != null) featureStore.set("fbt", fbt.widgetEnabled);
+}
 import AIChangesSummary from "./AIChangesSummary";
 import AINeedsInputCard from "./AINeedsInputCard";
+import { aiApi } from "./api";
 
 const HAMBURGER_ICON = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -37,6 +51,80 @@ function invertAction(action) {
   if (action === "enable") return "disable";
   if (action === "disable") return "enable";
   return action;
+}
+
+const MODULE_TO_ENGINE = {
+  cartDrawer: { enable: "enableDrawer", disable: "disableDrawer" },
+  progressBar: { enable: "enableGoalBar", disable: "disableGoalBar" },
+  upsells: { enable: "enableUpsell", disable: "disableUpsell" },
+  fbt: { enable: "enableFBT", disable: "disableFBT" },
+  trustBadges: { enable: "enableTrustBadges", disable: "disableTrustBadges" },
+};
+
+const ACTION_LABELS = {
+  cartDrawer: "Cart Drawer", progressBar: "Progress Bar",
+  upsells: "Upsells", fbt: "FBT", trustBadges: "Trust Badges",
+  styling: "Styling", optimization: "Optimization",
+};
+
+function extractActions(text) {
+  const lower = text.toLowerCase();
+  const actions = [];
+  const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
+
+  if (/(?:apply|set|use|enable)?\s*(premium\s*dark|dark\s*(?:theme|preset))/i.test(lower)) {
+    actions.push({ module: "styling", action: "applyTemplate", engine: "applyTemplate", settings: { template: "premium" }, label: "Premium Dark Theme" });
+    return actions;
+  }
+  if (/(?:apply|set|use|enable)?\s*(minimal\s*light|light\s*(?:theme|preset))/i.test(lower)) {
+    actions.push({ module: "styling", action: "applyTemplate", engine: "applyTemplate", settings: { template: "minimal" }, label: "Minimal Light Theme" });
+    return actions;
+  }
+  if (/(?:apply|set|use|enable)?\s*(luxury\s*gold|gold\s*(?:theme|preset))/i.test(lower)) {
+    actions.push({ module: "styling", action: "applyTemplate", engine: "applyTemplate", settings: { template: "luxury" }, label: "Luxury Gold Theme" });
+    return actions;
+  }
+  if (/match.?theme|sync.?theme|detect.?theme|auto.?theme|copy.?theme/i.test(lower)) {
+    actions.push({ module: "styling", action: "matchTheme", engine: "matchTheme", label: "Match Store Theme" });
+    return actions;
+  }
+  if (/optimize.*mobile|mobile.*optimize|responsive/i.test(lower)) {
+    actions.push({ module: "optimization", action: "optimizeMobile", engine: "optimizeMobile", label: "Optimize Mobile" });
+    return actions;
+  }
+
+  if (/cart.*drawer|drawer/.test(lower)) actions.push({ module: "cartDrawer", action: wantDisable ? "disable" : "enable" });
+  if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: "progressBar", action: wantDisable ? "disable" : "enable" });
+  if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: "trustBadges", action: wantDisable ? "disable" : "enable" });
+  if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "upsells", action: wantDisable ? "disable" : "enable" });
+  if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "fbt", action: wantDisable ? "disable" : "enable" });
+
+  return actions;
+}
+
+async function applyActionsViaApi(actions) {
+  if (actions.length === 0) return { success: false, error: "No actions to apply" };
+  const engineActions = actions.map((a) => a.engine || MODULE_TO_ENGINE[a.module]?.[a.action]).filter(Boolean);
+  if (engineActions.length === 0) return { success: false, error: "Unsupported action" };
+  const planSettings = actions.reduce((s, a) => {
+    if (a.settings) Object.assign(s, a.settings);
+    return s;
+  }, {});
+  try {
+    const res = await fetch("/api/ai-agent/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "", plan: { summary: "AI command", actions: engineActions, settings: planSettings }, mode: "apply" }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      return { success: false, error: err.error || `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { success: true, synced: data.synced, before: data.before, after: data.after };
+  } catch (e) {
+    return { success: false, error: e.message || "Network error" };
+  }
 }
 
 function executeActions(actions) {
@@ -112,6 +200,7 @@ function getTimeGroup(ts) {
   if (diff < 864e5) return "Today";
   if (diff < 1728e5) return "Yesterday";
   if (diff < 6048e5) return "Last 7 Days";
+  if (diff < 2592e6) return "Last 30 Days";
   return "Older";
 }
 
@@ -164,7 +253,7 @@ const detectMode = (lower) => {
     return "campaign";
   if (MK(/why.*(conversion|abandon|drop|low|leaving)|cart.*doctor|diagnos|improve.*checkout/i)(lower))
     return "diagnosis";
-  if (MK(/what.*(enable|important|recommend|best|feature|setup|prioritize)|which.*(feature|module).*(important|best|recommend|prioritize)/i)(lower))
+  if (MK(/what.*(enable|important|recommend|best|feature|setup|prioritize|first)|which.*(feature|module).*(important|best|recommend|prioritize|most|use|popular|common)|most.*(use|popular|common|enable)|top.*(feature|module)/i)(lower))
     return "bestpractice";
   if (MK(/recommendation|opportunit|suggest|what.*(next|missing|improve)|what.*(else|more).*(enable|do)/i)(lower))
     return "recommendation";
@@ -176,19 +265,13 @@ function mockApi(text) {
 
   const mode = detectMode(lower);
   if (mode === "audit") {
-    return modeCard("mode_audit", {
-      score: 72, items: [
-        { name: "Cart Drawer", status: "good", detail: "Enabled" },
-        { name: "Progress Bar", status: "missing", detail: "Not enabled — add to boost conversions" },
-        { name: "FBT", status: "missing", detail: "Not enabled — drives 10-20% extra revenue" },
-        { name: "Upsells", status: "off", detail: "Disabled — reactivate for AOV lift" },
-        { name: "Coupon Slider", status: "off", detail: "Disabled — helps conversion" },
-        { name: "Trust Badges", status: "off", detail: "Disabled — builds checkout trust" },
-      ], issues: ["No progress bar", "FBT disabled", "Upsells inactive"],
-      opportunities: ["Enable progress bar → 20-30% conversion lift", "Activate FBT → 15% AOV increase", "Turn on upsells → 10-20% revenue gain"],
-      quickWins: ["Enable Progress Bar (takes 1 click)", "Activate FBT recommendations"],
-      cta: "Apply Recommended Fixes"
-    });
+    return makeMsg(
+      "Task: Store Audit\nStatus: Completed\n\n" +
+      "Cart Optimization Score: 72/100\n\n" +
+      "Affected Modules:\n  \u2022 Cart Drawer (active)\n  \u2022 Progress Bar (inactive)\n  \u2022 FBT (inactive)\n  \u2022 Upsells (inactive)\n\n" +
+      "Recommendations:\n  \u2022 Enable Progress Bar \u2014 20-30% conversion lift\n  \u2022 Activate FBT \u2014 10-20% extra revenue\n  \u2022 Enable Upsells \u2014 10-20% AOV increase\n\n" +
+      "Apply these recommendations?"
+    );
   }
 
   if (mode === "strategy") {
@@ -198,14 +281,13 @@ function mockApi(text) {
       : /lead|email|collect/i.test(lower) ? "Collect More Leads"
       : /abandon|cancel|drop/i.test(lower) ? "Reduce Cart Abandonment"
       : "Increase AOV";
-    return modeCard("mode_strategy", {
-      goal, actions: [
-        { module: "Progress Bar", action: "enable" },
-        { module: "FBT", action: "enable" },
-        { module: "Upsells", action: "enable" },
-      ], impact: "Expected impact: 25-40% boost in target metric",
-      cta: "Apply Strategy"
-    });
+    return makeMsg(
+      "Task: " + goal + "\nStatus: Ready\n\n" +
+      "Strategy: " + goal + "\n\n" +
+      "Affected Modules:\n  \u2022 Progress Bar\n  \u2022 FBT\n  \u2022 Upsells\n\n" +
+      "Expected Impact: 25-40% boost\n\n" +
+      "Apply this strategy?"
+    );
   }
 
   if (mode === "campaign") {
@@ -215,54 +297,47 @@ function mockApi(text) {
       : /christmas|new.?year/i.test(lower) ? "Holiday Season Offer"
       : /weekend/i.test(lower) ? "Weekend Flash Sale"
       : "Limited Time Campaign";
-    return modeCard("mode_campaign", {
-      name: campaignName, elements: [
-        { type: "Banner", detail: `${campaignName} — Up to 20% OFF` },
-        { type: "Coupon", detail: "Auto-applied discount on checkout" },
-        { type: "Countdown Timer", detail: "72-hour urgency timer" },
-        { type: "Progress Bar", detail: "Free shipping on orders above Rs.999" },
-        { type: "Upsell Strategy", detail: "FBT + product recommendations" },
-      ], cta: "Launch Campaign"
-    });
+    return makeMsg(
+      "Task: Create Campaign\nStatus: Ready\n\n" +
+      "Campaign: " + campaignName + "\n\n" +
+      "Affected Modules:\n  \u2022 Coupon Slider\n  \u2022 Progress Bar\n  \u2022 FBT\n\n" +
+      "Configuration:\n  \u2022 Banner: Up to 20% OFF\n  \u2022 Coupon: Auto-applied discount\n  \u2022 Free Shipping: Orders above Rs.999\n  \u2022 Urgency Timer: 72 hours\n\n" +
+      "Launch this campaign?"
+    );
   }
 
   if (mode === "diagnosis") {
-    return modeCard("mode_diagnosis", {
-      diagnosis: "Your cart is missing urgency signals and purchase incentives", findings: [
-        "No progress bar — customers don't see shipping threshold",
-        "No countdown timer — no urgency to complete purchase",
-        "No trust badges — reduced checkout confidence",
-        "Upsells disabled — leaving revenue on the table"
-      ], fixes: [
-        "Enable progress bar with free shipping goal",
-        "Add countdown timer for time-limited offers",
-        "Enable trust badges near checkout button",
-        "Activate FBT recommendations for cross-sells"
-      ], cta: "Apply Fixes"
-    });
+    return makeMsg(
+      "Task: Cart Diagnosis\nStatus: Completed\n\n" +
+      "Issues Detected:\n  \u2022 No progress bar \u2014 customers can't see shipping threshold\n  \u2022 No urgency timer \u2014 missing purchase incentive\n  \u2022 No trust badges \u2014 reduced checkout confidence\n  \u2022 Upsells disabled \u2014 leaving revenue on table\n\n" +
+      "Recommended Fixes:\n  \u2022 Enable Progress Bar with free shipping goal\n  \u2022 Add countdown timer\n  \u2022 Enable Trust Badges\n  \u2022 Activate FBT recommendations\n\n" +
+      "Apply these fixes?"
+    );
   }
 
   if (mode === "bestpractice") {
-    return modeCard("mode_bestpractice", {
-      ranking: [
-        { rank: 1, name: "Progress Bar", impact: "20-30% conversion lift", priority: "critical" },
-        { rank: 2, name: "Cart Drawer", impact: "15-25% AOV increase", priority: "critical" },
-        { rank: 3, name: "FBT", impact: "10-20% extra revenue", priority: "high" },
-        { rank: 4, name: "Upsells", impact: "10-20% revenue gain", priority: "high" },
-        { rank: 5, name: "Coupon Slider", impact: "12-18% conversion lift", priority: "medium" },
-        { rank: 6, name: "Trust Badges", impact: "5-10% checkout trust", priority: "medium" },
-        { rank: 7, name: "Countdown Timer", impact: "8-15% urgency boost", priority: "low" },
-      ], recommendation: "Start with Progress Bar and Cart Drawer — they deliver the highest ROI for most stores",
-      cta: "Enable Recommended Features"
-    });
+    const isMostUsed = MK(/most.*(use|popular|common)|top.*(feature|module)|which.*(feature|module).*(use|popular|common)/i)(lower);
+    if (isMostUsed) {
+      return makeMsg(
+        "Task: Best Practices\nStatus: Completed\n\n" +
+        "Top Recommended Features:\n  \u2022 Free Shipping Progress Bar\n  \u2022 Cart Drawer\n  \u2022 Frequently Bought Together\n  \u2022 Upsells\n  \u2022 Coupon Unlock\n  \u2022 Rewards\n  \u2022 Countdown Timer\n  \u2022 Announcement Bar\n  \u2022 Trust Elements\n\n" +
+        "Enable any of these to improve conversion rates."
+      );
+    }
+    return makeMsg(
+      "Task: Recommendations\nStatus: Ready\n\n" +
+      "Highest Impact Features:\n  \u2022 Cart Drawer\n  \u2022 Progress Bar\n  \u2022 FBT Recommendations\n\n" +
+      "These provide the biggest boost to cart engagement and AOV."
+    );
   }
 
   if (mode === "recommendation") {
-    return modeCard("mode_recommendation", {
-      current: ["Cart Drawer", "Trust Badges"], missing: ["Progress Bar", "FBT", "Upsells", "Coupon Slider"],
-      opportunity: "Enable Progress Bar and FBT to increase AOV by 25-35%",
-      cta: "Enable Recommendations"
-    });
+    return makeMsg(
+      "Task: Optimization Recommendations\nStatus: Ready\n\n" +
+      "Recommended Modules:\n  \u2022 Progress Bar \u2014 20-30% conversion lift\n  \u2022 FBT \u2014 10-20% extra revenue\n  \u2022 Upsells \u2014 10-20% AOV gain\n\n" +
+      "Combined Impact: 25-35% AOV increase\n\n" +
+      "Enable these modules?"
+    );
   }
 
   const actionMap = {
@@ -282,7 +357,6 @@ function mockApi(text) {
   const needs = (q) => Promise.resolve({ id: "r-" + Date.now(), role: "agent", type: "json", json: { status: "needs_input", question: q } });
   const makeMsg = (text) => Promise.resolve({ id: "r-" + Date.now(), role: "agent", type: "json", json: { message: text } });
   const makeActions = (actions, message) => Promise.resolve({ id: "r-" + Date.now(), role: "agent", type: "json", json: { message: message || "", actions, status: "success" } });
-  const successMsg = (...lines) => lines.map(l => "\u2713 " + l).join("\n");
   const checkState = (key) => ({ enabled: featureStore.get(key), settings: featureStore.getSettings(key) });
   const setEnabled = (key) => { featureStore.set(key, true); };
   const setDisabled = (key) => { featureStore.set(key, false); };
@@ -315,11 +389,11 @@ function mockApi(text) {
       return needs("Which color scheme or border radius would you like to apply?");
     }
     if (wantDisable) {
-      if (!featureStore.get("cart_drawer")) return makeActions([], "Cart Drawer is already inactive.");
+      if (!featureStore.get("cart_drawer")) return makeActions([], "Task: Disable Cart Drawer\nStatus: Completed\n\nCart Drawer is already inactive.");
       setDisabled("cart_drawer");
-      return makeActions([{ module: "cartDrawer", action: "disable", settings: { enabled: false } }], successMsg("Cart Drawer deactivated"));
+      return makeActions([{ module: "cartDrawer", action: "disable", settings: { enabled: false } }], "Task: Disable Cart Drawer\nStatus: Completed\n\nCart Drawer deactivated");
     }
-    const a = []; const s = [];
+    const a = []; const s = []; const c = [];
     const fe = ensureFeature("cart_drawer", MODULE_LABELS.cart_drawer);
     a.push(...fe.actions); s.push(...fe.steps);
     const settings = { enabled: true };
@@ -329,18 +403,18 @@ function mockApi(text) {
     const hasExtra = Object.keys(settings).filter((k) => k !== "enabled").length > 0;
     if (hasExtra) {
       a.push({ module: "cartDrawer", action: "update", settings });
-      if (settings.theme) s.push(`Theme set to ${settings.theme}`);
-      if (settings.borderRadius) s.push(`Border radius set to ${settings.borderRadius}px`);
+      if (settings.theme) { s.push(`Theme: ${settings.theme}`); c.push(`Theme set to ${settings.theme}`); }
+      if (settings.borderRadius) { s.push(`Border Radius: ${settings.borderRadius}px`); c.push(`Border radius updated`); }
     }
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Configure Cart Drawer\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("progress_bar")) return makeActions([], "Progress Bar is already inactive.");
+      if (!featureStore.get("progress_bar")) return makeActions([], "Task: Disable Progress Bar\nStatus: Completed\n\nProgress Bar is already inactive.");
       setDisabled("progress_bar");
-      return makeActions([{ module: "progressBar", action: "disable", settings: { enabled: false } }], successMsg("Progress Bar deactivated"));
+      return makeActions([{ module: "progressBar", action: "disable", settings: { enabled: false } }], "Task: Disable Progress Bar\nStatus: Completed\n\nProgress Bar deactivated");
     }
     const a = []; const s = [];
     const pe = ensurePrereq("progress_bar");
@@ -352,22 +426,22 @@ function mockApi(text) {
       const goal = parseInt(match[1], 10);
       const currency = /inr|rs\./i.test(lower) ? "INR" : "USD";
       a.push({ module: "progressBar", action: "update", settings: { goal, currency, enabled: true } });
-      s.push(`Goal ${currency === "INR" ? "\u20B9" : "$"}${goal.toLocaleString()}`);
+      s.push(`Goal: ${currency === "INR" ? "\u20B9" : "$"}${goal.toLocaleString()}`);
     }
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Configure Progress Bar\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("trust_badges")) return makeActions([], "Trust Badges are already inactive.");
+      if (!featureStore.get("trust_badges")) return makeActions([], "Task: Disable Trust Badges\nStatus: Completed\n\nTrust Badges are already inactive.");
       setDisabled("trust_badges");
-      return makeActions([{ module: "trustBadges", action: "disable", settings: { enabled: false } }], successMsg("Trust Badges deactivated"));
+      return makeActions([{ module: "trustBadges", action: "disable", settings: { enabled: false } }], "Task: Disable Trust Badges\nStatus: Completed\n\nTrust Badges deactivated");
     }
     const a = []; const s = [];
     const pe = ensurePrereq("trust_badges"); a.push(...pe.actions); s.push(...pe.steps);
     const fe = ensureFeature("trust_badges", "Trust Badges"); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Enable Trust Badges\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/upsell|frequently.*bought|fbt|recommend/i.test(lower)) {
@@ -377,65 +451,107 @@ function mockApi(text) {
     const label = isFbt ? "Frequently Bought Together" : "Upsells";
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get(storeKey)) return makeActions([], `${label} is already inactive.`);
+      if (!featureStore.get(storeKey)) return makeActions([], `Task: Disable ${label}\nStatus: Completed\n\n${label} is already inactive.`);
       setDisabled(storeKey);
-      return makeActions([{ module: moduleName, action: "disable", settings: { enabled: false } }], successMsg(`${label} deactivated`));
+      return makeActions([{ module: moduleName, action: "disable", settings: { enabled: false } }], `Task: Disable ${label}\nStatus: Completed\n\n${label} deactivated`);
     }
     const a = []; const s = [];
     const pe = ensurePrereq(storeKey); a.push(...pe.actions); s.push(...pe.steps);
     const fe = ensureFeature(storeKey, label); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, `Task: Enable ${label}\nStatus: Completed\n\nChanges Applied:\n` + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/coupon.*slider|slider|coupon.*banner|coupon.*show|show.*coupon/i.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("coupon_slider")) return makeActions([], "Coupon Slider is already inactive.");
+      if (!featureStore.get("coupon_slider")) return makeActions([], "Task: Disable Coupon Slider\nStatus: Completed\n\nCoupon Slider is already inactive.");
       setDisabled("coupon_slider");
-      return makeActions([{ module: "couponSlider", action: "disable", settings: { enabled: false } }], successMsg("Coupon Slider deactivated"));
+      return makeActions([{ module: "couponSlider", action: "disable", settings: { enabled: false } }], "Task: Disable Coupon Slider\nStatus: Completed\n\nCoupon Slider deactivated");
     }
     const a = []; const s = [];
     const pe = ensurePrereq("coupon_slider"); a.push(...pe.actions); s.push(...pe.steps);
     const fe = ensureFeature("coupon_slider", "Coupon Slider"); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Enable Coupon Slider\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/coupon.*banner|banner.*coupon|product.?widget|widget/i.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("coupon_banner")) return makeActions([], "Coupon Banner is already inactive.");
+      if (!featureStore.get("coupon_banner")) return makeActions([], "Task: Disable Coupon Banner\nStatus: Completed\n\nCoupon Banner is already inactive.");
       setDisabled("coupon_banner");
-      return makeActions([{ module: "couponBanner", action: "disable", settings: { enabled: false } }], successMsg("Coupon Banner deactivated"));
+      return makeActions([{ module: "couponBanner", action: "disable", settings: { enabled: false } }], "Task: Disable Coupon Banner\nStatus: Completed\n\nCoupon Banner deactivated");
     }
     const a = []; const s = [];
     const pe = ensurePrereq("coupon_banner"); a.push(...pe.actions); s.push(...pe.steps);
     const fe = ensureFeature("coupon_banner", "Coupon Banner"); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Enable Coupon Banner\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/coupon.*creator|create.*coupon|discount|offer.*create/i.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("coupon_creator")) return makeActions([], "Coupon Creator is already inactive.");
+      if (!featureStore.get("coupon_creator")) return makeActions([], "Task: Disable Coupon Creator\nStatus: Completed\n\nCoupon Creator is already inactive.");
       setDisabled("coupon_creator");
-      return makeActions([{ module: "couponCreator", action: "disable", settings: { enabled: false } }], successMsg("Coupon Creator deactivated"));
+      return makeActions([{ module: "couponCreator", action: "disable", settings: { enabled: false } }], "Task: Disable Coupon Creator\nStatus: Completed\n\nCoupon Creator deactivated");
     }
     const a = []; const s = [];
     const fe = ensureFeature("coupon_creator", "Coupon Creator"); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Enable Coupon Creator\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
 
   if (/combo.?forge|bundle|bundles|landing.?page/i.test(lower)) {
     const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
     if (wantDisable) {
-      if (!featureStore.get("combo_forge")) return makeActions([], "Combo Forge is already inactive.");
+      if (!featureStore.get("combo_forge")) return makeActions([], "Task: Disable Combo Forge\nStatus: Completed\n\nCombo Forge is already inactive.");
       setDisabled("combo_forge");
-      return makeActions([{ module: "comboForge", action: "disable", settings: { enabled: false } }], successMsg("Combo Forge deactivated"));
+      return makeActions([{ module: "comboForge", action: "disable", settings: { enabled: false } }], "Task: Disable Combo Forge\nStatus: Completed\n\nCombo Forge deactivated");
     }
     const a = []; const s = [];
     const fe = ensureFeature("combo_forge", "Combo Forge"); a.push(...fe.actions); s.push(...fe.steps);
-    return makeActions(a, successMsg(...s));
+    return makeActions(a, "Task: Enable Combo Forge\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
   }
+
+  if (/match.?theme|sync.?theme|detect.?theme|auto.?theme|copy.?theme/i.test(lower)) {
+    try {
+      const k = "cartninja_cart_config";
+      const c = JSON.parse(localStorage.getItem(k) || "{}");
+      c.themeSync = true; c.themeSyncAt = Date.now();
+      localStorage.setItem(k, JSON.stringify(c));
+    } catch {}
+    return makeMsg(
+      "Task: Match Store Theme\nStatus: Completed\n\n" +
+      "Changes Applied:\n  \u2022 Colors synchronized\n  \u2022 Fonts synchronized\n  \u2022 Button styles synchronized\n  \u2022 Border radius synchronized\n  \u2022 Cart drawer updated"
+    );
+  }
+
+  const applyPreset = (preset, label) => {
+    try {
+      const k = "cartninja_cart_config";
+      const c = JSON.parse(localStorage.getItem(k) || "{}");
+      c.drawerTheme = preset;
+      localStorage.setItem(k, JSON.stringify(c));
+    } catch {}
+    return makeMsg(
+      "Task: Apply " + label + " Theme\nStatus: Completed\n\nChanges Applied:\n" +
+      {
+        premium_dark:
+          "  \u2022 Dark background\n  \u2022 Premium gradients\n  \u2022 Updated button styles\n  \u2022 Updated typography\n  \u2022 Cart drawer refreshed",
+        minimal_light:
+          "  \u2022 Clean layout\n  \u2022 Minimal styling\n  \u2022 Modern typography\n  \u2022 Refreshed cart drawer",
+        luxury_gold:
+          "  \u2022 Premium gold accents\n  \u2022 Luxury styling\n  \u2022 Updated buttons\n  \u2022 Updated cart appearance\n  \u2022 Cart drawer refreshed",
+      }[preset]
+    );
+  };
+
+  if (/(?:apply|set|use|enable)?\s*(premium\s*dark|dark\s*(?:theme|preset))/i.test(lower))
+    return applyPreset("premium_dark", "Premium Dark");
+
+  if (/(?:apply|set|use|enable)?\s*(minimal\s*light|light\s*(?:theme|preset))/i.test(lower))
+    return applyPreset("minimal_light", "Minimal Light");
+
+  if (/(?:apply|set|use|enable)?\s*(luxury\s*gold|gold\s*(?:theme|preset))/i.test(lower))
+    return applyPreset("luxury_gold", "Luxury Gold");
 
   if (/styl|theme|colou?r|look|appear/i.test(lower)) {
     const colorMatch = lower.match(/\b(red|blue|green|yellow|purple|pink|orange|brown|black|white|gray|grey|navy|teal|maroon|violet|magenta|coral|indigo|gold|silver)\b|#[0-9a-f]{3,6}\b/i);
@@ -449,8 +565,8 @@ function mockApi(text) {
         const fe = ensureFeature(moduleStoreKey, label); a.push(...fe.actions); s.push(...fe.steps);
       }
       a.push({ module: "styling", action: "update", settings: { target, color } });
-      s.push(`${label} color → ${color}`);
-      return makeActions(a, successMsg(...s));
+      s.push(`${label}: ${color}`);
+      return makeActions(a, "Task: Update Styling\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
     };
 
     if (/checkout/i.test(lower)) {
@@ -463,8 +579,8 @@ function mockApi(text) {
       const pe = ensurePrereq("cart_drawer"); a.push(...pe.actions); s.push(...pe.steps);
       const fe = ensureFeature("cart_drawer", "Cart Drawer"); a.push(...fe.actions); s.push(...fe.steps);
       a.push({ module: "cartDrawer", action: "update", settings: { theme: color } });
-      s.push(`Theme → ${color}`);
-      return makeActions(a, successMsg(...s));
+      s.push(`Theme: ${color}`);
+      return makeActions(a, "Task: Update Cart Drawer Theme\nStatus: Completed\n\nChanges Applied:\n" + s.map(x => "  \u2022 " + x).join("\n"));
     }
     if (/trust|badge|security/i.test(lower)) {
       if (hasColor) return styleTarget("trust_badges", "Trust Badges", "trust_badges", pickColor());
@@ -478,16 +594,10 @@ function mockApi(text) {
 
   const unrelated = /weather|news|sport|movie|music|recipe|cook|game|play|stock|price|bitcoin|crypto|travel|hotel|flight|book|author|poem|joke|funny|dance|sing/i;
   if (unrelated.test(lower)) {
-    return Promise.resolve({ id: "r-" + Date.now(), role: "agent", type: "json", json: {
-      status: "needs_input",
-      question: "Sorry, that's not related to Cart Ninja. I can only help you optimize your Shopify cart for more revenue."
-    }});
+    return makeMsg("I'm a Cart Ninja configuration agent. I can help with module setup, theme presets, campaigns, and store optimization.");
   }
 
-  return Promise.resolve({ id: "r-" + Date.now(), role: "agent", type: "json", json: {
-    status: "needs_input",
-    question: "I'm your Cart Ninja Conversion Agent. I can audit your store, recommend features, create campaigns, or configure settings. Try: 'audit my store', 'increase AOV', 'create a campaign', or 'enable cart drawer'."
-  }});
+  return makeMsg("Ready for instructions.\n\nYou can ask me to:\n• Enable or configure cart modules\n• Apply theme presets\n• Run store audits\n• Create campaigns\n• Optimize conversions");
 }
 
 function useFeatureState(key) {
@@ -498,56 +608,31 @@ function useFeatureState(key) {
   );
 }
 
-function useFeatureSettings(key) {
-  const [settings, setSettings] = useState(() => featureStore.getSettings(key));
-  useEffect(() => {
-    const handler = () => setSettings(featureStore.getSettings(key));
-    return featureStore.subscribe(handler);
-  }, [key]);
-  return settings;
-}
+const MODULES_LIST = [
+  { k: "cart_drawer", label: "Cart Drawer" },
+  { k: "progress_bar", label: "Progress Bar" },
+  { k: "coupon_slider", label: "Coupon Slider" },
+  { k: "upsells", label: "Upsells" },
+  { k: "trust_badges", label: "Trust Badges" },
+  { k: "fbt", label: "Frequently Bought Together" },
+  { k: "coupon_banner", label: "Coupon Banner" },
+  { k: "coupon_creator", label: "Coupon Creator" },
+  { k: "combo_forge", label: "Combo Forge" },
+];
 
-function FeatureStatus() {
-  const features = [
-    { k: "cart_drawer", label: "Cart Drawer" },
-    { k: "progress_bar", label: "Progress Bar" },
-    { k: "coupon_slider", label: "Coupon Slider" },
-    { k: "upsells", label: "Upsells" },
-    { k: "trust_badges", label: "Trust Badges" },
-    { k: "fbt", label: "Frequently Bought Together" },
-    { k: "coupon_banner", label: "Coupon Banner" },
-    { k: "coupon_creator", label: "Coupon Creator" },
-    { k: "combo_forge", label: "Combo Forge" },
-  ];
-
-  return (
-    <div className="aia-status">
-      <div className="aia-status-head">Module Status</div>
-      <div className="aia-status-body">
-        {features.map((f) => <FeatureRow key={f.k} storeKey={f.k} label={f.label} />)}
-      </div>
-    </div>
-  );
-}
-
-function FeatureRow({ storeKey, label }) {
+function ModuleToggle({ storeKey, label }) {
   const enabled = useFeatureState(storeKey);
-  const settings = useFeatureSettings(storeKey);
-  const settingsBadge = settings ? Object.entries(settings).filter(([,v]) => v).map(([k,v]) => `${k}:${v}`).join(" ") : null;
   return (
-    <div className="aia-status-row">
-      <span className="aia-status-label">{label}</span>
-      <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-        {settingsBadge && <span style={{ fontSize:10, color:"#534AB7", background:"#EEEDFE", padding:"2px 6px", borderRadius:4 }}>{settingsBadge}</span>}
-        <span className={"aia-status-badge" + (enabled ? " aia-status-on" : " aia-status-off")}>
-          {enabled ? "Active" : "Inactive"}
-        </span>
-      </div>
+    <div className="aia-settings-module">
+      <span className="aia-settings-module-label">{label}</span>
+      <span className={"aia-settings-module-badge" + (enabled ? " aia-settings-module-badge--on" : " aia-settings-module-badge--off")}>
+        {enabled ? "Active" : "Inactive"}
+      </span>
     </div>
   );
 }
 
-export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }) {
+export default function AiAgent({ appName = "Cart Operations Agent", initialQuery = "" }) {
   const [input, setInput] = useState(initialQuery || "");
   const [messages, setMessages] = useState(() => {
     try {
@@ -576,6 +661,7 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
     } catch { return null; }
   });
   const [pendingContext, setPendingContext] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
@@ -611,43 +697,52 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
 
   const processReply = useCallback((reply, userText) => {
     const j = reply.json;
-
-    if (!j) {
-      setLoading(null);
-      setMessages((prev) => [...prev, reply]);
-      return;
-    }
-
-    if (j.status === "needs_input") {
-      setPendingContext(userText);
-      setLoading(null);
-      setMessages((prev) => [...prev, reply]);
-      return;
-    }
-
-    if (j.actions && j.actions.length > 0) {
-      try {
-        const results = executeActions(j.actions);
-        const executedReply = { ...reply, executedResults: results };
-        setLoading(null);
-        setMessages((prev) => [...prev, executedReply]);
-      } catch {
-        setLoading(null);
-        setMessages((prev) => [...prev, { ...reply, json: { ...reply.json, message: "Error applying changes. Please try again." } }]);
-      }
-      return;
-    }
-
+    if (!j) { setLoading(null); setMessages((prev) => [...prev, reply]); return; }
+    if (j.status === "needs_input") { setPendingContext(userText); setLoading(null); setMessages((prev) => [...prev, reply]); return; }
     setLoading(null);
     setMessages((prev) => [...prev, reply]);
   }, []);
 
-  const callApi = useCallback((text) => {
+  const callApi = useCallback(async (text) => {
     setLoading("analyzing");
-    mockApi(text).then((reply) => {
-      processReply(reply, text);
-    });
-  }, [processReply]);
+    const detectedActions = extractActions(text);
+    if (detectedActions.length > 0) {
+      const result = await applyActionsViaApi(detectedActions);
+      const labels = detectedActions.map((a) => a.label || ACTION_LABELS[a.module] || a.module).filter(Boolean).join(", ");
+      if (result.success) {
+        syncAfterToFeatureStore(result.after);
+        const synced = result.synced !== false;
+        const statusLine = synced ? "Status: Completed" : "Status: Applied (waiting for store sync)";
+        processReply({
+          id: "r-" + Date.now(), role: "agent", type: "json",
+          json: { message: `Task: ${labels}\n${statusLine}`, actions: detectedActions, status: "success" },
+          executedResults: [{ status: "executed" }],
+        }, text);
+      } else {
+        processReply({
+          id: "r-" + Date.now(), role: "agent", type: "json",
+          json: { message: `Task: ${labels}\nStatus: Failed\nReason: ${result.error}` },
+        }, text);
+      }
+    } else {
+      try {
+        const res = await aiApi.sendMessage(activeConvId || "temp", text, messages.map((m) => ({ role: m.role, text: m.text })));
+        if (res.success && res.message) {
+          processReply({
+            id: "r-" + Date.now(), role: "agent", type: "json",
+            json: { message: res.message },
+          }, text);
+        } else {
+          throw new Error("no response");
+        }
+      } catch {
+        processReply({
+          id: "r-" + Date.now(), role: "agent", type: "json",
+          json: { message: "I couldn't process that command. Try something like \"Enable Cart Drawer\" or \"Add Upsells\"." },
+        }, text);
+      }
+    }
+  }, [processReply, activeConvId, messages]);
 
   const handleSend = useCallback((text) => {
     if (!text.trim()) return;
@@ -717,10 +812,12 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
     : 1;
 
   const WELCOME_CHIPS = [
-    { id: "w1", text: "Activate cart drawer" },
-    { id: "w2", text: "Enable progress bar with Rs.500 goal" },
-    { id: "w3", text: "Deactivate upsells" },
-    { id: "w4", text: "Activate FBT recommendations" },
+    { id: "w1", text: "Enable Cart Drawer" },
+    { id: "w2", text: "Free Shipping Goal" },
+    { id: "w3", text: "Add Upsells" },
+    { id: "w4", text: "Apply Premium Dark" },
+    { id: "w5", text: "Analyze Revenue" },
+    { id: "w6", text: "Optimize Mobile" },
   ];
 
   const today = conversations.filter((c) => getTimeGroup(c.ts) === "Today");
@@ -732,85 +829,103 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
     <>
       <style>{`
 .aia-wrap { height:100%; display:flex; flex-direction:column; gap:0; overflow:hidden; }
-.aia-header { display:flex; align-items:center; gap:12px; padding:16px 0 12px; flex-shrink:0; }
-.aia-header-icon { width:40px; height:40px; border-radius:10px; background:#534AB7; display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; }
-.aia-header h1 { margin:0; font-size:20px; font-weight:650; color:#1a1a1a; }
-.aia-header p { margin:2px 0 0; font-size:13px; color:#6d6d6d; }
-.aia-card { flex:1; border:1px solid #e8e8e8; border-radius:14px; background:#fff; overflow:hidden; display:flex; min-height:0; box-shadow:0 2px 8px rgba(0,0,0,.06); }
-.aia-sidebar { width:210px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #e8e8e8; transition:width .2s ease; overflow:hidden; }
+.aia-card { flex:1; border:1px solid #e8e8e8; border-radius:14px; background:#fff; overflow:hidden; display:flex; min-height:0; box-shadow:0 2px 8px rgba(0,0,0,.06); position:relative; }
+
+/* ── History Sidebar ── */
+.aia-sidebar { width:220px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #e8e8e8; transition:width .2s ease; overflow:hidden; background:#fafafa; }
 .aia-sidebar--closed { width:0; border-right-color:transparent; }
-.aia-sidebar-inner { width:210px; height:100%; display:flex; flex-direction:column; }
-.aia-sidebar-head { display:flex; align-items:center; gap:6px; padding:14px 14px 10px; font-size:13px; color:#6d6d6d; flex-shrink:0; }
-.aia-sidebar-list { padding:0 12px 12px; display:flex; flex-direction:column; gap:4px; flex:1; overflow-y:auto; }
-.aia-sb-btn { display:block; width:100%; text-align:left; background:none; border:1px solid #e8e8e8; border-radius:8px; padding:8px 10px; font-size:13px; color:#1a1a1a; cursor:pointer; transition:background .12s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.aia-sb-btn:hover { background:#f6f6f7; }
-.aia-sb-btn--active { background:#EEEDFE; border-color:#534AB7; color:#26215C; font-weight:500; }
-.aia-sidebar-foot { padding:8px 14px 12px; font-size:12px; color:#9a9a9a; border-top:1px solid #eee; flex-shrink:0; }
-.aia-chat { flex:1; display:flex; flex-direction:column; min-width:0; }
-.aia-chat-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid #eee; flex-shrink:0; }
-.aia-chat-head-btn { background:none; border:none; cursor:pointer; color:#6d6d6d; padding:2px; display:flex; }
-.aia-avatar { width:28px; height:28px; border-radius:50%; background:#EEEDFE; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.aia-name { font-size:14px; font-weight:600; color:#1a1a1a; flex:1; }
-.aia-online { font-size:12px; color:#085041; background:#E1F5EE; border-radius:10px; padding:2px 10px; flex-shrink:0; }
-.aia-newchat-btn { background:none; border:1px solid #e3e3e3; border-radius:6px; cursor:pointer; color:#6d6d6d; display:flex; align-items:center; gap:3px; padding:3px 8px; font-size:12px; transition:background .12s; flex-shrink:0; }
-.aia-newchat-btn:hover { background:#f6f6f7; }
-.aia-msgs { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
-.aia-bubble { padding:10px 14px; border-radius:10px; font-size:14px; line-height:1.55; white-space:pre-wrap; overflow-wrap:break-word; }
-.aia-input-wrap { display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid #eee; flex-shrink:0; }
-.aia-input { flex:1; height:36px; padding:0 12px; border:1px solid #e3e3e3; border-radius:8px; font-size:14px; outline:none; box-sizing:border-box; }
-.aia-input:focus { border-color:#534AB7; box-shadow:0 0 0 2px #EEEDFE; }
-.aia-send { width:36px; height:36px; border-radius:8px; border:none; background:#534AB7; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:background .12s; }
-.aia-send:hover { background:#453ea3; }
-.aia-send:disabled { opacity:.45; cursor:default; }
-.aia-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
-.aia-chip { padding:5px 14px; border-radius:16px; border:1px solid #e3e3e3; background:#fff; font-size:12px; color:#1a1a1a; cursor:pointer; transition:background .12s; }
-.aia-chip:hover { background:#f6f6f7; }
-.aia-right-panel { width:210px; flex-shrink:0; display:flex; flex-direction:column; border-left:1px solid #e8e8e8; }
-.aia-right-panel .aia-insights { width:auto; border-left:none; }
-.aia-status { display:flex; flex-direction:column; padding:0; height:100%; }
-.aia-status-head { padding:12px 12px 8px; font-size:13px; font-weight:600; color:#1a1a1a; border-bottom:1px solid #eee; }
-.aia-status-body { padding:8px 12px 12px; display:flex; flex-direction:column; gap:4px; flex:1; overflow-y:auto; }
-.aia-status-row { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border:1px solid #e8e8e8; border-radius:6px; }
-.aia-status-label { font-size:11px; color:#1a1a1a; font-weight:500; }
-.aia-status-badge { font-size:10px; padding:2px 8px; border-radius:8px; font-weight:500; }
-.aia-status-on { background:#E1F5EE; color:#085041; }
-.aia-status-off { background:#fce8e6; color:#a12b22; }
+.aia-sidebar-inner { width:220px; display:flex; flex-direction:column; min-height:0; }
+.aia-sidebar-head { display:flex; align-items:center; justify-content:space-between; padding:16px 14px 10px; font-size:12px; font-weight:600; color:#6d6d6d; text-transform:uppercase; letter-spacing:.4px; flex-shrink:0; }
+.aia-sidebar-new { background:none; border:none; cursor:pointer; color:#FF6B00; font-size:11px; font-weight:600; padding:4px 8px; border-radius:6px; transition:background .12s; }
+.aia-sidebar-new:hover { background:#FFF3EB; }
+.aia-sidebar-list { padding:0 10px 12px; display:flex; flex-direction:column; gap:2px; flex:1; overflow-y:auto; min-height:0; }
+.aia-sb-btn { display:block; width:100%; text-align:left; background:none; border:none; border-radius:6px; padding:8px 10px; font-size:13px; color:#1a1a1a; cursor:pointer; transition:all .12s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.aia-sb-btn:hover { background:#f0f0f0; }
+.aia-sb-btn--active { background:#FFF3EB; color:#FF6B00; font-weight:500; }
+.aia-history-label { font-size:10px; font-weight:600; color:#9a9a9a; padding:12px 10px 4px; text-transform:uppercase; letter-spacing:.5px; }
+.aia-history-empty { font-size:12px; color:#9a9a9a; padding:24px 14px; text-align:center; }
 
-.aia-loading { padding:14px; }
-.aia-loading-spinner { display:inline-block; width:16px; height:16px; border:2px solid #e3e3e3; border-top-color:#534AB7; border-radius:50%; animation:aiaSpin .6s linear infinite; }
+/* ── Chat ── */
+.aia-chat { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
+.aia-chat-head { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #eee; flex-shrink:0; }
+.aia-chat-head-btn { background:none; border:none; cursor:pointer; color:#9a9a9a; padding:4px; display:flex; border-radius:6px; transition:all .12s; }
+.aia-chat-head-btn:hover { background:#f0f0f0; color:#1a1a1a; }
+.aia-avatar { width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,#FF6B00,#FF8A33); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff; }
+.aia-name { font-size:14px; font-weight:600; color:#1a1a1a; }
+.aia-status-badge-header { font-size:11px; color:#059669; background:#ECFDF5; border-radius:6px; padding:2px 10px; margin-left:auto; }
+.aia-settings-btn { background:none; border:1px solid #e8e8e8; border-radius:6px; cursor:pointer; color:#9a9a9a; padding:5px; display:flex; transition:all .12s; flex-shrink:0; }
+.aia-settings-btn:hover { border-color:#FF6B00; color:#FF6B00; background:#FFF3EB; }
+
+/* ── Messages ── */
+.aia-msgs { flex:1; overflow-y:auto; min-height:0; padding:20px; display:flex; flex-direction:column; gap:16px; background:#fafafa; }
+.aia-msg-row { max-width:80%; display:flex; flex-direction:column; }
+.aia-msg-row--user { align-self:flex-end; }
+.aia-msg-row--agent { align-self:flex-start; }
+.aia-msg-label { margin-bottom:4px; padding-left:4px; font-size:10px; font-weight:600; color:#FF6B00; letter-spacing:.3px; text-transform:uppercase; display:flex; align-items:center; gap:4px; }
+.aia-msg-bubble { padding:12px 18px; font-size:14px; line-height:1.6; white-space:pre-wrap; overflow-wrap:break-word; }
+.aia-msg-bubble--user { background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; border-radius:16px 16px 4px 16px; }
+.aia-msg-bubble--agent { background:#fff; color:#1a1a1a; border:1px solid #e8e8e8; border-radius:16px 16px 16px 4px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+
+/* ── Agent Status (Welcome) ── */
+.aia-status-card { background:#fff; border:1px solid #e8e8e8; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.04); width:100%; }
+.aia-status-connected { display:flex; align-items:center; gap:8px; font-size:13px; color:#059669; font-weight:500; margin-bottom:16px; }
+.aia-status-connected-dot { width:8px; height:8px; border-radius:50%; background:#10B981; }
+.aia-status-monitoring { font-size:11px; font-weight:600; color:#9a9a9a; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+.aia-status-items { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+.aia-status-item { font-size:12px; color:#1a1a1a; background:#f5f5f5; padding:4px 12px; border-radius:6px; }
+.aia-status-ready { font-size:13px; color:#9a9a9a; }
+
+/* ── Chips ── */
+.aia-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.aia-chip { padding:5px 14px; border-radius:6px; border:1px solid #e8e8e8; background:#fff; font-size:12px; color:#555; cursor:pointer; transition:all .12s; }
+.aia-chip:hover { border-color:#FF6B00; color:#FF6B00; background:#FFF3EB; }
+
+/* ── Input ── */
+.aia-input-wrap { display:flex; align-items:center; gap:8px; padding:12px 16px; border-top:1px solid #eee; flex-shrink:0; background:#fff; }
+.aia-input { flex:1; height:40px; padding:0 14px; border:1px solid #e8e8e8; border-radius:10px; font-size:14px; outline:none; box-sizing:border-box; transition:border-color .15s; background:#fafafa; }
+.aia-input:focus { border-color:#FF6B00; background:#fff; box-shadow:0 0 0 3px rgba(255,107,0,.1); }
+.aia-send { width:40px; height:40px; border-radius:10px; border:none; background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:all .15s; }
+.aia-send:hover { transform:scale(1.05); box-shadow:0 2px 8px rgba(255,107,0,.25); }
+.aia-send:disabled { opacity:.4; cursor:default; transform:none; box-shadow:none; }
+
+/* ── Settings Panel ── */
+.aia-settings-overlay { position:absolute; inset:0; z-index:10; background:rgba(0,0,0,.15); border-radius:14px; animation:aiaFadeIn .15s ease; }
+.aia-settings-panel { position:absolute; top:0; right:0; bottom:0; width:280px; background:#fff; border-left:1px solid #e8e8e8; border-radius:0 14px 14px 0; display:flex; flex-direction:column; animation:aiaSlideIn .2s ease; z-index:11; }
+.aia-settings-head { display:flex; align-items:center; justify-content:space-between; padding:16px; border-bottom:1px solid #eee; flex-shrink:0; }
+.aia-settings-title { font-size:14px; font-weight:600; color:#1a1a1a; }
+.aia-settings-close { background:none; border:none; cursor:pointer; color:#9a9a9a; padding:4px; border-radius:6px; transition:all .12s; }
+.aia-settings-close:hover { background:#f0f0f0; color:#1a1a1a; }
+.aia-settings-body { flex:1; overflow-y:auto; min-height:0; padding:12px 16px; }
+.aia-settings-module { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#fafafa; border-radius:8px; margin-bottom:6px; }
+.aia-settings-module-label { font-size:13px; color:#1a1a1a; font-weight:500; }
+.aia-settings-module-badge { font-size:11px; padding:2px 10px; border-radius:6px; font-weight:500; }
+.aia-settings-module-badge--on { background:#ECFDF5; color:#065F46; }
+.aia-settings-module-badge--off { background:#FEF2F2; color:#991B1B; }
+
+/* ── Loading ── */
+.aia-loading-wrap { max-width:80%; align-self:flex-start; }
+.aia-loading { display:flex; align-items:center; gap:8px; padding:12px 18px; background:#fff; border-radius:16px 16px 16px 4px; border:1px solid #e8e8e8; }
+.aia-loading-spinner { display:inline-block; width:14px; height:14px; border:2px solid #e8e8e8; border-top-color:#FF6B00; border-radius:50%; animation:aiaSpin .6s linear infinite; }
 @keyframes aiaSpin { to{transform:rotate(360deg)} }
-
-.aia-changes-summary { max-width:100%; }
-.aia-changes-summary .Polaris-Card { border-radius:10px; }
-.aia-action-item { padding:4px 0; }
-.aia-action-icon { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; font-size:12px; font-weight:bold; flex-shrink:0; }
-.aia-action-icon--ok { background:#E1F5EE; color:#085041; }
-.aia-action-icon--err { background:#fce8e6; color:#a12b22; }
-
-.aia-needs-input { max-width:100%; }
-.aia-needs-input .Polaris-Card { border-radius:10px; }
-.aia-option-grid { display:flex; flex-wrap:wrap; gap:8px; }
 
 .aia-slide-in { animation:aiaSlideUp .28s ease; }
 @keyframes aiaSlideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes aiaFadeIn { from{opacity:0} to{opacity:1} }
+@keyframes aiaSlideIn { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
 
-.aia-history-label { font-size:11px; font-weight:600; color:#9a9a9a; padding:8px 14px 4px; text-transform:uppercase; letter-spacing:.5px; }
-.aia-history-empty { font-size:12px; color:#9a9a9a; padding:8px 14px; text-align:center; }
-
-@media(max-width:768px){ .aia-sidebar{display:none} .aia-right-panel{display:none} }
+@media(max-width:768px){ .aia-sidebar{display:none} .aia-settings-panel{width:100%; border-radius:0;} }
       `}</style>
 
       <div className="aia-wrap">
         <div className="aia-card">
+          {/* ── History Panel ── */}
           <div className={"aia-sidebar" + (showHistory ? "" : " aia-sidebar--closed")}>
             <div className="aia-sidebar-inner">
               <div className="aia-sidebar-head">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <circle cx="6.5" cy="6.5" r="5" /><path d="M6.5 4v3l2 1.5" />
-                </svg>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 1"/></svg>
                 <span>History</span>
               </div>
-              <div className="aia-sidebar-list" style={{ paddingBottom: 0 }}>
+              <div className="aia-sidebar-list">
                 {conversations.length === 0 && (
                   <div className="aia-history-empty">No conversations yet</div>
                 )}
@@ -838,35 +953,48 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
                     {c.title.length > 32 ? c.title.slice(0, 29) + "..." : c.title}
                   </button>
                 ))}
+                <div style={{ borderTop: "1px solid #eee", marginTop: 8, paddingTop: 8 }}>
+                  <button className="aia-sb-btn" onClick={handleNewChat} style={{ color: "#FF6B00", fontWeight: 500 }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ marginRight: 6, verticalAlign: "middle" }}><path d="M6 2v8M2 6h8"/></svg>
+                    Start New Conversation
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
+          {/* ── Chat ── */}
           <div className="aia-chat">
             <div className="aia-chat-head">
-              <button
-                className="aia-chat-head-btn"
-                onClick={() => setShowHistory((v) => !v)}
-                aria-label={showHistory ? "Hide history" : "Show history"}
-              >
-                {HAMBURGER_ICON}
+              <button className="aia-chat-head-btn" onClick={() => setShowHistory((v) => !v)} aria-label={showHistory ? "Hide history" : "Show history"}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12" /></svg>
               </button>
-              <div className="aia-avatar">{SPARKLE_ICON}</div>
+              <div className="aia-avatar">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="1.5"><path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" /></svg>
+              </div>
               <span className="aia-name">{appName}</span>
-              <span className="aia-online">Online</span>
-              <button className="aia-newchat-btn" onClick={handleNewChat} aria-label="New chat" title="New chat">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 2v8M2 6h8" /></svg>
-                New
+              <span className="aia-status-badge-header">Connected</span>
+              <button className="aia-settings-btn" onClick={() => setShowSettings((v) => !v)} title="Settings">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
               </button>
             </div>
 
             <div className="aia-msgs" ref={scrollRef}>
               {messages.length === 0 && !loading && (
                 <>
-                  <div style={{ maxWidth: "90%", alignSelf: "flex-start" }}>
-                    <div className="aia-bubble" style={{ background: "#f1f1f2" }}>
-                      How can I help you with your cart today?
+                  <div className="aia-status-card">
+                    <div className="aia-status-connected">
+                      <span className="aia-status-connected-dot" />
+                      Connected to Store
                     </div>
+                    <div className="aia-status-monitoring">Monitoring</div>
+                    <div className="aia-status-items">
+                      <span className="aia-status-item">Cart Drawer</span>
+                      <span className="aia-status-item">Conversion Opportunities</span>
+                      <span className="aia-status-item">Revenue Optimization</span>
+                      <span className="aia-status-item">Customer Experience</span>
+                    </div>
+                    <div className="aia-status-ready">Awaiting Instructions</div>
                   </div>
                   <div className="aia-chips">
                     {WELCOME_CHIPS.map((chip) => (
@@ -884,10 +1012,8 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
 
                 if (isUser) {
                   return (
-                    <div key={msg.id} style={{ maxWidth: "90%", alignSelf: "flex-end" }}>
-                      <div className="aia-bubble" style={{ background: "#EEEDFE", color: "#26215C" }}>
-                        {msg.text}
-                      </div>
+                    <div key={msg.id} className="aia-msg-row aia-msg-row--user">
+                      <div className="aia-msg-bubble aia-msg-bubble--user">{msg.text}</div>
                     </div>
                   );
                 }
@@ -895,15 +1021,15 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
                 if (j) {
                   if (j.status === "needs_input") {
                     return (
-                      <div key={msg.id} style={{ maxWidth: "90%", alignSelf: "flex-start" }}>
+                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
                         <AINeedsInputCard question={j.question} onSubmit={handleAnswer} />
                       </div>
                     );
                   }
                   if (j.status === "undo") {
                     return (
-                      <div key={msg.id} style={{ maxWidth: "90%", alignSelf: "flex-start" }}>
-                        <div className="aia-bubble aia-slide-in" style={{ background: "#FFF4E5", color: "#594430", border: "1px solid #FFD9A8" }}>
+                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
+                        <div className="aia-msg-bubble aia-msg-bubble--agent" style={{ background:"#FFF4E5", color:"#594430", border:"1px solid #FFD9A8" }}>
                           {"\u21A9"} Undo successful
                         </div>
                       </div>
@@ -911,17 +1037,19 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
                   }
                   if (j.actions) {
                     return (
-                      <div key={msg.id} style={{ maxWidth: "100%", alignSelf: "flex-start", width: "100%" }}>
+                      <div key={msg.id} style={{ maxWidth:"100%", alignSelf:"flex-start", width:"100%" }}>
                         <AIChangesSummary actions={j.actions} results={msg.executedResults} onUndo={handleUndo} message={j.message} />
                       </div>
                     );
                   }
                   if (j.message) {
                     return (
-                      <div key={msg.id} style={{ maxWidth: "90%", alignSelf: "flex-start" }}>
-                        <div className="aia-bubble" style={{ background: "#f1f1f2" }}>
-                          {j.message}
+                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
+                        <div className="aia-msg-label">
+                          <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="#FF6B00" strokeWidth="1.8"><path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" /></svg>
+                          Agent
                         </div>
+                        <div className="aia-msg-bubble aia-msg-bubble--agent">{j.message}</div>
                       </div>
                     );
                   }
@@ -931,8 +1059,11 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
               })}
 
               {loading && (
-                <div style={{ maxWidth: "90%", alignSelf: "flex-start", width: "100%" }}>
-                  <AILoadingState />
+                <div className="aia-loading-wrap">
+                  <div className="aia-loading">
+                    <span className="aia-loading-spinner" />
+                    <span style={{ fontSize:13, color:"#999" }}>Executing...</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -942,7 +1073,7 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
                 ref={inputRef}
                 className="aia-input"
                 type="text"
-                placeholder="Describe what you want to do..."
+                placeholder="Type a command..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -959,62 +1090,34 @@ export default function AiAgent({ appName = "Cart Ninja AI", initialQuery = "" }
                 onClick={() => { if (input.trim() && !loading) handleSend(input); }}
                 aria-label="Send message"
               >
-                {SEND_ICON}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 8l12-4-4 8-3-3-3-3z"/></svg>
               </button>
             </div>
           </div>
 
-          <div className="aia-right-panel">
-            {showInsight ? (
-              <div className="aia-insights">
-                <div className="aia-insights-head">
-                  <span>Insights</span>
-                  <button
-                    className="aia-insights-close"
-                    onClick={() => {
-                      setMessages((prev) => {
-                        const copy = [...prev];
-                        copy[copy.length - 1] = { ...copy[copy.length - 1], insight: null };
-                        return copy;
-                      });
-                    }}
-                    aria-label="Close insights"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          {/* ── Settings Panel ── */}
+          {showSettings && (
+            <>
+              <div className="aia-settings-overlay" onClick={() => setShowSettings(false)} />
+              <div className="aia-settings-panel">
+                <div className="aia-settings-head">
+                  <span className="aia-settings-title">Modules</span>
+                  <button className="aia-settings-close" onClick={() => setShowSettings(false)}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
                   </button>
                 </div>
-                <div className="aia-insights-body">
-                  <div className="aia-metric">
-                    <p className="aia-metric-label">{lastMsg.insight.metric}</p>
-                    <p className="aia-metric-val">{lastMsg.insight.value}</p>
-                    <div className="aia-metric-delta">
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#0F6E56" strokeWidth="1.5" strokeLinecap="round"><path d="M6 10V2M2 6l4-4 4 4" /></svg>
-                      <span>{lastMsg.insight.delta}</span>
-                    </div>
-                  </div>
-                  <div className="aia-chart">
-                    {lastMsg.insight.series.map((s, i) => {
-                      const isLast = i === lastMsg.insight.series.length - 1;
-                      const barH = Math.max(4, (s.value / maxVal) * 90);
-                      return (
-                        <div key={s.label} className="aia-bar-wrap">
-                          <div className="aia-bar" style={{ height: barH + "px", background: isLast ? "#534AB7" : "#AFA9EC" }} />
-                          <span className="aia-bar-label">{s.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <button className="aia-follow" onClick={() => handleSend(lastMsg.insight.followUp)}>
-                    {lastMsg.insight.followUp} {"\u2197"}
-                  </button>
+                <div className="aia-settings-body">
+                  {MODULES_LIST.map((mod) => (
+                    <ModuleToggle key={mod.k} storeKey={mod.k} label={mod.label} />
+                  ))}
                 </div>
               </div>
-            ) : (
-              <FeatureStatus />
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </>
   );
 }
+
+export { mockApi, executeActions, undoAction, generateTitle, getTimeGroup, MODULE_MAP, HAMBURGER_ICON, SPARKLE_ICON, SEND_ICON };

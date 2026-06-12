@@ -10,7 +10,7 @@ import HelpAndLearnSection from "./HelpAndLearnSection";
 import HistoryPanel from "./HistoryPanel";
 import { ONBOARDING_STORAGE_KEY } from "./constants";
 
-const WELCOME = "Hi! How can I help you today?";
+const WELCOME = "Connected to Store. Awaiting instructions.";
 const SAMPLE_CHART_DATA = [
   { name: "Mon", value: 400 }, { name: "Tue", value: 300 }, { name: "Wed", value: 600 },
   { name: "Thu", value: 800 }, { name: "Fri", value: 500 }, { name: "Sat", value: 900 },
