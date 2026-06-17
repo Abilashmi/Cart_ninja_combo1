@@ -55,6 +55,7 @@ model CartDrawer {
   progressStatus      Boolean  @default(false) @map("progress_status")
   couponStatus        Boolean  @default(false) @map("coupon_status")
   upsellStatus        Boolean  @default(false) @map("upsell_status")
+  countdownData       String?  @map("countdown_data") @db.LongText
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
   checkoutName        String?  @db.VarChar(255)
@@ -159,6 +160,7 @@ model UpsellRule {
 
   @@index([shop])
   @@index([ruleType])
+  @@map("upsell_rules")
 }
 
 model WidgetSettings {
