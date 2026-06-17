@@ -3078,121 +3078,173 @@ export default function Customize() {
   }
 
   // ── Full customisation editor ────────────────────────────────────────────
+  const handleSaveClick = () => {
+    if (config.layout === 'layout1') {
+      const numSteps = Number(config.max_selections || 3);
+      const newStepErrors = {};
+      for (let i = 1; i <= numSteps; i++) {
+        if (!config[`step_${i}_collection`]) {
+          newStepErrors[`step_${i}_collection`] = 'Please select a collection';
+        }
+      }
+      if (Object.keys(newStepErrors).length > 0) {
+        setStepErrors(newStepErrors);
+        setExpandedSections((prev) => ({ ...prev, general: true }));
+        shopify.toast.show('Please select a collection for each step', { isError: true });
+        return;
+      }
+      const maxProducts = Number(config.max_products || 5);
+      let stepLimitSum = 0;
+      let allStepsHaveLimits = true;
+      for (let i = 1; i <= numSteps; i++) {
+        const lim = config[`step_${i}_limit`];
+        if (lim === '' || lim == null) { allStepsHaveLimits = false; break; }
+        stepLimitSum += Number(lim);
+      }
+      if (allStepsHaveLimits && maxProducts > stepLimitSum) {
+        const errMsg = `Max products (${maxProducts}) exceeds total possible from step limits (${stepLimitSum}). Please adjust.`;
+        setMaxProductsError(errMsg);
+        setExpandedSections((prev) => ({ ...prev, general: true }));
+        shopify.toast.show(errMsg, { isError: true });
+        return;
+      }
+      setMaxProductsError('');
+    }
+    if (config.layout === 'layout3') {
+      const maxProducts = Number(config.max_products || 5);
+      let colLimitSum = 0;
+      let allColsHaveLimits = true;
+      for (let i = 1; i <= 4; i++) {
+        if (!config[`col_${i}`]) continue;
+        const lim = config[`col_${i}_limit`];
+        if (lim == null || lim === '') { allColsHaveLimits = false; break; }
+        colLimitSum += Number(lim);
+      }
+      if (allColsHaveLimits && colLimitSum > 0 && maxProducts > colLimitSum) {
+        const errMsg = `Max products (${maxProducts}) exceeds total possible from category limits (${colLimitSum}). Please adjust.`;
+        setMaxProductsError(errMsg);
+        setExpandedSections((prev) => ({ ...prev, general: true }));
+        shopify.toast.show(errMsg, { isError: true });
+        return;
+      }
+      setMaxProductsError('');
+    }
+    setSaveModalOpen(true);
+  };
+
   return (
-    <Page
-      backAction={{
-        content: 'Template Modules',
-        onAction: () => navigate('/app/bundles/templates', { replace: true }),
-      }}
-      title="Customize Template"
-      titleMetadata={
-        <div className="template-status-meta">
-          <div className="template-status-icon">
-            <Icon source={EditIcon} tone="base" />
-          </div>
-          <div
-            className="template-status-badge"
+    <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+
+      {/* ── Studio command bar ───────────────────────────────── */}
+      <div style={{
+        background: '#fff',
+        borderBottom: '1px solid rgba(15,15,35,0.08)',
+        padding: '0 20px',
+        height: '48px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
+      }}>
+        {/* Left: back + title + status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <button
+            onClick={() => navigate('/app/bundles/templates', { replace: true })}
             style={{
-              background: isActive ? '#eafff2' : '#f4f6f8',
-              color: isActive ? '#008060' : '#5c6ac4',
-              border: isActive ? '1px solid #008060' : '1px solid #5c6ac4',
+              width: '30px', height: '30px', borderRadius: '7px',
+              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#64748B', flexShrink: 0,
             }}
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+
+          <input
+            value={saveTitle}
+            onChange={handleTitleChange}
+            placeholder="Template title…"
+            style={{
+              border: 'none', outline: 'none', background: 'transparent',
+              fontSize: '14px', fontWeight: '650', color: '#0F0F23',
+              minWidth: '120px', maxWidth: '260px', fontFamily: 'inherit',
+            }}
+          />
+
+          {titleError && (
+            <span style={{ fontSize: '11px', color: '#EF4444', flexShrink: 0 }}>{titleError}</span>
+          )}
+
+          <span style={{
+            padding: '2px 9px', borderRadius: '20px', flexShrink: 0,
+            background: isActive ? 'rgba(16,185,129,0.09)' : 'rgba(100,116,139,0.09)',
+            color: isActive ? '#10B981' : '#64748B',
+            fontSize: '11px', fontWeight: '700',
+            border: isActive ? '1px solid rgba(16,185,129,0.22)' : '1px solid rgba(100,116,139,0.15)',
+            display: 'flex', alignItems: 'center', gap: '4px',
+          }}>
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
             {isActive ? 'Active' : 'Draft'}
-          </div>
+          </span>
         </div>
-      }
-      primaryAction={{
-        content: 'Save Template',
-        onAction: () => {
-          if (config.layout === 'layout1') {
-            const numSteps = Number(config.max_selections || 3);
-            const newStepErrors = {};
-            for (let i = 1; i <= numSteps; i++) {
-              if (!config[`step_${i}_collection`]) {
-                newStepErrors[`step_${i}_collection`] =
-                  'Please select a collection';
-              }
-            }
-            if (Object.keys(newStepErrors).length > 0) {
-              setStepErrors(newStepErrors);
-              setExpandedSections((prev) => ({ ...prev, general: true }));
-              shopify.toast.show('Please select a collection for each step', {
-                isError: true,
-              });
-              return;
-            }
-            // Validate max_products vs sum of step limits
-            const maxProducts = Number(config.max_products || 5);
-            let stepLimitSum = 0;
-            let allStepsHaveLimits = true;
-            for (let i = 1; i <= numSteps; i++) {
-              const lim = config[`step_${i}_limit`];
-              if (lim === '' || lim == null) {
-                allStepsHaveLimits = false;
-                break;
-              }
-              stepLimitSum += Number(lim);
-            }
-            if (allStepsHaveLimits && maxProducts > stepLimitSum) {
-              const errMsg = `Max products (${maxProducts}) exceeds total possible from step limits (${stepLimitSum}). Please adjust.`;
-              setMaxProductsError(errMsg);
-              setExpandedSections((prev) => ({ ...prev, general: true }));
-              shopify.toast.show(errMsg, { isError: true });
-              return;
-            }
-            setMaxProductsError('');
-          }
-          if (config.layout === 'layout3') {
-            const maxProducts = Number(config.max_products || 5);
-            let colLimitSum = 0;
-            let allColsHaveLimits = true;
-            for (let i = 1; i <= 4; i++) {
-              if (!config[`col_${i}`]) continue; // skip unconfigured categories
-              const lim = config[`col_${i}_limit`];
-              if (lim == null || lim === '') {
-                allColsHaveLimits = false;
-                break;
-              }
-              colLimitSum += Number(lim);
-            }
-            if (
-              allColsHaveLimits &&
-              colLimitSum > 0 &&
-              maxProducts > colLimitSum
-            ) {
-              const errMsg = `Max products (${maxProducts}) exceeds total possible from category limits (${colLimitSum}). Please adjust.`;
-              setMaxProductsError(errMsg);
-              setExpandedSections((prev) => ({ ...prev, general: true }));
-              shopify.toast.show(errMsg, { isError: true });
-              return;
-            }
-            setMaxProductsError('');
-          }
-          setSaveModalOpen(true);
-        },
-      }}
-      secondaryActions={[
-        ...(initialTemplate?.id
-          ? [{
-            content: 'Preview',
-            onAction: () => window.open(`/preview/${initialTemplate.id}?shop=${encodeURIComponent(shop)}`, '_blank'),
-            outline: true,
-          }]
-          : []),
-        {
-          content: isActive ? 'Deactivate' : 'Activate',
-          onAction: handleToggleActive,
-          outline: true,
-          primary: !isActive,
-        },
-        {
-          content: 'Reset to Default',
-          onAction: () => setResetModalOpen(true),
-        },
-      ]}
-    >
-      <div className="customize-top-gap"></div>
+
+        {/* Right: actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {initialTemplate?.id && (
+            <button
+              onClick={() => window.open(`/preview/${initialTemplate.id}?shop=${encodeURIComponent(shop)}`, '_blank')}
+              style={{
+                padding: '6px 12px', borderRadius: '7px',
+                border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
+                color: '#0F0F23', fontWeight: '550', fontSize: '12.5px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'inherit',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
+                <path d="M9 3C5 3 2 7.5 2 9s3 6 7 6 7-4.5 7-6-3-6-7-6zm0 9a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="currentColor"/>
+              </svg>
+              Preview
+            </button>
+          )}
+          <button
+            onClick={handleToggleActive}
+            style={{
+              padding: '6px 12px', borderRadius: '7px',
+              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
+              color: '#0F0F23', fontWeight: '550', fontSize: '12.5px',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {isActive ? 'Deactivate' : 'Activate'}
+          </button>
+          <button
+            onClick={() => setResetModalOpen(true)}
+            style={{
+              padding: '6px 12px', borderRadius: '7px',
+              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
+              color: '#64748B', fontWeight: '550', fontSize: '12.5px',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Reset
+          </button>
+          <button
+            onClick={handleSaveClick}
+            style={{
+              padding: '6px 16px', borderRadius: '7px',
+              background: '#5B47FB', color: '#fff',
+              border: 'none', fontWeight: '650', fontSize: '12.5px',
+              cursor: 'pointer', fontFamily: 'inherit',
+              boxShadow: '0 2px 6px rgba(91,71,251,0.28)',
+            }}
+          >
+            Save Template
+          </button>
+        </div>
+      </div>
       <Modal
         open={saveModalOpen}
         onClose={() => setSaveModalOpen(false)}
@@ -3338,171 +3390,149 @@ export default function Customize() {
       </Modal>
 
       <style>{`
-.customize-layout-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,1fr);gap:12px;align-items:start}
-.customize-left-sticky{position:sticky;top:16px;z-index:10}
-@media(max-width:1280px){.customize-layout-grid{grid-template-columns:minmax(0,1.4fr) minmax(300px,1fr)}}
-@media(max-width:768px){.customize-layout-grid{grid-template-columns:1fr;gap:12px}.customize-left-sticky{position:static;top:auto}}
+/* ── Studio layout ───────────────────────────── */
+.studio-grid{display:grid;grid-template-columns:1fr 360px;height:calc(100vh - 104px);overflow:hidden}
+.studio-canvas-area{display:flex;flex-direction:column;background:#1A1B2E;overflow:hidden;position:relative}
+.studio-device-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#13142A;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0}
+.studio-device-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.6);font-size:12.5px;font-weight:550;cursor:pointer;transition:all 0.13s;font-family:inherit}
+.studio-device-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9)}
+.studio-device-btn.active{background:rgba(91,71,251,0.3);border-color:rgba(91,71,251,0.5);color:#fff}
+.studio-preview-scroll{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px}
+.studio-sidebar{background:#fff;border-left:1px solid rgba(15,15,35,0.08);overflow-y:auto;overflow-x:hidden}
 
-.preview-stage{background:linear-gradient(180deg,#f8f9fb 0%,#f2f4f7 100%);border:1px solid #e3e6eb;border-radius:12px;padding:12px}
+/* ── Preview viewports (unchanged semantics) ─ */
 .preview-scale-panel{width:100%;overflow:hidden}
 .preview-scale-canvas{transform-origin:top left;will-change:transform}
-.preview-stage--desktop{display:flex;flex-direction:column;gap:10px}
-.preview-browser-chrome{width:100%;height:34px;border-radius:10px;border:1px solid #d7dce4;background:linear-gradient(180deg,#fff 0%,#f4f6fa 100%);display:flex;align-items:center;gap:6px;padding:0 10px}
-.preview-browser-chrome span{width:10px;height:10px;border-radius:50%;background:#d5dae3}
+.preview-browser-chrome{width:100%;height:34px;border-radius:10px 10px 0 0;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);display:flex;align-items:center;gap:6px;padding:0 12px;margin-bottom:0}
+.preview-browser-chrome span{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.2)}
 .preview-browser-chrome span:first-child{background:#ff6f61}
 .preview-browser-chrome span:nth-child(2){background:#ffca55}
 .preview-browser-chrome span:nth-child(3){background:#3ddc84}
 .preview-viewport{width:100%;overflow-y:auto;overflow-x:hidden;background:#fff;margin:0 auto;transition:all .25s ease;position:relative}
 .preview-viewport>*{max-width:100%}
-.preview-stage--desktop .preview-viewport{width:1280px;height:820px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
-.preview-stage--mobile{display:flex;justify-content:center;padding:4px;background:linear-gradient(180deg,#f6f7f9 0%,#eef1f5 100%)}
-.preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
+.preview-viewport--desktop{width:1280px;height:820px;border:1px solid rgba(255,255,255,0.10);border-radius:0 0 12px 12px;box-shadow:0 16px 48px rgba(0,0,0,0.4)}
+.preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid rgba(255,255,255,0.14);border-radius:24px;box-shadow:0 16px 40px rgba(0,0,0,0.4)}
+.preview-stage--desktop{display:flex;flex-direction:column}
+.preview-stage--mobile{display:flex;justify-content:center}
       `}</style>
-      <div key={formKey} className="customize-layout-grid">
-        <div>
-          <div className="customize-left-sticky">
-            <Card sectioned>
-              <FormLayout>
-                <TextField
-                  label="Template Title"
-                  value={saveTitle}
-                  onChange={handleTitleChange}
-                  autoComplete="off"
-                  helpText="This is the name of your saved template."
-                  error={titleError}
-                />
-              </FormLayout>
-            </Card>
-            <div className="customize-section-gap"></div>
-            <Card sectioned>
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', paddingBottom: '12px' }}>
-                <ButtonGroup segmented>
-                  <Button
-                    pressed={previewDevice === 'desktop'}
-                    onClick={() => setPreviewDevice('desktop')}
-                    icon={DesktopIcon}
-                    size="micro"
-                  >
-                    <span style={{ fontSize: '12px', padding: '0 4px' }}>Desktop</span>
-                  </Button>
-                  <Button
-                    pressed={previewDevice === 'mobile'}
-                    onClick={() => setPreviewDevice('mobile')}
-                    icon={MobileIcon}
-                    size="micro"
-                  >
-                    <span style={{ fontSize: '12px', padding: '0 4px' }}>Mobile</span>
-                  </Button>
-                </ButtonGroup>
-              </div>
-              <div className={`preview-stage preview-stage--${previewDevice}`}>
-                {previewDevice === 'desktop' ? (
-                  <div
-                    ref={containerRef}
-                    className="preview-scale-panel"
-                    style={scaledPanelStyle}
-                  >
-                    <div
-                      className="preview-scale-canvas"
-                      style={scaledCanvasStyle}
-                    >
-                      <div
-                        className="preview-browser-chrome"
-                        aria-hidden="true"
-                      >
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
 
-                      <div className="preview-device-container preview-viewport preview-viewport--desktop">
-                        <ComboPreview
-                          config={config}
-                          device={previewDevice}
-                          products={
-                            shopifyProducts.length > 0
-                              ? shopifyProducts
-                              : products
-                          }
-                          collections={collections}
-                          activeTab={activeTab}
-                          setActiveTab={setActiveTab}
-                          isLoading={productsLoading && shopifyProducts.length === 0}
-                          stepProductsLoading={stepProductsLoading}
-                          activeDiscounts={localActiveDiscounts}
-                          selectedVariants={selectedVariants}
-                          setSelectedVariants={setSelectedVariants}
-                          allStepProducts={allStepProducts}
-                          setAllStepProducts={setAllStepProducts}
-                        />
-                        {config.custom_css && (
-                          <style
-                            dangerouslySetInnerHTML={{
-                              __html: `.preview-viewport { ${config.custom_css} }`,
-                            }}
-                          />
-                        )}
-                      </div>
+      {/* ── Studio split layout ──────────────────────────────── */}
+      <div key={formKey} className="studio-grid">
+
+        {/* LEFT: Preview canvas */}
+        <div className="studio-canvas-area">
+          {/* Device toggle bar */}
+          <div className="studio-device-bar">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className={`studio-device-btn${previewDevice === 'desktop' ? ' active' : ''}`}
+                onClick={() => setPreviewDevice('desktop')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+                </svg>
+                Desktop
+              </button>
+              <button
+                className={`studio-device-btn${previewDevice === 'mobile' ? ' active' : ''}`}
+                onClick={() => setPreviewDevice('mobile')}
+              >
+                <svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/>
+                </svg>
+                Mobile
+              </button>
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic' }}>
+              Live preview
+            </div>
+          </div>
+
+          {/* Scrollable canvas */}
+          <div className="studio-preview-scroll">
+            {previewDevice === 'desktop' ? (
+              <div style={{ width: '100%' }}>
+                <div ref={containerRef} className="preview-scale-panel" style={scaledPanelStyle}>
+                  <div className="preview-scale-canvas" style={scaledCanvasStyle}>
+                    <div className="preview-browser-chrome" aria-hidden="true">
+                      <span /><span /><span />
+                    </div>
+                    <div className="preview-device-container preview-viewport preview-viewport--desktop">
+                      <ComboPreview
+                        config={config}
+                        device={previewDevice}
+                        products={shopifyProducts.length > 0 ? shopifyProducts : products}
+                        collections={collections}
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        isLoading={productsLoading && shopifyProducts.length === 0}
+                        stepProductsLoading={stepProductsLoading}
+                        activeDiscounts={localActiveDiscounts}
+                        selectedVariants={selectedVariants}
+                        setSelectedVariants={setSelectedVariants}
+                        allStepProducts={allStepProducts}
+                        setAllStepProducts={setAllStepProducts}
+                      />
+                      {config.custom_css && (
+                        <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <div className="preview-device-container preview-viewport preview-viewport--mobile-classic">
-                    <ComboPreview
-                      config={config}
-                      device={previewDevice}
-                      products={
-                        shopifyProducts.length > 0
-                          ? shopifyProducts
-                          : products
-                      }
-                      collections={collections}
-                      activeTab={activeTab}
-                      setActiveTab={setActiveTab}
-                      isLoading={productsLoading && products.length === 0}
-                      stepProductsLoading={stepProductsLoading}
-                      activeDiscounts={localActiveDiscounts}
-                      selectedVariants={selectedVariants}
-                      setSelectedVariants={setSelectedVariants}
-                      allStepProducts={allStepProducts}
-                      setAllStepProducts={setAllStepProducts}
-                    />
-                    {config.custom_css && (
-                      <style
-                        dangerouslySetInnerHTML={{
-                          __html: `.preview-viewport { ${config.custom_css} }`,
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
+                </div>
               </div>
-            </Card>
+            ) : (
+              <div className="preview-stage--mobile">
+                <div className="preview-device-container preview-viewport preview-viewport--mobile-classic">
+                  <ComboPreview
+                    config={config}
+                    device={previewDevice}
+                    products={shopifyProducts.length > 0 ? shopifyProducts : products}
+                    collections={collections}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    isLoading={productsLoading && products.length === 0}
+                    stepProductsLoading={stepProductsLoading}
+                    activeDiscounts={localActiveDiscounts}
+                    selectedVariants={selectedVariants}
+                    setSelectedVariants={setSelectedVariants}
+                    allStepProducts={allStepProducts}
+                    setAllStepProducts={setAllStepProducts}
+                  />
+                  {config.custom_css && (
+                    <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        <BuilderSidebar
-          config={config}
-          activeCategory={activeCategory}
-          setActiveCategory={setActiveCategory}
-          styleDevice={styleDevice}
-          setStyleDevice={setStyleDevice}
-          expandedSections={expandedSections}
-          toggleSection={toggleSection}
-          collections={collections}
-          updateConfig={updateConfig}
-          getStyleKey={getStyleKey}
-          stepErrors={stepErrors}
-          maxProductsError={maxProductsError}
-          stepFieldAiLoading={stepFieldAiLoading}
-          generateStepFieldSuggestion={generateStepFieldSuggestion}
-          generatingTitle={generatingTitle}
-          generatingDescription={generatingDescription}
-          generateAiSuggestion={generateAiSuggestion}
-          PxField={PxField}
-          ColorPickerField={ColorPickerField}
-          setPreviewDevice={setPreviewDevice}
-          localActiveDiscounts={localActiveDiscounts}
-        />
+        {/* RIGHT: Properties inspector */}
+        <div className="studio-sidebar">
+          <BuilderSidebar
+            config={config}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+            styleDevice={styleDevice}
+            setStyleDevice={setStyleDevice}
+            expandedSections={expandedSections}
+            toggleSection={toggleSection}
+            collections={collections}
+            updateConfig={updateConfig}
+            getStyleKey={getStyleKey}
+            stepErrors={stepErrors}
+            maxProductsError={maxProductsError}
+            stepFieldAiLoading={stepFieldAiLoading}
+            generateStepFieldSuggestion={generateStepFieldSuggestion}
+            generatingTitle={generatingTitle}
+            generatingDescription={generatingDescription}
+            generateAiSuggestion={generateAiSuggestion}
+            PxField={PxField}
+            ColorPickerField={ColorPickerField}
+            setPreviewDevice={setPreviewDevice}
+            localActiveDiscounts={localActiveDiscounts}
+          />
+        </div>
       </div>
 
       {/* Discount Type Modal (Level 1) */}
@@ -4184,7 +4214,7 @@ export default function Customize() {
           </FormLayout>
         </Modal.Section>
       </Modal>
-    </Page>
+    </div>
   );
 }
 

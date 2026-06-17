@@ -1,12 +1,8 @@
 <?php
 // get_schema.php
-// Please replace these with your actual Hostinger database credentials!
-$host = "localhost";
-$user = "u218702675_cartdrawer"; 
-$pass = "Digi2025#cart";
-$db   = "u218702675_cartdrawer";
+require_once __DIR__ . '/config.php';
 
-$conn = new mysqli($host, $user, $pass, $db);
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 if ($conn->connect_error) {
     die(json_encode(["error" => "Connection failed: " . $conn->connect_error]));
 }

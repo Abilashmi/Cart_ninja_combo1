@@ -9,13 +9,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Database Connection
-$host = 'localhost'; // Update with actual DB host
-$db   = 'u741492582_coupons'; // Update with actual DB name
-$user = 'u741492582_coupons'; // Update with actual DB username
-$pass = 'Digi2025#cart'; // Update with actual DB password
-$charset = 'utf8mb4';
+require_once __DIR__ . '/config.php';
 
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
 $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

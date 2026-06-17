@@ -1,32 +1,9 @@
 import { authenticate } from "../shopify.server";
 import { getStoredCoupons } from "./api.create_coupon-sample";
-import { promises as fs } from "fs";
-import path from "path";
-
-// ---------------- EXTERNAL API ----------------
-// Single source of truth for the external PHP backend URL.
-// Update this when the ngrok tunnel URL changes.
-const EXTERNAL_CART_API = "https://int.thecartninja.com/save_cart_drawer.php";
-
-// Local fallback persistence (used when external API is unavailable or incomplete)
-const LOCAL_DATA_FILE = path.resolve("cartdrawer-config-data.json");
+import { getDb } from "../services/db.server";
 
 function normalizeShopDomain(shopDomain) {
     return (shopDomain || "").toString().trim().toLowerCase();
-}
-
-async function readLocalConfigMap() {
-    try {
-        const raw = await fs.readFile(LOCAL_DATA_FILE, "utf-8");
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-        return {};
-    }
-}
-
-async function writeLocalConfigMap(map) {
-    await fs.writeFile(LOCAL_DATA_FILE, JSON.stringify(map, null, 2));
 }
 
 // ---------------- DEFAULTS ----------------
@@ -88,20 +65,17 @@ const DEFAULT_CART_DATA = {
 function stripLegacyAiKeysFromObject(obj) {
     if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
     const out = { ...obj };
-
     delete out.aiApiKey;
     delete out.apiKey;
     delete out.openaiKey;
     delete out.openai_api_key;
     delete out.OPENAI_API_KEY;
     delete out.OPENAI_KEY;
-
     return out;
 }
 
 function sanitizeUpsellDataField(value) {
     if (!value) return value;
-
     if (typeof value === "string") {
         try {
             const parsed = JSON.parse(value);
@@ -112,32 +86,24 @@ function sanitizeUpsellDataField(value) {
             return value;
         }
     }
-
     if (typeof value === "object") {
         const safeObj = stripLegacyAiKeysFromObject(value);
         return safeObj || value;
     }
-
     return value;
 }
 
 function sanitizeIncomingCartDrawerPayload(payload) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
-
     const out = { ...payload };
-
-    // Strip any accidental top-level AI key fields.
     const safeTopLevel = stripLegacyAiKeysFromObject(out);
     const base = safeTopLevel || out;
-
-    // Strip legacy AI key fields nested inside upsell config payloads.
     if (Object.prototype.hasOwnProperty.call(base, "upsell_data")) {
         base.upsell_data = sanitizeUpsellDataField(base.upsell_data);
     }
     if (Object.prototype.hasOwnProperty.call(base, "upsellData")) {
         base.upsellData = sanitizeUpsellDataField(base.upsellData);
     }
-
     return base;
 }
 
@@ -152,20 +118,14 @@ function transformFromDB(dbData) {
     const progressData = parseJSON(dbData.progress_data);
     const couponData = parseJSON(dbData.coupon_data);
     const upsellData = parseJSON(dbData.upsell_data);
-
-    // Never expose any AI/OpenAI API keys to the frontend (legacy data may contain them).
     const safeUpsellData = stripLegacyAiKeysFromObject(upsellData) || {};
 
-    // Map DB status flags to enabled booleans
     const progressEnabled = dbData.progress_status === 1 || dbData.progress_status === "1" || dbData.progress_status === true;
     const couponEnabled = dbData.coupon_status === 1 || dbData.coupon_status === "1" || dbData.coupon_status === true;
     const upsellEnabled = dbData.upsell_status === 1 || dbData.upsell_status === "1" || dbData.upsell_status === true;
-
-    // Support both cartStatus and cart_status from DB
     const cartActive = dbData.cartStatus === 1 || dbData.cartStatus === "1" || dbData.cartStatus === true ||
         dbData.cart_status === 1 || dbData.cart_status === "1" || dbData.cart_status === true;
 
-    // Build settings in the format the frontend expects
     const settings = {
         progressBar: {
             ...DEFAULT_SETTINGS.progressBar,
@@ -217,30 +177,20 @@ function transformFromDB(dbData) {
             ...safeUpsellData,
             enabled: upsellEnabled,
         },
-        // Checkout button & custom CSS — top-level fields in DB response
         checkoutName: dbData.checkoutName || 'Checkout Now',
         checkoutFooterText: dbData.checkoutFooterText || 'Shipping and taxes calculated at checkout',
         customCSS: dbData.customCSS || '',
         checkout_button_style: dbData.checkout_button_style || null,
     };
 
-    // Extract coupon selections if present in coupon_data
     const couponSelections = {
         selectedCouponIds: couponData.selectedActiveCoupons || [],
         couponOverrides: couponData.couponOverrides || {},
         allCouponDetails: couponData.allCouponDetails || [],
     };
 
-    return {
-        settings,
-        couponSelections,
-        cartActive,
-        shop: dbData.shop || dbData.shopDomain || ""
-    };
+    return { settings, couponSelections, cartActive, shop: dbData.shop || dbData.shopDomain || "" };
 }
-
-// In-memory store for cart drawer settings (per-shop, used as fallback in loader)
-const savedSettingsMap = new Map();
 
 // ---------------- LOADER ----------------
 export async function loader({ request }) {
@@ -248,60 +198,34 @@ export async function loader({ request }) {
     const shopDomain = url.searchParams.get("shop") || url.searchParams.get("shopdomain") || "";
     const shopKey = normalizeShopDomain(shopDomain);
 
-    // Local fallback config (per-shop)
-    const localConfigMap = shopKey ? await readLocalConfigMap() : {};
-    const localDbData = shopKey && localConfigMap[shopKey] ? localConfigMap[shopKey] : null;
-
     const storedCoupons = await getStoredCoupons(shopDomain);
 
-    // Try to fetch from Shopify API if authenticated
     let shopifyProducts = [];
     let shopifyCollections = [];
 
     try {
         const { admin } = await authenticate.admin(request);
-
         if (admin) {
-            // Fetch Products
             const productQuery = `
               query {
                 products(first: 50) {
                   edges {
                     node {
-                      id
-                      title
-                                            productType
-                                            vendor
-                                            tags
-                      status
-                      totalInventory
+                      id title productType vendor tags status totalInventory
                       featuredImage { url }
-                      variants(first: 1) {
-                        edges {
-                          node {
-                            price
-                          }
-                        }
-                      }
+                      variants(first: 1) { edges { node { price } } }
                     }
                   }
                 }
                 collections(first: 50) {
                   edges {
-                    node {
-                      id
-                      title
-                      productsCount {
-                        count
-                      }
-                    }
+                    node { id title productsCount { count } }
                   }
                 }
               }
             `;
             const gqlRes = await admin.graphql(productQuery);
             const gqlData = await gqlRes.json();
-
             if (gqlData.data) {
                 shopifyProducts = (gqlData.data.products?.edges || []).map(({ node }) => ({
                     id: node.id,
@@ -314,7 +238,6 @@ export async function loader({ request }) {
                     vendor: node.vendor || "",
                     tags: Array.isArray(node.tags) ? node.tags : [],
                 }));
-
                 shopifyCollections = (gqlData.data.collections?.edges || []).map(({ node }) => ({
                     id: node.id,
                     title: node.title,
@@ -323,10 +246,9 @@ export async function loader({ request }) {
             }
         }
     } catch (e) {
-        console.warn("Shopify API authentication failed, using mock fallback:", e.message);
+        console.warn("Shopify API auth failed:", e.message);
     }
 
-    // Map stored coupons to the format app.cartdrawer.jsx expects
     const formattedCoupons = storedCoupons.map(c => ({
         id: c.id,
         code: c.code,
@@ -338,9 +260,7 @@ export async function loader({ request }) {
         status: 'ACTIVE'
     }));
 
-    // If no shopDomain, return defaults
-    if (!shopDomain) {
-        console.warn("No shop domain provided to sample API loader, returning defaults");
+    if (!shopKey) {
         return Response.json({
             success: true,
             settings: { ...DEFAULT_SETTINGS },
@@ -351,39 +271,14 @@ export async function loader({ request }) {
     }
 
     try {
-        const apiUrl = `${EXTERNAL_CART_API}?shopdomain=${encodeURIComponent(shopDomain)}`;
-        console.log("Fetching cart drawer config from:", apiUrl);
+        const db = getDb();
+        const [rows] = await db.execute(
+            'SELECT * FROM cart_drawer WHERE shop = ? LIMIT 1',
+            [shopKey]
+        );
 
-        const extRes = await fetch(apiUrl, {
-            method: "GET",
-            headers: { "ngrok-skip-browser-warning": "true" },
-        });
-
-        const extBody = await extRes.json();
-        console.log(`External Cart API GET response [${extRes.status}]:`, JSON.stringify(extBody));
-        if (extBody.status === "success" && extBody.data) {
-            const { settings, couponSelections, cartActive } = transformFromDB(extBody.data);
-
-            // If the external API returns an apparently empty selection but we have a locally-saved
-            // selection, prefer the local data so the admin UI reflects the last saved state.
-            if (
-                (!couponSelections?.selectedCouponIds || couponSelections.selectedCouponIds.length === 0) &&
-                localDbData
-            ) {
-                const localTransformed = transformFromDB(localDbData);
-                if (localTransformed?.couponSelections?.selectedCouponIds?.length) {
-                    return Response.json({
-                        success: true,
-                        settings: localTransformed.settings,
-                        couponSelections: localTransformed.couponSelections,
-                        cartStatus: localTransformed.cartActive,
-                        cartData: { ...DEFAULT_CART_DATA },
-                        coupons: formattedCoupons,
-                        shopifyProducts,
-                        shopifyCollections
-                    });
-                }
-            }
+        if (rows.length > 0) {
+            const { settings, couponSelections, cartActive } = transformFromDB(rows[0]);
             return Response.json({
                 success: true,
                 settings,
@@ -394,77 +289,21 @@ export async function loader({ request }) {
                 shopifyProducts,
                 shopifyCollections
             });
-        } else {
-            console.warn("External Cart API returned non-success, using defaults");
-            if (localDbData) {
-                const localTransformed = transformFromDB(localDbData);
-                return Response.json({
-                    success: true,
-                    settings: localTransformed.settings,
-                    couponSelections: localTransformed.couponSelections,
-                    cartStatus: localTransformed.cartActive,
-                    cartData: { ...DEFAULT_CART_DATA },
-                    coupons: formattedCoupons,
-                    shopifyProducts,
-                    shopifyCollections
-                });
-            }
-
-            const memCached = savedSettingsMap.get(shopKey);
-            if (memCached) {
-                const localTransformed = transformFromDB(memCached);
-                return Response.json({
-                    success: true,
-                    settings: localTransformed.settings,
-                    couponSelections: localTransformed.couponSelections,
-                    cartStatus: localTransformed.cartActive,
-                    cartData: { ...DEFAULT_CART_DATA },
-                    coupons: formattedCoupons,
-                    shopifyProducts,
-                    shopifyCollections
-                });
-            }
-
-            return Response.json({
-                success: true,
-                settings: { ...DEFAULT_SETTINGS },
-                cartData: { ...DEFAULT_CART_DATA },
-                coupons: formattedCoupons,
-                shopifyProducts,
-                shopifyCollections
-            });
         }
+
+        // No record yet — return defaults
+        return Response.json({
+            success: true,
+            settings: { ...DEFAULT_SETTINGS },
+            cartStatus: false,
+            cartData: { ...DEFAULT_CART_DATA },
+            coupons: formattedCoupons,
+            shopifyProducts,
+            shopifyCollections
+        });
+
     } catch (error) {
-        console.error("Failed to fetch from external Cart API:", error.message);
-        if (localDbData) {
-            const localTransformed = transformFromDB(localDbData);
-            return Response.json({
-                success: true,
-                settings: localTransformed.settings,
-                couponSelections: localTransformed.couponSelections,
-                cartStatus: localTransformed.cartActive,
-                cartData: { ...DEFAULT_CART_DATA },
-                coupons: formattedCoupons,
-                shopifyProducts,
-                shopifyCollections
-            });
-        }
-
-        const memCached2 = savedSettingsMap.get(shopKey);
-        if (memCached2) {
-            const localTransformed = transformFromDB(memCached2);
-            return Response.json({
-                success: true,
-                settings: localTransformed.settings,
-                couponSelections: localTransformed.couponSelections,
-                cartStatus: localTransformed.cartActive,
-                cartData: { ...DEFAULT_CART_DATA },
-                coupons: formattedCoupons,
-                shopifyProducts,
-                shopifyCollections
-            });
-        }
-
+        console.error("DB read failed:", error.message);
         return Response.json({
             success: true,
             settings: { ...DEFAULT_SETTINGS },
@@ -479,147 +318,88 @@ export async function loader({ request }) {
 // ---------------- ACTION ----------------
 export async function action({ request }) {
     if (request.method !== "POST") {
-        return Response.json(
-            { error: "Method not allowed" },
-            { status: 405 }
-        );
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
     }
 
     try {
         const rawData = await request.json();
         const data = sanitizeIncomingCartDrawerPayload(rawData);
 
-        console.log("------------------------------------------");
-        console.log("RECEIVED DATA ON SAMPLE API:");
-        console.log(JSON.stringify(data, null, 2));
-        console.log("------------------------------------------");
-
-        // Normalize shop identifier for local persistence and external API.
-        // Prefer the authenticated session's shop when available.
         let sessionShop = "";
         try {
             const auth = await authenticate.admin(request);
             sessionShop = auth?.session?.shop || "";
-        } catch {
-            // If not authenticated, fall back to header/body.
-        }
+        } catch {}
 
         const headerShop = request.headers.get("X-Shop-ID") || "";
         const rawShop = sessionShop || headerShop || data.shop || data.shopDomain || data.Id || "";
         const shopKey = normalizeShopDomain(rawShop);
-        const payload = {
-            ...data,
-            shop: rawShop,
-            shopDomain: rawShop, // Send both to satisfy different PHP backend versions
+
+        if (!shopKey) {
+            return Response.json({ success: false, error: "No shop domain provided" }, { status: 400 });
+        }
+
+        // Normalize field names (support both snake_case and camelCase from frontend)
+        const progressData = data.progress_data ?? data.progressData ?? null;
+        const couponData = data.coupon_data ?? data.couponData ?? null;
+        const upsellData = data.upsell_data ?? data.upsellData ?? null;
+        const progressStatus = data.progress_status ?? data.progressStatus ?? 0;
+        const couponStatus = data.coupon_status ?? data.couponStatus ?? 0;
+        const upsellStatus = data.upsell_status ?? data.upsellStatus ?? 0;
+        const cartStatus = data.cartStatus ?? data.cart_status ?? 1;
+
+        const toJson = (val) => {
+            if (!val) return null;
+            if (typeof val === "string") return val;
+            return JSON.stringify(val);
         };
 
-        // Save to in-memory store (fast refresh fallback)
-        if (shopKey) savedSettingsMap.set(shopKey, payload);
+        const toBool = (val) => (val === true || val === 1 || val === "1") ? 1 : 0;
 
-        // Save to local JSON file (refresh + server restart fallback)
-        if (shopKey) {
-            try {
-                const map = await readLocalConfigMap();
-                map[shopKey] = payload;
-                await writeLocalConfigMap(map);
-            } catch (fileErr) {
-                console.warn("Failed to persist cart drawer config locally:", fileErr.message);
-            }
-        } else {
-            console.warn("No shop domain found in payload. Local persistence skipped.");
-        }
-
-        // Forward to external PHP endpoint (required for storefront)
-        let externalOk = false;
-        let externalStatus = null;
-        let externalResult = null;
-        let externalError = null;
-
-        try {
-            const externalResponse = await fetch(EXTERNAL_CART_API, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-                body: JSON.stringify({
-                    ...payload,
-                    shop: rawShop,
-                    shopDomain: rawShop,
-                })
-            });
-
-            externalStatus = externalResponse.status;
-
-            const externalText = await externalResponse.text();
-            let parsed = null;
-            try {
-                parsed = externalText ? JSON.parse(externalText) : null;
-            } catch {
-                parsed = null;
-            }
-
-            externalResult = parsed ?? externalText;
-
-            const externalBodyOk =
-                parsed && typeof parsed === "object"
-                    ? (parsed.status === "success")
-                    : externalResponse.ok;
-
-            externalOk = Boolean(externalResponse.ok && externalBodyOk);
-
-            if (externalOk) {
-                console.log("External sync successful:", externalResult);
-            } else {
-                externalError =
-                    (parsed && (parsed.message || parsed.error)) ||
-                    externalText ||
-                    `External sync failed (HTTP ${externalResponse.status})`;
-                console.warn(`External sync failed (${externalResponse.status}):`, externalError);
-            }
-        } catch (externalErr) {
-            externalError = externalErr.message;
-            console.warn("External sync unavailable (data saved locally):", externalErr.message);
-        }
-
-        // The storefront reads from the external DB via App Proxy.
-        // If external sync fails, treat the save as failed (but keep local fallback).
-        if (!externalOk) {
-            return Response.json(
-                {
-                    success: false,
-                    error: externalError
-                        ? `External DB sync failed: ${externalError}`
-                        : "External DB sync failed — storefront will not update until this succeeds.",
-                    shop: rawShop,
-                    localSaved: true,
-                    externalOk,
-                    externalStatus,
-                    external: externalResult,
-                    externalError,
-                    receivedAt: new Date().toISOString(),
-                },
-                { status: 502 }
-            );
-        }
+        const db = getDb();
+        await db.execute(
+            `INSERT INTO cart_drawer
+                (shop, cartStatus, progress_data, coupon_data, upsell_data,
+                 progress_status, coupon_status, upsell_status,
+                 checkoutName, checkoutFooterText, customCSS, checkout_button_style)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                cartStatus = VALUES(cartStatus),
+                progress_data = VALUES(progress_data),
+                coupon_data = VALUES(coupon_data),
+                upsell_data = VALUES(upsell_data),
+                progress_status = VALUES(progress_status),
+                coupon_status = VALUES(coupon_status),
+                upsell_status = VALUES(upsell_status),
+                checkoutName = VALUES(checkoutName),
+                checkoutFooterText = VALUES(checkoutFooterText),
+                customCSS = VALUES(customCSS),
+                checkout_button_style = VALUES(checkout_button_style),
+                updated_at = CURRENT_TIMESTAMP`,
+            [
+                shopKey,
+                toBool(cartStatus),
+                toJson(progressData),
+                toJson(couponData),
+                toJson(upsellData),
+                toBool(progressStatus),
+                toBool(couponStatus),
+                toBool(upsellStatus),
+                data.checkoutName || null,
+                data.checkoutFooterText || null,
+                data.customCSS || null,
+                data.checkout_button_style || null,
+            ]
+        );
 
         return Response.json({
             success: true,
             message: "Configuration saved successfully",
-            shop: rawShop,
-            localSaved: true,
-            externalOk,
-            externalStatus,
-            external: externalResult,
-            externalError,
-            receivedAt: new Date().toISOString()
+            shop: shopKey,
         });
 
     } catch (error) {
-        console.error("Sample API Critical Error:", error);
-        return Response.json(
-            { success: false, error: error.message || "Failed to parse request" },
-            { status: 400 }
-        );
+        console.error("Cart drawer save failed:", error.message);
+        return Response.json({ success: false, error: error.message }, { status: 500 });
     }
 }

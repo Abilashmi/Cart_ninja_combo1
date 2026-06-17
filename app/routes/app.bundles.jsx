@@ -1,12 +1,5 @@
 import { Outlet, useLocation, useNavigate, useRouteError } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
-import { Icon } from '@shopify/polaris';
-import {
-  HomeIcon,
-  PageIcon,
-  PaintBrushFlatIcon,
-  ChartVerticalIcon,
-} from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 
 export const loader = async ({ request }) => {
@@ -15,139 +8,129 @@ export const loader = async ({ request }) => {
 };
 
 const NAV_TABS = [
-  { id: 'dashboard',     label: 'Dashboard',       href: '/app/bundles',                  icon: HomeIcon          },
-  { id: 'templates',     label: 'Templates',        href: '/app/bundles/templates',         icon: PageIcon          },
-  { id: 'customize',     label: 'Customize',        href: '/app/bundles/customize',         icon: PaintBrushFlatIcon},
-  { id: 'analytics',     label: 'Analytics',        href: '/app/bundles/analytics',         icon: ChartVerticalIcon },
+  { id: 'dashboard', label: 'Dashboard', href: '/app/bundles' },
+  { id: 'templates', label: 'Templates', href: '/app/bundles/templates' },
+  { id: 'customize', label: 'Builder',   href: '/app/bundles/customize' },
+  { id: 'analytics', label: 'Analytics', href: '/app/bundles/analytics' },
 ];
 
-// Inline bolt SVG — Polaris doesn't ship a lightning icon
-function BoltIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-    </svg>
-  );
-}
-
 export default function AppBundlesLayout() {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const location  = useLocation();
+  const navigate  = useNavigate();
 
   const activeTabId = NAV_TABS.find(t =>
     t.href === '/app/bundles'
       ? location.pathname === '/app/bundles' || location.pathname === '/app/bundles/'
       : location.pathname.startsWith(t.href)
-  )?.id || NAV_TABS[0].id;
+  )?.id ?? NAV_TABS[0].id;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f5f7' }}>
+    <div style={{
+      minHeight: '100vh',
+      background: '#F4F6FA',
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    }}>
+      <style>{`
+        .cs-nav-btn {
+          border: none; background: transparent; cursor: pointer;
+          padding: 7px 15px; border-radius: 8px;
+          font-size: 13.5px; font-weight: 500; color: #64748B;
+          transition: background 0.13s, color 0.13s;
+          outline: none; white-space: nowrap; font-family: inherit;
+          line-height: 1;
+        }
+        .cs-nav-btn:hover  { background: rgba(91,71,251,0.07); color: #5B47FB; }
+        .cs-nav-btn.active { background: rgba(91,71,251,0.11); color: #5B47FB; font-weight: 650; }
+      `}</style>
 
-      {/* Branded header */}
+      {/* ── Top command bar ─────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '14px 28px',
+        background: '#fff',
+        borderBottom: '1px solid rgba(15,15,35,0.08)',
+        padding: '0 28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        boxShadow: '0 2px 12px rgba(102,126,234,0.35)',
+        height: '58px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 200,
+        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        {/* Left: logo + nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Logo mark */}
           <div style={{
-            width: '40px', height: '40px', borderRadius: '12px',
-            background: 'rgba(255,255,255,0.22)',
+            width: '34px', height: '34px', borderRadius: '10px',
+            background: 'linear-gradient(135deg, #5B47FB 0%, #8B5CF6 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backdropFilter: 'blur(4px)',
-            border: '1px solid rgba(255,255,255,0.3)',
+            flexShrink: 0,
           }}>
-            <BoltIcon />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9.5 4 C7.5 3 5 2.3 3.5 3.2 L5 5 C7 4.8 8.8 5 9.5 5.6 Z" fill="white"/>
+              <circle cx="13.5" cy="5.6" r="3.5" stroke="white" strokeWidth="1.8" fill="none"/>
+              <line x1="10" y1="5.6" x2="17" y2="5.6" stroke="white" strokeWidth="1.3"/>
+              <path d="M2 15 C2 9.5 22 9.5 22 15" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
+              <line x1="2" y1="17.5" x2="15" y2="17.5" stroke="white" strokeWidth="2.3" strokeLinecap="round"/>
+              <line x1="13.5" y1="16.5" x2="7" y2="21" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="7" y1="21" x2="22" y2="21" stroke="white" strokeWidth="2.3" strokeLinecap="round"/>
+            </svg>
           </div>
-          <div>
-            <div style={{
-              color: '#fff', fontWeight: '700', fontSize: '19px',
-              letterSpacing: '-0.4px', lineHeight: '1.2',
-            }}>
-              Combo Forge
+
+          {/* Brand name */}
+          <div style={{ marginRight: '4px' }}>
+            <div style={{ fontWeight: '700', fontSize: '15px', color: '#0F0F23', letterSpacing: '-0.3px', lineHeight: 1 }}>
+              Combo Studio
             </div>
-            <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', letterSpacing: '0.5px' }}>
-              BUNDLE BUILDER PLATFORM
+            <div style={{ fontSize: '10.5px', color: '#94A3B8', letterSpacing: '0.4px', marginTop: '2px', textTransform: 'uppercase' }}>
+              Bundle Builder
             </div>
           </div>
+
+          {/* Separator */}
+          <div style={{ width: '1px', height: '22px', background: 'rgba(0,0,0,0.09)' }} />
+
+          {/* Nav pills */}
+          <nav style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+            {NAV_TABS.map(tab => (
+              <button
+                key={tab.id}
+                className={`cs-nav-btn${tab.id === activeTabId ? ' active' : ''}`}
+                onClick={() => navigate(tab.href)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            padding: '4px 14px', borderRadius: '20px',
-            background: 'rgba(255,255,255,0.18)',
-            color: 'rgba(255,255,255,0.85)', fontSize: '12px', fontWeight: '500',
-            border: '1px solid rgba(255,255,255,0.25)',
+        {/* Right: status badges */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            padding: '4px 12px', borderRadius: '20px',
+            background: 'rgba(91,71,251,0.08)', color: '#5B47FB',
+            fontSize: '11.5px', fontWeight: '650',
+            border: '1px solid rgba(91,71,251,0.18)',
           }}>
             Pro Trial
-          </div>
-          <div style={{
-            padding: '4px 14px', borderRadius: '20px',
-            background: 'rgba(52,211,153,0.25)',
-            color: '#6ee7b7', fontSize: '12px', fontWeight: '600',
-            border: '1px solid rgba(52,211,153,0.3)',
+          </span>
+          <span style={{
+            padding: '4px 12px', borderRadius: '20px',
+            background: 'rgba(16,185,129,0.08)', color: '#10B981',
+            fontSize: '11.5px', fontWeight: '650',
+            border: '1px solid rgba(16,185,129,0.20)',
             display: 'flex', alignItems: 'center', gap: '5px',
           }}>
-            {/* CSS green dot instead of emoji */}
             <span style={{
               width: '6px', height: '6px', borderRadius: '50%',
-              background: '#6ee7b7', display: 'inline-block',
+              background: '#10B981', flexShrink: 0,
             }} />
             Live
-          </div>
+          </span>
         </div>
       </div>
 
-      {/* Navigation tabs */}
-      <div style={{
-        background: '#fff',
-        borderBottom: '1px solid #e5e7eb',
-        padding: '0 24px',
-        display: 'flex',
-        gap: '2px',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-      }}>
-        {NAV_TABS.map(tab => {
-          const active = tab.id === activeTabId;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => navigate(tab.href)}
-              style={{
-                padding: '13px 20px',
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                fontSize: '13.5px',
-                fontWeight: active ? '600' : '400',
-                color: active ? '#667eea' : '#6b7280',
-                borderBottom: active ? '2.5px solid #667eea' : '2.5px solid transparent',
-                transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-              }}
-            >
-              <span style={{
-                display: 'flex',
-                color: active ? '#667eea' : '#9ca3af',
-                transition: 'color 0.15s',
-              }}>
-                <Icon source={tab.icon} tone={active ? 'base' : 'subdued'} />
-              </span>
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Page content */}
+      {/* ── Page content ─────────────────────────────────────── */}
       <div style={{ padding: '28px' }}>
         <Outlet />
       </div>

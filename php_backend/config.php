@@ -17,9 +17,9 @@ error_reporting(E_ALL);
 
 // ===== DATABASE CONFIG =====
 define('DB_HOST',    'localhost');
-define('DB_NAME',    'u218702675_cartdrawer');
-define('DB_USER',    'u218702675_cartdrawer');
-define('DB_PASS',    'Digi2025#cart');
+define('DB_NAME',    'cart_drawer_ninja');
+define('DB_USER',    'root');
+define('DB_PASS',    '');
 define('DB_CHARSET', 'utf8mb4');
 
 // ===== PDO CONNECTION =====

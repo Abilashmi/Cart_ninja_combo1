@@ -1,205 +1,104 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { getDb } from "../services/db.server";
 
-// ===============================
-// Configuration
-// ===============================
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const PHP_ENDPOINT = "https://int.thecartninja.com/save_coupon.php";
-const LOCAL_COUPONS_FILE = path.resolve("coupons-data.json");
-
-async function saveCouponLocally(coupon) {
-    try {
-        const shopDomain = (coupon.shop_domain || coupon.shopDomain || "").toLowerCase();
-        let all = {};
-        try {
-            const raw = await fs.readFile(LOCAL_COUPONS_FILE, "utf-8");
-            all = JSON.parse(raw);
-        } catch { /* file may not exist yet */ }
-        if (!all[shopDomain]) all[shopDomain] = [];
-        const existingIdx = all[shopDomain].findIndex(
-            c => c.shopify_id === coupon.shopify_id || c.internal_id === coupon.internal_id
-        );
-        if (existingIdx >= 0) {
-            all[shopDomain][existingIdx] = coupon;
-        } else {
-            all[shopDomain].push(coupon);
-        }
-        await fs.writeFile(LOCAL_COUPONS_FILE, JSON.stringify(all, null, 2));
-    } catch (err) {
-        console.warn("Failed to save coupon locally:", err.message);
-    }
+function genId() {
+    return `coupon_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-
-// ===============================
-// PHP Forwarding & Fetching
-// ===============================
-
-/**
- * Send coupon to PHP endpoint (POST)
- */
-async function sendCouponToPHP(coupon) {
-    try {
-        const response = await fetch(PHP_ENDPOINT, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(coupon)
-        });
-
-        const text = await response.text();
-
-        console.log("---------- PHP POST RESPONSE ----------");
-        console.log(text);
-        console.log("---------------------------------------");
-
-        if (!response.ok) {
-            throw new Error(`PHP POST returned status ${response.status}`);
-        }
-
-        return true;
-
-    } catch (error) {
-        console.error("Error sending coupon to PHP:", error);
-        return false;
-    }
+function normalizeShop(s) {
+    return (s || "").toString().trim().toLowerCase();
 }
 
-/**
- * Fetch coupons from PHP endpoint (GET)
- */
+// ── Read ──────────────────────────────────────────────────────────────────────
+
 export async function getStoredCoupons(shopDomain = "") {
-    if (!shopDomain) {
-        console.warn("getStoredCoupons: No shopDomain provided");
-        return [];
-    }
-
+    if (!shopDomain) return [];
+    const db = getDb();
     try {
-        const url = `${PHP_ENDPOINT}?shopdomain=${encodeURIComponent(shopDomain)}`;
-        console.log("Fetching coupons from PHP:", url);
-
-        const response = await fetch(url, {
-            method: "GET",
-            headers: {
-                "Accept": "application/json",
-                "ngrok-skip-browser-warning": "true"
-            }
+        const [rows] = await db.execute(
+            'SELECT * FROM coupons WHERE shop_domain = ? AND is_active = 1 ORDER BY created_at DESC',
+            [normalizeShop(shopDomain)]
+        );
+        return rows.map(row => {
+            let config = {};
+            try { config = row.discount_config ? JSON.parse(row.discount_config) : {}; } catch {}
+            return {
+                id: row.internal_id || String(row.id),
+                internal_id: row.internal_id,
+                shopify_id: row.shopify_id,
+                shop_domain: row.shop_domain,
+                code: row.code,
+                ...config,
+            };
         });
-
-        if (!response.ok) {
-            throw new Error(`PHP GET returned status ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result.status === "success" && Array.isArray(result.data)) {
-            // Map PHP response fields (internal_id) to id field used by Remix
-            return result.data.map(item => ({
-                ...item,
-                id: item.internal_id || item.id || `php_${item.shopify_id?.split('/').pop() || Date.now()}`,
-            }));
-        }
-
-        console.warn("PHP GET returned success but no data array:", result);
-        return [];
-    } catch (error) {
-        console.error("Error fetching coupons from PHP:", error);
+    } catch (e) {
+        console.error("[getStoredCoupons] DB error:", e.message);
         return [];
     }
 }
 
-// ===============================
-// Coupon Preparation Logic
-// ===============================
+// ── Prepare coupon object ─────────────────────────────────────────────────────
 
-/**
- * Prepare coupon for storage (now just returns processed object)
- */
 export async function storeCoupon(couponData) {
-    const newCoupon = {
+    return {
         ...couponData,
-        id: couponData.id || `sample_${Date.now()}`,
-        createdAt: new Date().toISOString()
+        id: couponData.id || genId(),
+        createdAt: new Date().toISOString(),
     };
-    console.log("------------------------------------------");
-    console.log("[COUPON PREPARED FOR SYNC]");
-    console.log(JSON.stringify(newCoupon, null, 2));
-    console.log("------------------------------------------");
-
-    return newCoupon;
 }
 
-// ===============================
-// API Loader (GET) Handler
-// ===============================
+// ── Loader (GET) ──────────────────────────────────────────────────────────────
 
 export async function loader({ request }) {
     const url = new URL(request.url);
-    const shopdomain = url.searchParams.get("shopdomain") || url.searchParams.get("shop") || "";
-
+    const shopDomain = url.searchParams.get("shopdomain") || url.searchParams.get("shop") || "";
     try {
-        const coupons = await getStoredCoupons(shopdomain);
+        const coupons = await getStoredCoupons(shopDomain);
         return Response.json({ coupons }, { status: 200 });
     } catch (error) {
-        console.error("Error loading coupons:", error);
-        return Response.json(
-            { error: "Failed to load coupons", details: error.message },
-            { status: 500 }
-        );
+        return Response.json({ error: "Failed to load coupons", details: error.message }, { status: 500 });
     }
 }
 
-// ===============================
-// API Action (POST) Handler
-// ===============================
+// ── Action (POST) ─────────────────────────────────────────────────────────────
 
 export async function action({ request }) {
-
     if (request.method !== "POST") {
-        return Response.json(
-            { error: "Method not allowed" },
-            { status: 405 }
-        );
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
     }
 
     try {
         const couponData = await request.json();
-
         if (!couponData || Object.keys(couponData).length === 0) {
-            return Response.json(
-                { error: "Invalid or empty JSON payload" },
-                { status: 400 }
-            );
+            return Response.json({ error: "Empty payload" }, { status: 400 });
         }
 
-        // 1. Store locally
-        const storedCoupon = await storeCoupon(couponData);
+        const shopDomain = normalizeShop(couponData.shop_domain || couponData.shopDomain || "");
+        const code = (couponData.code || "").trim().toUpperCase();
+        const internalId = couponData.internal_id || couponData.id || genId();
+        const shopifyId = couponData.shopify_id || null;
 
-        // 2. Save to local JSON (storefront reads from this via save_coupon.php route)
-        await saveCouponLocally(storedCoupon);
+        // Everything except identity fields goes into discount_config
+        const { shop_domain, shopDomain: _sd, code: _c, internal_id: _ii, shopify_id: _si, id: _id, ...rest } = couponData;
+        const discountConfig = JSON.stringify(rest);
 
-        // 3. Send to PHP (best-effort, non-blocking)
-        const phpSuccess = await sendCouponToPHP(storedCoupon);
-
-        if (!phpSuccess) {
-            console.warn("Coupon stored locally but PHP sync failed");
-        }
-
-        // 3. Return response
-        return Response.json(storedCoupon, { status: 201 });
-
-    } catch (error) {
-
-        console.error("Create coupon error:", error);
-
-        return Response.json(
-            {
-                error: "Failed to process request",
-                details: error.message
-            },
-            { status: 500 }
+        const db = getDb();
+        await db.execute(
+            `INSERT INTO coupons (internal_id, shopify_id, shop_domain, code, discount_config, is_active)
+             VALUES (?, ?, ?, ?, ?, 1)
+             ON DUPLICATE KEY UPDATE
+               shopify_id = VALUES(shopify_id),
+               code = VALUES(code),
+               discount_config = VALUES(discount_config),
+               is_active = 1,
+               updated_at = CURRENT_TIMESTAMP`,
+            [internalId, shopifyId, shopDomain, code, discountConfig]
         );
+
+        return Response.json({ ...couponData, id: internalId }, { status: 201 });
+    } catch (error) {
+        console.error("[coupon action] Error:", error.message);
+        return Response.json({ error: "Failed to process request", details: error.message }, { status: 500 });
     }
 }

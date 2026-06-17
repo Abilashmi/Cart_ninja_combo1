@@ -1,9 +1,19 @@
 <?php
 require_once __DIR__ . '/config.php';
-$res = $conn->query("SELECT * FROM cart_click_events LIMIT 5;");
-$rows = [];
-while($row = $res->fetch_assoc()) {
-    $rows[] = $row;
+
+try {
+    $stmt = $pdo->query("SELECT DATABASE() AS db");
+    $row = $stmt->fetch();
+
+    $stmt2 = $pdo->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME");
+    $tables = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+
+    echo json_encode([
+        "status"   => "ok",
+        "database" => $row['db'],
+        "tables"   => $tables,
+    ], JSON_PRETTY_PRINT);
+} catch (Exception $e) {
+    echo json_encode(["status" => "error", "message" => $e->getMessage()]);
 }
-echo json_encode($rows, JSON_PRETTY_PRINT);
 ?>

@@ -1,56 +1,7 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { validateRequestBody, validateFBTConfig, validateManualUpsellRules } from "../validators/product-sample.validator.js";
+import { validateRequestBody, validateFBTConfig } from "../validators/product-sample.validator.js";
+import { getDb } from "../services/db.server";
 
-const DATA_FILE = path.resolve("fbt-product-data.json");
-
-/* ---------------- DEFAULT CONFIGS ---------------- */
-
-const DEFAULT_COUPON_DATA = {
-    activeTemplate: "template1",
-    selectedActiveCoupons: [],
-    templates: {
-        template1: {
-            name: "Classic Banner",
-            headingText: "GET 10% OFF!",
-            subtextText: "Apply at checkout for savings",
-            bgColor: "#ffffff",
-            textColor: "#111827",
-            accentColor: "#3b82f6",
-            buttonColor: "#3b82f6",
-            buttonTextColor: "#ffffff",
-            borderRadius: 12,
-            fontSize: 16,
-            padding: 16,
-        },
-        template2: {
-            name: "Minimal Card",
-            headingText: "SPECIAL OFFER",
-            subtextText: "Free shipping on orders over your minimum",
-            bgColor: "#f9fafb",
-            textColor: "#374151",
-            accentColor: "#10b981",
-            buttonColor: "#10b981",
-            buttonTextColor: "#ffffff",
-            borderRadius: 8,
-            fontSize: 14,
-            padding: 14,
-        },
-        template3: {
-            name: "Bold & Vibrant",
-            headingText: "FLASH SALE!",
-            subtextText: "Use code: BOLD25 for extra 25% OFF",
-            bgColor: "#4f46e5",
-            textColor: "#ffffff",
-            accentColor: "#f59e0b",
-            buttonColor: "#f59e0b",
-            buttonTextColor: "#111827",
-            borderRadius: 16,
-            fontSize: 18,
-            padding: 20,
-        },
-    },
-};
+/* ---------------- DEFAULTS ---------------- */
 
 const DEFAULT_AI_SETTINGS = {
     aiEnabled: false,
@@ -116,9 +67,7 @@ function normalizeAiSettings(rawSettings) {
     const maxSuggestions = Number.isFinite(parsedLimit)
         ? Math.min(20, Math.max(1, parsedLimit))
         : DEFAULT_AI_SETTINGS.maxSuggestions;
-
     const aiEnabled = source.aiEnabled === true || source.aiEnabled === 1 || source.aiEnabled === "1";
-
     return {
         aiEnabled,
         aiProductCount: maxSuggestions,
@@ -129,22 +78,39 @@ function normalizeAiSettings(rawSettings) {
     };
 }
 
-/* ---------------- FILE HELPERS ---------------- */
-
-async function readStoredData() {
-    try {
-        const raw = await fs.readFile(DATA_FILE, "utf-8");
-        return JSON.parse(raw);
-    } catch {
-        return {
-            couponSlider: DEFAULT_COUPON_DATA,
-            fbt: DEFAULT_FBT_DATA
-        };
-    }
+function parseJson(val, fallback) {
+    if (!val) return fallback;
+    if (typeof val === "object") return val;
+    try { return JSON.parse(val); } catch { return fallback; }
 }
 
-async function writeStoredData(data) {
-    await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+/* ---------------- DB HELPERS ---------------- */
+
+async function fetchFbtRow(shopDomain) {
+    const db = getDb();
+    const [rows] = await db.execute(
+        'SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1',
+        [shopDomain]
+    );
+    return rows[0] || null;
+}
+
+function rowToFbt(row) {
+    return {
+        activeTemplate: row.selectedTemp || "fbt1",
+        mode: row.selectedMode || "manual",
+        templates: {
+            fbt1: parseJson(row.temp1, DEFAULT_FBT_DATA.templates.fbt1),
+            fbt2: parseJson(row.temp2, DEFAULT_FBT_DATA.templates.fbt2),
+            fbt3: parseJson(row.temp3, DEFAULT_FBT_DATA.templates.fbt3),
+        },
+        manualRules: parseJson(row.condition, []),
+        aiSettings: {
+            ...DEFAULT_AI_SETTINGS,
+            aiEnabled: row.ai_enabled === 1 || row.ai_enabled === true,
+            aiProductCount: row.ai_product_count != null ? Number(row.ai_product_count) : DEFAULT_AI_SETTINGS.aiProductCount,
+        },
+    };
 }
 
 /* ---------------- LOADER ---------------- */
@@ -153,234 +119,89 @@ export async function loader({ request }) {
     const url = new URL(request.url);
     const shopDomain = url.searchParams.get("shopdomain");
 
-    if (shopDomain) {
-        try {
-            const phpRes = await fetch(
-                `https://int.thecartninja.com/save_fbt_widget.php?shopdomain=${encodeURIComponent(shopDomain)}`,
-                { headers: { "ngrok-skip-browser-warning": "true" } }
-            );
-            if (phpRes.ok) {
-                const phpData = await phpRes.json();
-                if (phpData.status === "success" && phpData.data) {
-                    const row = phpData.data;
-                    const fbt = {
-                        activeTemplate: row.selectedTemp || "fbt1",
-                        mode: row.selectedMode || "manual",
-                        templates: {
-                            fbt1: (typeof row.temp1 === "object" && row.temp1) ? row.temp1 : DEFAULT_FBT_DATA.templates.fbt1,
-                            fbt2: (typeof row.temp2 === "object" && row.temp2) ? row.temp2 : DEFAULT_FBT_DATA.templates.fbt2,
-                            fbt3: (typeof row.temp3 === "object" && row.temp3) ? row.temp3 : DEFAULT_FBT_DATA.templates.fbt3,
-                        },
-                        manualRules: Array.isArray(row.condition) ? row.condition : [],
-                        aiSettings: {
-                            ...DEFAULT_AI_SETTINGS,
-                            aiProductCount: row.aiProductCount != null ? Number(row.aiProductCount) : DEFAULT_AI_SETTINGS.aiProductCount,
-                        },
-                    };
-                    return Response.json({ success: true, fbt });
-                }
-            }
-        } catch (e) {
-            console.error("[FBT loader] Failed to fetch shop data from PHP backend:", e);
-        }
+    if (!shopDomain) {
+        return Response.json({ success: true, fbt: { ...DEFAULT_FBT_DATA, manualRules: [] } });
     }
 
-    // New install or no data found for this shop — return clean defaults
-    return Response.json({
-        success: true,
-        fbt: { ...DEFAULT_FBT_DATA, manualRules: [] }
-    });
+    try {
+        const row = await fetchFbtRow(shopDomain);
+        if (row) {
+            return Response.json({ success: true, fbt: rowToFbt(row) });
+        }
+    } catch (e) {
+        console.error("[FBT loader] DB read failed:", e.message);
+    }
+
+    return Response.json({ success: true, fbt: { ...DEFAULT_FBT_DATA, manualRules: [] } });
 }
 
 /* ---------------- ACTION ---------------- */
 
 export async function action({ request }) {
-
     if (request.method !== "POST") {
-        return Response.json(
-            { error: "Method not allowed" },
-            { status: 405 }
-        );
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
     }
 
     try {
         const data = await request.json();
         const { actionType, shop } = data;
 
-        // Validate top-level request body
         const bodyCheck = validateRequestBody(data);
         if (bodyCheck.status === "error") {
-            return Response.json(
-                { success: false, errors: bodyCheck.errors },
-                { status: 400 }
-            );
+            return Response.json({ success: false, errors: bodyCheck.errors }, { status: 400 });
         }
 
-        const storedData = await readStoredData();
+        if (actionType !== "saveFBTConfig") {
+            return Response.json({ success: false, error: "Unsupported actionType" }, { status: 400 });
+        }
 
-        if (actionType === "saveFBTConfig") {
+        const configCheck = validateFBTConfig(data);
+        if (configCheck.status === "error") {
+            return Response.json({ success: false, errors: configCheck.errors }, { status: 400 });
+        }
 
-            // Validate FBT config data
-            const configCheck = validateFBTConfig(data);
-            if (configCheck.status === "error") {
-                return Response.json(
-                    { success: false, errors: configCheck.errors },
-                    { status: 400 }
-                );
-            }
+        const { activeTemplate, templateData: rawTemplateData, mode, configData: rawConfigData, aiSettings: rawAiSettings } = data;
 
-            const {
-                activeTemplate,
-                templateData: rawTemplateData,
-                mode,
-                configData: rawConfigData,
-                aiSettings: rawAiSettings,
-            } = data;
+        const templates = parseJson(rawTemplateData, {});
+        const manualRules = parseJson(rawConfigData, []);
+        const aiSettings = normalizeAiSettings(parseJson(rawAiSettings, {}));
 
-            const templates = typeof rawTemplateData === "string"
-                ? JSON.parse(rawTemplateData)
-                : rawTemplateData;
-
-            const manualRules = typeof rawConfigData === "string"
-                ? JSON.parse(rawConfigData)
-                : (rawConfigData || []);
-
-            let parsedAiSettings = rawAiSettings;
-            if (typeof parsedAiSettings === "string") {
-                try {
-                    parsedAiSettings = JSON.parse(parsedAiSettings);
-                } catch {
-                    parsedAiSettings = null;
-                }
-            }
-
-            const aiSettings = normalizeAiSettings(parsedAiSettings);
-
-            const activeTpl = templates[activeTemplate] || {};
-
-            // Structured Data for Output
-            const selectedTemplate = activeTemplate;
-            const interactionStyle = activeTpl.interactionType;
-            const layoutAlignment = activeTpl.layout;
-
-            const color = {
-                bgColor: activeTpl.bgColor,
-                textColor: activeTpl.textColor,
-                priceColor: activeTpl.priceColor,
-                buttonColor: activeTpl.buttonColor,
-                buttonText: activeTpl.buttonTextColor,
-                borderColor: activeTpl.borderColor
-            };
-
-            const styling = {
-                borderRadius: activeTpl.borderRadius,
-                showPrices: activeTpl.showPrices,
-                showAddAllButton: activeTpl.showAddAllButton
-            };
-
-            const configurationMode = mode === "manual" ? "Manual Configuration" : "AI Configuration";
-
-            // Process manual rules to include product names instead of just IDs
-            const manualConfiguration = manualRules.map(rule => {
-                // Determine trigger product names
-                const triggerNames = (rule.triggerProducts || []).map(p => p.title || p.id).join(", ");
-
-                // Determine upsell/fbt product names
-                const upsellNames = (rule.fbtProducts || []).map(p => p.title || p.id).join(", ");
-
-                return {
-                    ruleId: rule.id,
-                    displayScope: rule.displayScope,
-                    triggeredProduct: triggerNames || (rule.displayScope === "all" ? "All Products" : "None"),
-                    upsellProduct: upsellNames || "None",
-                    // Keep original data for functionality
-                    triggerProducts: rule.triggerProducts,
-                    fbtProducts: rule.fbtProducts
-                };
-            });
-
-            storedData.fbt = {
-                activeTemplate,
-                templates,
-                mode,
-                manualRules,
-                aiSettings,
-                // New structured fields
-                selectedTemplate,
-                interactionStyle,
-                layoutAlignment,
-                color,
-                styling,
-                configurationMode,
-                manualConfiguration
-            };
-
-            await writeStoredData(storedData);
-
-            /* -------- SEND DATA TO PHP ENDPOINT -------- */
-
-            try {
-                await fetch(
-                    "https://int.thecartninja.com/save_fbt_widget.php",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            shop,
-                            fbt: {
-                                ...storedData.fbt,
-                                // PHP reads `condition` as the rules payload consumed by storefront.
-                                condition: storedData.fbt.manualRules || [],
-                                ai_enabled: aiSettings.aiEnabled ? 1 : 0,
-                                ai_product_count: aiSettings.aiProductCount || aiSettings.maxSuggestions || 0,
-                            }
-                        })
-                    }
-                );
-                // console.log("[FBT PUSH RESPONSE]", await response.text()); // Optional logging
-
-            } catch (pushError) {
-                console.error("[FBT PUSH FAILED]", pushError);
-            }
-
-            console.log("==========================================");
-            console.log("[SAVED] FBT CONFIGURATION");
-            console.log("Shop:", shop);
-
-            console.log("Selected Template:", selectedTemplate);
-            console.log("Interaction Style:", interactionStyle);
-            console.log("Layout:", layoutAlignment);
-            console.log("Color:", color);
-            console.log("Styling:", styling);
-            console.log("Mode:", configurationMode);
-            console.log("AI Settings:", aiSettings);
-            if (mode === "manual") {
-                console.log("Manual Rules:", manualConfiguration);
-            }
-            console.log("==========================================");
-
-            return Response.json({
-                success: true,
-                message: "FBT configuration saved successfully!",
+        const db = getDb();
+        await db.execute(
+            `INSERT INTO fbt_widget
+                (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                temp1 = VALUES(temp1),
+                temp2 = VALUES(temp2),
+                temp3 = VALUES(temp3),
+                selectedTemp = VALUES(selectedTemp),
+                selectedMode = VALUES(selectedMode),
+                \`condition\` = VALUES(\`condition\`),
+                ai_enabled = VALUES(ai_enabled),
+                ai_product_count = VALUES(ai_product_count),
+                updated_at = CURRENT_TIMESTAMP`,
+            [
                 shop,
-                config: storedData.fbt
-            });
+                templates.fbt1 ? JSON.stringify(templates.fbt1) : null,
+                templates.fbt2 ? JSON.stringify(templates.fbt2) : null,
+                templates.fbt3 ? JSON.stringify(templates.fbt3) : null,
+                activeTemplate || "fbt1",
+                mode || "manual",
+                JSON.stringify(manualRules),
+                aiSettings.aiEnabled ? 1 : 0,
+                aiSettings.aiProductCount || 0,
+            ]
+        );
 
-        } else {
-            return Response.json(
-                { success: false, error: "Unsupported actionType" },
-                { status: 400 }
-            );
-        }
+        return Response.json({
+            success: true,
+            message: "FBT configuration saved successfully!",
+            shop,
+        });
 
     } catch (error) {
-        console.error("Product Sample API Error:", error);
-
-        return Response.json(
-            { success: false, error: "Invalid JSON or internal error" },
-            { status: 400 }
-        );
+        console.error("[FBT action] Error:", error.message);
+        return Response.json({ success: false, error: "Internal error" }, { status: 500 });
     }
 }

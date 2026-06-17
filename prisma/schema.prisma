@@ -1,123 +1,210 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
+// ─── Shopify Session ───────────────────────────────────────────────────────────
+
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
-  refreshToken        String?
+  id                  String    @id @db.VarChar(191)
+  shop                String    @db.VarChar(255)
+  state               String    @db.VarChar(255)
+  isOnline            Boolean   @default(false)
+  scope               String?   @db.Text
+  expires             DateTime?
+  accessToken         String    @db.VarChar(255)
+  userId              BigInt?
+  firstName           String?   @db.VarChar(255)
+  lastName            String?   @db.VarChar(255)
+  email               String?   @db.VarChar(255)
+  accountOwner        Boolean   @default(false)
+  locale              String?   @db.VarChar(100)
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?   @db.VarChar(255)
   refreshTokenExpires DateTime?
 }
 
-model UpsellRule {
-  id                String   @id @default(uuid())
-  shop              String
-  name              String?
-  enabled           Boolean  @default(true)
-  ruleType          String   // GLOBAL, TRIGGERED, GLOBAL_EXCEPT
-  priority          Int      @default(0)
-  
-  // Trigger configuration (for TRIGGERED rule)
-  triggerProducts   String?  // JSON array of product IDs
-  triggerCollections String? // JSON array of collection IDs
-  
-  // Upsell configuration
-  upsellProducts    String?  // JSON array of product IDs
-  upsellCollections String?  // JSON array of collection IDs
-  
-  // Exclusion configuration (for GLOBAL_EXCEPT rule)
-  excludedProducts  String?  // JSON array of product IDs
-  excludedCollections String? // JSON array of collection IDs
+// ─── Production Tables (live MySQL schema) ────────────────────────────────────
 
-  // Cart condition configuration (for CART_CONDITIONS rule)
-  cartValueThreshold Int?     @default(0)
-  
-  // UI Configuration
-  displayLimit      Int      @default(3)
-  layout            String   @default("slider") // slider, vertical
-  buttonText        String   @default("Add to Cart")
-  showPrice         Boolean  @default(true)
-  title             String   @default("Recommended for you")
-  
-  // Analytics
-  trackViews        Boolean  @default(true)
-  trackClicks       Boolean  @default(true)
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+model Shop {
+  id           Int      @id @default(autoincrement())
+  shopDomain   String   @unique @map("shop_domain") @db.VarChar(255)
+  accessToken  String?  @map("access_token") @db.VarChar(255)
+  isActive     Boolean  @default(true) @map("is_active")
+  planName     String   @default("free") @map("plan_name") @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  orderCount   Int      @default(0) @map("order_count")
+  totalRevenue Decimal  @default(0.00) @map("total_revenue") @db.Decimal(12, 2)
+
+  @@map("shops")
+}
+
+model CartDrawer {
+  id                  Int      @id @default(autoincrement())
+  shop                String   @unique @db.VarChar(255)
+  cartStatus          Boolean  @default(true)
+  progressData        String?  @map("progress_data") @db.LongText
+  couponData          String?  @map("coupon_data") @db.LongText
+  upsellData          String?  @map("upsell_data") @db.LongText
+  progressStatus      Boolean  @default(false) @map("progress_status")
+  couponStatus        Boolean  @default(false) @map("coupon_status")
+  upsellStatus        Boolean  @default(false) @map("upsell_status")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  checkoutName        String?  @db.VarChar(255)
+  checkoutFooterText  String?  @db.VarChar(500)
+  customCSS           String?  @db.LongText
+  checkoutButtonStyle String?  @map("checkout_button_style") @db.Text
+
+  @@map("cart_drawer")
+}
+
+model CartClickEvent {
+  id         Int      @id @default(autoincrement())
+  shopId     String?  @map("shop_id") @db.VarChar(100)
+  domain     String?  @db.VarChar(255)
+  eventType  String?  @map("event_type") @db.VarChar(50)
+  widgetType String?  @map("widget_type") @db.VarChar(100)
+  sessionId  String?  @map("session_id") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at")
+  revenue    Decimal  @default(0.00) @db.Decimal(10, 2)
+
+  @@map("cart_click_events")
+}
+
+model Coupon {
+  id             Int      @id @default(autoincrement())
+  internalId     String   @map("internal_id") @db.VarChar(100)
+  shopifyId      String?  @map("shopify_id") @db.VarChar(100)
+  shopDomain     String   @map("shop_domain") @db.VarChar(255)
+  code           String   @db.VarChar(100)
+  discountConfig String   @map("discount_config") @db.LongText
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([shopDomain], map: "idx_shop")
+  @@index([code], map: "idx_code")
+  @@map("coupons")
+}
+
+model CouponSliderWidget {
+  id                     Int      @id @default(autoincrement())
+  shopDomain             String   @unique @db.VarChar(255)
+  temp1DefaultStyle      String?  @db.LongText
+  temp2DefaultStyle      String?  @db.LongText
+  temp3DefaultStyle      String?  @db.LongText
+  selectedTemplate       String?  @db.VarChar(50)
+  selectedTemplateCoupon String?  @db.LongText
+  temp1CouponStyle       String?  @db.LongText
+  temp2CouponStyle       String?  @db.LongText
+  temp3CouponStyle       String?  @db.LongText
+  temp1CouponCondition   String?  @db.LongText
+  temp2CouponCondition   String?  @db.LongText
+  temp3CouponCondition   String?  @db.LongText
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("coupon_slider_widget")
+}
+
+model FbtWidget {
+  id             Int      @id @default(autoincrement())
+  shopDomain     String   @unique @db.VarChar(255)
+  temp1          String?  @db.LongText
+  temp2          String?  @db.LongText
+  temp3          String?  @db.LongText
+  selectedTemp   String?  @db.VarChar(50)
+  selectedMode   String?  @db.VarChar(50)
+  condition      String?  @db.LongText
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  aiEnabled      Boolean  @default(false) @map("ai_enabled")
+  aiProductCount Int      @default(0) @map("ai_product_count")
+
+  @@map("fbt_widget")
+}
+
+// ─── Local App Models ──────────────────────────────────────────────────────────
+
+model UpsellRule {
+  id                  String   @id @default(uuid()) @db.VarChar(36)
+  shop                String   @db.VarChar(255)
+  name                String?  @db.VarChar(255)
+  enabled             Boolean  @default(true)
+  ruleType            String   @db.VarChar(50)
+  priority            Int      @default(0)
+  triggerProducts     String?  @db.LongText
+  triggerCollections  String?  @db.LongText
+  upsellProducts      String?  @db.LongText
+  upsellCollections   String?  @db.LongText
+  excludedProducts    String?  @db.LongText
+  excludedCollections String?  @db.LongText
+  cartValueThreshold  Int?     @default(0)
+  displayLimit        Int      @default(3)
+  layout              String   @default("slider") @db.VarChar(50)
+  buttonText          String   @default("Add to Cart") @db.VarChar(255)
+  showPrice           Boolean  @default(true)
+  title               String   @default("Recommended for you") @db.VarChar(255)
+  trackViews          Boolean  @default(true)
+  trackClicks         Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
   @@index([shop])
   @@index([ruleType])
 }
 
 model WidgetSettings {
-  id          String   @id @default(uuid())
-  shop        String   @unique
-  coupons     String   // JSON string
-  fbt         String   // JSON string
-  progressBar String?  // JSON string - Added for Cart Drawer sync
-  upsell      String?  // JSON string - Added for Cart Drawer sync
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  shop        String   @unique @db.VarChar(255)
+  coupons     String   @db.LongText
+  fbt         String   @db.LongText
+  progressBar String?  @db.LongText
+  upsell      String?  @db.LongText
   updatedAt   DateTime @updatedAt
 }
 
 // ─── Combo Forge Models ────────────────────────────────────────────────────────
 
 model ComboTemplate {
-  id                String   @id @default(uuid())
-  shop              String
-  name              String
-  slug              String?
-  templateType      String   @default("grid")  // guided, velocity, editorial, custom, grid, carousel
-  status            String   @default("draft")  // draft, active, inactive
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  shop              String   @db.VarChar(255)
+  name              String   @db.VarChar(255)
+  slug              String?  @db.VarChar(255)
+  templateType      String   @default("grid") @db.VarChar(50)
+  status            String   @default("draft") @db.VarChar(50)
   isActive          Boolean  @default(true)
   version           Int      @default(1)
-  description       String?
-  customizationData String?  // JSON: all builder settings
-  features          String?  // JSON: feature flags
-  pageId            String?  // Shopify page GID
-  pageHandle        String?  // Shopify page handle
+  description       String?  @db.Text
+  customizationData String?  @db.LongText
+  features          String?  @db.LongText
+  pageId            String?  @db.VarChar(255)
+  pageHandle        String?  @db.VarChar(255)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  analytics  ComboAnalytic[]
+  analytics ComboAnalytic[]
 
   @@index([shop])
   @@index([shop, status])
 }
 
 model ComboAnalytic {
-  id         String   @id @default(uuid())
-  shop       String
-  templateId String?
-  eventType  String   // view, click, add_to_cart, checkout, order
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  shop       String   @db.VarChar(255)
+  templateId String?  @db.VarChar(36)
+  eventType  String   @db.VarChar(50)
   revenue    Float    @default(0)
   recordedAt DateTime @default(now())
 
-  template   ComboTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template ComboTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([shop])
   @@index([shop, eventType])
@@ -126,24 +213,24 @@ model ComboAnalytic {
 }
 
 model ComboSubscription {
-  id               String   @id @default(uuid())
-  shop             String   @unique
-  planId           String   @default("basic") // basic, build, enterprise
-  shopifySubId     String?  // Shopify subscription GID
-  status           String   @default("active") // active, cancelled, expired
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  shop             String    @unique @db.VarChar(255)
+  planId           String    @default("basic") @db.VarChar(50)
+  shopifySubId     String?   @db.VarChar(255)
+  status           String    @default("active") @db.VarChar(50)
   trialEndsAt      DateTime?
   currentPeriodEnd DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([shop])
 }
 
 model ComboAIUsage {
-  id        String   @id @default(uuid())
-  shop      String
-  field     String   // mainTitle, subtitle, description, etc.
-  model     String   @default("gpt-4o-mini")
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  shop      String   @db.VarChar(255)
+  field     String   @db.VarChar(100)
+  model     String   @default("gpt-4o-mini") @db.VarChar(100)
   tokensIn  Int      @default(0)
   tokensOut Int      @default(0)
   usedAt    DateTime @default(now())

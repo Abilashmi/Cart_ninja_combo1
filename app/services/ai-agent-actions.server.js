@@ -11,28 +11,11 @@
 
 import { promises as fs } from "fs";
 import path from "path";
-import mysql from "mysql2/promise";
 import db from "../db.server";
+import { getDb } from "./db.server";
 
 const LOCAL_CART_DATA_FILE = path.resolve("cartdrawer-config-data.json");
 const LOCAL_FBT_DATA_FILE = path.resolve("ai-agent-fbt-data.json");
-
-// ── MySQL connection (same credentials as php_backend/config.php) ──
-let mysqlPool = null;
-function getMysqlPool() {
-    if (!mysqlPool) {
-        mysqlPool = mysql.createPool({
-            host: process.env.DB_HOST || "localhost",
-            user: process.env.DB_USER || "u218702675_cartdrawer",
-            password: process.env.DB_PASS || "Digi2025#cart",
-            database: process.env.DB_NAME || "u218702675_cartdrawer",
-            charset: "utf8mb4",
-            waitForConnections: true,
-            connectionLimit: 5,
-        });
-    }
-    return mysqlPool;
-}
 
 export const SUPPORTED_ACTIONS = [
     "enableDrawer", "disableDrawer", "configureCartDrawer",
@@ -182,7 +165,7 @@ export async function fetchCartDrawerRecord(shop) {
     const shopKey = normalizeShopDomain(shop);
 
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         const [rows] = await pool.execute(
             "SELECT * FROM cart_drawer WHERE shop = ? LIMIT 1",
             [shop]
@@ -223,7 +206,7 @@ export async function persistCartDrawerRecord(shop, record) {
 
     // Write to MySQL (best-effort — failure does NOT block the AI agent response)
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         const cartStatus = payload.cartStatus != null ? (payload.cartStatus ? 1 : 0) : 0;
         const progressData = payload.progress_data
             ? (typeof payload.progress_data === "string" ? payload.progress_data : JSON.stringify(payload.progress_data))
@@ -359,7 +342,7 @@ async function fetchFbtRecord(shop) {
 
     agentLog("INFO", "fbt_fetch", "Fetching FBT record from MySQL", { shop });
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         const [rows] = await pool.execute(
             "SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1",
             [shop]
@@ -422,7 +405,7 @@ async function persistFbtRecord(shop, record) {
 
     // Write to MySQL (best-effort — failure does NOT block the AI agent response)
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         await pool.execute(`
             INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -481,7 +464,7 @@ export async function getCurrentSettingsSnapshot(shop, themeColors) {
 
 async function fetchCartDrawerExternalOnly(shop) {
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         const [rows] = await pool.execute(
             "SELECT * FROM cart_drawer WHERE shop = ? LIMIT 1",
             [shop]
@@ -497,7 +480,7 @@ async function fetchCartDrawerExternalOnly(shop) {
 
 async function fetchFbtExternalOnly(shop) {
     try {
-        const pool = getMysqlPool();
+        const pool = getDb();
         const [rows] = await pool.execute(
             "SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1",
             [shop]

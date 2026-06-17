@@ -9,26 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Database Connection
-$host = 'localhost'; // Update with actual DB host
-$db   = 'u218702675_cartdrawer'; // Update with actual DB name
-$user = 'u218702675_cartdrawer'; // Update with actual DB username
-$pass = 'Digi2025#cart'; // Update with actual DB password, based on get_schema.php
-$charset = 'utf8mb4';
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-
-try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
-    exit;
-}
+require_once __DIR__ . '/config.php';
 
 // Get JSON Input
 $input = json_decode(file_get_contents('php://input'), true);
