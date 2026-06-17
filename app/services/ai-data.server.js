@@ -80,7 +80,7 @@ export async function createConversation(shopDomain, title) {
     (m) => m.createConversation(shopDomain, title),
     async () => {
       const all = await readJson(CONVERSATIONS_FILE);
-      const conv = { id: id(), shopDomain, title: title || "New Chat", createdAt: now(), updatedAt: now() };
+      const conv = { id: id(), shopDomain, title: title || "New Chat", pinned: false, createdAt: now(), updatedAt: now() };
       all.push(conv);
       await writeJson(CONVERSATIONS_FILE, all);
       return conv;
