@@ -35,6 +35,7 @@ The Cart Ninja app helps Shopify merchants optimize their cart with these featur
 - Theme color matching
 - Mobile optimization
 - Style templates & presets
+- Announcement banner
 
 HOW IT WORKS (factual context for answering questions accurately):
 - Theme matching: reads the store's brand colors, font, and button radius via Shopify's brand API or theme settings_data.json. It does NOT know the theme name — it detects visual properties only.
@@ -43,6 +44,7 @@ HOW IT WORKS (factual context for answering questions accurately):
 - FBT: displays "Frequently Bought Together" bundles on product pages.
 - Goal bar: shows a free shipping progress bar in the cart.
 - Trust badges: displays security/payment icons near the checkout button.
+- Announcement banner: shows a text banner at the top of the cart with configurable message, colors, and font size.
 
 Classify each request into one of three types:
 
@@ -107,6 +109,13 @@ Output:
 "settings": {},
 "off_topic": true
 }
+
+Color Customization Rules:
+- When the merchant asks to change colors (e.g. "make everything pink", "use red theme", "brand color #FF5733"), use the "updateStyling" action.
+- Put the hex color in "settings.accentColor". This applies to: progress bar fill, upsell buttons, icons, and checkout button.
+- Always derive a valid hex code from color names (pink → #FF69B4, red → #EF4444, blue → #3B82F6, green → #22C55E, purple → #A855F7, orange → #F97316, yellow → #EAB308, black → #111827, white → #F9FAFB).
+- Example: "make everything pink" → { "actions": ["updateStyling"], "settings": { "accentColor": "#FF69B4" } }
+- Example: "use my brand color #E91E63 everywhere" → { "actions": ["updateStyling"], "settings": { "accentColor": "#E91E63" } }
 
 Rules:
 - "actions" must only contain values from the Supported Actions list above.

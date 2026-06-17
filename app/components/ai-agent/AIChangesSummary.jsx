@@ -1,4 +1,4 @@
-export default function AIChangesSummary({ actions, results, onUndo, message, synced }) {
+export default function AIChangesSummary({ actions, results, onUndo, message, synced, rawCartBefore, before }) {
   const hasErrors = results?.some((r) => r.status === "error");
   const allDone = results?.every((r) => r.status === "executed");
   const statusText = allDone ? (synced !== false ? 'Applied' : 'Applied (offline)') : hasErrors ? 'Issues found' : 'Processing';
@@ -47,7 +47,7 @@ export default function AIChangesSummary({ actions, results, onUndo, message, sy
                 )}
               </div>
               {onUndo && a.action !== "delete" && a.action !== "disable_cart_drawer" && (
-                <button className="aif-as-undo" onClick={() => onUndo(a)} title="Undo">
+                <button className="aif-as-undo" onClick={() => onUndo(a, rawCartBefore, before)} title="Undo">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
                     <path d="M4 8h8M4 8l3-3M4 8l3 3" />
                   </svg>

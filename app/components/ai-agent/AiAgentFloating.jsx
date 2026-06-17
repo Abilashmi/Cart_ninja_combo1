@@ -7,6 +7,7 @@ import { aiApi } from "./api";
 import AILoadingState from "./AILoadingState";
 import AIChangesSummary from "./AIChangesSummary";
 import AINeedsInputCard from "./AINeedsInputCard";
+import "./ai-agent.css";
 import {
   BRAND, QUICK_ACTIONS, PAGE_AWARE_PROMPTS, WELCOME_MESSAGE,
   PREDICTIVE_SUGGESTIONS, EXAMPLE_PROMPTS, UNRELATED_RESPONSE
@@ -120,6 +121,8 @@ export default function AiAgentFloating() {
   const [notification, setNotification] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [flashModules, setFlashModules] = useState([]);
+  const flashTimerRef = useRef(null);
 
   const location = useLocation();
   const {
@@ -156,6 +159,8 @@ export default function AiAgentFloating() {
     disable_goal_bar: "progress_bar",
     enable_trust_badges: "trust_badges",
     disable_trust_badges: "trust_badges",
+    enable_announcement: "announcements",
+    disable_announcement: "announcements",
   };
 
   const NVIDIA_TO_BOOL = {
@@ -169,6 +174,8 @@ export default function AiAgentFloating() {
     disable_goal_bar: false,
     enable_trust_badges: true,
     disable_trust_badges: false,
+    enable_announcement: true,
+    disable_announcement: false,
   };
 
   useEffect(() => {
@@ -179,14 +186,41 @@ export default function AiAgentFloating() {
   useEffect(() => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.executedActions?.length > 0 && lastMsg?.synced) {
-      const conv = conversations.find((c) => c.id === activeConvId);
-      if (conv) {
-        lastMsg.actions.forEach((act) => {
-          const key = NVIDIA_TO_FEATURE_KEY[act.type];
-          if (key) {
-            featureStore.set(key, NVIDIA_TO_BOOL[act.type]);
-          }
-        });
+      // Prefer syncing from actual DB `after` state — covers configure_* actions too
+      const after = lastMsg.after;
+      if (after?.cart) {
+        if (after.cart.goalBar?.enabled != null) featureStore.set("progress_bar", after.cart.goalBar.enabled);
+        if (after.cart.upsell?.enabled != null) featureStore.set("upsells", after.cart.upsell.enabled);
+        if (after.cart.drawerEnabled != null) featureStore.set("cart_drawer", after.cart.drawerEnabled);
+        if (after.cart.trustBadges?.enabled != null) featureStore.set("trust_badges", after.cart.trustBadges.enabled);
+        if (after.cart.announcement?.enabled != null) featureStore.set("announcements", after.cart.announcement.enabled);
+        if (after.cart.couponSlider?.enabled != null) featureStore.set("coupon_slider", after.cart.couponSlider.enabled);
+        if (after.cart.checkoutButton?.backgroundColor) {
+          try {
+            const cfgKey = "cartninja_cart_config";
+            const raw = localStorage.getItem(cfgKey);
+            const cfg = raw ? JSON.parse(raw) : {};
+            cfg.checkoutButtonStyle = {
+              backgroundColor: after.cart.checkoutButton.backgroundColor,
+              textColor: after.cart.checkoutButton.textColor || "#ffffff",
+              borderRadius: after.cart.checkoutButton.borderRadius ?? 4,
+            };
+            localStorage.setItem(cfgKey, JSON.stringify(cfg));
+            window.dispatchEvent(new CustomEvent("featureStateChanged", { detail: { key: "checkout_style" } }));
+          } catch {}
+        }
+      }
+      if (after?.fbt?.enabled != null) featureStore.set("fbt", after.fbt.enabled);
+
+      // Fallback: use action type map for enable/disable actions without `after`
+      if (!after) {
+        const conv = conversations.find((c) => c.id === activeConvId);
+        if (conv) {
+          lastMsg.actions.forEach((act) => {
+            const key = NVIDIA_TO_FEATURE_KEY[act.type];
+            if (key) featureStore.set(key, NVIDIA_TO_BOOL[act.type]);
+          });
+        }
       }
     }
   }, [messages, activeConvId, conversations]);
@@ -236,14 +270,32 @@ export default function AiAgentFloating() {
 
   useEffect(() => {
     if (loading) {
+      setShowSettings(true);
       const interval = setInterval(() => {
         setLoadingStep((prev) => (prev < 3 ? prev + 1 : 3));
       }, 2000);
       return () => clearInterval(interval);
     } else {
       setLoadingStep(0);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     }
   }, [loading]);
+
+  // Detect affected modules from the last agent message and flash them
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (last?.role === "agent" && last?.json?.actions?.length > 0) {
+      const storeKeys = last.json.actions.map((a) => {
+        const entry = Object.entries(MODULE_MAP).find(([, v]) => v.name === a.module);
+        return entry?.[1]?.store || a.module;
+      }).filter(Boolean);
+      setFlashModules(storeKeys);
+      setShowSettings(true);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => { setFlashModules([]); setShowSettings(false); }, 4000);
+    }
+  }, [messages]);
 
   const handleSend = useCallback((text) => {
     if (!text.trim() || loading) return;
@@ -263,8 +315,23 @@ export default function AiAgentFloating() {
     handleSend(fullQuery);
   }, [pendingContext, handleSend]);
 
-  const handleUndo = useCallback((action) => {
-    undoAction(action);
+  const handleUndo = useCallback(async (action, rawCartBefore, before) => {
+    if (rawCartBefore) {
+      try {
+        await fetch('/app/cartdrawer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: 'saveCartConfig', ...rawCartBefore }),
+        });
+        if (before?.cart) {
+          window.dispatchEvent(new CustomEvent('cartEditorConfigUpdated', { detail: before.cart }));
+        }
+      } catch (err) {
+        console.error('[AiAgent] Undo DB restore failed:', err);
+      }
+    } else {
+      undoAction(action);
+    }
     setMessages((prev) => [...prev, {
       id: "u-" + Date.now(), role: "agent", type: "json",
       json: { status: "undo", message: "Action undone", action }
@@ -390,6 +457,52 @@ export default function AiAgentFloating() {
       );
     }
 
+    if (msg.type === "scraping") {
+      const completedCount = (msg.steps || []).filter(s => s.done).length;
+      const totalCount = (msg.steps || []).length;
+      const pct = totalCount > 1 ? Math.round((completedCount / (totalCount - 1)) * 100) : 0;
+      return (
+        <div key={msg.id} className="aiff-msg aiff-msg-agent">
+          <div className="aiff-scraping-card">
+            <div className="aiff-scraping-header">
+              <div className="aiff-scraping-header-left">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <span className="aiff-scraping-title-text">
+                  {msg.isDesign ? "Scanning Storefront" : "Analyzing Request"}
+                </span>
+              </div>
+              <span className="aiff-scraping-live-badge">LIVE</span>
+            </div>
+            {msg.isDesign && (
+              <div className="aiff-scraping-url">
+                <span className="aiff-scraping-url-dot" />
+                scraping live store data...
+              </div>
+            )}
+            <div className="aiff-scraping-progress-bar">
+              <div className="aiff-scraping-progress-fill" style={{ width: pct + "%" }} />
+            </div>
+            <div className="aiff-scraping-steps">
+              {(msg.steps || []).map((step, i) => (
+                <div key={i} className={"aiff-scraping-step" + (step.done ? " aiff-scraping-step--done" : step.active ? " aiff-scraping-step--active" : "")}>
+                  <span className="aiff-scraping-step-icon">
+                    {step.done
+                      ? CHECK_ICON
+                      : step.active
+                      ? <span className="aiff-scraping-spinner" />
+                      : <span className="aiff-scraping-dot" />
+                    }
+                  </span>
+                  <span>{step.text}</span>
+                  {step.active && <span className="aiff-scraping-ellipsis"><span>.</span><span>.</span><span>.</span></span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (j) {
       if (j.status === "needs_input") {
         return (
@@ -461,7 +574,7 @@ export default function AiAgentFloating() {
                 </div>
               )}
               {(msg.executedResults || []).length > 0 && (
-                <button className="aiff-card-undo" onClick={() => handleUndo(j.actions[0])}>{'\u21A9'} Undo</button>
+                <button className="aiff-card-undo" onClick={() => handleUndo(j.actions[0], j.rawCartBefore, j.before)}>{'\u21A9'} Undo</button>
               )}
             </div>
           </div>
@@ -530,182 +643,9 @@ export default function AiAgentFloating() {
 
   if (!mounted) return null;
 
-  const contextMenuStyle = {
-    position: "absolute", right: 8, top: 32,
-    background: "#fff", border: "1px solid #E8E8E8",
-    borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,.12)",
-    zIndex: 100, minWidth: 140, overflow: "hidden",
-  };
-
   return (
     <>
-      <style>{`
-        /* ── Overlay Reset ── */
-        .aiff-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:9999; animation:aiffFade .15s ease; }
-        .aiff-modal { position:fixed; top:45%; left:50%; transform:translate(-50%,-50%); width:860px; height:480px; max-width:calc(100vw - 40px); background:#fff; border-radius:16px; box-shadow:0 8px 40px rgba(0,0,0,.18); display:flex; flex-direction:column; z-index:10000; overflow:hidden; animation:aiffSlide .2s ease; }
 
-        /* ── Launcher ── */
-        .aiff-launcher-shell { position:fixed; bottom:20px; right:20px; z-index:9998; }
-        .aiff-launcher { width:52px; height:52px; border-radius:50%; border:none; background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 16px rgba(255,107,0,.3); transition:all .2s; }
-        .aiff-launcher:hover { transform:scale(1.08); box-shadow:0 6px 20px rgba(255,107,0,.4); }
-        .aiff-launcher-badge { position:absolute; top:-4px; right:-4px; width:18px; height:18px; border-radius:50%; background:#DC2626; color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; }
-
-        /* ── Workspace ── */
-        .aiff-workspace { display:flex; flex:1; min-height:0; overflow:hidden; }
-
-        /* ── Left Panel (History) ── */
-        .aiff-left { width:200px; min-width:200px; display:flex; flex-direction:column; min-height:0; border-right:1px solid #eee; background:#fafafa; }
-        .aiff-left-head { display:flex; align-items:center; gap:6px; padding:6px 12px 4px; font-size:11px; font-weight:600; color:#1a1a1a; }
-        .aiff-left-search { padding:0 12px 4px; }
-        .aiff-left-search input { width:100%; padding:4px 8px; border:1px solid #e0e0e0; border-radius:6px; font-size:11px; outline:none; box-sizing:border-box; background:#fff; }
-        .aiff-left-search input:focus { border-color:#FF6B00; }
-        .aiff-left-groups { flex:1; overflow-y:auto; min-height:0; padding:0 12px 4px; }
-        .aiff-left-group-label { font-size:9px; text-transform:uppercase; color:#9a9a9a; letter-spacing:.5px; padding:4px 0 2px; font-weight:600; }
-        .aiff-left-item { display:flex; align-items:center; justify-content:space-between; width:100%; padding:4px 8px; border:none; background:none; border-radius:6px; cursor:pointer; font-size:11px; color:#333; text-align:left; transition:all .12s; }
-        .aiff-left-item:hover { background:#eee; }
-        .aiff-left-item.active { background:#FFF3EB; color:#FF6B00; font-weight:500; }
-        .aiff-left-item-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
-        .aiff-left-item-more { flex-shrink:0; background:none; border:none; cursor:pointer; padding:2px; color:#9a9a9a; border-radius:4px; opacity:0; transition:opacity .12s; }
-        .aiff-left-item:hover .aiff-left-item-more { opacity:1; }
-        .aiff-left-empty { font-size:11px; color:#9a9a9a; padding:12px 0; text-align:center; }
-        .aiff-left-new { display:flex; align-items:center; gap:4px; width:100%; padding:5px 8px; margin-top:2px; border:none; background:none; border-radius:6px; cursor:pointer; font-size:11px; color:#FF6B00; font-weight:500; transition:background .12s; }
-        .aiff-left-new:hover { background:#FFF3EB; }
-        .aiff-left-new svg { flex-shrink:0; }
-
-        /* ── Center Panel (Chat) ── */
-        .aiff-center { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:#fff; }
-
-        .aiff-center-head { display:flex; align-items:center; gap:6px; padding:5px 12px; border-bottom:1px solid #f0f0f0; flex-shrink:0; }
-        .aiff-center-head-btn { background:none; border:none; cursor:pointer; padding:3px; color:#666; border-radius:4px; display:flex; }
-        .aiff-center-head-btn:hover { background:#f0f0f0; }
-        .aiff-center-head-icon { width:20px; height:20px; border-radius:5px; background:linear-gradient(135deg,#FF6B00,#FF8A33); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-        .aiff-center-head-name { font-size:12px; font-weight:600; color:#1a1a1a; }
-        .aiff-center-head-status { margin-left:auto; display:flex; align-items:center; gap:4px; font-size:10px; color:#059669; }
-        .aiff-center-head-dot { width:5px; height:5px; border-radius:50%; background:#059669; }
-        .aiff-center-head-settings { background:none; border:none; cursor:pointer; padding:3px; color:#666; border-radius:4px; display:flex; margin-left:4px; }
-        .aiff-center-head-settings:hover { background:#f0f0f0; color:#FF6B00; }
-        .aiff-center-head-close { background:none; border:none; cursor:pointer; padding:3px; color:#666; border-radius:4px; display:flex; }
-        .aiff-center-head-close:hover { background:#f0f0f0; }
-
-        /* ── Messages ── */
-        .aiff-msgs { flex:1; overflow-y:auto; min-height:0; padding:6px 12px 2px; display:flex; flex-direction:column; gap:6px; }
-
-        /* User bubble */
-        .aiff-msg { display:flex; }
-        .aiff-msg-user { justify-content:flex-end; }
-        .aiff-msg-agent { justify-content:flex-start; }
-        .aiff-bubble { max-width:75%; padding:6px 10px; border-radius:10px; font-size:12px; line-height:1.4; word-wrap:break-word; }
-        .aiff-bubble-user { background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; border-bottom-right-radius:4px; }
-
-        /* Agent cards */
-        .aiff-card { max-width:85%; background:#f9f9f9; border:1px solid #e8e8e8; border-radius:10px; padding:10px; font-size:12px; line-height:1.45; color:#1a1a1a; }
-        .aiff-card-simple { padding:6px 10px; }
-        .aiff-card-input { padding:10px; }
-        .aiff-card-question { font-weight:500; margin-bottom:6px; font-size:12px; }
-        .aiff-card-options { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; }
-        .aiff-card-opt { padding:3px 10px; border:1px solid #ddd; border-radius:5px; background:#fff; cursor:pointer; font-size:11px; transition:all .12s; }
-        .aiff-card-opt:hover { border-color:#FF6B00; color:#FF6B00; }
-        .aiff-card-input-row { display:flex; gap:4px; }
-        .aiff-card-inp { flex:1; padding:4px 8px; border:1px solid #ddd; border-radius:5px; font-size:11px; outline:none; }
-        .aiff-card-inp:focus { border-color:#FF6B00; }
-        .aiff-card-submit { padding:4px 10px; border:none; border-radius:5px; background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; cursor:pointer; font-size:11px; }
-        .aiff-card-submit:hover { opacity:.9; }
-
-        /* Status card */
-        .aiff-card-status { }
-        .aiff-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
-        .aiff-card-title { font-size:10px; text-transform:uppercase; color:#9a9a9a; letter-spacing:.4px; font-weight:600; }
-        .aiff-card-value { font-size:12px; color:#333; font-weight:500; }
-        .aiff-card-value--success { color:#059669; }
-        .aiff-card-row { display:flex; justify-content:space-between; align-items:center; padding:2px 0; }
-        .aiff-card-label { font-size:10px; text-transform:uppercase; color:#9a9a9a; letter-spacing:.4px; font-weight:600; }
-        .aiff-card-status-badge { font-size:10px; padding:1px 8px; border-radius:5px; font-weight:500; }
-        .aiff-card-status-badge--ok { background:#ECFDF5; color:#065F46; }
-        .aiff-card-status-badge--err { background:#FEF2F2; color:#991B1B; }
-        .aiff-card-value--err { color:#DC2626; }
-        .aiff-card-divider { height:1px; background:#e8e8e8; margin:5px 0; }
-        .aiff-card-section-label { font-size:10px; text-transform:uppercase; color:#9a9a9a; letter-spacing:.4px; font-weight:600; margin-bottom:4px; }
-        .aiff-card-change { display:flex; align-items:center; gap:4px; padding:2px 0; font-size:12px; }
-        .aiff-card-change-bullet { color:#059669; display:flex; flex-shrink:0; }
-        .aiff-card-change-action { margin-left:auto; font-size:10px; color:#666; }
-        .aiff-card-line { padding:2px 0; display:flex; align-items:center; gap:4px; font-size:12px; }
-        .aiff-card-line--success { color:#059669; }
-        .aiff-card-line-icon { flex-shrink:0; color:#059669; display:flex; }
-        .aiff-card-undo { margin-top:4px; padding:2px 8px; border:1px solid #e0e0e0; border-radius:5px; background:#fff; cursor:pointer; font-size:10px; color:#666; transition:all .12s; }
-        .aiff-card-undo:hover { border-color:#DC2626; color:#DC2626; }
-        .aiff-card-actions { display:flex; gap:3px; margin-top:2px; padding-left:2px; }
-        .aiff-card-action-btn { background:none; border:none; cursor:pointer; padding:2px; color:#9a9a9a; border-radius:4px; display:flex; font-size:11px; }
-        .aiff-card-action-btn:hover { background:#f0f0f0; color:#666; }
-
-        /* ── Welcome Screen ── */
-        .aiff-welcome { flex:1; display:flex; flex-direction:column; align-items:center; padding:32px 24px 0; text-align:center; }
-        .aiff-welcome-divider { width:24px; height:2px; background:linear-gradient(135deg,#FF6B00,#FF8A33); border-radius:2px; margin-bottom:6px; }
-        .aiff-welcome-title { font-size:13px; font-weight:600; color:#1a1a1a; margin:0; }
-        .aiff-welcome-sub { font-size:11px; color:#666; margin:2px 0 8px; display:flex; align-items:center; gap:4px; }
-        .aiff-welcome-dot { width:5px; height:5px; border-radius:50%; background:#059669; display:inline-block; }
-        .aiff-welcome-monitor { background:#f9f9f9; border:1px solid #e8e8e8; border-radius:6px; padding:6px 12px; margin-bottom:6px; text-align:left; min-width:220px; }
-        .aiff-welcome-monitor-label { font-size:9px; text-transform:uppercase; color:#9a9a9a; letter-spacing:.4px; font-weight:600; margin-bottom:2px; }
-        .aiff-welcome-monitor-item { display:flex; align-items:center; gap:3px; padding:1px 0; font-size:11px; color:#555; }
-        .aiff-welcome-monitor-icon { color:#059669; display:flex; flex-shrink:0; }
-        .aiff-welcome-status { margin-top:4px; padding-top:4px; border-top:1px solid #e8e8e8; font-size:10px; color:#888; }
-        .aiff-welcome-chips { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:2px; }
-        .aiff-welcome-chip { padding:3px 10px; border:1px solid #e0e0e0; border-radius:14px; background:#fff; cursor:pointer; font-size:11px; color:#555; transition:all .15s; white-space:nowrap; }
-        .aiff-welcome-chip:hover { border-color:#FF6B00; color:#FF6B00; background:#FFF8F3; }
-
-        /* ── Loading ── */
-        .aiff-loading { display:flex; align-items:center; gap:6px; padding:6px 10px; background:#f9f9f9; border:1px solid #e8e8e8; border-radius:10px; max-width:80%; }
-        .aiff-loading-spinner { width:12px; height:12px; border:2px solid #e8e8e8; border-top-color:#FF6B00; border-radius:50%; animation:aiffSpin .6s linear infinite; flex-shrink:0; }
-        @keyframes aiffSpin { to{transform:rotate(360deg)} }
-        .aiff-loading-text { font-size:11px; color:#888; }
-
-        /* ── Predictive ── */
-        .aiff-predictive { display:flex; flex-wrap:wrap; gap:3px; padding:2px 12px 0; }
-        .aiff-predictive-item { padding:3px 8px; border:1px solid #e8e8e8; border-radius:5px; background:#fff; cursor:pointer; font-size:10px; color:#666; transition:all .12s; }
-        .aiff-predictive-item:hover { border-color:#FF6B00; color:#FF6B00; }
-
-        /* ── Input ── */
-        .aiff-input-wrap { display:flex; align-items:flex-end; gap:6px; padding:4px 12px; border-top:1px solid #f0f0f0; flex-shrink:0; }
-        .aiff-input { flex:1; padding:6px 10px; border:1px solid #e0e0e0; border-radius:8px; font-size:12px; outline:none; resize:none; font-family:inherit; line-height:1.3; min-height:32px; max-height:60px; box-sizing:border-box; }
-        .aiff-input:focus { border-color:#FF6B00; }
-        .aiff-input::placeholder { color:#bbb; }
-        .aiff-send { width:32px; height:32px; border-radius:8px; border:none; background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:all .15s; }
-        .aiff-send:hover { transform:scale(1.05); box-shadow:0 2px 8px rgba(255,107,0,.25); }
-        .aiff-send:disabled { opacity:.4; cursor:default; transform:none; box-shadow:none; }
-
-        /* ── Settings Panel ── */
-        .aiff-settings-overlay { position:absolute; inset:0; z-index:10; background:rgba(0,0,0,.12); border-radius:16px; animation:aiffFade .15s ease; }
-        .aiff-settings-panel { position:absolute; top:0; right:0; bottom:0; width:240px; background:#fff; border-left:1px solid #e8e8e8; border-radius:0 16px 16px 0; display:flex; flex-direction:column; animation:aiffSlideIn .2s ease; z-index:11; }
-        .aiff-settings-head { display:flex; align-items:center; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; flex-shrink:0; }
-        .aiff-settings-title { font-size:12px; font-weight:600; color:#1a1a1a; }
-        .aiff-settings-close { background:none; border:none; cursor:pointer; padding:3px; border-radius:5px; color:#9a9a9a; display:flex; }
-        .aiff-settings-close:hover { background:#f0f0f0; color:#1a1a1a; }
-        .aiff-settings-body { flex:1; overflow-y:auto; min-height:0; padding:6px 10px; }
-        .aiff-settings-module { display:flex; align-items:center; justify-content:space-between; padding:5px 8px; background:#fafafa; border-radius:6px; margin-bottom:3px; }
-        .aiff-settings-module-label { font-size:11px; color:#1a1a1a; font-weight:500; }
-        .aiff-settings-module-badge { font-size:9px; padding:1px 6px; border-radius:5px; font-weight:500; }
-        .aiff-settings-module-badge--on { background:#ECFDF5; color:#065F46; }
-        .aiff-settings-module-badge--off { background:#FEF2F2; color:#991B1B; }
-
-        /* ── Mobile ── */
-        .aiff-mobile-nav { display:none; border-top:1px solid #eee; flex-shrink:0; }
-        .aiff-mobile-nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px; border:none; background:#fff; cursor:pointer; font-size:10px; color:#9a9a9a; }
-        .aiff-mobile-nav-btn.active { color:#FF6B00; }
-        .aiff-mobile-overlay { display:none; }
-
-        /* ── Animations ── */
-        @keyframes aiffSlide { from{opacity:0;transform:translate(-50%,-50%) scale(.95)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
-        @keyframes aiffFade { from{opacity:0} to{opacity:1} }
-        @keyframes aiffSlideIn { from{transform:translateX(30px);opacity:0} to{transform:translateX(0);opacity:1} }
-
-        @media(max-width:768px){
-          .aiff-modal { width:100vw; height:100vh; max-width:100vw; bottom:0; right:0; border-radius:0; }
-          .aiff-left { width:100%; min-width:100%; }
-          .aiff-center { width:100%; }
-          .aiff-mobile-nav { display:flex; }
-          .aiff-settings-panel { width:100%; border-radius:0; }
-          .aiff-launcher-shell { bottom:16px; right:16px; }
-        }
-      `}</style>
 
       {/* Floating Button */}
       <div className="aiff-launcher-shell">
@@ -765,11 +705,11 @@ export default function AiAgentFloating() {
                             </button>
                           </button>
                           {showContextMenu === c.id && (
-                            <div style={contextMenuStyle}>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleRenameConversation(c.id)}>Rename</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleArchiveConversation(c.id)}>Archive</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626" }} onClick={() => handleDeleteConversation(c.id)}>Delete</button>
+                            <div className="aiff-context-menu">
+                              <button className="aiff-context-item" onClick={() => handleRenameConversation(c.id)}>Rename</button>
+                              <button className="aiff-context-item" onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
+                              <button className="aiff-context-item" onClick={() => handleArchiveConversation(c.id)}>Archive</button>
+                              <button className="aiff-context-item aiff-context-item--danger" onClick={() => handleDeleteConversation(c.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -789,11 +729,11 @@ export default function AiAgentFloating() {
                             </button>
                           </button>
                           {showContextMenu === c.id && (
-                            <div style={contextMenuStyle}>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleRenameConversation(c.id)}>Rename</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handlePinConversation(c.id)}>Pin</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleArchiveConversation(c.id)}>Archive</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626" }} onClick={() => handleDeleteConversation(c.id)}>Delete</button>
+                            <div className="aiff-context-menu">
+<button className="aiff-context-item" onClick={() => handleRenameConversation(c.id)}>Rename</button>
+                              <button className="aiff-context-item" onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
+                              <button className="aiff-context-item" onClick={() => handleArchiveConversation(c.id)}>Archive</button>
+                              <button className="aiff-context-item aiff-context-item--danger" onClick={() => handleDeleteConversation(c.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -813,11 +753,11 @@ export default function AiAgentFloating() {
                             </button>
                           </button>
                           {showContextMenu === c.id && (
-                            <div style={contextMenuStyle}>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleRenameConversation(c.id)}>Rename</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handlePinConversation(c.id)}>Pin</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleArchiveConversation(c.id)}>Archive</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626" }} onClick={() => handleDeleteConversation(c.id)}>Delete</button>
+                            <div className="aiff-context-menu">
+<button className="aiff-context-item" onClick={() => handleRenameConversation(c.id)}>Rename</button>
+                              <button className="aiff-context-item" onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
+                              <button className="aiff-context-item" onClick={() => handleArchiveConversation(c.id)}>Archive</button>
+                              <button className="aiff-context-item aiff-context-item--danger" onClick={() => handleDeleteConversation(c.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -837,11 +777,11 @@ export default function AiAgentFloating() {
                             </button>
                           </button>
                           {showContextMenu === c.id && (
-                            <div style={contextMenuStyle}>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleRenameConversation(c.id)}>Rename</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handlePinConversation(c.id)}>Pin</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleArchiveConversation(c.id)}>Archive</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626" }} onClick={() => handleDeleteConversation(c.id)}>Delete</button>
+                            <div className="aiff-context-menu">
+<button className="aiff-context-item" onClick={() => handleRenameConversation(c.id)}>Rename</button>
+                              <button className="aiff-context-item" onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
+                              <button className="aiff-context-item" onClick={() => handleArchiveConversation(c.id)}>Archive</button>
+                              <button className="aiff-context-item aiff-context-item--danger" onClick={() => handleDeleteConversation(c.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -861,11 +801,11 @@ export default function AiAgentFloating() {
                             </button>
                           </button>
                           {showContextMenu === c.id && (
-                            <div style={contextMenuStyle}>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleRenameConversation(c.id)}>Rename</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handlePinConversation(c.id)}>Pin</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1a1a1a" }} onClick={() => handleArchiveConversation(c.id)}>Archive</button>
-                              <button style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626" }} onClick={() => handleDeleteConversation(c.id)}>Delete</button>
+                            <div className="aiff-context-menu">
+<button className="aiff-context-item" onClick={() => handleRenameConversation(c.id)}>Rename</button>
+                              <button className="aiff-context-item" onClick={() => handlePinConversation(c.id)}>{c.pinned ? "Unpin" : "Pin"}</button>
+                              <button className="aiff-context-item" onClick={() => handleArchiveConversation(c.id)}>Archive</button>
+                              <button className="aiff-context-item aiff-context-item--danger" onClick={() => handleDeleteConversation(c.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -982,26 +922,59 @@ export default function AiAgentFloating() {
                   </button>
                 </div>
 
-                {/* Settings Slide-out */}
+                {/* Operations Panel */}
                 {showSettings && (
                   <>
                     <div className="aiff-settings-overlay" onClick={() => setShowSettings(false)} />
                     <div className="aiff-settings-panel">
                       <div className="aiff-settings-head">
-                        <span className="aiff-settings-title">Module Settings</span>
+                        <span className="aiff-settings-title">{loading ? "Agent Operations" : "Module Status"}</span>
                         <button className="aiff-settings-close" onClick={() => setShowSettings(false)}>
                           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>
                         </button>
                       </div>
                       <div className="aiff-settings-body">
+                        {/* Execution step tracker */}
+                        {loading && (
+                          <div className="aiff-ops-tracker">
+                            <div className="aiff-ops-step">
+                              <span className={"aiff-ops-step-dot" + (loadingStep >= 0 ? " aiff-ops-step-dot--active" : "")} />
+                              <span className={"aiff-ops-step-label" + (loadingStep >= 0 ? " aiff-ops-step-label--active" : "")}>Analyze</span>
+                            </div>
+                            <div className="aiff-ops-step-connector" />
+                            <div className="aiff-ops-step">
+                              <span className={"aiff-ops-step-dot" + (loadingStep >= 1 ? " aiff-ops-step-dot--active" : "")} />
+                              <span className={"aiff-ops-step-label" + (loadingStep >= 1 ? " aiff-ops-step-label--active" : "")}>Configure</span>
+                            </div>
+                            <div className="aiff-ops-step-connector" />
+                            <div className="aiff-ops-step">
+                              <span className={"aiff-ops-step-dot" + (loadingStep >= 2 ? " aiff-ops-step-dot--active" : "")} />
+                              <span className={"aiff-ops-step-label" + (loadingStep >= 2 ? " aiff-ops-step-label--active" : "")}>Apply</span>
+                            </div>
+                            <div className="aiff-ops-step-connector" />
+                            <div className="aiff-ops-step">
+                              <span className={"aiff-ops-step-dot" + (loadingStep >= 3 ? " aiff-ops-step-dot--active" : "")} />
+                              <span className={"aiff-ops-step-label" + (loadingStep >= 3 ? " aiff-ops-step-label--active" : "")}>Verify</span>
+                            </div>
+                          </div>
+                        )}
+                        {/* Current operation text */}
+                        {loading && (
+                          <div className="aiff-ops-current">{LOADING_STEPS[loadingStep]}</div>
+                        )}
+                        {!loading && flashModules.length > 0 && (
+                          <div className="aiff-ops-current" style={{ color: "#059669" }}>{"\u2713"} Changes Applied</div>
+                        )}
+                        <div className="aiff-ops-divider" />
+                        {/* Module status list */}
+                        <div className="aiff-ops-module-label">Modules</div>
                         {MODULES.map((key) => {
                           const state = getModuleState(key);
+                          const isFlashing = flashModules.includes(key);
                           return (
-                            <div key={key} className="aiff-settings-module">
-                              <span className="aiff-settings-module-label">{MODULE_LABELS[key]}</span>
-                              <span className={`aiff-settings-module-badge ${state?.enabled ? "aiff-settings-module-badge--on" : "aiff-settings-module-badge--off"}`}>
-                                {state?.enabled ? "On" : "Off"}
-                              </span>
+                            <div key={key} className={"aiff-ops-module" + (isFlashing ? " aiff-ops-module--flash" : "")}>
+                              <span className="aiff-ops-module-name">{MODULE_LABELS[key]}</span>
+                              <span className={"aiff-ops-module-dot" + (state?.enabled ? " aiff-ops-module-dot--on" : " aiff-ops-module-dot--off")} />
                             </div>
                           );
                         })}

@@ -2,3 +2,6 @@
 > start
 > react-router-serve ./build/server/index.js
 
+[shopify-api/INFO] version 12.3.0, environment React Router
+[react-router-serve] http://localhost:3000 (http://192.168.31.105:3000)
+GET / 200 - - 217.848 ms

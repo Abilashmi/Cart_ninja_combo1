@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { aiApi } from "./api";
 import { featureStore } from "./featureStore";
 
@@ -20,7 +20,7 @@ function id() {
 const ACTION_LABELS = {
   cartDrawer: "Cart Drawer", progressBar: "Progress Bar",
   upsells: "Upsells", fbt: "FBT", trustBadges: "Trust Badges",
-  styling: "Styling", optimization: "Optimization",
+  announcements: "Announcement", styling: "Styling", optimization: "Optimization",
 };
 
 function extractActions(text) {
@@ -54,12 +54,35 @@ function extractActions(text) {
     return actions;
   }
 
+  // Color / brand customization
+  const COLOR_MAP = {
+    pink: "#FF69B4", red: "#EF4444", blue: "#3B82F6", green: "#22C55E",
+    purple: "#A855F7", orange: "#F97316", yellow: "#EAB308", black: "#111827",
+    white: "#F9FAFB", teal: "#14B8A6", indigo: "#6366F1", rose: "#F43F5E",
+    violet: "#8B5CF6", gold: "#D97706", coral: "#F87171", navy: "#1E3A8A",
+    cyan: "#06B6D4", lime: "#84CC16", amber: "#F59E0B", sky: "#0EA5E9",
+  };
+  const colorNamePattern = Object.keys(COLOR_MAP).join("|");
+  const colorRegex = new RegExp(`\\b(${colorNamePattern}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\\b`, "i");
+  const colorMatch = lower.match(colorRegex);
+  if (colorMatch && /(color|theme|style|everything|all|entire|whole|cart|customiz|brand|make|set|use|apply)/i.test(lower)) {
+    const colorName = colorMatch[1].toLowerCase();
+    const hexColor = colorName.startsWith("#") ? colorName.toUpperCase() : COLOR_MAP[colorName];
+    actions.push({
+      module: "styling", action: "updateStyling", engine: "updateStyling",
+      settings: { accentColor: hexColor },
+      label: `Apply ${colorMatch[1].charAt(0).toUpperCase() + colorMatch[1].slice(1)} Theme`,
+    });
+    return actions;
+  }
+
   // Standard module enable / disable
   if (/cart.*drawer|drawer/.test(lower)) actions.push({ module: "cartDrawer", action: wantDisable ? "disable" : "enable" });
   if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: "progressBar", action: wantDisable ? "disable" : "enable" });
   if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: "trustBadges", action: wantDisable ? "disable" : "enable" });
   if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "upsells", action: wantDisable ? "disable" : "enable" });
   if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "fbt", action: wantDisable ? "disable" : "enable" });
+  if (/announc|promo.*banner|notif.*bar|message.*bar/i.test(lower)) actions.push({ module: "announcements", action: wantDisable ? "disable" : "enable" });
 
   return actions;
 }
@@ -73,8 +96,26 @@ function syncAfterToFeatureStore(after) {
     if (cart.upsell?.enabled != null) featureStore.set("upsells", cart.upsell.enabled);
     if (cart.goalBar?.enabled != null) featureStore.set("progress_bar", cart.goalBar.enabled);
     if (cart.trustBadges?.enabled != null) featureStore.set("trust_badges", cart.trustBadges.enabled);
+    if (cart.announcement?.enabled != null) featureStore.set("announcements", cart.announcement.enabled);
+    if (cart.couponSlider?.enabled != null) featureStore.set("coupon_slider", cart.couponSlider.enabled);
+    if (cart.checkoutButton?.backgroundColor) {
+      try {
+        const cfgKey = "cartninja_cart_config";
+        const raw = localStorage.getItem(cfgKey);
+        const cfg = raw ? JSON.parse(raw) : {};
+        cfg.checkoutButtonStyle = {
+          backgroundColor: cart.checkoutButton.backgroundColor,
+          textColor: cart.checkoutButton.textColor || "#ffffff",
+          borderRadius: cart.checkoutButton.borderRadius ?? 4,
+        };
+        localStorage.setItem(cfgKey, JSON.stringify(cfg));
+        window.dispatchEvent(new CustomEvent("featureStateChanged", { detail: { key: "checkout_style" } }));
+      } catch {}
+    }
+    // Dispatch full cart config update so CartEditorContext can apply color/styling changes live
+    window.dispatchEvent(new CustomEvent("cartEditorConfigUpdated", { detail: cart }));
   }
-  if (fbt?.widgetEnabled != null) featureStore.set("fbt", fbt.widgetEnabled);
+  if (fbt?.enabled != null) featureStore.set("fbt", fbt.enabled);
 }
 
 function generateTitle(text) {
@@ -96,6 +137,7 @@ const MODULE_TO_ENGINE = {
   upsells: { enable: "enableUpsell", disable: "disableUpsell" },
   fbt: { enable: "enableFBT", disable: "disableFBT" },
   trustBadges: { enable: "enableTrustBadges", disable: "disableTrustBadges" },
+  announcements: { enable: "enableAnnouncement", disable: "disableAnnouncement" },
 };
 
 async function applyActionsViaApi(actions) {
@@ -126,7 +168,7 @@ async function applyActionsViaApi(actions) {
     }
 
     const data = await res.json();
-    return { success: true, synced: data.synced, before: data.before, after: data.after };
+    return { success: true, synced: data.synced, before: data.before, after: data.after, rawCartBefore: data.rawCartBefore };
   } catch (e) {
     return { success: false, error: e.message || "Network error" };
   }
@@ -253,6 +295,8 @@ export default function useAiAgent(location) {
               message: `Task: ${labels}\n${statusLine}`,
               actions: detectedActions,
               status: "success",
+              rawCartBefore: result.rawCartBefore,
+              before: result.before,
             },
             executedResults: [{ status: "executed" }],
           };
@@ -272,20 +316,74 @@ export default function useAiAgent(location) {
         }
       } else {
         // Step 3: No local intent — try the AI chat API for a text response
+        const isDesignIntent = /theme|color|design|brand|website|style|font|match|look|feel/i.test(text);
+        const ALL_STEPS = isDesignIntent
+          ? [
+              { text: "Thinking about your request", icon: "think" },
+              { text: "Connecting to your storefront", icon: "connect" },
+              { text: "Fetching HTML & CSS variables", icon: "fetch" },
+              { text: "Extracting brand colors", icon: "color" },
+              { text: "Reading fonts & border styles", icon: "font" },
+              { text: "Scanning promotional offers", icon: "scan" },
+            ]
+          : [
+              { text: "Thinking about your request", icon: "think" },
+              { text: "Checking store configuration", icon: "check" },
+              { text: "Preparing response", icon: "prepare" },
+            ];
+
+        const scrapeMsgId = "scrape-" + Date.now();
+        const scrapeTimers = [];
+
+        setMessages((prev) => [...prev, {
+          id: scrapeMsgId,
+          role: "agent",
+          type: "scraping",
+          isDesign: isDesignIntent,
+          steps: [{ ...ALL_STEPS[0], active: true, done: false }],
+        }]);
+
+        ALL_STEPS.slice(1).forEach((_s, idx) => {
+          const i = idx + 1;
+          const t = setTimeout(() => {
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== scrapeMsgId) return m;
+              return {
+                ...m,
+                steps: ALL_STEPS.slice(0, i + 1).map((s, j) => ({
+                  ...s, done: j < i, active: j === i,
+                })),
+              };
+            }));
+          }, 800 * i);
+          scrapeTimers.push(t);
+        });
+
         try {
           const history = messages.map((m) => ({ role: m.role, text: m.text }));
           const res = await aiApi.sendMessage(convId, text, history);
+          scrapeTimers.forEach(clearTimeout);
+          setMessages((prev) => prev.filter((m) => m.id !== scrapeMsgId));
+
           if (res.success && res.message) {
+            if (res.after) syncAfterToFeatureStore(res.after);
             reply = {
               id: "a-" + Date.now(),
               role: "agent",
               text: res.message,
               json: res.actions?.length > 0 ? { message: res.message, actions: res.actions } : null,
+              synced: res.synced,
+              after: res.after,
+              before: res.before,
+              executedActions: res.executedActions,
+              scrapedDesign: res.scrapedDesign || null,
             };
           } else {
             throw new Error("No response");
           }
         } catch {
+          scrapeTimers.forEach(clearTimeout);
+          setMessages((prev) => prev.filter((m) => m.id !== scrapeMsgId));
           reply = {
             id: "a-" + Date.now(),
             role: "agent",

@@ -11,6 +11,7 @@ const DEFAULTS = {
   coupon_banner: true,
   coupon_creator: true,
   combo_forge: true,
+  announcements: false,
 };
 
 function load() {

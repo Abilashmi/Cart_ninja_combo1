@@ -1,6 +1,844 @@
 {
   "cartstoreviewer.myshopify.com": [
     {
+      "id": "93a7739f-5e84-4506-8d93-c28f5b99a0e3",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableUpsell"
+        ],
+        "settings": {
+          "enabled": true,
+          "layout": "slider",
+          "template": "modern"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "enableUpsell",
+          "impact": "Surfacing related products in the cart can grow average order value by 10–15%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-17T09:47:17.214Z"
+    },
+    {
+      "id": "2fa7c91d-3981-420f-bf63-833e3663d9c8",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "accentColor": "#EF4444"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-17T09:41:03.432Z"
+    },
+    {
+      "id": "e6c2f4dc-0d0a-4321-a2f3-38530c6fa5d4",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableFBT",
+          "impact": "\"Frequently Bought Together\" bundles often add 5–8% to order value on product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-17T07:47:25.081Z"
+    },
+    {
+      "id": "8803e313-597d-497e-aed5-f8efaebaa506",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableAnnouncement"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableAnnouncement",
+          "impact": "Announcement banners let you highlight promotions, shipping offers, or important messages right inside the cart — a simple way to boost urgency and conversion."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:51:19.572Z"
+    },
+    {
+      "id": "0d3df558-2d0f-427f-9363-8aa195a9c471",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:50:35.377Z"
+    },
+    {
+      "id": "45b51e2c-eac2-4c6f-97ac-b7794719b219",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:45:04.693Z"
+    },
+    {
+      "id": "2423ff95-27b8-463f-8d5d-e6c698f50e79",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:34:27.182Z"
+    },
+    {
+      "id": "970ac8bf-3d85-4186-bee0-1b5216ef28d6",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:04:55.158Z"
+    },
+    {
+      "id": "9fc70470-8fa7-4c4a-bd4c-cdfaa145c120",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "updateStyling"
+        ],
+        "settings": {
+          "accentColor": "#FF69B4"
+        }
+      },
+      "appliedActions": [
+        {
+          "action": "updateStyling",
+          "impact": "Custom styling preferences applied to the cart drawer."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T11:03:05.446Z"
+    },
+    {
+      "id": "407eb054-0dc4-4a3c-b0b8-d51f86664bb1",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer",
+          "enableGoalBar",
+          "enableUpsell"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        },
+        {
+          "action": "enableGoalBar",
+          "impact": "Free shipping goal bars are one of the strongest AOV levers — often +8–12% per order."
+        },
+        {
+          "action": "enableUpsell",
+          "impact": "Surfacing related products in the cart can grow average order value by 10–15%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T10:56:34.629Z"
+    },
+    {
+      "id": "62d5abcc-c526-43bd-888b-02b98a1aa2a5",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer",
+          "enableGoalBar",
+          "enableUpsell"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        },
+        {
+          "action": "enableGoalBar",
+          "impact": "Free shipping goal bars are one of the strongest AOV levers — often +8–12% per order."
+        },
+        {
+          "action": "enableUpsell",
+          "impact": "Surfacing related products in the cart can grow average order value by 10–15%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T10:45:32.155Z"
+    },
+    {
+      "id": "ee9dcb46-cd70-40fd-8be8-f28164eac8b3",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T09:17:34.800Z"
+    },
+    {
+      "id": "e9c266d9-c6c9-48b6-a8a3-9f28d8eacad5",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T09:16:51.207Z"
+    },
+    {
+      "id": "c0e59edc-b2cc-460a-b14c-2b1ee9be8db0",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableGoalBar",
+          "disableAnnouncement"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableGoalBar",
+          "impact": "Free shipping progress bar removed from the cart."
+        },
+        {
+          "action": "disableAnnouncement",
+          "impact": "Announcement banner hidden from the cart."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T07:43:43.954Z"
+    },
+    {
+      "id": "69c27fc5-b540-4d7d-8c2a-1fcf5b685004",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableAnnouncement"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableAnnouncement",
+          "impact": "Announcement banners let you highlight promotions, shipping offers, or important messages right inside the cart — a simple way to boost urgency and conversion."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T07:41:22.659Z"
+    },
+    {
+      "id": "18f45d41-bcf4-4d8d-b6b1-387a16e4f86a",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableAnnouncement"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableAnnouncement",
+          "impact": "Announcement banners let you highlight promotions, shipping offers, or important messages right inside the cart — a simple way to boost urgency and conversion."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T07:34:09.254Z"
+    },
+    {
+      "id": "5859a5b7-93d4-440c-8438-170e8badfb32",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T07:10:40.813Z"
+    },
+    {
+      "id": "36b0ccde-df4d-4039-a433-39ab335d205d",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T06:31:38.440Z"
+    },
+    {
+      "id": "d7f296ce-d6ea-4648-a85d-79a29b9bc000",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableGoalBar"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableGoalBar",
+          "impact": "Free shipping goal bars are one of the strongest AOV levers — often +8–12% per order."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T06:30:30.160Z"
+    },
+    {
+      "id": "d1813c96-2f4f-4ac7-ab57-ba3fd1c0fa18",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableGoalBar"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableGoalBar",
+          "impact": "Free shipping goal bars are one of the strongest AOV levers — often +8–12% per order."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T06:19:49.350Z"
+    },
+    {
+      "id": "51a02264-a1a0-4ab3-9e62-06b4be28e2d4",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableGoalBar"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableGoalBar",
+          "impact": "Free shipping goal bars are one of the strongest AOV levers — often +8–12% per order."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T06:15:59.955Z"
+    },
+    {
+      "id": "8db57611-4cf6-45da-83e3-ea22c9d5e689",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T05:16:38.587Z"
+    },
+    {
+      "id": "4685eacf-373a-46ff-995c-f68c18668fb3",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-16T04:18:25.177Z"
+    },
+    {
+      "id": "fc2a8128-d7ad-424f-81f4-31219bf4026a",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T12:34:20.420Z"
+    },
+    {
+      "id": "054456ff-98e7-43c2-aa1f-06013f22cb63",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T12:25:51.804Z"
+    },
+    {
+      "id": "52234e33-6cbb-4a0e-a74f-287c721a06f6",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T12:17:56.385Z"
+    },
+    {
+      "id": "99ccb823-7f00-4de2-95c9-4525ee5cb687",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T12:00:52.483Z"
+    },
+    {
+      "id": "46ab2c72-4093-4708-a3b4-29e7b6463659",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T12:00:16.796Z"
+    },
+    {
+      "id": "c8a9d5e4-3456-42fe-8e54-44e3c0a6f959",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T11:59:24.772Z"
+    },
+    {
+      "id": "496fdfb3-2675-4955-a095-b5b0688847c3",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T11:48:09.856Z"
+    },
+    {
+      "id": "af9f7efe-1b19-4af6-9804-21391b234580",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer",
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        },
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T11:47:03.494Z"
+    },
+    {
+      "id": "5a8b0b05-ca0e-4432-a5a1-0f57f366fcc5",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableFBT",
+          "impact": "Frequently Bought Together widget hidden from product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T05:45:22.009Z"
+    },
+    {
+      "id": "42ac2ba4-b4ff-4c7d-bf30-6ad80329df4a",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableFBT",
+          "impact": "\"Frequently Bought Together\" bundles often add 5–8% to order value on product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T05:44:50.322Z"
+    },
+    {
+      "id": "c4657702-960b-4312-aedb-d2ecfbf1ca34",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableFBT",
+          "impact": "\"Frequently Bought Together\" bundles often add 5–8% to order value on product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T05:35:16.236Z"
+    },
+    {
+      "id": "b0d7aebf-bd38-4339-a419-3380e047c402",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableFBT",
+          "impact": "\"Frequently Bought Together\" bundles often add 5–8% to order value on product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T05:14:52.503Z"
+    },
+    {
+      "id": "ceff8235-8e63-4041-80d7-30162fe64a3f",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableFBT"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableFBT",
+          "impact": "\"Frequently Bought Together\" bundles often add 5–8% to order value on product pages."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T04:59:12.482Z"
+    },
+    {
+      "id": "0c9434d5-5e5c-421b-a8db-d4c3516cbb79",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T04:57:58.276Z"
+    },
+    {
+      "id": "75d3727a-1e8e-413e-930f-64e782ba3df9",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-15T04:57:30.437Z"
+    },
+    {
+      "id": "b85eafcb-f648-4ec4-93d8-ae6023bb1cf7",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "disableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "disableDrawer",
+          "impact": "Cart drawer turned off — shoppers will use the standard cart page instead."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-13T09:25:45.478Z"
+    },
+    {
+      "id": "3f042000-cad2-417b-a72f-70ca8365988e",
+      "prompt": "",
+      "summary": "AI command",
+      "response": {
+        "summary": "AI command",
+        "actions": [
+          "enableDrawer"
+        ],
+        "settings": {}
+      },
+      "appliedActions": [
+        {
+          "action": "enableDrawer",
+          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
+        }
+      ],
+      "status": "applied",
+      "timestamp": "2026-06-13T07:34:08.378Z"
+    },
+    {
       "id": "90e61451-3697-45d6-9721-abeecca22ca7",
       "prompt": "",
       "summary": "AI command",
@@ -211,112 +1049,6 @@
       ],
       "status": "applied",
       "timestamp": "2026-06-09T11:35:16.802Z"
-    },
-    {
-      "id": "135c7c3e-87f4-42fb-aab7-2fdd6b458184",
-      "prompt": "Enable the cart drawer for my store.",
-      "summary": "Enable cart drawer for your store",
-      "response": {
-        "summary": "Enable cart drawer for your store",
-        "actions": [
-          "enableDrawer"
-        ],
-        "settings": {}
-      },
-      "appliedActions": [
-        {
-          "action": "enableDrawer",
-          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
-        }
-      ],
-      "status": "applied",
-      "timestamp": "2026-06-08T12:17:49.994Z"
-    },
-    {
-      "id": "66c3d720-ebfe-4036-a63c-a2ee2c524dc7",
-      "prompt": "Enable the cart drawer for my store.",
-      "summary": "Restored: Enable cart drawer for your store",
-      "response": {
-        "summary": "Enable cart drawer for your store",
-        "actions": [
-          "enableDrawer"
-        ],
-        "settings": {}
-      },
-      "appliedActions": [
-        {
-          "action": "enableDrawer",
-          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
-        }
-      ],
-      "status": "restored",
-      "timestamp": "2026-06-08T10:47:26.074Z"
-    },
-    {
-      "id": "bc8fa1a5-0728-4cd7-94f3-3fc3879c1d27",
-      "prompt": "Enable the cart drawer for my store.",
-      "summary": "Enable cart drawer for your store",
-      "response": {
-        "summary": "Enable cart drawer for your store",
-        "actions": [
-          "enableDrawer"
-        ],
-        "settings": {}
-      },
-      "appliedActions": [
-        {
-          "action": "enableDrawer",
-          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
-        }
-      ],
-      "status": "applied",
-      "timestamp": "2026-06-08T10:29:47.201Z"
-    },
-    {
-      "id": "dddcfa88-feaa-4bed-9826-ee19b77c0216",
-      "prompt": "Enable the cart drawer for my store.",
-      "summary": "Enable cart drawer for your store",
-      "response": {
-        "summary": "Enable cart drawer for your store",
-        "actions": [
-          "enableDrawer"
-        ],
-        "settings": {}
-      },
-      "appliedActions": [
-        {
-          "action": "enableDrawer",
-          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
-        }
-      ],
-      "status": "applied",
-      "timestamp": "2026-06-08T10:28:52.090Z"
-    },
-    {
-      "id": "4efafa4b-d094-423b-a8f8-6de6cd3823a7",
-      "prompt": "Enable the cart drawer for my store.and design the cart drawer according to my theme",
-      "summary": "Enable cart drawer and apply store theme styling",
-      "response": {
-        "summary": "Enable cart drawer and apply store theme styling",
-        "actions": [
-          "enableDrawer"
-        ],
-        "settings": {
-          "template": "premium",
-          "primaryColor": "#008060",
-          "secondaryColor": "#1a1a1a",
-          "fontFamily": "Inter",
-          "buttonRadius": 8
-        }
-      },
-      "appliedActions": [
-        {
-          "action": "enableDrawer",
-          "impact": "Keeps shoppers on-page and reduces checkout drop-off — drawer carts typically lift conversion by 5–10%."
-        }
-      ],
-      "status": "applied",
-      "timestamp": "2026-06-08T10:24:22.379Z"
     }
   ]
 }

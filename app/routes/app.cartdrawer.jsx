@@ -85,7 +85,7 @@ export const loader = async ({ request }) => {
     ? truthyFlag(cartRecord.cartStatus ?? cartRecord.cart_status)
     : true;
 
-  return { coupons, allProducts, drawerEnabled };
+  return { coupons, allProducts, drawerEnabled, cartRecord: cartRecord ?? null, shop: session.shop };
 };
 
 export const action = async ({ request }) => {
@@ -100,6 +100,27 @@ export const action = async ({ request }) => {
     record.cart_status = enabled ? 1 : 0;
     const synced = await persistCartDrawerRecord(shop, record);
     return Response.json({ intent: 'toggleDrawerStatus', success: true, drawerEnabled: enabled, synced });
+  }
+
+  if (body?.intent === 'saveCartConfig') {
+    const existing = (await fetchCartDrawerRecord(shop)) || {};
+    const newRecord = {
+      ...existing,
+      cartStatus: body.cartStatus ?? existing.cartStatus ?? 0,
+      cart_status: body.cartStatus ?? existing.cartStatus ?? 0,
+      progress_status: body.progress_status ?? existing.progress_status ?? 0,
+      progress_data: body.progress_data ?? existing.progress_data ?? null,
+      coupon_status: body.coupon_status ?? existing.coupon_status ?? 0,
+      coupon_data: body.coupon_data ?? existing.coupon_data ?? null,
+      upsell_status: body.upsell_status ?? existing.upsell_status ?? 0,
+      upsell_data: body.upsell_data ?? existing.upsell_data ?? null,
+      checkoutName: body.checkoutName ?? existing.checkoutName ?? null,
+      checkoutFooterText: body.checkoutFooterText ?? existing.checkoutFooterText ?? null,
+      customCSS: body.customCSS ?? existing.customCSS ?? null,
+      checkout_button_style: body.checkout_button_style ?? existing.checkout_button_style ?? null,
+    };
+    const result = await persistCartDrawerRecord(shop, newRecord);
+    return Response.json({ intent: 'saveCartConfig', success: result.ok });
   }
 
   return Response.json({ success: false, error: 'Unknown action' }, { status: 400 });

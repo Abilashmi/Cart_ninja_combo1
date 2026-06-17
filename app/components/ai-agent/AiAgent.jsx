@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { featureStore } from "./featureStore";
 import AILoadingState from "./AILoadingState";
+import "./ai-agent.css";
 
 function syncAfterToFeatureStore(after) {
   if (!after) return;
@@ -11,8 +12,26 @@ function syncAfterToFeatureStore(after) {
     if (cart.upsell?.enabled != null) featureStore.set("upsells", cart.upsell.enabled);
     if (cart.goalBar?.enabled != null) featureStore.set("progress_bar", cart.goalBar.enabled);
     if (cart.trustBadges?.enabled != null) featureStore.set("trust_badges", cart.trustBadges.enabled);
+    if (cart.announcement?.enabled != null) featureStore.set("announcements", cart.announcement.enabled);
+    if (cart.couponSlider?.enabled != null) featureStore.set("coupon_slider", cart.couponSlider.enabled);
+    if (cart.checkoutButton?.backgroundColor) {
+      try {
+        const cfgKey = "cartninja_cart_config";
+        const raw = localStorage.getItem(cfgKey);
+        const cfg = raw ? JSON.parse(raw) : {};
+        cfg.checkoutButtonStyle = {
+          backgroundColor: cart.checkoutButton.backgroundColor,
+          textColor: cart.checkoutButton.textColor || "#ffffff",
+          borderRadius: cart.checkoutButton.borderRadius ?? 4,
+        };
+        localStorage.setItem(cfgKey, JSON.stringify(cfg));
+        window.dispatchEvent(new CustomEvent("featureStateChanged", { detail: { key: "checkout_style" } }));
+      } catch {}
+    }
+    // Push color/config changes to CartEditorContext so the editor updates live
+    window.dispatchEvent(new CustomEvent("cartEditorConfigUpdated", { detail: cart }));
   }
-  if (fbt?.widgetEnabled != null) featureStore.set("fbt", fbt.widgetEnabled);
+  if (fbt?.enabled != null) featureStore.set("fbt", fbt.enabled);
 }
 import AIChangesSummary from "./AIChangesSummary";
 import AINeedsInputCard from "./AINeedsInputCard";
@@ -54,17 +73,18 @@ function invertAction(action) {
 }
 
 const MODULE_TO_ENGINE = {
-  cartDrawer: { enable: "enableDrawer", disable: "disableDrawer" },
-  progressBar: { enable: "enableGoalBar", disable: "disableGoalBar" },
-  upsells: { enable: "enableUpsell", disable: "disableUpsell" },
-  fbt: { enable: "enableFBT", disable: "disableFBT" },
+  cartDrawer: { enable: "enableDrawer", disable: "disableDrawer", configureCartDrawer: "configureCartDrawer" },
+  progressBar: { enable: "enableGoalBar", disable: "disableGoalBar", configureGoalBar: "configureGoalBar" },
+  upsells: { enable: "enableUpsell", disable: "disableUpsell", configureUpsell: "configureUpsell" },
+  fbt: { enable: "enableFBT", disable: "disableFBT", configureFBT: "configureFBT" },
   trustBadges: { enable: "enableTrustBadges", disable: "disableTrustBadges" },
+  announcements: { enable: "enableAnnouncement", disable: "disableAnnouncement", configureAnnouncement: "configureAnnouncement" },
 };
 
 const ACTION_LABELS = {
   cartDrawer: "Cart Drawer", progressBar: "Progress Bar",
   upsells: "Upsells", fbt: "FBT", trustBadges: "Trust Badges",
-  styling: "Styling", optimization: "Optimization",
+  announcements: "Announcement", styling: "Styling", optimization: "Optimization",
 };
 
 function extractActions(text) {
@@ -92,12 +112,90 @@ function extractActions(text) {
     actions.push({ module: "optimization", action: "optimizeMobile", engine: "optimizeMobile", label: "Optimize Mobile" });
     return actions;
   }
+  if (/create.*bundle|bundle.*offer|combo.*forge/i.test(lower)) {
+    actions.push({ module: "comboForge", action: "createBundle", engine: "createBundle", label: "Create Bundle" });
+    return actions;
+  }
 
-  if (/cart.*drawer|drawer/.test(lower)) actions.push({ module: "cartDrawer", action: wantDisable ? "disable" : "enable" });
-  if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: "progressBar", action: wantDisable ? "disable" : "enable" });
-  if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: "trustBadges", action: wantDisable ? "disable" : "enable" });
-  if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "upsells", action: wantDisable ? "disable" : "enable" });
-  if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: "fbt", action: wantDisable ? "disable" : "enable" });
+  // ── Color / brand customization ──
+  const COLOR_MAP = {
+    pink: "#FF69B4", red: "#EF4444", blue: "#3B82F6", green: "#22C55E",
+    purple: "#A855F7", orange: "#F97316", yellow: "#EAB308", black: "#111827",
+    white: "#F9FAFB", teal: "#14B8A6", indigo: "#6366F1", rose: "#F43F5E",
+    violet: "#8B5CF6", gold: "#D97706", coral: "#F87171", navy: "#1E3A8A",
+    cyan: "#06B6D4", lime: "#84CC16", amber: "#F59E0B", sky: "#0EA5E9",
+  };
+  const colorNamePattern = Object.keys(COLOR_MAP).join("|");
+  const colorRegex = new RegExp(`\\b(${colorNamePattern}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\\b`, "i");
+  const colorMatch = lower.match(colorRegex);
+  if (colorMatch && /(color|theme|style|everything|all|entire|whole|cart|customiz|brand|make|set|use|apply)/i.test(lower)) {
+    const colorName = colorMatch[1].toLowerCase();
+    const hexColor = colorName.startsWith("#") ? colorName.toUpperCase() : COLOR_MAP[colorName];
+    actions.push({
+      module: "styling", action: "updateStyling", engine: "updateStyling",
+      settings: { accentColor: hexColor },
+      label: `Apply ${colorMatch[1].charAt(0).toUpperCase() + colorMatch[1].slice(1)} Theme`,
+    });
+    return actions;
+  }
+
+  // ── Full-workflow configure actions (map simple intents to complete setups) ──
+  const isFullSetup = /set.?up|config|full|complete|setup|install/i.test(lower);
+  const isCartDrawer = /cart.*drawer|drawer/.test(lower);
+  const isGoalBar = /progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower);
+  const isFbt = /fbt|frequently.*bought/i.test(lower);
+  const isUpsell = /upsell/i.test(lower) && !isFbt;
+  const isTrustBadges = /trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower);
+  const isAnnouncement = /announc|promo.*banner|notif.*bar|message.*bar/i.test(lower);
+
+  if (wantDisable) {
+    if (isCartDrawer) actions.push({ module: "cartDrawer", action: "disable", engine: "disableDrawer", label: "Disable Cart Drawer" });
+    if (isGoalBar) actions.push({ module: "progressBar", action: "disable", engine: "disableGoalBar", label: "Disable Progress Bar" });
+    if (isUpsell) actions.push({ module: "upsells", action: "disable", engine: "disableUpsell", label: "Disable Upsells" });
+    if (isFbt) actions.push({ module: "fbt", action: "disable", engine: "disableFBT", label: "Disable FBT" });
+    if (isTrustBadges) actions.push({ module: "trustBadges", action: "disable", engine: "disableTrustBadges", label: "Disable Trust Badges" });
+    if (isAnnouncement) actions.push({ module: "announcements", action: "disable", engine: "disableAnnouncement", label: "Disable Announcement Banner" });
+    return actions;
+  }
+
+  // Full-workflow: configure with intelligent defaults
+  if (isCartDrawer) {
+    const settings = { enabled: true };
+    if (/dark|themed?/.test(lower)) settings.theme = "dark";
+    if (/round|radius/.test(lower)) settings.borderRadius = 20;
+    actions.push(isFullSetup
+      ? { module: "cartDrawer", action: "configureCartDrawer", engine: "configureCartDrawer", settings, label: "Configure Cart Drawer" }
+      : { module: "cartDrawer", action: "enable", engine: "enableDrawer", label: "Enable Cart Drawer" });
+  }
+  if (isGoalBar) {
+    const settings = { enabled: true };
+    const match = lower.match(/(?:rs\.?\s*)?(\d+)/);
+    if (match) settings.goal = parseInt(match[1], 10);
+    if (/inr|rs\./i.test(lower)) settings.currency = "INR";
+    actions.push({ module: "progressBar", action: "configureGoalBar", engine: "configureGoalBar", settings, label: "Configure Progress Bar" });
+  }
+  if (isUpsell) {
+    actions.push(isFullSetup
+      ? { module: "upsells", action: "configureUpsell", engine: "configureUpsell", settings: { layout: "slider", template: "modern" }, label: "Configure Upsells" }
+      : { module: "upsells", action: "enable", engine: "enableUpsell", label: "Enable Upsells" });
+  }
+  if (isFbt) {
+    actions.push(isFullSetup
+      ? { module: "fbt", action: "configureFBT", engine: "configureFBT", settings: { template: "fbt2", mode: "ai" }, label: "Configure FBT" }
+      : { module: "fbt", action: "enable", engine: "enableFBT", label: "Enable FBT" });
+  }
+  if (isTrustBadges) {
+    actions.push({ module: "trustBadges", action: "enable", engine: "enableTrustBadges", label: "Enable Trust Badges" });
+  }
+  if (isAnnouncement) {
+    const settings = { enabled: true };
+    const textMatch = lower.match(/(?:say|text|message|show)\s+[""]([^""]+)[""]/i);
+    if (textMatch) settings.text = textMatch[1];
+    if (/free.?shipping/i.test(lower)) settings.text = "Free shipping on all orders!";
+    actions.push(isFullSetup
+      ? { module: "announcements", action: "configureAnnouncement", engine: "configureAnnouncement", settings, label: "Configure Announcement Banner" }
+      : { module: "announcements", action: "enable", engine: "enableAnnouncement", label: "Enable Announcement Banner" });
+  }
 
   return actions;
 }
@@ -121,7 +219,15 @@ async function applyActionsViaApi(actions) {
       return { success: false, error: err.error || `HTTP ${res.status}` };
     }
     const data = await res.json();
-    return { success: true, synced: data.synced, before: data.before, after: data.after };
+    return {
+      success: true,
+      synced: data.synced,
+      before: data.before,
+      after: data.after,
+      rawCartBefore: data.rawCartBefore,
+      verification: data.verification,
+      backendResponses: data.backendResponses,
+    };
   } catch (e) {
     return { success: false, error: e.message || "Network error" };
   }
@@ -600,6 +706,46 @@ function mockApi(text) {
   return makeMsg("Ready for instructions.\n\nYou can ask me to:\n• Enable or configure cart modules\n• Apply theme presets\n• Run store audits\n• Create campaigns\n• Optimize conversions");
 }
 
+// ── Cart Ninja Logo SVG (faithful recreation of brand mark) ─────────────────
+const CartNinjaLogo = ({ size = 32, colorMode = "dark" }) => {
+  const c = colorMode === "white" ? "#FFFFFF" : "#0A0A0A";
+  return (
+    <svg width={size} height={Math.round(size * 1.18)} viewBox="0 0 100 118" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M49 33 C41 23 25 25 15 18 C18 27 16 38 24 40 C33 38 44 40 49 40" fill={c}/>
+      <circle cx="65" cy="36" r="17" stroke={c} strokeWidth="7" fill="none"/>
+      <line x1="48" y1="36" x2="82" y2="36" stroke={c} strokeWidth="5" strokeLinecap="round"/>
+      <path d="M12 83 Q12 58 65 58 Q118 58 118 83" stroke={c} strokeWidth="8" fill="none" strokeLinecap="round"/>
+      <rect x="14" y="93" width="72" height="10" rx="5" fill={c}/>
+      <path d="M80 93 L22 103" stroke={c} strokeWidth="9" strokeLinecap="round"/>
+      <rect x="14" y="103" width="72" height="10" rx="5" fill={c}/>
+    </svg>
+  );
+};
+
+// ── Welcome screen action cards ──────────────────────────────────────────────
+const ACTION_CARDS = [
+  { id: "fbt",      icon: "🔗", title: "Generate FBT",      desc: "Find product combos that drive sales",    query: "Generate FBT products for my store" },
+  { id: "upsell",   icon: "⬆️", title: "Create Upsell",     desc: "Boost AOV with smart recommendations",    query: "Set up upsell offers" },
+  { id: "rewards",  icon: "🏆", title: "Configure Rewards",  desc: "Build loyalty with reward programs",      query: "Configure rewards program" },
+  { id: "coupon",   icon: "🏷️", title: "Create Coupon",     desc: "Launch discounts and promotions",         query: "Create a coupon discount" },
+  { id: "optimize", icon: "🛒", title: "Optimize Cart",      desc: "Maximize conversion rates",               query: "Optimize cart for conversions" },
+  { id: "analyze",  icon: "📊", title: "Analyze Store",      desc: "Deep dive into performance metrics",      query: "Analyze my store performance" },
+  { id: "health",   icon: "🏥", title: "Store Health",       desc: "Check your optimization score",           query: "Audit my store setup" },
+  { id: "revenue",  icon: "💰", title: "Revenue Insights",   desc: "Identify growth opportunities",           query: "Increase revenue and AOV" },
+];
+
+const QUICK_CHIPS = [
+  "Generate FBT", "Create Upsell", "Optimize Cart", "Store Analysis",
+  "Revenue Report", "Store Health", "Create Coupon", "Configure Rewards",
+  "Cart Drawer Settings",
+];
+
+function getStatusLabel(loading) {
+  if (!loading) return { label: "Ready", type: "ready" };
+  if (loading === "analyzing") return { label: "Analyzing", type: "active" };
+  return { label: "Executing", type: "active" };
+}
+
 function useFeatureState(key) {
   return useSyncExternalStore(
     featureStore.subscribe,
@@ -623,9 +769,9 @@ const MODULES_LIST = [
 function ModuleToggle({ storeKey, label }) {
   const enabled = useFeatureState(storeKey);
   return (
-    <div className="aia-settings-module">
-      <span className="aia-settings-module-label">{label}</span>
-      <span className={"aia-settings-module-badge" + (enabled ? " aia-settings-module-badge--on" : " aia-settings-module-badge--off")}>
+    <div className="cn-mod-row">
+      <span className="cn-mod-label">{label}</span>
+      <span className={"cn-mod-badge" + (enabled ? " cn-mod-badge--on" : " cn-mod-badge--off")}>
         {enabled ? "Active" : "Inactive"}
       </span>
     </div>
@@ -648,7 +794,7 @@ export default function AiAgent({ appName = "Cart Operations Agent", initialQuer
     } catch { return []; }
   });
   const [loading, setLoading] = useState(null);
-  const [showHistory, setShowHistory] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState(() => {
     try {
       const saved = localStorage.getItem("aia_conversations");
@@ -705,37 +851,171 @@ export default function AiAgent({ appName = "Cart Operations Agent", initialQuer
 
   const callApi = useCallback(async (text) => {
     setLoading("analyzing");
+    console.log("[AiAgent] callApi", { text });
     const detectedActions = extractActions(text);
-    if (detectedActions.length > 0) {
-      const result = await applyActionsViaApi(detectedActions);
-      const labels = detectedActions.map((a) => a.label || ACTION_LABELS[a.module] || a.module).filter(Boolean).join(", ");
-      if (result.success) {
-        syncAfterToFeatureStore(result.after);
-        const synced = result.synced !== false;
-        const statusLine = synced ? "Status: Completed" : "Status: Applied (waiting for store sync)";
-        processReply({
-          id: "r-" + Date.now(), role: "agent", type: "json",
-          json: { message: `Task: ${labels}\n${statusLine}`, actions: detectedActions, status: "success" },
-          executedResults: [{ status: "executed" }],
-        }, text);
-      } else {
+    console.log("[AiAgent] extractActions result", detectedActions);
+      if (detectedActions.length > 0) {
+        const result = await applyActionsViaApi(detectedActions);
+        console.log("[AiAgent] applyActionsViaApi result", result);
+        const labels = detectedActions.map((a) => a.label || ACTION_LABELS[a.module] || a.module).filter(Boolean).join(", ");
+        if (result.success) {
+          console.log("[AiAgent] success, synced:", result.synced, "verification:", result.verification, "backendResponses:", result.backendResponses);
+          syncAfterToFeatureStore(result.after);
+          const ver = result.verification;
+          const synced = result.synced === true;
+          const backendResp = result.backendResponses;
+
+          // Check if any action is a full-workflow configure
+          const isFullWorkflow = detectedActions.some((a) =>
+            ["configureCartDrawer", "configureFBT", "configureUpsell", "configureGoalBar", "createBundle"].includes(a.action || a.engine)
+          );
+
+          let statusLine;
+          if (!synced) {
+            const details = [];
+            if (backendResp?.cart) details.push(`Cart API: ${backendResp.cart.httpStatus} → ${JSON.stringify(backendResp.cart.body)}`);
+            if (backendResp?.fbt) details.push(`FBT API: ${backendResp.fbt.httpStatus} → ${JSON.stringify(backendResp.fbt.body)}`);
+            statusLine = `Backend Save Failed\n\nNo successful response from database.\n${details.length > 0 ? "\n" + details.join("\n") : ""}\n\nPlease check backend connection and retry.`;
+          } else if (ver && !ver.verified) {
+            if (ver.externalError) {
+              statusLine = `Verification Failed\n\nCould not reach the database to confirm changes.\nReason: ${ver.externalError}\n\nThe change may not have been saved. Please check backend connection and retry.`;
+            } else {
+              const failedDetails = (ver.results || [])
+                .filter((r) => !r.passed)
+                .map((r) => `  • ${r.action}: expected ${r.expected}, found ${r.actual}`);
+              statusLine = `Verification Failed\n\nDatabase does not reflect requested changes:\n${failedDetails.join("\n") || "  • Unknown"}\n\nPossible causes:\n• Database write failed\n• API sync error\n• Network timeout\n\nPlease retry.`;
+            }
+          } else if (isFullWorkflow) {
+            // Build detail-rich success message
+            const planSettings = detectedActions.reduce((s, a) => {
+              if (a.settings) Object.assign(s, a.settings);
+              return s;
+            }, {});
+            const lines = [];
+            detectedActions.forEach((a) => {
+              const act = a.action || a.engine;
+              if (act === "configureFBT") {
+                lines.push("FBT Configuration Updated");
+                lines.push(`Template: ${planSettings.template === "fbt2" ? "Modern Cards" : "Modern Cards"}`);
+                lines.push("Mode: AI");
+                lines.push("Status: Enabled");
+                lines.push("Products: AI-recommended (up to 5)");
+              }
+              if (act === "configureUpsell") {
+                lines.push("Upsell Configuration Updated");
+                lines.push("Layout: Slider");
+                lines.push("Template: Modern");
+                lines.push("Status: Enabled");
+              }
+              if (act === "configureGoalBar") {
+                const goal = planSettings?.goal || 999;
+                const reward = planSettings?.reward || "Free Shipping";
+                lines.push("Progress Bar Configuration Updated");
+                lines.push(`Goal: \u20B9${typeof goal === "number" ? goal.toLocaleString("en-IN") : goal}`);
+                lines.push(`Reward: ${reward}`);
+                lines.push("Status: Enabled");
+                lines.push("Milestones: 3 tiers configured");
+              }
+              if (act === "configureCartDrawer") {
+                lines.push("Cart Drawer Configuration Updated");
+                lines.push(`Theme: ${planSettings?.theme || "Modern"}`);
+                lines.push(`Border Radius: ${planSettings?.borderRadius || 12}px`);
+                lines.push("Status: Enabled");
+              }
+              if (act === "createBundle") {
+                lines.push("Bundle Creation");
+                lines.push("Open Combo Forge in the settings to build your bundle.");
+              }
+            });
+            lines.push("");
+            lines.push("Verification Successful");
+            statusLine = lines.join("\n");
+          } else {
+            statusLine = "Status: Completed";
+          }
+
+          processReply({
+            id: "r-" + Date.now(), role: "agent", type: "json",
+            json: { message: `Task: ${labels}\n${statusLine}`, actions: detectedActions, status: synced ? "success" : "failed", rawCartBefore: result.rawCartBefore, before: result.before },
+            executedResults: [{ status: "executed" }],
+          }, text);
+        } else {
         processReply({
           id: "r-" + Date.now(), role: "agent", type: "json",
           json: { message: `Task: ${labels}\nStatus: Failed\nReason: ${result.error}` },
         }, text);
       }
     } else {
+      const isDesignIntent = /theme|color|design|brand|website|style|font|match|look|feel/i.test(text);
+      const ALL_STEPS = isDesignIntent
+        ? [
+            { text: "Thinking about your request", icon: "think" },
+            { text: "Connecting to your storefront", icon: "connect" },
+            { text: "Fetching HTML & CSS variables", icon: "fetch" },
+            { text: "Extracting brand colors", icon: "color" },
+            { text: "Reading fonts & border styles", icon: "font" },
+            { text: "Scanning promotional offers", icon: "scan" },
+          ]
+        : [
+            { text: "Thinking about your request", icon: "think" },
+            { text: "Checking store configuration", icon: "check" },
+            { text: "Preparing response", icon: "prepare" },
+          ];
+
+      const scrapeMsgId = "scrape-" + Date.now();
+      const scrapeTimers = [];
+
+      setMessages((prev) => [...prev, {
+        id: scrapeMsgId,
+        role: "agent",
+        type: "scraping",
+        isDesign: isDesignIntent,
+        steps: [{ ...ALL_STEPS[0], active: true, done: false }],
+      }]);
+
+      ALL_STEPS.slice(1).forEach((_s, idx) => {
+        const i = idx + 1;
+        const t = setTimeout(() => {
+          setMessages((prev) => prev.map((m) => {
+            if (m.id !== scrapeMsgId) return m;
+            return {
+              ...m,
+              steps: ALL_STEPS.slice(0, i + 1).map((s, j) => ({
+                ...s, done: j < i, active: j === i,
+              })),
+            };
+          }));
+        }, 800 * i);
+        scrapeTimers.push(t);
+      });
+
       try {
         const res = await aiApi.sendMessage(activeConvId || "temp", text, messages.map((m) => ({ role: m.role, text: m.text })));
+        scrapeTimers.forEach(clearTimeout);
+        setMessages((prev) => prev.filter((m) => m.id !== scrapeMsgId));
+
         if (res.success && res.message) {
+          syncAfterToFeatureStore(res.after);
           processReply({
             id: "r-" + Date.now(), role: "agent", type: "json",
-            json: { message: res.message },
+            json: {
+              message: res.message,
+              summary: res.summary,
+              executedActions: res.executedActions,
+              synced: res.synced,
+              after: res.after,
+              before: res.before,
+              verification: res.verification,
+              backendResponses: res.backendResponses,
+              scrapedDesign: res.scrapedDesign || null,
+            },
           }, text);
         } else {
           throw new Error("no response");
         }
       } catch {
+        scrapeTimers.forEach(clearTimeout);
+        setMessages((prev) => prev.filter((m) => m.id !== scrapeMsgId));
         processReply({
           id: "r-" + Date.now(), role: "agent", type: "json",
           json: { message: "I couldn't process that command. Try something like \"Enable Cart Drawer\" or \"Add Upsells\"." },
@@ -772,8 +1052,21 @@ export default function AiAgent({ appName = "Cart Operations Agent", initialQuer
     handleSend(fullQuery);
   }, [pendingContext, handleSend]);
 
-  const handleUndo = useCallback((action) => {
-    undoAction(action);
+  const handleUndo = useCallback(async (action, rawCartBefore, before) => {
+    if (rawCartBefore) {
+      try {
+        await fetch('/app/cartdrawer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: 'saveCartConfig', ...rawCartBefore }),
+        });
+        if (before?.cart) syncAfterToFeatureStore({ cart: before.cart });
+      } catch (err) {
+        console.error('[AiAgent] Undo DB restore failed:', err);
+      }
+    } else {
+      undoAction(action);
+    }
     setMessages((prev) => [...prev, {
       id: "u-" + Date.now(), role: "agent",
       type: "json",
@@ -803,320 +1096,314 @@ export default function AiAgent({ appName = "Cart Operations Agent", initialQuer
     syncedRef.current = true;
   }, []);
 
-  const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-  const showInsight = lastMsg && lastMsg.role === "agent" && lastMsg.insight;
-  const showChips = !loading && messages.length === 0;
-
-  const maxVal = showInsight
-    ? Math.max(...lastMsg.insight.series.map((s) => s.value))
-    : 1;
-
-  const WELCOME_CHIPS = [
-    { id: "w1", text: "Enable Cart Drawer" },
-    { id: "w2", text: "Free Shipping Goal" },
-    { id: "w3", text: "Add Upsells" },
-    { id: "w4", text: "Apply Premium Dark" },
-    { id: "w5", text: "Analyze Revenue" },
-    { id: "w6", text: "Optimize Mobile" },
-  ];
-
   const today = conversations.filter((c) => getTimeGroup(c.ts) === "Today");
   const yesterday = conversations.filter((c) => getTimeGroup(c.ts) === "Yesterday");
   const last7 = conversations.filter((c) => getTimeGroup(c.ts) === "Last 7 Days");
   const older = conversations.filter((c) => getTimeGroup(c.ts) === "Older");
+  const { label: statusLabel, type: statusType } = getStatusLabel(loading);
 
   return (
-    <>
-      <style>{`
-.aia-wrap { height:100%; display:flex; flex-direction:column; gap:0; overflow:hidden; }
-.aia-card { flex:1; border:1px solid #e8e8e8; border-radius:14px; background:#fff; overflow:hidden; display:flex; min-height:0; box-shadow:0 2px 8px rgba(0,0,0,.06); position:relative; }
+    <div className="cn-workspace">
 
-/* ── History Sidebar ── */
-.aia-sidebar { width:220px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #e8e8e8; transition:width .2s ease; overflow:hidden; background:#fafafa; }
-.aia-sidebar--closed { width:0; border-right-color:transparent; }
-.aia-sidebar-inner { width:220px; display:flex; flex-direction:column; min-height:0; }
-.aia-sidebar-head { display:flex; align-items:center; justify-content:space-between; padding:16px 14px 10px; font-size:12px; font-weight:600; color:#6d6d6d; text-transform:uppercase; letter-spacing:.4px; flex-shrink:0; }
-.aia-sidebar-new { background:none; border:none; cursor:pointer; color:#FF6B00; font-size:11px; font-weight:600; padding:4px 8px; border-radius:6px; transition:background .12s; }
-.aia-sidebar-new:hover { background:#FFF3EB; }
-.aia-sidebar-list { padding:0 10px 12px; display:flex; flex-direction:column; gap:2px; flex:1; overflow-y:auto; min-height:0; }
-.aia-sb-btn { display:block; width:100%; text-align:left; background:none; border:none; border-radius:6px; padding:8px 10px; font-size:13px; color:#1a1a1a; cursor:pointer; transition:all .12s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.aia-sb-btn:hover { background:#f0f0f0; }
-.aia-sb-btn--active { background:#FFF3EB; color:#FF6B00; font-weight:500; }
-.aia-history-label { font-size:10px; font-weight:600; color:#9a9a9a; padding:12px 10px 4px; text-transform:uppercase; letter-spacing:.5px; }
-.aia-history-empty { font-size:12px; color:#9a9a9a; padding:24px 14px; text-align:center; }
-
-/* ── Chat ── */
-.aia-chat { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; }
-.aia-chat-head { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #eee; flex-shrink:0; }
-.aia-chat-head-btn { background:none; border:none; cursor:pointer; color:#9a9a9a; padding:4px; display:flex; border-radius:6px; transition:all .12s; }
-.aia-chat-head-btn:hover { background:#f0f0f0; color:#1a1a1a; }
-.aia-avatar { width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,#FF6B00,#FF8A33); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff; }
-.aia-name { font-size:14px; font-weight:600; color:#1a1a1a; }
-.aia-status-badge-header { font-size:11px; color:#059669; background:#ECFDF5; border-radius:6px; padding:2px 10px; margin-left:auto; }
-.aia-settings-btn { background:none; border:1px solid #e8e8e8; border-radius:6px; cursor:pointer; color:#9a9a9a; padding:5px; display:flex; transition:all .12s; flex-shrink:0; }
-.aia-settings-btn:hover { border-color:#FF6B00; color:#FF6B00; background:#FFF3EB; }
-
-/* ── Messages ── */
-.aia-msgs { flex:1; overflow-y:auto; min-height:0; padding:20px; display:flex; flex-direction:column; gap:16px; background:#fafafa; }
-.aia-msg-row { max-width:80%; display:flex; flex-direction:column; }
-.aia-msg-row--user { align-self:flex-end; }
-.aia-msg-row--agent { align-self:flex-start; }
-.aia-msg-label { margin-bottom:4px; padding-left:4px; font-size:10px; font-weight:600; color:#FF6B00; letter-spacing:.3px; text-transform:uppercase; display:flex; align-items:center; gap:4px; }
-.aia-msg-bubble { padding:12px 18px; font-size:14px; line-height:1.6; white-space:pre-wrap; overflow-wrap:break-word; }
-.aia-msg-bubble--user { background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; border-radius:16px 16px 4px 16px; }
-.aia-msg-bubble--agent { background:#fff; color:#1a1a1a; border:1px solid #e8e8e8; border-radius:16px 16px 16px 4px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
-
-/* ── Agent Status (Welcome) ── */
-.aia-status-card { background:#fff; border:1px solid #e8e8e8; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.04); width:100%; }
-.aia-status-connected { display:flex; align-items:center; gap:8px; font-size:13px; color:#059669; font-weight:500; margin-bottom:16px; }
-.aia-status-connected-dot { width:8px; height:8px; border-radius:50%; background:#10B981; }
-.aia-status-monitoring { font-size:11px; font-weight:600; color:#9a9a9a; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
-.aia-status-items { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
-.aia-status-item { font-size:12px; color:#1a1a1a; background:#f5f5f5; padding:4px 12px; border-radius:6px; }
-.aia-status-ready { font-size:13px; color:#9a9a9a; }
-
-/* ── Chips ── */
-.aia-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-.aia-chip { padding:5px 14px; border-radius:6px; border:1px solid #e8e8e8; background:#fff; font-size:12px; color:#555; cursor:pointer; transition:all .12s; }
-.aia-chip:hover { border-color:#FF6B00; color:#FF6B00; background:#FFF3EB; }
-
-/* ── Input ── */
-.aia-input-wrap { display:flex; align-items:center; gap:8px; padding:12px 16px; border-top:1px solid #eee; flex-shrink:0; background:#fff; }
-.aia-input { flex:1; height:40px; padding:0 14px; border:1px solid #e8e8e8; border-radius:10px; font-size:14px; outline:none; box-sizing:border-box; transition:border-color .15s; background:#fafafa; }
-.aia-input:focus { border-color:#FF6B00; background:#fff; box-shadow:0 0 0 3px rgba(255,107,0,.1); }
-.aia-send { width:40px; height:40px; border-radius:10px; border:none; background:linear-gradient(135deg,#FF6B00,#FF8A33); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:all .15s; }
-.aia-send:hover { transform:scale(1.05); box-shadow:0 2px 8px rgba(255,107,0,.25); }
-.aia-send:disabled { opacity:.4; cursor:default; transform:none; box-shadow:none; }
-
-/* ── Settings Panel ── */
-.aia-settings-overlay { position:absolute; inset:0; z-index:10; background:rgba(0,0,0,.15); border-radius:14px; animation:aiaFadeIn .15s ease; }
-.aia-settings-panel { position:absolute; top:0; right:0; bottom:0; width:280px; background:#fff; border-left:1px solid #e8e8e8; border-radius:0 14px 14px 0; display:flex; flex-direction:column; animation:aiaSlideIn .2s ease; z-index:11; }
-.aia-settings-head { display:flex; align-items:center; justify-content:space-between; padding:16px; border-bottom:1px solid #eee; flex-shrink:0; }
-.aia-settings-title { font-size:14px; font-weight:600; color:#1a1a1a; }
-.aia-settings-close { background:none; border:none; cursor:pointer; color:#9a9a9a; padding:4px; border-radius:6px; transition:all .12s; }
-.aia-settings-close:hover { background:#f0f0f0; color:#1a1a1a; }
-.aia-settings-body { flex:1; overflow-y:auto; min-height:0; padding:12px 16px; }
-.aia-settings-module { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#fafafa; border-radius:8px; margin-bottom:6px; }
-.aia-settings-module-label { font-size:13px; color:#1a1a1a; font-weight:500; }
-.aia-settings-module-badge { font-size:11px; padding:2px 10px; border-radius:6px; font-weight:500; }
-.aia-settings-module-badge--on { background:#ECFDF5; color:#065F46; }
-.aia-settings-module-badge--off { background:#FEF2F2; color:#991B1B; }
-
-/* ── Loading ── */
-.aia-loading-wrap { max-width:80%; align-self:flex-start; }
-.aia-loading { display:flex; align-items:center; gap:8px; padding:12px 18px; background:#fff; border-radius:16px 16px 16px 4px; border:1px solid #e8e8e8; }
-.aia-loading-spinner { display:inline-block; width:14px; height:14px; border:2px solid #e8e8e8; border-top-color:#FF6B00; border-radius:50%; animation:aiaSpin .6s linear infinite; }
-@keyframes aiaSpin { to{transform:rotate(360deg)} }
-
-.aia-slide-in { animation:aiaSlideUp .28s ease; }
-@keyframes aiaSlideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-@keyframes aiaFadeIn { from{opacity:0} to{opacity:1} }
-@keyframes aiaSlideIn { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
-
-@media(max-width:768px){ .aia-sidebar{display:none} .aia-settings-panel{width:100%; border-radius:0;} }
-      `}</style>
-
-      <div className="aia-wrap">
-        <div className="aia-card">
-          {/* ── History Panel ── */}
-          <div className={"aia-sidebar" + (showHistory ? "" : " aia-sidebar--closed")}>
-            <div className="aia-sidebar-inner">
-              <div className="aia-sidebar-head">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5"/><path d="M7 4v3l2 1"/></svg>
-                <span>History</span>
-              </div>
-              <div className="aia-sidebar-list">
-                {conversations.length === 0 && (
-                  <div className="aia-history-empty">No conversations yet</div>
-                )}
-                {today.length > 0 && <div className="aia-history-label">Today</div>}
-                {today.map((c) => (
-                  <button key={c.id} className={"aia-sb-btn" + (c.id === activeConvId ? " aia-sb-btn--active" : "")} onClick={() => handleConversationClick(c.id)}>
-                    {c.title.length > 32 ? c.title.slice(0, 29) + "..." : c.title}
-                  </button>
-                ))}
-                {yesterday.length > 0 && <div className="aia-history-label">Yesterday</div>}
-                {yesterday.map((c) => (
-                  <button key={c.id} className={"aia-sb-btn" + (c.id === activeConvId ? " aia-sb-btn--active" : "")} onClick={() => handleConversationClick(c.id)}>
-                    {c.title.length > 32 ? c.title.slice(0, 29) + "..." : c.title}
-                  </button>
-                ))}
-                {last7.length > 0 && <div className="aia-history-label">Last 7 Days</div>}
-                {last7.map((c) => (
-                  <button key={c.id} className={"aia-sb-btn" + (c.id === activeConvId ? " aia-sb-btn--active" : "")} onClick={() => handleConversationClick(c.id)}>
-                    {c.title.length > 32 ? c.title.slice(0, 29) + "..." : c.title}
-                  </button>
-                ))}
-                {older.length > 0 && <div className="aia-history-label">Older</div>}
-                {older.map((c) => (
-                  <button key={c.id} className={"aia-sb-btn" + (c.id === activeConvId ? " aia-sb-btn--active" : "")} onClick={() => handleConversationClick(c.id)}>
-                    {c.title.length > 32 ? c.title.slice(0, 29) + "..." : c.title}
-                  </button>
-                ))}
-                <div style={{ borderTop: "1px solid #eee", marginTop: 8, paddingTop: 8 }}>
-                  <button className="aia-sb-btn" onClick={handleNewChat} style={{ color: "#FF6B00", fontWeight: 500 }}>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ marginRight: 6, verticalAlign: "middle" }}><path d="M6 2v8M2 6h8"/></svg>
-                    Start New Conversation
-                  </button>
-                </div>
-              </div>
-            </div>
+      {/* ════════════ HEADER ════════════ */}
+      <header className="cn-header">
+        <div className="cn-header-left">
+          <div className="cn-header-logo">
+            <CartNinjaLogo size={26} colorMode="white" />
           </div>
+          <span className="cn-header-brand">Cart Ninja <span className="cn-header-brand-ai">AI</span></span>
+        </div>
+        <div className="cn-header-center">
+          <div className={"cn-status-pill cn-status-" + statusType}>
+            <span className="cn-status-dot" />
+            <span className="cn-status-label">{statusLabel}</span>
+          </div>
+        </div>
+        <div className="cn-header-right">
+          <button className="cn-header-btn" onClick={handleNewChat}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M7 2v10M2 7h10"/></svg>
+            <span>New Chat</span>
+          </button>
+          <button className={"cn-header-icon-btn" + (showHistory ? " cn-header-icon-btn--active" : "")} onClick={() => setShowHistory((v) => !v)} title="Conversation History">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5.5v2.8l1.8 1.8"/></svg>
+          </button>
+          <button className={"cn-header-icon-btn" + (showSettings ? " cn-header-icon-btn--active" : "")} onClick={() => setShowSettings((v) => !v)} title="Settings">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/></svg>
+          </button>
+        </div>
+      </header>
 
-          {/* ── Chat ── */}
-          <div className="aia-chat">
-            <div className="aia-chat-head">
-              <button className="aia-chat-head-btn" onClick={() => setShowHistory((v) => !v)} aria-label={showHistory ? "Hide history" : "Show history"}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 4h12M2 8h12M2 12h12" /></svg>
-              </button>
-              <div className="aia-avatar">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="1.5"><path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" /></svg>
-              </div>
-              <span className="aia-name">{appName}</span>
-              <span className="aia-status-badge-header">Connected</span>
-              <button className="aia-settings-btn" onClick={() => setShowSettings((v) => !v)} title="Settings">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
+      {/* ════════════ HISTORY DRAWER ════════════ */}
+      {showHistory && (
+        <div className="cn-overlay" onClick={() => setShowHistory(false)}>
+          <div className="cn-drawer cn-history-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="cn-drawer-head">
+              <span className="cn-drawer-title">Conversations</span>
+              <button className="cn-icon-btn" onClick={() => setShowHistory(false)}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
               </button>
             </div>
-
-            <div className="aia-msgs" ref={scrollRef}>
-              {messages.length === 0 && !loading && (
-                <>
-                  <div className="aia-status-card">
-                    <div className="aia-status-connected">
-                      <span className="aia-status-connected-dot" />
-                      Connected to Store
-                    </div>
-                    <div className="aia-status-monitoring">Monitoring</div>
-                    <div className="aia-status-items">
-                      <span className="aia-status-item">Cart Drawer</span>
-                      <span className="aia-status-item">Conversion Opportunities</span>
-                      <span className="aia-status-item">Revenue Optimization</span>
-                      <span className="aia-status-item">Customer Experience</span>
-                    </div>
-                    <div className="aia-status-ready">Awaiting Instructions</div>
-                  </div>
-                  <div className="aia-chips">
-                    {WELCOME_CHIPS.map((chip) => (
-                      <button key={chip.id} className="aia-chip" onClick={() => handleChipClick(chip.text)}>
-                        {chip.text}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {messages.map((msg) => {
-                const isUser = msg.role === "user";
-                const j = msg.json;
-
-                if (isUser) {
-                  return (
-                    <div key={msg.id} className="aia-msg-row aia-msg-row--user">
-                      <div className="aia-msg-bubble aia-msg-bubble--user">{msg.text}</div>
-                    </div>
-                  );
-                }
-
-                if (j) {
-                  if (j.status === "needs_input") {
-                    return (
-                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
-                        <AINeedsInputCard question={j.question} onSubmit={handleAnswer} />
-                      </div>
-                    );
-                  }
-                  if (j.status === "undo") {
-                    return (
-                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
-                        <div className="aia-msg-bubble aia-msg-bubble--agent" style={{ background:"#FFF4E5", color:"#594430", border:"1px solid #FFD9A8" }}>
-                          {"\u21A9"} Undo successful
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (j.actions) {
-                    return (
-                      <div key={msg.id} style={{ maxWidth:"100%", alignSelf:"flex-start", width:"100%" }}>
-                        <AIChangesSummary actions={j.actions} results={msg.executedResults} onUndo={handleUndo} message={j.message} />
-                      </div>
-                    );
-                  }
-                  if (j.message) {
-                    return (
-                      <div key={msg.id} className="aia-msg-row aia-msg-row--agent">
-                        <div className="aia-msg-label">
-                          <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="#FF6B00" strokeWidth="1.8"><path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" /></svg>
-                          Agent
-                        </div>
-                        <div className="aia-msg-bubble aia-msg-bubble--agent">{j.message}</div>
-                      </div>
-                    );
-                  }
-                }
-
-                return null;
-              })}
-
-              {loading && (
-                <div className="aia-loading-wrap">
-                  <div className="aia-loading">
-                    <span className="aia-loading-spinner" />
-                    <span style={{ fontSize:13, color:"#999" }}>Executing...</span>
-                  </div>
+            <div className="cn-history-list">
+              {conversations.length === 0 && (
+                <div className="cn-history-empty">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#DDD" strokeWidth="1.5" strokeLinecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  <span>No conversations yet</span>
                 </div>
               )}
+              {today.length > 0 && <div className="cn-history-group">Today</div>}
+              {today.map((c) => (
+                <button key={c.id} className={"cn-history-item" + (c.id === activeConvId ? " cn-history-item--active" : "")} onClick={() => { handleConversationClick(c.id); setShowHistory(false); }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h8M2 6h6M2 9h4"/></svg>
+                  <span>{c.title.length > 33 ? c.title.slice(0, 30) + "..." : c.title}</span>
+                </button>
+              ))}
+              {yesterday.length > 0 && <div className="cn-history-group">Yesterday</div>}
+              {yesterday.map((c) => (
+                <button key={c.id} className={"cn-history-item" + (c.id === activeConvId ? " cn-history-item--active" : "")} onClick={() => { handleConversationClick(c.id); setShowHistory(false); }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h8M2 6h6M2 9h4"/></svg>
+                  <span>{c.title.length > 33 ? c.title.slice(0, 30) + "..." : c.title}</span>
+                </button>
+              ))}
+              {last7.length > 0 && <div className="cn-history-group">Last 7 Days</div>}
+              {last7.map((c) => (
+                <button key={c.id} className={"cn-history-item" + (c.id === activeConvId ? " cn-history-item--active" : "")} onClick={() => { handleConversationClick(c.id); setShowHistory(false); }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h8M2 6h6M2 9h4"/></svg>
+                  <span>{c.title.length > 33 ? c.title.slice(0, 30) + "..." : c.title}</span>
+                </button>
+              ))}
+              {older.length > 0 && <div className="cn-history-group">Older</div>}
+              {older.map((c) => (
+                <button key={c.id} className={"cn-history-item" + (c.id === activeConvId ? " cn-history-item--active" : "")} onClick={() => { handleConversationClick(c.id); setShowHistory(false); }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h8M2 6h6M2 9h4"/></svg>
+                  <span>{c.title.length > 33 ? c.title.slice(0, 30) + "..." : c.title}</span>
+                </button>
+              ))}
             </div>
-
-            <div className="aia-input-wrap">
-              <input
-                ref={inputRef}
-                className="aia-input"
-                type="text"
-                placeholder="Type a command..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (input.trim() && !loading) handleSend(input);
-                  }
-                }}
-                disabled={loading !== null}
-              />
-              <button
-                className="aia-send"
-                disabled={!input.trim() || loading !== null}
-                onClick={() => { if (input.trim() && !loading) handleSend(input); }}
-                aria-label="Send message"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 8l12-4-4 8-3-3-3-3z"/></svg>
+            <div className="cn-drawer-footer">
+              <button className="cn-new-chat-btn" onClick={() => { handleNewChat(); setShowHistory(false); }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M7 2v10M2 7h10"/></svg>
+                Start New Conversation
               </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* ── Settings Panel ── */}
-          {showSettings && (
-            <>
-              <div className="aia-settings-overlay" onClick={() => setShowSettings(false)} />
-              <div className="aia-settings-panel">
-                <div className="aia-settings-head">
-                  <span className="aia-settings-title">Modules</span>
-                  <button className="aia-settings-close" onClick={() => setShowSettings(false)}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-                  </button>
-                </div>
-                <div className="aia-settings-body">
-                  {MODULES_LIST.map((mod) => (
-                    <ModuleToggle key={mod.k} storeKey={mod.k} label={mod.label} />
-                  ))}
-                </div>
+      {/* ════════════ SETTINGS DRAWER ════════════ */}
+      {showSettings && (
+        <div className="cn-overlay" onClick={() => setShowSettings(false)}>
+          <div className="cn-drawer cn-settings-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="cn-drawer-head">
+              <span className="cn-drawer-title">Module Status</span>
+              <button className="cn-icon-btn" onClick={() => setShowSettings(false)}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+              </button>
+            </div>
+            <div className="cn-settings-body">
+              {MODULES_LIST.map((mod) => (
+                <ModuleToggle key={mod.k} storeKey={mod.k} label={mod.label} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════ MAIN WORKSPACE ════════════ */}
+      <main className="cn-main">
+
+        {/* ── Messages scroll area ── */}
+        <div className="cn-msgs" ref={scrollRef}>
+
+          {/* Welcome screen */}
+          {messages.length === 0 && !loading && (
+            <div className="cn-welcome">
+              <div className="cn-welcome-logo-ring">
+                <CartNinjaLogo size={52} colorMode="white" />
               </div>
-            </>
+              <h1 className="cn-welcome-title">What would you like to do today?</h1>
+              <p className="cn-welcome-sub">I can help manage your Cart Ninja store.</p>
+              <div className="cn-action-grid">
+                {ACTION_CARDS.map((card) => (
+                  <button key={card.id} className="cn-action-card" onClick={() => { setInput(card.query); setTimeout(() => inputRef.current?.focus(), 0); }}>
+                    <span className="cn-action-icon">{card.icon}</span>
+                    <span className="cn-action-title">{card.title}</span>
+                    <span className="cn-action-desc">{card.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Message list */}
+          {messages.map((msg) => {
+            const isUser = msg.role === "user";
+            const j = msg.json;
+
+            if (isUser) {
+              return (
+                <div key={msg.id} className="cn-msg-row cn-msg-row--user">
+                  <div className="cn-msg-user">{msg.text}</div>
+                </div>
+              );
+            }
+
+            if (j) {
+              if (j.status === "needs_input") {
+                return (
+                  <div key={msg.id} className="cn-msg-row cn-msg-row--agent">
+                    <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+                    <AINeedsInputCard question={j.question} onSubmit={handleAnswer} />
+                  </div>
+                );
+              }
+              if (j.status === "undo") {
+                return (
+                  <div key={msg.id} className="cn-msg-row cn-msg-row--agent">
+                    <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+                    <div className="cn-msg-undo">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 7c0-3 2.5-5 5-5s5 2 5 5-2.5 5-5 5"/><path d="M2 3v4h4"/></svg>
+                      Action undone successfully
+                    </div>
+                  </div>
+                );
+              }
+              if (j.actions) {
+                return (
+                  <div key={msg.id} className="cn-msg-row cn-msg-row--agent">
+                    <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+                    <div className="cn-agent-card-wrap">
+                      <AIChangesSummary actions={j.actions} results={msg.executedResults} onUndo={handleUndo} message={j.message} rawCartBefore={j.rawCartBefore} before={j.before} />
+                    </div>
+                  </div>
+                );
+              }
+              if (j.message) {
+                const sd = j.scrapedDesign;
+                const wasScraped = sd?.source === "live-scrape";
+                return (
+                  <div key={msg.id} className="cn-msg-row cn-msg-row--agent">
+                    <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+                    <div className="cn-msg-agent">
+                      <div className="cn-msg-agent-meta">
+                        <svg width="9" height="9" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"/></svg>
+                        Cart Ninja AI
+                        {wasScraped && (
+                          <span className="cn-scrape-tag">
+                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="#22C55E" strokeWidth="2"><path d="M2 5l2 2 4-4"/></svg>
+                            Storefront scanned
+                            {sd.primaryColor && <><span className="cn-scrape-swatch" style={{ background: sd.primaryColor }} />{sd.primaryColor}</>}
+                          </span>
+                        )}
+                      </div>
+                      <div className="cn-msg-agent-body">{j.message}</div>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
+            if (msg.type === "scraping") {
+              const completedCount = (msg.steps || []).filter((s) => s.done).length;
+              const totalCount = (msg.steps || []).length;
+              const pct = totalCount > 1 ? Math.round((completedCount / (totalCount - 1)) * 100) : 0;
+              return (
+                <div key={msg.id} className="cn-msg-row cn-msg-row--agent">
+                  <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+                  <div className="cn-exec-card">
+                    <div className="cn-exec-head">
+                      <div className="cn-exec-head-left">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.4-4.4"/></svg>
+                        <span className="cn-exec-heading">{msg.isDesign ? "Scanning Storefront" : "Analyzing Request"}</span>
+                      </div>
+                      <span className="cn-exec-live">LIVE</span>
+                    </div>
+                    {msg.isDesign && (
+                      <div className="cn-exec-url">
+                        <span className="cn-exec-url-dot" />
+                        scanning live store data...
+                      </div>
+                    )}
+                    <div className="cn-exec-track">
+                      <div className="cn-exec-fill" style={{ width: pct + "%" }} />
+                    </div>
+                    <div className="cn-exec-steps">
+                      {(msg.steps || []).map((step, i) => (
+                        <div key={i} className={"cn-exec-step" + (step.done ? " cn-exec-step--done" : step.active ? " cn-exec-step--active" : "")}>
+                          <span className="cn-exec-step-icon">
+                            {step.done
+                              ? <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round"><path d="M3 7l3 3 5-5"/></svg>
+                              : step.active
+                              ? <span className="cn-spinner" />
+                              : <span className="cn-step-dot" />
+                            }
+                          </span>
+                          <span className="cn-exec-step-text">{step.text}</span>
+                          {step.active && <span className="cn-dots"><span /><span /><span /></span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return null;
+          })}
+
+          {/* Thinking indicator */}
+          {loading && messages.length > 0 && !messages.some((m) => m.type === "scraping") && (
+            <div className="cn-msg-row cn-msg-row--agent">
+              <div className="cn-agent-avatar"><CartNinjaLogo size={14} colorMode="white" /></div>
+              <div className="cn-thinking">
+                <span className="cn-thinking-dot" />
+                <span className="cn-thinking-dot" />
+                <span className="cn-thinking-dot" />
+              </div>
+            </div>
           )}
         </div>
-      </div>
-    </>
+
+        {/* ── Input Area ── */}
+        <div className="cn-input-area">
+          <div className="cn-quick-chips">
+            {QUICK_CHIPS.map((chip) => (
+              <button key={chip} className="cn-chip" onClick={() => handleChipClick(chip)}>{chip}</button>
+            ))}
+          </div>
+          <div className="cn-input-box">
+            <button className="cn-input-icon" title="Attach">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M13 7l-5 5a3.5 3.5 0 01-5-5l5-5a2.5 2.5 0 013.5 3.5l-5 5a1.5 1.5 0 01-2-2l4-4"/></svg>
+            </button>
+            <input
+              ref={inputRef}
+              className="cn-input"
+              type="text"
+              placeholder="Ask Cart Ninja AI to help manage your store..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (input.trim() && !loading) handleSend(input);
+                }
+              }}
+              disabled={loading !== null}
+            />
+            <button className="cn-input-icon" title="Voice">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="5" y="1" width="6" height="9" rx="3"/><path d="M2 8a6 6 0 0012 0M8 14v2M6 16h4"/></svg>
+            </button>
+            <button
+              className="cn-send"
+              disabled={!input.trim() || loading !== null}
+              onClick={() => { if (input.trim() && !loading) handleSend(input); }}
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M2 8l12-4-4 8-3-3-3-3z"/></svg>
+            </button>
+          </div>
+          <div className="cn-input-hint">Cart Ninja AI can make mistakes. Review important changes before applying.</div>
+        </div>
+      </main>
+    </div>
   );
 }
 

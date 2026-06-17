@@ -1,6 +1,46 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 
+function parseJSONSafe(v) {
+  if (!v) return {};
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(v); } catch { return {}; }
+}
+
+function dbFlag(v) {
+  return v === 1 || v === '1' || v === true;
+}
+
+function hydrateFromRecord(record, base) {
+  if (!record) return base;
+  const pb = parseJSONSafe(record.progress_data);
+  const cs = parseJSONSafe(record.coupon_data);
+  const up = parseJSONSafe(record.upsell_data);
+  const cbStyle = parseJSONSafe(record.checkout_button_style);
+  return {
+    ...base,
+    status: dbFlag(record.cartStatus ?? record.cart_status) ? 'active' : 'inactive',
+    body: {
+      ...base.body,
+      progressBar: { ...base.body.progressBar, ...pb, enabled: dbFlag(record.progress_status) },
+      couponSlider: { ...base.body.couponSlider, ...cs, enabled: dbFlag(record.coupon_status) },
+      upsellProducts: { ...base.body.upsellProducts, ...up, enabled: dbFlag(record.upsell_status) },
+    },
+    footer: {
+      ...base.footer,
+      checkoutButton: {
+        ...base.footer.checkoutButton,
+        ...(record.checkoutName ? { text: record.checkoutName } : {}),
+        ...(record.checkoutFooterText ? { footerText: record.checkoutFooterText } : {}),
+        ...(cbStyle.backgroundColor ? { bgColor: cbStyle.backgroundColor } : {}),
+        ...(cbStyle.textColor ? { textColor: cbStyle.textColor } : {}),
+        ...(cbStyle.borderRadius != null ? { borderRadius: cbStyle.borderRadius } : {}),
+      },
+      customCSS: record.customCSS || base.footer.customCSS,
+    },
+  };
+}
+
 function mergeConfigIntoState(base, cfg) {
   if (!cfg) return base;
   let next = { ...base };
@@ -32,7 +72,7 @@ function mergeConfigIntoState(base, cfg) {
     };
   }
   if (cfg.moduleStates) {
-    const bodyKeyMap = { progress_bar: 'progressBar', coupon_slider: 'couponSlider', upsells: 'upsellProducts' };
+    const bodyKeyMap = { progress_bar: 'progressBar', coupon_slider: 'couponSlider', upsells: 'upsellProducts', announcements: 'announcements' };
     for (const [storeKey, bodyKey] of Object.entries(bodyKeyMap)) {
       if (storeKey in cfg.moduleStates && next.body?.[bodyKey]) {
         next = { ...next, body: { ...next.body, [bodyKey]: { ...next.body[bodyKey], enabled: cfg.moduleStates[storeKey] } } };
@@ -44,9 +84,10 @@ function mergeConfigIntoState(base, cfg) {
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus }) {
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord }) {
   const [state, setState] = useState(() => {
-    return initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
+    const base = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
+    return initialRecord ? hydrateFromRecord(initialRecord, base) : base;
   });
 
   useEffect(() => {
@@ -59,6 +100,58 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
   }, [initialStatus]);
 
+  // Listen for AI agent color/config changes and apply them live to the editor
+  useEffect(() => {
+    const handler = (e) => {
+      const cart = e?.detail;
+      if (!cart) return;
+      setState((prev) => ({
+        ...prev,
+        ...(cart.drawerEnabled != null ? { status: cart.drawerEnabled ? 'active' : 'inactive' } : {}),
+        body: {
+          ...prev.body,
+          progressBar: {
+            ...prev.body.progressBar,
+            ...(cart.goalBar?.enabled != null ? { enabled: cart.goalBar.enabled } : {}),
+            ...(cart.goalBar?.barColor ? {
+              barForegroundColor: cart.goalBar.barColor,
+              fill_color: cart.goalBar.barColor,
+              colors: { ...prev.body.progressBar.colors, fill: cart.goalBar.barColor },
+            } : {}),
+          },
+          upsellProducts: {
+            ...prev.body.upsellProducts,
+            ...(cart.upsell?.enabled != null ? { enabled: cart.upsell.enabled } : {}),
+            ...(cart.upsell?.buttonColor ? { buttonColor: cart.upsell.buttonColor } : {}),
+            ...(cart.upsell?.accentColor ? { accentColor: cart.upsell.accentColor } : {}),
+          },
+          couponSlider: {
+            ...prev.body.couponSlider,
+            ...(cart.couponSlider?.enabled != null ? { enabled: cart.couponSlider.enabled } : {}),
+          },
+          announcements: {
+            ...prev.body.announcements,
+            ...(cart.announcement?.enabled != null ? { enabled: cart.announcement.enabled } : {}),
+            ...(cart.announcement?.text ? { text: cart.announcement.text } : {}),
+            ...(cart.announcement?.bgColor ? { bgColor: cart.announcement.bgColor } : {}),
+            ...(cart.announcement?.textColor ? { textColor: cart.announcement.textColor } : {}),
+          },
+        },
+        footer: {
+          ...prev.footer,
+          checkoutButton: {
+            ...prev.footer.checkoutButton,
+            ...(cart.checkoutButton?.backgroundColor ? { bgColor: cart.checkoutButton.backgroundColor } : {}),
+            ...(cart.checkoutButton?.textColor ? { textColor: cart.checkoutButton.textColor } : {}),
+            ...(cart.checkoutButton?.borderRadius != null ? { borderRadius: cart.checkoutButton.borderRadius } : {}),
+          },
+        },
+      }));
+    };
+    window.addEventListener("cartEditorConfigUpdated", handler);
+    return () => window.removeEventListener("cartEditorConfigUpdated", handler);
+  }, []);
+
   useEffect(() => {
     function loadCartConfig() {
       try {
@@ -66,7 +159,27 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
         return raw ? JSON.parse(raw) : null;
       } catch { return null; }
     }
-    const handler = () => {
+    // Map featureStore keys → CartEditorContext body keys
+    const FEATURE_TO_BODY = {
+      progress_bar: "progressBar",
+      coupon_slider: "couponSlider",
+      upsells: "upsellProducts",
+      announcements: "announcements",
+    };
+    const handler = (e) => {
+      const { key, value } = e?.detail || {};
+      // Direct update from featureStore.set() — covers AI agent configure_* actions
+      if (key && value !== undefined && FEATURE_TO_BODY[key]) {
+        setState((prev) => ({
+          ...prev,
+          body: {
+            ...prev.body,
+            [FEATURE_TO_BODY[key]]: { ...prev.body[FEATURE_TO_BODY[key]], enabled: value },
+          },
+        }));
+        return;
+      }
+      // Full re-read fallback (storage events, resets, etc.)
       setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
     };
     window.addEventListener("featureStateChanged", handler);

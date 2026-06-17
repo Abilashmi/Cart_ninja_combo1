@@ -77,7 +77,10 @@ export async function action({ request }) {
             applied: result.appliedActions,
             before: result.before,
             after: result.after,
+            rawCartBefore: result.rawCartBefore,
             synced: result.synced,
+            verification: result.verification,
+            backendResponses: result.backendResponses,
             history: historyEntry,
         });
     } catch (err) {
