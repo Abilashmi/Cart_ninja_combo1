@@ -1,34 +1,29 @@
-import { useState, useCallback } from 'react';
+/* eslint-disable react/prop-types */
+import { useCallback, useMemo, useState } from 'react';
 import { useLoaderData, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 
 const ONBOARDING_STEPS = [
-  { id: 'template', title: 'Choose a Template',  description: 'Pick Guided Architect, Grid, Carousel, or Editorial Split', href: '/app/bundles/templates' },
-  { id: 'products', title: 'Pick Collections',   description: 'Select which product collections display in your bundle',   href: '/app/bundles/customize' },
-  { id: 'content',  title: 'Customize Content',  description: 'Add titles, subtitles, CTAs, and AI-generated copy',        href: '/app/bundles/customize' },
-  { id: 'style',    title: 'Style Your Bundle',  description: 'Adjust colors, fonts, banners, and spacing',                href: '/app/bundles/customize' },
-  { id: 'publish',  title: 'Save & Publish',     description: 'Publish as a Shopify page — no theme embedding needed',     href: '/app/bundles/customize' },
+  { id: 'template', title: 'Select layout', description: 'Choose the page structure for this bundle.', href: '/app/bundles/templates' },
+  { id: 'products', title: 'Assign collections', description: 'Map each bundle step to the right products.', href: '/app/bundles/customize' },
+  { id: 'content', title: 'Set offer content', description: 'Write titles, price messaging, and button text.', href: '/app/bundles/customize' },
+  { id: 'style', title: 'Match storefront', description: 'Tune colors, spacing, media, and mobile behavior.', href: '/app/bundles/customize' },
+  { id: 'publish', title: 'Publish page', description: 'Create or update the Shopify page for customers.', href: '/app/bundles/customize' },
 ];
 
 const RECENT_ACTIVITY = [
-  { message: 'Template "Summer Bundle" published',    time: '2h ago',     color: '#10B981' },
-  { message: 'New bundle order — $124.00',            time: '4h ago',     color: '#10B981' },
-  { message: 'Discount code BUNDLE20 created',        time: '1 day ago',  color: '#5B47FB' },
-  { message: '47 new bundle impressions today',       time: '1 day ago',  color: '#5B47FB' },
-  { message: 'Template "Winter Sale" saved as draft', time: '2 days ago', color: '#F59E0B' },
-];
-
-const QUICK_ACTIONS = [
-  { label: 'Template Library', sub: 'Browse saved templates',    href: '/app/bundles/templates', color: '#5B47FB', icon: '▤' },
-  { label: 'Bundle Builder',   sub: 'Design your bundle layout', href: '/app/bundles/customize', color: '#8B5CF6', icon: '✦' },
-  { label: 'Analytics',        sub: 'View performance data',     href: '/app/bundles/analytics', color: '#10B981', icon: '◈' },
+  { message: 'Summer Combo was published', time: '2h ago', tone: 'success' },
+  { message: 'Combo order recorded for $124.00', time: '4h ago', tone: 'success' },
+  { message: 'COMBO20 discount configuration updated', time: '1 day ago', tone: 'info' },
+  { message: '47 combo page sessions tracked today', time: '1 day ago', tone: 'info' },
+  { message: 'Winter Sale saved as draft', time: '2 days ago', tone: 'attention' },
 ];
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let templateCount  = 0;
+  let templateCount = 0;
   let publishedCount = 0;
   let publishedPages = [];
 
@@ -49,179 +44,461 @@ export const loader = async ({ request }) => {
     ).catch(() => []);
     publishedPages = Array.isArray(pubRows) ? pubRows : [];
     publishedCount = publishedPages.length;
-  } catch { /* table may not exist yet */ }
+  } catch {
+    // The template table may not exist on a fresh install.
+  }
 
   return { templateCount, publishedCount, publishedPages };
 };
 
-// ─── Tiny reusable pieces ────────────────────────────────────────────────────
-
-function Chip({ children, color = '#5B47FB' }) {
+function StatCard({ label, value, detail }) {
   return (
-    <span style={{
-      padding: '3px 10px', borderRadius: '20px',
-      background: `${color}12`, color,
-      fontSize: '11.5px', fontWeight: '650',
-      border: `1px solid ${color}22`,
-    }}>
-      {children}
-    </span>
-  );
-}
-
-function IconBox({ icon, color }) {
-  return (
-    <div style={{
-      width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
-      background: `${color}12`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: '15px', color,
-    }}>
-      {icon}
+    <div className="cf-stat-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
     </div>
   );
 }
 
-// ─── Page component ──────────────────────────────────────────────────────────
+function StatusBadge({ children, tone = 'neutral' }) {
+  return <span className={`cf-badge cf-badge-${tone}`}>{children}</span>;
+}
+
+function ExternalIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M8 5H5.5A2.5 2.5 0 0 0 3 7.5v7A2.5 2.5 0 0 0 5.5 17h7A2.5 2.5 0 0 0 15 14.5V12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M11 3h6v6M10 10l6.5-6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function AppBundlesIndex() {
   const { templateCount, publishedCount, publishedPages } = useLoaderData();
   const navigate = useNavigate();
-
   const [completedSteps, setCompletedSteps] = useState([]);
 
   const toggleStep = useCallback((id) => {
-    setCompletedSteps(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    setCompletedSteps((prev) =>
+      prev.includes(id) ? prev.filter((stepId) => stepId !== id) : [...prev, id]
     );
   }, []);
 
   const progress = Math.round((completedSteps.length / ONBOARDING_STEPS.length) * 100);
 
-  const metrics = [
-    { label: 'Active Templates', value: templateCount,  sub: '+12% this week', up: true  },
-    { label: 'Published Pages',  value: publishedCount, sub: 'total',          up: null  },
-    { label: 'Conversions',      value: '0',            sub: '0% rate',        up: null  },
-    { label: 'Bundle Revenue',   value: '$0.00',        sub: 'this month',     up: null  },
-  ];
+  const metrics = useMemo(() => [
+    { label: 'Active templates', value: templateCount, detail: 'Ready to edit or publish' },
+    { label: 'Published pages', value: publishedCount, detail: 'Live Shopify pages' },
+    { label: 'Conversions', value: '0', detail: 'Awaiting order data' },
+    { label: 'Combo revenue', value: '$0.00', detail: 'Current month' },
+  ], [templateCount, publishedCount]);
 
   return (
-    <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0F0F23' }}>
+    <div className="cf-dashboard">
       <style>{`
-        .dash-card       { background:#fff; border-radius:14px; border:1px solid rgba(15,15,35,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04); }
-        .dash-metric     { background:#fff; border-radius:12px; border:1px solid rgba(15,15,35,0.07); padding:18px 20px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
-        .step-row        { display:flex; align-items:flex-start; gap:12px; padding:10px 12px; border-radius:10px; cursor:pointer; transition:background 0.12s; border:1px solid transparent; }
-        .step-row:hover  { background:rgba(91,71,251,0.04); }
-        .step-row.active { background:rgba(91,71,251,0.06); border-color:rgba(91,71,251,0.16); }
-        .step-check      { width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s; margin-top:1px; }
-        .page-row        { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-radius:10px; border:1px solid rgba(15,15,35,0.07); background:#FAFBFC; }
-        .qaction         { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid rgba(15,15,35,0.07); cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s; }
-        .qaction:hover   { border-color:#5B47FB; box-shadow:0 2px 10px rgba(91,71,251,0.10); }
-        .activity-dot    { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:5px; }
-        @media(max-width:900px){.dash-2col{grid-template-columns:1fr !important;}.dash-metrics{grid-template-columns:repeat(2,1fr) !important;}}
+        .cf-dashboard {
+          --ink: #202223;
+          --muted: #6d7175;
+          --border: #dfe3e8;
+          --surface: #ffffff;
+          --subtle: #f7f8f8;
+          --green: #006241;
+          --green-soft: #e6f4ee;
+          --blue: #2c6ecb;
+          --yellow: #b7791f;
+          color: var(--ink);
+        }
+        .cf-page-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 20px;
+          margin-bottom: 18px;
+        }
+        .cf-page-kicker {
+          color: var(--muted);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          margin-bottom: 6px;
+        }
+        .cf-page-head h1 {
+          color: var(--ink);
+          font-size: 24px;
+          line-height: 1.25;
+          margin: 0;
+          font-weight: 750;
+        }
+        .cf-page-head p {
+          color: var(--muted);
+          font-size: 13px;
+          line-height: 1.55;
+          max-width: 620px;
+          margin: 6px 0 0;
+        }
+        .cf-actions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .cf-btn {
+          min-height: 38px;
+          padding: 9px 14px;
+          border-radius: 8px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--ink);
+          cursor: pointer;
+          font: inherit;
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .cf-btn:hover {
+          background: var(--subtle);
+        }
+        .cf-btn-primary {
+          background: var(--green);
+          border-color: var(--green);
+          color: #ffffff;
+        }
+        .cf-btn-primary:hover {
+          background: #004c34;
+        }
+        .cf-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+        .cf-stat-card,
+        .cf-panel {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .cf-stat-card {
+          padding: 16px;
+          min-height: 118px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .cf-stat-card span,
+        .cf-stat-card small {
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+        .cf-stat-card strong {
+          color: var(--ink);
+          font-size: 28px;
+          line-height: 1;
+          font-weight: 760;
+          margin: 12px 0;
+        }
+        .cf-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 18px;
+          align-items: start;
+        }
+        .cf-panel {
+          padding: 18px;
+        }
+        .cf-panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 14px;
+        }
+        .cf-panel h2 {
+          font-size: 15px;
+          margin: 0;
+          font-weight: 720;
+        }
+        .cf-panel p {
+          margin: 3px 0 0;
+          color: var(--muted);
+          font-size: 12.5px;
+          line-height: 1.5;
+        }
+        .cf-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 9px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          white-space: nowrap;
+          border: 1px solid transparent;
+        }
+        .cf-badge-success {
+          color: var(--green);
+          background: var(--green-soft);
+          border-color: #bdd6ca;
+        }
+        .cf-badge-info {
+          color: var(--blue);
+          background: #eef4ff;
+          border-color: #c7d7f2;
+        }
+        .cf-badge-attention {
+          color: var(--yellow);
+          background: #fff5d6;
+          border-color: #f1d083;
+        }
+        .cf-badge-neutral {
+          color: var(--muted);
+          background: #f1f2f2;
+          border-color: var(--border);
+        }
+        .cf-table {
+          display: flex;
+          flex-direction: column;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        .cf-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 14px;
+          align-items: center;
+          padding: 12px 14px;
+          background: #fff;
+          border-bottom: 1px solid var(--border);
+        }
+        .cf-row:last-child {
+          border-bottom: 0;
+        }
+        .cf-row-title {
+          font-size: 13px;
+          font-weight: 650;
+          color: var(--ink);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .cf-row-sub {
+          color: var(--muted);
+          font-size: 12px;
+          margin-top: 2px;
+        }
+        .cf-icon-btn {
+          width: 32px;
+          height: 32px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 7px;
+          border: 1px solid var(--border);
+          color: var(--muted);
+          background: #fff;
+          text-decoration: none;
+        }
+        .cf-empty {
+          padding: 38px 24px;
+          text-align: center;
+          border: 1px dashed #b8c6c0;
+          border-radius: 8px;
+          background: #fbfcfc;
+        }
+        .cf-empty-mark {
+          width: 44px;
+          height: 44px;
+          margin: 0 auto 14px;
+          border-radius: 8px;
+          background: var(--green-soft);
+          color: var(--green);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .cf-empty h3 {
+          margin: 0 0 6px;
+          font-size: 15px;
+        }
+        .cf-empty p {
+          max-width: 430px;
+          margin: 0 auto 18px;
+        }
+        .cf-steps {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .cf-step {
+          width: 100%;
+          border: 1px solid transparent;
+          background: transparent;
+          border-radius: 8px;
+          padding: 10px;
+          display: flex;
+          gap: 10px;
+          text-align: left;
+          cursor: pointer;
+          font: inherit;
+        }
+        .cf-step:hover {
+          background: var(--subtle);
+          border-color: var(--border);
+        }
+        .cf-step-current {
+          background: var(--green-soft);
+          border-color: #bdd6ca;
+        }
+        .cf-step strong {
+          display: block;
+          color: var(--ink);
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.35;
+        }
+        .cf-step small {
+          display: block;
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.4;
+          margin-top: 2px;
+        }
+        .cf-check {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: 2px solid #b5babf;
+          padding: 0;
+          background: transparent;
+          cursor: pointer;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-top: 1px;
+        }
+        .cf-check-done {
+          border-color: var(--green);
+          background: var(--green);
+          color: #fff;
+        }
+        .cf-progress {
+          height: 6px;
+          background: #e4e7e7;
+          border-radius: 999px;
+          overflow: hidden;
+          margin: 8px 0 14px;
+        }
+        .cf-progress span {
+          display: block;
+          height: 100%;
+          width: var(--progress);
+          background: var(--green);
+          border-radius: inherit;
+        }
+        .cf-action-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .cf-action-card {
+          width: 100%;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #fff;
+          padding: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          cursor: pointer;
+          text-align: left;
+          font: inherit;
+        }
+        .cf-action-card:hover {
+          background: var(--subtle);
+        }
+        .cf-activity {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .cf-activity-row {
+          display: flex;
+          gap: 10px;
+        }
+        .cf-activity-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: var(--green);
+          margin-top: 5px;
+          flex-shrink: 0;
+        }
+        @media (max-width: 980px) {
+          .cf-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .cf-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 620px) {
+          .cf-page-head {
+            flex-direction: column;
+          }
+          .cf-metrics {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
-      {/* ── Hero strip ─────────────────────────────────────────── */}
-      <div style={{
-        background: 'linear-gradient(135deg, #5B47FB 0%, #7C3AED 55%, #A855F7 100%)',
-        borderRadius: '16px',
-        padding: '26px 32px',
-        marginBottom: '22px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'relative',
-        overflow: 'hidden',
-        gap: '20px',
-      }}>
-        {/* Background blobs */}
-        <div style={{ position:'absolute', top:'-30px', right:'140px', width:'160px', height:'160px', borderRadius:'50%', background:'rgba(255,255,255,0.06)', pointerEvents:'none' }} />
-        <div style={{ position:'absolute', top:'10px',  right:'60px',  width:'90px',  height:'90px',  borderRadius:'50%', background:'rgba(255,255,255,0.08)', pointerEvents:'none' }} />
-
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: '22px', fontWeight: '700', color: '#fff', letterSpacing: '-0.4px', marginBottom: '7px' }}>
-            Welcome to Combo Studio
-          </div>
-          <div style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.75)', maxWidth: '450px', lineHeight: 1.55 }}>
-            Build high-converting product bundles and publish them as standalone Shopify pages — no theme editing required.
-          </div>
+      <header className="cf-page-head">
+        <div>
+          <div className="cf-page-kicker">Combo Forge</div>
+          <h1>Build modular combo pages for Shopify.</h1>
+          <p>
+            Create, manage, and publish collection-based bundle pages with a focused workflow for templates,
+            offers, storefront styling, and performance tracking.
+          </p>
         </div>
-        <button
-          onClick={() => navigate('/app/bundles/customize')}
-          style={{
-            padding: '11px 22px', borderRadius: '10px',
-            background: '#fff', color: '#5B47FB',
-            border: 'none', fontWeight: '700', fontSize: '13.5px',
-            cursor: 'pointer', flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-            transition: 'box-shadow 0.15s',
-            position: 'relative', zIndex: 1,
-          }}
-        >
-          + Create Bundle
-        </button>
-      </div>
+        <div className="cf-actions">
+          <button className="cf-btn" onClick={() => navigate('/app/bundles/templates')}>Manage templates</button>
+          <button className="cf-btn cf-btn-primary" onClick={() => navigate('/app/bundles/customize')}>Create combo</button>
+        </div>
+      </header>
 
-      {/* ── Metrics row ────────────────────────────────────────── */}
-      <div className="dash-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '22px' }}>
-        {metrics.map(m => (
-          <div key={m.label} className="dash-metric">
-            <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500', marginBottom: '9px' }}>{m.label}</div>
-            <div style={{ fontSize: '28px', fontWeight: '700', color: '#0F0F23', letterSpacing: '-0.6px', lineHeight: 1, marginBottom: '7px' }}>
-              {m.value}
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: '500', color: m.up === true ? '#10B981' : '#94A3B8' }}>
-              {m.up === true && '▲ '}{m.up === false && '▼ '}{m.sub}
-            </div>
-          </div>
+      <section className="cf-metrics" aria-label="Combo Forge metrics">
+        {metrics.map((metric) => (
+          <StatCard key={metric.label} {...metric} />
         ))}
-      </div>
+      </section>
 
-      {/* ── Main 2-column ──────────────────────────────────────── */}
-      <div className="dash-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px' }}>
-
-        {/* ── Left: Published pages ── */}
-        <div className="dash-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', gap: '12px' }}>
+      <section className="cf-grid">
+        <div className="cf-panel">
+          <div className="cf-panel-header">
             <div>
-              <div style={{ fontSize: '16px', fontWeight: '700', color: '#0F0F23', letterSpacing: '-0.3px' }}>
-                Published Bundle Pages
-              </div>
-              <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '3px' }}>
-                Live on your storefront via Cart Ninja
-              </div>
+              <h2>Published combo pages</h2>
+              <p>Standalone Shopify pages connected to Combo Forge templates.</p>
             </div>
-            <Chip color="#10B981">Active via Cart Ninja</Chip>
+            <StatusBadge tone="success">Storefront ready</StatusBadge>
           </div>
 
           {publishedPages.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-              {publishedPages.map((p, i) => (
-                <div key={i} className="page-row">
+            <div className="cf-table">
+              {publishedPages.map((page, index) => (
+                <div key={`${page.page_handle}-${index}`} className="cf-row">
                   <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: '600', color: '#0F0F23' }}>{p.name}</div>
-                    <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>/pages/{p.page_handle}</div>
+                    <div className="cf-row-title">{page.name}</div>
+                    <div className="cf-row-sub">/pages/{page.page_handle}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <Chip color="#10B981">Live</Chip>
-                    {p.page_url && (
-                      <a
-                        href={p.page_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="View page"
-                        style={{
-                          width: '30px', height: '30px', borderRadius: '8px',
-                          background: 'rgba(16,185,129,0.08)',
-                          border: '1px solid rgba(16,185,129,0.20)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          textDecoration: 'none', color: '#10B981',
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                          <path d="M10 4C5.5 4 2 10 2 10s3.5 6 8 6 8-6 8-6-3.5-6-8-6z" stroke="currentColor" strokeWidth="1.5" />
-                          <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                        </svg>
+                  <div className="cf-actions">
+                    <StatusBadge tone="success">Live</StatusBadge>
+                    {page.page_url && (
+                      <a className="cf-icon-btn" href={page.page_url} target="_blank" rel="noreferrer" title="View page">
+                        <ExternalIcon />
                       </a>
                     )}
                   </div>
@@ -229,183 +506,112 @@ export default function AppBundlesIndex() {
               ))}
             </div>
           ) : (
-            <div style={{
-              padding: '36px 24px',
-              borderRadius: '12px',
-              background: 'rgba(91,71,251,0.03)',
-              border: '1.5px dashed rgba(91,71,251,0.22)',
-              textAlign: 'center',
-              marginBottom: '20px',
-            }}>
-              <div style={{ fontSize: '36px', marginBottom: '12px' }}>📦</div>
-              <div style={{ fontSize: '14px', fontWeight: '650', color: '#0F0F23', marginBottom: '6px' }}>
-                No bundle pages yet
+            <div className="cf-empty">
+              <div className="cf-empty-mark">
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M7 8h6M7 11h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
               </div>
-              <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '18px', lineHeight: 1.6 }}>
-                Create a template and click <strong>Save &amp; Publish</strong> to go live instantly.
-              </div>
-              <button
-                onClick={() => navigate('/app/bundles/customize')}
-                style={{
-                  padding: '10px 22px', borderRadius: '9px',
-                  background: '#5B47FB', color: '#fff',
-                  border: 'none', fontWeight: '650', fontSize: '13px', cursor: 'pointer',
-                }}
-              >
-                Create Your First Bundle
-              </button>
+              <h3>No published pages yet</h3>
+              <p>Create a template, assign products, and publish it as a Shopify page when it is ready.</p>
+              <button className="cf-btn cf-btn-primary" onClick={() => navigate('/app/bundles/customize')}>Create first combo</button>
             </div>
           )}
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => navigate('/app/bundles/templates')}
-              style={{
-                padding: '9px 18px', borderRadius: '8px',
-                border: '1px solid rgba(15,15,35,0.12)',
-                background: '#fff', color: '#0F0F23',
-                fontWeight: '600', fontSize: '13px', cursor: 'pointer',
-              }}
-            >
-              Manage Templates
-            </button>
-            <button
-              onClick={() => navigate('/app/bundles/customize')}
-              style={{
-                padding: '9px 18px', borderRadius: '8px',
-                background: '#5B47FB', color: '#fff',
-                border: 'none', fontWeight: '650', fontSize: '13px', cursor: 'pointer',
-              }}
-            >
-              + New Bundle
-            </button>
-          </div>
         </div>
 
-        {/* ── Right column ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-          {/* Getting started */}
-          <div className="dash-card" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F0F23' }}>Getting Started</div>
-              <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '500' }}>
-                {completedSteps.length}/{ONBOARDING_STEPS.length}
+        <aside className="cf-side">
+          <div className="cf-panel">
+            <div className="cf-panel-header">
+              <div>
+                <h2>Setup checklist</h2>
+                <p>{completedSteps.length} of {ONBOARDING_STEPS.length} steps complete</p>
               </div>
+              <StatusBadge>{progress}%</StatusBadge>
             </div>
-            {/* Progress bar */}
-            <div style={{ height: '4px', background: 'rgba(15,15,35,0.07)', borderRadius: '4px', marginBottom: '14px' }}>
-              <div style={{
-                height: '100%', borderRadius: '4px',
-                background: 'linear-gradient(90deg, #5B47FB, #8B5CF6)',
-                width: `${progress}%`, transition: 'width 0.3s ease',
-              }} />
+            <div className="cf-progress" style={{ '--progress': `${progress}%` }}>
+              <span />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {ONBOARDING_STEPS.map((s, i) => {
-                const done    = completedSteps.includes(s.id);
-                const current = i === completedSteps.length && !done;
+            <div className="cf-steps">
+              {ONBOARDING_STEPS.map((step, index) => {
+                const done = completedSteps.includes(step.id);
+                const current = index === completedSteps.length && !done;
                 return (
-                  <div
-                    key={s.id}
-                    className={`step-row${current ? ' active' : ''}`}
-                    onClick={() => navigate(s.href)}
+                  <button
+                    key={step.id}
+                    className={`cf-step${current ? ' cf-step-current' : ''}`}
+                    onClick={() => navigate(step.href)}
                   >
-                    {/* Circle toggle */}
-                    <div
-                      className="step-check"
-                      onClick={e => { e.stopPropagation(); toggleStep(s.id); }}
-                      style={{
-                        background: done ? '#10B981' : 'transparent',
-                        border: done ? 'none' : '2px solid #D1D5DB',
+                    <button
+                      type="button"
+                      className={`cf-check${done ? ' cf-check-done' : ''}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleStep(step.id);
                       }}
+                      aria-label={done ? `Mark ${step.title} incomplete` : `Mark ${step.title} complete`}
                     >
                       {done && (
-                        <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
-                          <path d="M1 4l3 3 6-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" aria-hidden="true">
+                          <path d="M1 5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       )}
-                    </div>
-                    <div>
-                      <div style={{
-                        fontSize: '13px',
-                        fontWeight: done ? '400' : '550',
-                        color: done ? '#94A3B8' : '#0F0F23',
-                        textDecoration: done ? 'line-through' : 'none',
-                      }}>
-                        {s.title}
-                      </div>
-                      {current && (
-                        <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px', lineHeight: 1.4 }}>
-                          {s.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    </button>
+                    <span>
+                      <strong>{step.title}</strong>
+                      {current && <small>{step.description}</small>}
+                    </span>
+                  </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Quick actions */}
-          <div className="dash-card" style={{ padding: '20px' }}>
-            <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F0F23', marginBottom: '12px' }}>Quick Actions</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {QUICK_ACTIONS.map(item => (
-                <div key={item.label} className="qaction" onClick={() => navigate(item.href)}>
-                  <IconBox icon={item.icon} color={item.color} />
+          <div className="cf-panel" style={{ marginTop: 14 }}>
+            <div className="cf-panel-header">
+              <div>
+                <h2>Quick actions</h2>
+                <p>Common module tasks.</p>
+              </div>
+            </div>
+            <div className="cf-action-list">
+              {[
+                ['Open template library', '/app/bundles/templates'],
+                ['Edit combo builder', '/app/bundles/customize'],
+                ['Review analytics', '/app/bundles/analytics'],
+                ['View plans', '/app/bundles/plan'],
+              ].map(([label, href]) => (
+                <button key={label} className="cf-action-card" onClick={() => navigate(href)}>
+                  <span>{label}</span>
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="cf-panel" style={{ marginTop: 14 }}>
+            <div className="cf-panel-header">
+              <div>
+                <h2>Recent activity</h2>
+                <p>Latest combo events.</p>
+              </div>
+            </div>
+            <div className="cf-activity">
+              {RECENT_ACTIVITY.map((activity, index) => (
+                <div key={`${activity.message}-${index}`} className="cf-activity-row">
+                  <span className="cf-activity-dot" />
                   <div>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F0F23' }}>{item.label}</div>
-                    <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '1px' }}>{item.sub}</div>
+                    <div className="cf-row-title">{activity.message}</div>
+                    <div className="cf-row-sub">{activity.time}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Recent activity */}
-          <div className="dash-card" style={{ padding: '20px' }}>
-            <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F0F23', marginBottom: '14px' }}>Recent Activity</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {RECENT_ACTIVITY.map((a, i) => (
-                <div key={i} style={{ display: 'flex', gap: '10px' }}>
-                  <div className="activity-dot" style={{ background: a.color }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '12.5px', color: '#0F0F23', lineHeight: 1.4 }}>{a.message}</div>
-                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{a.time}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Plan upsell */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(91,71,251,0.06) 0%, rgba(139,92,246,0.06) 100%)',
-            border: '1px solid rgba(91,71,251,0.18)',
-            borderRadius: '14px',
-            padding: '18px 20px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#0F0F23' }}>Upgrade to Pro</div>
-              <Chip color="#5B47FB">Free Trial</Chip>
-            </div>
-            <div style={{ fontSize: '12.5px', color: '#64748B', marginBottom: '14px', lineHeight: 1.55 }}>
-              Unlimited templates, AI content generation, and advanced analytics.
-            </div>
-            <button
-              onClick={() => navigate('/app/bundles/plan')}
-              style={{
-                width: '100%', padding: '9px', borderRadius: '8px',
-                background: '#5B47FB', color: '#fff',
-                border: 'none', fontWeight: '650', fontSize: '13px', cursor: 'pointer',
-              }}
-            >
-              View Plans &amp; Upgrade
-            </button>
-          </div>
-        </div>
-      </div>
+        </aside>
+      </section>
     </div>
   );
 }

@@ -722,16 +722,66 @@ const CartNinjaLogo = ({ size = 32, colorMode = "dark" }) => {
   );
 };
 
+// ── Action card SVG icons ─────────────────────────────────────────────────────
+const CARD_ICONS = {
+  fbt: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="5" r="2.5"/><circle cx="15" cy="5" r="2.5"/><circle cx="10" cy="15" r="2.5"/>
+      <path d="M7 6l3 7M13 6l-3 7M7.2 5h5.6"/>
+    </svg>
+  ),
+  upsell: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 15l5-6 4 3 5-7"/>
+      <path d="M14 4h4v4"/>
+    </svg>
+  ),
+  rewards: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 2l2 5h5l-4 3 1.5 5L10 12l-4.5 3L7 10 3 7h5z"/>
+    </svg>
+  ),
+  coupon: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 7a2 2 0 0 0 0 3.5v2.5h16V10.5a2 2 0 0 0 0-3.5V4H2z"/>
+      <path d="M8 7v.5M8 12v.5M12 10H8.5M12 7.5l-4 5"/>
+    </svg>
+  ),
+  optimize: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h2l3 9h6l2-6H9"/>
+      <circle cx="8" cy="17" r="1.3"/><circle cx="15" cy="17" r="1.3"/>
+    </svg>
+  ),
+  analyze: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <path d="M3 17V4"/><path d="M3 17h14"/>
+      <rect x="5" y="10" width="3" height="5" rx="1"/><rect x="10" y="7" width="3" height="8" rx="1"/><rect x="15" y="4" width="3" height="11" rx="1"/>
+    </svg>
+  ),
+  health: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10h3l2-5 3 8 2-5 2 3h4"/>
+    </svg>
+  ),
+  revenue: (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="10" cy="10" r="8"/>
+      <path d="M10 6v1.5M10 12.5V14M7.5 11.5c0 1 1 1.5 2.5 1.5s2.5-.7 2.5-1.7-1-1.5-2.5-1.8-2.5-.8-2.5-1.8S8.9 6 10.5 6 13 6.7 13 7.5"/>
+    </svg>
+  ),
+};
+
 // ── Welcome screen action cards ──────────────────────────────────────────────
 const ACTION_CARDS = [
-  { id: "fbt",      icon: "🔗", title: "Generate FBT",      desc: "Find product combos that drive sales",    query: "Generate FBT products for my store" },
-  { id: "upsell",   icon: "⬆️", title: "Create Upsell",     desc: "Boost AOV with smart recommendations",    query: "Set up upsell offers" },
-  { id: "rewards",  icon: "🏆", title: "Configure Rewards",  desc: "Build loyalty with reward programs",      query: "Configure rewards program" },
-  { id: "coupon",   icon: "🏷️", title: "Create Coupon",     desc: "Launch discounts and promotions",         query: "Create a coupon discount" },
-  { id: "optimize", icon: "🛒", title: "Optimize Cart",      desc: "Maximize conversion rates",               query: "Optimize cart for conversions" },
-  { id: "analyze",  icon: "📊", title: "Analyze Store",      desc: "Deep dive into performance metrics",      query: "Analyze my store performance" },
-  { id: "health",   icon: "🏥", title: "Store Health",       desc: "Check your optimization score",           query: "Audit my store setup" },
-  { id: "revenue",  icon: "💰", title: "Revenue Insights",   desc: "Identify growth opportunities",           query: "Increase revenue and AOV" },
+  { id: "fbt",      icon: CARD_ICONS.fbt,      title: "Generate FBT",      desc: "Find product combos that drive sales",    query: "Generate FBT products for my store" },
+  { id: "upsell",   icon: CARD_ICONS.upsell,   title: "Create Upsell",     desc: "Boost AOV with smart recommendations",    query: "Set up upsell offers" },
+  { id: "rewards",  icon: CARD_ICONS.rewards,  title: "Configure Rewards",  desc: "Build loyalty with reward programs",      query: "Configure rewards program" },
+  { id: "coupon",   icon: CARD_ICONS.coupon,   title: "Create Coupon",     desc: "Launch discounts and promotions",         query: "Create a coupon discount" },
+  { id: "optimize", icon: CARD_ICONS.optimize, title: "Optimize Cart",      desc: "Maximize conversion rates",               query: "Optimize cart for conversions" },
+  { id: "analyze",  icon: CARD_ICONS.analyze,  title: "Analyze Store",      desc: "Deep dive into performance metrics",      query: "Analyze my store performance" },
+  { id: "health",   icon: CARD_ICONS.health,   title: "Store Health",       desc: "Check your optimization score",           query: "Audit my store setup" },
+  { id: "revenue",  icon: CARD_ICONS.revenue,  title: "Revenue Insights",   desc: "Identify growth opportunities",           query: "Increase revenue and AOV" },
 ];
 
 const QUICK_CHIPS = [

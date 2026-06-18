@@ -174,15 +174,15 @@ const RESPONSES = {
     type: "text",
   },
   help: {
-    text: "Here's what I can help you with:\n\n**⚡ Actions**\n• Enable/configure Cart Drawer\n• Set up Upsell Recommendations\n• Add Trust Badges & Goal Bar\n• Match store theme\n\n**📊 Analytics**\n• Conversion rates & trends\n• Revenue reports\n• Traffic sources\n• Cart abandonment insights\n\n**💡 Tips**\n• Best practices for higher AOV\n• Mobile optimization suggestions\n• Trust & security improvements\n\nJust type what you'd like to do!",
+    text: "Here's what I can help you with:\n\n**Actions**\n• Enable/configure Cart Drawer\n• Set up Upsell Recommendations\n• Add Trust Badges & Goal Bar\n• Match store theme\n\n**Analytics**\n• Conversion rates & trends\n• Revenue reports\n• Traffic sources\n• Cart abandonment insights\n\n**Tips**\n• Best practices for higher AOV\n• Mobile optimization suggestions\n• Trust & security improvements\n\nJust type what you'd like to do!",
     type: "text",
   },
   greeting: {
-    text: "Hey there! 👋 I'm your **Cart Ninja AI assistant**. I can help you optimize your store, check analytics, or make changes.\n\nTry asking me:\n• \"Enable the cart drawer\"\n• \"What's my conversion rate?\"\n• \"Add upsell recommendations\"\n• \"How do I reduce cart abandonment?\"",
+    text: "Hello! I'm your **Cart Ninja AI assistant**. I can help you optimize your store, check analytics, or make changes.\n\nTry asking me:\n• \"Enable the cart drawer\"\n• \"What's my conversion rate?\"\n• \"Add upsell recommendations\"\n• \"How do I reduce cart abandonment?\"",
     type: "text",
   },
   thanks: {
-    text: "You're welcome! 😊 Let me know if you need anything else. I'm here 24/7 to help optimize your store.",
+    text: "You're welcome! Let me know if you need anything else. I'm here 24/7 to help optimize your store.",
     type: "text",
   },
   general: {
@@ -237,7 +237,7 @@ function mockAgentApi(userMessage, previousMessages = []) {
         resolve({
           id: `msg-${Date.now()}`,
           role: "agent",
-          text: "✅ **Changes applied successfully!** Your store settings have been updated. You can check the results in your analytics dashboard within 24 hours.\n\nNeed anything else?",
+          text: "**Changes applied successfully!** Your store settings have been updated. You can check the results in your analytics dashboard within 24 hours.\n\nNeed anything else?",
           type: "text",
         });
       }, 800);
@@ -250,7 +250,7 @@ function mockAgentApi(userMessage, previousMessages = []) {
         resolve({
           id: `msg-${Date.now()}`,
           role: "agent",
-          text: "✅ **Previous changes reverted.** Your store settings have been restored to their previous state.\n\nIs there anything else I can help you with?",
+          text: "**Previous changes reverted.** Your store settings have been restored to their previous state.\n\nIs there anything else I can help you with?",
           type: "text",
         });
       }, 600);

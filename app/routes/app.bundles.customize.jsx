@@ -627,7 +627,7 @@ export const loader = async ({ request }) => {
         localTemplate = {
           id: Number(found.id),
           title: found.name || 'Untitled',
-          active: found.is_active === 1,
+          active: Boolean(found.is_active),
           config: (() => { try { return JSON.parse(found.customization_data || '{}'); } catch { return {}; } })(),
           template_type: found.template_type || 'grid',
           shop,
@@ -1348,7 +1348,7 @@ const DEFAULT_COMBO_CONFIG = {
   // Title & Description defaults
   show_title_description: true,
   collection_title: 'Create Your Combo',
-  collection_description: 'Select items to build your perfect bundle.',
+  collection_description: 'Select items to build your perfect combo.',
   heading_align: 'left',
   heading_size: 28,
   heading_color: '#333333',
@@ -1497,7 +1497,7 @@ const TEMPLATE_CATALOGUE = [
       'Tiered discount auto-unlocks as cart fills',
       'Sticky checkout summary at the bottom',
     ],
-    bestFor: 'FMCG kits, meal bundles, multi-category sets',
+    bestFor: 'FMCG kits, meal combos, multi-category sets',
     differentiators: [
       'Only layout with enforced step order',
       'Built-in progress-bar discount engine',
@@ -1545,7 +1545,7 @@ const TEMPLATE_CATALOGUE = [
       'Simplest flow — no steps or tabs',
       'Dark-mode ready colour scheme',
     ],
-    bestFor: 'Gift sets, capsule collections, single-category bundles',
+    bestFor: 'Gift sets, capsule collections, single-category combos',
     differentiators: [
       'No steps or tabs — one collection only',
       'Hero image is the centrepiece',
@@ -3252,10 +3252,10 @@ export default function Customize() {
             onClick={handleSaveClick}
             style={{
               padding: '6px 16px', borderRadius: '7px',
-              background: '#5B47FB', color: '#fff',
+              background: '#006241', color: '#fff',
               border: 'none', fontWeight: '650', fontSize: '12.5px',
               cursor: 'pointer', fontFamily: 'inherit',
-              boxShadow: '0 2px 6px rgba(91,71,251,0.28)',
+              boxShadow: 'none',
             }}
           >
             Save Template
@@ -3413,7 +3413,7 @@ export default function Customize() {
 .studio-device-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#13142A;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0}
 .studio-device-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.6);font-size:12.5px;font-weight:550;cursor:pointer;transition:all 0.13s;font-family:inherit}
 .studio-device-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9)}
-.studio-device-btn.active{background:rgba(91,71,251,0.3);border-color:rgba(91,71,251,0.5);color:#fff}
+.studio-device-btn.active{background:rgba(0,98,65,0.34);border-color:rgba(0,98,65,0.58);color:#fff}
 .studio-preview-scroll{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px}
 .studio-sidebar{background:#fff;border-left:1px solid rgba(15,15,35,0.08);overflow-y:auto;overflow-x:hidden}
 
@@ -5812,7 +5812,7 @@ function ComboPreview({
               textAlign: 'center',
             }}
           >
-            ⚠️ No products found. Select a collection above to display your real Shopify products here.
+            No products found. Select a collection above to display your real Shopify products here.
           </div>
         )}
         <div style={{ position: 'relative', width: '100%' }}>
@@ -6245,7 +6245,7 @@ function ComboPreview({
                     gap: '8px',
                   }}
                 >
-                  🛒 {config.hero_btn_text || 'Add to Cart - Save 38%'}
+                  {config.hero_btn_text || 'Add to Cart - Save 38%'}
                 </button>
               </div>
             </div>
@@ -6919,7 +6919,7 @@ function ComboPreview({
                 }}
               >
                 {config.collection_description ||
-                  'Select items to build your perfect bundle.'}
+                  'Select items to build your perfect combo.'}
               </p>
             </div>
           </div>
@@ -6992,8 +6992,11 @@ function ComboPreview({
                       fontSize: '13px',
                     }}
                   >
-                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>
-                      📦
+                    <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                      <svg width="24" height="24" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                        <path d="M7 8h6M7 11h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                      </svg>
                     </div>
                     <div style={{ fontWeight: '600', marginBottom: '4px' }}>
                       No collection selected
@@ -7027,8 +7030,10 @@ function ComboPreview({
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>
-                          🔍
+                        <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                          <svg width="24" height="24" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path d="M9 16A7 7 0 1 0 9 2a7 7 0 0 0 0 14ZM14 14l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
                         </div>
                         <div style={{ fontWeight: '600', marginBottom: '4px' }}>
                           No products found

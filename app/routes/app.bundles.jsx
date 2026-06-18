@@ -10,130 +10,202 @@ export const loader = async ({ request }) => {
 const NAV_TABS = [
   { id: 'dashboard', label: 'Dashboard', href: '/app/bundles' },
   { id: 'templates', label: 'Templates', href: '/app/bundles/templates' },
-  { id: 'customize', label: 'Builder',   href: '/app/bundles/customize' },
+  { id: 'customize', label: 'Builder', href: '/app/bundles/customize' },
   { id: 'analytics', label: 'Analytics', href: '/app/bundles/analytics' },
 ];
 
-export default function AppBundlesLayout() {
-  const location  = useLocation();
-  const navigate  = useNavigate();
+function BundleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <rect x="3" y="4" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="11" y="4" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <rect x="7" y="12" width="6" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M9 7h2M10 10v2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-  const activeTabId = NAV_TABS.find(t =>
-    t.href === '/app/bundles'
+export default function AppBundlesLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const activeTabId = NAV_TABS.find((tab) =>
+    tab.href === '/app/bundles'
       ? location.pathname === '/app/bundles' || location.pathname === '/app/bundles/'
-      : location.pathname.startsWith(t.href)
+      : location.pathname.startsWith(tab.href)
   )?.id ?? NAV_TABS[0].id;
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#F4F6FA',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    }}>
+    <div className="cf-shell">
       <style>{`
-        .cs-nav-btn {
-          border: none; background: transparent; cursor: pointer;
-          padding: 7px 15px; border-radius: 8px;
-          font-size: 13.5px; font-weight: 500; color: #64748B;
-          transition: background 0.13s, color 0.13s;
-          outline: none; white-space: nowrap; font-family: inherit;
-          line-height: 1;
+        .cf-shell {
+          --cf-bg: #f6f7f7;
+          --cf-surface: #ffffff;
+          --cf-ink: #202223;
+          --cf-muted: #6d7175;
+          --cf-border: #dfe3e8;
+          --cf-green: #006241;
+          --cf-green-soft: #e6f4ee;
+          min-height: 100vh;
+          background: var(--cf-bg);
+          color: var(--cf-ink);
+          font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
         }
-        .cs-nav-btn:hover  { background: rgba(91,71,251,0.07); color: #5B47FB; }
-        .cs-nav-btn.active { background: rgba(91,71,251,0.11); color: #5B47FB; font-weight: 650; }
+        .cf-topbar {
+          position: sticky;
+          top: 0;
+          z-index: 200;
+          height: 60px;
+          padding: 0 28px;
+          background: var(--cf-surface);
+          border-bottom: 1px solid var(--cf-border);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px;
+        }
+        .cf-brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          min-width: 220px;
+        }
+        .cf-brand-mark {
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          border: 1px solid #bdd6ca;
+          background: var(--cf-green-soft);
+          color: var(--cf-green);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .cf-brand-title {
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.15;
+        }
+        .cf-brand-subtitle {
+          color: var(--cf-muted);
+          font-size: 11px;
+          margin-top: 2px;
+        }
+        .cf-nav {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px;
+          border: 1px solid var(--cf-border);
+          border-radius: 8px;
+          background: #f7f8f8;
+        }
+        .cf-nav-btn {
+          border: 0;
+          background: transparent;
+          cursor: pointer;
+          padding: 8px 13px;
+          border-radius: 6px;
+          color: var(--cf-muted);
+          font: inherit;
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .cf-nav-btn:hover {
+          color: var(--cf-ink);
+          background: #eef1f1;
+        }
+        .cf-nav-btn.active {
+          color: var(--cf-ink);
+          background: var(--cf-surface);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .cf-status {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--cf-muted);
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .cf-status-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 10px;
+          border-radius: 999px;
+          background: var(--cf-green-soft);
+          border: 1px solid #bdd6ca;
+          color: var(--cf-green);
+        }
+        .cf-status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+        .cf-content {
+          padding: 24px 28px 32px;
+          max-width: 1480px;
+          margin: 0 auto;
+        }
+        @media (max-width: 860px) {
+          .cf-topbar {
+            height: auto;
+            padding: 14px 16px;
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .cf-nav {
+            width: 100%;
+            overflow-x: auto;
+          }
+          .cf-status {
+            display: none;
+          }
+          .cf-content {
+            padding: 16px;
+          }
+        }
       `}</style>
 
-      {/* ── Top command bar ─────────────────────────────────── */}
-      <div style={{
-        background: '#fff',
-        borderBottom: '1px solid rgba(15,15,35,0.08)',
-        padding: '0 28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: '58px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 200,
-        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
-      }}>
-        {/* Left: logo + nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* Logo mark */}
-          <div style={{
-            width: '34px', height: '34px', borderRadius: '10px',
-            background: 'linear-gradient(135deg, #5B47FB 0%, #8B5CF6 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M9.5 4 C7.5 3 5 2.3 3.5 3.2 L5 5 C7 4.8 8.8 5 9.5 5.6 Z" fill="white"/>
-              <circle cx="13.5" cy="5.6" r="3.5" stroke="white" strokeWidth="1.8" fill="none"/>
-              <line x1="10" y1="5.6" x2="17" y2="5.6" stroke="white" strokeWidth="1.3"/>
-              <path d="M2 15 C2 9.5 22 9.5 22 15" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-              <line x1="2" y1="17.5" x2="15" y2="17.5" stroke="white" strokeWidth="2.3" strokeLinecap="round"/>
-              <line x1="13.5" y1="16.5" x2="7" y2="21" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="7" y1="21" x2="22" y2="21" stroke="white" strokeWidth="2.3" strokeLinecap="round"/>
-            </svg>
+      <div className="cf-topbar">
+        <div className="cf-brand">
+          <div className="cf-brand-mark">
+            <BundleMark />
           </div>
-
-          {/* Brand name */}
-          <div style={{ marginRight: '4px' }}>
-            <div style={{ fontWeight: '700', fontSize: '15px', color: '#0F0F23', letterSpacing: '-0.3px', lineHeight: 1 }}>
-              Combo Studio
-            </div>
-            <div style={{ fontSize: '10.5px', color: '#94A3B8', letterSpacing: '0.4px', marginTop: '2px', textTransform: 'uppercase' }}>
-              Bundle Builder
-            </div>
+          <div>
+            <div className="cf-brand-title">Combo Forge</div>
+            <div className="cf-brand-subtitle">Bundle pages and offers</div>
           </div>
-
-          {/* Separator */}
-          <div style={{ width: '1px', height: '22px', background: 'rgba(0,0,0,0.09)' }} />
-
-          {/* Nav pills */}
-          <nav style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
-            {NAV_TABS.map(tab => (
-              <button
-                key={tab.id}
-                className={`cs-nav-btn${tab.id === activeTabId ? ' active' : ''}`}
-                onClick={() => navigate(tab.href)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
         </div>
 
-        {/* Right: status badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            padding: '4px 12px', borderRadius: '20px',
-            background: 'rgba(91,71,251,0.08)', color: '#5B47FB',
-            fontSize: '11.5px', fontWeight: '650',
-            border: '1px solid rgba(91,71,251,0.18)',
-          }}>
-            Pro Trial
-          </span>
-          <span style={{
-            padding: '4px 12px', borderRadius: '20px',
-            background: 'rgba(16,185,129,0.08)', color: '#10B981',
-            fontSize: '11.5px', fontWeight: '650',
-            border: '1px solid rgba(16,185,129,0.20)',
-            display: 'flex', alignItems: 'center', gap: '5px',
-          }}>
-            <span style={{
-              width: '6px', height: '6px', borderRadius: '50%',
-              background: '#10B981', flexShrink: 0,
-            }} />
-            Live
+        <nav className="cf-nav" aria-label="Combo Forge navigation">
+          {NAV_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`cf-nav-btn${tab.id === activeTabId ? ' active' : ''}`}
+              onClick={() => navigate(tab.href)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="cf-status">
+          <span className="cf-status-pill">
+            <span className="cf-status-dot" />
+            Storefront sync ready
           </span>
         </div>
       </div>
 
-      {/* ── Page content ─────────────────────────────────────── */}
-      <div style={{ padding: '28px' }}>
+      <main className="cf-content">
         <Outlet />
-      </div>
+      </main>
     </div>
   );
 }
@@ -141,4 +213,5 @@ export default function AppBundlesLayout() {
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
+
 export const headers = (headersArgs) => boundary.headers(headersArgs);

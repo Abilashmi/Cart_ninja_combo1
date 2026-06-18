@@ -25,16 +25,25 @@ export const loader = async ({ params, request }) => {
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS combo_templates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      shop_domain TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', slug TEXT,
-      template_type TEXT NOT NULL DEFAULT 'grid', status TEXT NOT NULL DEFAULT 'draft',
-      is_active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1,
-      description TEXT, features TEXT, customization_data TEXT,
-      page_handle TEXT, page_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id INT NOT NULL AUTO_INCREMENT,
+      shop_domain VARCHAR(255) NOT NULL,
+      name VARCHAR(500) NOT NULL DEFAULT '',
+      slug VARCHAR(255) DEFAULT NULL,
+      template_type VARCHAR(100) NOT NULL DEFAULT 'grid',
+      status VARCHAR(50) NOT NULL DEFAULT 'draft',
+      is_active TINYINT NOT NULL DEFAULT 1,
+      version INT NOT NULL DEFAULT 1,
+      description TEXT DEFAULT NULL,
+      features TEXT DEFAULT NULL,
+      customization_data LONGTEXT DEFAULT NULL,
+      page_handle VARCHAR(255) DEFAULT NULL,
+      page_id VARCHAR(255) DEFAULT NULL,
+      page_url VARCHAR(500) DEFAULT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
     )
-  `);
+  `).catch(() => {});
 
   const rows = await prisma.$queryRawUnsafe(
     `SELECT * FROM combo_templates WHERE id = ? AND shop_domain = ?`,
@@ -523,7 +532,11 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
               background: '#f9fafb', borderRadius: '8px',
               border: '2px dashed #e1e3e5', color: '#8c9196', fontSize: '13px',
             }}>
-              <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
+              <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+              </div>
               <div style={{ fontWeight: '600', marginBottom: '4px' }}>No products in this tab</div>
             </div>
           ) : (
@@ -686,7 +699,11 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                     background: '#f9fafb', borderRadius: '8px',
                     border: '2px dashed #e1e3e5', color: '#8c9196', fontSize: '13px',
                   }}>
-                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔍</div>
+                    <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+              </div>
                     <div style={{ fontWeight: '600', marginBottom: '4px' }}>No products found</div>
                     <div>The selected collection has no products.</div>
                   </div>
@@ -851,27 +868,32 @@ export default function ComboPreviewPage() {
         }
       `}</style>
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        padding: '14px 28px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', boxShadow: '0 2px 12px rgba(102,126,234,0.35)',
+        background: '#ffffff',
+        padding: '12px 24px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottom: '1px solid #e5e7eb',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <a href={`/app/bundles/templates`} style={{
-            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.25)',
-            borderRadius: '8px', color: '#fff', padding: '6px 12px', cursor: 'pointer',
-            fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center',
-            gap: '6px', textDecoration: 'none',
+            background: '#f3f4f6', border: '1px solid #e5e7eb',
+            borderRadius: '7px', color: '#374151', padding: '6px 12px', cursor: 'pointer',
+            fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center',
+            gap: '5px', textDecoration: 'none',
           }}>
-            ← Back
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 12L6 8l4-4"/>
+            </svg>
+            Back
           </a>
-          <span style={{ color: '#fff', fontWeight: '700', fontSize: '19px', letterSpacing: '-0.4px' }}>
-            Preview: {templateName}
+          <span style={{ color: '#111827', fontWeight: '600', fontSize: '15px' }}>
+            Preview: <span style={{ color: '#6b7280' }}>{templateName}</span>
           </span>
         </div>
         {selected.size > 0 && (
           <div style={{
-            background: 'rgba(255,255,255,0.2)', borderRadius: '8px',
-            padding: '6px 14px', color: '#fff', fontSize: '14px', fontWeight: 600,
+            background: '#f0fdf4', border: '1px solid #bbf7d0',
+            borderRadius: '8px', padding: '5px 12px',
+            color: '#15803d', fontSize: '13px', fontWeight: 600,
           }}>
             {selected.size} selected
           </div>

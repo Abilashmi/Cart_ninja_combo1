@@ -2,10 +2,28 @@ import { useCallback, useEffect, useRef } from "react";
 import { Card, Box, BlockStack, InlineStack, Text, TextField, Button, Icon } from "@shopify/polaris";
 import { ChatIcon, XIcon } from "@shopify/polaris-icons";
 
+const TIP_ICONS = {
+  cart: (
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M3 3h2l3 9h7l2-6H8"/><circle cx="8" cy="17" r="1.3"/><circle cx="15" cy="17" r="1.3"/>
+    </svg>
+  ),
+  chart: (
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M3 16l4-5 4 3 6-8"/>
+    </svg>
+  ),
+  sparkle: (
+    <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+      <path d="M10 2l1.5 5H17l-4.5 3 1.5 5L10 12l-4 3 1.5-5L3 7h5.5z"/>
+    </svg>
+  ),
+};
+
 const QUICK_TIPS = [
-  { text: "Enable cart drawer", emoji: "\u{1F6D2}" },
-  { text: "Conversion rate", emoji: "\u{1F4C8}" },
-  { text: "What can you do?", emoji: "\u{1F916}" },
+  { text: "Enable cart drawer", icon: TIP_ICONS.cart },
+  { text: "Conversion rate", icon: TIP_ICONS.chart },
+  { text: "What can you do?", icon: TIP_ICONS.sparkle },
 ];
 
 export default function GreetingPopover({ input, onInputChange, onActivate, onClose }) {
@@ -78,7 +96,7 @@ export default function GreetingPopover({ input, onInputChange, onActivate, onCl
                   fontWeight: 450,
                 }}
               >
-                {tip.emoji} {tip.text}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{tip.icon}{tip.text}</span>
               </button>
             ))}
           </InlineStack>

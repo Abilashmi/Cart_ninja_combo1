@@ -284,7 +284,7 @@ function ConversationItem({ conv, active, openMenuId, onSelect, onMenuOpen, onRe
         />
       ) : (
         <>
-          {conv.pinned && <span className="cnv4-pin-mark" title="Pinned">📌</span>}
+          {conv.pinned && <span className="cnv4-pin-mark" title="Pinned"><Icon name="pin" size={12} /></span>}
           <span className="cnv4-conv-title">{conv.title || "New Chat"}</span>
           <button
             className="cnv4-conv-dots"

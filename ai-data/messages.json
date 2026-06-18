@@ -3399,5 +3399,283 @@
     "off_topic": false,
     "insight_mode": "modules",
     "createdAt": "2026-06-17T12:19:19.999Z"
+  },
+  {
+    "id": "mqj0lhzwo2s35",
+    "conversationId": "mqgkrw2ll4s2s",
+    "role": "user",
+    "message": "Generate FBT",
+    "createdAt": "2026-06-18T04:43:31.292Z"
+  },
+  {
+    "id": "mqj0llkn5yi4f",
+    "conversationId": "mqgkrw2ll4s2s",
+    "role": "assistant",
+    "message": "FBT Configuration Updated\nTemplate: Modern Cards\nMode: AI\nStatus: Enabled\nProducts: AI-recommended (up to 5)\nLayout: Horizontal with Add All button\n\nVerification Successful",
+    "summary": "Configure Frequently Bought Together — Completed",
+    "actions": [
+      {
+        "type": "configure_fbt",
+        "label": "Configure Frequently Bought Together",
+        "settings": {
+          "template": "fbt2",
+          "mode": "ai"
+        }
+      }
+    ],
+    "executedActions": [
+      {
+        "action": "configureFBT",
+        "impact": "FBT enabled with Modern Cards template and AI recommendation mode."
+      }
+    ],
+    "before": {
+      "cart": {
+        "drawerEnabled": true,
+        "upsell": {
+          "enabled": true,
+          "template": "grid",
+          "buttonColor": "#008060",
+          "accentColor": "#008060",
+          "mobileOptimized": false
+        },
+        "goalBar": {
+          "enabled": true,
+          "barColor": "#2e5bca",
+          "completionText": "🎉 All Rewards Unlocked!"
+        },
+        "trustBadges": {
+          "enabled": false,
+          "style": "secure-checkout"
+        },
+        "announcement": {
+          "enabled": false,
+          "text": ""
+        },
+        "couponSlider": {
+          "enabled": true
+        },
+        "checkoutButton": {
+          "backgroundColor": "#a62020",
+          "textColor": "#ffffff",
+          "borderRadius": 8
+        }
+      },
+      "fbt": {
+        "enabled": true,
+        "template": "fbt1"
+      }
+    },
+    "after": {
+      "cart": {
+        "drawerEnabled": true,
+        "upsell": {
+          "enabled": true,
+          "template": "grid",
+          "buttonColor": "#008060",
+          "accentColor": "#008060",
+          "mobileOptimized": false
+        },
+        "goalBar": {
+          "enabled": true,
+          "barColor": "#2e5bca",
+          "completionText": "🎉 All Rewards Unlocked!"
+        },
+        "trustBadges": {
+          "enabled": false,
+          "style": "secure-checkout"
+        },
+        "announcement": {
+          "enabled": false,
+          "text": ""
+        },
+        "couponSlider": {
+          "enabled": true
+        },
+        "checkoutButton": {
+          "backgroundColor": "#a62020",
+          "textColor": "#ffffff",
+          "borderRadius": 8
+        }
+      },
+      "fbt": {
+        "enabled": true,
+        "template": "fbt2"
+      }
+    },
+    "synced": true,
+    "verification": {
+      "verified": true,
+      "results": [
+        {
+          "action": "configureFBT",
+          "expected": true,
+          "actual": true,
+          "passed": true
+        }
+      ],
+      "source": "mysql"
+    },
+    "backendResponses": {
+      "cart": null,
+      "fbt": {
+        "httpStatus": 200,
+        "body": {
+          "status": "success",
+          "message": "FBT widget saved"
+        }
+      }
+    },
+    "off_topic": false,
+    "insight_mode": "modules",
+    "createdAt": "2026-06-18T04:43:35.927Z"
+  },
+  {
+    "id": "mqj21bxzgjm7s",
+    "conversationId": "mqj21bahjt47p",
+    "role": "user",
+    "message": "enable the progress bar and set the tier 1 for 200rs",
+    "createdAt": "2026-06-18T05:23:49.560Z"
+  },
+  {
+    "id": "mqj21hbmq53bq",
+    "conversationId": "mqj21bahjt47p",
+    "role": "assistant",
+    "message": "Progress Bar Configuration Updated\nGoal: ₹999\nReward: Free Shipping\nStatus: Enabled\nMilestones: 3 tiers configured\n\nVerification Successful",
+    "summary": "Configure Free Shipping Goal Bar — Completed",
+    "actions": [
+      {
+        "type": "configure_goal_bar",
+        "label": "Configure Free Shipping Goal Bar",
+        "settings": {
+          "goal": 999,
+          "reward": "Free Shipping",
+          "currency": "INR",
+          "tiers": [
+            {
+              "minValue": 0,
+              "description": "Start shopping",
+              "iconPreset": "box"
+            },
+            {
+              "minValue": 200,
+              "description": "Halfway there!",
+              "iconPreset": "truck"
+            },
+            {
+              "minValue": 999,
+              "description": "Free Shipping unlocked!",
+              "iconPreset": "star"
+            }
+          ]
+        }
+      }
+    ],
+    "executedActions": [
+      {
+        "action": "configureGoalBar",
+        "impact": "Free shipping goal bar enabled with ₹999 target and milestone rewards."
+      }
+    ],
+    "before": {
+      "cart": {
+        "drawerEnabled": true,
+        "upsell": {
+          "enabled": true,
+          "template": "grid",
+          "buttonColor": "#008060",
+          "accentColor": "#008060",
+          "mobileOptimized": false
+        },
+        "goalBar": {
+          "enabled": true,
+          "barColor": "#2e5bca",
+          "completionText": "🎉 All Rewards Unlocked!"
+        },
+        "trustBadges": {
+          "enabled": false,
+          "style": "secure-checkout"
+        },
+        "announcement": {
+          "enabled": false,
+          "text": ""
+        },
+        "couponSlider": {
+          "enabled": true
+        },
+        "checkoutButton": {
+          "backgroundColor": "#a62020",
+          "textColor": "#ffffff",
+          "borderRadius": 8
+        }
+      },
+      "fbt": {
+        "enabled": true,
+        "template": "fbt2"
+      }
+    },
+    "after": {
+      "cart": {
+        "drawerEnabled": true,
+        "upsell": {
+          "enabled": true,
+          "template": "grid",
+          "buttonColor": "#008060",
+          "accentColor": "#008060",
+          "mobileOptimized": false
+        },
+        "goalBar": {
+          "enabled": true,
+          "barColor": "#2e5bca",
+          "completionText": "🎉 You've unlocked Free Shipping!"
+        },
+        "trustBadges": {
+          "enabled": false,
+          "style": "secure-checkout"
+        },
+        "announcement": {
+          "enabled": false,
+          "text": ""
+        },
+        "couponSlider": {
+          "enabled": true
+        },
+        "checkoutButton": {
+          "backgroundColor": "#a62020",
+          "textColor": "#ffffff",
+          "borderRadius": 8
+        }
+      },
+      "fbt": {
+        "enabled": true,
+        "template": "fbt2"
+      }
+    },
+    "synced": true,
+    "verification": {
+      "verified": true,
+      "results": [
+        {
+          "action": "configureGoalBar",
+          "expected": true,
+          "actual": true,
+          "passed": true
+        }
+      ],
+      "source": "mysql"
+    },
+    "backendResponses": {
+      "cart": {
+        "httpStatus": 200,
+        "body": {
+          "status": "success",
+          "message": "Cart drawer saved"
+        }
+      },
+      "fbt": null
+    },
+    "off_topic": false,
+    "insight_mode": "modules",
+    "createdAt": "2026-06-18T05:23:56.530Z"
   }
 ]

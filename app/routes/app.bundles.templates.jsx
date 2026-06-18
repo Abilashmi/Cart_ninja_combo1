@@ -18,22 +18,22 @@ const layoutMetadata = [
     title: 'The Guided Architect',
     description: 'Conversion-focused multi-step builder with progress tracking and tiered discount logic.',
     img: '/combo-design-one-preview.png',
-    fallbackImg: 'https://placehold.co/400x300/5B47FB/ffffff?text=Guided+Architect',
+    fallbackImg: 'https://placehold.co/400x300/006241/ffffff?text=Guided+Architect',
     badge: 'Core',
     blockName: 'combo_main',
-    accent: '#5B47FB',
+    accent: '#006241',
     features: ['Visual progress tracking', 'Tiered discount engine', 'Step-by-step flow', 'Sticky summary bar'],
-    bestFor: 'Complex bundles & high-value kits',
+    bestFor: 'Complex combos & high-value kits',
   },
   {
     id: 2,
     title: 'The Velocity Stream',
     description: 'Immersive motion-driven experience with an auto-scrolling carousel for maximum engagement.',
     img: '/combo-design-two-preview.png',
-    fallbackImg: 'https://placehold.co/400x300/8B5CF6/ffffff?text=Velocity+Stream',
+    fallbackImg: 'https://placehold.co/400x300/2c6ecb/ffffff?text=Velocity+Stream',
     badge: 'Trending',
     blockName: 'combo_design_two',
-    accent: '#8B5CF6',
+    accent: '#2C6ECB',
     features: ['Smooth auto-scroll motion', 'Touch-optimized swiping', 'Infinite loop', 'Visual-first discovery'],
     bestFor: 'Visual storytelling & featured promos',
   },
@@ -51,13 +51,13 @@ const layoutMetadata = [
   },
   {
     id: 6,
-    title: 'Custom Bundle Layout',
-    description: 'Build your own custom bundle layout with fully flexible configuration options.',
+    title: 'Custom Combo Layout',
+    description: 'Build your own custom combo layout with fully flexible configuration options.',
     img: '/combo-design-one-preview.png',
-    fallbackImg: 'https://placehold.co/400x300/10B981/ffffff?text=Custom+Bundle',
+    fallbackImg: 'https://placehold.co/400x300/6d7175/ffffff?text=Custom+Combo',
     badge: 'Flexible',
     blockName: 'custom_bundle_layout',
-    accent: '#10B981',
+    accent: '#6D7175',
     features: ['Drag-and-drop builder', 'Custom CSS support', 'Dynamic pricing rules', 'A/B testing ready'],
     bestFor: 'Advanced & experimental setups',
   },
@@ -89,16 +89,11 @@ export const action = async ({ request }) => {
 
   if (intent === 'delete') {
     try {
-      const dbResult = await sendToPhp(
-        { event: 'delete', resource: 'templates', shop, data: { id } },
-        'templates.php'
+      await prisma.$executeRawUnsafe(
+        'DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        Number(id),
+        shop
       );
-      if (!dbResult?.success) {
-        return Response.json(
-          { success: false, error: dbResult?.error || 'PHP rejected the delete' },
-          { status: 500 }
-        );
-      }
       return Response.json({ success: true, message: 'Template deleted' });
     } catch (dbError) {
       return Response.json({ success: false, error: dbError.message }, { status: 500 });
@@ -108,16 +103,12 @@ export const action = async ({ request }) => {
   if (intent === 'toggle_active') {
     const active = data.active === 'true' || data.active === true;
     try {
-      const dbResult = await sendToPhp(
-        { event: 'update', resource: 'templates', shop, data: { id, active } },
-        'templates.php'
+      await prisma.$executeRawUnsafe(
+        'UPDATE combo_templates SET is_active = ?, updated_at = NOW() WHERE id = ? AND shop_domain = ?',
+        active ? 1 : 0,
+        Number(id),
+        shop
       );
-      if (!dbResult?.success) {
-        return Response.json(
-          { success: false, error: dbResult?.error || 'PHP rejected the update' },
-          { status: 500 }
-        );
-      }
       return Response.json({
         success: true,
         message: `Template marked as ${active ? 'active' : 'inactive'}`,
@@ -170,13 +161,13 @@ export const loader = async ({ request }) => {
   let templates = [];
   try {
     const rows = await prisma.$queryRawUnsafe(
-      `SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
+      `SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY name ASC`,
       shop
     );
     templates = (Array.isArray(rows) ? rows : []).map((r) => ({
       id: Number(r.id),
       title: r.name || 'Untitled',
-      active: r.is_active === 1,
+      active: Boolean(r.is_active),
       config: (() => { try { return JSON.parse(r.customization_data || '{}'); } catch { return {}; } })(),
       template_type: r.template_type || 'grid',
       slug: r.slug,
@@ -275,6 +266,13 @@ export default function TemplatesPage() {
   const startIdx          = (validPage - 1) * itemsPerPage;
   const paginatedTemplates = filteredTemplates.slice(startIdx, startIdx + itemsPerPage);
 
+  const filteredLayoutMetadata = searchValue
+    ? layoutMetadata.filter(m =>
+        m.title.toLowerCase().includes(searchValue.toLowerCase()) ||
+        m.description.toLowerCase().includes(searchValue.toLowerCase())
+      )
+    : layoutMetadata;
+
   const counts = {
     all:      templates.length,
     active:   templates.filter(t => t.active).length,
@@ -290,7 +288,7 @@ export default function TemplatesPage() {
       {isMainNavigating && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, height: '3px',
-          background: 'linear-gradient(90deg, #5B47FB, #8B5CF6)',
+          background: 'linear-gradient(90deg, #006241, #2C6ECB)',
           zIndex: 9999, animation: 'loadingSlide 1.5s ease-in-out infinite',
         }} />
       )}
@@ -301,15 +299,15 @@ export default function TemplatesPage() {
         .tpl-card         { background:#fff; border-radius:14px; border:1px solid rgba(15,15,35,0.07); box-shadow:0 1px 3px rgba(0,0,0,0.04); overflow:hidden; transition:box-shadow 0.18s, transform 0.18s; }
         .tpl-card:hover   { box-shadow:0 6px 20px rgba(0,0,0,0.10); transform:translateY(-2px); }
         .preset-card      { background:#fff; border-radius:14px; border:1px solid rgba(15,15,35,0.08); overflow:hidden; transition:box-shadow 0.18s, transform 0.18s, border-color 0.18s; cursor:pointer; }
-        .preset-card:hover{ box-shadow:0 8px 24px rgba(0,0,0,0.12); transform:translateY(-3px); border-color:rgba(91,71,251,0.30); }
+        .preset-card:hover{ box-shadow:0 8px 24px rgba(0,0,0,0.10); transform:translateY(-3px); border-color:#bdd6ca; }
         .filter-pill      { padding:6px 14px; border-radius:20px; border:1.5px solid rgba(15,15,35,0.10); background:#fff; font-size:12.5px; font-weight:550; color:#64748B; cursor:pointer; transition:all 0.13s; white-space:nowrap; font-family:inherit; }
-        .filter-pill:hover{ border-color:#5B47FB; color:#5B47FB; }
-        .filter-pill.active{ background:#5B47FB; border-color:#5B47FB; color:#fff; }
+        .filter-pill:hover{ border-color:#006241; color:#006241; }
+        .filter-pill.active{ background:#006241; border-color:#006241; color:#fff; }
         .tpl-action-btn   { width:30px; height:30px; border-radius:7px; border:1px solid rgba(15,15,35,0.08); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#64748B; transition:all 0.13s; }
-        .tpl-action-btn:hover{ border-color:#5B47FB; color:#5B47FB; background:rgba(91,71,251,0.06); }
+        .tpl-action-btn:hover{ border-color:#006241; color:#006241; background:#e6f4ee; }
         .search-input-cs  { padding:9px 14px 9px 36px; border-radius:8px; border:1.5px solid rgba(15,15,35,0.10); background:#fff; font-size:13px; width:220px; outline:none; color:#0F0F23; font-family:inherit; transition:border-color 0.15s; }
         .search-input-cs::placeholder{ color:#94A3B8; }
-        .search-input-cs:focus{ border-color:#5B47FB; }
+        .search-input-cs:focus{ border-color:#006241; }
         .tpl-img-area { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; }
         .tpl-img-placeholder { width:100%; aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; font-size:32px; }
         @media(max-width:768px){ .tpl-grid-3{ grid-template-columns:1fr !important; } .preset-grid{ grid-template-columns:1fr 1fr !important; } }
@@ -366,10 +364,10 @@ export default function TemplatesPage() {
             onClick={handleCreateTemplate}
             style={{
               padding: '9px 18px', borderRadius: '9px',
-              background: '#5B47FB', color: '#fff',
+              background: '#006241', color: '#fff',
               border: 'none', fontWeight: '650', fontSize: '13.5px',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px',
-              boxShadow: '0 2px 8px rgba(91,71,251,0.28)',
+              boxShadow: 'none',
               fontFamily: 'inherit',
             }}
           >
@@ -382,16 +380,19 @@ export default function TemplatesPage() {
       </div>
 
       {/* ── Layout Presets ───────────────────────────────────────────── */}
+      {filteredLayoutMetadata.length > 0 && (
       <div style={{ marginBottom: '36px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: '650', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
             Built-in Layout Styles
           </div>
+          {!searchValue && (
           <div style={{ fontSize: '12px', color: '#94A3B8' }}>Click to start building</div>
+          )}
         </div>
 
         <div className="preset-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
-          {layoutMetadata.map(meta => (
+          {filteredLayoutMetadata.map(meta => (
             <div
               key={meta.id}
               className="preset-card"
@@ -453,13 +454,14 @@ export default function TemplatesPage() {
                   onMouseOver={e => { e.currentTarget.style.background = `${meta.accent}22`; }}
                   onMouseOut={e => { e.currentTarget.style.background = `${meta.accent}12`; }}
                 >
-                  Use This Layout →
+                  Use this layout
                 </button>
               </div>
             </div>
           ))}
         </div>
       </div>
+      )}
 
       {/* ── My Templates grid ────────────────────────────────────────── */}
       <div>
@@ -467,7 +469,7 @@ export default function TemplatesPage() {
           <div style={{ fontSize: '13px', fontWeight: '650', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
             My Templates
             {totalTemplates > 0 && (
-              <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '10px', background: 'rgba(91,71,251,0.1)', color: '#5B47FB', fontSize: '11px', fontWeight: '700' }}>
+              <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '10px', background: '#e6f4ee', color: '#006241', fontSize: '11px', fontWeight: '700' }}>
                 {totalTemplates}
               </span>
             )}
@@ -536,7 +538,7 @@ export default function TemplatesPage() {
                         onClick={() => handleEditNavigate(t.id)}
                         style={{
                           flex: 1, padding: '8px 12px', borderRadius: '8px',
-                          background: '#5B47FB', color: '#fff',
+                          background: '#006241', color: '#fff',
                           border: 'none', fontWeight: '600', fontSize: '12.5px',
                           cursor: 'pointer', fontFamily: 'inherit',
                         }}
@@ -594,32 +596,41 @@ export default function TemplatesPage() {
           <div style={{
             textAlign: 'center', padding: '72px 24px',
             background: '#fff', borderRadius: '16px',
-            border: '1.5px dashed rgba(91,71,251,0.22)',
+            border: '1.5px dashed #bdd6ca',
             marginBottom: '24px',
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '14px' }}>✦</div>
+            <div style={{ width: '48px', height: '48px', margin: '0 auto 14px', borderRadius: '8px', background: '#e6f4ee', color: '#006241', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="24" height="24" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M7 8h6M7 11h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </div>
             <div style={{ fontSize: '16px', fontWeight: '700', color: '#0F0F23', marginBottom: '7px' }}>
               No templates yet
             </div>
             <div style={{ fontSize: '13.5px', color: '#64748B', marginBottom: '22px', maxWidth: '360px', margin: '0 auto 22px' }}>
-              Choose a layout preset above or create a custom bundle from scratch.
+              Choose a layout preset above or create a custom combo from scratch.
             </div>
             <button
               onClick={handleCreateTemplate}
               style={{
                 padding: '11px 24px', borderRadius: '9px',
-                background: '#5B47FB', color: '#fff',
+                background: '#006241', color: '#fff',
                 border: 'none', fontWeight: '650', fontSize: '13.5px',
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
-              + Create Your First Template
+              Create your first template
             </button>
           </div>
         ) : isClient && paginatedTemplates.length === 0 ? (
           /* No results for search */
           <div style={{ textAlign: 'center', padding: '56px 24px', background: '#fff', borderRadius: '16px', border: '1px solid rgba(15,15,35,0.07)', marginBottom: '24px' }}>
-            <div style={{ fontSize: '36px', marginBottom: '12px' }}>🔍</div>
+            <div style={{ width: '40px', height: '40px', margin: '0 auto 12px', borderRadius: '8px', background: '#f1f2f2', color: '#6d7175', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M9 16A7 7 0 1 0 9 2a7 7 0 0 0 0 14ZM14 14l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </div>
             <div style={{ fontSize: '15px', fontWeight: '650', color: '#0F0F23', marginBottom: '6px' }}>No results</div>
             <div style={{ fontSize: '13px', color: '#64748B' }}>Try a different search term or switch the filter.</div>
           </div>
@@ -639,7 +650,7 @@ export default function TemplatesPage() {
                   style={{
                     width: '34px', height: '34px', borderRadius: '8px',
                     border: pg === validPage ? 'none' : '1px solid rgba(15,15,35,0.10)',
-                    background: pg === validPage ? '#5B47FB' : '#fff',
+                    background: pg === validPage ? '#006241' : '#fff',
                     color: pg === validPage ? '#fff' : '#64748B',
                     fontWeight: '600', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
                   }}
@@ -658,9 +669,9 @@ export default function TemplatesPage() {
         style={{
           position: 'fixed', bottom: '24px', right: '24px',
           width: '54px', height: '54px', borderRadius: '50%',
-          background: '#5B47FB', color: '#fff',
+          background: '#006241', color: '#fff',
           border: 'none', cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(91,71,251,0.45)',
+          boxShadow: '0 4px 16px rgba(0,98,65,0.28)',
           display: 'none', alignItems: 'center', justifyContent: 'center',
           zIndex: 99, fontFamily: 'inherit',
         }}

@@ -8,7 +8,8 @@
       "Bash(git commit -m ' *)",
       "Bash(git rm *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(grep -v \"^.*//\\\\|discountData\\\\|discountCode\\\\|shopifyDiscount\")"
     ]
   },
   "enableAllProjectMcpServers": true,
