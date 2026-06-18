@@ -6,7 +6,7 @@ import '../styles/cart-editor.css';
 
 function CartEditorContent({ shop }) {
   const navigate = useNavigate();
-  const { isDirty, resetDirty, body, footer, status } = useCartEditor();
+  const { isDirty, resetDirty, body, footer, status, settings, header } = useCartEditor();
 
   const handleSave = async () => {
     try {
@@ -49,17 +49,38 @@ function CartEditorContent({ shop }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             is_enabled: status === 'active' ? 1 : 0,
+            // Checkout
             checkout_button_text: cb.text,
             checkout_footer_text: cb.footerText,
             checkout_button_bg_color: cb.bgColor,
             checkout_button_text_color: cb.textColor,
             checkout_button_border_radius: cb.borderRadius,
             custom_css: footer.customCSS,
+            // Announcement
             announcement_enabled: ann.enabled ? 1 : 0,
             announcement_text: ann.text || null,
             announcement_bg_color: ann.bgColor || '#111827',
             announcement_text_color: ann.textColor || '#ffffff',
             announcement_font_size: ann.fontSize || 13,
+            // General
+            open_on_add: settings?.general?.openOnAdd !== false ? 1 : 0,
+            open_on_icon_click: settings?.general?.openOnIconClick !== false ? 1 : 0,
+            position: settings?.general?.position || 'right',
+            // Header
+            header_title: header?.title || 'Your Cart',
+            header_close_style: header?.closeStyle || 'icon',
+            header_bg_color: header?.bgColor || '#ffffff',
+            header_text_color: header?.textColor || '#1a1a1a',
+            header_border_bottom: header?.borderBottom !== false ? 1 : 0,
+            // Design
+            design_width: settings?.design?.width || 'normal',
+            design_border_radius: settings?.design?.borderRadius ?? 8,
+            design_shadow: settings?.design?.shadow !== false ? 1 : 0,
+            design_animation: settings?.design?.animation || 'slide',
+            // Empty Cart
+            empty_cart_message: body.emptyCart?.message || 'Your cart is empty',
+            empty_cart_show_continue_shopping: body.emptyCart?.showContinueShopping !== false ? 1 : 0,
+            empty_cart_show_recommendations: body.emptyCart?.showRecommendations !== false ? 1 : 0,
           }),
         }),
 
@@ -157,6 +178,7 @@ export default function CartEditorPage() {
   const allProducts = data?.allProducts ?? [];
   const initialStatus = data?.drawerEnabled === false ? 'inactive' : 'active';
   const cartRecord = data?.cartRecord ?? null;
+  const configRecord = data?.configRecord ?? null;
   const shop = data?.shop ?? '';
 
   return (
@@ -165,6 +187,7 @@ export default function CartEditorPage() {
       allProducts={allProducts}
       initialStatus={initialStatus}
       initialRecord={cartRecord}
+      initialConfigRecord={configRecord}
     >
       <CartEditorContent shop={shop} />
     </CartEditorProvider>

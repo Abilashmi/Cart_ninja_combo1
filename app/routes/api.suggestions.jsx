@@ -1,6 +1,9 @@
-const AI_API_KEY = process.env.OPENAI_API_KEY || '';
-const AI_MODEL = 'gpt-4o-mini';
-const AI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const AI_API_KEY = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || '';
+const USE_NVIDIA = AI_API_KEY.startsWith('nvapi-');
+const AI_MODEL = USE_NVIDIA ? 'meta/llama-3.1-8b-instruct' : 'gpt-4o-mini';
+const AI_API_URL = USE_NVIDIA
+  ? 'https://integrate.api.nvidia.com/v1/chat/completions'
+  : 'https://api.openai.com/v1/chat/completions';
 
 export async function action({ request }) {
   if (request.method !== 'POST') {
@@ -66,7 +69,8 @@ async function callAI(systemPrompt, userPrompt) {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`AI API error: ${res.status} ${errText}`);
+    const provider = USE_NVIDIA ? 'NVIDIA' : 'OpenAI';
+    throw new Error(`${provider} API error: ${res.status} ${errText}`);
   }
 
   const json = await res.json();

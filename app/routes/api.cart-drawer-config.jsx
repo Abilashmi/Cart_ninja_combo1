@@ -41,49 +41,60 @@ export async function action({ request }) {
   const body = await request.json();
   const db = getDb();
 
-  // Save cart drawer general config
-  const { checkout_button_text, checkout_footer_text, checkout_button_bg_color,
-    checkout_button_text_color, checkout_button_border_radius, custom_css,
-    is_enabled, announcement_enabled, announcement_text, announcement_bg_color,
-    announcement_text_color, announcement_font_size } = body;
+  // Column definitions: key in request body → { column, coerce }
+  // coerce(value) converts the JS value to the SQL value.
+  const COLUMN_MAP = {
+    is_enabled:                        { col: 'is_enabled',                        coerce: (v) => v !== false ? 1 : 0 },
+    checkout_button_text:              { col: 'checkout_button_text',              coerce: (v) => v || 'Checkout Now' },
+    checkout_footer_text:              { col: 'checkout_footer_text',              coerce: (v) => v || 'Shipping and taxes calculated at checkout' },
+    checkout_button_bg_color:          { col: 'checkout_button_bg_color',          coerce: (v) => v || '#111827' },
+    checkout_button_text_color:        { col: 'checkout_button_text_color',        coerce: (v) => v || '#ffffff' },
+    checkout_button_border_radius:     { col: 'checkout_button_border_radius',     coerce: (v) => v ?? 4 },
+    custom_css:                        { col: 'custom_css',                        coerce: (v) => v || null },
+    announcement_enabled:              { col: 'announcement_enabled',              coerce: (v) => v ? 1 : 0 },
+    announcement_text:                 { col: 'announcement_text',                 coerce: (v) => v || null },
+    announcement_bg_color:             { col: 'announcement_bg_color',             coerce: (v) => v || '#111827' },
+    announcement_text_color:           { col: 'announcement_text_color',           coerce: (v) => v || '#ffffff' },
+    announcement_font_size:            { col: 'announcement_font_size',            coerce: (v) => v || 13 },
+    open_on_add:                       { col: 'open_on_add',                       coerce: (v) => v !== false ? 1 : 0 },
+    open_on_icon_click:                { col: 'open_on_icon_click',                coerce: (v) => v !== false ? 1 : 0 },
+    position:                          { col: 'position',                          coerce: (v) => v || 'right' },
+    header_title:                      { col: 'header_title',                      coerce: (v) => v || 'Your Cart' },
+    header_close_style:                { col: 'header_close_style',                coerce: (v) => v || 'icon' },
+    header_bg_color:                   { col: 'header_bg_color',                   coerce: (v) => v || '#ffffff' },
+    header_text_color:                 { col: 'header_text_color',                 coerce: (v) => v || '#1a1a1a' },
+    header_border_bottom:              { col: 'header_border_bottom',              coerce: (v) => v !== false ? 1 : 0 },
+    design_width:                      { col: 'design_width',                      coerce: (v) => v || 'normal' },
+    design_border_radius:              { col: 'design_border_radius',              coerce: (v) => v ?? 8 },
+    design_shadow:                     { col: 'design_shadow',                     coerce: (v) => v !== false ? 1 : 0 },
+    design_animation:                  { col: 'design_animation',                  coerce: (v) => v || 'slide' },
+    empty_cart_message:                { col: 'empty_cart_message',                coerce: (v) => v || 'Your cart is empty' },
+    empty_cart_show_continue_shopping: { col: 'empty_cart_show_continue_shopping', coerce: (v) => v !== false ? 1 : 0 },
+    empty_cart_show_recommendations:   { col: 'empty_cart_show_recommendations',   coerce: (v) => v !== false ? 1 : 0 },
+  };
 
-  await db.execute(`
-    INSERT INTO cart_drawer_config
-      (shop_domain, is_enabled, checkout_button_text, checkout_footer_text,
-       checkout_button_bg_color, checkout_button_text_color, checkout_button_border_radius,
-       custom_css, announcement_enabled, announcement_text, announcement_bg_color,
-       announcement_text_color, announcement_font_size)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE
-      is_enabled                 = VALUES(is_enabled),
-      checkout_button_text       = VALUES(checkout_button_text),
-      checkout_footer_text       = VALUES(checkout_footer_text),
-      checkout_button_bg_color   = VALUES(checkout_button_bg_color),
-      checkout_button_text_color = VALUES(checkout_button_text_color),
-      checkout_button_border_radius = VALUES(checkout_button_border_radius),
-      custom_css                 = VALUES(custom_css),
-      announcement_enabled       = VALUES(announcement_enabled),
-      announcement_text          = VALUES(announcement_text),
-      announcement_bg_color      = VALUES(announcement_bg_color),
-      announcement_text_color    = VALUES(announcement_text_color),
-      announcement_font_size     = VALUES(announcement_font_size),
-      updated_at                 = CURRENT_TIMESTAMP(3)
-  `, [
-    shop,
-    is_enabled !== false ? 1 : 0,
-    checkout_button_text || 'Checkout Now',
-    checkout_footer_text || 'Shipping and taxes calculated at checkout',
-    checkout_button_bg_color || '#111827',
-    checkout_button_text_color || '#ffffff',
-    checkout_button_border_radius ?? 4,
-    custom_css || null,
-    announcement_enabled ? 1 : 0,
-    announcement_text || null,
-    announcement_bg_color || '#111827',
-    announcement_text_color || '#ffffff',
-    announcement_font_size || 13,
-  ]);
+  // Only update the columns that are explicitly present in the request body.
+  const presentKeys = Object.keys(body).filter((k) => k in COLUMN_MAP);
 
-  const [rows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ?', [shop]);
+  if (presentKeys.length === 0) {
+    return Response.json({ success: false, error: 'No valid fields provided' }, { status: 400 });
+  }
+
+  const setClauses = presentKeys.map((k) => `${COLUMN_MAP[k].col} = ?`).join(', ');
+  const values = presentKeys.map((k) => COLUMN_MAP[k].coerce(body[k]));
+
+  // INSERT with whatever was sent (missing fields get DB column defaults) then
+  // UPDATE only those columns on conflict — never touches columns we didn't send.
+  const colList = presentKeys.map((k) => COLUMN_MAP[k].col).join(', ');
+  const placeholders = presentKeys.map(() => '?').join(', ');
+
+  await db.execute(
+    `INSERT INTO cart_drawer_config (shop_domain, ${colList})
+     VALUES (?, ${placeholders})
+     ON DUPLICATE KEY UPDATE ${setClauses}, updated_at = CURRENT_TIMESTAMP(3)`,
+    [shop, ...values, ...values]
+  );
+
+  const [rows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]);
   return Response.json({ success: true, data: rows[0] });
 }

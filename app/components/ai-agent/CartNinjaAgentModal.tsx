@@ -11,51 +11,45 @@ export default function CartNinjaAgentModal({ initialQuery, onClose }: Props) {
       <style>{`
         .cnam-backdrop {
           position: fixed; inset: 0; z-index: 2147483100;
-          background: rgba(0,0,0,0.5);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
+          background:
+            radial-gradient(circle at 72% 18%, rgba(255,107,0,0.20), transparent 28%),
+            rgba(12,16,24,0.62);
+          backdrop-filter: blur(10px) saturate(110%);
+          -webkit-backdrop-filter: blur(10px) saturate(110%);
           display: flex; align-items: center; justify-content: center;
-          animation: cnam-fade 0.3s ease;
+          padding: 24px;
+          animation: cnam-fade 0.22s ease;
         }
         @keyframes cnam-fade {
           from { opacity: 0; } to { opacity: 1; }
         }
         .cnam-modal {
           position: relative;
-          width: 90vw; max-width: 1400px; height: 90vh;
-          border-radius: 24px; overflow: hidden;
-          background: transparent;
-          animation: cnam-scale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          width: min(1380px, 96vw);
+          height: min(900px, 92vh);
+          border-radius: 18px;
+          overflow: hidden;
+          background: #f5f6f8;
+          border: 1px solid rgba(255,255,255,0.22);
+          box-shadow: 0 28px 90px rgba(0,0,0,0.34);
+          animation: cnam-scale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
         }
         @keyframes cnam-scale {
           from { transform: scale(0.92); opacity: 0; }
           to { transform: scale(1); opacity: 1; }
         }
         .cnam-body {
-          width: 100%; height: 100%; border-radius: 24px; overflow: hidden;
+          width: 100%; height: 100%; border-radius: 18px; overflow: hidden;
         }
         .cnam-body > * { width: 100%; height: 100%; }
-        .cnam-close {
-          position: absolute; top: 16px; right: 16px; z-index: 10;
-          width: 36px; height: 36px; border-radius: 50%;
-          background: rgba(0,0,0,0.4); border: none; color: #fff;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          transition: background 0.15s; backdrop-filter: blur(4px);
-        }
-        .cnam-close:hover { background: rgba(0,0,0,0.6); }
-        .cnam-close svg { width: 18px; height: 18px; }
         @media (max-width: 600px) {
+          .cnam-backdrop { padding: 0; }
           .cnam-modal { width: 100vw; height: 100vh; border-radius: 0; max-width: none; }
           .cnam-body { border-radius: 0; }
         }
       `}</style>
       <div className="cnam-backdrop" onClick={onClose}>
         <div className="cnam-modal" onClick={(e) => e.stopPropagation()}>
-          <button className="cnam-close" onClick={onClose} aria-label="Close">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6l-12 12" />
-            </svg>
-          </button>
           <div className="cnam-body">
             <CartNinjaAgentV2 initialQuery={initialQuery} onClose={onClose} />
           </div>

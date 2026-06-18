@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Card, FormLayout, TextField, RangeSlider, BlockStack, Text, InlineStack } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -8,13 +8,26 @@ export function AnnouncementsSection() {
   const { body, updateAnnouncements } = useCartEditor();
   const { announcements } = body;
 
+  // Auto-save the enabled flag immediately so the DB reflects the toggle state
+  // without waiting for the global Save button (avoids stale-closure race).
+  const handleToggle = useCallback(async (v) => {
+    updateAnnouncements({ enabled: v });
+    try {
+      await fetch('/api/cart-drawer-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ announcement_enabled: v ? 1 : 0 }),
+      });
+    } catch { /* network error — global Save will catch it */ }
+  }, [updateAnnouncements]);
+
   return (
     <BlockStack gap="400">
       <InlineStack align="space-between" blockAlign="center">
         <FeatureToggle
           label=""
           enabled={announcements.enabled}
-          onToggle={(v) => updateAnnouncements({ enabled: v })}
+          onToggle={handleToggle}
         />
       </InlineStack>
       <Text as="p" variant="bodyMd" tone="subdued">

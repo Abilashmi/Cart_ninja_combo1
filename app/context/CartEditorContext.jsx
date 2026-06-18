@@ -41,6 +41,66 @@ function hydrateFromRecord(record, base) {
   };
 }
 
+function hydrateFromConfig(cfg, base) {
+  if (!cfg) return base;
+  return {
+    ...base,
+    settings: {
+      ...base.settings,
+      general: {
+        ...base.settings.general,
+        ...(cfg.open_on_add        != null ? { openOnAdd:        dbFlag(cfg.open_on_add) }        : {}),
+        ...(cfg.open_on_icon_click != null ? { openOnIconClick:  dbFlag(cfg.open_on_icon_click) } : {}),
+        ...(cfg.position           != null ? { position:         cfg.position }                   : {}),
+      },
+      design: {
+        ...base.settings.design,
+        ...(cfg.design_width         != null ? { width:        cfg.design_width }                     : {}),
+        ...(cfg.design_border_radius != null ? { borderRadius: Number(cfg.design_border_radius) }     : {}),
+        ...(cfg.design_shadow        != null ? { shadow:       dbFlag(cfg.design_shadow) }            : {}),
+        ...(cfg.design_animation     != null ? { animation:    cfg.design_animation }                 : {}),
+      },
+    },
+    header: {
+      ...base.header,
+      ...(cfg.header_title         != null ? { title:        cfg.header_title }                  : {}),
+      ...(cfg.header_close_style   != null ? { closeStyle:   cfg.header_close_style }            : {}),
+      ...(cfg.header_bg_color      != null ? { bgColor:      cfg.header_bg_color }               : {}),
+      ...(cfg.header_text_color    != null ? { textColor:    cfg.header_text_color }             : {}),
+      ...(cfg.header_border_bottom != null ? { borderBottom: dbFlag(cfg.header_border_bottom) } : {}),
+    },
+    body: {
+      ...base.body,
+      announcements: {
+        ...base.body.announcements,
+        ...(cfg.announcement_enabled    != null ? { enabled:   dbFlag(cfg.announcement_enabled) }   : {}),
+        ...(cfg.announcement_text       != null ? { text:      cfg.announcement_text }               : {}),
+        ...(cfg.announcement_bg_color   != null ? { bgColor:   cfg.announcement_bg_color }           : {}),
+        ...(cfg.announcement_text_color != null ? { textColor: cfg.announcement_text_color }         : {}),
+        ...(cfg.announcement_font_size  != null ? { fontSize:  Number(cfg.announcement_font_size) }  : {}),
+      },
+      emptyCart: {
+        ...base.body.emptyCart,
+        ...(cfg.empty_cart_message                   != null ? { message:               cfg.empty_cart_message }                                : {}),
+        ...(cfg.empty_cart_show_continue_shopping    != null ? { showContinueShopping:  dbFlag(cfg.empty_cart_show_continue_shopping) }         : {}),
+        ...(cfg.empty_cart_show_recommendations      != null ? { showRecommendations:   dbFlag(cfg.empty_cart_show_recommendations) }           : {}),
+      },
+    },
+    footer: {
+      ...base.footer,
+      checkoutButton: {
+        ...base.footer.checkoutButton,
+        ...(cfg.checkout_button_text          != null ? { text:         cfg.checkout_button_text }               : {}),
+        ...(cfg.checkout_footer_text          != null ? { footerText:   cfg.checkout_footer_text }               : {}),
+        ...(cfg.checkout_button_bg_color      != null ? { bgColor:      cfg.checkout_button_bg_color }           : {}),
+        ...(cfg.checkout_button_text_color    != null ? { textColor:    cfg.checkout_button_text_color }         : {}),
+        ...(cfg.checkout_button_border_radius != null ? { borderRadius: Number(cfg.checkout_button_border_radius) } : {}),
+      },
+      customCSS: cfg.custom_css ?? base.footer.customCSS,
+    },
+  };
+}
+
 function mergeConfigIntoState(base, cfg) {
   if (!cfg) return base;
   let next = { ...base };
@@ -84,10 +144,12 @@ function mergeConfigIntoState(base, cfg) {
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord }) {
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord, initialConfigRecord }) {
   const [state, setState] = useState(() => {
     const base = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
-    return initialRecord ? hydrateFromRecord(initialRecord, base) : base;
+    const fromRecord = initialRecord ? hydrateFromRecord(initialRecord, base) : base;
+    // config fields take precedence over the legacy blob (they are always more recent)
+    return initialConfigRecord ? hydrateFromConfig(initialConfigRecord, fromRecord) : fromRecord;
   });
 
   useEffect(() => {

@@ -5560,8 +5560,8 @@ function ComboPreview({
         </Modal>
 
         <div style={{ padding: productCardPadding }}>
-          {/* Static Variants Display - Below Image */}
-          {hasVariants && config.product_card_variants_display === 'static' && (
+          {/* Variants Display - Below Image (always shown when product has multiple variants) */}
+          {hasVariants && (
             <div
               style={{ marginBottom: 10 }}
               onClick={(e) => e.stopPropagation()}
@@ -5609,7 +5609,7 @@ function ComboPreview({
               justifyContent: 'space-between',
             }}
           >
-            {config.show_quantity_selector && (
+            {(config.show_quantity_selector !== false) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                 <button
                   type="button"

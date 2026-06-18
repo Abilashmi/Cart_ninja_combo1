@@ -61,6 +61,10 @@ const STAGES = [
   { id: "verifying", label: "Verifying results..." },
 ];
 const STAGE_DELAYS = [0, 700, 1700, 2900];
+const ANALYTICS_DATA_TERMS = /\b(analytics?|graph|chart|trend|report|dashboard|data|metrics?|stats?|statistics|performance)\b/i;
+const ANALYTICS_METRIC_TERMS = /\b(sales?|revenue|aov|conversion|conversions|checkout clicks?|coupon clicks?|upsell clicks?|coupons applied|upsell revenue)\b/i;
+const ANALYTICS_ASK_TERMS = /\b(show|view|open|display|see|check|what'?s|what is|how much|how many|tell me|give me|current|today|yesterday|week|month|last)\b/i;
+const ACTION_OPTIMIZATION_TERMS = /\b(increase|boost|improve|optimize|grow|setup|set up|enable|create|add|configure|fix|change|make)\b/i;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -124,6 +128,89 @@ function syncAfterToFeatureStore(after) {
 function autoResize(el) {
   el.style.height = "auto";
   el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+}
+
+function isAnalyticsQuery(text) {
+  const value = text || "";
+  if (ANALYTICS_DATA_TERMS.test(value)) return true;
+  if (ANALYTICS_METRIC_TERMS.test(value) && ANALYTICS_ASK_TERMS.test(value)) return true;
+  if (ANALYTICS_METRIC_TERMS.test(value) && !ACTION_OPTIMIZATION_TERMS.test(value)) return true;
+  return false;
+}
+
+function formatLocalDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatMoney(value) {
+  return `₹${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
+}
+
+function normalizeAnalytics(data = {}) {
+  return {
+    checkoutClicks: Number(data.checkout_click) || 0,
+    couponClicks: Number(data.coupon_click) || 0,
+    upsellClicks: Number(data.upsell_click) || 0,
+    upsellRevenue: Number(data.upsell_revenue_generated) || 0,
+    revenue: Number(data.cartdrawer_total_revenue) || 0,
+    couponsApplied: Number(data.cartdrawer_total_coupon_applied) || 0,
+  };
+}
+
+function makeEmptyAnalyticsPoint(date) {
+  return {
+    label: date.toLocaleDateString("en-US", { weekday: "short" }),
+    revenue: 0,
+    upsellRevenue: 0,
+    checkoutClicks: 0,
+    couponClicks: 0,
+    upsellClicks: 0,
+  };
+}
+
+async function fetchAnalyticsRange(days = 7) {
+  const dates = Array.from({ length: days }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1 - i));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  const points = await Promise.all(dates.map(async (date) => {
+    const dateStr = formatLocalDate(date);
+    try {
+      const res = await fetch(`/api/analytics?startDate=${dateStr}&endDate=${dateStr}`, {
+        headers: { Accept: "application/json" },
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload?.success) return makeEmptyAnalyticsPoint(date);
+      const row = normalizeAnalytics(payload.data);
+      return {
+        ...makeEmptyAnalyticsPoint(date),
+        ...row,
+      };
+    } catch {
+      return makeEmptyAnalyticsPoint(date);
+    }
+  }));
+
+  const totals = points.reduce((acc, point) => ({
+    revenue: acc.revenue + point.revenue,
+    upsellRevenue: acc.upsellRevenue + point.upsellRevenue,
+    checkoutClicks: acc.checkoutClicks + point.checkoutClicks,
+    couponClicks: acc.couponClicks + point.couponClicks,
+    upsellClicks: acc.upsellClicks + point.upsellClicks,
+    couponsApplied: acc.couponsApplied + point.couponsApplied,
+  }), {
+    revenue: 0,
+    upsellRevenue: 0,
+    checkoutClicks: 0,
+    couponClicks: 0,
+    upsellClicks: 0,
+    couponsApplied: 0,
+  });
+
+  return { points, totals };
 }
 
 // ─── Icon ─────────────────────────────────────────────────────────────────────
@@ -241,6 +328,100 @@ function StageIndicator({ stage }) {
   );
 }
 
+// ─── AnalyticsPanel ──────────────────────────────────────────────────────────
+
+function AnalyticsPanel({ open, loading, data, error, onClose }) {
+  if (!open) return null;
+
+  const points = data?.points || [];
+  const totals = data?.totals || {};
+  const maxRevenue = Math.max(...points.map(p => p.revenue), 1);
+  const aov = totals.checkoutClicks > 0 ? totals.revenue / totals.checkoutClicks : 0;
+
+  return (
+    <aside className="cnv4-analytics-panel">
+      <div className="cnv4-analytics-head">
+        <div>
+          <span className="cnv4-analytics-kicker">Live insight</span>
+          <h2>Sales Analytics</h2>
+        </div>
+        <button className="cnv4-icon-btn" onClick={onClose} aria-label="Close analytics">
+          <Icon name="close" size={15} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="cnv4-analytics-loading">
+          <Icon name="spinner" size={18} />
+          <span>Loading sales data...</span>
+        </div>
+      ) : error ? (
+        <div className="cnv4-analytics-error">
+          Analytics data is unavailable right now.
+        </div>
+      ) : (
+        <>
+          <div className="cnv4-analytics-metrics">
+            <div className="cnv4-analytics-metric primary">
+              <span>Total revenue</span>
+              <strong>{formatMoney(totals.revenue)}</strong>
+            </div>
+            <div className="cnv4-analytics-metric">
+              <span>AOV</span>
+              <strong>{formatMoney(aov)}</strong>
+            </div>
+            <div className="cnv4-analytics-metric">
+              <span>Checkout clicks</span>
+              <strong>{totals.checkoutClicks || 0}</strong>
+            </div>
+            <div className="cnv4-analytics-metric">
+              <span>Coupons applied</span>
+              <strong>{totals.couponsApplied || 0}</strong>
+            </div>
+          </div>
+
+          <div className="cnv4-analytics-card">
+            <div className="cnv4-analytics-card-head">
+              <h3>Revenue trend</h3>
+              <span>Last 7 days</span>
+            </div>
+            <div className="cnv4-analytics-chart" aria-label="Revenue trend chart">
+              {points.map((point) => (
+                <div key={point.label} className="cnv4-analytics-bar-wrap">
+                  <div
+                    className="cnv4-analytics-bar"
+                    style={{ height: `${Math.max(6, (point.revenue / maxRevenue) * 100)}%` }}
+                    title={`${point.label}: ${formatMoney(point.revenue)}`}
+                  />
+                  <span>{point.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="cnv4-analytics-card">
+            <div className="cnv4-analytics-card-head">
+              <h3>Revenue mix</h3>
+            </div>
+            <div className="cnv4-analytics-source">
+              <span>Upsell revenue</span>
+              <strong>{formatMoney(totals.upsellRevenue)}</strong>
+            </div>
+            <div className="cnv4-analytics-source">
+              <span>Coupon clicks</span>
+              <strong>{totals.couponClicks || 0}</strong>
+            </div>
+            <div className="cnv4-analytics-source">
+              <span>Upsell clicks</span>
+              <strong>{totals.upsellClicks || 0}</strong>
+            </div>
+          </div>
+        </>
+      )}
+    </aside>
+  );
+}
+
 // ─── ConversationItem ─────────────────────────────────────────────────────────
 
 function ConversationItem({ conv, active, openMenuId, onSelect, onMenuOpen, onRename, onPin, onDelete }) {
@@ -325,11 +506,18 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
   const [input, setInput] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [currentStage, setCurrentStage] = useState(null);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
 
   // Refs
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
   const stageTimersRef = useRef([]);
+  const recognitionRef = useRef(null);
 
   // Load conversations on mount
   useEffect(() => {
@@ -355,6 +543,14 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [initialQuery]);
+
+  useEffect(() => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setVoiceSupported(Boolean(Recognition));
+    return () => {
+      recognitionRef.current?.abort?.();
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -411,6 +607,57 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
     stageTimersRef.current = [];
     setCurrentStage(null);
   }, []);
+
+  const openAnalyticsPanel = useCallback(async () => {
+    setAnalyticsOpen(true);
+    setAnalyticsLoading(true);
+    setAnalyticsError(false);
+    try {
+      const result = await fetchAnalyticsRange(7);
+      setAnalyticsData(result);
+    } catch {
+      setAnalyticsError(true);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
+  const handleVoiceInput = useCallback(() => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition || loading) return;
+
+    if (listening) {
+      recognitionRef.current?.stop?.();
+      setListening(false);
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognitionRef.current = recognition;
+
+    let finalTranscript = "";
+    recognition.onstart = () => setListening(true);
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0]?.transcript || "";
+        if (event.results[i].isFinal) finalTranscript += transcript;
+        else interimTranscript += transcript;
+      }
+      const nextText = `${finalTranscript || ""}${interimTranscript ? ` ${interimTranscript}` : ""}`.trim();
+      setInput(nextText);
+      setTimeout(() => textareaRef.current && autoResize(textareaRef.current), 0);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.start();
+  }, [listening, loading]);
 
   const handleNewChat = useCallback(() => {
     setActiveConvId(null);
@@ -479,6 +726,12 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
   const sendMessage = useCallback(async (text) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+
+    if (isAnalyticsQuery(trimmed)) {
+      openAnalyticsPanel();
+    } else {
+      setAnalyticsOpen(false);
+    }
 
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -572,7 +825,7 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [activeConvId, messages, loading, createConversation, handleRename, startStages, stopStages]);
+  }, [activeConvId, messages, loading, createConversation, handleRename, startStages, stopStages, openAnalyticsPanel]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
@@ -583,7 +836,7 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
   const showWelcome = messages.length === 0 && !currentStage;
 
   return (
-    <div className="cnv4-root" onClick={() => setOpenMenuId(null)}>
+    <div className={`cnv4-root${analyticsOpen ? " has-analytics" : ""}`} onClick={() => setOpenMenuId(null)}>
 
       {/* ── Sidebar ── */}
       <aside className="cnv4-sidebar" onClick={e => e.stopPropagation()}>
@@ -756,7 +1009,18 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
               disabled={loading}
             />
             <div className="cnv4-composer-actions">
-              <button className="cnv4-icon-btn" title="Voice input" disabled><Icon name="mic" size={16} /></button>
+              {voiceSupported && (
+                <button
+                  className={`cnv4-icon-btn cnv4-mic-btn${listening ? " listening" : ""}`}
+                  title={listening ? "Stop voice input" : "Voice input"}
+                  onClick={handleVoiceInput}
+                  disabled={loading}
+                  aria-label={listening ? "Stop voice input" : "Start voice input"}
+                  type="button"
+                >
+                  <Icon name="mic" size={16} />
+                </button>
+              )}
               <button
                 className={`cnv4-send${loading ? " busy" : ""}`}
                 disabled={!input.trim() || loading}
@@ -770,6 +1034,14 @@ export default function CartNinjaAgentV2({ initialQuery = "", onClose }) {
           <p className="cnv4-hint">Agent executes real store changes · changes are logged and can be undone</p>
         </div>
       </main>
+
+      <AnalyticsPanel
+        open={analyticsOpen}
+        loading={analyticsLoading}
+        data={analyticsData}
+        error={analyticsError}
+        onClose={() => setAnalyticsOpen(false)}
+      />
     </div>
   );
 }

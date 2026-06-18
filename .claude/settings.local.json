@@ -9,7 +9,8 @@
       "Bash(git rm *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(grep -v \"^.*//\\\\|discountData\\\\|discountCode\\\\|shopifyDiscount\")"
+      "Bash(grep -v \"^.*//\\\\|discountData\\\\|discountCode\\\\|shopifyDiscount\")",
+      "PowerShell(& \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysql.exe\" -u root cart_drawer_ninja -e \"DESCRIBE cart_drawer_config;\" 2>&1)"
     ]
   },
   "enableAllProjectMcpServers": true,

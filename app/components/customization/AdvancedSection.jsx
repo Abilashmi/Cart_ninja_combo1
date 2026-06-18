@@ -55,21 +55,13 @@ function AdvancedSectionComponent({
           {/* When checkbox IS ticked — show coupon selection UI */}
           {!!config.has_discount_offer && (
             couponOptions.length > 0 ? (
-              <>
-                <Select
-                  label="Select Coupon"
-                  value={String(config.selected_discount_id || '')}
-                  placeholder="Choose a coupon..."
-                  options={couponOptions}
-                  onChange={(v) => updateConfig('selected_discount_id', v || null)}
-                />
-                <Button
-                  variant="plain"
-                  onClick={() => onCreateCoupon?.()}
-                >
-                  + Create new coupon
-                </Button>
-              </>
+              <Select
+                label="Select Coupon"
+                value={String(config.selected_discount_id || '')}
+                placeholder="Choose a coupon..."
+                options={couponOptions}
+                onChange={(v) => updateConfig('selected_discount_id', v || null)}
+              />
             ) : (
               <>
                 <Text as="p" variant="bodySm" tone="subdued">

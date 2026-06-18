@@ -1,12 +1,20 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
-import { Form, useActionData, useLoaderData } from "react-router";
+import { Form, useActionData, useLoaderData, redirect } from "react-router";
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
 
 export const loader = async ({ request }) => {
-  const errors = loginErrorMessage(await login(request));
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
 
+  // If the shop is already known (e.g. session expired while embedded),
+  // skip the login form and go straight to OAuth.
+  if (shop) {
+    throw redirect(`/auth?shop=${encodeURIComponent(shop)}`);
+  }
+
+  const errors = loginErrorMessage(await login(request));
   return { errors };
 };
 

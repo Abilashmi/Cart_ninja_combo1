@@ -9,6 +9,7 @@ import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
 import CartNinjaFloatingLauncher from "../components/ai-agent/CartNinjaFloatingLauncher";
 import "../components/ai-agent/ai-agent.css";
+import "../components/ai-agent/CartNinjaAgentV2.css";
 
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);

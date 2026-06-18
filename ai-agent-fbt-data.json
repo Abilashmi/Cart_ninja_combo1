@@ -2,7 +2,7 @@
   "cartstoreviewer.myshopify.com": {
     "id": 58,
     "shopDomain": "cartstoreviewer.myshopify.com",
-    "temp1": "{\"name\":\"Classic Grid\",\"layout\":\"horizontal\",\"interactionType\":\"classic\",\"showPrices\":true,\"showAddAllButton\":true,\"bg\":\"#ffffff\",\"text\":\"#111827\",\"price\":\"#059669\",\"button\":\"#111827\",\"buttonText\":\"#ffffff\",\"border\":\"#e5e7eb\",\"borderRadius\":8,\"widgetEnabled\":true,\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"priceColor\":\"#059669\",\"buttonColor\":\"#111827\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#e5e7eb\"}",
+    "temp1": "{\"name\":\"Classic Grid\",\"layout\":\"slider\",\"interactionType\":\"classic\",\"showPrices\":true,\"showAddAllButton\":true,\"bg\":\"#ffffff\",\"text\":\"#111827\",\"price\":\"#059669\",\"button\":\"#111827\",\"buttonText\":\"#ffffff\",\"border\":\"#e5e7eb\",\"borderRadius\":8,\"widgetEnabled\":true,\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"priceColor\":\"#059669\",\"buttonColor\":\"#111827\",\"buttonTextColor\":\"#ffffff\",\"borderColor\":\"#e5e7eb\"}",
     "temp2": {
       "name": "Modern Cards",
       "layout": "horizontal",
@@ -31,15 +31,15 @@
       "border": "#e5e7eb",
       "borderRadius": 4
     },
-    "selectedTemp": "fbt2",
+    "selectedTemp": 3,
     "selectedMode": "ai",
     "condition": [],
     "created_at": "2026-03-23T04:37:13.000Z",
-    "updated_at": "2026-06-18T07:02:54.682Z",
+    "updated_at": "2026-06-18T10:33:22.797Z",
     "ai_enabled": 1,
     "ai_product_count": 6,
     "aiProductCount": 5,
     "shop": "cartstoreviewer.myshopify.com",
-    "_lastSaved": "2026-06-18T10:33:20.674Z"
+    "_lastSaved": "2026-06-18T12:32:31.274Z"
   }
 }

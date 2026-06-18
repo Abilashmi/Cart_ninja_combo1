@@ -633,8 +633,14 @@ IMPORTANT: Your response MUST be valid JSON. Return an array of recommended prod
 Example output format:
 [\"123456789\", \"987654321\"]";
 
+$isNvidiaKey = strpos($apiKey, 'nvapi-') === 0;
+$aiApiUrl = $isNvidiaKey
+    ? 'https://integrate.api.nvidia.com/v1/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+$aiModel = $isNvidiaKey ? 'meta/llama-3.1-8b-instruct' : 'gpt-4o-mini';
+
 $data = [
-    'model' => 'gpt-4o-mini',
+    'model' => $aiModel,
     'messages' => [
         ['role' => 'system', 'content' => 'You are an expert e-commerce recommendation engine.'],
         ['role' => 'user', 'content' => $prompt]
@@ -643,7 +649,7 @@ $data = [
     'max_tokens' => 140
 ];
 
-$ch = curl_init('https://api.openai.com/v1/chat/completions');
+$ch = curl_init($aiApiUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Content-Type: application/json',

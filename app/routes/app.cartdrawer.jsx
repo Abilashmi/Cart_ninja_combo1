@@ -1,11 +1,13 @@
 import { authenticate } from '../shopify.server';
 import CartEditorPage from '../components/CartEditorPage';
 import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/ai-agent-actions.server';
+import { getDb } from '../services/db.server';
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const [discountQuery, productsQuery, cartRecord] = await Promise.all([
+  const db = getDb();
+  const [discountQuery, productsQuery, cartRecord, configRows] = await Promise.all([
     admin.graphql(`
       query DiscountList {
         discountNodes(first: 100, reverse: true) {
@@ -53,6 +55,9 @@ export const loader = async ({ request }) => {
       }
     `),
     fetchCartDrawerRecord(session.shop),
+    db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [session.shop])
+      .then(([rows]) => rows[0] || null)
+      .catch(() => null),
   ]);
 
   const discountJson = await discountQuery.json();
@@ -85,7 +90,7 @@ export const loader = async ({ request }) => {
     ? truthyFlag(cartRecord.cartStatus ?? cartRecord.cart_status)
     : true;
 
-  return { coupons, allProducts, drawerEnabled, cartRecord: cartRecord ?? null, shop: session.shop };
+  return { coupons, allProducts, drawerEnabled, cartRecord: cartRecord ?? null, configRecord: configRows, shop: session.shop };
 };
 
 export const action = async ({ request }) => {
