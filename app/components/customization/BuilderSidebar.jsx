@@ -36,6 +36,7 @@ function BuilderSidebarComponent({
   ColorPickerField,
   setPreviewDevice,
   localActiveDiscounts,
+  onCreateCoupon,
 }) {
   const handleTabClick = useCallback((catId) => {
     if (catId === 'layout') {
@@ -227,6 +228,7 @@ function BuilderSidebarComponent({
             updateConfig={updateConfig}
             ColorPickerField={ColorPickerField}
             localActiveDiscounts={localActiveDiscounts}
+            onCreateCoupon={onCreateCoupon}
           />
         )}
       </div>

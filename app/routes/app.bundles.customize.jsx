@@ -3509,6 +3509,7 @@ export default function Customize() {
             ColorPickerField={ColorPickerField}
             setPreviewDevice={setPreviewDevice}
             localActiveDiscounts={localActiveDiscounts}
+            onCreateCoupon={() => setCreateDiscountModalOpen(true)}
           />
         </div>
       </div>

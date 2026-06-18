@@ -1,6 +1,5 @@
 import { memo } from 'react';
-import { useNavigate } from 'react-router';
-import { FormLayout, Checkbox, Select, Text, Button, TextField } from '@shopify/polaris';
+import { FormLayout, Checkbox, Select, Text, Button, TextField, InlineStack } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 
 function AdvancedSectionComponent({
@@ -10,8 +9,8 @@ function AdvancedSectionComponent({
   updateConfig,
   ColorPickerField,
   localActiveDiscounts = [],
+  onCreateCoupon,
 }) {
-  const navigate = useNavigate();
   const couponOptions = (localActiveDiscounts || []).map((d) => ({
     label: `${d.title || d.code || 'Untitled'} (${d.code || ''})`,
     value: String(d.id),
@@ -41,28 +40,38 @@ function AdvancedSectionComponent({
             }}
             helpText="Enable to offer a coupon code with this bundle"
           />
-          {!!config.has_discount_offer ? (
+
+          {!!config.has_discount_offer && (
             couponOptions.length > 0 ? (
-            <Select
-              label="Select Coupon"
-              value={String(config.selected_discount_id || '')}
-              placeholder="Choose a coupon..."
-              options={couponOptions}
-              onChange={(v) => updateConfig('selected_discount_id', v || null)}
-            />
+              <>
+                <Select
+                  label="Select Coupon"
+                  value={String(config.selected_discount_id || '')}
+                  placeholder="Choose a coupon..."
+                  options={couponOptions}
+                  onChange={(v) => updateConfig('selected_discount_id', v || null)}
+                />
+                <Button
+                  variant="plain"
+                  onClick={() => onCreateCoupon?.()}
+                >
+                  + Create new coupon
+                </Button>
+              </>
             ) : (
-              <Text as="p" variant="bodySm" tone="subdued">
-                No coupons created yet. Create one first.
-              </Text>
+              <>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  No coupons created yet.
+                </Text>
+                <Button
+                  variant="secondary"
+                  onClick={() => onCreateCoupon?.()}
+                  fullWidth
+                >
+                  Create Coupon
+                </Button>
+              </>
             )
-          ) : (
-            <Button
-              variant="secondary"
-              onClick={() => navigate('/app/coupons')}
-              fullWidth
-            >
-              Create Coupon
-            </Button>
           )}
         </FormLayout>
       </SectionCard>
