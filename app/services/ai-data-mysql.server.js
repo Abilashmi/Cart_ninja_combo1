@@ -1,13 +1,14 @@
+import mysql from 'mysql2/promise';
+
 let pool = null;
 
 function getPool() {
   if (!pool) {
-    const mysql = require('mysql2/promise');
     pool = mysql.createPool({
       host: process.env.AI_DB_HOST || '127.0.0.1',
       user: process.env.AI_DB_USER || 'root',
       password: process.env.AI_DB_PASS || '',
-      database: process.env.AI_DB_NAME || 'u218702675_cartdrawer',
+      database: process.env.AI_DB_NAME || 'cart_drawer_ninja',
       waitForConnections: true,
       connectionLimit: 5,
       queueLimit: 0,
@@ -31,7 +32,7 @@ function toMySQLDateTime(iso) {
 
 /* ─── Conversations ─── */
 
-async function listConversations(shopDomain) {
+export async function listConversations(shopDomain) {
   const db = getPool();
   let sql = 'SELECT * FROM ai_conversations';
   const params = [];
@@ -44,17 +45,25 @@ async function listConversations(shopDomain) {
   return rows.map(r => ({ ...r, pinned: !!r.pinned, archived: !!r.archived }));
 }
 
-async function createConversation(shopDomain, title) {
+export async function createConversation(shopDomain, title) {
   const db = getPool();
-  const conv = { id: id(), shopDomain, title: title || 'New Chat', pinned: 0, archived: 0, createdAt: now(), updatedAt: now() };
+  const conv = {
+    id: id(),
+    shopDomain,
+    title: title || 'New Chat',
+    pinned: 0,
+    archived: 0,
+    createdAt: now(),
+    updatedAt: now(),
+  };
   await db.execute(
     'INSERT INTO ai_conversations (id, shopDomain, title, pinned, archived, createdAt, updatedAt) VALUES (?,?,?,0,0,?,?)',
     [conv.id, conv.shopDomain, conv.title, conv.createdAt, conv.updatedAt]
   );
-  return conv;
+  return { ...conv, pinned: false, archived: false };
 }
 
-async function getConversation(convId) {
+export async function getConversation(convId) {
   const db = getPool();
   const [rows] = await db.execute('SELECT * FROM ai_conversations WHERE id = ?', [convId]);
   if (rows.length === 0) return null;
@@ -62,7 +71,7 @@ async function getConversation(convId) {
   return { ...r, pinned: !!r.pinned, archived: !!r.archived };
 }
 
-async function updateConversation(convId, updates) {
+export async function updateConversation(convId, updates) {
   const db = getPool();
   const fields = [];
   const params = [];
@@ -76,7 +85,7 @@ async function updateConversation(convId, updates) {
   return getConversation(convId);
 }
 
-async function deleteConversation(convId) {
+export async function deleteConversation(convId) {
   const db = getPool();
   await db.execute('DELETE FROM ai_messages WHERE conversationId = ?', [convId]);
   await db.execute('DELETE FROM ai_actions WHERE conversationId = ?', [convId]);
@@ -85,7 +94,7 @@ async function deleteConversation(convId) {
 
 /* ─── Messages ─── */
 
-async function listMessages(conversationId) {
+export async function listMessages(conversationId) {
   const db = getPool();
   const [rows] = await db.execute(
     'SELECT * FROM ai_messages WHERE conversationId = ? ORDER BY createdAt ASC',
@@ -93,42 +102,48 @@ async function listMessages(conversationId) {
   );
   return rows.map(r => ({
     ...r,
-    actions: typeof r.actions === 'string' ? JSON.parse(r.actions) : r.actions,
-    executedActions: typeof r.executedActions === 'string' ? JSON.parse(r.executedActions) : r.executedActions,
-    before: typeof r.before === 'string' ? JSON.parse(r.before) : r.before,
-    after: typeof r.after === 'string' ? JSON.parse(r.after) : r.after,
-    off_topic: !!r.off_topic,
-    synced: r.synced,
+    actions:         typeof r.actions === 'string'         ? JSON.parse(r.actions)         : (r.actions         ?? []),
+    executedActions: typeof r.executedActions === 'string' ? JSON.parse(r.executedActions) : (r.executedActions ?? []),
+    before:          typeof r.before === 'string'          ? JSON.parse(r.before)          : r.before,
+    after:           typeof r.after === 'string'           ? JSON.parse(r.after)           : r.after,
+    off_topic:       !!r.off_topic,
+    synced:          r.synced,
   }));
 }
 
-async function createMessage(conversationId, role, message, extra = {}) {
+export async function createMessage(conversationId, role, message, extra = {}) {
   const db = getPool();
   const msg = {
-    id: id(),
+    id:              id(),
     conversationId,
     role,
     message,
-    summary: extra.summary || null,
-    actions: extra.actions ? JSON.stringify(extra.actions) : null,
-    executedActions: extra.executedActions ? JSON.stringify(extra.executedActions) : null,
-    before: extra.before ? JSON.stringify(extra.before) : null,
-    after: extra.after ? JSON.stringify(extra.after) : null,
-    synced: extra.synced !== undefined ? (extra.synced ? 1 : 0) : null,
-    off_topic: extra.off_topic ? 1 : 0,
-    insight_mode: extra.insight_mode || null,
-    createdAt: now(),
+    summary:         extra.summary || null,
+    actions:         extra.actions          ? JSON.stringify(extra.actions)          : null,
+    executedActions: extra.executedActions  ? JSON.stringify(extra.executedActions)  : null,
+    before:          extra.before           ? JSON.stringify(extra.before)           : null,
+    after:           extra.after            ? JSON.stringify(extra.after)            : null,
+    synced:          extra.synced !== undefined ? (extra.synced ? 1 : 0) : null,
+    off_topic:       extra.off_topic ? 1 : 0,
+    insight_mode:    extra.insight_mode || null,
+    createdAt:       now(),
   };
   await db.execute(
     'INSERT INTO ai_messages (id, conversationId, role, message, summary, actions, executedActions, `before`, `after`, synced, off_topic, insight_mode, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
     [msg.id, msg.conversationId, msg.role, msg.message, msg.summary, msg.actions, msg.executedActions, msg.before, msg.after, msg.synced, msg.off_topic, msg.insight_mode, msg.createdAt]
   );
-  return { ...msg, actions: extra.actions || [], executedActions: extra.executedActions || [], before: extra.before, after: extra.after };
+  return {
+    ...msg,
+    actions:         extra.actions         || [],
+    executedActions: extra.executedActions || [],
+    before:          extra.before,
+    after:           extra.after,
+  };
 }
 
 /* ─── Suggestions ─── */
 
-async function getSuggestions(page) {
+export async function getSuggestions(page) {
   const db = getPool();
   let sql = 'SELECT * FROM ai_suggestions WHERE active = 1';
   const params = [];
@@ -140,7 +155,7 @@ async function getSuggestions(page) {
 
 /* ─── Tools ─── */
 
-async function getTools() {
+export async function getTools() {
   const db = getPool();
   const [rows] = await db.execute('SELECT * FROM ai_tools WHERE active = 1');
   return rows;
@@ -148,16 +163,16 @@ async function getTools() {
 
 /* ─── Actions ─── */
 
-async function createAction({ conversationId, module, actionName, payload, status }) {
+export async function createAction({ conversationId, module: mod, actionName, payload, status }) {
   const db = getPool();
   const action = {
-    id: id(),
+    id:             id(),
     conversationId: conversationId || null,
-    module: module || '',
+    module:         mod || '',
     actionName,
-    payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
-    status: status || 'pending',
-    createdAt: now(),
+    payload:        typeof payload === 'string' ? payload : JSON.stringify(payload),
+    status:         status || 'pending',
+    createdAt:      now(),
   };
   await db.execute(
     'INSERT INTO ai_actions (id, conversationId, module, actionName, payload, status, createdAt) VALUES (?,?,?,?,?,?,?)',
@@ -165,16 +180,3 @@ async function createAction({ conversationId, module, actionName, payload, statu
   );
   return action;
 }
-
-module.exports = {
-  listConversations,
-  createConversation,
-  getConversation,
-  updateConversation,
-  deleteConversation,
-  listMessages,
-  createMessage,
-  getSuggestions,
-  getTools,
-  createAction,
-};

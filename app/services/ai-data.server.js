@@ -22,7 +22,7 @@ async function tryMysql(fn, fallback) {
       const impl = await getMysql();
       if (impl) return await fn(impl);
     } catch (e) {
-      console.warn("[AI Data] MySQL operation failed, falling back to JSON:", e.message);
+      console.error("[AI Data] MySQL operation failed, falling back to JSON:", e.message);
     }
   }
   return fallback();
