@@ -228,67 +228,28 @@ export async function persistCartDrawerRecord(shop, record) {
         const checkoutFooterText = payload.checkoutFooterText || null;
         const customCSS = payload.customCSS || null;
 
-        try {
-            await pool.execute(`
-                INSERT INTO cart_drawer (shop, cartStatus, progress_data, coupon_data, upsell_data, progress_status, coupon_status, upsell_status, checkout_button_style, checkoutName, checkoutFooterText, customCSS)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    cartStatus = VALUES(cartStatus),
-                    progress_data = VALUES(progress_data),
-                    coupon_data = VALUES(coupon_data),
-                    upsell_data = VALUES(upsell_data),
-                    progress_status = VALUES(progress_status),
-                    coupon_status = VALUES(coupon_status),
-                    upsell_status = VALUES(upsell_status),
-                    checkout_button_style = VALUES(checkout_button_style),
-                    checkoutName = VALUES(checkoutName),
-                    checkoutFooterText = VALUES(checkoutFooterText),
-                    customCSS = VALUES(customCSS)
-            `, [shop, cartStatus, progressData, couponData, upsellData, progressStatus, couponStatus, upsellStatus, checkoutButtonStyle, checkoutName, checkoutFooterText, customCSS]);
-        } catch (insertErr) {
-            // Some columns may not exist in older DB schemas — retry with progressively fewer columns
-            if (insertErr?.code === "ER_BAD_FIELD_ERROR") {
-                agentLog("WARN", "cart_persist", "Column missing, retrying without optional columns", { error: insertErr?.message });
-                try {
-                    await pool.execute(`
-                        INSERT INTO cart_drawer (shop, cartStatus, progress_data, coupon_data, upsell_data, progress_status, coupon_status, upsell_status, checkout_button_style)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            cartStatus = VALUES(cartStatus),
-                            progress_data = VALUES(progress_data),
-                            coupon_data = VALUES(coupon_data),
-                            upsell_data = VALUES(upsell_data),
-                            progress_status = VALUES(progress_status),
-                            coupon_status = VALUES(coupon_status),
-                            upsell_status = VALUES(upsell_status),
-                            checkout_button_style = VALUES(checkout_button_style)
-                    `, [shop, cartStatus, progressData, couponData, upsellData, progressStatus, couponStatus, upsellStatus, checkoutButtonStyle]);
-                } catch (retryErr) {
-                    if (retryErr?.code === "ER_BAD_FIELD_ERROR") {
-                        agentLog("WARN", "cart_persist", "coupon_data or checkout_button_style missing, retrying minimal", { error: retryErr?.message });
-                        await pool.execute(`
-                            INSERT INTO cart_drawer (shop, cartStatus, progress_data, upsell_data, progress_status, coupon_status, upsell_status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                            ON DUPLICATE KEY UPDATE
-                                cartStatus = VALUES(cartStatus),
-                                progress_data = VALUES(progress_data),
-                                upsell_data = VALUES(upsell_data),
-                                progress_status = VALUES(progress_status),
-                                coupon_status = VALUES(coupon_status),
-                                upsell_status = VALUES(upsell_status)
-                        `, [shop, cartStatus, progressData, upsellData, progressStatus, couponStatus, upsellStatus]);
-                    } else {
-                        throw retryErr;
-                    }
-                }
-            } else {
-                throw insertErr;
-            }
-        }
+        await pool.execute(`
+            INSERT INTO cart_drawer (shop, cartStatus, progress_data, coupon_data, upsell_data, progress_status, coupon_status, upsell_status, checkout_button_style, checkoutName, checkoutFooterText, customCSS, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
+            ON DUPLICATE KEY UPDATE
+                cartStatus = VALUES(cartStatus),
+                progress_data = VALUES(progress_data),
+                coupon_data = VALUES(coupon_data),
+                upsell_data = VALUES(upsell_data),
+                progress_status = VALUES(progress_status),
+                coupon_status = VALUES(coupon_status),
+                upsell_status = VALUES(upsell_status),
+                checkout_button_style = VALUES(checkout_button_style),
+                checkoutName = VALUES(checkoutName),
+                checkoutFooterText = VALUES(checkoutFooterText),
+                customCSS = VALUES(customCSS),
+                updated_at = CURRENT_TIMESTAMP(3)
+        `, [shop, cartStatus, progressData, couponData, upsellData, progressStatus, couponStatus, upsellStatus, checkoutButtonStyle, checkoutName, checkoutFooterText, customCSS]);
 
         agentLog("INFO", "cart_persist", "Cart drawer saved to MySQL successfully");
     } catch (e) {
-        agentLog("WARN", "cart_persist", "MySQL save failed — local JSON was still written", { error: e?.message });
+        agentLog("ERROR", "cart_persist", "MySQL save failed", { error: e?.message });
+        return { ok: false, error: e?.message, response: { status: "error", message: e?.message }, httpStatus: 500 };
     }
 
     return { ok: true, response: { status: "success", message: "Cart drawer saved" }, httpStatus: 200 };
@@ -407,15 +368,16 @@ async function persistFbtRecord(shop, record) {
     try {
         const pool = getDb();
         await pool.execute(`
-            INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
             ON DUPLICATE KEY UPDATE
                 temp1 = VALUES(temp1),
                 temp2 = VALUES(temp2),
                 temp3 = VALUES(temp3),
                 selectedTemp = VALUES(selectedTemp),
                 selectedMode = VALUES(selectedMode),
-                \`condition\` = VALUES(\`condition\`)
+                \`condition\` = VALUES(\`condition\`),
+                updated_at = CURRENT_TIMESTAMP(3)
         `, [
             shop,
             JSON.stringify(fbtTemplate1),
@@ -428,7 +390,8 @@ async function persistFbtRecord(shop, record) {
 
         agentLog("INFO", "fbt_persist", "FBT saved to MySQL successfully");
     } catch (e) {
-        agentLog("WARN", "fbt_persist", "MySQL save failed — local JSON was still written", { error: e?.message });
+        agentLog("ERROR", "fbt_persist", "MySQL save failed", { error: e?.message });
+        return { ok: false, error: e?.message, response: { status: "error", message: e?.message }, httpStatus: 500 };
     }
 
     return { ok: true, response: { status: "success", message: "FBT widget saved" }, httpStatus: 200 };

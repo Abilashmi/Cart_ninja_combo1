@@ -209,7 +209,8 @@ INSERT INTO cart_drawer (
     checkout_button_style,
     progress_status,
     coupon_status,
-    upsell_status
+    upsell_status,
+    updated_at
 ) VALUES (
     :shop,
     :cartStatus,
@@ -222,7 +223,8 @@ INSERT INTO cart_drawer (
     :checkout_button_style,
     :progress_status,
     :coupon_status,
-    :upsell_status
+    :upsell_status,
+    CURRENT_TIMESTAMP(3)
 )
 ON DUPLICATE KEY UPDATE
     cartStatus = VALUES(cartStatus),
@@ -235,7 +237,8 @@ ON DUPLICATE KEY UPDATE
     checkout_button_style = VALUES(checkout_button_style),
     progress_status = VALUES(progress_status),
     coupon_status = VALUES(coupon_status),
-    upsell_status = VALUES(upsell_status)
+    upsell_status = VALUES(upsell_status),
+    updated_at = CURRENT_TIMESTAMP(3)
 ";
 
 try {

@@ -64,21 +64,21 @@ export async function loader({ request }) {
         activeTemplate: rule1?.layout || UPSELL_STYLES.GRID,
         rule1: rule1 ? {
           enabled: !!rule1.enabled,
-          upsellProducts: parseJson(rule1.upsell_products, []),
-          upsellCollections: parseJson(rule1.upsell_collections, []),
+          upsellProducts:         parseJson(rule1.upsellProducts, []),
+          upsellCollections: parseJson(rule1.upsellCollections, []),
         } : DEFAULT_UPSELL_CONFIG.rule1,
         rule2: rule2 ? {
           enabled: !!rule2.enabled,
-          triggerProducts: parseJson(rule2.trigger_products, []),
-          triggerCollections: parseJson(rule2.trigger_collections, []),
-          upsellProducts: parseJson(rule2.upsell_products, []),
-          upsellCollections: parseJson(rule2.upsell_collections, []),
+          triggerProducts: parseJson(rule2.triggerProducts, []),
+          triggerCollections: parseJson(rule2.triggerCollections, []),
+          upsellProducts: parseJson(rule2.upsellProducts, []),
+          upsellCollections: parseJson(rule2.upsellCollections, []),
         } : DEFAULT_UPSELL_CONFIG.rule2,
         rule3: rule3 ? {
           enabled: !!rule3.enabled,
-          cartValueThreshold: rule3.cart_value_threshold || 1000,
-          upsellProducts: parseJson(rule3.upsell_products, []),
-          upsellCollections: parseJson(rule3.upsell_collections, []),
+          cartValueThreshold: rule3.cartValueThreshold || 1000,
+          upsellProducts: parseJson(rule3.upsellProducts, []),
+          upsellCollections: parseJson(rule3.upsellCollections, []),
         } : DEFAULT_UPSELL_CONFIG.rule3,
       };
     }
@@ -106,7 +106,7 @@ export async function action({ request }) {
 
     for (const rule of rulesToSave) {
       if (!rule.data) continue;
-      const validation = validateUpsellRule(rule.data);
+      const validation = validateUpsellRule({ ...rule.data, ruleType: rule.ruleType, id: rule.id });
       if (!validation.valid) {
         return Response.json({ success: false, error: validation.error || `Invalid rule: ${rule.ruleType}` }, { status: 400 });
       }
@@ -117,22 +117,22 @@ export async function action({ request }) {
       if (!rule.data) continue;
       await db.execute(
         `INSERT INTO upsell_rules
-            (id, shop, enabled, rule_type, priority, trigger_products, trigger_collections,
-             upsell_products, upsell_collections, cart_value_threshold, layout, title)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, shop, enabled, ruleType, priority, triggerProducts, triggerCollections,
+             upsellProducts, upsellCollections, cartValueThreshold, layout, title, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
          ON DUPLICATE KEY UPDATE
             shop = VALUES(shop),
             enabled = VALUES(enabled),
-            rule_type = VALUES(rule_type),
+            ruleType = VALUES(ruleType),
             priority = VALUES(priority),
-            trigger_products = VALUES(trigger_products),
-            trigger_collections = VALUES(trigger_collections),
-            upsell_products = VALUES(upsell_products),
-            upsell_collections = VALUES(upsell_collections),
-            cart_value_threshold = VALUES(cart_value_threshold),
+            triggerProducts = VALUES(triggerProducts),
+            triggerCollections = VALUES(triggerCollections),
+            upsellProducts = VALUES(upsellProducts),
+            upsellCollections = VALUES(upsellCollections),
+            cartValueThreshold = VALUES(cartValueThreshold),
             layout = VALUES(layout),
             title = VALUES(title),
-            updated_at = CURRENT_TIMESTAMP`,
+            updatedAt = CURRENT_TIMESTAMP(3)`,
         [
           rule.id, shopId,
           rule.data.enabled ? 1 : 0,

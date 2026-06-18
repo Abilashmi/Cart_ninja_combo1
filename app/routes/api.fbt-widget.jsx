@@ -169,8 +169,8 @@ export async function action({ request }) {
         const db = getDb();
         await db.execute(
             `INSERT INTO fbt_widget
-                (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
              ON DUPLICATE KEY UPDATE
                 temp1 = VALUES(temp1),
                 temp2 = VALUES(temp2),
@@ -180,7 +180,7 @@ export async function action({ request }) {
                 \`condition\` = VALUES(\`condition\`),
                 ai_enabled = VALUES(ai_enabled),
                 ai_product_count = VALUES(ai_product_count),
-                updated_at = CURRENT_TIMESTAMP`,
+                updated_at = CURRENT_TIMESTAMP(3)`,
             [
                 shop,
                 templates.fbt1 ? JSON.stringify(templates.fbt1) : null,

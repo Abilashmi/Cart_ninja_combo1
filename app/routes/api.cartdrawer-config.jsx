@@ -361,8 +361,8 @@ export async function action({ request }) {
             `INSERT INTO cart_drawer
                 (shop, cartStatus, progress_data, coupon_data, upsell_data,
                  progress_status, coupon_status, upsell_status,
-                 checkoutName, checkoutFooterText, customCSS, checkout_button_style)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 checkoutName, checkoutFooterText, customCSS, checkout_button_style, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
              ON DUPLICATE KEY UPDATE
                 cartStatus = VALUES(cartStatus),
                 progress_data = VALUES(progress_data),
@@ -375,7 +375,7 @@ export async function action({ request }) {
                 checkoutFooterText = VALUES(checkoutFooterText),
                 customCSS = VALUES(customCSS),
                 checkout_button_style = VALUES(checkout_button_style),
-                updated_at = CURRENT_TIMESTAMP`,
+                updated_at = CURRENT_TIMESTAMP(3)`,
             [
                 shopKey,
                 toBool(cartStatus),

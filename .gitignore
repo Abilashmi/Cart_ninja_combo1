@@ -31,3 +31,10 @@ database.sqlite
 
 # Separate sub-project (not part of the main app)
 Project_Solaris/
+
+# Local JSON fallback files used as dev data cache — NOT the source of truth
+# These are written by ai-agent-actions.server.js and must not be committed
+cartdrawer-config-data.json
+ai-agent-fbt-data.json
+ai-agent-history-data.json
+ai-data/

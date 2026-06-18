@@ -356,7 +356,8 @@ INSERT INTO coupon_slider_widget (
     temp3CouponStyle,
     temp1CouponCondition,
     temp2CouponCondition,
-    temp3CouponCondition
+    temp3CouponCondition,
+    updated_at
 ) VALUES (
     :shopDomain,
     :temp1DefaultStyle,
@@ -369,7 +370,8 @@ INSERT INTO coupon_slider_widget (
     :temp3CouponStyle,
     :temp1CouponCondition,
     :temp2CouponCondition,
-    :temp3CouponCondition
+    :temp3CouponCondition,
+    CURRENT_TIMESTAMP(3)
 )
 ON DUPLICATE KEY UPDATE
     temp1DefaultStyle = VALUES(temp1DefaultStyle),
@@ -382,7 +384,8 @@ ON DUPLICATE KEY UPDATE
     temp3CouponStyle = VALUES(temp3CouponStyle),
     temp1CouponCondition = VALUES(temp1CouponCondition),
     temp2CouponCondition = VALUES(temp2CouponCondition),
-    temp3CouponCondition = VALUES(temp3CouponCondition)
+    temp3CouponCondition = VALUES(temp3CouponCondition),
+    updated_at = CURRENT_TIMESTAMP(3)
 ';
 
 try {

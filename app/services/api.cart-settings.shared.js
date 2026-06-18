@@ -448,7 +448,7 @@ export function validateUpsellRule(config, allRules = []) {
         };
     }
 
-    if (currentRuleType === RULE_TYPES.TRIGGERED) {
+    if (config.enabled && currentRuleType === RULE_TYPES.TRIGGERED) {
         if (
             (!config.triggerProducts || config.triggerProducts.length === 0) &&
             (!config.triggerCollections || config.triggerCollections.length === 0)
@@ -460,7 +460,7 @@ export function validateUpsellRule(config, allRules = []) {
         }
     }
 
-    if (currentRuleType === RULE_TYPES.GLOBAL_EXCEPT) {
+    if (config.enabled && currentRuleType === RULE_TYPES.GLOBAL_EXCEPT) {
         if (
             (!config.excludedProducts || config.excludedProducts.length === 0) &&
             (!config.excludedCollections || config.excludedCollections.length === 0)
@@ -482,7 +482,7 @@ export function validateUpsellRule(config, allRules = []) {
         };
     }
 
-    if (config.limit < 1 || config.limit > 4) {
+    if (config.limit != null && (config.limit < 1 || config.limit > 4)) {
         return {
             valid: false,
             error: 'Upsell limit must be between 1 and 4',

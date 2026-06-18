@@ -278,6 +278,10 @@ if ($aiProductCountColumn !== null) {
     $params[':aiProductCount'] = $aiProductCount;
 }
 
+$insertColumns[] = 'updated_at';
+$insertValues[] = 'CURRENT_TIMESTAMP(3)';
+$updateColumns[] = 'updated_at = CURRENT_TIMESTAMP(3)';
+
 $sql = "
 INSERT INTO fbt_widget (
     " . implode(",\n    ", $insertColumns) . "

@@ -320,8 +320,8 @@ async function upsertRow(dbPayload) {
             (shopDomain, selectedTemplate, selectedTemplateCoupon,
              temp1DefaultStyle, temp2DefaultStyle, temp3DefaultStyle,
              temp1CouponStyle, temp2CouponStyle, temp3CouponStyle,
-             temp1CouponCondition, temp2CouponCondition, temp3CouponCondition)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             temp1CouponCondition, temp2CouponCondition, temp3CouponCondition, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
          ON DUPLICATE KEY UPDATE
             selectedTemplate = VALUES(selectedTemplate),
             selectedTemplateCoupon = VALUES(selectedTemplateCoupon),
@@ -334,7 +334,7 @@ async function upsertRow(dbPayload) {
             temp1CouponCondition = VALUES(temp1CouponCondition),
             temp2CouponCondition = VALUES(temp2CouponCondition),
             temp3CouponCondition = VALUES(temp3CouponCondition),
-            updated_at = CURRENT_TIMESTAMP`,
+            updated_at = CURRENT_TIMESTAMP(3)`,
         [
             dbPayload.shopDomain,
             dbPayload.selectedTemplate,
