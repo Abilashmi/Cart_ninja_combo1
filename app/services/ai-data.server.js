@@ -1,26 +1,13 @@
 import { promises as fs } from "fs";
 import path from "path";
+import * as mysqlImpl from "./ai-data-mysql.server.js";
 
 const USE_MYSQL = process.env.AI_DB_MYSQL === "true";
-
-let mysqlImpl;
-async function getMysql() {
-  if (!mysqlImpl) {
-    try {
-      mysqlImpl = await import("./ai-data-mysql.server.js");
-    } catch {
-      console.warn("[AI Data] MySQL module not available, falling back to JSON");
-      mysqlImpl = null;
-    }
-  }
-  return mysqlImpl;
-}
 
 async function tryMysql(fn, fallback) {
   if (USE_MYSQL) {
     try {
-      const impl = await getMysql();
-      if (impl) return await fn(impl);
+      return await fn(mysqlImpl);
     } catch (e) {
       console.error("[AI Data] MySQL operation failed, falling back to JSON:", e.message);
     }
