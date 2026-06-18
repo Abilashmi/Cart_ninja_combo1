@@ -174,6 +174,19 @@ export const action = async ({ request }) => {
           },
         };
 
+      // Applies-to for amount_off_products
+      let appliesToItems = { all: true };
+      if (type === 'amount_off_products') {
+        const appliesTo = String(discountData.appliesTo || 'all');
+        let appliesToIds = [];
+        try { appliesToIds = discountData.appliesToIds ? JSON.parse(discountData.appliesToIds) : []; } catch {}
+        if (appliesTo === 'products' && appliesToIds.length) {
+          appliesToItems = { products: { productsToAdd: appliesToIds } };
+        } else if (appliesTo === 'collections' && appliesToIds.length) {
+          appliesToItems = { collections: { add: appliesToIds } };
+        }
+      }
+
       const variables = {
         basicCodeDiscount: {
           title,
@@ -183,7 +196,7 @@ export const action = async ({ request }) => {
           customerSelection: { all: true },
           customerGets: {
             value: customerGetsValue,
-            items: type === 'amount_off_order' ? { all: true } : { all: true },
+            items: type === 'amount_off_order' ? { all: true } : appliesToItems,
           },
           appliesOncePerCustomer,
           combinesWith: {
@@ -223,6 +236,14 @@ export const action = async ({ request }) => {
         }
       `;
 
+      const freeShipAllCountries = discountData.freeShipAllCountries !== 'false';
+      const freeShipCountryCodes = String(discountData.freeShipCountryCodes || '');
+      const parsedCountryCodes = freeShipCountryCodes
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const destination = (!freeShipAllCountries && parsedCountryCodes.length)
+        ? { countries: { add: parsedCountryCodes } }
+        : { all: true };
+
       const variables = {
         freeShippingCodeDiscount: {
           title,
@@ -230,7 +251,7 @@ export const action = async ({ request }) => {
           startsAt,
           ...(endsAt ? { endsAt } : {}),
           customerSelection: { all: true },
-          destination: { all: true },
+          destination,
           appliesOncePerCustomer,
           combinesWith: {
             orderDiscounts: !!combinations.order,
@@ -1926,6 +1947,12 @@ export default function Customize() {
   const [dBuyTargetIds, setDBuyTargetIds] = useState([]);
   const [dGetTargetType, setDGetTargetType] = useState('all');
   const [dGetTargetIds, setDGetTargetIds] = useState([]);
+  // Amount off products: applies-to
+  const [dAppliesTo, setDAppliesTo] = useState('all');
+  const [dAppliesToIds, setDAppliesToIds] = useState([]);
+  // Free shipping: countries
+  const [dFreeShipAllCountries, setDFreeShipAllCountries] = useState(true);
+  const [dFreeShipCountryCodes, setDFreeShipCountryCodes] = useState('');
   const [dErrors, setDErrors] = useState({});
   const [stepErrors, setStepErrors] = useState({});
   const [maxProductsError, setMaxProductsError] = useState('');
@@ -2543,6 +2570,10 @@ export default function Customize() {
     setDBuyTargetIds([]);
     setDGetTargetType('all');
     setDGetTargetIds([]);
+    setDAppliesTo('all');
+    setDAppliesToIds([]);
+    setDFreeShipAllCountries(true);
+    setDFreeShipCountryCodes('');
     setDErrors({});
   }, []);
 
@@ -2664,6 +2695,14 @@ export default function Customize() {
       formData.append('buyTargetIds', JSON.stringify(dBuyTargetIds));
       formData.append('getTargetType', dGetTargetType);
       formData.append('getTargetIds', JSON.stringify(dGetTargetIds));
+    }
+    if (selectedDiscountType === 'amount_off_products') {
+      formData.append('appliesTo', dAppliesTo);
+      formData.append('appliesToIds', JSON.stringify(dAppliesToIds));
+    }
+    if (selectedDiscountType === 'free_shipping') {
+      formData.append('freeShipAllCountries', dFreeShipAllCountries ? 'true' : 'false');
+      formData.append('freeShipCountryCodes', dFreeShipCountryCodes);
     }
 
     discountFetcher.submit(formData, { method: 'post' });
@@ -3616,355 +3655,230 @@ export default function Customize() {
       >
         <Modal.Section>
           <FormLayout>
+            {/* ── Title ── */}
             <TextField
               label="Title"
               value={dTitle}
-              onChange={(v) => {
-                setDTitle(v);
-                if (dErrors.title)
-                  setDErrors((p) => ({ ...p, title: undefined }));
-              }}
+              onChange={(v) => { setDTitle(v); if (dErrors.title) setDErrors((p) => ({ ...p, title: undefined })); }}
               autoComplete="off"
-              helpText="For internal use. Customers may see this in cart or checkout."
+              helpText="Internal name — customers may see this in cart or checkout."
               error={dErrors.title}
               placeholder="Summer Sale 20% Off"
             />
 
+            {/* ── Discount code ── */}
             <TextField
               label="Discount code"
               value={dCode}
               onChange={(v) => setDCode(v.toUpperCase())}
               autoComplete="off"
-              helpText="Customers must enter this code at checkout."
-              placeholder="SAVE10WINTER"
+              helpText="Customers enter this at checkout."
+              placeholder="SUMMER20"
               suffix={
-                <Button
-                  variant="plain"
-                  onClick={() =>
-                    setDCode(
-                      Math.random().toString(36).substring(2, 10).toUpperCase()
-                    )
-                  }
-                >
-                  Generate random code
+                <Button variant="plain" onClick={() => setDCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>
+                  Generate
                 </Button>
               }
             />
 
-            {selectedDiscountType !== 'free_shipping' &&
-              selectedDiscountType !== 'buy_x_get_y' && (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 12,
-                  }}
-                >
-                  <Select
-                    label="Value type"
-                    options={[
-                      { label: 'Percentage off (%)', value: 'percentage' },
-                      { label: 'Fixed amount off', value: 'fixed_amount' },
-                    ]}
-                    value={dValueType}
-                    onChange={setDValueType}
-                  />
-                  <TextField
-                    label="Discount value"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={dValue}
-                    onChange={(v) => {
-                      setDValue(v);
-                      if (dErrors.value)
-                        setDErrors((p) => ({ ...p, value: undefined }));
-                    }}
-                    suffix={dValueType === 'percentage' ? '%' : '₹'}
-                    autoComplete="off"
-                    error={dErrors.value}
-                    placeholder={dValueType === 'percentage' ? '10' : '20'}
-                  />
-                </div>
-              )}
-
-            {selectedDiscountType === 'free_shipping' && (
-              <div
-                style={{
-                  padding: 12,
-                  background: '#F6F6F7',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  color: '#202223',
-                }}
-              >
-                Free shipping discounts apply shipping benefit only. Minimum
-                requirement, usage limits, dates, and combinations can still be
-                configured below.
+            {/* ── Amount off products / order: value ── */}
+            {(selectedDiscountType === 'amount_off_products' || selectedDiscountType === 'amount_off_order') && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Select
+                  label="Discount type"
+                  options={[
+                    { label: 'Percentage off (%)', value: 'percentage' },
+                    { label: 'Fixed amount off (₹)', value: 'fixed_amount' },
+                  ]}
+                  value={dValueType}
+                  onChange={setDValueType}
+                />
+                <TextField
+                  label="Discount value"
+                  type="number" min="0.01" step="0.01"
+                  value={dValue}
+                  onChange={(v) => { setDValue(v); if (dErrors.value) setDErrors((p) => ({ ...p, value: undefined })); }}
+                  suffix={dValueType === 'percentage' ? '%' : '₹'}
+                  autoComplete="off"
+                  error={dErrors.value}
+                  placeholder={dValueType === 'percentage' ? '10' : '100'}
+                />
               </div>
             )}
 
+            {/* ── Amount off products: Applies to ── */}
+            {selectedDiscountType === 'amount_off_products' && (
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#202223', marginBottom: 6 }}>Applies to</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {[
+                    { value: 'all', label: 'All products' },
+                    { value: 'products', label: 'Specific products' },
+                    { value: 'collections', label: 'Specific collections' },
+                  ].map((opt) => (
+                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                      <input type="radio" checked={dAppliesTo === opt.value} onChange={() => { setDAppliesTo(opt.value); setDAppliesToIds([]); }} />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                {dAppliesTo !== 'all' && (
+                  <div>
+                    <p style={{ fontSize: 12, color: '#6D7175', marginBottom: 4 }}>
+                      Select {dAppliesTo === 'products' ? 'products' : 'collections'} (hold Ctrl/Cmd for multiple)
+                    </p>
+                    <select
+                      multiple
+                      value={dAppliesToIds}
+                      onChange={(e) => setDAppliesToIds(Array.from(e.target.selectedOptions).map((o) => o.value))}
+                      style={{ width: '100%', minHeight: 100, border: '1px solid #c9cccf', borderRadius: 8, padding: 6, background: '#fff', fontSize: 13 }}
+                    >
+                      {(dAppliesTo === 'products' ? bxgyProductOptions : bxgyCollectionOptions).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Free shipping: Countries ── */}
+            {selectedDiscountType === 'free_shipping' && (
+              <div>
+                <div style={{ padding: '10px 12px', background: '#F6F6F7', borderRadius: 8, fontSize: 13, color: '#202223', marginBottom: 12 }}>
+                  <strong>Shipping rate:</strong> All shipping rates
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#202223', marginBottom: 6 }}>Countries</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="radio" checked={dFreeShipAllCountries} onChange={() => setDFreeShipAllCountries(true)} />
+                    All countries
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="radio" checked={!dFreeShipAllCountries} onChange={() => setDFreeShipAllCountries(false)} />
+                    Selected countries
+                  </label>
+                </div>
+                {!dFreeShipAllCountries && (
+                  <TextField
+                    label="Country codes"
+                    value={dFreeShipCountryCodes}
+                    onChange={setDFreeShipCountryCodes}
+                    autoComplete="off"
+                    placeholder="IN, US, GB, AU"
+                    helpText="Comma-separated ISO 2-letter country codes"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* ── Buy X Get Y ── */}
             {selectedDiscountType === 'buy_x_get_y' && (
               <>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 12,
-                  }}
-                >
-                  <TextField
-                    label="Customer buys quantity"
-                    type="number"
-                    min="1"
-                    value={dBuyQuantity}
-                    onChange={(v) => {
-                      setDBuyQuantity(v);
-                      if (dErrors.buyQuantity)
-                        setDErrors((p) => ({ ...p, buyQuantity: undefined }));
-                    }}
-                    autoComplete="off"
-                    error={dErrors.buyQuantity}
-                  />
-                  <TextField
-                    label="Customer gets quantity"
-                    type="number"
-                    min="1"
-                    value={dGetQuantity}
-                    onChange={(v) => {
-                      setDGetQuantity(v);
-                      if (dErrors.getQuantity)
-                        setDErrors((p) => ({ ...p, getQuantity: undefined }));
-                    }}
-                    autoComplete="off"
-                    error={dErrors.getQuantity}
-                  />
-                  <Select
-                    label="Get value type"
-                    options={[
-                      { label: 'Percentage off', value: 'percentage' },
-                      { label: 'Fixed amount off', value: 'fixed_amount' },
-                      { label: 'Free', value: 'free' },
-                    ]}
-                    value={dGetValueType}
-                    onChange={(v) => {
-                      setDGetValueType(v);
-                      if (v === 'free') setDGetValue('100');
-                    }}
-                  />
-                  <TextField
-                    label="Get value"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={dGetValue}
-                    disabled={dGetValueType === 'free'}
-                    onChange={(v) => {
-                      setDGetValue(v);
-                      if (dErrors.getValue)
-                        setDErrors((p) => ({ ...p, getValue: undefined }));
-                    }}
-                    suffix={dGetValueType === 'percentage' ? '%' : '₹'}
-                    autoComplete="off"
-                    error={dErrors.getValue}
-                  />
-                </div>
-
-                <div style={{ marginTop: 8 }}>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: '#111',
-                      marginBottom: 6,
-                    }}
-                  >
-                    Customer buys from
-                  </p>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 10,
-                    }}
-                  >
+                {/* Customer BUYS */}
+                <div style={{ border: '1px solid #E1E3E5', borderRadius: 8, padding: 14 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#202223', marginBottom: 10 }}>Customer buys</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, alignItems: 'start' }}>
+                    <TextField
+                      label="Minimum quantity"
+                      type="number" min="1"
+                      value={dBuyQuantity}
+                      onChange={(v) => { setDBuyQuantity(v); if (dErrors.buyQuantity) setDErrors((p) => ({ ...p, buyQuantity: undefined })); }}
+                      autoComplete="off"
+                      error={dErrors.buyQuantity}
+                    />
                     <Select
-                      label="Buy target type"
+                      label="Any items from"
                       options={[
                         { label: 'Specific products', value: 'products' },
                         { label: 'Specific collections', value: 'collections' },
                       ]}
                       value={dBuyTargetType}
-                      onChange={(v) => {
-                        setDBuyTargetType(v);
-                        setDBuyTargetIds([]);
-                        if (dErrors.buyTargets)
-                          setDErrors((p) => ({ ...p, buyTargets: undefined }));
-                      }}
+                      onChange={(v) => { setDBuyTargetType(v); setDBuyTargetIds([]); if (dErrors.buyTargets) setDErrors((p) => ({ ...p, buyTargets: undefined })); }}
                     />
-                    <div>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          color: '#6D7175',
-                          display: 'block',
-                          marginBottom: 4,
-                        }}
-                      >
-                        Select buy targets (multiple)
-                      </label>
-                      <select
-                        multiple
-                        value={dBuyTargetIds}
-                        onChange={(e) => {
-                          const values = Array.from(
-                            e.target.selectedOptions
-                          ).map((opt) => opt.value);
-                          setDBuyTargetIds(values);
-                          if (dErrors.buyTargets)
-                            setDErrors((p) => ({
-                              ...p,
-                              buyTargets: undefined,
-                            }));
-                        }}
-                        style={{
-                          width: '100%',
-                          minHeight: 96,
-                          border: `1px solid ${dErrors.buyTargets ? '#d72c0d' : '#c9cccf'}`,
-                          borderRadius: 8,
-                          padding: 6,
-                          background: '#fff',
-                        }}
-                      >
-                        {(dBuyTargetType === 'products'
-                          ? bxgyProductOptions
-                          : bxgyCollectionOptions
-                        ).map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      {dErrors.buyTargets && (
-                        <div
-                          style={{
-                            color: '#d72c0d',
-                            fontSize: 12,
-                            marginTop: 4,
-                          }}
-                        >
-                          {dErrors.buyTargets}
-                        </div>
-                      )}
-                    </div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ fontSize: 12, color: '#6D7175', marginBottom: 4 }}>
+                      Select {dBuyTargetType === 'products' ? 'products' : 'collections'} (hold Ctrl/Cmd for multiple)
+                    </p>
+                    <select
+                      multiple value={dBuyTargetIds}
+                      onChange={(e) => { const v = Array.from(e.target.selectedOptions).map((o) => o.value); setDBuyTargetIds(v); if (dErrors.buyTargets) setDErrors((p) => ({ ...p, buyTargets: undefined })); }}
+                      style={{ width: '100%', minHeight: 90, border: `1px solid ${dErrors.buyTargets ? '#d72c0d' : '#c9cccf'}`, borderRadius: 8, padding: 6, background: '#fff', fontSize: 13 }}
+                    >
+                      {(dBuyTargetType === 'products' ? bxgyProductOptions : bxgyCollectionOptions).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    {dErrors.buyTargets && <p style={{ color: '#d72c0d', fontSize: 12, marginTop: 4 }}>{dErrors.buyTargets}</p>}
                   </div>
                 </div>
 
-                <div style={{ marginTop: 6 }}>
-                  <p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: '#111',
-                      marginBottom: 6,
-                    }}
-                  >
-                    Customer gets from
-                  </p>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 10,
-                    }}
-                  >
+                {/* Customer GETS */}
+                <div style={{ border: '1px solid #E1E3E5', borderRadius: 8, padding: 14 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#202223', marginBottom: 10 }}>Customer gets</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, alignItems: 'start' }}>
+                    <TextField
+                      label="Quantity"
+                      type="number" min="1"
+                      value={dGetQuantity}
+                      onChange={(v) => { setDGetQuantity(v); if (dErrors.getQuantity) setDErrors((p) => ({ ...p, getQuantity: undefined })); }}
+                      autoComplete="off"
+                      error={dErrors.getQuantity}
+                    />
                     <Select
-                      label="Get target type"
+                      label="Any items from"
                       options={[
                         { label: 'All products', value: 'all' },
                         { label: 'Specific products', value: 'products' },
                         { label: 'Specific collections', value: 'collections' },
                       ]}
                       value={dGetTargetType}
-                      onChange={(v) => {
-                        setDGetTargetType(v);
-                        setDGetTargetIds([]);
-                        if (dErrors.getTargets)
-                          setDErrors((p) => ({ ...p, getTargets: undefined }));
-                      }}
+                      onChange={(v) => { setDGetTargetType(v); setDGetTargetIds([]); if (dErrors.getTargets) setDErrors((p) => ({ ...p, getTargets: undefined })); }}
                     />
-                    <div>
-                      {dGetTargetType === 'all' ? (
-                        <div
-                          style={{
-                            minHeight: 96,
-                            border: '1px solid #c9cccf',
-                            borderRadius: 8,
-                            padding: '10px 12px',
-                            fontSize: 12,
-                            color: '#6D7175',
-                            background: '#f6f6f7',
-                          }}
-                        >
-                          Applies to all products.
-                        </div>
-                      ) : (
-                        <>
-                          <label
-                            style={{
-                              fontSize: 12,
-                              color: '#6D7175',
-                              display: 'block',
-                              marginBottom: 4,
-                            }}
-                          >
-                            Select get targets (multiple)
-                          </label>
-                          <select
-                            multiple
-                            value={dGetTargetIds}
-                            onChange={(e) => {
-                              const values = Array.from(
-                                e.target.selectedOptions
-                              ).map((opt) => opt.value);
-                              setDGetTargetIds(values);
-                              if (dErrors.getTargets)
-                                setDErrors((p) => ({
-                                  ...p,
-                                  getTargets: undefined,
-                                }));
-                            }}
-                            style={{
-                              width: '100%',
-                              minHeight: 96,
-                              border: `1px solid ${dErrors.getTargets ? '#d72c0d' : '#c9cccf'}`,
-                              borderRadius: 8,
-                              padding: 6,
-                              background: '#fff',
-                            }}
-                          >
-                            {(dGetTargetType === 'products'
-                              ? bxgyProductOptions
-                              : bxgyCollectionOptions
-                            ).map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                          {dErrors.getTargets && (
-                            <div
-                              style={{
-                                color: '#d72c0d',
-                                fontSize: 12,
-                                marginTop: 4,
-                              }}
-                            >
-                              {dErrors.getTargets}
-                            </div>
-                          )}
-                        </>
-                      )}
+                  </div>
+                  {dGetTargetType !== 'all' && (
+                    <div style={{ marginTop: 8 }}>
+                      <p style={{ fontSize: 12, color: '#6D7175', marginBottom: 4 }}>
+                        Select {dGetTargetType === 'products' ? 'products' : 'collections'} (hold Ctrl/Cmd for multiple)
+                      </p>
+                      <select
+                        multiple value={dGetTargetIds}
+                        onChange={(e) => { const v = Array.from(e.target.selectedOptions).map((o) => o.value); setDGetTargetIds(v); if (dErrors.getTargets) setDErrors((p) => ({ ...p, getTargets: undefined })); }}
+                        style={{ width: '100%', minHeight: 90, border: `1px solid ${dErrors.getTargets ? '#d72c0d' : '#c9cccf'}`, borderRadius: 8, padding: 6, background: '#fff', fontSize: 13 }}
+                      >
+                        {(dGetTargetType === 'products' ? bxgyProductOptions : bxgyCollectionOptions).map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      {dErrors.getTargets && <p style={{ color: '#d72c0d', fontSize: 12, marginTop: 4 }}>{dErrors.getTargets}</p>}
+                    </div>
+                  )}
+                  {/* At a discounted value */}
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #E1E3E5' }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: '#6D7175', marginBottom: 8 }}>AT A DISCOUNTED VALUE</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <Select
+                        label="Discount type"
+                        options={[
+                          { label: 'Percentage off', value: 'percentage' },
+                          { label: 'Fixed amount off (₹)', value: 'fixed_amount' },
+                          { label: 'Free (100% off)', value: 'free' },
+                        ]}
+                        value={dGetValueType}
+                        onChange={(v) => { setDGetValueType(v); if (v === 'free') setDGetValue('100'); }}
+                      />
+                      <TextField
+                        label="Value"
+                        type="number" min="0.01" step="0.01"
+                        value={dGetValue}
+                        disabled={dGetValueType === 'free'}
+                        onChange={(v) => { setDGetValue(v); if (dErrors.getValue) setDErrors((p) => ({ ...p, getValue: undefined })); }}
+                        suffix={dGetValueType === 'percentage' ? '%' : dGetValueType === 'free' ? '' : '₹'}
+                        autoComplete="off"
+                        error={dErrors.getValue}
+                        helpText={dGetValueType === 'free' ? 'Customers get the item for free' : undefined}
+                      />
                     </div>
                   </div>
                 </div>
