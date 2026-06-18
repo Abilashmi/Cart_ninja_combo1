@@ -10,6 +10,13 @@ import {
   SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
+import { getDb } from '../services/db.server';
+
+function parseJson(val, fallback) {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return fallback; }
+}
 
 /* ─── LOADER ──────────────────────────────────────────────────────────────── */
 export const loader = async ({ request }) => {
@@ -48,40 +55,38 @@ export const loader = async ({ request }) => {
     }));
   } catch (e) { console.error('[FBT loader] products:', e); }
 
-  /* fetch FBT config from PHP backend */
+  /* fetch FBT config from local DB */
   let fbtConfig = null;
   let manualRules = [];
   try {
-    const res = await fetch(
-      `https://int.thecartninja.com/save_fbt_widget.php?shopdomain=${encodeURIComponent(shop)}`,
-      { headers: { 'ngrok-skip-browser-warning': 'true' } }
+    const db = getDb();
+    const [rows] = await db.execute(
+      'SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1',
+      [shop]
     );
-    if (res.ok) {
-      const data = await res.json();
-      if (data.status === 'success' && data.data) {
-        const row = data.data;
-        const tpl = row.temp1 || {};
-        fbtConfig = {
-          activeTemplate: row.selectedTemp || 'fbt1',
-          mode: row.selectedMode || 'manual',
-          layout: tpl.layout || 'horizontal',
-          interactionType: tpl.interactionType || 'classic',
-          showPrices: tpl.showPrices !== false,
-          showAddAllButton: tpl.showAddAllButton !== false,
-          bgColor: tpl.bgColor || '#ffffff',
-          textColor: tpl.textColor || '#111827',
-          priceColor: tpl.priceColor || '#059669',
-          buttonColor: tpl.buttonColor || '#111827',
-          buttonTextColor: tpl.buttonTextColor || '#ffffff',
-          borderColor: tpl.borderColor || '#e5e7eb',
-          borderRadius: tpl.borderRadius ?? 8,
-          aiEnabled: Boolean(row.aiEnabled),
-          aiProductCount: row.aiProductCount || 3,
-        };
-        manualRules = Array.isArray(row.condition) ? row.condition : [];
-      }
+    if (rows.length > 0) {
+      const row = rows[0];
+      const tpl = parseJson(row.temp1, {});
+      fbtConfig = {
+        activeTemplate: row.selectedTemp || 'fbt1',
+        mode: row.selectedMode || 'manual',
+        layout: tpl.layout || 'horizontal',
+        interactionType: tpl.interactionType || 'classic',
+        showPrices: tpl.showPrices !== false,
+        showAddAllButton: tpl.showAddAllButton !== false,
+        bgColor: tpl.bgColor || '#ffffff',
+        textColor: tpl.textColor || '#111827',
+        priceColor: tpl.priceColor || '#059669',
+        buttonColor: tpl.buttonColor || '#111827',
+        buttonTextColor: tpl.buttonTextColor || '#ffffff',
+        borderColor: tpl.borderColor || '#e5e7eb',
+        borderRadius: tpl.borderRadius ?? 8,
+        aiEnabled: row.ai_enabled === 1 || row.ai_enabled === true,
+        aiProductCount: row.ai_product_count ? Number(row.ai_product_count) : 3,
+      };
+      manualRules = parseJson(row.condition, []);
     }
-  } catch (e) { console.error('[FBT loader]', e); }
+  } catch (e) { console.error('[FBT loader] DB read:', e.message); }
 
   return {
     shop,
@@ -103,24 +108,45 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const body = await request.json();
   try {
-    const payload = {
-      shop,
-      fbt: {
-        selectedTemplate: body.selectedTemplate,
-        mode: body.mode,
-        manualRules: body.manualRules || [],
-        templates: body.templates || {},
-        aiProductCount: body.aiProductCount != null ? Number(body.aiProductCount) : null,
-      },
-    };
-    const res = await fetch('https://int.thecartninja.com/save_fbt_widget.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) { const d = await res.json(); return { success: d.status === 'success' }; }
-  } catch (e) { console.error('[FBT action]', e); }
-  return { success: false };
+    const templates = body.templates || {};
+    const manualRules = body.manualRules || [];
+    const aiEnabled = body.aiEnabled ? 1 : 0;
+    const aiProductCount = body.aiProductCount != null ? Number(body.aiProductCount) : 3;
+    const selectedTemplate = body.selectedTemplate || 'fbt1';
+    const mode = body.mode || 'manual';
+
+    const db = getDb();
+    await db.execute(
+      `INSERT INTO fbt_widget
+          (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
+       ON DUPLICATE KEY UPDATE
+          temp1 = VALUES(temp1),
+          temp2 = VALUES(temp2),
+          temp3 = VALUES(temp3),
+          selectedTemp = VALUES(selectedTemp),
+          selectedMode = VALUES(selectedMode),
+          \`condition\` = VALUES(\`condition\`),
+          ai_enabled = VALUES(ai_enabled),
+          ai_product_count = VALUES(ai_product_count),
+          updated_at = CURRENT_TIMESTAMP(3)`,
+      [
+        shop,
+        templates.fbt1 ? JSON.stringify(templates.fbt1) : null,
+        templates.fbt2 ? JSON.stringify(templates.fbt2) : null,
+        templates.fbt3 ? JSON.stringify(templates.fbt3) : null,
+        selectedTemplate,
+        mode,
+        JSON.stringify(manualRules),
+        aiEnabled,
+        aiProductCount,
+      ]
+    );
+    return { success: true };
+  } catch (e) {
+    console.error('[FBT action] DB write:', e.message);
+    return { success: false, error: e.message };
+  }
 };
 
 /* ─── CONSTANTS ───────────────────────────────────────────────────────────── */

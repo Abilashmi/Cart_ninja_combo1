@@ -463,47 +463,56 @@ async function fetchFbtExternalOnly(shop) {
     }
 }
 
-// ---------------- coupon slider helpers ----------------
-
-const COUPON_SLIDER_API = "https://int.thecartninja.com/save_coupon_slider_widget.php";
-const COUPON_API = "https://int.thecartninja.com/save_coupon.php";
+// ---------------- coupon slider helpers (local DB) ----------------
 
 const COUPON_TEMPLATE_MAP = { 1: "template1", 2: "template2", 3: "template3" };
 
 async function fetchCouponSliderConfig(shop) {
     try {
-        const res = await fetch(`${COUPON_SLIDER_API}?shopdomain=${encodeURIComponent(shop)}`);
-        const data = await res.json();
-        if (data.status === "success" && data.data) return data.data;
-    } catch {}
+        const pool = getDb();
+        const [rows] = await pool.execute(
+            "SELECT selectedTemplate, temp1DefaultStyle, temp2DefaultStyle, temp3DefaultStyle, selectedTemplateCoupon FROM coupon_slider_widget WHERE shopDomain = ? LIMIT 1",
+            [shop]
+        );
+        if (rows.length > 0) return rows[0];
+    } catch (e) {
+        agentLog("WARN", "coupon_slider_fetch", "DB read failed", { error: e?.message });
+    }
     return {};
 }
 
 async function fetchFirstCoupon(shop) {
     try {
-        const res = await fetch(`${COUPON_API}?shopdomain=${encodeURIComponent(shop)}`, {
-            headers: { "ngrok-skip-browser-warning": "true" },
-        });
-        const data = await res.json();
-        if (data.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
-            const c = data.data[0];
-            return c.internal_id || c.id || null;
+        const pool = getDb();
+        const [rows] = await pool.execute(
+            "SELECT internal_id, id FROM coupons WHERE shop_domain = ? AND is_active = 1 ORDER BY id ASC LIMIT 1",
+            [shop]
+        );
+        if (rows.length > 0) {
+            return rows[0].internal_id || String(rows[0].id) || null;
         }
-    } catch {}
+    } catch (e) {
+        agentLog("WARN", "coupon_fetch", "DB read failed", { error: e?.message });
+    }
     return null;
 }
 
 async function saveCouponSliderConfig(shop, patch) {
     try {
-        const res = await fetch(COUPON_SLIDER_API, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...patch, shopDomain: shop, shop }),
-        });
-        const data = await res.json();
-        return { ok: data.status === "success", response: data, httpStatus: res.status };
+        const pool = getDb();
+        const selectedTemplate = patch.selectedTemplate || patch.template || "template1";
+        await pool.execute(
+            `INSERT INTO coupon_slider_widget (shopDomain, selectedTemplate, updated_at)
+             VALUES (?, ?, CURRENT_TIMESTAMP(3))
+             ON DUPLICATE KEY UPDATE
+                selectedTemplate = VALUES(selectedTemplate),
+                updated_at = CURRENT_TIMESTAMP(3)`,
+            [shop, selectedTemplate]
+        );
+        return { ok: true, response: { status: "success" }, httpStatus: 200 };
     } catch (e) {
-        return { ok: false, response: { error: e?.message }, httpStatus: null };
+        agentLog("ERROR", "coupon_slider_save", "DB write failed", { error: e?.message });
+        return { ok: false, response: { error: e?.message }, httpStatus: 500 };
     }
 }
 
