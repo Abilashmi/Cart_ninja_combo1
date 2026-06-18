@@ -55,36 +55,69 @@ export const loader = async ({ request }) => {
     }));
   } catch (e) { console.error('[FBT loader] products:', e); }
 
-  /* fetch FBT config from local DB */
+  /* fetch FBT config from new normalized tables */
   let fbtConfig = null;
   let manualRules = [];
   try {
     const db = getDb();
-    const [rows] = await db.execute(
-      'SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1',
-      [shop]
+    const [settings] = await db.execute(
+      'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
     );
-    if (rows.length > 0) {
-      const row = rows[0];
-      const tpl = parseJson(row.temp1, {});
+    const [rules] = await db.execute(
+      'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]
+    );
+    if (settings.length > 0) {
+      const s = settings[0];
       fbtConfig = {
-        activeTemplate: row.selectedTemp || 'fbt1',
-        mode: row.selectedMode || 'manual',
-        layout: tpl.layout || 'horizontal',
-        interactionType: tpl.interactionType || 'classic',
-        showPrices: tpl.showPrices !== false,
-        showAddAllButton: tpl.showAddAllButton !== false,
-        bgColor: tpl.bgColor || '#ffffff',
-        textColor: tpl.textColor || '#111827',
-        priceColor: tpl.priceColor || '#059669',
-        buttonColor: tpl.buttonColor || '#111827',
-        buttonTextColor: tpl.buttonTextColor || '#ffffff',
-        borderColor: tpl.borderColor || '#e5e7eb',
-        borderRadius: tpl.borderRadius ?? 8,
-        aiEnabled: row.ai_enabled === 1 || row.ai_enabled === true,
-        aiProductCount: row.ai_product_count ? Number(row.ai_product_count) : 3,
+        activeTemplate: s.selected_template || 'fbt1',
+        mode: s.mode || 'manual',
+        layout: s.layout || 'horizontal',
+        interactionType: s.interaction_type || 'classic',
+        showPrices: s.show_prices !== 0,
+        showAddAllButton: s.show_add_all_button !== 0,
+        bgColor: s.bg_color || '#ffffff',
+        textColor: s.text_color || '#111827',
+        priceColor: s.price_color || '#059669',
+        buttonColor: s.button_color || '#111827',
+        buttonTextColor: s.button_text_color || '#ffffff',
+        borderColor: s.border_color || '#e5e7eb',
+        borderRadius: s.border_radius ?? 8,
+        aiEnabled: s.mode === 'ai',
+        aiProductCount: s.ai_product_count || 3,
       };
-      manualRules = parseJson(row.condition, []);
+      manualRules = rules.map(r => ({
+        id: r.id,
+        name: r.name,
+        displayScope: r.trigger_scope || 'all',
+        triggerProducts: parseJson(r.trigger_products, []),
+        triggerCollections: parseJson(r.trigger_collections, []),
+        fbtProducts: parseJson(r.fbt_products, []),
+      }));
+    } else {
+      // Fall back to legacy fbt_widget table
+      const [legacy] = await db.execute('SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
+      if (legacy.length > 0) {
+        const row = legacy[0];
+        const tpl = parseJson(row.temp1, {});
+        fbtConfig = {
+          activeTemplate: row.selectedTemp || 'fbt1',
+          mode: row.selectedMode || 'manual',
+          layout: tpl.layout || 'horizontal',
+          interactionType: tpl.interactionType || 'classic',
+          showPrices: tpl.showPrices !== false,
+          showAddAllButton: tpl.showAddAllButton !== false,
+          bgColor: tpl.bgColor || '#ffffff',
+          textColor: tpl.textColor || '#111827',
+          priceColor: tpl.priceColor || '#059669',
+          buttonColor: tpl.buttonColor || '#111827',
+          buttonTextColor: tpl.buttonTextColor || '#ffffff',
+          borderColor: tpl.borderColor || '#e5e7eb',
+          borderRadius: tpl.borderRadius ?? 8,
+          aiEnabled: row.ai_enabled === 1,
+          aiProductCount: row.ai_product_count || 3,
+        };
+        manualRules = parseJson(row.condition, []);
+      }
     }
   } catch (e) { console.error('[FBT loader] DB read:', e.message); }
 
@@ -113,35 +146,85 @@ export const action = async ({ request }) => {
     const aiEnabled = body.aiEnabled ? 1 : 0;
     const aiProductCount = body.aiProductCount != null ? Number(body.aiProductCount) : 3;
     const selectedTemplate = body.selectedTemplate || 'fbt1';
-    const mode = body.mode || 'manual';
+    const mode = body.mode || (aiEnabled ? 'ai' : 'manual');
+    const activeTpl = templates[selectedTemplate] || Object.values(templates)[0] || {};
 
     const db = getDb();
-    await db.execute(
-      `INSERT INTO fbt_widget
-          (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3))
-       ON DUPLICATE KEY UPDATE
-          temp1 = VALUES(temp1),
-          temp2 = VALUES(temp2),
-          temp3 = VALUES(temp3),
-          selectedTemp = VALUES(selectedTemp),
-          selectedMode = VALUES(selectedMode),
-          \`condition\` = VALUES(\`condition\`),
-          ai_enabled = VALUES(ai_enabled),
-          ai_product_count = VALUES(ai_product_count),
-          updated_at = CURRENT_TIMESTAMP(3)`,
-      [
+
+    // Save to new normalized fbt_widget_settings table
+    await db.execute(`
+      INSERT INTO fbt_widget_settings
+        (shop_domain, is_enabled, selected_template, mode, ai_product_count,
+         bg_color, text_color, price_color, button_color, button_text_color,
+         border_color, border_radius, layout, interaction_type, show_prices, show_add_all_button)
+      VALUES (?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE
+        is_enabled = 1,
+        selected_template   = VALUES(selected_template),
+        mode                = VALUES(mode),
+        ai_product_count    = VALUES(ai_product_count),
+        bg_color            = VALUES(bg_color),
+        text_color          = VALUES(text_color),
+        price_color         = VALUES(price_color),
+        button_color        = VALUES(button_color),
+        button_text_color   = VALUES(button_text_color),
+        border_color        = VALUES(border_color),
+        border_radius       = VALUES(border_radius),
+        layout              = VALUES(layout),
+        interaction_type    = VALUES(interaction_type),
+        show_prices         = VALUES(show_prices),
+        show_add_all_button = VALUES(show_add_all_button),
+        updated_at          = CURRENT_TIMESTAMP(3)
+    `, [
+      shop, selectedTemplate, mode, aiProductCount,
+      activeTpl.bgColor || '#ffffff',
+      activeTpl.textColor || '#111827',
+      activeTpl.priceColor || '#059669',
+      activeTpl.buttonColor || '#111827',
+      activeTpl.buttonTextColor || '#ffffff',
+      activeTpl.borderColor || '#e5e7eb',
+      activeTpl.borderRadius ?? 8,
+      activeTpl.layout || 'horizontal',
+      activeTpl.interactionType || 'classic',
+      activeTpl.showPrices !== false ? 1 : 0,
+      activeTpl.showAddAllButton !== false ? 1 : 0,
+    ]);
+
+    // Replace manual rules in fbt_rules table
+    await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ?', [shop]);
+    for (let i = 0; i < manualRules.length; i++) {
+      const r = manualRules[i];
+      await db.execute(`
+        INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order)
+        VALUES (?,?,?,?,?,?,1,?)
+      `, [
         shop,
-        templates.fbt1 ? JSON.stringify(templates.fbt1) : null,
-        templates.fbt2 ? JSON.stringify(templates.fbt2) : null,
-        templates.fbt3 ? JSON.stringify(templates.fbt3) : null,
-        selectedTemplate,
-        mode,
-        JSON.stringify(manualRules),
-        aiEnabled,
-        aiProductCount,
-      ]
-    );
+        r.name || `Rule ${i + 1}`,
+        r.displayScope || r.trigger_scope || 'all',
+        r.triggerProducts?.length ? JSON.stringify(r.triggerProducts) : null,
+        r.triggerCollections?.length ? JSON.stringify(r.triggerCollections) : null,
+        r.fbtProducts?.length ? JSON.stringify(r.fbtProducts) : null,
+        i,
+      ]);
+    }
+
+    // Also write to legacy fbt_widget for backwards compat
+    await db.execute(`
+      INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3))
+      ON DUPLICATE KEY UPDATE
+        temp1=VALUES(temp1),temp2=VALUES(temp2),temp3=VALUES(temp3),
+        selectedTemp=VALUES(selectedTemp),selectedMode=VALUES(selectedMode),
+        \`condition\`=VALUES(\`condition\`),ai_enabled=VALUES(ai_enabled),
+        ai_product_count=VALUES(ai_product_count),updated_at=CURRENT_TIMESTAMP(3)
+    `, [
+      shop,
+      templates.fbt1 ? JSON.stringify(templates.fbt1) : null,
+      templates.fbt2 ? JSON.stringify(templates.fbt2) : null,
+      templates.fbt3 ? JSON.stringify(templates.fbt3) : null,
+      selectedTemplate, mode, JSON.stringify(manualRules), aiEnabled, aiProductCount,
+    ]);
+
     return { success: true };
   } catch (e) {
     console.error('[FBT action] DB write:', e.message);
