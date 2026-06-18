@@ -85,13 +85,13 @@ export default function AppBundlesAnalytics() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/bundle-analytics?shop=${encodeURIComponent(shop)}`)
+    fetch(`/api/bundle-analytics?days=${dateRange}`)
       .then(r => r.json())
       .then(data => {
         const d = data.data || DEFAULT_ANALYTICS;
         setAnalytics(d);
-        const demo = buildDemoData(parseInt(dateRange, 10));
-        setDailyData(d.daily?.length ? d.daily : demo);
+        // Use real daily data if available, demo otherwise (no data recorded yet)
+        setDailyData(d.daily?.length ? d.daily : buildDemoData(parseInt(dateRange, 10)));
         setLoading(false);
       })
       .catch(() => {
@@ -99,7 +99,7 @@ export default function AppBundlesAnalytics() {
         setDailyData(buildDemoData(parseInt(dateRange, 10)));
         setLoading(false);
       });
-  }, [shop, dateRange]);
+  }, [dateRange]);
 
   const totals = analytics || DEFAULT_ANALYTICS;
   const aov = totals.total_orders > 0
@@ -109,12 +109,14 @@ export default function AppBundlesAnalytics() {
     ? ((totals.total_conversions / totals.total_views) * 100).toFixed(1)
     : '0.0';
 
+  // Use real data from DB, fall back to demo only when no events recorded yet
   const DEMO_TOP_TEMPLATES = [
     { name: 'Summer Bundle Grid', views: 1240, clicks: 387, conversions: 58, revenue: 4820 },
     { name: 'Velocity Carousel', views: 890, clicks: 201, conversions: 34, revenue: 2910 },
     { name: 'Editorial Split', views: 530, clicks: 142, conversions: 19, revenue: 1650 },
     { name: 'Premium Storefront', views: 320, clicks: 88, conversions: 11, revenue: 980 },
   ];
+  const topTemplates = totals.top_templates?.length ? totals.top_templates : DEMO_TOP_TEMPLATES;
 
   return (
     <BlockStack gap="500">
@@ -259,11 +261,11 @@ export default function AppBundlesAnalytics() {
                       </Text>
                     ))}
                   </div>
-                  {DEMO_TOP_TEMPLATES.map((t, i) => (
-                    <div key={t.name} style={{
+                  {topTemplates.map((t, i) => (
+                    <div key={t.name || i} style={{
                       display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
                       padding: '10px 12px', alignItems: 'center',
-                      borderBottom: i < DEMO_TOP_TEMPLATES.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      borderBottom: i < topTemplates.length - 1 ? '1px solid #f3f4f6' : 'none',
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{

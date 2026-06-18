@@ -41,6 +41,18 @@ function AdvancedSectionComponent({
             helpText="Enable to offer a coupon code with this bundle"
           />
 
+          {/* When checkbox is NOT ticked — show Create Coupon button below */}
+          {!config.has_discount_offer && (
+            <Button
+              variant="secondary"
+              onClick={() => onCreateCoupon?.()}
+              fullWidth
+            >
+              Create Coupon
+            </Button>
+          )}
+
+          {/* When checkbox IS ticked — show coupon selection UI */}
           {!!config.has_discount_offer && (
             couponOptions.length > 0 ? (
               <>
