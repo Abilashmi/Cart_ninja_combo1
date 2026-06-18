@@ -592,31 +592,9 @@ export const loader = async ({ request }) => {
   // INITIAL LOAD MODE (Fast)
   const db = await getDb(shop).catch(() => ({ templates: [], discounts: [] }));
 
-  // Fetch from local SQLite too (templates saved via api.bundle-templates)
   let localTemplate = null;
   let localTemplates = [];
   try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS combo_templates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        shop_domain TEXT NOT NULL,
-        name TEXT NOT NULL DEFAULT '',
-        slug TEXT,
-        template_type TEXT NOT NULL DEFAULT 'grid',
-        status TEXT NOT NULL DEFAULT 'draft',
-        is_active INTEGER NOT NULL DEFAULT 1,
-        version INTEGER NOT NULL DEFAULT 1,
-        description TEXT,
-        features TEXT,
-        customization_data TEXT,
-        page_handle TEXT,
-        page_id TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-    await prisma.$executeRawUnsafe(`ALTER TABLE combo_templates ADD COLUMN page_handle TEXT`).catch(() => {});
-    await prisma.$executeRawUnsafe(`ALTER TABLE combo_templates ADD COLUMN page_id TEXT`).catch(() => {});
     const rows = await prisma.$queryRawUnsafe(
       `SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
       shop

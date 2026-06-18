@@ -1,19 +1,6 @@
-import prisma from '../db.server';
+import { getDb } from '../services/db.server';
 
 const TABLE = 'combo_analytics';
-
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS ${TABLE} (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      shop_domain TEXT NOT NULL,
-      template_id INTEGER,
-      event_type TEXT NOT NULL,
-      revenue REAL DEFAULT 0,
-      recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `).catch(() => {});
-}
 
 function buildDefaultAnalytics() {
   return {
@@ -31,28 +18,26 @@ export async function loader({ request }) {
     return Response.json({ success: false, error: 'shop parameter required' }, { status: 400 });
   }
 
-  await ensureTable();
-
   try {
-    const [views, clicks, conversions] = await Promise.all([
-      prisma.$queryRawUnsafe(`SELECT COUNT(*) as n FROM ${TABLE} WHERE shop_domain = ? AND event_type = 'view'`, shop).catch(() => [{ n: 0 }]),
-      prisma.$queryRawUnsafe(`SELECT COUNT(*) as n FROM ${TABLE} WHERE shop_domain = ? AND event_type = 'click'`, shop).catch(() => [{ n: 0 }]),
-      prisma.$queryRawUnsafe(`SELECT COUNT(*) as n FROM ${TABLE} WHERE shop_domain = ? AND event_type = 'order'`, shop).catch(() => [{ n: 0 }]),
+    const db = getDb();
+    const [[views], [clicks], [conversions], [revenue]] = await Promise.all([
+      db.execute(`SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE shop_domain = ? AND event_type = 'view'`, [shop]),
+      db.execute(`SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE shop_domain = ? AND event_type = 'click'`, [shop]),
+      db.execute(`SELECT COUNT(*) AS n FROM \`${TABLE}\` WHERE shop_domain = ? AND event_type = 'order'`, [shop]),
+      db.execute(`SELECT COALESCE(SUM(revenue), 0) AS total FROM \`${TABLE}\` WHERE shop_domain = ? AND event_type = 'order'`, [shop]),
     ]);
-    const revenue = await prisma.$queryRawUnsafe(
-      `SELECT COALESCE(SUM(revenue), 0) as total FROM ${TABLE} WHERE shop_domain = ? AND event_type = 'order'`, shop
-    ).catch(() => [{ total: 0 }]);
 
-    const data = {
-      total_views: Number(views[0]?.n ?? 0),
-      total_clicks: Number(clicks[0]?.n ?? 0),
-      total_conversions: Number(conversions[0]?.n ?? 0),
-      total_revenue: parseFloat(revenue[0]?.total ?? 0),
-      total_orders: Number(conversions[0]?.n ?? 0),
-      daily: [], top_templates: [], discount_usage: [],
-    };
-
-    return Response.json({ success: true, data });
+    return Response.json({
+      success: true,
+      data: {
+        total_views:       Number(views[0]?.n ?? 0),
+        total_clicks:      Number(clicks[0]?.n ?? 0),
+        total_conversions: Number(conversions[0]?.n ?? 0),
+        total_revenue:     parseFloat(revenue[0]?.total ?? 0),
+        total_orders:      Number(conversions[0]?.n ?? 0),
+        daily: [], top_templates: [], discount_usage: [],
+      },
+    });
   } catch (err) {
     return Response.json({ success: true, data: buildDefaultAnalytics(), _note: 'fallback' });
   }
@@ -75,12 +60,11 @@ export async function action({ request }) {
     return Response.json({ success: false, error: `event_type must be one of: ${validEvents.join(', ')}` }, { status: 400 });
   }
 
-  await ensureTable();
-
   try {
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO ${TABLE} (shop_domain, template_id, event_type, revenue, recorded_at) VALUES (?, ?, ?, ?, datetime('now'))`,
-      shop_domain, template_id ? Number(template_id) : null, event_type, revenue ? parseFloat(revenue) : 0
+    const db = getDb();
+    await db.execute(
+      `INSERT INTO \`${TABLE}\` (shop_domain, template_id, event_type, revenue) VALUES (?, ?, ?, ?)`,
+      [shop_domain, template_id ? Number(template_id) : null, event_type, revenue ? parseFloat(revenue) : 0]
     );
     return Response.json({ success: true, message: 'Event recorded' });
   } catch (err) {
