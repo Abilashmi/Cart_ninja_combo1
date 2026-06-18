@@ -210,6 +210,9 @@ INSERT INTO cart_drawer (
     progress_status,
     coupon_status,
     upsell_status,
+    progress_updated_at,
+    coupon_updated_at,
+    upsell_updated_at,
     updated_at
 ) VALUES (
     :shop,
@@ -224,6 +227,9 @@ INSERT INTO cart_drawer (
     :progress_status,
     :coupon_status,
     :upsell_status,
+    CURRENT_TIMESTAMP(3),
+    CURRENT_TIMESTAMP(3),
+    CURRENT_TIMESTAMP(3),
     CURRENT_TIMESTAMP(3)
 )
 ON DUPLICATE KEY UPDATE
@@ -238,6 +244,9 @@ ON DUPLICATE KEY UPDATE
     progress_status = VALUES(progress_status),
     coupon_status = VALUES(coupon_status),
     upsell_status = VALUES(upsell_status),
+    progress_updated_at = IF(VALUES(progress_data) IS NOT NULL, CURRENT_TIMESTAMP(3), progress_updated_at),
+    coupon_updated_at    = IF(VALUES(coupon_data)   IS NOT NULL, CURRENT_TIMESTAMP(3), coupon_updated_at),
+    upsell_updated_at    = IF(VALUES(upsell_data)   IS NOT NULL, CURRENT_TIMESTAMP(3), upsell_updated_at),
     updated_at = CURRENT_TIMESTAMP(3)
 ";
 
