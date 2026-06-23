@@ -29,8 +29,6 @@
   let _lastCopiedCode = null;
   let _ccConfigLoading = false;
 
-  const CC_AI_UPSELL_CACHE_TTL_MS = 60 * 1000;
-  let _ccAiUpsellCache = { key: null, ts: 0, recommendations: [] };
 
   const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
   let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
@@ -1637,105 +1635,8 @@
     let matchedUpsellDetails = [];
     let storeDetailsById = null;
 
-    // AI mode: always runs when useAI is true, uses full store catalog.
-    // Manual rules run only when AI is off OR AI returned no products.
-    if (upsellConfig.useAI) {
-      const storeCatalog = await ccGetStoreCatalog();
-      let candidateCatalog = [];
-      if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
-        candidateCatalog = storeCatalog.candidateCatalog;
-        storeDetailsById = storeCatalog.detailsById || null;
-      }
 
-      const cartProducts = cart.items.map((i) => ({
-        title: i.product_title,
-        id: i.product_id,
-      }));
-
-      const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
-      const limit = Number.isFinite(rawLimit) ? Math.max(3, Math.min(5, rawLimit)) : 3;
-
-      if (cartProducts.length > 0 && candidateCatalog.length > 0) {
-        const cacheKey = JSON.stringify({
-          cart: cart.items.map((i) => [String(i.product_id), i.quantity]),
-          candidates: candidateCatalog.map((p) => String(p.id)),
-          limit,
-        });
-
-        const now = Date.now();
-        if (
-          _ccAiUpsellCache.key === cacheKey &&
-          now - _ccAiUpsellCache.ts < CC_AI_UPSELL_CACHE_TTL_MS
-        ) {
-          upsellProducts = Array.isArray(_ccAiUpsellCache.recommendations)
-            ? _ccAiUpsellCache.recommendations
-            : [];
-        } else {
-          try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 10000);
-
-            const aiRes = await originalFetch(AI_UPSELL_API, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              signal: controller.signal,
-              body: JSON.stringify({
-                cartProducts,
-                allProducts: candidateCatalog,
-                limit,
-              }),
-            });
-
-            clearTimeout(timeout);
-
-            if (aiRes.ok) {
-              const aiData = await aiRes.json();
-              if (aiData && aiData.success && Array.isArray(aiData.recommendations)) {
-                upsellProducts = aiData.recommendations
-                  .map((id) => ccExtractNumericId(id) || String(id || '').trim())
-                  .map((id) => ccExtractNumericId(id) || id)
-                  .filter((id) => id);
-                _ccAiUpsellCache = {
-                  key: cacheKey,
-                  ts: now,
-                  recommendations: upsellProducts,
-                };
-              }
-            }
-          } catch (e) {
-            // Ignore and fall back to manual rules.
-          }
-        }
-
-        if (upsellProducts.length > 0) {
-          upsellProducts.forEach((id) => {
-            const storeDetail = storeDetailsById ? storeDetailsById[String(id)] : null;
-            if (storeDetail) matchedUpsellDetails.push(storeDetail);
-          });
-        }
-      }
-    }
-
-    // When AI is on but returned nothing, fall back to all configured manual-rule products
-    // (ignoring trigger conditions) so something always shows.
-    if (upsellProducts.length === 0 && upsellConfig.useAI && upsellConfig.manualRules) {
-      if (!storeDetailsById) {
-        const sc = await ccGetStoreCatalog();
-        if (sc && sc.detailsById) storeDetailsById = sc.detailsById;
-      }
-      for (const rule of upsellConfig.manualRules) {
-        if (rule.enabled === false) continue;
-        (rule.upsellProductIds || []).forEach((id, idx) => {
-          const pId = String(id).replace('gid://shopify/Product/', '');
-          if (!upsellProducts.includes(pId)) {
-            upsellProducts.push(pId);
-            if (rule.upsellProductDetails?.[idx]) matchedUpsellDetails.push(rule.upsellProductDetails[idx]);
-          }
-        });
-      }
-    }
-
-    if (upsellProducts.length === 0 && !upsellConfig.useAI && upsellConfig.manualRules) {
+    if (upsellProducts.length === 0 && upsellConfig.manualRules) {
       for (const rule of upsellConfig.manualRules) {
         if (rule.enabled === false) continue;
         const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));

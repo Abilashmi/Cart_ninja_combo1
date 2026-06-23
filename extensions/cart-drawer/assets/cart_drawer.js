@@ -27,8 +27,6 @@
     let COUPONS = [];
     let appliedCouponCodes = [];
 
-    const CC_AI_UPSELL_CACHE_TTL_MS = 60 * 1000;
-    let _ccAiUpsellCache = { key: null, ts: 0, recommendations: [] };
 
     const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
     let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
@@ -883,84 +881,6 @@
         let upsellProducts = [];
         let matchedUpsellDetails = [];
 
-        if (upsellConfig.useAI) {
-            const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
-            let candidateCatalog = allDetails
-                .filter((d) => d && d.id && d.title)
-                .map((d) => ({ id: d.id, title: d.title }));
-
-            let storeDetailsById = null;
-            if (candidateCatalog.length === 0) {
-                const storeCatalog = await ccGetStoreCatalog();
-                if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
-                    candidateCatalog = storeCatalog.candidateCatalog;
-                    storeDetailsById = storeCatalog.detailsById || null;
-                }
-            }
-
-            const cartProducts = cart.items.map((i) => ({ title: i.product_title, id: i.product_id }));
-
-            const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
-            const limit = Number.isFinite(rawLimit) ? Math.max(3, Math.min(5, rawLimit)) : 3;
-
-            if (cartProducts.length > 0 && candidateCatalog.length > 0) {
-                const cacheKey = JSON.stringify({
-                    cart: cart.items.map((i) => [String(i.product_id), i.quantity]),
-                    candidates: candidateCatalog.map((p) => String(p.id)),
-                    limit,
-                });
-
-                const now = Date.now();
-                if (_ccAiUpsellCache.key === cacheKey && now - _ccAiUpsellCache.ts < CC_AI_UPSELL_CACHE_TTL_MS) {
-                    upsellProducts = Array.isArray(_ccAiUpsellCache.recommendations)
-                        ? _ccAiUpsellCache.recommendations
-                        : [];
-                } else {
-                    try {
-                        const controller = new AbortController();
-                        const timeout = setTimeout(() => controller.abort(), 6000);
-
-                        const aiRes = await originalFetch(AI_UPSELL_API, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            signal: controller.signal,
-                            body: JSON.stringify({
-                                cartProducts,
-                                allProducts: candidateCatalog,
-                                limit,
-                            }),
-                        });
-
-                        clearTimeout(timeout);
-
-                        if (aiRes.ok) {
-                            const aiData = await aiRes.json();
-                            if (aiData && aiData.success && Array.isArray(aiData.recommendations)) {
-                                upsellProducts = aiData.recommendations;
-                                _ccAiUpsellCache = { key: cacheKey, ts: now, recommendations: upsellProducts };
-                            }
-                        }
-                    } catch (e) {
-                        // Ignore and fall back to manual rules.
-                    }
-                }
-
-                if (upsellProducts.length > 0) {
-                    upsellProducts.forEach((id) => {
-                        if (allDetails.length > 0) {
-                            const detail = allDetails.find(
-                                (d) => String(d.id).includes(id) || String(d.variantId) == String(id)
-                            );
-                            if (detail) matchedUpsellDetails.push(detail);
-                            return;
-                        }
-
-                        const storeDetail = storeDetailsById ? storeDetailsById[String(id)] : null;
-                        if (storeDetail) matchedUpsellDetails.push(storeDetail);
-                    });
-                }
-            }
-        }
 
         if (upsellProducts.length === 0 && upsellConfig.manualRules) {
             for (const rule of upsellConfig.manualRules) {
