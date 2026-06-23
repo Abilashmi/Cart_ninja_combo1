@@ -7,7 +7,6 @@
   const API_BASE = '/apps/cart-app';
   const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
   const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
-  const AI_UPSELL_API = API_BASE + '/ai_upsell.php?shopdomain=' + SHOP;
   const CLICK_API = API_BASE + '/click.php';
 
   // Utility: Get currency symbol from code

@@ -7,9 +7,7 @@ import { authenticate } from "../shopify.server";
 import { getShopCurrencySymbol } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
-import CartNinjaFloatingLauncher from "../components/ai-agent/CartNinjaFloatingLauncher";
-import "../components/ai-agent/ai-agent.css";
-import "../components/ai-agent/CartNinjaAgentV2.css";
+
 
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
@@ -50,7 +48,7 @@ export default function App() {
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
                         <Outlet context={{ currencySymbol }} />
-                        <CartNinjaFloatingLauncher />
+
                     </PlanProvider>
                 </CurrencyProvider>
             </PolarisAppProvider>

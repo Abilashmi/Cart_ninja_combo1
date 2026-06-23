@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useFetcher } from 'react-router';
 import { useCartEditor } from '../context/CartEditorContext';
-import { featureStore } from './ai-agent/featureStore';
 import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
   ArrowLeftIcon,
@@ -64,14 +63,6 @@ export function CartEditorSidebar({ onDiscard }) {
   const statusFetcher = useFetcher();
   const isTogglingStatus = statusFetcher.state !== 'idle';
 
-  // Sync featureStore with context on mount + reactively
-  useEffect(() => {
-    const sync = () => setStatus(featureStore.get("cart_drawer") ? "active" : "inactive");
-    sync();
-    window.addEventListener("featureStateChanged", sync);
-    return () => window.removeEventListener("featureStateChanged", sync);
-  }, [setStatus]);
-
   useEffect(() => {
     const data = statusFetcher.data;
     if (!data || data.intent !== 'toggleDrawerStatus') return;
@@ -79,7 +70,7 @@ export function CartEditorSidebar({ onDiscard }) {
     if (data.success) {
       const enabled = data.drawerEnabled;
       setStatus(enabled ? 'active' : 'inactive');
-      featureStore.set("cart_drawer", enabled);
+      try { localStorage.setItem("cartninja_feature_state", JSON.stringify({ cart_drawer: enabled })); } catch {}
       setStatusError(data.synced ? '' : 'Saved locally — will sync to your storefront shortly.');
     } else {
       setStatusError(data.error || 'Could not update the cart drawer status. Please try again.');

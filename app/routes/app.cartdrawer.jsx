@@ -1,6 +1,6 @@
 import { authenticate } from '../shopify.server';
 import CartEditorPage from '../components/CartEditorPage';
-import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/ai-agent-actions.server';
+import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/cart-drawer-record.server';
 import { getDb } from '../services/db.server';
 
 export const loader = async ({ request }) => {
