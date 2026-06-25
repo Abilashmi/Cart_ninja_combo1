@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button } from '@shopify/polaris';
-import { MagicIcon } from '@shopify/polaris-icons';
+import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button, InlineStack } from '@shopify/polaris';
+import { MagicIcon, TextAlignLeftIcon, TextAlignCenterIcon, TextAlignRightIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
 
 function ContentSectionComponent({
@@ -25,6 +25,47 @@ function ContentSectionComponent({
         />
         {config.show_title_description && (
           <>
+            <div>
+              <Text as="p" variant="bodySm">Content Alignment</Text>
+              <div style={{ marginTop: 6 }}>
+                <InlineStack gap="0">
+                  {[
+                    { value: 'left', icon: TextAlignLeftIcon, label: 'Left' },
+                    { value: 'center', icon: TextAlignCenterIcon, label: 'Center' },
+                    { value: 'right', icon: TextAlignRightIcon, label: 'Right' },
+                  ].map(({ value, icon: Ico, label }) => {
+                    const active = (config[getStyleKey('heading_align')] || config.heading_align || 'left') === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        title={label}
+                        onClick={() => {
+                          updateConfig(getStyleKey('heading_align'), value);
+                          updateConfig(getStyleKey('description_align'), value);
+                          updateConfig('tab_alignment', value);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 0',
+                          border: `1px solid ${active ? '#5c6ac4' : '#c4cdd5'}`,
+                          background: active ? '#f4f5fd' : '#fff',
+                          color: active ? '#5c6ac4' : '#6d7175',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: value === 'left' ? '6px 0 0 6px' : value === 'right' ? '0 6px 6px 0' : '0',
+                          marginLeft: value === 'left' ? 0 : -1,
+                        }}
+                      >
+                        <Ico width={16} height={16} />
+                      </button>
+                    );
+                  })}
+                </InlineStack>
+              </div>
+            </div>
             {config.layout === 'layout2' && (
               <TextField label="Header Title (Sticky Top)" value={config.header_title || ''} onChange={(v) => updateConfig('header_title', v)} autoComplete="off" />
             )}

@@ -4,22 +4,10 @@ import { Icon, Button } from '@shopify/polaris';
 import {
   CartIcon, DesktopIcon, MobileIcon,
   GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon,
-  DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon, MagicIcon,
+  DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon,
 } from '@shopify/polaris-icons';
 import { upsellProducts } from '../data/mockData';
 
-const SECTION_TIPS = {
-  progressBar: 'Free shipping progress bars boost AOV by 20–30% on average — customers deliberately add items to unlock the reward.',
-  announcements: 'Cart-level announcements with urgency or benefit messaging keep up to 20% more shoppers engaged all the way to checkout.',
-  couponSlider: 'Surfacing coupons directly in the cart captures up to 40% more completions — shoppers stay in flow. Add per-coupon countdown timers to multiply urgency.',
-  upsellProducts: 'In-cart recommendations drive 10–30% higher order values. Amazon attributes ~35% of its revenue to upsell suggestions.',
-  checkoutButton: 'A high-contrast checkout button improves checkout initiation by up to 25% — pick a color that commands attention and stands out.',
-  header: 'Showing item count and cart total in the header reassures shoppers and actively boosts checkout confidence.',
-  design: 'Visual consistency between cart and storefront builds trust — brand consistency improves conversion by up to 23%.',
-  general: 'Slide-out cart drawers convert up to 20% better than full cart page redirects by keeping shoppers in the purchase flow.',
-  emptyCart: 'Empty cart states with product recommendations convert 2–3× better — turning every visit into a new product discovery.',
-  customCSS: 'Custom-styled cart experiences that match your storefront increase brand recognition and boost buyer confidence.',
-};
 
 const SECTION_LABELS = {
   design: 'Design',
@@ -76,7 +64,7 @@ const TIER_ICON_MAP = {
 const MOCK_PREVIEW_COUPONS = [
   {
     id: 'preview-1', code: 'SAVE20', labelText: 'SAVE20', description: '20% off your order',
-    bgColor: '#4f46e5', textColor: '#ffffff', icon: 'discount', borderRadius: 8,
+    bgColor: '#1a9de0', textColor: '#ffffff', icon: 'discount', borderRadius: 8,
     buttonText: 'Apply', buttonBgColor: '#000000', buttonTextColor: '#ffffff',
   },
   {
@@ -89,17 +77,51 @@ const MOCK_PREVIEW_COUPONS = [
 const CART_TOTAL = 489;
 const MOCK_CART_COUNT = 1;
 
-function HighlightZone({ sectionId, activeSection, label, children, className, style }) {
+const BRAND = '#1a9de0';
+
+function HighlightZone({ sectionId, activeSection, label, children, className, style, onSectionClick }) {
+  const [hovered, setHovered] = useState(false);
   const ids = Array.isArray(sectionId) ? sectionId : [sectionId];
+  const primaryId = ids[0];
   const isActive = activeSection !== '' && ids.includes(activeSection);
   const highlightLabel = label ?? SECTION_LABELS[activeSection] ?? activeSection;
+  const hoverLabel = SECTION_LABELS[primaryId] ?? primaryId;
 
   return (
-    <div className={`preview-highlight-zone ${isActive ? 'is-active' : ''} ${className ?? ''}`} style={style}>
+    <div
+      className={className ?? ''}
+      style={{
+        position: 'relative',
+        cursor: 'pointer',
+        outline: isActive
+          ? `2px solid ${BRAND}`
+          : hovered ? `2px dashed ${BRAND}` : '2px solid transparent',
+        outlineOffset: -2,
+        background: isActive
+          ? `rgba(26,157,224,0.06)`
+          : hovered ? `rgba(26,157,224,0.03)` : undefined,
+        transition: 'outline 0.12s, background 0.12s',
+        ...style,
+      }}
+      onClick={(e) => { e.stopPropagation(); onSectionClick?.(primaryId); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {children}
+
+      {/* Active: solid blue border + section name tag */}
       {isActive && (
-        <div className="preview-highlight-overlay">
-          <span className="preview-highlight-tag">{highlightLabel}</span>
+        <div style={{ position: 'absolute', inset: 0, border: `2px solid ${BRAND}`, background: `rgba(26,157,224,0.08)`, pointerEvents: 'none', zIndex: 99 }}>
+          <span style={{ position: 'absolute', top: 0, left: 0, background: BRAND, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+            {highlightLabel}
+          </span>
+        </div>
+      )}
+
+      {/* Hover (not active): section label badge */}
+      {!isActive && hovered && (
+        <div style={{ position: 'absolute', top: 4, left: 4, background: `rgba(26,157,224,0.9)`, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', borderRadius: 3, letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 50 }}>
+          {hoverLabel}
         </div>
       )}
     </div>
@@ -180,7 +202,7 @@ function ProgressBarPreview({ pb }) {
             )}
           </>
         ) : (
-          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor }}>{pb.completionMessage}</div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor }}>{pb.completionMessage || "🎉 You've unlocked free shipping!"}</div>
         )}
       </div>
 
@@ -340,7 +362,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 }
 
 export function CartPreview({ onSave, onDiscard, isDirty }) {
-  const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, header, body, footer, settings } = useCartEditor();
+  const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings } = useCartEditor();
 
   const designTheme = settings.design?.theme;
   const isDarkTheme = designTheme === "dark";
@@ -349,7 +371,6 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
-  const activeTip = activeSection ? SECTION_TIPS[activeSection] : null;
   const activeSectionLabel = getSectionLabel(activeSection, body);
 
   const pb = body.progressBar;
@@ -390,85 +411,76 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
   ]);
 
   return (
-    <div className="cart-editor-right" ref={previewRootRef}>
-      {/* Preview Stage Header */}
-      <div className="cart-preview-stage-header">
-        <span className="cart-preview-stage-title">Live Preview</span>
-        <div className="cart-editor-segmented">
-          <button
-            className={`segmented-btn ${isDesktop ? 'active' : ''}`}
-            onClick={() => setPreviewDevice('desktop')}
-          >
-            <Icon source={DesktopIcon} />
-            Desktop
-          </button>
-          <button
-            className={`segmented-btn ${!isDesktop ? 'active' : ''}`}
-            onClick={() => setPreviewDevice('mobile')}
-          >
-            <Icon source={MobileIcon} />
-            Mobile
-          </button>
+    <div ref={previewRootRef} style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden', background: '#f0f1f3' }}>
+
+      {/* ── Preview header ── */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', background: '#f0f1f3', borderBottom: '1px solid #e1e3e5' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Preview</span>
+        <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 8, overflow: 'hidden' }}>
+          {[{ key: 'desktop', src: DesktopIcon }, { key: 'mobile', src: MobileIcon }].map(({ key, src }) => (
+            <button key={key} onClick={() => setPreviewDevice(key)}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: previewDevice === key ? '#202223' : '#fff', color: previewDevice === key ? '#fff' : '#6d7175', borderLeft: key === 'mobile' ? '1px solid #c9cccf' : 'none' }}
+            >
+              <Icon source={src} />
+              {key.charAt(0).toUpperCase() + key.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Device Frame Stage */}
-      <div className="cart-preview-stage">
-        {activeTip && (
-          <div className="cart-preview-stage-tip">
-            <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderLeft: '3px solid #6366f1', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <span style={{ minWidth: '20px', width: '20px', height: '20px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>
-                <Icon source={MagicIcon} />
-              </span>
-              <p style={{ margin: 0, fontSize: '13px', color: '#312e81', lineHeight: 1.6 }}>{activeTip}</p>
+      {/* ── Stage: centers the device frame ── */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'hidden', minHeight: 0 }}>
+
+        {/* ── Device frame ── */}
+        <div style={{ width: isDesktop ? 380 : 340, height: '100%', maxHeight: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: isDesktop ? 10 : 36, border: isDesktop ? '1px solid #d0d0d0' : '3px solid #1a1a1a', background: '#f9f9f9', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+
+          {/* Browser chrome (desktop) */}
+          {isDesktop && (
+            <div style={{ flexShrink: 0, height: 36, background: '#e8e8e8', display: 'flex', alignItems: 'center', padding: '0 12px', gap: 10, borderBottom: '1px solid #d0d0d0' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff6f61', display: 'block' }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ffca55', display: 'block' }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3ddc84', display: 'block' }} />
+              </div>
+              <div style={{ flex: 1, height: 20, background: '#fff', borderRadius: 4, border: '1px solid #ccc' }} />
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="cart-preview-stage-inner">
-          <div className={`cart-preview-frame ${isDesktop ? 'desktop' : 'mobile'}`}>
-            {isDesktop && (
-              <div className="cart-preview-browser-chrome">
-                <div className="browser-dots"><span /><span /><span /></div>
-                <div className="browser-bar" />
-              </div>
-            )}
-            {!isDesktop && <div className="cart-preview-phone-chrome top" />}
+          {/* Phone top chrome (mobile) */}
+          {!isDesktop && <div className="cart-preview-phone-chrome top" />}
 
-            <div className="cart-preview-screen">
-              <div className="cart-preview-store-bg">
-                <div className="store-bg-grid" />
-              </div>
+          {/* ── Screen area ── */}
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f8f8f8' }}>
+              {/* Store grid background */}
+              <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px)', opacity: 0.4 }} />
 
               {/* Cart Drawer */}
-              <div className={`cart-preview-drawer ${isDesktop ? 'desktop' : 'mobile'}${isDarkTheme ? ' cart-preview-drawer--dark' : ''}`} style={{ position: 'relative', background: drawerBg, color: drawerTextColor }}>
+              <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+
+                {/* Design/General/CSS global overlay */}
                 {['design', 'general', 'customCSS'].includes(activeSection) && (
-                  <div className="preview-highlight-overlay">
-                    <span className="preview-highlight-tag">{activeSectionLabel}</span>
+                  <div style={{ position: 'absolute', inset: 0, border: `2px solid ${BRAND}`, background: `rgba(26,157,224,0.08)`, pointerEvents: 'none', zIndex: 100 }}>
+                    <span style={{ position: 'absolute', top: 0, left: 0, background: BRAND, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{activeSectionLabel}</span>
                   </div>
                 )}
 
-                {/* Header */}
-                <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} className="cart-preview-header-zone">
-                  <div
-                    className="cart-preview-header"
-                    style={{ backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none' }}
-                  >
-                    <h3 style={{ color: header.textColor }}>{header.title} {!isEmpty ? '(1)' : '(0)'}</h3>
-                    <button className="cart-preview-close" style={{ color: header.textColor }}>
+                {/* ── HEADER ── */}
+                <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? '(1)' : '(0)'}</h3>
+                    <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: header.textColor, padding: 0, lineHeight: 1 }}>
                       {header.closeStyle === 'icon' ? '×' : 'Close'}
                     </button>
                   </div>
                 </HighlightZone>
 
-                <div className="cart-preview-body">
+                {/* ── BODY (scrollable) ── */}
+                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+
                   {/* Announcements */}
                   {body.announcements.enabled && (
-                    <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel}>
-                      <div
-                        className="cart-preview-announcement"
-                        style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px` }}
-                      >
+                    <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                      <div style={{ padding: '8px 18px', textAlign: 'center', fontSize: `${body.announcements.fontSize}px`, fontWeight: 500, backgroundColor: body.announcements.bgColor, color: body.announcements.textColor }}>
                         {body.announcements.text}
                       </div>
                     </HighlightZone>
@@ -476,84 +488,86 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
-                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} />
                     </HighlightZone>
                   )}
 
                   {/* Coupon Slider — TOP */}
                   {showCouponSlider && cs.position === 'top' && (
-                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
                   )}
 
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
                     </HighlightZone>
                   )}
 
                   {/* Empty state OR Cart items */}
                   {isEmpty ? (
-                    <HighlightZone sectionId="emptyCart" activeSection={activeSection} label={activeSectionLabel} className="cart-preview-empty-zone">
-                      <div className="cart-preview-empty">
-                        <div className="cart-preview-empty-icon"><Icon source={CartIcon} /></div>
-                        <h4>{body.emptyCart.message}</h4>
-                        <p>Add items to unlock rewards</p>
+                    <HighlightZone sectionId="emptyCart" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center', gap: 10 }}>
+                        <div style={{ fontSize: 40, color: '#c9cccf' }}><Icon source={CartIcon} /></div>
+                        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#202223' }}>{body.emptyCart.message}</h4>
+                        <p style={{ margin: 0, fontSize: 13, color: '#6d7175' }}>Add items to unlock rewards</p>
                         {body.emptyCart.showContinueShopping && (
-                          <button className="cart-preview-continue-btn" onClick={() => setPreviewMode('items')}>Continue shopping</button>
+                          <button onClick={(e) => { e.stopPropagation(); setPreviewMode('items'); }} style={{ marginTop: 4, padding: '8px 18px', border: '1px solid #c9cccf', borderRadius: 7, background: '#fff', fontSize: 13, cursor: 'pointer', color: '#202223' }}>Continue shopping</button>
                         )}
                       </div>
                     </HighlightZone>
                   ) : (
-                    <div className="cart-preview-items-section">
-                      <div className="cart-preview-items-header">
+                    <div style={{ padding: '10px 18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6d7175', marginBottom: 10 }}>
                         <span>Items included</span>
                         <span>1 ITEMS</span>
                       </div>
-                      <div className="cart-preview-item">
-                        <div className="cart-preview-item-image">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderTop: '1px solid #f1f2f3' }}>
+                        <div style={{ width: 56, height: 56, background: '#f1f2f3', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#8c9196" strokeWidth="1.5" style={{ width: 20, height: 20 }}>
                             <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
                         </div>
-                        <div className="cart-preview-item-details">
-                          <div className="cart-preview-item-title">Sample Product</div>
-                          <div className="cart-preview-item-price">₹{CART_TOTAL} (1 × ₹{CART_TOTAL})</div>
-                          <div className="cart-preview-item-quantity">
-                            <button>−</button>
-                            <span>1</span>
-                            <button>+</button>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#202223' }}>Sample Product</div>
+                          <div style={{ fontSize: 12, color: '#6d7175' }}>₹{CART_TOTAL} (1 × ₹{CART_TOTAL})</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
+                            <button style={{ width: 24, height: 24, border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                            <span style={{ fontSize: 13, fontWeight: 500 }}>1</span>
+                            <button style={{ width: 24, height: 24, border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                           </div>
                         </div>
-                        <button className="cart-preview-item-remove">×</button>
+                        <button style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#8c9196', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
                       </div>
                     </div>
                   )}
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
                     </HighlightZone>
                   )}
 
                   {/* Empty cart recommendations */}
                   {isEmpty && body.emptyCart.showRecommendations && !up.showWhenEmpty && (
-                    <div className="cart-preview-upsell-section">
-                      <div className="cart-preview-upsell-title">Recommended For You</div>
+                    <div style={{ padding: '12px 18px', borderTop: '1px solid #e1e3e5' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recommended For You</div>
                       {upsellProducts.slice(0, 2).map((product) => (
-                        <div key={product.id} className="cart-preview-upsell-item">
-                          <div className="cart-preview-upsell-image" />
-                          <div className="cart-preview-upsell-info">
-                            <div className="cart-preview-upsell-name">{product.title}</div>
-                            <div className="cart-preview-upsell-price">{product.price}</div>
+                        <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
+                          <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#f1f2f3,#e8e9eb)', borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b0b3b8" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                            </svg>
                           </div>
-                          <button className="cart-preview-upsell-add" style={{ backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>
-                            Add
-                          </button>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 12, fontWeight: 500 }}>{product.title}</div>
+                            <div style={{ fontSize: 11, color: '#6d7175' }}>{product.price}</div>
+                          </div>
+                          <button style={{ padding: '5px 12px', borderRadius: 5, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>Add</button>
                         </div>
                       ))}
                     </div>
@@ -561,63 +575,62 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
 
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
-                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} />
                     </HighlightZone>
                   )}
 
                   {/* Coupon Slider — BOTTOM */}
                   {showCouponSlider && cs.position === 'bottom' && (
-                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel}>
+                    <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
                   )}
                 </div>
 
-                {/* Footer */}
+                {/* ── FOOTER ── */}
                 {!isEmpty && (
-                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel}>
-                    <div className="cart-preview-footer">
-                      <div className="cart-preview-totals">
-                        <span className="cart-preview-subtotal-label">Subtotal</span>
-                        <span className="cart-preview-subtotal-value">₹{CART_TOTAL}</span>
+                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                    <div style={{ padding: '12px 18px', borderTop: '1px solid #e1e3e5', flexShrink: 0, background: drawerBg }}>
+                      {/* Subtotal */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, color: '#6d7175' }}>Subtotal</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>₹{CART_TOTAL}</span>
                       </div>
-                      <div className="cart-preview-total">
-                        <span className="cart-preview-total-label">Total</span>
-                        <span className="cart-preview-total-value">₹{CART_TOTAL}</span>
+                      {/* Total */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>₹{CART_TOTAL}</span>
                       </div>
+                      {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (
-                        <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: '44px', display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
-                          <div style={{ width: '38px', height: '38px', margin: '3px', borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
-                            <span style={{ color: footer.checkoutButton.bgColor, fontSize: '16px', lineHeight: 1 }}>›</span>
+                        <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: 44, display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
+                          <div style={{ width: 38, height: 38, margin: 3, borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
+                            <span style={{ color: footer.checkoutButton.bgColor, fontSize: 16, lineHeight: 1 }}>›</span>
                           </div>
-                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: '12px', fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>
-                            Swipe to checkout
-                          </span>
+                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: 12, fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>Swipe to checkout</span>
                         </div>
                       ) : (
-                        <button
-                          className="cart-preview-checkout-btn"
-                          style={{ backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor, borderRadius: `${footer.checkoutButton.borderRadius}px` }}
-                        >
+                        <button style={{ width: '100%', padding: '11px', border: 'none', borderRadius: `${footer.checkoutButton.borderRadius}px`, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>
                           {footer.checkoutButton.text} →
                         </button>
                       )}
-                      <div className="cart-preview-footer-text">{footer.checkoutButton.footerText}</div>
+                      {/* Footer note */}
+                      <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>
                     </div>
                   </HighlightZone>
                 )}
-              </div>
-            </div>
+              </div>{/* end cart-preview-drawer */}
+          </div>{/* end screen area */}
 
-            {!isDesktop && <div className="cart-preview-phone-chrome bottom" />}
-          </div>
-        </div>
+          {!isDesktop && <div className="cart-preview-phone-chrome bottom" />}
+        </div>{/* end device frame */}
+      </div>{/* end stage */}
 
-        <div className="cart-preview-stage-footer">
-          <Button onClick={onDiscard} size="slim">Discard</Button>
-          <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
-        </div>
+      {/* Discard / Save — pinned at the bottom of the right panel */}
+      <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px', borderTop: '1px solid #e1e3e5', background: '#f0f1f3' }}>
+        <Button onClick={onDiscard} size="slim">Discard</Button>
+        <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
       </div>
     </div>
   );

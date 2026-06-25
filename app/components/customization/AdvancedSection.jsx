@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FormLayout, Checkbox, Select, Text, Button, TextField, InlineStack } from '@shopify/polaris';
+import { FormLayout, Checkbox, Select, Text, Button, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 
 function AdvancedSectionComponent({
@@ -18,68 +18,6 @@ function AdvancedSectionComponent({
 
   return (
     <>
-      <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
-        <FormLayout>
-          <Checkbox
-            label="Enable AI Suggestions for Customers"
-            checked={!!config.ai_mode}
-            onChange={(v) => updateConfig('ai_mode', v)}
-            helpText="When enabled, AI will suggest products and collections to customers on the storefront"
-          />
-        </FormLayout>
-      </SectionCard>
-
-      <SectionCard title="Coupon" expanded={expandedSections?.discount} onToggle={() => toggleSection?.('discount')}>
-        <FormLayout>
-          <Checkbox
-            label="Offer a coupon?"
-            checked={!!config.has_discount_offer}
-            onChange={(v) => {
-              updateConfig('has_discount_offer', v);
-              if (!v) updateConfig('selected_discount_id', null);
-            }}
-            helpText="Enable to offer a coupon code with this bundle"
-          />
-
-          {/* When checkbox is NOT ticked — show Create Coupon button below */}
-          {!config.has_discount_offer && (
-            <Button
-              variant="secondary"
-              onClick={() => onCreateCoupon?.()}
-              fullWidth
-            >
-              Create Coupon
-            </Button>
-          )}
-
-          {/* When checkbox IS ticked — show coupon selection UI */}
-          {!!config.has_discount_offer && (
-            couponOptions.length > 0 ? (
-              <Select
-                label="Select Coupon"
-                value={String(config.selected_discount_id || '')}
-                placeholder="Choose a coupon..."
-                options={couponOptions}
-                onChange={(v) => updateConfig('selected_discount_id', v || null)}
-              />
-            ) : (
-              <>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  No coupons created yet.
-                </Text>
-                <Button
-                  variant="secondary"
-                  onClick={() => onCreateCoupon?.()}
-                  fullWidth
-                >
-                  Create Coupon
-                </Button>
-              </>
-            )
-          )}
-        </FormLayout>
-      </SectionCard>
-
       <SectionCard title="Progress Bar" expanded={expandedSections?.progressBar} onToggle={() => toggleSection?.('progressBar')}>
         <FormLayout>
           <Checkbox label="Show Progress Bar" checked={!!config.show_progress_bar} onChange={(v) => updateConfig('show_progress_bar', v)} />
@@ -96,6 +34,54 @@ function AdvancedSectionComponent({
               <TextField label="Discount Unlocked Text" value={config.discount_unlocked_text || 'Discount Unlocked!'} onChange={(v) => updateConfig('discount_unlocked_text', v)} autoComplete="off" />
             </>
           )}
+        </FormLayout>
+      </SectionCard>
+
+      <SectionCard title="Coupon" expanded={expandedSections?.discount} onToggle={() => toggleSection?.('discount')}>
+        <FormLayout>
+          <Checkbox
+            label="Offer a coupon?"
+            checked={!!config.has_discount_offer}
+            onChange={(v) => {
+              updateConfig('has_discount_offer', v);
+              if (!v) updateConfig('selected_discount_id', null);
+            }}
+            helpText="Enable to offer a coupon code with this bundle"
+          />
+          {!config.has_discount_offer && (
+            <Button variant="secondary" onClick={() => onCreateCoupon?.()} fullWidth>
+              Create Coupon
+            </Button>
+          )}
+          {!!config.has_discount_offer && (
+            couponOptions.length > 0 ? (
+              <Select
+                label="Select Coupon"
+                value={String(config.selected_discount_id || '')}
+                placeholder="Choose a coupon..."
+                options={couponOptions}
+                onChange={(v) => updateConfig('selected_discount_id', v || null)}
+              />
+            ) : (
+              <>
+                <Text as="p" variant="bodySm" tone="subdued">No coupons created yet.</Text>
+                <Button variant="secondary" onClick={() => onCreateCoupon?.()} fullWidth>
+                  Create Coupon
+                </Button>
+              </>
+            )
+          )}
+        </FormLayout>
+      </SectionCard>
+
+      <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
+        <FormLayout>
+          <Checkbox
+            label="Enable AI Suggestions for Customers"
+            checked={!!config.ai_mode}
+            onChange={(v) => updateConfig('ai_mode', v)}
+            helpText="When enabled, AI will suggest products and collections to customers on the storefront"
+          />
         </FormLayout>
       </SectionCard>
 

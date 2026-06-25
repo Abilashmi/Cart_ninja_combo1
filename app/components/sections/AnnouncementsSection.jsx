@@ -23,13 +23,11 @@ export function AnnouncementsSection() {
 
   return (
     <BlockStack gap="400">
-      <InlineStack align="space-between" blockAlign="center">
-        <FeatureToggle
-          label=""
-          enabled={announcements.enabled}
-          onToggle={handleToggle}
-        />
-      </InlineStack>
+      <FeatureToggle
+        label="Enable Announcements"
+        enabled={announcements.enabled}
+        onToggle={handleToggle}
+      />
       <Text as="p" variant="bodyMd" tone="subdued">
         Display a promotional banner at the top of your cart drawer.
       </Text>

@@ -6,6 +6,7 @@ import {
   Select, Checkbox, Divider, RadioButton, RangeSlider, Collapsible,
   Icon, Modal, TextField, Toast, Frame,
 } from '@shopify/polaris';
+import BrixBar from '../components/ai-agent/BrixBar';
 import {
   SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
 } from '@shopify/polaris-icons';
@@ -84,6 +85,7 @@ export const loader = async ({ request }) => {
         borderRadius: s.border_radius ?? 8,
         aiEnabled: s.mode === 'ai',
         aiProductCount: s.ai_product_count || 3,
+        widgetPlacement: s.widget_placement || 'above_cart',
       };
       manualRules = rules.map(r => ({
         id: r.id,
@@ -115,6 +117,7 @@ export const loader = async ({ request }) => {
           borderRadius: tpl.borderRadius ?? 8,
           aiEnabled: row.ai_enabled === 1,
           aiProductCount: row.ai_product_count || 3,
+          widgetPlacement: tpl.widgetPlacement || 'above_cart',
         };
         manualRules = parseJson(row.condition, []);
       }
@@ -130,7 +133,7 @@ export const loader = async ({ request }) => {
       interactionType: 'classic', showPrices: true, showAddAllButton: true,
       bgColor: '#ffffff', textColor: '#111827', priceColor: '#059669',
       buttonColor: '#111827', buttonTextColor: '#ffffff', borderColor: '#e5e7eb',
-      borderRadius: 8, aiEnabled: false, aiProductCount: 3,
+      borderRadius: 8, aiEnabled: false, aiProductCount: 3, widgetPlacement: 'above_cart',
     },
   };
 };
@@ -148,6 +151,7 @@ export const action = async ({ request }) => {
     const selectedTemplate = body.selectedTemplate || 'fbt1';
     const mode = body.mode || (aiEnabled ? 'ai' : 'manual');
     const activeTpl = templates[selectedTemplate] || Object.values(templates)[0] || {};
+    const widgetPlacement = body.widgetPlacement || 'above_cart';
 
     const db = getDb();
 
@@ -156,8 +160,9 @@ export const action = async ({ request }) => {
       INSERT INTO fbt_widget_settings
         (shop_domain, is_enabled, selected_template, mode, ai_product_count,
          bg_color, text_color, price_color, button_color, button_text_color,
-         border_color, border_radius, layout, interaction_type, show_prices, show_add_all_button)
-      VALUES (?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         border_color, border_radius, layout, interaction_type, show_prices, show_add_all_button,
+         widget_placement)
+      VALUES (?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE
         is_enabled = 1,
         selected_template   = VALUES(selected_template),
@@ -174,6 +179,7 @@ export const action = async ({ request }) => {
         interaction_type    = VALUES(interaction_type),
         show_prices         = VALUES(show_prices),
         show_add_all_button = VALUES(show_add_all_button),
+        widget_placement    = VALUES(widget_placement),
         updated_at          = CURRENT_TIMESTAMP(3)
     `, [
       shop, selectedTemplate, mode, aiProductCount,
@@ -188,6 +194,7 @@ export const action = async ({ request }) => {
       activeTpl.interactionType || 'classic',
       activeTpl.showPrices !== false ? 1 : 0,
       activeTpl.showAddAllButton !== false ? 1 : 0,
+      widgetPlacement,
     ]);
 
     // Replace manual rules in fbt_rules table
@@ -257,9 +264,9 @@ const PLACEMENT_OPTIONS = [
 ];
 
 const MOCK_PRODUCTS = [
-  { id: 1, name: '100% Organic Handcrafted Kajal', price: 499 },
-  { id: 2, name: 'Organic Castor Oil',              price: 499 },
-  { id: 3, name: 'Tejas Face Serum',               price: 599 },
+  { id: 1, name: 'Product A', price: 29 },
+  { id: 2, name: 'Product B', price: 34 },
+  { id: 3, name: 'Product C', price: 24 },
 ];
 
 const SECTION_TIPS = {
@@ -347,6 +354,23 @@ function usePrevious(value) {
   return ref.current;
 }
 
+/* ─── IMAGE PLACEHOLDER ───────────────────────────────────────────────────── */
+function ImagePlaceholder({ size = 64 }) {
+  return (
+    <div style={{
+      width: size, height: size, background: '#f3f4f6', borderRadius: '10px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      border: '1px solid #e5e7eb',
+    }}>
+      <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+    </div>
+  );
+}
+
 /* ─── RULE HELPERS ────────────────────────────────────────────────────────── */
 function findProductsByIds(allProducts, ids) {
   return allProducts.filter(p => ids.includes(p.id)).map(p => ({
@@ -364,13 +388,28 @@ function scopeLabel(scope) {
 /* ─── ACCORDION SECTION ───────────────────────────────────────────────────── */
 function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
   return (
-    <div style={{ border: `1.5px solid ${isOpen ? '#b5e3d8' : '#e1e3e5'}`, borderRadius: '10px', overflow: 'hidden', transition: 'border-color 0.15s' }}>
+    <div style={{
+      border: `1px solid ${isOpen ? '#b5e3d8' : '#e5e7eb'}`,
+      borderRadius: '10px', overflow: 'hidden',
+      transition: 'border-color 0.15s, box-shadow 0.15s',
+      boxShadow: isOpen ? '0 0 0 2px rgba(0,128,96,0.06)' : 'none',
+    }}>
       <button
         onClick={() => onToggle(id)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: isOpen ? '#f6fffe' : '#fff', border: 'none', cursor: 'pointer', borderBottom: isOpen ? '1px solid #e1e3e5' : 'none' }}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px', background: isOpen ? '#f6fffe' : '#fafafa', border: 'none',
+          cursor: 'pointer', borderBottom: isOpen ? '1px solid #e5e7eb' : 'none',
+          transition: 'background 0.15s',
+        }}
+        aria-expanded={isOpen}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '30px', height: '30px', borderRadius: '7px', flexShrink: 0, background: isOpen ? '#dcfce7' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0,
+            background: isOpen ? '#e6f4f1' : '#f3f4f6', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+          }}>
             <Icon source={icon} />
           </div>
           <Text as="span" variant="bodyMd" fontWeight="semibold">{title}</Text>
@@ -384,10 +423,10 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
           {children}
           {tip && (
             <div style={{ marginTop: '16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderLeft: '3px solid #6366f1', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <span style={{ minWidth: '20px', width: '20px', height: '20px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px' }}>
+              <span style={{ minWidth: '18px', width: '18px', height: '18px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
                 <Icon source={MagicIcon} />
               </span>
-              <p style={{ margin: 0, fontSize: '13px', color: '#312e81', lineHeight: 1.6 }}>{tip}</p>
+              <p style={{ margin: 0, fontSize: '12.5px', color: '#312e81', lineHeight: 1.65 }}>{tip}</p>
             </div>
           )}
         </div>
@@ -438,6 +477,7 @@ export default function FBTPage() {
   const [configMode,        setConfigMode]        = useState(fbtConfig.mode === 'ai' ? 'ai' : 'manual');
   const [fbtCount,          setFbtCount]          = useState(String(fbtConfig.aiProductCount || 6));
   const [placement,         setPlacement]         = useState('all');
+  const [widgetPlacement,   setWidgetPlacement]   = useState(fbtConfig.widgetPlacement || 'above_cart');
   const [productStates,     setProductStates]     = useState(defaultProductStates());
   const [hasChanges,        setHasChanges]        = useState(false);
   const [toastActive,       setToastActive]       = useState(false);
@@ -503,6 +543,7 @@ export default function FBTPage() {
         manualRules,
         aiEnabled: configMode === 'ai',
         aiProductCount: Number(fbtCount),
+        widgetPlacement,
         ...curSettings,
         shop,
       },
@@ -514,7 +555,7 @@ export default function FBTPage() {
   /* ── renderAction: per-product button based on interaction style ── */
   const renderAction = (i) => {
     const s = productStates[i];
-    const btnBase = { borderRadius: `${borderRadius}px`, border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: '5px 12px', background: buttonColor, color: buttonTextColor };
+    const btnBase = { borderRadius: `${borderRadius}px`, border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: '7px 14px', background: buttonColor, color: buttonTextColor, transition: 'background 0.15s' };
 
     if (interactionStyle === 'bundle') {
       return (
@@ -528,12 +569,12 @@ export default function FBTPage() {
         <button onClick={() => updateProduct(i, { added: true })} style={{ ...btnBase, background: '#fff', color: buttonColor, border: `1px solid ${borderColor}` }}>Add</button>
       );
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}>
           <button onClick={() => updateProduct(i, s.qty <= 1 ? { added: false, qty: 1 } : { qty: s.qty - 1 })}
-            style={{ width: '26px', height: '26px', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: 700, color: textColor }}>−</button>
-          <span style={{ color: textColor, fontSize: '13px', minWidth: '18px', textAlign: 'center' }}>{s.qty}</span>
+            style={{ width: '28px', height: '28px', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: '#fff', cursor: 'pointer', fontSize: '15px', fontWeight: 700, color: textColor, flexShrink: 0 }}>−</button>
+          <span style={{ color: textColor, fontSize: '13px', minWidth: '20px', textAlign: 'center', fontWeight: 600 }}>{s.qty}</span>
           <button onClick={() => updateProduct(i, { qty: s.qty + 1 })}
-            style={{ width: '26px', height: '26px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}>+</button>
+            style={{ width: '28px', height: '28px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, cursor: 'pointer', fontSize: '15px', fontWeight: 700, flexShrink: 0 }}>+</button>
         </div>
       );
     }
@@ -551,18 +592,23 @@ export default function FBTPage() {
     if (selectedTemplate === 'classic-grid') {
       if (layout === 'horizontal') {
         return (
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: '8px' }}>
             {MOCK_PRODUCTS.map((p, i) => (
               <div key={p.id} style={{ display: 'contents' }}>
-                <div style={{ flex: 1, background: '#fff', border: `1px solid ${borderColor}`, borderRadius: `${borderRadius}px`, padding: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '48px', height: '48px', background: '#f3f4f6', borderRadius: '6px', flexShrink: 0 }} />
-                  <div style={{ color: textColor, fontSize: '11px', textAlign: 'center', lineHeight: 1.3 }}>{p.name}</div>
+                <div style={{
+                  flex: 1, background: '#fff', border: `1px solid ${borderColor}`,
+                  borderRadius: `${borderRadius}px`, padding: '14px 10px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                }}>
+                  <ImagePlaceholder size={64} />
+                  <div style={{ color: textColor, fontSize: '11px', textAlign: 'center', lineHeight: 1.4, fontWeight: 500 }}>{p.name}</div>
                   <div style={{ flex: 1 }} />
-                  {showPrices && <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, textAlign: 'center', width: '100%' }}>₹{p.price}</div>}
-                  {renderAction(i)}
+                  {showPrices && <div style={{ color: priceColor, fontSize: '14px', fontWeight: 700, textAlign: 'center', width: '100%' }}>₹{p.price}</div>}
+                  <InlineStack align="center">{renderAction(i)}</InlineStack>
                 </div>
                 {i < MOCK_PRODUCTS.length - 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', color: textColor, fontSize: '20px', fontWeight: 300, opacity: 0.4, flexShrink: 0, padding: '0 2px' }}>+</div>
+                  <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', color: '#9ca3af', fontSize: '18px', fontWeight: 400, flexShrink: 0, padding: '0 2px' }}>+</div>
                 )}
               </div>
             ))}
@@ -570,13 +616,13 @@ export default function FBTPage() {
         );
       }
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {MOCK_PRODUCTS.map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#fff', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}` }}>
-              <div style={{ width: '44px', height: '44px', background: '#f3f4f6', borderRadius: '6px', flexShrink: 0 }} />
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: '#fff', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              <ImagePlaceholder size={48} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                {showPrices && <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700 }}>₹{p.price}</div>}
+                {showPrices && <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700 }}>₹{p.price}</div>}
               </div>
               {renderAction(i)}
             </div>
@@ -590,11 +636,11 @@ export default function FBTPage() {
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
             {MOCK_PRODUCTS.map((p, i) => (
-              <div key={p.id} style={{ background: '#fff', borderRadius: `${borderRadius}px`, boxShadow: '0 2px 10px rgba(0,0,0,0.10)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: `${Math.max(borderRadius - 2, 4)}px`, background: `linear-gradient(135deg, ${buttonColor}30 0%, ${priceColor}20 100%)` }} />
-                <div style={{ color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.3 }}>{p.name}</div>
-                {showPrices && <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700 }}>₹{p.price}</div>}
-                <div style={{ marginTop: 'auto' }}>{renderAction(i)}</div>
+              <div key={p.id} style={{ background: '#fff', borderRadius: `${borderRadius}px`, boxShadow: '0 2px 10px rgba(0,0,0,0.09)', padding: '14px 10px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                <ImagePlaceholder size={60} />
+                <div style={{ color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.3, textAlign: 'center', width: '100%' }}>{p.name}</div>
+                {showPrices && <div style={{ color: priceColor, fontSize: '14px', fontWeight: 700 }}>₹{p.price}</div>}
+                <InlineStack align="center">{renderAction(i)}</InlineStack>
               </div>
             ))}
           </div>
@@ -604,7 +650,7 @@ export default function FBTPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {MOCK_PRODUCTS.map((p, i) => (
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: '#fff', borderRadius: `${borderRadius}px`, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ width: '46px', height: '46px', flexShrink: 0, borderRadius: `${Math.max(borderRadius - 2, 4)}px`, background: `linear-gradient(135deg, ${buttonColor}30 0%, ${priceColor}20 100%)` }} />
+              <ImagePlaceholder size={48} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                 {showPrices && <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700 }}>₹{p.price}</div>}
@@ -618,15 +664,20 @@ export default function FBTPage() {
 
     // vertical-list
     return (
-      <div style={{ borderRadius: `${borderRadius}px`, overflow: 'hidden', border: `1px solid ${borderColor}40` }}>
+      <div style={{ borderRadius: `${borderRadius}px`, overflow: 'hidden', border: `1px solid ${borderColor}` }}>
         {MOCK_PRODUCTS.map((p, i) => (
-          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: i % 2 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)', borderTop: i > 0 ? `1px solid ${borderColor}30` : 'none', borderLeft: `3px solid ${buttonColor}` }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(255,255,255,0.25)', borderRadius: '6px', flexShrink: 0 }} />
+          <div key={p.id} style={{
+            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px',
+            background: i % 2 === 0 ? '#fff' : '#fafafa',
+            borderTop: i > 0 ? `1px solid ${borderColor}` : 'none',
+            borderLeft: `3px solid ${buttonColor}`,
+          }}>
+            <ImagePlaceholder size={44} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
               {showPrices && <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700 }}>₹{p.price}</div>}
             </div>
-            {renderAction(i)}
+            <div style={{ flexShrink: 0, minWidth: '70px' }}>{renderAction(i)}</div>
           </div>
         ))}
       </div>
@@ -642,43 +693,54 @@ export default function FBTPage() {
 
       <Page
         title="Frequently Bought Together"
-        subtitle="Recommend products that customers frequently purchase together."
         primaryAction={{ content: isSaving ? 'Saving…' : 'Save', onAction: handleSave, loading: isSaving, disabled: !hasChanges }}
         secondaryActions={[{ content: 'Discard', onAction: () => { setHasChanges(false); } }]}
       >
         <BlockStack gap="400">
 
-          {/* ── Status card ── */}
-          <Card>
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="300" blockAlign="center">
-                <div style={{ width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0, background: isEnabled ? '#f1f8f5' : '#f6f6f7', border: `1px solid ${isEnabled ? '#b5e3d8' : '#e1e3e5'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon source={ProductIcon} />
-                </div>
-                <BlockStack gap="050">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Frequently Bought Together</Text>
-                    <Badge tone={isEnabled ? 'success' : undefined}>{isEnabled ? 'Active' : 'Inactive'}</Badge>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">Show product bundle recommendations on your product pages</Text>
-                </BlockStack>
-              </InlineStack>
+          <BrixBar size="md" floating />
 
-              <InlineStack gap="300" blockAlign="center">
-                <InlineStack gap="150" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="subdued">{isEnabled ? 'On' : 'Off'}</Text>
-                  <button
-                    onClick={() => { setIsEnabled(p => !p); mark(); }}
-                    style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: isEnabled ? '#008060' : '#babec3', position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
-                  >
-                    <span style={{ position: 'absolute', top: '3px', left: isEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
-                  </button>
+          {/* ── Status card ── */}
+          <div style={{ borderLeft: '4px solid #008060', borderRadius: '12px', overflow: 'hidden' }}>
+            <Card>
+              <InlineStack align="space-between" blockAlign="center">
+                <InlineStack gap="300" blockAlign="center">
+                  <div style={{
+                    width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0,
+                    background: isEnabled ? '#008060' : '#babec3',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <div style={{ filter: 'brightness(0) invert(1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon source={ProductIcon} />
+                    </div>
+                  </div>
+                  <BlockStack gap="050">
+                    <Text as="h2" variant="headingMd">Frequently Bought Together</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Cross-sell widget shown on{' '}
+                      <span style={{ color: '#008060', fontWeight: 500 }}>your product pages</span>
+                    </Text>
+                  </BlockStack>
                 </InlineStack>
-                <div style={{ width: '1px', height: '24px', background: '#e1e3e5' }} />
-                <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)}>Configure</Button>
+
+                <InlineStack gap="300" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge tone={isEnabled ? 'success' : undefined}>{isEnabled ? 'Active' : 'Inactive'}</Badge>
+                    <Text as="span" variant="bodySm" tone="subdued">{isEnabled ? 'On' : 'Off'}</Text>
+                    <button
+                      onClick={() => { setIsEnabled(p => !p); mark(); }}
+                      style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: isEnabled ? '#008060' : '#babec3', position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
+                      aria-label="Toggle FBT widget"
+                    >
+                      <span style={{ position: 'absolute', top: '3px', left: isEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
+                    </button>
+                  </InlineStack>
+                  <div style={{ width: '1px', height: '24px', background: '#e1e3e5' }} />
+                  <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)}>Configure</Button>
+                </InlineStack>
               </InlineStack>
-            </InlineStack>
-          </Card>
+            </Card>
+          </div>
 
           {/* ── Configuration Modal ── */}
           <Modal
@@ -840,26 +902,43 @@ export default function FBTPage() {
           />
 
           {/* ── Select Template + Customize  |  Preview ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'stretch' }}>
+          <style>{`
+            @media (max-width: 900px) {
+              .fbt-main-grid { grid-template-columns: 1fr !important; }
+            }
+            @media (max-width: 480px) {
+              .fbt-preview-products { flex-direction: column !important; }
+              .fbt-preview-products .fbt-plus { transform: rotate(90deg); }
+            }
+          `}</style>
+          <div className="fbt-main-grid" style={{ display: 'grid', gridTemplateColumns: '440px 1fr', gap: '16px', alignItems: 'start' }}>
 
             {/* Left column */}
-            <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', gap: '16px', height: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
               {/* Template selector */}
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">Select Template</Text>
-                  <InlineStack gap="200">
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {TEMPLATES.map((t) => (
                       <button
                         key={t.id}
                         onClick={() => applyTemplate(t.id)}
-                        style={{ padding: '6px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? '#008060' : '#c9cccf'}`, background: selectedTemplate === t.id ? '#f1f8f5' : '#ffffff', color: selectedTemplate === t.id ? '#008060' : '#202223' }}
+                        style={{
+                          padding: '7px 18px', borderRadius: '8px', cursor: 'pointer',
+                          fontSize: '13px', fontWeight: 500,
+                          border: `1.5px solid ${selectedTemplate === t.id ? '#008060' : '#c9cccf'}`,
+                          background: selectedTemplate === t.id ? '#f1f8f5' : '#ffffff',
+                          color: selectedTemplate === t.id ? '#008060' : '#202223',
+                          transition: 'all 0.15s',
+                          outline: 'none',
+                        }}
                       >
                         {t.name}
                       </button>
                     ))}
-                  </InlineStack>
+                  </div>
                 </BlockStack>
               </Card>
 
@@ -892,6 +971,22 @@ export default function FBTPage() {
                       <Divider />
                       <Checkbox label="Show Prices"          checked={showPrices}  onChange={(v) => { setShowPrices(v);  mark(); }} />
                       <Checkbox label="Show 'Add All' Button" checked={showAddAll} onChange={(v) => { setShowAddAll(v); mark(); }} />
+                      <Divider />
+                      <Select
+                        label="Widget Placement"
+                        helpText={
+                          widgetPlacement === 'above_cart' ? 'Pinned above Add to Cart — position locked on storefront.' :
+                          widgetPlacement === 'below_cart' ? 'Pinned below Add to Cart — position locked on storefront.' :
+                          'Customers can drag and reposition the widget on the product page.'
+                        }
+                        options={[
+                          { label: 'Above the Add to Cart button',        value: 'above_cart' },
+                          { label: 'Below the Add to Cart button',        value: 'below_cart' },
+                          { label: 'Customize (let customers position)',   value: 'custom'     },
+                        ]}
+                        value={widgetPlacement}
+                        onChange={(v) => { setWidgetPlacement(v); mark(); }}
+                      />
                     </BlockStack>
                   </AccordionSection>
                 </BlockStack>
@@ -900,35 +995,56 @@ export default function FBTPage() {
 
             {/* Right column — Preview */}
             <Card>
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <Text as="h2" variant="headingMd">Preview</Text>
-                <div style={{ background: bgColor, borderRadius: '10px', padding: '16px' }}>
-                  <div style={{ color: textColor, fontSize: '15px', fontWeight: 700, marginBottom: '8px' }}>
-                    Frequently Bought Together
-                  </div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.25)', color: textColor, border: `1px solid ${borderColor}44` }}>
-                      {interactionLabel}
+                <div style={{
+                  background: bgColor, borderRadius: '12px', padding: '18px',
+                  border: `1px solid ${borderColor}`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                }}>
+                  {/* Preview header */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ color: textColor, fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>
+                      Frequently Bought Together
+                    </div>
+                    <span style={{
+                      display: 'inline-block', fontSize: '11px', padding: '2px 9px', borderRadius: '4px',
+                      background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb',
+                      fontWeight: 500,
+                    }}>
+                      {templateName.split(' ')[0]}
                     </span>
                   </div>
 
+                  {/* Product cards */}
                   {previewProducts}
 
-                  <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: `1px solid ${borderColor}44` }}>
-                    <div style={{ color: textColor, fontSize: '12px', marginBottom: '8px' }}>
+                  {/* Price summary + CTA */}
+                  <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: `1px solid ${borderColor}` }}>
+                    <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
                       {interactionStyle === 'quick-add' ? 'Select items' : `Total (${activeCount} items)`}
                       <br />
-                      <span style={{ color: priceColor, fontSize: '16px', fontWeight: 700 }}>₹{total}</span>
+                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>₹{total}</span>
                     </div>
                     {showAddAll && (
-                      <button style={{ width: '100%', padding: '10px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                      <button style={{
+                        width: '100%', padding: '13px 16px', borderRadius: `${borderRadius}px`,
+                        border: 'none', background: buttonColor, color: buttonTextColor,
+                        fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                        letterSpacing: '0.02em', transition: 'opacity 0.15s',
+                      }}>
                         {interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || MOCK_PRODUCTS.length} to Cart`}
                       </button>
                     )}
                   </div>
 
-                  <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                    <span style={{ fontSize: '11px', padding: '2px 12px', borderRadius: '20px', background: 'rgba(255,255,255,0.2)', color: textColor, border: `1px solid ${borderColor}44` }}>
+                  {/* Template label */}
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <span style={{
+                      fontSize: '11px', padding: '3px 16px', borderRadius: '20px',
+                      background: '#f3f4f6', color: '#9ca3af', border: '1px solid #e5e7eb',
+                      fontWeight: 500,
+                    }}>
                       {templateName}
                     </span>
                   </div>

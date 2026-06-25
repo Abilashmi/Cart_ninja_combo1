@@ -181,13 +181,11 @@ export function UpsellSection() {
 
   return (
     <BlockStack gap="400">
-      <InlineStack align="space-between" blockAlign="center">
-        <FeatureToggle
-          label=""
-          enabled={upsellProducts.enabled}
-          onToggle={(v) => updateUpsellProducts({ enabled: v })}
-        />
-      </InlineStack>
+      <FeatureToggle
+        label="Enable Upsell Products"
+        enabled={upsellProducts.enabled}
+        onToggle={(v) => updateUpsellProducts({ enabled: v })}
+      />
       <Text as="p" variant="bodyMd" tone="subdued">
         Configure how upsell products appear in the cart drawer.
       </Text>

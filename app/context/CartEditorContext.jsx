@@ -152,6 +152,9 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     return initialConfigRecord ? hydrateFromConfig(initialConfigRecord, fromRecord) : fromRecord;
   });
 
+  // Shared accordion open state — lets CartPreview drive sidebar navigation
+  const [openSection, setOpenSectionState] = useState('');
+
   useEffect(() => {
     function loadCartConfig() {
       try {
@@ -254,6 +257,18 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
 
   const setActiveSection = useCallback((section) => {
     setState(prev => ({ ...prev, activeSection: section }));
+  }, []);
+
+  // Opens accordion + highlights preview + auto-switches preview mode atomically
+  const navigateToSection = useCallback((id) => {
+    setOpenSectionState(id);
+    setState(prev => ({
+      ...prev,
+      activeSection: id || '',
+      previewMode: id === 'emptyCart' ? 'empty'
+        : prev.previewMode === 'empty' && id && id !== 'emptyCart' ? 'items'
+        : prev.previewMode,
+    }));
   }, []);
 
   const setPreviewMode = useCallback((mode) => {
@@ -414,6 +429,8 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     ...state,
     availableCoupons,
     allProducts,
+    openSection,
+    navigateToSection,
     setActiveSection,
     setPreviewMode,
     setPreviewDevice,

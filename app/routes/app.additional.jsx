@@ -3,6 +3,8 @@ import { authenticate } from '../shopify.server';
 import {
   Page, Card, BlockStack, InlineStack, Text, Badge, Button, ProgressBar, Divider, Banner,
 } from '@shopify/polaris';
+import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
+import BrixBar from '../components/ai-agent/BrixBar';
 import { ExternalIcon } from '@shopify/polaris-icons';
 
 export const loader = async ({ request }) => {
@@ -104,6 +106,9 @@ export default function AccountPage() {
       subtitle="Manage your store settings, billing, and usage"
     >
       <BlockStack gap="500">
+        <FeatureHeaderBar feature="account" title="Account" subtitle="Manage your store settings, billing, and usage." />
+        <BrixBar size="md" floating />
+
         {/* Store Information */}
         <Card>
           <BlockStack gap="400">

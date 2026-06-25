@@ -456,13 +456,11 @@ export function CouponSliderSection() {
 
   return (
     <BlockStack gap="400">
-      <InlineStack align="space-between" blockAlign="center">
-        <FeatureToggle
-          label=""
-          enabled={couponSlider.enabled}
-          onToggle={(v) => updateCouponSlider({ enabled: v })}
-        />
-      </InlineStack>
+      <FeatureToggle
+        label="Enable Coupon Slider"
+        enabled={couponSlider.enabled}
+        onToggle={(v) => updateCouponSlider({ enabled: v })}
+      />
       <Text as="p" variant="bodyMd" tone="subdued">
         Display available coupons in your cart drawer for easy application.
       </Text>

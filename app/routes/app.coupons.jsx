@@ -14,6 +14,9 @@ import { useLoaderData, useNavigate, useSubmit } from "react-router";
 import { useState, useMemo } from "react";
 import { authenticate } from "../shopify.server";
 import { PlusIcon } from "@shopify/polaris-icons";
+import { FeatureHeaderBar } from "../components/feature/FeatureHeaderBar";
+import { BrowserTabStrip } from "../components/feature/BrowserTabStrip";
+import BrixBar from "../components/ai-agent/BrixBar";
 
 /* ─── ACTION ──────────────────────────────────────────────────────────────── */
 export const action = async ({ request }) => {
@@ -240,18 +243,24 @@ export default function CouponsPage() {
 
     return (
         <Page
-            title="Coupon Creator"
-            subtitle="Manage, create, and view your store coupons in one place"
+            fullWidth
             primaryAction={{
-                content: "Create Coupon",
+                content: "Create Discount",
                 icon: PlusIcon,
                 onAction: () => navigate("/app/discounts/create"),
             }}
             secondaryActions={[{ content: "Export", disabled: true }]}
         >
             <BlockStack gap="400">
+                <FeatureHeaderBar
+                    feature="coupon"
+                    title="Discount Creator"
+                    subtitle="Create and manage discount codes for your store"
+                />
+                <BrixBar size="md" floating />
+                <BrowserTabStrip tabs={TABS} selected={selectedTab} onSelect={setSelectedTab} accent="#e11d48" />
                 <Card padding="0">
-                    <Tabs tabs={TABS} selected={selectedTab} onSelect={setSelectedTab}>
+                    <div>
                         <div style={{ padding: "12px 16px", borderBottom: "1px solid #e1e3e5" }}>
                             <TextField
                                 placeholder="Search by title or code…"
@@ -267,30 +276,26 @@ export default function CouponsPage() {
 
                         {filteredDiscounts.length === 0 ? (
                             <EmptyState
-                                heading={searchValue ? "No coupons match your search" : "No coupons yet"}
+                                heading={searchValue ? "No discounts match your search" : "No discounts yet"}
                                 image=""
                                 action={{
-                                    content: "Create Coupon",
+                                    content: "Create Discount",
                                     onAction: () => navigate("/app/discounts/create"),
                                 }}
                             >
                                 <p>
                                     {searchValue
                                         ? "Try adjusting your search."
-                                        : "Create your first coupon to start driving more conversions."}
+                                        : "Create your first discount to start driving more conversions."}
                                 </p>
                             </EmptyState>
                         ) : (
                             <IndexTable
-                                resourceName={{ singular: "coupon", plural: "coupons" }}
+                                resourceName={{ singular: "discount", plural: "discounts" }}
                                 itemCount={filteredDiscounts.length}
-                                selectedItemsCount={
-                                    allResourcesSelected ? "All" : selectedResources.length
-                                }
+                                selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
                                 onSelectionChange={handleSelectionChange}
-                                promotedBulkActions={[
-                                    { content: "Delete", onAction: handleDelete },
-                                ]}
+                                promotedBulkActions={[{ content: "Delete", onAction: handleDelete }]}
                                 headings={[
                                     { title: "Title" },
                                     { title: "Code" },
@@ -304,7 +309,7 @@ export default function CouponsPage() {
                                 {rowMarkup}
                             </IndexTable>
                         )}
-                    </Tabs>
+                    </div>
                 </Card>
             </BlockStack>
         </Page>

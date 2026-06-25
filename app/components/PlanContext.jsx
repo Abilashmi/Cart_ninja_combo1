@@ -1,12 +1,24 @@
 import { createContext, useContext } from "react";
-import { Banner, Button } from "@shopify/polaris";
+import { Banner } from "@shopify/polaris";
 import { useNavigate } from "react-router";
 
-const PlanContext = createContext({ isPro: false });
+export const PLAN_RANK = { starter: 0, plus: 1, pro: 2 };
+
+const PlanContext = createContext({
+  plan: 'starter',
+  isPro: false,
+  isPlus: false,
+  canUse: () => true,
+});
 
 export function PlanProvider({ isPro, children }) {
+  // Map Shopify subscription to plan tier
+  const plan = isPro ? 'pro' : 'starter';
+  const isPlus = PLAN_RANK[plan] >= PLAN_RANK['plus'];
+  const canUse = (minPlan) => PLAN_RANK[plan] >= (PLAN_RANK[minPlan] ?? 0);
+
   return (
-    <PlanContext.Provider value={{ isPro }}>
+    <PlanContext.Provider value={{ plan, isPro, isPlus, canUse }}>
       {children}
     </PlanContext.Provider>
   );
@@ -16,19 +28,16 @@ export function usePlan() {
   return useContext(PlanContext);
 }
 
-/** Drop this banner at the top of any Pro-only page */
-export function ProUpgradeBanner() {
+export function ProUpgradeBanner({ minPlan = 'plus' }) {
   const navigate = useNavigate();
+  const planLabel = minPlan === 'pro' ? 'Pro' : 'Plus';
   return (
     <Banner
-      title="This feature requires Cart Ninja Pro"
+      title={`This feature requires Brix ${planLabel}`}
       tone="warning"
-      action={{
-        content: "Upgrade to Pro — 14-day free trial",
-        onAction: () => navigate("/app/subscribe"),
-      }}
+      action={{ content: 'Upgrade to unlock', onAction: () => navigate('/app/subscribe') }}
     >
-      Upgrade to unlock advanced analytics, usage billing tracking, and more.
+      Upgrade to {planLabel} to unlock this feature.
     </Banner>
   );
 }

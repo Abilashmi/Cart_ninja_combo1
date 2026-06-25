@@ -7,6 +7,7 @@ import {
     TextField, Badge, Checkbox, Divider, Select,
     Icon, RangeSlider, Collapsible, Toast, Frame, Banner,
 } from "@shopify/polaris";
+import BrixBar from "../components/ai-agent/BrixBar";
 import {
     DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
     ChevronDownIcon, ChevronUpIcon, XSmallIcon,
@@ -159,13 +160,24 @@ const SECTION_TIPS = {
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
 function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
     return (
-        <div style={{ border: `1.5px solid ${isOpen ? '#b5e3d8' : '#e1e3e5'}`, borderRadius: "10px", overflow: "hidden", transition: "border-color 0.15s" }}>
+        <div style={{
+            border: `1px solid ${isOpen ? '#b5e3d8' : '#e5e7eb'}`,
+            borderRadius: "10px", overflow: "hidden",
+            transition: "border-color 0.15s, box-shadow 0.15s",
+            boxShadow: isOpen ? "0 0 0 2px rgba(0,128,96,0.06)" : "none",
+        }}>
             <button
                 onClick={() => onToggle(id)}
-                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: isOpen ? "#f6fffe" : "#fff", border: "none", cursor: "pointer", borderBottom: isOpen ? "1px solid #e1e3e5" : "none" }}
+                style={{
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "14px 16px", background: isOpen ? "#f6fffe" : "#fafafa",
+                    border: "none", cursor: "pointer", borderBottom: isOpen ? "1px solid #e5e7eb" : "none",
+                    transition: "background 0.15s",
+                }}
+                aria-expanded={isOpen}
             >
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ width: "30px", height: "30px", borderRadius: "7px", flexShrink: 0, background: isOpen ? "#dcfce7" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0, background: isOpen ? "#e6f4f1" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
                         <Icon source={icon} />
                     </div>
                     <Text as="span" variant="bodyMd" fontWeight="semibold">{title}</Text>
@@ -179,10 +191,10 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
                     {children}
                     {tip && (
                         <div style={{ marginTop: "16px", background: "#eef2ff", border: "1px solid #c7d2fe", borderLeft: "3px solid #6366f1", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
-                            <span style={{ minWidth: "20px", width: "20px", height: "20px", borderRadius: "50%", background: "#6366f1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
+                            <span style={{ minWidth: "18px", width: "18px", height: "18px", borderRadius: "50%", background: "#6366f1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "2px" }}>
                                 <Icon source={MagicIcon} />
                             </span>
-                            <p style={{ margin: 0, fontSize: "13px", color: "#312e81", lineHeight: 1.6 }}>{tip}</p>
+                            <p style={{ margin: 0, fontSize: "12.5px", color: "#312e81", lineHeight: 1.65 }}>{tip}</p>
                         </div>
                     )}
                 </div>
@@ -352,9 +364,12 @@ export default function ProductWidgetPage() {
 
     /* state */
     const [isEnabled,   setIsEnabled]   = useState(true);
-    const [selectedTemplate, setSelectedTemplate] = useState(
-        tKey === "template1" ? "classic-banner" : tKey === "template2" ? "minimal-card" : "bold-vibrant"
-    );
+    const [selectedTemplate, setSelectedTemplate] = useState(() => {
+        if (tKey === "template1" || tKey === "classic-banner") return "classic-banner";
+        if (tKey === "template2" || tKey === "minimal-card")   return "minimal-card";
+        if (tKey === "template3" || tKey === "bold-vibrant")   return "bold-vibrant";
+        return "classic-banner"; // safe default: first template
+    });
     const [openSection, setOpenSection] = useState(null);
     const [heading,     setHeading]     = useState(activeTpl.headingText || "GET 10% OFF!");
     const [subtext,     setSubtext]     = useState(activeTpl.subtextText || "Apply at checkout for savings");
@@ -381,6 +396,7 @@ export default function ProductWidgetPage() {
         couponConfig?.selectedActiveCoupons?.[0] || ""
     );
     const [couponSearch,  setCouponSearch]  = useState("");
+    const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.widgetPlacement || "above_cart");
     const [hasChanges,    setHasChanges]    = useState(false);
     const [toastActive,   setToastActive]   = useState(false);
 
@@ -418,6 +434,7 @@ export default function ProductWidgetPage() {
                 selectedActiveCoupons: selectedCouponId ? [selectedCouponId] : [],
                 template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
                 timerEnabled, timerHours, timerMins, timerLabel, timerExpired, timerBg, timerText, timerAccent,
+                widgetPlacement,
             },
             { method: "POST", encType: "application/json" }
         );
@@ -492,59 +509,73 @@ export default function ProductWidgetPage() {
             {toastActive && <Toast content="Settings saved!" onDismiss={() => setToastActive(false)} />}
             <Page
                 title="Coupon Banner"
-                subtitle="Display coupons and discounts on your product pages"
                 primaryAction={{ content: isSaving ? "Saving…" : "Save", onAction: handleSave, loading: isSaving, disabled: !hasChanges }}
+                secondaryActions={[{ content: "Discard", onAction: () => setHasChanges(false), disabled: !hasChanges }]}
             >
                 <BlockStack gap="400">
+                    <BrixBar size="md" floating />
+
                     {fetcher.data?.success === false && (
                         <Banner tone="critical"><p>Failed to save settings. Please try again.</p></Banner>
                     )}
 
-                    {/* Status toggle card */}
-                    <Card>
-                        <InlineStack align="space-between" blockAlign="center">
-                            <InlineStack gap="300" blockAlign="center">
-                                <div style={{ width: "42px", height: "42px", borderRadius: "10px", flexShrink: 0, background: isEnabled ? "#f1f8f5" : "#f6f6f7", border: `1px solid ${isEnabled ? "#b5e3d8" : "#e1e3e5"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    <Icon source={DiscountIcon} />
-                                </div>
-                                <BlockStack gap="050">
-                                    <InlineStack gap="200" blockAlign="center">
+                    {/* ── Status card ── */}
+                    <div style={{ borderLeft: "4px solid #ea580c", borderRadius: "12px", overflow: "hidden" }}>
+                        <Card>
+                            <InlineStack align="space-between" blockAlign="center">
+                                <InlineStack gap="300" blockAlign="center">
+                                    <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, background: isEnabled ? "#ea580c" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <div style={{ filter: "brightness(0) invert(1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                            <Icon source={DiscountIcon} />
+                                        </div>
+                                    </div>
+                                    <BlockStack gap="050">
                                         <Text as="h2" variant="headingMd">Coupon Banner</Text>
-                                        <Badge tone={isEnabled ? "success" : undefined}>
-                                            {isEnabled ? "Active" : "Inactive"}
-                                        </Badge>
+                                        <Text as="p" variant="bodySm" tone="subdued">
+                                            A promo banner shown on your storefront{" "}
+                                            <span style={{ color: "#008060", fontWeight: 500 }}>product pages</span>
+                                        </Text>
+                                    </BlockStack>
+                                </InlineStack>
+
+                                <InlineStack gap="300" blockAlign="center">
+                                    <InlineStack gap="200" blockAlign="center">
+                                        <Badge tone={isEnabled ? "success" : undefined}>{isEnabled ? "Active" : "Inactive"}</Badge>
+                                        <Text as="span" variant="bodySm" tone="subdued">{isEnabled ? "On" : "Off"}</Text>
+                                        <button
+                                            onClick={() => { setIsEnabled(p => !p); mark(); }}
+                                            aria-label="Toggle Coupon Banner"
+                                            style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: isEnabled ? "#008060" : "#babec3", position: "relative", cursor: "pointer", transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
+                                        >
+                                            <span style={{ position: "absolute", top: "3px", left: isEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
+                                        </button>
                                     </InlineStack>
-                                    <Text as="p" variant="bodySm" tone="subdued">Display coupon codes and promotions on your product pages</Text>
-                                </BlockStack>
+                                </InlineStack>
                             </InlineStack>
+                        </Card>
+                    </div>
 
-                            <button
-                                onClick={() => { setIsEnabled(p => !p); mark(); }}
-                                title={isEnabled ? "Disable" : "Enable"}
-                                style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: isEnabled ? "#008060" : "#babec3", position: "relative", cursor: "pointer", transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
-                            >
-                                <span style={{ position: "absolute", top: "3px", left: isEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
-                            </button>
-                        </InlineStack>
-                    </Card>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", alignItems: "stretch" }}>
+                    {/* ── Main two-column layout ── */}
+                    <style>{`
+                        @media (max-width: 900px) { .cpn-main-grid { grid-template-columns: 1fr !important; } }
+                    `}</style>
+                    <div className="cpn-main-grid" style={{ display: "grid", gridTemplateColumns: "440px 1fr", gap: "16px", alignItems: "start" }}>
                         {/* Left column — template + customize */}
-                        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "16px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                             <Card>
                                 <BlockStack gap="300">
                                     <Text as="h2" variant="headingMd">Select Template</Text>
-                                    <InlineStack gap="200">
+                                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                         {TEMPLATES.map(t => (
                                             <button
                                                 key={t.id}
                                                 onClick={() => applyTemplate(t.id)}
-                                                style={{ padding: "6px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223" }}
+                                                style={{ padding: "7px 18px", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223", transition: "all 0.15s", outline: "none" }}
                                             >
                                                 {t.name}
                                             </button>
                                         ))}
-                                    </InlineStack>
+                                    </div>
                                 </BlockStack>
                             </Card>
 
@@ -638,16 +669,35 @@ export default function ProductWidgetPage() {
                                             )}
                                         </BlockStack>
                                     </AccordionSection>
+
+                                    {/* ── Placement — separate dropdown below all accordion sections ── */}
+                                    <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "14px 16px", background: "#fafafa" }}>
+                                        <Select
+                                            label="Widget Placement"
+                                            options={[
+                                                { label: "Above the Add to Cart button",       value: "above_cart" },
+                                                { label: "Below the Add to Cart button",       value: "below_cart" },
+                                                { label: "Customize (let customers position)", value: "custom"     },
+                                            ]}
+                                            value={widgetPlacement}
+                                            onChange={(v) => { setWidgetPlacement(v); mark(); }}
+                                            helpText={
+                                                widgetPlacement === "above_cart" ? "Position locked above the Add to Cart button on storefront." :
+                                                widgetPlacement === "below_cart" ? "Position locked below the Add to Cart button on storefront." :
+                                                "Customers can drag and reposition the widget on the product page."
+                                            }
+                                        />
+                                    </div>
                                 </BlockStack>
                             </Card>
                         </div>
 
                         {/* Right column — Live Preview */}
                         <Card>
-                            <BlockStack gap="300">
+                            <BlockStack gap="400">
                                 <Text as="h2" variant="headingMd">Preview</Text>
-                                <div style={{ background: "#f9fafb", borderRadius: "10px", padding: "16px" }}>
-                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "14px" }}>
+                                <div style={{ background: "#f9fafb", borderRadius: "12px", padding: "18px", border: "1px solid #e5e7eb", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "14px" }}>
                                         Product Page Widget
                                     </div>
                                     {renderPreview()}

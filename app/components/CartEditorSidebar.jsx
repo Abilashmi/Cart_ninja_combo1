@@ -1,23 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useFetcher } from 'react-router';
 import { useCartEditor } from '../context/CartEditorContext';
+import { featureStore } from './ai-agent/featureStore';
+import BrixBar from './ai-agent/BrixBar';
 import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
-  ArrowLeftIcon,
-  ChevronDownIcon,
-  ColorIcon,
-  SettingsIcon,
-  LayoutHeaderIcon,
-  MegaphoneIcon,
-  ChartVerticalIcon,
-  DiscountCodeIcon,
-  ProductIcon,
-  CartIcon,
-  CashDollarIcon,
-  CodeIcon,
+  ArrowLeftIcon, ChevronDownIcon, ColorIcon, SettingsIcon,
+  LayoutHeaderIcon, MegaphoneIcon, ChartVerticalIcon,
+  DiscountCodeIcon, ProductIcon, CartIcon, CashDollarIcon, CodeIcon,
 } from '@shopify/polaris-icons';
 import { Icon, Modal, Text } from '@shopify/polaris';
-
 import { DesignSection } from './sections/DesignSection';
 import { GeneralSection } from './sections/GeneralSection';
 import { HeaderSection } from './sections/HeaderSection';
@@ -30,66 +22,65 @@ import { CheckoutSection } from './sections/CheckoutSection';
 import { CustomCSSSection } from './sections/CustomCSSSection';
 
 const ICON_MAP = {
-  color: ColorIcon,
-  settings: SettingsIcon,
-  'layout-header': LayoutHeaderIcon,
-  megaphone: MegaphoneIcon,
-  chart: ChartVerticalIcon,
-  discount: DiscountCodeIcon,
-  product: ProductIcon,
-  cart: CartIcon,
-  cash: CashDollarIcon,
-  code: CodeIcon,
+  color: ColorIcon, settings: SettingsIcon, 'layout-header': LayoutHeaderIcon,
+  megaphone: MegaphoneIcon, chart: ChartVerticalIcon, discount: DiscountCodeIcon,
+  product: ProductIcon, cart: CartIcon, cash: CashDollarIcon, code: CodeIcon,
 };
 
 const SECTION_COMPONENT_MAP = {
-  design: DesignSection,
-  general: GeneralSection,
-  header: HeaderSection,
-  announcements: AnnouncementsSection,
-  progressBar: ProgressBarSection,
-  couponSlider: CouponSliderSection,
-  upsellProducts: UpsellSection,
-  emptyCart: EmptyCartSection,
-  checkoutButton: CheckoutSection,
-  customCSS: CustomCSSSection,
+  design: DesignSection, general: GeneralSection, header: HeaderSection,
+  announcements: AnnouncementsSection, progressBar: ProgressBarSection,
+  couponSlider: CouponSliderSection, upsellProducts: UpsellSection,
+  emptyCart: EmptyCartSection, checkoutButton: CheckoutSection, customCSS: CustomCSSSection,
 };
 
 export function CartEditorSidebar({ onDiscard }) {
-  const { status, setStatus, setActiveSection, previewMode, setPreviewMode, body } = useCartEditor();
+  const {
+    status, setStatus, setActiveSection,
+    openSection: contextSection,
+    previewMode, setPreviewMode, body,
+  } = useCartEditor();
+
   const [openSection, setOpenSection] = useState(null);
   const [statusError, setStatusError] = useState('');
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const statusFetcher = useFetcher();
   const isTogglingStatus = statusFetcher.state !== 'idle';
+  const isActive = status === 'active';
+
+  useEffect(() => {
+    const sync = () => setStatus(featureStore.get('cart_drawer') ? 'active' : 'inactive');
+    sync();
+    window.addEventListener('featureStateChanged', sync);
+    return () => window.removeEventListener('featureStateChanged', sync);
+  }, [setStatus]);
+
+  // Sync preview-zone clicks into the local accordion
+  useEffect(() => {
+    if (!contextSection || contextSection === openSection) return;
+    setOpenSection(contextSection);
+  }, [contextSection]);
 
   useEffect(() => {
     const data = statusFetcher.data;
     if (!data || data.intent !== 'toggleDrawerStatus') return;
-
     if (data.success) {
       const enabled = data.drawerEnabled;
       setStatus(enabled ? 'active' : 'inactive');
-      try { localStorage.setItem("cartninja_feature_state", JSON.stringify({ cart_drawer: enabled })); } catch {}
-      setStatusError(data.synced ? '' : 'Saved locally — will sync to your storefront shortly.');
+      featureStore.set('cart_drawer', enabled);
+      setStatusError(data.synced ? '' : 'Saved locally — will sync shortly.');
     } else {
-      setStatusError(data.error || 'Could not update the cart drawer status. Please try again.');
+      setStatusError(data.error || 'Could not update status.');
     }
   }, [statusFetcher.data, setStatus]);
 
   const submitStatusToggle = (enabled) => {
     setStatusError('');
-    statusFetcher.submit(
-      { intent: 'toggleDrawerStatus', enabled },
-      { method: 'POST', encType: 'application/json' }
-    );
+    statusFetcher.submit({ intent: 'toggleDrawerStatus', enabled }, { method: 'POST', encType: 'application/json' });
   };
 
   const handleToggleStatus = () => {
-    if (status === 'active') {
-      setShowDeactivateModal(true);
-      return;
-    }
+    if (isActive) { setShowDeactivateModal(true); return; }
     submitStatusToggle(true);
   };
 
@@ -114,76 +105,67 @@ export function CartEditorSidebar({ onDiscard }) {
   };
 
   return (
-    <div className="cart-editor-left">
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#fff', borderRight: '1px solid #e1e3e5', overflow: 'hidden' }}>
+
       <Modal
         open={showDeactivateModal}
         onClose={() => setShowDeactivateModal(false)}
         title="Deactivate cart drawer"
-        primaryAction={{
-          content: 'Deactivate',
-          onAction: handleConfirmDeactivate,
-          destructive: true,
-        }}
-        secondaryActions={[
-          { content: 'Cancel', onAction: () => setShowDeactivateModal(false) },
-        ]}
+        primaryAction={{ content: 'Deactivate', onAction: handleConfirmDeactivate, destructive: true }}
+        secondaryActions={[{ content: 'Cancel', onAction: () => setShowDeactivateModal(false) }]}
       >
         <Modal.Section>
-          <Text as="p">
-            Turning the cart drawer off will hide it on your live storefront immediately. You can switch it back on at any time.
-          </Text>
+          <Text as="p">Turning the cart drawer off will hide it immediately on your storefront.</Text>
         </Modal.Section>
       </Modal>
 
-      {/* Header */}
-      <div className="cart-editor-left-header">
-        <div className="cart-editor-left-header-top">
-          <button className="cart-editor-back-btn" onClick={onDiscard}>
+      {/* ── Header: 3 compact rows ── */}
+      <div style={{ flexShrink: 0, background: '#fff', borderBottom: '1px solid #e1e3e5', padding: '8px 14px 6px' }}>
+
+        {/* Row 1: back + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <button onClick={onDiscard} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, color: '#6d7175' }}>
             <Icon source={ArrowLeftIcon} />
           </button>
-          <span className="cart-editor-title">Cart Editor</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#202223' }}>Cart Editor</span>
         </div>
 
-        {/* Controls */}
-        <div className="cart-editor-left-header-controls">
-          <div className="cart-editor-control-row">
-            <span className="cart-editor-control-label">Status</span>
-            <button
-              className={`cart-editor-status-pill ${status === 'active' ? 'active' : ''}`}
-              onClick={handleToggleStatus}
-              disabled={isTogglingStatus}
-            >
-              <span className="status-dot" />
-              {isTogglingStatus ? 'Saving…' : (status === 'active' ? 'Active' : 'Inactive')}
-            </button>
-          </div>
-          {statusError && <p className="cart-editor-status-hint">{statusError}</p>}
+        {/* Row 2: STATUS + pill */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#8c9196', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</span>
+          <button onClick={handleToggleStatus} disabled={isTogglingStatus}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: isActive ? '#aee9d1' : '#e4e5e7', color: isActive ? '#005e46' : '#6d7175', opacity: isTogglingStatus ? 0.6 : 1 }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+            {isTogglingStatus ? '…' : isActive ? 'Active' : 'Inactive'}
+          </button>
+        </div>
 
-          <div className="cart-editor-control-row">
-            <span className="cart-editor-control-label">Preview</span>
-            <div className="cart-editor-segmented">
-              <button
-                className={`segmented-btn ${previewMode === 'items' ? 'active' : ''}`}
-                onClick={() => setPreviewMode('items')}
+        {/* Row 3: PREVIEW + segmented */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#8c9196', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preview</span>
+          <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 7, overflow: 'hidden' }}>
+            {['items', 'empty'].map(m => (
+              <button key={m} onClick={() => setPreviewMode(m)}
+                style={{ padding: '3px 10px', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', background: previewMode === m ? '#202223' : '#fff', color: previewMode === m ? '#fff' : '#6d7175', borderLeft: m === 'empty' ? '1px solid #c9cccf' : 'none' }}
               >
-                Items
+                {m === 'items' ? 'Items' : 'Empty'}
               </button>
-              <button
-                className={`segmented-btn ${previewMode === 'empty' ? 'active' : ''}`}
-                onClick={() => setPreviewMode('empty')}
-              >
-                Empty
-              </button>
-            </div>
+            ))}
           </div>
         </div>
+
+        {statusError && <p style={{ margin: '4px 0 0', fontSize: 10, color: '#8a6116' }}>{statusError}</p>}
       </div>
 
-      {/* Accordion */}
-      <div className="cart-editor-accordion">
+      {/* ── Accordion ── */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {SECTION_GROUPS.map((group) => (
-          <div key={group.title} className="accordion-group">
-            <div className="accordion-group-label">{group.title}</div>
+          <div key={group.title}>
+            <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
+              {group.title}
+            </div>
+
             {group.items.map((item) => {
               const isOpen = openSection === item.id;
               const IconComponent = ICON_MAP[item.icon] || SettingsIcon;
@@ -191,30 +173,29 @@ export function CartEditorSidebar({ onDiscard }) {
               const SectionComponent = SECTION_COMPONENT_MAP[item.id];
 
               return (
-                <div
-                  key={item.id}
-                  className={`accordion-item ${isOpen ? 'open' : ''}`}
-                >
+                <div key={item.id} style={{ borderBottom: '1px solid #f1f2f3' }}>
                   <button
-                    className="accordion-row"
                     onClick={() => toggleSection(item.id)}
+                    style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, padding: '7px 14px', width: '100%', background: isOpen ? '#f0f7f5' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}
                   >
-                    <span className="accordion-row-icon">
+                    <span style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isOpen ? '#008060' : '#8c9196' }}>
                       <Icon source={IconComponent} />
                     </span>
-                    <span className="accordion-row-label">{item.label}</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isOpen ? '#008060' : '#202223', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                      {item.label}
+                    </span>
                     {item.toggleable && (
-                      <span className={`accordion-badge ${isEnabled ? 'on' : 'off'}`}>
+                      <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600, flexShrink: 0, background: isEnabled ? '#aee9d1' : '#e4e5e7', color: isEnabled ? '#005e46' : '#6d7175' }}>
                         {isEnabled ? 'On' : 'Off'}
                       </span>
                     )}
-                    <span className={`accordion-chevron ${isOpen ? 'open' : ''}`}>
+                    <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#8c9196', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
                       <Icon source={ChevronDownIcon} />
                     </span>
                   </button>
 
                   {isOpen && SectionComponent && (
-                    <div className="accordion-content">
+                    <div style={{ padding: '12px 16px 16px', background: '#fafbfb', borderTop: '1px solid #e1e3e5' }}>
                       <SectionComponent />
                     </div>
                   )}
@@ -223,6 +204,11 @@ export function CartEditorSidebar({ onDiscard }) {
             })}
           </div>
         ))}
+      </div>
+
+      {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ── */}
+      <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5' }}>
+        <BrixBar size="sm" floating={false} />
       </div>
     </div>
   );

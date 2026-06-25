@@ -165,9 +165,15 @@ function CartEditorContent({ shop }) {
   };
 
   return (
-    <div className="cart-editor-root">
-      <CartEditorSidebar onDiscard={handleDiscard} />
-      <CartPreview onSave={handleSave} onDiscard={handleDiscard} isDirty={isDirty} />
+    <div style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
+      {/* Left: fixed-width sidebar */}
+      <div style={{ width: 360, minWidth: 360, flexShrink: 0, height: '100vh', overflow: 'hidden' }}>
+        <CartEditorSidebar onDiscard={handleDiscard} />
+      </div>
+      {/* Right: preview fills remaining space */}
+      <div style={{ flex: 1, minWidth: 0, height: '100vh', overflow: 'hidden' }}>
+        <CartPreview onSave={handleSave} onDiscard={handleDiscard} isDirty={isDirty} />
+      </div>
     </div>
   );
 }

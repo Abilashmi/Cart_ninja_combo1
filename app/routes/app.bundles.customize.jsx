@@ -11,6 +11,8 @@ import {
   Page,
   Card,
   FormLayout,
+  Popover,
+  Spinner,
   TextField,
   Select,
   RangeSlider,
@@ -19,7 +21,6 @@ import {
   ButtonGroup,
   Modal,
   ColorPicker,
-  Popover,
   Icon,
   Text,
   Tooltip,
@@ -37,6 +38,10 @@ import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { CdoPreviewBar } from '../components/CdoPreviewBar';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
+import { BuilderActionBar } from '../components/customization/BuilderActionBar';
+import { ValidationPanel } from '../components/customization/ValidationPanel';
+import { TemplatePreviewThumb } from '../components/customization/TemplatePreviewThumb';
+import BrixBar from '../components/ai-agent/BrixBar';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import prisma from '../db.server';
 
@@ -1614,6 +1619,7 @@ export default function Customize() {
       );
     }
     if (saveFetcher.data?.success) {
+      setSaveStatus('saved');
       shopify.toast.show(
         saveFetcher.data.message || 'Template saved successfully!'
       );
@@ -1625,6 +1631,7 @@ export default function Customize() {
 
       navigate('/app/bundles/templates');
     } else if (saveFetcher.data?.error) {
+      setSaveStatus('error');
       if (saveFetcher.data?.pageHandleConflict) {
         // Re-open the save modal, switch to existing page tab, show the error
         setPublishType('existing');
@@ -1648,6 +1655,7 @@ export default function Customize() {
   const [saveTitle, setSaveTitle] = useState(
     initialTemplate?.title || 'Untitled Template'
   );
+  const [saveStatus, setSaveStatus] = useState(initialTemplate?.id ? 'saved' : null);
   const [publishToPage, setPublishToPage] = useState(true);
   const [targetPageTitle, setTargetPageTitle] = useState(
     initialTemplate?.page_url || 'About Us'
@@ -1711,8 +1719,102 @@ export default function Customize() {
     if (titleError) setTitleError('');
   };
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [aiBundleOpen, setAiBundleOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiBundleLoading, setAiBundleLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
   const [formKey, setFormKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState('layout'); // layout, style, advanced
+
+  const handleBackNavigation = useCallback(() => {
+    navigate('/app/bundles/templates', { replace: true });
+  }, [navigate]);
+
+  const handlePreview = useCallback(() => {
+    if (initialTemplate?.id) {
+      window.open(
+        `/preview/${initialTemplate.id}?shop=${encodeURIComponent(shop)}`,
+        '_blank'
+      );
+    }
+  }, [initialTemplate?.id, shop]);
+
+  const handleDuplicate = useCallback(() => {
+    shopify.toast.show('Duplicate template is available after the first save.');
+  }, [shopify]);
+
+  const handleAiGenerate = useCallback(async () => {
+    const prompt = aiPrompt.trim();
+    if (!prompt) {
+      setAiError('Please describe the bundle you want first.');
+      return;
+    }
+
+    setAiError('');
+    setAiBundleLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      shopify.toast.show('AI generation is available in the reference experience.');
+      setAiBundleOpen(false);
+      setAiPrompt('');
+    } finally {
+      setAiBundleLoading(false);
+    }
+  }, [aiPrompt, shopify]);
+
+  const validationIssues = useMemo(() => {
+    const issues = [];
+
+    if (!String(saveTitle || '').trim()) {
+      issues.push({
+        title: 'Template needs a name',
+        message: 'Add a clear template title before publishing.',
+        section: 'general',
+      });
+    }
+
+    if (config.layout === 'layout1') {
+      const numSteps = Number(config.max_selections || 3);
+      for (let i = 1; i <= numSteps; i++) {
+        if (!config[`step_${i}_collection`]) {
+          issues.push({
+            title: `Step ${i} needs a collection`,
+            message: 'Choose a collection for this step before saving.',
+            section: 'general',
+          });
+        }
+      }
+    }
+
+    if (config.layout === 'layout2') {
+      const tabs = Number(config.tab_count || 4);
+      const hasAnyTab = Array.from({ length: tabs }, (_, i) => config[`col_${i + 1}`]).some(Boolean);
+      if (!hasAnyTab) {
+        issues.push({
+          title: 'Add at least one tab collection',
+          message: 'The tab switcher needs a collection to render products.',
+          section: 'general',
+        });
+      }
+    }
+
+    if (config.layout === 'layout3' && !config.collection_handle) {
+      const cols = Number(config.col_count || 4);
+      const hasAnyCol = Array.from({ length: cols }, (_, i) => config[`col_${i + 1}`]).some(Boolean);
+      if (!hasAnyCol) {
+        issues.push({
+          title: 'Choose a collection for the editorial layout',
+          message: 'This layout needs a base collection to display the grid.',
+          section: 'general',
+        });
+      }
+    }
+
+    return issues;
+  }, [config, saveTitle]);
+  const canUndo = false;
+  const canRedo = false;
   const [styleDevice, setStyleDevice] = useState('desktop'); // desktop, mobile, linked
   const [activeTab, setActiveTab] = useState('all');
   const [allStepProducts, setAllStepProducts] = useState({});
@@ -1980,10 +2082,10 @@ export default function Customize() {
   // Keep pickedLayout in sync when URL search params change
   useEffect(() => {
     const lp = searchParams.get('layout');
-    if (lp && !pickedLayout) {
+    if (lp) {
       const mapped = LAYOUT_MAP[lp] || 'layout1';
-      setPickedLayout(mapped);
-      setConfig((prev) => ({ ...prev, layout: mapped }));
+      setPickedLayout((prev) => (prev === mapped ? prev : mapped));
+      setConfig((prev) => (prev.layout === mapped ? prev : { ...prev, layout: mapped }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -1992,12 +2094,13 @@ export default function Customize() {
   const handlePickLayout = useCallback(
     (blockName) => {
       const mapped = LAYOUT_MAP[blockName] || 'layout1';
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.set('layout', blockName);
+      navigate(`/app/bundles/customize?${nextParams.toString()}`, { replace: true });
       setPickedLayout(mapped);
       setConfig((prev) => ({ ...prev, layout: mapped }));
     },
-    // LAYOUT_MAP is stable (module-level constant)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [navigate, searchParams]
   );
 
   // Real-time product fetching for multi-step bundles (all step-based layouts)
@@ -2114,6 +2217,14 @@ export default function Customize() {
 
   const updateConfig = useCallback((key, value) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const applyConfigPatch = useCallback((patch) => {
+    setConfig((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const onlyOpen = useCallback((prev, key) => {
+    return Object.keys(prev).reduce((acc, k) => { acc[k] = k === key; return acc; }, {});
   }, []);
 
   const generateAiSuggestion = useCallback(
@@ -2505,6 +2616,19 @@ export default function Customize() {
     });
   };
 
+  const layoutLabel = useMemo(() => {
+    switch (config.layout) {
+      case 'layout2':
+        return 'Velocity Stream';
+      case 'layout3':
+      case 'layout4':
+        return 'Editorial Split';
+      case 'layout1':
+      default:
+        return 'Guided Architect';
+    }
+  }, [config.layout]);
+
   const discountTypeOptions = [
     {
       value: 'amount_off_products',
@@ -2713,7 +2837,6 @@ export default function Customize() {
     discountTypeOptions[0];
 
   // ── Template picker gate ──────────────────────────────────────────────────
-  // Show the picker ONLY when creating a new template with no layout chosen.
   if (!pickedLayout && !initialTemplate) {
     return (
       <Page
@@ -2721,368 +2844,68 @@ export default function Customize() {
         title="Customize Template"
         backAction={{
           content: 'Template Modules',
-          onAction: () => navigate('/app/bundles/templates', { replace: true }),
+          onAction: () => navigate('/app/bundles', { replace: true }),
         }}
       >
-        {/* Header */}
+        <BrixBar size="md" floating />
+        <style>{`
+.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:32px;align-items:stretch}
+.tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
+.tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
+.tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
+.tpl-pick-badge{position:absolute;top:12px;right:12px;background:#e3f1df;color:#1a7f45;padding:4px 12px;border-radius:24px;font-size:12px;font-weight:600;letter-spacing:.3px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.tpl-pick-body{padding:16px;display:flex;flex-direction:column;gap:8px;flex-grow:1}
+.tpl-pick-how{background:#f6f8fa;border:1px solid #e8eaed;border-radius:10px;padding:10px 12px}
+.tpl-pick-how-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6c737a;margin-bottom:6px}
+.tpl-pick-how-text{font-size:13px;color:#374151;line-height:1.55}
+.tpl-pick-features{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;flex-grow:1}
+.tpl-pick-feature{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#374151}
+.tpl-pick-check{color:#008060;font-weight:700;margin-top:1px}
+.tpl-pick-bestfor{font-size:12.5px;color:#6b7280;line-height:1.4}
+.tpl-pick-bestfor b{color:#111827;font-weight:700}
+@media(max-width:1024px){.template-picker-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.template-picker-grid{grid-template-columns:1fr;gap:14px}}
+        `}</style>
         <div style={{ padding: '12px 0 8px' }}>
-          <Text variant="headingLg" as="h2">
-            Choose a Template to Get Started
-          </Text>
+          <Text variant="headingLg" as="h2">Choose a Template to Get Started</Text>
           <div style={{ marginTop: 8 }}>
             <Text variant="bodyMd" tone="subdued">
-              Each layout is a completely different shopping experience. Read
-              the descriptions carefully — they behave differently, not just
-              look different.
+              Each layout is a completely different shopping experience. Read the descriptions carefully — they behave differently, not just look different.
             </Text>
           </div>
         </div>
 
-        {/* Quick comparison strip */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '12px',
-            marginBottom: '28px',
-            marginTop: '20px',
-            background: '#f6f8fa',
-            borderRadius: '12px',
-            padding: '16px 20px',
-            border: '1px solid #e8eaed',
-          }}
-        >
-          {[
-            {
-              label: 'The Guided Architect',
-              tag: 'Step-by-Step',
-              icon: '',
-              hint: 'Locked steps, one collection per step, progress bar discount',
-            },
-            {
-              label: 'The Velocity Stream',
-              tag: 'Tab Switcher',
-              icon: '',
-              hint: 'Free browsing across collection tabs, no step order enforced',
-            },
-            {
-              label: 'The Editorial Split',
-              tag: 'Simple Grid',
-              icon: '',
-              hint: 'One collection shown as a full grid, no tabs or steps',
-            },
-          ].map((row, i) => (
-            <div
-              key={i}
-              style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '4px',
-                }}
-              >
-                <span style={{ fontSize: '18px' }}>{row.icon}</span>
-                <span
-                  style={{
-                    fontWeight: '700',
-                    fontSize: '13px',
-                    color: '#111827',
-                  }}
-                >
-                  {row.label}
-                </span>
-              </div>
-              <span
-                style={{
-                  display: 'inline-block',
-                  background: '#e3f1df',
-                  color: '#1a7f45',
-                  padding: '2px 10px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  marginBottom: '6px',
-                  width: 'fit-content',
-                }}
-              >
-                {row.tag}
-              </span>
-              <span
-                style={{ fontSize: '12px', color: '#555', lineHeight: '1.5' }}
-              >
-                {row.hint}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <style>{`
-.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px;margin-bottom:32px;max-width:1400px;align-items:stretch}
-.template-picker-grid>div{height:auto}
-@media(max-width:768px){.template-picker-grid{grid-template-columns:1fr;gap:12px}}
-        `}</style>
-        {/* Template cards */}
         <div className="template-picker-grid">
           {TEMPLATE_CATALOGUE.map((tpl) => (
-            <div
-              key={tpl.id}
-              style={{
-                border: '1px solid #ebeef0',
-                borderRadius: '16px',
-                overflow: 'hidden',
-                background: '#ffffff',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-6px)';
-                e.currentTarget.style.boxShadow =
-                  '0 12px 28px rgba(0,0,0,0.08)';
-                e.currentTarget.style.borderColor = '#d2d5d8';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.03)';
-                e.currentTarget.style.borderColor = '#ebeef0';
-              }}
-            >
-              {/* Preview image */}
-              <div
-                style={{
-                  position: 'relative',
-                  borderBottom: '1px solid #f0f2f4',
-                }}
-              >
-                <img
-                  src={tpl.img}
-                  alt={tpl.title}
-                  onError={(e) => {
-                    e.target.src = tpl.fallbackImg;
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '280px',
-                    objectFit: 'contain',
-                    background: '#ffffff',
-                    display: 'block',
-                    transition: 'transform 0.5s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'scale(1.02)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '16px',
-                    right: '16px',
-                    background: '#e3f1df',
-                    color: '#1a7f45',
-                    padding: '4px 12px',
-                    borderRadius: '24px',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    letterSpacing: '0.3px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                  }}
-                >
-                  {tpl.badge}
-                </div>
+            <div key={tpl.id} className="tpl-pick-card">
+              <div className="tpl-pick-media">
+                <TemplatePreviewThumb kind={tpl.previewKind || 'steps'} compact />
+                <div className="tpl-pick-badge">{tpl.badge}</div>
               </div>
-
-              {/* Card body */}
-              <div
-                style={{
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  flexGrow: 1,
-                }}
-              >
-                {/* Title */}
-                <div style={{ marginBottom: '8px' }}>
-                  <Text variant="headingLg" as="h3" fontWeight="bold">
-                    {tpl.title}
-                  </Text>
-                </div>
-
-                {/* Description */}
-                <div style={{ marginBottom: '10px' }}>
-                  <Text variant="bodyMd" tone="subdued">
-                    {tpl.description}
-                  </Text>
-                </div>
-
-                {/* How it works box */}
-                <div
-                  style={{
-                    background: '#f6f8fa',
-                    border: '1px solid #e8eaed',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.6px',
-                      color: '#6c737a',
-                      marginBottom: '6px',
-                    }}
-                  >
-                    How it works
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '13px',
-                      color: '#374151',
-                      lineHeight: '1.55',
-                    }}
-                  >
-                    {tpl.howItWorks}
-                  </div>
-                </div>
-
-                {/* Features list */}
-                <ul
-                  style={{
-                    margin: '0 0 12px',
-                    padding: '0',
-                    fontSize: '13px',
-                    color: '#333',
-                    lineHeight: '1.5',
-                    listStyle: 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                    flexGrow: 1,
-                  }}
-                >
-                  {tpl.features.map((f, i) => (
-                    <li
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '8px',
-                      }}
-                    >
-                      <svg
-                        width="17"
-                        height="17"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#008060"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ flexShrink: 0, marginTop: '3px' }}
-                      >
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                      <span style={{ color: '#374151' }}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* What makes it different */}
-                {tpl.differentiators && (
-                  <div
-                    style={{
-                      background: '#fffbeb',
-                      border: '1px solid #fde68a',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                      marginBottom: '12px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.6px',
-                        color: '#92400e',
-                        marginBottom: '6px',
-                      }}
-                    >
-                      What makes it different
-                    </div>
-                    <ul
-                      style={{
-                        margin: 0,
-                        padding: 0,
-                        listStyle: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px',
-                      }}
-                    >
-                      {tpl.differentiators.map((d, i) => (
-                        <li
-                          key={i}
-                          style={{
-                            fontSize: '12.5px',
-                            color: '#78350f',
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '6px',
-                          }}
-                        >
-                          <span style={{ flexShrink: 0, marginTop: '2px' }}>
-                            →
-                          </span>
-                          <span>{d}</span>
-                        </li>
-                      ))}
-                    </ul>
+              <div className="tpl-pick-body">
+                <Text variant="headingMd" as="h3" fontWeight="bold">{tpl.title}</Text>
+                <Text variant="bodySm" tone="subdued">{tpl.description}</Text>
+                {tpl.howItWorks && (
+                  <div className="tpl-pick-how">
+                    <div className="tpl-pick-how-label">How it works</div>
+                    <div className="tpl-pick-how-text">{tpl.howItWorks}</div>
                   </div>
                 )}
-
-                {/* Footer */}
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'stretch',
-                    gap: 8,
-                    paddingTop: '12px',
-                    borderTop: '1px solid #f0f2f4',
-                    marginTop: 'auto',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '13px',
-                      color: '#666',
-                      fontWeight: '500',
-                      lineHeight: '1.4',
-                    }}
-                  >
-                    Best for:{' '}
-                    <span style={{ color: '#111827', fontWeight: '700' }}>
-                      {tpl.bestFor}
-                    </span>
-                  </div>
-                  <Button
-                    variant="primary"
-                    fullWidth
-                    className="premium-customize-btn"
-                    id={`select-template-${tpl.id}`}
-                    onClick={() => handlePickLayout(tpl.blockName)}
-                  >
+                {tpl.features?.length > 0 && (
+                  <ul className="tpl-pick-features">
+                    {tpl.features.map((feature, i) => (
+                      <li key={i} className="tpl-pick-feature">
+                        <span className="tpl-pick-check">✓</span>
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {tpl.bestFor && (
+                  <div className="tpl-pick-bestfor">Best for: <b>{tpl.bestFor}</b></div>
+                )}
+                <div style={{ marginTop: 6 }}>
+                  <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
                     Use This Template
                   </Button>
                 </div>
@@ -3152,116 +2975,129 @@ export default function Customize() {
   return (
     <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      {/* ── Studio command bar ───────────────────────────────── */}
-      <div style={{
-        background: '#fff',
-        borderBottom: '1px solid rgba(15,15,35,0.08)',
-        padding: '0 20px',
-        height: '48px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
-      }}>
-        {/* Left: back + title + status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-          <button
-            onClick={() => navigate('/app/bundles/templates', { replace: true })}
-            style={{
-              width: '30px', height: '30px', borderRadius: '7px',
-              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: '#64748B', flexShrink: 0,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M15 18l-6-6 6-6"/>
-            </svg>
-          </button>
+      <BrixBar size="md" floating />
 
-          <input
-            value={saveTitle}
-            onChange={handleTitleChange}
-            placeholder="Template title…"
-            style={{
-              border: 'none', outline: 'none', background: 'transparent',
-              fontSize: '14px', fontWeight: '650', color: '#0F0F23',
-              minWidth: '120px', maxWidth: '260px', fontFamily: 'inherit',
-            }}
-          />
-
-          {titleError && (
-            <span style={{ fontSize: '11px', color: '#EF4444', flexShrink: 0 }}>{titleError}</span>
-          )}
-
-          <span style={{
-            padding: '2px 9px', borderRadius: '20px', flexShrink: 0,
-            background: isActive ? 'rgba(16,185,129,0.09)' : 'rgba(100,116,139,0.09)',
-            color: isActive ? '#10B981' : '#64748B',
-            fontSize: '11px', fontWeight: '700',
-            border: isActive ? '1px solid rgba(16,185,129,0.22)' : '1px solid rgba(100,116,139,0.15)',
-            display: 'flex', alignItems: 'center', gap: '4px',
-          }}>
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
-            {isActive ? 'Active' : 'Draft'}
-          </span>
-        </div>
-
-        {/* Right: actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-          {initialTemplate?.id && (
-            <button
-              onClick={() => window.open(`/preview/${initialTemplate.id}?shop=${encodeURIComponent(shop)}`, '_blank')}
-              style={{
-                padding: '6px 12px', borderRadius: '7px',
-                border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
-                color: '#0F0F23', fontWeight: '550', fontSize: '12.5px',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontFamily: 'inherit',
-              }}
+      <Page
+        fullWidth
+        backAction={{
+          content: 'Template Modules',
+          onAction: handleBackNavigation,
+        }}
+        title={saveTitle || 'Untitled Template'}
+        titleMetadata={
+          <div className="template-status-meta">
+            <Tooltip
+              content={
+                isActive
+                  ? 'Live — this template is published to your store.'
+                  : 'Saved but not live yet. Click Activate to publish it to your store.'
+              }
             >
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-                <path d="M9 3C5 3 2 7.5 2 9s3 6 7 6 7-4.5 7-6-3-6-7-6zm0 9a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="currentColor"/>
-              </svg>
-              Preview
-            </button>
-          )}
-          <button
-            onClick={handleToggleActive}
-            style={{
-              padding: '6px 12px', borderRadius: '7px',
-              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
-              color: '#0F0F23', fontWeight: '550', fontSize: '12.5px',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            {isActive ? 'Deactivate' : 'Activate'}
-          </button>
-          <button
-            onClick={() => setResetModalOpen(true)}
-            style={{
-              padding: '6px 12px', borderRadius: '7px',
-              border: '1px solid rgba(15,15,35,0.10)', background: '#fff',
-              color: '#64748B', fontWeight: '550', fontSize: '12.5px',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Reset
-          </button>
-          <button
-            onClick={handleSaveClick}
-            style={{
-              padding: '6px 16px', borderRadius: '7px',
-              background: '#006241', color: '#fff',
-              border: 'none', fontWeight: '650', fontSize: '12.5px',
-              cursor: 'pointer', fontFamily: 'inherit',
-              boxShadow: 'none',
-            }}
-          >
-            Save Template
-          </button>
-        </div>
-      </div>
+              <div
+                className="template-status-badge"
+                style={{
+                  background: isActive ? '#eafff2' : '#f4f6f8',
+                  color: isActive ? '#008060' : '#5c6ac4',
+                  border: isActive ? '1px solid #008060' : '1px solid #5c6ac4',
+                  cursor: 'help',
+                }}
+              >
+                {isActive ? 'Active' : 'Draft'}
+              </div>
+            </Tooltip>
+            <Popover
+              active={renameOpen}
+              onClose={() => setRenameOpen(false)}
+              preferredAlignment="left"
+              activator={
+                <Tooltip content="Rename template">
+                  <Button
+                    variant="tertiary"
+                    size="slim"
+                    icon={EditIcon}
+                    accessibilityLabel="Rename template"
+                    onClick={() => setRenameOpen((o) => !o)}
+                  />
+                </Tooltip>
+              }
+            >
+              <div style={{ padding: 12, width: 280 }}>
+                <TextField
+                  label="Template title"
+                  value={saveTitle}
+                  onChange={handleTitleChange}
+                  autoComplete="off"
+                  error={titleError}
+                  helpText="The name of your saved template."
+                />
+              </div>
+            </Popover>
+          </div>
+        }
+      >
+        <div className="customize-top-gap"></div>
+        <BuilderActionBar
+          saveStatus={saveStatus}
+          isActive={isActive}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={() => {}}
+          onRedo={() => {}}
+          onSave={handleSaveClick}
+          onPreview={handlePreview}
+          onDuplicate={handleDuplicate}
+          onToggleActive={handleToggleActive}
+          onReset={() => setResetModalOpen(true)}
+          onAiGenerate={() => setAiBundleOpen(true)}
+          canPreview={!!initialTemplate?.id}
+          issueCount={validationIssues.length}
+        />
+        <BrixBar size="md" floating placeholder="Ask Brix to help with your bundle — layout, copy, colours, products…" />
+        {validationIssues.length > 0 && (
+          <ValidationPanel
+            issues={validationIssues}
+            onFix={() => setActiveCategory('layout')}
+          />
+        )}
+        <Modal
+          open={aiBundleOpen}
+          onClose={() => { if (!aiBundleLoading) { setAiBundleOpen(false); setAiError(''); } }}
+          title="✨ Generate a bundle with AI"
+          primaryAction={{
+            content: aiBundleLoading ? 'Generating…' : 'Generate',
+            onAction: handleAiGenerate,
+            loading: aiBundleLoading,
+          }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setAiBundleOpen(false), disabled: aiBundleLoading }]}
+        >
+          <Modal.Section>
+            <FormLayout>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Describe the bundle you want. AI will pick a layout, choose matching collections, write the copy, and set a colour theme — you can fine-tune everything afterwards.
+              </Text>
+              <TextField
+                label="What's this bundle for?"
+                value={aiPrompt}
+                onChange={(v) => { setAiPrompt(v); if (aiError) setAiError(''); }}
+                multiline={3}
+                autoComplete="off"
+                disabled={aiBundleLoading}
+                placeholder="e.g. A skincare routine kit — cleanser, toner, moisturizer, with a fresh minimal look"
+              />
+              {aiBundleLoading && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size="small" />
+                  <Text as="span" tone="subdued" variant="bodySm">Designing your bundle… this can take a few seconds.</Text>
+                </div>
+              )}
+              {aiError && (
+                <div style={{ background: '#fff1f0', border: '1px solid #ffd2cd', borderRadius: 8, padding: '10px 12px' }}>
+                  <Text as="span" tone="critical" variant="bodySm">{aiError}</Text>
+                </div>
+              )}
+            </FormLayout>
+          </Modal.Section>
+        </Modal>
       <Modal
         open={saveModalOpen}
         onClose={() => setSaveModalOpen(false)}
@@ -3407,125 +3243,118 @@ export default function Customize() {
       </Modal>
 
       <style>{`
-/* ── Studio layout ───────────────────────────── */
-.studio-grid{display:grid;grid-template-columns:1fr 360px;height:calc(100vh - 104px);overflow:hidden}
-.studio-canvas-area{display:flex;flex-direction:column;background:#1A1B2E;overflow:hidden;position:relative}
-.studio-device-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#13142A;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0}
-.studio-device-btn{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.6);font-size:12.5px;font-weight:550;cursor:pointer;transition:all 0.13s;font-family:inherit}
-.studio-device-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9)}
-.studio-device-btn.active{background:rgba(0,98,65,0.34);border-color:rgba(0,98,65,0.58);color:#fff}
-.studio-preview-scroll{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:20px}
-.studio-sidebar{background:#fff;border-left:1px solid rgba(15,15,35,0.08);overflow-y:auto;overflow-x:hidden}
+.customize-layout-grid{display:grid;grid-template-columns:370px minmax(0,1fr);gap:14px;align-items:start}
+.cz-panel-col{zoom:0.9}
+.customize-left-sticky{position:sticky;top:16px;z-index:10}
+.cz-panel-col{order:1}
+.cz-preview-col{order:2}
+@media(max-width:1280px){.customize-layout-grid{grid-template-columns:380px minmax(0,1fr);gap:12px}}
+@media(max-width:768px){.customize-layout-grid{grid-template-columns:1fr;gap:12px}.customize-left-sticky{position:static;top:auto}.cz-panel-col,.cz-preview-col{order:0}}
 
-/* ── Preview viewports (unchanged semantics) ─ */
-.preview-scale-panel{width:100%;overflow:hidden}
+.template-status-meta{display:flex;align-items:center;gap:8px}
+.template-status-badge{display:inline-flex;align-items:center;justify-content:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.2px}
+
+.preview-stage{background:linear-gradient(180deg,#f8f9fb 0%,#f2f4f7 100%);border:1px solid #e3e6eb;border-radius:12px;padding:12px}
+.preview-scale-panel{width:100%;overflow:visible}
 .preview-scale-canvas{transform-origin:top left;will-change:transform}
-.preview-browser-chrome{width:100%;height:34px;border-radius:10px 10px 0 0;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);display:flex;align-items:center;gap:6px;padding:0 12px;margin-bottom:0}
-.preview-browser-chrome span{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.2)}
+.preview-stage--desktop{display:flex;flex-direction:column;gap:10px}
+.preview-browser-chrome{width:100%;height:34px;border-radius:10px;border:1px solid #d7dce4;background:linear-gradient(180deg,#fff 0%,#f4f6fa 100%);display:flex;align-items:center;gap:6px;padding:0 10px}
+.preview-browser-chrome span{width:10px;height:10px;border-radius:50%;background:#d5dae3}
 .preview-browser-chrome span:first-child{background:#ff6f61}
 .preview-browser-chrome span:nth-child(2){background:#ffca55}
 .preview-browser-chrome span:nth-child(3){background:#3ddc84}
 .preview-viewport{width:100%;overflow-y:auto;overflow-x:hidden;background:#fff;margin:0 auto;transition:all .25s ease;position:relative}
 .preview-viewport>*{max-width:100%}
-.preview-viewport--desktop{width:1280px;height:820px;border:1px solid rgba(255,255,255,0.10);border-radius:0 0 12px 12px;box-shadow:0 16px 48px rgba(0,0,0,0.4)}
-.preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid rgba(255,255,255,0.14);border-radius:24px;box-shadow:0 16px 40px rgba(0,0,0,0.4)}
-.preview-stage--desktop{display:flex;flex-direction:column}
-.preview-stage--mobile{display:flex;justify-content:center}
+.preview-stage--desktop .preview-viewport{width:1200px;height:800px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
+.preview-stage--mobile{display:flex;justify-content:center;padding:4px;background:linear-gradient(180deg,#f6f7f9 0%,#eef1f5 100%)}
+.preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
       `}</style>
 
-      {/* ── Studio split layout ──────────────────────────────── */}
-      <div key={formKey} className="studio-grid">
-
-        {/* LEFT: Preview canvas */}
-        <div className="studio-canvas-area">
-          {/* Device toggle bar */}
-          <div className="studio-device-bar">
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                className={`studio-device-btn${previewDevice === 'desktop' ? ' active' : ''}`}
-                onClick={() => setPreviewDevice('desktop')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-                </svg>
-                Desktop
-              </button>
-              <button
-                className={`studio-device-btn${previewDevice === 'mobile' ? ' active' : ''}`}
-                onClick={() => setPreviewDevice('mobile')}
-              >
-                <svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/>
-                </svg>
-                Mobile
-              </button>
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic' }}>
-              Live preview
-            </div>
-          </div>
-
-          {/* Scrollable canvas */}
-          <div className="studio-preview-scroll">
-            {previewDevice === 'desktop' ? (
-              <div style={{ width: '100%' }}>
-                <div ref={containerRef} className="preview-scale-panel" style={scaledPanelStyle}>
-                  <div className="preview-scale-canvas" style={scaledCanvasStyle}>
-                    <div className="preview-browser-chrome" aria-hidden="true">
-                      <span /><span /><span />
-                    </div>
-                    <div className="preview-device-container preview-viewport preview-viewport--desktop">
-                      <ComboPreview
-                        config={config}
-                        device={previewDevice}
-                        products={shopifyProducts.length > 0 ? shopifyProducts : products}
-                        collections={collections}
-                        activeTab={activeTab}
-                        setActiveTab={setActiveTab}
-                        isLoading={productsLoading && shopifyProducts.length === 0}
-                        stepProductsLoading={stepProductsLoading}
-                        activeDiscounts={localActiveDiscounts}
-                        selectedVariants={selectedVariants}
-                        setSelectedVariants={setSelectedVariants}
-                        allStepProducts={allStepProducts}
-                        setAllStepProducts={setAllStepProducts}
-                      />
-                      {config.custom_css && (
-                        <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
-                      )}
+      <div key={formKey} className="customize-layout-grid">
+        <div className="cz-preview-col">
+          <div className="customize-left-sticky">
+            <Card sectioned>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', paddingBottom: '12px' }}>
+                <ButtonGroup segmented>
+                  <Button
+                    pressed={previewDevice === 'desktop'}
+                    onClick={() => setPreviewDevice('desktop')}
+                    icon={DesktopIcon}
+                    size="micro"
+                  >
+                    <span style={{ fontSize: '12px', padding: '0 4px' }}>Desktop</span>
+                  </Button>
+                  <Button
+                    pressed={previewDevice === 'mobile'}
+                    onClick={() => setPreviewDevice('mobile')}
+                    icon={MobileIcon}
+                    size="micro"
+                  >
+                    <span style={{ fontSize: '12px', padding: '0 4px' }}>Mobile</span>
+                  </Button>
+                </ButtonGroup>
+              </div>
+              <div className={`preview-stage preview-stage--${previewDevice}`}>
+                {previewDevice === 'desktop' ? (
+                  <div ref={containerRef} className="preview-scale-panel" style={scaledPanelStyle}>
+                    <div className="preview-scale-canvas" style={scaledCanvasStyle}>
+                      <div className="preview-browser-chrome" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                      <div className="preview-device-container preview-viewport preview-viewport--desktop">
+                        <ComboPreview
+                          config={config}
+                          device={previewDevice}
+                          products={shopifyProducts.length > 0 ? shopifyProducts : products}
+                          collections={collections}
+                          activeTab={activeTab}
+                          setActiveTab={setActiveTab}
+                          isLoading={productsLoading && shopifyProducts.length === 0}
+                          stepProductsLoading={stepProductsLoading}
+                          activeDiscounts={localActiveDiscounts}
+                          selectedVariants={selectedVariants}
+                          setSelectedVariants={setSelectedVariants}
+                          allStepProducts={allStepProducts}
+                          setAllStepProducts={setAllStepProducts}
+                          onUpdateConfig={updateConfig}
+                        />
+                        {config.custom_css && (
+                          <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="preview-device-container preview-viewport preview-viewport--mobile-classic">
+                    <ComboPreview
+                      config={config}
+                      device={previewDevice}
+                      products={shopifyProducts.length > 0 ? shopifyProducts : products}
+                      collections={collections}
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      isLoading={productsLoading && products.length === 0}
+                      stepProductsLoading={stepProductsLoading}
+                      activeDiscounts={localActiveDiscounts}
+                      selectedVariants={selectedVariants}
+                      setSelectedVariants={setSelectedVariants}
+                      allStepProducts={allStepProducts}
+                      setAllStepProducts={setAllStepProducts}
+                      onUpdateConfig={updateConfig}
+                    />
+                    {config.custom_css && (
+                      <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
+                    )}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="preview-stage--mobile">
-                <div className="preview-device-container preview-viewport preview-viewport--mobile-classic">
-                  <ComboPreview
-                    config={config}
-                    device={previewDevice}
-                    products={shopifyProducts.length > 0 ? shopifyProducts : products}
-                    collections={collections}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    isLoading={productsLoading && products.length === 0}
-                    stepProductsLoading={stepProductsLoading}
-                    activeDiscounts={localActiveDiscounts}
-                    selectedVariants={selectedVariants}
-                    setSelectedVariants={setSelectedVariants}
-                    allStepProducts={allStepProducts}
-                    setAllStepProducts={setAllStepProducts}
-                  />
-                  {config.custom_css && (
-                    <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
-                  )}
-                </div>
-              </div>
-            )}
+            </Card>
           </div>
         </div>
 
-        {/* RIGHT: Properties inspector */}
-        <div className="studio-sidebar">
+        <div className="cz-panel-col customize-left-sticky">
           <BuilderSidebar
             config={config}
             activeCategory={activeCategory}
@@ -3548,6 +3377,13 @@ export default function Customize() {
             ColorPickerField={ColorPickerField}
             setPreviewDevice={setPreviewDevice}
             localActiveDiscounts={localActiveDiscounts}
+            applyConfigPatch={applyConfigPatch}
+            openSection={(key) => setExpandedSections((prev) => onlyOpen(prev, key))}
+            setAllSections={(val) =>
+              setExpandedSections((prev) =>
+                Object.keys(prev).reduce((acc, k) => ((acc[k] = val), acc), {})
+              )
+            }
             onCreateCoupon={() => setCreateDiscountModalOpen(true)}
           />
         </div>
@@ -4107,7 +3943,107 @@ export default function Customize() {
           </FormLayout>
         </Modal.Section>
       </Modal>
+      </Page>
     </div>
+  );
+}
+
+function InlineEdit({ value, configKey, onUpdate, style }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (editing && ref.current) {
+      ref.current.focus();
+      ref.current.select();
+    }
+  }, [editing]);
+
+  const handleBlur = () => {
+    const trimmed = draft.trim();
+    if (trimmed !== value) {
+      onUpdate(configKey, trimmed);
+    }
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      ref.current?.blur();
+    }
+    if (e.key === 'Escape') {
+      setDraft(value);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        dir="ltr"
+        size={Math.max(draft.length || 1, 12)}
+        style={{
+          fontSize: style?.fontSize,
+          fontWeight: style?.fontWeight,
+          color: style?.color,
+          outline: '2px solid #1a9de0',
+          outlineOffset: '2px',
+          borderRadius: '2px',
+          border: 'none',
+          background: 'transparent',
+          padding: '2px 0',
+          margin: 0,
+          minWidth: 60,
+          maxWidth: '100%',
+          fontFamily: 'inherit',
+          lineHeight: 'inherit',
+          textAlign: 'left',
+          direction: 'ltr',
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      onClick={() => setEditing(true)}
+      style={{
+        ...style,
+        cursor: 'pointer',
+        borderRadius: '2px',
+        transition: 'box-shadow 0.15s',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 0 1.5px #1a9de0'}
+      onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+      title="Click to edit"
+    >
+      {value}
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#9ca3af"
+        strokeWidth="2"
+        strokeLinecap="round"
+        style={{ marginLeft: 4, display: 'inline', verticalAlign: 'middle', opacity: 0.5 }}
+      >
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </span>
   );
 }
 
@@ -4125,6 +4061,7 @@ function ComboPreview({
   allStepProducts = {},
   setAllStepProducts = () => { },
   stepProductsLoading = false,
+  onUpdateConfig = () => { },
 }) {
   const isMobile = device === 'mobile';
   const sliderRef = useRef(null);
@@ -4382,7 +4319,7 @@ function ComboPreview({
             textAlign: headingAlign,
           }}
         >
-          {config.collection_title}
+          <InlineEdit value={config.collection_title || ''} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight }} />
         </h1>
       </div>
       {config.collection_description && (
@@ -4407,7 +4344,7 @@ function ComboPreview({
               textAlign: descriptionAlign,
             }}
           >
-            {config.collection_description}
+            <InlineEdit value={config.collection_description || ''} configKey="collection_description" onUpdate={onUpdateConfig} style={{ fontSize: `${descriptionSize}px`, color: descriptionColor, fontWeight: descriptionFontWeight }} />
           </p>
         </div>
       )}
@@ -6892,7 +6829,7 @@ function ComboPreview({
                   lineHeight: 1.2,
                 }}
               >
-                {config.collection_title || 'Create Your Combo'}
+                <InlineEdit value={config.collection_title || 'Create Your Combo'} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor || '#333', fontWeight: headingFontWeight || '700' }} />
               </h1>
             </div>
             <div
@@ -6918,8 +6855,7 @@ function ComboPreview({
                   lineHeight: 1.5,
                 }}
               >
-                {config.collection_description ||
-                  'Select items to build your perfect combo.'}
+                <InlineEdit value={config.collection_description || 'Select items to build your perfect combo.'} configKey="collection_description" onUpdate={onUpdateConfig} style={{ fontSize: `${descriptionSize}px`, color: descriptionColor || '#666', fontWeight: descriptionFontWeight || '400' }} />
               </p>
             </div>
           </div>
@@ -6967,7 +6903,7 @@ function ComboPreview({
                     }}
                   >
                     <h3 style={{ fontSize: '18px', fontWeight: '700' }}>
-                      {stepTitle}
+                      <InlineEdit value={stepTitle} configKey={`step_${step}_title`} onUpdate={onUpdateConfig} style={{ fontSize: '18px', fontWeight: '700' }} />
                     </h3>
                     {isCompleted && (
                       <span style={{ color: '#28a745', fontWeight: 'bold' }}>
@@ -6976,7 +6912,7 @@ function ComboPreview({
                     )}
                   </div>
                   <p style={{ fontSize: '13px', color: '#888' }}>
-                    {stepSubtitle}
+                    <InlineEdit value={stepSubtitle} configKey={`step_${step}_subtitle`} onUpdate={onUpdateConfig} style={{ fontSize: '13px', color: '#888' }} />
                   </p>
                 </div>
 
