@@ -209,6 +209,17 @@ if ($requestMethod === 'GET') {
         $result['selectedTemplateCoupon'] = $normalizedSelectedCoupon;
         $result['selectedCouponsGlobal'] = $normalizedSelectedCoupon !== null ? [$normalizedSelectedCoupon] : [];
 
+        // Also fetch placement/position from coupon_slider_settings
+        try {
+            $settingsStmt = $pdo->prepare('SELECT position, is_enabled FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1');
+            $settingsStmt->execute([$shopDomain]);
+            $settings = $settingsStmt->fetch();
+            $result['widgetPlacement'] = $settings['position'] ?? 'above_cart';
+            $result['is_enabled'] = $settings['is_enabled'] ?? 1;
+        } catch (PDOException $e) {
+            $result['widgetPlacement'] = 'above_cart';
+        }
+
         echo json_encode([
             'status' => 'success',
             'data' => $result

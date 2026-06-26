@@ -1,3 +1,6 @@
+api_version = "2024-04"
+
+[[extensions]]
 name = "Cart Ninja"
 handle = "cart-ninja"
 type = "theme"

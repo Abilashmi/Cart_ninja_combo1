@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useLoaderData, useRouteError, useFetcher } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 import {
     Page, Card, BlockStack, InlineStack, Text, Button,
     TextField, Badge, Checkbox, Divider, Select,
@@ -10,7 +11,7 @@ import {
 import BrixBar from "../components/ai-agent/BrixBar";
 import {
     DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
-    ChevronDownIcon, ChevronUpIcon, XSmallIcon,
+    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
 } from "@shopify/polaris-icons";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
@@ -35,17 +36,18 @@ const FAKE_FBT_CONFIG = {
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
+    const url = new URL(request.url);
+
+    const [productsResponse, discountsResponse, couponRes, fbtRes] = await Promise.all([
+        admin.graphql(`query getProducts { products(first: 50, query: "status:active") { edges { node { id title handle featuredImage { url } variants(first: 1) { edges { node { id price } } } } } } }`),
+        admin.graphql(`query DiscountList { discountNodes(first: 100, reverse: true) { edges { node { id discount { ... on DiscountCodeBasic { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeBxgy { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeFreeShipping { title codes(first: 1) { edges { node { code } } } status } } } } } }`),
+        fetch(`${BASE_PHP_URL}/coupon_slider_settings.php?shop=${encodeURIComponent(shop)}`, { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }).catch(() => null),
+        fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
+    ]);
 
     let products = [];
     try {
-        const response = await admin.graphql(`
-      query getProducts {
-        products(first: 50, query: "status:active") {
-          edges { node { id title handle featuredImage { url } variants(first: 1) { edges { node { id price } } } } }
-        }
-      }
-    `);
-        const data = await response.json();
+        const data = await productsResponse.json();
         products = data.data?.products?.edges?.map(({ node }) => {
             const fv = node?.variants?.edges?.[0]?.node;
             if (!fv?.id) return null;
@@ -55,35 +57,7 @@ export async function loader({ request }) {
 
     let discounts = [];
     try {
-        const discountRes = await admin.graphql(`
-            query DiscountList {
-              discountNodes(first: 100, reverse: true) {
-                edges {
-                  node {
-                    id
-                    discount {
-                      ... on DiscountCodeBasic {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        status
-                      }
-                      ... on DiscountCodeBxgy {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        status
-                      }
-                      ... on DiscountCodeFreeShipping {
-                        title
-                        codes(first: 1) { edges { node { code } } }
-                        status
-                      }
-                    }
-                  }
-                }
-              }
-            }
-        `);
-        const discountJson = await discountRes.json();
+        const discountJson = await discountsResponse.json();
         discounts = (discountJson.data?.discountNodes?.edges || [])
             .map(({ node }) => {
                 const d = node.discount;
@@ -96,19 +70,20 @@ export async function loader({ request }) {
     } catch (e) { console.error("Failed to fetch discounts:", e); }
 
     let couponConfig = null;
-    const url = new URL(request.url);
     try {
-        const res = await fetch(`${url.origin}/api/coupon-slider?shopdomain=${encodeURIComponent(shop)}`);
-        const d = await res.json();
-        if (d.success && d.config) couponConfig = d.config;
+        if (couponRes) {
+            const d = await couponRes.json();
+            if (d.status === 'success' && d.data) couponConfig = d.data;
+        }
     } catch (e) { console.error("Failed to fetch coupon settings:", e); }
     if (!couponConfig) couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
 
     let fbtConfig = null;
     try {
-        const res = await fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`);
-        const d = await res.json();
-        if (d.success && d.fbt) fbtConfig = d.fbt;
+        if (fbtRes) {
+            const d = await fbtRes.json();
+            if (d.success && d.fbt) fbtConfig = d.fbt;
+        }
     } catch (e) { console.error("Failed to fetch FBT settings:", e); }
     if (!fbtConfig) fbtConfig = { ...FAKE_FBT_CONFIG, templates: { ...FAKE_FBT_CONFIG.templates } };
 
@@ -121,16 +96,40 @@ export async function action({ request }) {
     const shop = session.shop;
     const body = await request.json();
 
+    const { activeTemplate, template, selectedActiveCoupons, isEnabled, ...rest } = body;
+
+    const tplKey = activeTemplate || "template1";
+    const widgetPayload = {
+        shop,
+        selectedTemplate: tplKey,
+        selectedTemplateCoupon: selectedActiveCoupons?.[0] || null,
+        [tplKey]: { styles: template },
+        ...rest,
+    };
+    const settingsPayload = {
+        shop,
+        is_enabled: isEnabled ? 1 : 0,
+        selected_template: tplKey,
+        position: rest.widgetPlacement || 'above_cart',
+    };
+
     try {
-        const res = await fetch("https://int.thecartninja.com/save_coupon_slider_widget.php", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-            body: JSON.stringify({ shop, ...body }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            return { success: data.status === "success" };
-        }
+        const [widgetRes, settingsRes] = await Promise.all([
+            fetch(`${BASE_PHP_URL}/save_coupon_slider_widget.php`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(widgetPayload),
+            }),
+            fetch(`${BASE_PHP_URL}/coupon_slider_settings.php`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Forge-Secret": process.env.SHOPIFY_API_KEY || "" },
+                body: JSON.stringify(settingsPayload),
+            }),
+        ]);
+        const widgetData = await widgetRes.json().catch(() => ({}));
+        const settingsData = await settingsRes.json().catch(() => ({}));
+        if (widgetData.status === "success" || settingsData.status === "success") return { success: true };
+        console.error("[ProductWidget action] PHP errors:", { widgetData, settingsData });
     } catch (e) { console.error("[ProductWidget action] Save failed:", e); }
     return { success: false };
 }
@@ -170,31 +169,31 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
                 onClick={() => onToggle(id)}
                 style={{
                     width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "14px 16px", background: isOpen ? "#f6fffe" : "#fafafa",
+                    padding: "14px 18px", background: isOpen ? "#f6fffe" : "#fafafa",
                     border: "none", cursor: "pointer", borderBottom: isOpen ? "1px solid #e5e7eb" : "none",
                     transition: "background 0.15s",
                 }}
                 aria-expanded={isOpen}
             >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ width: "32px", height: "32px", borderRadius: "8px", flexShrink: 0, background: isOpen ? "#e6f4f1" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "34px", height: "34px", borderRadius: "8px", flexShrink: 0, background: isOpen ? "#e6f4f1" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
                         <Icon source={icon} />
                     </div>
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">{title}</Text>
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: isOpen ? "#008060" : "#202223" }}>{title}</span>
                 </div>
                 <span style={{ flexShrink: 0, color: "#637381" }}>
                     <Icon source={isOpen ? ChevronUpIcon : ChevronDownIcon} />
                 </span>
             </button>
             <Collapsible open={isOpen} id={`pw-section-${id}`}>
-                <div style={{ padding: "20px 16px", background: "#fff" }}>
+                <div style={{ padding: "20px 18px", background: "#fff" }}>
                     {children}
                     {tip && (
                         <div style={{ marginTop: "16px", background: "#eef2ff", border: "1px solid #c7d2fe", borderLeft: "3px solid #6366f1", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
                             <span style={{ minWidth: "18px", width: "18px", height: "18px", borderRadius: "50%", background: "#6366f1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "2px" }}>
                                 <Icon source={MagicIcon} />
                             </span>
-                            <p style={{ margin: 0, fontSize: "12.5px", color: "#312e81", lineHeight: 1.65 }}>{tip}</p>
+                            <p style={{ margin: 0, fontSize: "13.5px", color: "#312e81", lineHeight: 1.65 }}>{tip}</p>
                         </div>
                     )}
                 </div>
@@ -363,7 +362,7 @@ export default function ProductWidgetPage() {
     const activeTpl = couponConfig?.templates?.[tKey] || FAKE_COUPON_CONFIG.templates.template1;
 
     /* state */
-    const [isEnabled,   setIsEnabled]   = useState(true);
+    const [isEnabled,   setIsEnabled]   = useState(couponConfig?.is_enabled !== 0);
     const [selectedTemplate, setSelectedTemplate] = useState(() => {
         if (tKey === "template1" || tKey === "classic-banner") return "classic-banner";
         if (tKey === "template2" || tKey === "minimal-card")   return "minimal-card";
@@ -396,7 +395,7 @@ export default function ProductWidgetPage() {
         couponConfig?.selectedActiveCoupons?.[0] || ""
     );
     const [couponSearch,  setCouponSearch]  = useState("");
-    const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.widgetPlacement || "above_cart");
+    const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.position || "above_cart");
     const [hasChanges,    setHasChanges]    = useState(false);
     const [toastActive,   setToastActive]   = useState(false);
 
@@ -430,6 +429,7 @@ export default function ProductWidgetPage() {
         fetcher.submit(
             {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
+                isEnabled,
                 displayCondition: showOn,
                 selectedActiveCoupons: selectedCouponId ? [selectedCouponId] : [],
                 template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
@@ -507,61 +507,51 @@ export default function ProductWidgetPage() {
     return (
         <Frame>
             {toastActive && <Toast content="Settings saved!" onDismiss={() => setToastActive(false)} />}
-            <Page
-                title="Coupon Banner"
-                primaryAction={{ content: isSaving ? "Saving…" : "Save", onAction: handleSave, loading: isSaving, disabled: !hasChanges }}
-                secondaryActions={[{ content: "Discard", onAction: () => setHasChanges(false), disabled: !hasChanges }]}
-            >
-                <BlockStack gap="400">
-                    <BrixBar size="md" floating />
+            <BrixBar size="md" floating />
+            <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#f6f6f7" }}>
 
-                    {fetcher.data?.success === false && (
-                        <Banner tone="critical"><p>Failed to save settings. Please try again.</p></Banner>
-                    )}
-
-                    {/* ── Status card ── */}
-                    <div style={{ borderLeft: "4px solid #ea580c", borderRadius: "12px", overflow: "hidden" }}>
-                        <Card>
-                            <InlineStack align="space-between" blockAlign="center">
-                                <InlineStack gap="300" blockAlign="center">
-                                    <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, background: isEnabled ? "#ea580c" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                        <div style={{ filter: "brightness(0) invert(1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                            <Icon source={DiscountIcon} />
-                                        </div>
-                                    </div>
-                                    <BlockStack gap="050">
-                                        <Text as="h2" variant="headingMd">Coupon Banner</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">
-                                            A promo banner shown on your storefront{" "}
-                                            <span style={{ color: "#008060", fontWeight: 500 }}>product pages</span>
-                                        </Text>
-                                    </BlockStack>
-                                </InlineStack>
-
-                                <InlineStack gap="300" blockAlign="center">
-                                    <InlineStack gap="200" blockAlign="center">
-                                        <Badge tone={isEnabled ? "success" : undefined}>{isEnabled ? "Active" : "Inactive"}</Badge>
-                                        <Text as="span" variant="bodySm" tone="subdued">{isEnabled ? "On" : "Off"}</Text>
-                                        <button
-                                            onClick={() => { setIsEnabled(p => !p); mark(); }}
-                                            aria-label="Toggle Coupon Banner"
-                                            style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: isEnabled ? "#008060" : "#babec3", position: "relative", cursor: "pointer", transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
-                                        >
-                                            <span style={{ position: "absolute", top: "3px", left: isEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
-                                        </button>
-                                    </InlineStack>
-                                </InlineStack>
-                            </InlineStack>
-                        </Card>
+                {/* ── Top bar ── */}
+                <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", background: "#fff", borderBottom: "1px solid #e1e3e5", borderLeft: "4px solid #ea580c" }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 7, background: isEnabled ? "#ea580c" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <div style={{ filter: "brightness(0) invert(1)", display: "flex" }}><Icon source={DiscountIcon} /></div>
                     </div>
+                    <div>
+                        <Text as="h1" variant="headingMd">Coupon Banner</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">Promo banner on <span style={{ color: "#008060", fontWeight: 500 }}>product pages</span></Text>
+                    </div>
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+                        {fetcher.data?.success === false && <Text as="span" variant="bodySm" tone="critical">Save failed. Please try again.</Text>}
+                        <Badge tone={isEnabled ? "success" : undefined}>{isEnabled ? "Active" : "Inactive"}</Badge>
+                        <button
+                            onClick={() => { setIsEnabled(p => !p); mark(); }}
+                            aria-label="Toggle Coupon Banner"
+                            style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: isEnabled ? "#008060" : "#babec3", position: "relative", cursor: "pointer", transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
+                        >
+                            <span style={{ position: "absolute", top: "3px", left: isEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
+                        </button>
+                        <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
+                        <Button icon={ThemeIcon} url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim">Customize in Store</Button>
+                        <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
+                        <Button onClick={() => setHasChanges(false)} disabled={!hasChanges} size="slim">Discard</Button>
+                        <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+                    </div>
+                </div>
 
-                    {/* ── Main two-column layout ── */}
-                    <style>{`
-                        @media (max-width: 900px) { .cpn-main-grid { grid-template-columns: 1fr !important; } }
-                    `}</style>
-                    <div className="cpn-main-grid" style={{ display: "grid", gridTemplateColumns: "440px 1fr", gap: "16px", alignItems: "start" }}>
-                        {/* Left column — template + customize */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {/* ── Two-column body ── */}
+                <div style={{ flex: 1, display: "grid", gridTemplateColumns: "58% 42%", minHeight: 0, overflow: "hidden" }}>
+                    {/* Left column — settings (scrolls internally) */}
+                    <div style={{ overflowY: "auto", padding: "12px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            {/* Setup guide */}
+                            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                                <div style={{ width: 32, height: 32, borderRadius: "8px", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    <Icon source={ThemeIcon} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <Text as="p" variant="bodySm" fontWeight="semibold">Enable in your store theme</Text>
+                                    <Text as="p" variant="bodySm" tone="subdued">Go to <strong>Customize in Store</strong> → App embeds → turn on <em>Coupon Banner</em>. Pick Above or Below Add to Cart and save.</Text>
+                                </div>
+                                <Button url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim" variant="plain">Open →</Button>
+                            </div>
                             <Card>
                                 <BlockStack gap="300">
                                     <Text as="h2" variant="headingMd">Select Template</Text>
@@ -570,7 +560,7 @@ export default function ProductWidgetPage() {
                                             <button
                                                 key={t.id}
                                                 onClick={() => applyTemplate(t.id)}
-                                                style={{ padding: "7px 18px", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223", transition: "all 0.15s", outline: "none" }}
+                                                style={{ padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223", transition: "all 0.15s", outline: "none" }}
                                             >
                                                 {t.name}
                                             </button>
@@ -692,7 +682,8 @@ export default function ProductWidgetPage() {
                             </Card>
                         </div>
 
-                        {/* Right column — Live Preview */}
+                    {/* Right column — Live Preview */}
+                    <div style={{ overflowY: "auto", padding: "12px" }}>
                         <Card>
                             <BlockStack gap="400">
                                 <Text as="h2" variant="headingMd">Preview</Text>
@@ -708,8 +699,8 @@ export default function ProductWidgetPage() {
                             </BlockStack>
                         </Card>
                     </div>
-                </BlockStack>
-            </Page>
+                </div>
+            </div>
         </Frame>
     );
 }

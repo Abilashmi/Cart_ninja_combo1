@@ -414,25 +414,29 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
     <div ref={previewRootRef} style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden', background: '#f0f1f3' }}>
 
       {/* ── Preview header ── */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', background: '#f0f1f3', borderBottom: '1px solid #e1e3e5' }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Preview</span>
-        <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', background: '#f0f1f3', borderBottom: '1px solid #e1e3e5', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Live Preview</span>
+        <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
           {[{ key: 'desktop', src: DesktopIcon }, { key: 'mobile', src: MobileIcon }].map(({ key, src }) => (
             <button key={key} onClick={() => setPreviewDevice(key)}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: previewDevice === key ? '#202223' : '#fff', color: previewDevice === key ? '#fff' : '#6d7175', borderLeft: key === 'mobile' ? '1px solid #c9cccf' : 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 10px', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', background: previewDevice === key ? '#202223' : '#fff', color: previewDevice === key ? '#fff' : '#6d7175', borderLeft: key === 'mobile' ? '1px solid #c9cccf' : 'none' }}
             >
               <Icon source={src} />
               {key.charAt(0).toUpperCase() + key.slice(1)}
             </button>
           ))}
         </div>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          <Button onClick={onDiscard} size="slim">Discard</Button>
+          <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
+        </div>
       </div>
 
       {/* ── Stage: centers the device frame ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0 12px', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Device frame ── */}
-        <div style={{ width: isDesktop ? 380 : 340, height: '100%', maxHeight: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: isDesktop ? 10 : 36, border: isDesktop ? '1px solid #d0d0d0' : '3px solid #1a1a1a', background: '#f9f9f9', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+        <div style={{ width: isDesktop ? 360 : 320, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: isDesktop ? 10 : 36, border: isDesktop ? '1px solid #d0d0d0' : '3px solid #1a1a1a', background: '#f9f9f9', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
 
           {/* Browser chrome (desktop) */}
           {isDesktop && (
@@ -627,11 +631,6 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
         </div>{/* end device frame */}
       </div>{/* end stage */}
 
-      {/* Discard / Save — pinned at the bottom of the right panel */}
-      <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px', borderTop: '1px solid #e1e3e5', background: '#f0f1f3' }}>
-        <Button onClick={onDiscard} size="slim">Discard</Button>
-        <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
-      </div>
     </div>
   );
 }

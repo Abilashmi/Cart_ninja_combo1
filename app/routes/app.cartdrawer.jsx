@@ -3,11 +3,27 @@ import CartEditorPage from '../components/CartEditorPage';
 import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/cart-drawer-record.server';
 import { getDb } from '../services/db.server';
 
+const PHP_BASE = process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
+
+async function phpGet(endpoint, shop) {
+  try {
+    const res = await fetch(
+      `${PHP_BASE}/${endpoint}?shop=${encodeURIComponent(shop)}`,
+      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
+    );
+    const json = await res.json();
+    return json?.status === 'success' ? json.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-
+  const shop = session.shop;
   const db = getDb();
-  const [discountQuery, productsQuery, cartRecord, configRows] = await Promise.all([
+
+  const [discountQuery, productsQuery, cartRecord, configRows, pbRecord, csRecord, upsellRecord] = await Promise.all([
     admin.graphql(`
       query DiscountList {
         discountNodes(first: 100, reverse: true) {
@@ -54,11 +70,20 @@ export const loader = async ({ request }) => {
         }
       }
     `),
-    fetchCartDrawerRecord(session.shop),
-    db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [session.shop])
+    fetchCartDrawerRecord(shop),
+    db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop])
       .then(([rows]) => rows[0] || null)
       .catch(() => null),
+    phpGet('progress_bar.php', shop),
+    phpGet('coupon_slider_settings.php', shop),
+    phpGet('upsell_settings.php', shop),
   ]);
+
+  console.log('[loader] shop:', shop);
+  console.log('[loader] csRecord:', JSON.stringify(csRecord));
+  console.log('[loader] pbRecord:', JSON.stringify(pbRecord));
+  console.log('[loader] upsellRecord:', JSON.stringify(upsellRecord));
+  console.log('[loader] cartRecord.coupon_status:', cartRecord?.coupon_status);
 
   const discountJson = await discountQuery.json();
   const productsJson = await productsQuery.json();
@@ -69,12 +94,7 @@ export const loader = async ({ request }) => {
       if (!d) return null;
       const code = d.codes?.edges?.[0]?.node?.code || '';
       if (!code) return null;
-      return {
-        id: node.id,
-        code,
-        title: d.title || code,
-        status: d.status || 'ACTIVE',
-      };
+      return { id: node.id, code, title: d.title || code, status: d.status || 'ACTIVE' };
     })
     .filter(Boolean)
     .filter((c) => c.status === 'ACTIVE');
@@ -82,15 +102,25 @@ export const loader = async ({ request }) => {
   const allProducts = productsJson.data?.products?.edges?.map(({ node }) => ({
     id: node.id,
     title: node.title,
-    image: node.featuredImage?.url || "",
-    price: node.variants.edges[0]?.node?.price || "0.00",
+    image: node.featuredImage?.url || '',
+    price: node.variants.edges[0]?.node?.price || '0.00',
   })) || [];
 
   const drawerEnabled = cartRecord
     ? truthyFlag(cartRecord.cartStatus ?? cartRecord.cart_status)
     : true;
 
-  return { coupons, allProducts, drawerEnabled, cartRecord: cartRecord ?? null, configRecord: configRows, shop: session.shop };
+  return {
+    coupons,
+    allProducts,
+    drawerEnabled,
+    cartRecord: cartRecord ?? null,
+    configRecord: configRows,
+    pbRecord: pbRecord ?? null,
+    csRecord: csRecord ?? null,
+    upsellRecord: upsellRecord ?? null,
+    shop,
+  };
 };
 
 export const action = async ({ request }) => {

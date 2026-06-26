@@ -119,35 +119,30 @@ export function CartEditorSidebar({ onDiscard }) {
         </Modal.Section>
       </Modal>
 
-      {/* ── Header: 3 compact rows ── */}
-      <div style={{ flexShrink: 0, background: '#fff', borderBottom: '1px solid #e1e3e5', padding: '8px 14px 6px' }}>
+      {/* ── Header ── */}
+      <div style={{ flexShrink: 0, background: '#fff', borderBottom: '1px solid #e1e3e5', padding: '6px 12px 5px' }}>
 
-        {/* Row 1: back + title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        {/* Row 1: back + title + status pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <button onClick={onDiscard} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, color: '#6d7175' }}>
             <Icon source={ArrowLeftIcon} />
           </button>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#202223' }}>Cart Editor</span>
-        </div>
-
-        {/* Row 2: STATUS + pill */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: '#8c9196', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#202223', flex: 1 }}>Cart Editor</span>
           <button onClick={handleToggleStatus} disabled={isTogglingStatus}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 20, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: isActive ? '#aee9d1' : '#e4e5e7', color: isActive ? '#005e46' : '#6d7175', opacity: isTogglingStatus ? 0.6 : 1 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, border: 'none', fontSize: 10, fontWeight: 600, cursor: 'pointer', background: isActive ? '#aee9d1' : '#e4e5e7', color: isActive ? '#005e46' : '#6d7175', opacity: isTogglingStatus ? 0.6 : 1 }}
           >
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
             {isTogglingStatus ? '…' : isActive ? 'Active' : 'Inactive'}
           </button>
         </div>
 
-        {/* Row 3: PREVIEW + segmented */}
+        {/* Row 2: PREVIEW segmented */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: '#8c9196', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preview</span>
-          <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 7, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 6, overflow: 'hidden' }}>
             {['items', 'empty'].map(m => (
               <button key={m} onClick={() => setPreviewMode(m)}
-                style={{ padding: '3px 10px', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', background: previewMode === m ? '#202223' : '#fff', color: previewMode === m ? '#fff' : '#6d7175', borderLeft: m === 'empty' ? '1px solid #c9cccf' : 'none' }}
+                style={{ padding: '2px 9px', border: 'none', fontSize: 10, fontWeight: 500, cursor: 'pointer', background: previewMode === m ? '#202223' : '#fff', color: previewMode === m ? '#fff' : '#6d7175', borderLeft: m === 'empty' ? '1px solid #c9cccf' : 'none' }}
               >
                 {m === 'items' ? 'Items' : 'Empty'}
               </button>
@@ -155,14 +150,14 @@ export function CartEditorSidebar({ onDiscard }) {
           </div>
         </div>
 
-        {statusError && <p style={{ margin: '4px 0 0', fontSize: 10, color: '#8a6116' }}>{statusError}</p>}
+        {statusError && <p style={{ margin: '3px 0 0', fontSize: 10, color: '#8a6116' }}>{statusError}</p>}
       </div>
 
       {/* ── Accordion ── */}
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'hidden', minHeight: 0 }}>
         {SECTION_GROUPS.map((group) => (
           <div key={group.title}>
-            <div style={{ padding: '6px 14px 2px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
+            <div style={{ padding: '4px 12px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
               {group.title}
             </div>
 
@@ -176,26 +171,26 @@ export function CartEditorSidebar({ onDiscard }) {
                 <div key={item.id} style={{ borderBottom: '1px solid #f1f2f3' }}>
                   <button
                     onClick={() => toggleSection(item.id)}
-                    style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8, padding: '7px 14px', width: '100%', background: isOpen ? '#f0f7f5' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}
+                    style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 7, padding: '5px 12px', width: '100%', background: isOpen ? '#f0f7f5' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}
                   >
-                    <span style={{ width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isOpen ? '#008060' : '#8c9196' }}>
+                    <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isOpen ? '#008060' : '#8c9196' }}>
                       <Icon source={IconComponent} />
                     </span>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: isOpen ? '#008060' : '#202223', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: isOpen ? '#008060' : '#202223', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                       {item.label}
                     </span>
                     {item.toggleable && (
-                      <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 10, fontWeight: 600, flexShrink: 0, background: isEnabled ? '#aee9d1' : '#e4e5e7', color: isEnabled ? '#005e46' : '#6d7175' }}>
+                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, fontWeight: 600, flexShrink: 0, background: isEnabled ? '#aee9d1' : '#e4e5e7', color: isEnabled ? '#005e46' : '#6d7175' }}>
                         {isEnabled ? 'On' : 'Off'}
                       </span>
                     )}
-                    <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#8c9196', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                    <span style={{ width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#8c9196', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
                       <Icon source={ChevronDownIcon} />
                     </span>
                   </button>
 
                   {isOpen && SectionComponent && (
-                    <div style={{ padding: '12px 16px 16px', background: '#fafbfb', borderTop: '1px solid #e1e3e5' }}>
+                    <div style={{ padding: '8px 12px 12px', background: '#fafbfb', borderTop: '1px solid #e1e3e5', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
                       <SectionComponent />
                     </div>
                   )}

@@ -70,6 +70,7 @@ export const loader = async ({ request }) => {
     if (settings.length > 0) {
       const s = settings[0];
       fbtConfig = {
+        is_enabled: s.is_enabled,
         activeTemplate: s.selected_template || 'fbt1',
         mode: s.mode || 'manual',
         layout: s.layout || 'horizontal',
@@ -102,6 +103,7 @@ export const loader = async ({ request }) => {
         const row = legacy[0];
         const tpl = parseJson(row.temp1, {});
         fbtConfig = {
+          is_enabled: 1,
           activeTemplate: row.selectedTemp || 'fbt1',
           mode: row.selectedMode || 'manual',
           layout: tpl.layout || 'horizontal',
@@ -129,6 +131,7 @@ export const loader = async ({ request }) => {
     allProducts,
     manualRules,
     fbtConfig: fbtConfig ?? {
+      is_enabled: 1,
       activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal',
       interactionType: 'classic', showPrices: true, showAddAllButton: true,
       bgColor: '#ffffff', textColor: '#111827', priceColor: '#059669',
@@ -152,6 +155,7 @@ export const action = async ({ request }) => {
     const mode = body.mode || (aiEnabled ? 'ai' : 'manual');
     const activeTpl = templates[selectedTemplate] || Object.values(templates)[0] || {};
     const widgetPlacement = body.widgetPlacement || 'above_cart';
+    const isEnabled = body.isEnabled === false ? 0 : 1;
 
     const db = getDb();
 
@@ -162,9 +166,9 @@ export const action = async ({ request }) => {
          bg_color, text_color, price_color, button_color, button_text_color,
          border_color, border_radius, layout, interaction_type, show_prices, show_add_all_button,
          widget_placement)
-      VALUES (?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE
-        is_enabled = 1,
+        is_enabled = VALUES(is_enabled),
         selected_template   = VALUES(selected_template),
         mode                = VALUES(mode),
         ai_product_count    = VALUES(ai_product_count),
@@ -182,7 +186,7 @@ export const action = async ({ request }) => {
         widget_placement    = VALUES(widget_placement),
         updated_at          = CURRENT_TIMESTAMP(3)
     `, [
-      shop, selectedTemplate, mode, aiProductCount,
+      shop, isEnabled, selectedTemplate, mode, aiProductCount,
       activeTpl.bgColor || '#ffffff',
       activeTpl.textColor || '#111827',
       activeTpl.priceColor || '#059669',
@@ -458,7 +462,7 @@ export default function FBTPage() {
   const fetcher = useFetcher();
 
   /* state */
-  const [isEnabled,         setIsEnabled]         = useState(true);
+  const [isEnabled,         setIsEnabled]         = useState(fbtConfig?.is_enabled !== 0);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [openSection,       setOpenSection]       = useState(null);
 
@@ -538,6 +542,7 @@ export default function FBTPage() {
     fetcher.submit(
       {
         selectedTemplate: templateIdToApiKey(selectedTemplate),
+        isEnabled,
         mode: configMode,
         templates,
         manualRules,
@@ -690,57 +695,34 @@ export default function FBTPage() {
   return (
     <Frame>
       {toastActive && <Toast content="FBT settings saved!" onDismiss={() => setToastActive(false)} />}
+      <BrixBar size="md" floating />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
 
-      <Page
-        title="Frequently Bought Together"
-        primaryAction={{ content: isSaving ? 'Saving…' : 'Save', onAction: handleSave, loading: isSaving, disabled: !hasChanges }}
-        secondaryActions={[{ content: 'Discard', onAction: () => { setHasChanges(false); } }]}
-      >
-        <BlockStack gap="400">
-
-          <BrixBar size="md" floating />
-
-          {/* ── Status card ── */}
-          <div style={{ borderLeft: '4px solid #008060', borderRadius: '12px', overflow: 'hidden' }}>
-            <Card>
-              <InlineStack align="space-between" blockAlign="center">
-                <InlineStack gap="300" blockAlign="center">
-                  <div style={{
-                    width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0,
-                    background: isEnabled ? '#008060' : '#babec3',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <div style={{ filter: 'brightness(0) invert(1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Icon source={ProductIcon} />
-                    </div>
-                  </div>
-                  <BlockStack gap="050">
-                    <Text as="h2" variant="headingMd">Frequently Bought Together</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Cross-sell widget shown on{' '}
-                      <span style={{ color: '#008060', fontWeight: 500 }}>your product pages</span>
-                    </Text>
-                  </BlockStack>
-                </InlineStack>
-
-                <InlineStack gap="300" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Badge tone={isEnabled ? 'success' : undefined}>{isEnabled ? 'Active' : 'Inactive'}</Badge>
-                    <Text as="span" variant="bodySm" tone="subdued">{isEnabled ? 'On' : 'Off'}</Text>
-                    <button
-                      onClick={() => { setIsEnabled(p => !p); mark(); }}
-                      style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: isEnabled ? '#008060' : '#babec3', position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
-                      aria-label="Toggle FBT widget"
-                    >
-                      <span style={{ position: 'absolute', top: '3px', left: isEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
-                    </button>
-                  </InlineStack>
-                  <div style={{ width: '1px', height: '24px', background: '#e1e3e5' }} />
-                  <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)}>Configure</Button>
-                </InlineStack>
-              </InlineStack>
-            </Card>
+        {/* ── Top bar ── */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: '#fff', borderBottom: '1px solid #e1e3e5', borderLeft: '4px solid #008060' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 7, background: isEnabled ? '#008060' : '#babec3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ filter: 'brightness(0) invert(1)', display: 'flex' }}><Icon source={ProductIcon} /></div>
           </div>
+          <div>
+            <Text as="h1" variant="headingMd">Frequently Bought Together</Text>
+            <Text as="p" variant="bodySm" tone="subdued">Cross-sell widget on <span style={{ color: '#008060', fontWeight: 500 }}>product pages</span></Text>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Badge tone={isEnabled ? 'success' : undefined}>{isEnabled ? 'Active' : 'Inactive'}</Badge>
+            <button
+              onClick={() => { setIsEnabled(p => !p); mark(); }}
+              style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: isEnabled ? '#008060' : '#babec3', position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
+              aria-label="Toggle FBT widget"
+            >
+              <span style={{ position: 'absolute', top: '3px', left: isEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
+            </button>
+            <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
+            <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
+            <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
+            <Button onClick={() => { setHasChanges(false); }} size="slim">Discard</Button>
+            <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+          </div>
+        </div>
 
           {/* ── Configuration Modal ── */}
           <Modal
@@ -901,20 +883,11 @@ export default function FBTPage() {
             title={pickerTarget === 'trigger' ? 'Select Trigger Products' : 'Select FBT Products'}
           />
 
-          {/* ── Select Template + Customize  |  Preview ── */}
-          <style>{`
-            @media (max-width: 900px) {
-              .fbt-main-grid { grid-template-columns: 1fr !important; }
-            }
-            @media (max-width: 480px) {
-              .fbt-preview-products { flex-direction: column !important; }
-              .fbt-preview-products .fbt-plus { transform: rotate(90deg); }
-            }
-          `}</style>
-          <div className="fbt-main-grid" style={{ display: 'grid', gridTemplateColumns: '440px 1fr', gap: '16px', alignItems: 'start' }}>
+        {/* ── Two-column body ── */}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '58% 42%', minHeight: 0, overflow: 'hidden' }}>
 
-            {/* Left column */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Left column — settings (scrolls internally) */}
+          <div style={{ overflowY: 'auto', padding: '12px', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
               {/* Template selector */}
               <Card>
@@ -993,14 +966,17 @@ export default function FBTPage() {
               </Card>
             </div>
 
-            {/* Right column — Preview */}
+          {/* Right column — Preview */}
+          <div style={{ overflowY: 'auto', padding: '8px' }}>
             <Card>
-              <BlockStack gap="400">
+              <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Preview</Text>
                 <div style={{
                   background: bgColor, borderRadius: '12px', padding: '18px',
                   border: `1px solid ${borderColor}`,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  zoom: 0.78,
+                  transformOrigin: 'top left',
                 }}>
                   {/* Preview header */}
                   <div style={{ marginBottom: '14px' }}>
@@ -1052,9 +1028,8 @@ export default function FBTPage() {
               </BlockStack>
             </Card>
           </div>
-
-        </BlockStack>
-      </Page>
+        </div>
+      </div>
     </Frame>
   );
 }

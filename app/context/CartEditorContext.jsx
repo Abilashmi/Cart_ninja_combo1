@@ -101,6 +101,94 @@ function hydrateFromConfig(cfg, base) {
   };
 }
 
+function hydrateFromProgressBar(pb, base) {
+  if (!pb) return base;
+  const tiers = Array.isArray(pb.tiers) ? pb.tiers.map((t) => ({
+    id:          t.id          ?? String(t.sort_order ?? 0),
+    minValue:    Number(t.min_value   ?? t.minValue   ?? 0),
+    minQuantity: Number(t.min_quantity ?? t.minQuantity ?? 0),
+    description: t.description ?? 'Milestone',
+    rewardType:  t.reward_type  ?? t.rewardType  ?? 'free_shipping',
+    iconType:    t.icon_type    ?? t.iconType    ?? 'preset',
+    iconPreset:  t.icon_preset  ?? t.iconPreset  ?? 'gift',
+    iconCustomSvg: t.icon_custom_svg ?? t.iconCustomSvg ?? null,
+    products:    Array.isArray(t.reward_products) ? t.reward_products : [],
+  })) : base.body.progressBar.tiers;
+
+  return {
+    ...base,
+    body: {
+      ...base.body,
+      progressBar: {
+        ...base.body.progressBar,
+        enabled:          dbFlag(pb.is_enabled),
+        mode:             pb.mode             ?? base.body.progressBar.mode,
+        showWhenEmpty:    dbFlag(pb.show_on_empty),
+        position:         pb.placement        ?? base.body.progressBar.position,
+        borderRadius:     Number(pb.border_radius ?? base.body.progressBar.borderRadius),
+        completionMessage: pb.completion_text ?? base.body.progressBar.completionMessage,
+        confetti:         dbFlag(pb.enable_confetti),
+        colors: {
+          ...base.body.progressBar.colors,
+          background: pb.bar_background_color  ?? base.body.progressBar.colors?.background,
+          fill:       pb.bar_foreground_color   ?? base.body.progressBar.colors?.fill,
+          icon:       pb.icon_color             ?? base.body.progressBar.colors?.icon,
+          message:    pb.completion_text_color  ?? base.body.progressBar.colors?.message,
+        },
+        tiers,
+      },
+    },
+  };
+}
+
+function hydrateFromCouponSlider(cs, base) {
+  if (!cs) return base;
+  return {
+    ...base,
+    body: {
+      ...base.body,
+      couponSlider: {
+        ...base.body.couponSlider,
+        enabled:        dbFlag(cs.is_enabled),
+        template:       cs.selected_template ?? base.body.couponSlider.template,
+        sectionTitle:   cs.title_text        ?? base.body.couponSlider.sectionTitle,
+        titleColor:     cs.title_color       ?? base.body.couponSlider.titleColor,
+        titleFontSize:  Number(cs.title_font_size ?? base.body.couponSlider.titleFontSize),
+        titleTextAlign: cs.title_alignment   ?? base.body.couponSlider.titleTextAlign,
+        position:       cs.position          ?? base.body.couponSlider.position,
+        layout:         cs.layout            ?? base.body.couponSlider.layout,
+        selectedCoupons: Array.isArray(cs.selected_coupons) ? cs.selected_coupons : [],
+      },
+    },
+  };
+}
+
+function hydrateFromUpsell(up, base) {
+  if (!up) return base;
+  return {
+    ...base,
+    body: {
+      ...base.body,
+      upsellProducts: {
+        ...base.body.upsellProducts,
+        enabled:          dbFlag(up.is_enabled),
+        title:            up.title             ?? base.body.upsellProducts.title,
+        titleColor:       up.title_color       ?? base.body.upsellProducts.titleColor,
+        showWhenEmpty:    dbFlag(up.show_on_empty_cart),
+        layout:           up.layout            ?? base.body.upsellProducts.layout,
+        buttonText:       up.button_text       ?? base.body.upsellProducts.buttonText,
+        buttonColor:      up.button_bg_color   ?? base.body.upsellProducts.buttonColor,
+        buttonTextColor:  up.button_text_color ?? base.body.upsellProducts.buttonTextColor,
+        buttonBorderRadius: Number(up.button_border_radius ?? base.body.upsellProducts.buttonBorderRadius ?? 6),
+        showPrice:        dbFlag(up.show_price),
+        position:         up.position          ?? base.body.upsellProducts.position,
+        limit:            Number(up.display_limit ?? base.body.upsellProducts.limit),
+        manualRules:      Array.isArray(up.manual_rules) ? up.manual_rules : [],
+      },
+    },
+  };
+}
+
 function mergeConfigIntoState(base, cfg) {
   if (!cfg) return base;
   let next = { ...base };
@@ -144,18 +232,30 @@ function mergeConfigIntoState(base, cfg) {
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord, initialConfigRecord }) {
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord, initialConfigRecord, initialPbRecord, initialCsRecord, initialUpsellRecord }) {
   const [state, setState] = useState(() => {
-    const base = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
-    const fromRecord = initialRecord ? hydrateFromRecord(initialRecord, base) : base;
-    // config fields take precedence over the legacy blob (they are always more recent)
-    return initialConfigRecord ? hydrateFromConfig(initialConfigRecord, fromRecord) : fromRecord;
+    const base        = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
+    const fromRecord  = initialRecord       ? hydrateFromRecord(initialRecord, base)          : base;
+    const fromConfig  = initialConfigRecord ? hydrateFromConfig(initialConfigRecord, fromRecord) : fromRecord;
+    const fromPb      = initialPbRecord     ? hydrateFromProgressBar(initialPbRecord, fromConfig) : fromConfig;
+    const fromCs      = initialCsRecord     ? hydrateFromCouponSlider(initialCsRecord, fromPb)    : fromPb;
+    const fromUpsell  = initialUpsellRecord ? hydrateFromUpsell(initialUpsellRecord, fromCs)      : fromCs;
+
+    console.log('[Context init] initialCsRecord:', JSON.stringify(initialCsRecord));
+    console.log('[Context init] couponSlider.enabled after hydration:', fromUpsell.body.couponSlider.enabled);
+    console.log('[Context init] progressBar.enabled:', fromUpsell.body.progressBar.enabled);
+    console.log('[Context init] upsellProducts.enabled:', fromUpsell.body.upsellProducts.enabled);
+
+    return fromUpsell;
   });
 
   // Shared accordion open state — lets CartPreview drive sidebar navigation
   const [openSection, setOpenSectionState] = useState('');
 
   useEffect(() => {
+    // Only apply localStorage AI config if no fresh DB records exist
+    // (DB records are authoritative — localStorage is only for real-time AI agent updates)
+    if (initialCsRecord || initialPbRecord || initialUpsellRecord) return;
     function loadCartConfig() {
       try {
         const raw = localStorage.getItem("cartninja_cart_config");
@@ -163,7 +263,7 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
       } catch { return null; }
     }
     setState((prev) => mergeConfigIntoState(prev, loadCartConfig()));
-  }, [initialStatus]);
+  }, [initialStatus, initialCsRecord, initialPbRecord, initialUpsellRecord]);
 
   // Listen for AI agent color/config changes and apply them live to the editor
   useEffect(() => {

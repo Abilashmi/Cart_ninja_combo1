@@ -145,6 +145,7 @@ export default function BrixBar({
       <span className="bxb-panel-name">Brix</span>
       <span className="bxb-panel-status"><span className="bxb-panel-dot" />Connected</span>
       <button className="bxb-panel-action" onClick={handleNewChat}>New chat</button>
+      <button className="bxb-hist-close" onClick={() => setExpanded(false)} aria-label="Close chat">{CLOSE_ICON}</button>
     </div>
   );
 

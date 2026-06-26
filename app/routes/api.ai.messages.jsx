@@ -1,5 +1,22 @@
 import { authenticate } from '../shopify.server';
-import { getDb } from '../services/db.server';
+import { BASE_PHP_URL } from '../utils/api-helpers';
+
+async function callPhp(method, params = {}, body = null) {
+  const qs = new URLSearchParams(params).toString();
+  const url = method === 'GET'
+    ? `${BASE_PHP_URL}/ai_messages.php?${qs}`
+    : `${BASE_PHP_URL}/ai_messages.php`;
+
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  return res.json();
+}
 
 export async function loader({ request }) {
   try {
@@ -7,12 +24,8 @@ export async function loader({ request }) {
     const url = new URL(request.url);
     const conversationId = url.searchParams.get('conversationId');
     if (!conversationId) return Response.json({ success: true, messages: [] });
-    const db = getDb();
-    const [rows] = await db.execute(
-      'SELECT id, role, message, created_at as createdAt FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC',
-      [conversationId]
-    );
-    return Response.json({ success: true, messages: rows });
+    const result = await callPhp('GET', { conversationId });
+    return Response.json({ success: true, messages: result.messages ?? [] });
   } catch {
     return Response.json({ success: true, messages: [] });
   }
@@ -22,17 +35,12 @@ export async function action({ request }) {
   try {
     await authenticate.admin(request);
     const { conversationId, role, message } = await request.json();
-    if (!conversationId || !role || !message) return Response.json({ success: false, error: 'Missing fields' }, { status: 400 });
-    const db = getDb();
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    await db.execute(
-      'INSERT INTO ai_messages (id, conversation_id, role, message, created_at) VALUES (?, ?, ?, ?, ?)',
-      [id, conversationId, role, message, now]
-    );
-    await db.execute('UPDATE ai_conversations SET updated_at = ? WHERE id = ?', [now, conversationId]);
-    return Response.json({ success: true, message: { id, conversationId, role, message, createdAt: now } });
+    if (!conversationId || !role || !message) {
+      return Response.json({ success: false, error: 'Missing fields' }, { status: 400 });
+    }
+    const result = await callPhp('POST', {}, { conversationId, role, message });
+    return Response.json({ success: result.status === 'success', message: result.message });
   } catch {
-    return Response.json({ success: true, message: { id: Date.now().toString(), createdAt: new Date().toISOString() } });
+    return Response.json({ success: false, messages: [] });
   }
 }

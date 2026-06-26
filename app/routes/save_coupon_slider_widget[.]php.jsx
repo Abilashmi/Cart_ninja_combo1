@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { getDb } from "../services/db.server.js";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
@@ -41,7 +42,10 @@ function buildCouponConditions(allTemplateOverrides, tplKey) {
         });
 }
 
-export async function loader() {
+export async function loader({ request }) {
+    const url = new URL(request.url);
+    const shopDomain = url.searchParams.get("shopdomain") || url.searchParams.get("shopDomain") || "";
+
     const config = await readData();
 
     const activeTemplate = config.activeTemplate || "template1";
@@ -54,9 +58,27 @@ export async function loader() {
     // Return plain GID strings — coupon_slider.js expects an array of ID strings
     const selectedTemplateCoupon = selectedActiveCoupons;
 
+    // Read placement from MySQL coupon_slider_settings
+    let widgetPlacement = "above_cart";
+    if (shopDomain) {
+        try {
+            const db = getDb();
+            const [rows] = await db.execute(
+                "SELECT position FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1",
+                [shopDomain]
+            );
+            if (rows.length > 0 && rows[0].position) {
+                widgetPlacement = rows[0].position;
+            }
+        } catch (_e) {
+            // fallback to default
+        }
+    }
+
     const data = {
         selectedTemplate: activeTemplate,
         selectedTemplateCoupon,
+        widgetPlacement,
         temp1DefaultStyle: { ...(templates.template1 || {}), title },
         temp2DefaultStyle: { ...(templates.template2 || {}), title },
         temp3DefaultStyle: { ...(templates.template3 || {}), title },

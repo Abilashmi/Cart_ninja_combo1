@@ -22,7 +22,7 @@ export const formatToIST = (dateString = null, timeZone = 'Asia/Kolkata') => {
    PHP BACKEND CONFIG
 ========================= */
 export const BASE_PHP_URL =
-  'https://int.thecomboforge.com';
+  process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
 
 /* =========================
    DATABASE HELPERS (PHP REPLACEMENT)
