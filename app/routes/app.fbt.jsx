@@ -4,7 +4,7 @@ import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
   Select, Checkbox, Divider, RadioButton, RangeSlider, Collapsible,
-  Icon, Modal, TextField, Toast, Frame,
+  Icon, Modal, TextField, Toast, Frame, Banner,
 } from '@shopify/polaris';
 import BrixBar from '../components/ai-agent/BrixBar';
 import {
@@ -126,10 +126,47 @@ export const loader = async ({ request }) => {
     }
   } catch (e) { console.error('[FBT loader] DB read:', e.message); }
 
+  // Detect if FBT app embed is enabled in the active theme.
+  // Optimistic default: if we CANNOT read the theme (missing read_themes scope,
+  // API error, etc.) we assume it's enabled so we never show a false warning.
+  // We only downgrade to "disabled" when we successfully parse the theme and
+  // confirm no enabled FBT app-embed block exists.
+  let fbtEmbedEnabled = true;
+  try {
+    const themesRes = await fetch(
+      `https://${shop}/admin/api/2024-04/themes.json?role=main`,
+      { headers: { 'X-Shopify-Access-Token': session.accessToken } }
+    );
+    if (themesRes.ok) {
+      const { themes } = await themesRes.json();
+      const mainTheme = (themes || []).find(t => t.role === 'main') || themes?.[0];
+      if (mainTheme) {
+        const assetRes = await fetch(
+          `https://${shop}/admin/api/2024-04/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+          { headers: { 'X-Shopify-Access-Token': session.accessToken } }
+        );
+        if (assetRes.ok) {
+          const { asset } = await assetRes.json();
+          const settingsData = JSON.parse(asset?.value || '{}');
+          const current = settingsData?.current || {};
+          // Scan all sections + top-level app-embed blocks (theme structure varies)
+          const allBlocks = [];
+          Object.values(current.sections || {}).forEach(s => Object.values(s?.blocks || {}).forEach(b => allBlocks.push(b)));
+          Object.values(current.blocks || {}).forEach(b => allBlocks.push(b));
+          fbtEmbedEnabled = allBlocks.some(b => {
+            if (b.disabled) return false;
+            return (b.type || '').toLowerCase().includes('fbt');
+          });
+        }
+      }
+    }
+  } catch { /* keep optimistic true on any error */ }
+
   return {
     shop,
     allProducts,
     manualRules,
+    fbtEmbedEnabled,
     fbtConfig: fbtConfig ?? {
       is_enabled: 1,
       activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal',
@@ -159,7 +196,7 @@ export const action = async ({ request }) => {
 
     const db = getDb();
 
-    // Save to new normalized fbt_widget_settings table
+    // Save to normalized fbt_widget_settings table
     await db.execute(`
       INSERT INTO fbt_widget_settings
         (shop_domain, is_enabled, selected_template, mode, ai_product_count,
@@ -219,7 +256,7 @@ export const action = async ({ request }) => {
       ]);
     }
 
-    // Also write to legacy fbt_widget for backwards compat
+    // Also write to legacy fbt_widget (storefront-facing), with placement embedded in each template
     await db.execute(`
       INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3))
@@ -230,9 +267,9 @@ export const action = async ({ request }) => {
         ai_product_count=VALUES(ai_product_count),updated_at=CURRENT_TIMESTAMP(3)
     `, [
       shop,
-      templates.fbt1 ? JSON.stringify(templates.fbt1) : null,
-      templates.fbt2 ? JSON.stringify(templates.fbt2) : null,
-      templates.fbt3 ? JSON.stringify(templates.fbt3) : null,
+      templates.fbt1 ? JSON.stringify({ ...templates.fbt1, widgetPlacement }) : null,
+      templates.fbt2 ? JSON.stringify({ ...templates.fbt2, widgetPlacement }) : null,
+      templates.fbt3 ? JSON.stringify({ ...templates.fbt3, widgetPlacement }) : null,
       selectedTemplate, mode, JSON.stringify(manualRules), aiEnabled, aiProductCount,
     ]);
 
@@ -458,7 +495,7 @@ function ColorField({ label, value, onChange }) {
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
-  const { shop, fbtConfig, allProducts, manualRules: initialRules } = useLoaderData();
+  const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled } = useLoaderData();
   const fetcher = useFetcher();
 
   /* state */
@@ -492,10 +529,10 @@ export default function FBTPage() {
 
   const isSaving = fetcher.state !== 'idle';
 
-  // toast on save
+  // toast on save (success or error)
   useEffect(() => {
-    if (fetcher.data?.success && !toastActive) setToastActive(true);
-  }, [fetcher.data?.success, toastActive]);
+    if (fetcher.data && !toastActive) setToastActive(true);
+  }, [fetcher.data, toastActive]);
 
   const mark = () => setHasChanges(true);
   const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);
@@ -694,8 +731,14 @@ export default function FBTPage() {
 
   return (
     <Frame>
-      {toastActive && <Toast content="FBT settings saved!" onDismiss={() => setToastActive(false)} />}
-      <BrixBar size="md" floating />
+      {toastActive && (
+        <Toast
+          content={fetcher.data?.success ? 'FBT settings saved!' : `Save failed: ${fetcher.data?.error || 'unknown error'}`}
+          error={!fetcher.data?.success}
+          onDismiss={() => setToastActive(false)}
+        />
+      )}
+      {!isConfigModalOpen && <BrixBar size="md" floating />}
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
 
         {/* ── Top bar ── */}
@@ -729,7 +772,7 @@ export default function FBTPage() {
             open={isConfigModalOpen}
             onClose={() => setIsConfigModalOpen(false)}
             title="Frequently Bought Together — Configuration"
-            primaryAction={{ content: 'Save', onAction: () => { setIsConfigModalOpen(false); mark(); } }}
+            primaryAction={{ content: 'Save', loading: isSaving, onAction: () => { setIsConfigModalOpen(false); handleSave(); } }}
             secondaryActions={[{ content: 'Cancel', onAction: () => setIsConfigModalOpen(false) }]}
           >
             <Modal.Section>
@@ -888,6 +931,17 @@ export default function FBTPage() {
 
           {/* Left column — settings (scrolls internally) */}
           <div style={{ overflowY: 'auto', padding: '12px', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+              {/* Theme embed status */}
+              {!fbtEmbedEnabled && (
+                <Banner
+                  title="FBT Widget is not visible on your store yet"
+                  tone="warning"
+                  action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
+                >
+                  <p>Go to <strong>App embeds</strong> and turn on <em>FBT Widget</em> to show it on your product pages. Once enabled, <strong>refresh this page</strong> to confirm the status.</p>
+                </Banner>
+              )}
 
               {/* Template selector */}
               <Card>

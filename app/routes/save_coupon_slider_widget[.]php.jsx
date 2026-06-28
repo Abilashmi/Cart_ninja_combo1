@@ -1,100 +1,38 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { getDb } from "../services/db.server.js";
-
-const DATA_FILE = path.resolve("coupon-slider-data.json");
-const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
-
-async function readData() {
-    try {
-        const raw = await fs.readFile(DATA_FILE, "utf-8");
-        return JSON.parse(raw);
-    } catch {
-        return {};
-    }
-}
-
-function buildCouponStyles(allTemplateOverrides, tplKey) {
-    const tplOverrides = allTemplateOverrides[tplKey] || {};
-    const couponStyles = {};
-    for (const [couponId, ov] of Object.entries(tplOverrides)) {
-        const styleOv = {};
-        for (const [k, v] of Object.entries(ov)) {
-            if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
-                styleOv[k] = v;
-            }
-        }
-        if (Object.keys(styleOv).length > 0) couponStyles[couponId] = styleOv;
-    }
-    return couponStyles;
-}
-
-function buildCouponConditions(allTemplateOverrides, tplKey) {
-    const tplOverrides = allTemplateOverrides[tplKey] || {};
-    return Object.entries(tplOverrides)
-        .filter(([, ov]) => ov.displayCondition)
-        .map(([couponId, ov]) => {
-            const cond = { couponId, displayCondition: ov.displayCondition };
-            if (ov.productHandles?.length) cond.productHandles = ov.productHandles;
-            if (ov.collectionHandles?.length) cond.collectionHandles = ov.collectionHandles;
-            if (ov.displayTags?.length) cond.displayTags = ov.displayTags;
-            return cond;
-        });
-}
+/**
+ * Storefront coupon-slider config endpoint (hit via the Shopify app proxy).
+ *
+ * The product-widget editor saves styles + selected coupon to the `coupon_slider_widget`
+ * table and placement to `coupon_slider_settings`. The PHP backend's
+ * save_coupon_slider_widget.php GET already combines both into the exact shape
+ * coupon_slider.js expects — so we proxy to it (server-to-server, no CORS) instead
+ * of re-implementing the read. PHP_BASE_URL points at the local php_backend in dev.
+ */
+const PHP_BASE = process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
 
 export async function loader({ request }) {
-    const url = new URL(request.url);
-    const shopDomain = url.searchParams.get("shopdomain") || url.searchParams.get("shopDomain") || "";
+  const url = new URL(request.url);
+  const shopDomain = url.searchParams.get('shopdomain') || url.searchParams.get('shopDomain') || '';
 
-    const config = await readData();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  };
 
-    const activeTemplate = config.activeTemplate || "template1";
-    const selectedActiveCoupons = config.selectedActiveCoupons || [];
-    const allTemplateOverrides = config.allTemplateOverrides || {};
-    const templates = config.templates || {};
-    const title = config.title || {};
+  if (!shopDomain) {
+    return new Response(JSON.stringify({ status: 'error', message: 'shopdomain required' }), { status: 400, headers });
+  }
 
-    const activeOverrides = allTemplateOverrides[activeTemplate] || {};
-    // Return plain GID strings — coupon_slider.js expects an array of ID strings
-    const selectedTemplateCoupon = selectedActiveCoupons;
-
-    // Read placement from MySQL coupon_slider_settings
-    let widgetPlacement = "above_cart";
-    if (shopDomain) {
-        try {
-            const db = getDb();
-            const [rows] = await db.execute(
-                "SELECT position FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1",
-                [shopDomain]
-            );
-            if (rows.length > 0 && rows[0].position) {
-                widgetPlacement = rows[0].position;
-            }
-        } catch (_e) {
-            // fallback to default
-        }
-    }
-
-    const data = {
-        selectedTemplate: activeTemplate,
-        selectedTemplateCoupon,
-        widgetPlacement,
-        temp1DefaultStyle: { ...(templates.template1 || {}), title },
-        temp2DefaultStyle: { ...(templates.template2 || {}), title },
-        temp3DefaultStyle: { ...(templates.template3 || {}), title },
-        temp1CouponStyle: buildCouponStyles(allTemplateOverrides, "template1"),
-        temp2CouponStyle: buildCouponStyles(allTemplateOverrides, "template2"),
-        temp3CouponStyle: buildCouponStyles(allTemplateOverrides, "template3"),
-        temp1CouponCondition: buildCouponConditions(allTemplateOverrides, "template1"),
-        temp2CouponCondition: buildCouponConditions(allTemplateOverrides, "template2"),
-        temp3CouponCondition: buildCouponConditions(allTemplateOverrides, "template3"),
-        updated_at: new Date().toISOString(),
-    };
-
-    return new Response(JSON.stringify({ status: "success", data }), {
-        headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        },
-    });
+  try {
+    const res = await fetch(
+      `${PHP_BASE}/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shopDomain)}`,
+      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
+    );
+    let text = await res.text();
+    // Strip a leading UTF-8 BOM if present, so the storefront JSON.parse works.
+    text = text.replace(/^﻿/, '').trim();
+    return new Response(text, { headers });
+  } catch (e) {
+    console.error('[save_coupon_slider_widget] proxy error:', e.message);
+    return new Response(JSON.stringify({ status: 'error', message: e.message }), { status: 500, headers });
+  }
 }

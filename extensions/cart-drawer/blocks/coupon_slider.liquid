@@ -310,7 +310,7 @@ function renderSlider(el,data,ctx){
           +'<button class="ps-nav ps-next">&#8594;</button>'
         +'</div>'
       +'</div>'
-      +'<div class="ps-coupon-wrapper"></div>'
+      +'<div class="ps-coupon-wrapper '+(data.layout==='carousel'?'ps-layout-carousel':data.layout==='grid'?'ps-layout-grid':'')+'"></div>'
     +'</div>';
 
   var w=el.querySelector('.ps-coupon-wrapper');
@@ -436,17 +436,25 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 })();
 </script>
 <style>
-.ps-slider{position:relative;width:100%}
-.ps-slider-header{display:flex;justify-content:flex-end;margin-bottom:10px}
-.ps-nav-group{display:flex;gap:10px}
-.ps-coupon-wrapper{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:16px;padding:10px 0;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none}
-.ps-coupon-wrapper::-webkit-scrollbar{display:none}
+.ps-slider{position:relative;width:100%;padding:4px 0}
+.ps-slider-header{display:none}
+.ps-nav-group{display:none}
+/* Responsive: full-width cards stacked vertically so text never breaks per-character */
+.ps-coupon-wrapper{display:flex;flex-direction:column;gap:12px;padding:6px 0}
+.ps-coupon-wrapper > .ps-card{flex:none!important;width:100%!important;min-width:0!important}
+/* Carousel: horizontal slider with fixed-width cards */
+.ps-coupon-wrapper.ps-layout-carousel{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory}
+.ps-coupon-wrapper.ps-layout-carousel::-webkit-scrollbar{display:none}
+.ps-coupon-wrapper.ps-layout-carousel > .ps-card{width:260px!important;flex:0 0 260px!important;scroll-snap-align:start}
+/* Grid: 2 columns */
+.ps-coupon-wrapper.ps-layout-grid{display:grid;grid-template-columns:1fr 1fr}
+.ps-coupon-wrapper.ps-layout-grid > .ps-card{width:auto!important}
+@media(max-width:520px){.ps-coupon-wrapper.ps-layout-grid{grid-template-columns:1fr}}
 .ps-nav{width:36px;height:36px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
 .ps-nav:hover{background:#f8fafc;border-color:#cbd5e1}
 .ps-card{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.ps-section-title{margin-top:0}
 @media(max-width:768px){
-  .ps-coupon-wrapper{gap:12px}
-  .ps-nav{width:32px;height:32px}
-  .ps-card{flex:0 0 220px!important;min-width:220px!important}
+  .ps-coupon-wrapper{gap:10px}
 }
 </style>

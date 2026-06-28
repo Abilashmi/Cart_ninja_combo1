@@ -204,20 +204,34 @@ if ($requestMethod === 'GET') {
             }
         }
 
-        // Always return a stable single id + array alias for frontend consumers.
-        $normalizedSelectedCoupon = normalizeSelectedTemplateCoupon($result['selectedTemplateCoupon'] ?? null);
-        $result['selectedTemplateCoupon'] = $normalizedSelectedCoupon;
-        $result['selectedCouponsGlobal'] = $normalizedSelectedCoupon !== null ? [$normalizedSelectedCoupon] : [];
+        // Return all selected coupons as an array (+ single alias for older consumers).
+        $rawSelected = $result['selectedTemplateCoupon'] ?? null;
+        // It may already be json-decoded into an array earlier in this handler.
+        $decodedSelected = is_array($rawSelected) ? $rawSelected
+            : (is_string($rawSelected) ? json_decode($rawSelected, true) : null);
+        if (is_array($decodedSelected)) {
+            $globalIds = array_values(array_filter(array_map(function ($x) {
+                return is_string($x) ? trim($x) : '';
+            }, $decodedSelected), function ($x) { return $x !== ''; }));
+            $result['selectedCouponsGlobal'] = $globalIds;
+            $result['selectedTemplateCoupon'] = $globalIds[0] ?? null;
+        } else {
+            $normalizedSelectedCoupon = normalizeSelectedTemplateCoupon($rawSelected);
+            $result['selectedTemplateCoupon'] = $normalizedSelectedCoupon;
+            $result['selectedCouponsGlobal'] = $normalizedSelectedCoupon !== null ? [$normalizedSelectedCoupon] : [];
+        }
 
         // Also fetch placement/position from coupon_slider_settings
         try {
-            $settingsStmt = $pdo->prepare('SELECT position, is_enabled FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1');
+            $settingsStmt = $pdo->prepare('SELECT position, is_enabled, layout FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1');
             $settingsStmt->execute([$shopDomain]);
             $settings = $settingsStmt->fetch();
             $result['widgetPlacement'] = $settings['position'] ?? 'above_cart';
             $result['is_enabled'] = $settings['is_enabled'] ?? 1;
+            $result['layout'] = $settings['layout'] ?? 'list';
         } catch (PDOException $e) {
             $result['widgetPlacement'] = 'above_cart';
+            $result['layout'] = 'list';
         }
 
         echo json_encode([
@@ -351,8 +365,16 @@ $temp1CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp1CouponCondi
 $temp2CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp2CouponConditionSource));
 $temp3CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp3CouponConditionSource));
 
-// `selectedTemplateCoupon` column is varchar(50), so persist one stable id/code only.
-$selectedTemplateCoupon = normalizeSelectedTemplateCoupon($selectedTemplateCouponSource);
+// Support multiple coupons: store a JSON array (column is longtext). Fall back to a single id.
+$globalCouponArr = $payload['selectedCouponsGlobal'] ?? null;
+if (is_array($globalCouponArr)) {
+    $cleanCouponIds = array_values(array_filter(array_map(function ($x) {
+        return is_string($x) ? trim($x) : '';
+    }, $globalCouponArr), function ($x) { return $x !== ''; }));
+    $selectedTemplateCoupon = json_encode($cleanCouponIds);
+} else {
+    $selectedTemplateCoupon = normalizeSelectedTemplateCoupon($selectedTemplateCouponSource);
+}
 
 $sql = '
 INSERT INTO coupon_slider_widget (

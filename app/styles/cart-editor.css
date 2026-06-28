@@ -521,6 +521,37 @@
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.12);
 }
 
+/* ─── Drawer open animations ─────────────────────────────────────────────── */
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes drawerFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes drawerBounceIn {
+  0%   { transform: translateX(100%); }
+  65%  { transform: translateX(-10px); }
+  82%  { transform: translateX(5px); }
+  93%  { transform: translateX(-3px); }
+  100% { transform: translateX(0); }
+}
+@keyframes drawerZoomIn {
+  from { opacity: 0; transform: translateX(40%) scale(0.92); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes drawerPushIn {
+  from { transform: translateX(100%); box-shadow: none; }
+  to   { transform: translateX(0); box-shadow: -4px 0 20px rgba(0,0,0,0.12); }
+}
+
+.cart-preview-anim-slide  { animation: drawerSlideIn  0.32s cubic-bezier(0.25,0.46,0.45,0.94) both; }
+.cart-preview-anim-fade   { animation: drawerFadeIn   0.28s ease both; }
+.cart-preview-anim-bounce { animation: drawerBounceIn 0.55s cubic-bezier(0.36,0.07,0.19,0.97) both; }
+.cart-preview-anim-zoom   { animation: drawerZoomIn   0.3s cubic-bezier(0.34,1.56,0.64,1) both; }
+.cart-preview-anim-push   { animation: drawerPushIn   0.35s cubic-bezier(0.4,0,0.2,1) both; }
+
 .cart-preview-drawer.desktop {
   width: 100%;
 }
@@ -590,6 +621,11 @@
   text-align: center;
   font-size: 13px;
   font-weight: 500;
+}
+.cart-preview-announcement--disabled {
+  opacity: 0.4;
+  filter: grayscale(0.4);
+  border: 1.5px dashed #c9cccf;
 }
 
 .cart-preview-progress {

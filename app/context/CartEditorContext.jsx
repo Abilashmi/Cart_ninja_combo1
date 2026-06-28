@@ -105,7 +105,9 @@ function hydrateFromProgressBar(pb, base) {
   if (!pb) return base;
   const tiers = Array.isArray(pb.tiers) ? pb.tiers.map((t) => ({
     id:          t.id          ?? String(t.sort_order ?? 0),
-    minValue:    Number(t.min_value   ?? t.minValue   ?? 0),
+    // Keep minValue (DB/storefront) and minimumSpend (editor UI + preview) in sync
+    minValue:     Number(t.min_value ?? t.minValue ?? t.minimumSpend ?? 0),
+    minimumSpend: Number(t.min_value ?? t.minValue ?? t.minimumSpend ?? 0),
     minQuantity: Number(t.min_quantity ?? t.minQuantity ?? 0),
     description: t.description ?? 'Milestone',
     rewardType:  t.reward_type  ?? t.rewardType  ?? 'free_shipping',

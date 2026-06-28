@@ -156,6 +156,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $result['aiProductCount'] = (int)$result['aiProductCount'];
         }
 
+        // Pull widget_placement from fbt_widget_settings as authoritative fallback
+        // (the legacy temp1 JSON may not have widgetPlacement if saved before that field was added)
+        if (empty($result['widgetPlacement']) && empty($result['temp1']['widgetPlacement'] ?? null)) {
+            try {
+                $ps = $pdo->prepare("SELECT widget_placement FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1");
+                $ps->execute([$shopDomain]);
+                $row = $ps->fetch();
+                if ($row && !empty($row['widget_placement'])) {
+                    $result['widgetPlacement'] = $row['widget_placement'];
+                }
+            } catch (PDOException $ignored) {}
+        }
+
         echo json_encode([
             "status" => "success",
             "data" => $result
@@ -296,6 +309,78 @@ try {
     $stmt = $pdo->prepare($sql);
 
     $stmt->execute($params);
+
+    // ===== ALSO WRITE NORMALIZED TABLES (keep the merchant admin loader in sync) =====
+    try {
+        $widgetPlacement = $fbt['widgetPlacement'] ?? 'above_cart';
+        $isEnabled = isset($fbt['isEnabled']) ? ($fbt['isEnabled'] ? 1 : 0) : 1;
+        $selTpl = $selectedTemp ?: 'fbt1';
+        $activeTpl = $templates[$selTpl] ?? (is_array($templates) && count($templates) ? reset($templates) : []);
+        if (!is_array($activeTpl)) $activeTpl = [];
+        $aiCountVal = $aiProductCount !== null ? (int)$aiProductCount : 3;
+        $modeVal = $selectedMode ?: 'manual';
+
+        $settingsStmt = $pdo->prepare("
+          INSERT INTO fbt_widget_settings
+            (shop_domain, is_enabled, selected_template, mode, ai_product_count,
+             bg_color, text_color, price_color, button_color, button_text_color,
+             border_color, border_radius, layout, interaction_type, show_prices, show_add_all_button,
+             widget_placement)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE
+            is_enabled=VALUES(is_enabled), selected_template=VALUES(selected_template),
+            mode=VALUES(mode), ai_product_count=VALUES(ai_product_count),
+            bg_color=VALUES(bg_color), text_color=VALUES(text_color), price_color=VALUES(price_color),
+            button_color=VALUES(button_color), button_text_color=VALUES(button_text_color),
+            border_color=VALUES(border_color), border_radius=VALUES(border_radius),
+            layout=VALUES(layout), interaction_type=VALUES(interaction_type),
+            show_prices=VALUES(show_prices), show_add_all_button=VALUES(show_add_all_button),
+            widget_placement=VALUES(widget_placement), updated_at=CURRENT_TIMESTAMP(3)
+        ");
+        $settingsStmt->execute([
+            $shopDomain, $isEnabled, $selTpl, $modeVal, $aiCountVal,
+            $activeTpl['bgColor'] ?? '#ffffff',
+            $activeTpl['textColor'] ?? '#111827',
+            $activeTpl['priceColor'] ?? '#059669',
+            $activeTpl['buttonColor'] ?? '#111827',
+            $activeTpl['buttonTextColor'] ?? '#ffffff',
+            $activeTpl['borderColor'] ?? '#e5e7eb',
+            $activeTpl['borderRadius'] ?? 8,
+            $activeTpl['layout'] ?? 'horizontal',
+            $activeTpl['interactionType'] ?? 'classic',
+            (isset($activeTpl['showPrices']) && $activeTpl['showPrices'] === false) ? 0 : 1,
+            (isset($activeTpl['showAddAllButton']) && $activeTpl['showAddAllButton'] === false) ? 0 : 1,
+            $widgetPlacement,
+        ]);
+
+        // Replace fbt_rules with the submitted manual rules
+        $rules = $fbt['manualRules'] ?? [];
+        if (is_array($rules)) {
+            $pdo->prepare("DELETE FROM fbt_rules WHERE shop_domain = ?")->execute([$shopDomain]);
+            $ruleStmt = $pdo->prepare("
+              INSERT INTO fbt_rules
+                (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order)
+              VALUES (?,?,?,?,?,?,1,?)
+            ");
+            $i = 0;
+            foreach ($rules as $r) {
+                if (!is_array($r)) { $i++; continue; }
+                $ruleStmt->execute([
+                    $shopDomain,
+                    $r['name'] ?? ('Rule ' . ($i + 1)),
+                    $r['displayScope'] ?? ($r['trigger_scope'] ?? 'all'),
+                    !empty($r['triggerProducts']) ? json_encode($r['triggerProducts']) : null,
+                    !empty($r['triggerCollections']) ? json_encode($r['triggerCollections']) : null,
+                    !empty($r['fbtProducts']) ? json_encode($r['fbtProducts']) : null,
+                    $i,
+                ]);
+                $i++;
+            }
+        }
+    } catch (PDOException $eNorm) {
+        // Non-fatal: legacy fbt_widget already saved; log and continue
+        error_log('[save_fbt_widget] normalized write failed: ' . $eNorm->getMessage());
+    }
 
     echo json_encode([
         "status"  => "success",

@@ -40,6 +40,9 @@ export function DesignSection() {
             options={[
               { label: 'Slide', value: 'slide' },
               { label: 'Fade', value: 'fade' },
+              { label: 'Bounce', value: 'bounce' },
+              { label: 'Zoom', value: 'zoom' },
+              { label: 'Push', value: 'push' },
               { label: 'None', value: 'none' },
             ]}
             value={design.animation}

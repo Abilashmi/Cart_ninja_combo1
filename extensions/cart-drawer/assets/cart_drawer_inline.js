@@ -132,6 +132,29 @@
           checkoutButtonStyle: parseCheckoutButtonStyle(d),
           checkoutName: d.checkoutName || 'Checkout Now',
           checkoutFooterText: d.checkoutFooterText || 'Shipping and taxes calculated at checkout',
+          announcement: {
+            enabled: isEnabled(d.announcement_enabled),
+            text: d.announcement_text || '',
+            bgColor: d.announcement_bg_color || '#4f46e5',
+            textColor: d.announcement_text_color || '#ffffff',
+            fontSize: parseInt(d.announcement_font_size || 14, 10),
+          },
+          header: {
+            title: d.header_title || 'Your Cart',
+            bgColor: d.header_bg_color || '#f9fafb',
+            textColor: d.header_text_color || '#000000',
+            borderBottom: d.header_border_bottom != null ? isEnabled(d.header_border_bottom) : true,
+          },
+          design: {
+            animation: d.design_animation || 'slide',
+            borderRadius: parseInt(d.design_border_radius || 0, 10),
+            shadow: d.design_shadow != null ? isEnabled(d.design_shadow) : true,
+          },
+          emptyCart: {
+            message: d.empty_cart_message || 'Your cart is empty',
+            showContinueShopping: d.empty_cart_show_continue_shopping != null ? isEnabled(d.empty_cart_show_continue_shopping) : true,
+            showRecommendations: d.empty_cart_show_recommendations != null ? isEnabled(d.empty_cart_show_recommendations) : true,
+          },
         };
 
         await enrichUpsellProducts(CONFIG.upsell);
@@ -154,6 +177,9 @@
           progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
           coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', title: { text: 'Apply Coupon', fontSize: 14, textColor: '#1e293b', alignment: 'left' }, couponOverrides: {}, allCouponDetails: [] },
           upsell: { enabled: false, manualRules: [], direction: 'vertical', layout: 'carousel', position: 'bottom', showOnEmptyCart: false, showIfInCart: false, limit: 3, buttonText: 'Add to cart', upsellTitle: { text: 'Recommended for you', color: '#111827', bold: false, italic: false, underline: false }, activeTemplate: 'grid' },
+          announcement: { enabled: false, text: '', bgColor: '#4f46e5', textColor: '#ffffff', fontSize: 14 },
+          header: { title: 'Your Cart', bgColor: '#f9fafb', textColor: '#000000', borderBottom: true },
+          design: { animation: 'slide', borderRadius: 0, shadow: true },
         };
       }
     } finally {
@@ -248,12 +274,12 @@
       enabled,
       mode,
       showOnEmpty: data.showOnEmpty !== false,
-      barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
-      barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
-      iconColor: data.iconColor || data.icon_color || data.barForegroundColor || data.fill_color || '#2563eb',
+      barBackgroundColor: data.barBackgroundColor || data.colors?.background || '#e2e8f0',
+      barForegroundColor: data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
+      iconColor: data.iconColor || data.icon_color || data.colors?.icon || data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
       borderRadius: data.borderRadius || 8,
-      completionText: data.completionText || '🎉 All Rewards Unlocked!',
-      completionTextColor: data.completionTextColor || '#10b981',
+      completionText: data.completionText || data.completionMessage || '🎉 All Rewards Unlocked!',
+      completionTextColor: data.completionTextColor || data.colors?.message || '#10b981',
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
@@ -1083,6 +1109,16 @@
         @keyframes cc-fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes cc-pop { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         @keyframes cc-pulse-ring { 0% { box-shadow: 0 0 0 0 var(--cc-fg-color66); } 70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+        @keyframes cc-drawer-bounce { 0%{transform:translateX(100%)} 65%{transform:translateX(-8px)} 82%{transform:translateX(4px)} 93%{transform:translateX(-2px)} 100%{transform:translateX(0)} }
+        @keyframes cc-drawer-zoom { from{transform:translateX(30%) scale(0.88);opacity:0} to{transform:translateX(0) scale(1);opacity:1} }
+        #cc-drawer[data-animation="fade"] { transform:none !important; opacity:0; transition:opacity 0.28s ease !important; }
+        #cc-overlay.active #cc-drawer[data-animation="fade"] { opacity:1; }
+        #cc-overlay.active #cc-drawer[data-animation="bounce"] { animation:cc-drawer-bounce 0.55s cubic-bezier(0.36,0.07,0.19,0.97) both; }
+        #cc-drawer[data-animation="zoom"] { transform:none !important; opacity:0; transition:none !important; }
+        #cc-overlay.active #cc-drawer[data-animation="zoom"] { animation:cc-drawer-zoom 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        #cc-drawer[data-animation="push"] { transition:transform 0.4s cubic-bezier(0.77,0,0.175,1) !important; }
+        #cc-drawer[data-animation="none"] { transform:none !important; transition:none !important; }
+        #cc-announcement-bar { display:block; }
       `;
       document.head.appendChild(style);
     }
@@ -1112,13 +1148,24 @@
     let bottomBodyHtml = '';
 
     /* -------- HEADER -------- */
+    const hdr = CONFIG.header || {};
+    const hdrBg = hdr.bgColor || '#f9fafb';
+    const hdrColor = hdr.textColor || '#000000';
+    const hdrTitle = hdr.title || 'Your Cart';
+    const hdrBorder = hdr.borderBottom !== false ? 'border-bottom:1px solid #e5e7eb;' : '';
     drawerHtml += `
-<div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-  <h3 style="margin:0;font-size:18px;font-weight:600;color:#000;">Your Cart</h3>
+<div style="padding:16px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+  <h3 style="margin:0;font-size:18px;font-weight:600;color:${hdrColor};">${escapeHtml(hdrTitle)}</h3>
   <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
     style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
 </div>
 `;
+
+    /* -------- ANNOUNCEMENT BAR (below header) -------- */
+    const ann = CONFIG.announcement || {};
+    if (ann.enabled && ann.text) {
+      drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:center;font-weight:500;flex-shrink:0;">${escapeHtml(ann.text)}</div>`;
+    }
 
     /* -------- BODY -------- */
     drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
@@ -1141,7 +1188,7 @@
       You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
     </p>
     <p style="margin:0;font-size:14px;font-weight:700;color:${fgColor};">
-      Unlock: ${pInfo.upcoming.rewardText}
+      ${escapeHtml(pInfo.upcoming.rewardText || '')}
     </p>
   `;
       } else {
@@ -1193,11 +1240,10 @@
 
         pbHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
 
-        if (ms.title) {
-          pbHtml += `<span style="font-weight:700;margin-bottom:2px;">${ms.title}</span>`;
-        }
-        if (ms.rewardText) {
-          pbHtml += `<span style="font-weight:500;opacity:0.9;">${ms.rewardText}</span>`;
+        // Match the editor preview: show a single label (title takes precedence, else reward text)
+        const msLabel = ms.title || ms.rewardText;
+        if (msLabel) {
+          pbHtml += `<span style="font-weight:600;opacity:0.9;">${escapeHtml(msLabel)}</span>`;
         }
         pbHtml += `</div></div>`;
       });
@@ -1230,11 +1276,13 @@
 
     /* ---- EMPTY STATE ---- */
     if (isEmpty) {
+      const ec = CONFIG.emptyCart || {};
       drawerHtml += `
-  <div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;">
-    <div style="font-size:40px;">🛒</div>
-    <p style="margin:0;font-size:16px;font-weight:600;color:#111;">Your cart is empty</p>
+  <div style="padding:40px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9cccf" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    <p style="margin:0;font-size:16px;font-weight:600;color:#111;">${escapeHtml(ec.message || 'Your cart is empty')}</p>
     <p style="margin:0;font-size:13px;color:#6b7280;">Add items to unlock rewards</p>
+    ${ec.showContinueShopping !== false ? `<button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);" style="margin-top:4px;padding:8px 18px;border:1px solid #c9cccf;border-radius:7px;background:#fff;font-size:13px;cursor:pointer;color:#202223;">Continue shopping</button>` : ''}
   </div>
 `;
     }
@@ -1283,7 +1331,7 @@
         ${item.image
             ? `<img src="${item.image}" alt="${escapeHtml(
               item.product_title
-            )}" style="width:100%;height:100%;object-fit:cover;">`
+            )}" style="width:100%;height:100%;object-fit:contain;">`
             : `<span style="font-size:32px;">📦</span>`
           }
       </div>
@@ -1402,7 +1450,8 @@
     // ---- SMOOTH DOM UPDATE ----
     if (isFirstOpen) {
       // First open: build full overlay with backdrop + drawer
-      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer">${drawerHtml}</div>`;
+      const drawerAnim = (CONFIG.design && CONFIG.design.animation) || 'slide';
+      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" data-animation="${drawerAnim}">${drawerHtml}</div>`;
       root.appendChild(overlay);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -1643,9 +1692,14 @@
         // When specific trigger products are set, they MUST be in the cart.
         // triggerType='all' only acts as a global rule when NO trigger products are configured.
         const hasSpecificTriggers = triggerIds.length > 0;
-        const triggerMatches = hasSpecificTriggers
-          ? triggerIds.some(id => cartProductIds.includes(id))
-          : rule.triggerType === 'all';
+        // On an empty cart with "show on empty" enabled, there's no trigger product to
+        // match against — so show the rule's configured products regardless of trigger.
+        const cartIsEmpty = cartProductIds.length === 0;
+        const triggerMatches = (cartIsEmpty && upsellConfig.showOnEmptyCart)
+          ? true
+          : hasSpecificTriggers
+            ? triggerIds.some(id => cartProductIds.includes(id))
+            : rule.triggerType === 'all';
         if (triggerMatches) {
           (rule.upsellProductIds || []).forEach((id, idx) => {
             const pId = String(id).replace('gid://shopify/Product/', '');
@@ -1671,7 +1725,9 @@
     if (!upsellConfig.showIfInCart) {
       upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
     }
-    if (upsellConfig.limit) {
+    // Only cap by the global limit in AI mode. Manual rules show every product the
+    // merchant explicitly selected (selecting 3 products should display all 3).
+    if (upsellConfig.limit && upsellConfig.useAI) {
       const parsedLimit = Number.parseInt(String(upsellConfig.limit), 10);
       if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
         upsellProducts = upsellProducts.slice(0, parsedLimit);
@@ -1790,7 +1846,7 @@
       const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
       const imageHtml =
         detail.image && detail.image !== '📦' && detail.image !== null
-          ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`
+          ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:contain;" loading="lazy">`
           : `<span style="font-size:20px;color:#94a3b8;">📦</span>`;
 
       const hasVariantId = detail.variantId !== undefined && detail.variantId !== null && String(detail.variantId).trim() !== '';
@@ -1818,21 +1874,20 @@
           </div>
         `;
       } else {
-        // CAROUSEL CARD: Always Rectangular Design (Image Left, Content Right)
+        // CAROUSEL CARD: narrow vertical card (image top, content below) in a horizontal
+        // scroll — matches the editor preview so multiple products are visible.
         const cardSpecialStyle = isHorizontal
-          ? 'min-width: 320px; max-width: 320px; scroll-snap-align: start;'
-          : '';
+          ? 'min-width:150px;max-width:150px;'
+          : 'width:100%;';
         html += `
-          <div class="cc-upsell-card cc-layout-carousel" style="${cardSpecialStyle}">
-            <div class="cc-upsell-image-wrapper">
+          <div class="cc-upsell-card" style="${cardSpecialStyle}flex-shrink:0;scroll-snap-align:start;display:flex;flex-direction:column;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;background:#fff;">
+            <div style="width:100%;height:90px;background:#f1f2f3;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
               ${imageHtml}
             </div>
-            <div class="cc-upsell-content">
-              <p class="cc-upsell-title cc-upsell-title--carousel" style="margin:0;font-size:14px;font-weight:600;color:#0f172a;line-height:1.4;width:100%;">${escapeHtml(title)}</p>
-              <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px;">
-                <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
-                <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}">${escapeHtml((upsellConfig.buttonText || 'ADD TO CART').toUpperCase())}</button>
-              </div>
+            <div style="padding:8px;display:flex;flex-direction:column;gap:4px;flex:1;">
+              <p style="margin:0;font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
+              <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+              <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="margin-top:auto;width:100%;padding:5px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
             </div>
           </div>
         `;

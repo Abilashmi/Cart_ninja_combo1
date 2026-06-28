@@ -32,6 +32,47 @@ const FAKE_FBT_CONFIG = {
     manualRules: [],
 };
 
+/* ─── EMBED STATUS ────────────────────────────────────────────────────────── */
+async function getEmbedStatus(shop, accessToken) {
+    try {
+        const themesRes = await fetch(
+            `https://${shop}/admin/api/2024-04/themes.json?role=main`,
+            { headers: { 'X-Shopify-Access-Token': accessToken } }
+        );
+        const { themes } = await themesRes.json();
+        const mainTheme = (themes || []).find(t => t.role === 'main') || themes?.[0];
+        if (!mainTheme) return { couponEmbedEnabled: false, fbtEmbedEnabled: false };
+
+        const assetRes = await fetch(
+            `https://${shop}/admin/api/2024-04/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+            { headers: { 'X-Shopify-Access-Token': accessToken } }
+        );
+        const { asset } = await assetRes.json();
+        const settingsData = JSON.parse(asset?.value || '{}');
+        const current = settingsData?.current || {};
+
+        // Collect all blocks across every section (theme structure varies)
+        const allBlocks = [];
+        Object.values(current.sections || {}).forEach(section => {
+            Object.values(section?.blocks || {}).forEach(b => allBlocks.push(b));
+        });
+        Object.values(current.blocks || {}).forEach(b => allBlocks.push(b));
+
+        console.log('[EmbedCheck] blocks found:', allBlocks.map(b => ({ type: b.type, disabled: b.disabled })));
+        let couponEmbedEnabled = false, fbtEmbedEnabled = false;
+        for (const block of allBlocks) {
+            if (block.disabled) continue;
+            const t = (block.type || '').toLowerCase();
+            if (t.includes('coupon_slider')) couponEmbedEnabled = true;
+            if (t.includes('fbt')) fbtEmbedEnabled = true;
+        }
+        console.log('[EmbedCheck] result:', { couponEmbedEnabled, fbtEmbedEnabled });
+        return { couponEmbedEnabled, fbtEmbedEnabled };
+    } catch {
+        return { couponEmbedEnabled: false, fbtEmbedEnabled: false };
+    }
+}
+
 /* ─── LOADER ──────────────────────────────────────────────────────────────── */
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
@@ -87,7 +128,9 @@ export async function loader({ request }) {
     } catch (e) { console.error("Failed to fetch FBT settings:", e); }
     if (!fbtConfig) fbtConfig = { ...FAKE_FBT_CONFIG, templates: { ...FAKE_FBT_CONFIG.templates } };
 
-    return { couponConfig, fbtConfig, products, shop, discounts };
+    const { couponEmbedEnabled, fbtEmbedEnabled } = await getEmbedStatus(shop, session.accessToken);
+
+    return { couponConfig, fbtConfig, products, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled };
 }
 
 /* ─── ACTION ──────────────────────────────────────────────────────────────── */
@@ -96,14 +139,15 @@ export async function action({ request }) {
     const shop = session.shop;
     const body = await request.json();
 
-    const { activeTemplate, template, selectedActiveCoupons, isEnabled, ...rest } = body;
+    const { activeTemplate, template, couponStyles, couponConditions, selectedActiveCoupons, isEnabled, ...rest } = body;
 
     const tplKey = activeTemplate || "template1";
     const widgetPayload = {
         shop,
         selectedTemplate: tplKey,
         selectedTemplateCoupon: selectedActiveCoupons?.[0] || null,
-        [tplKey]: { styles: template },
+        selectedCouponsGlobal: Array.isArray(selectedActiveCoupons) ? selectedActiveCoupons.filter(Boolean) : [],
+        [tplKey]: { styles: template, couponStyles: couponStyles || {}, couponConditions: couponConditions || [] },
         ...rest,
     };
     const settingsPayload = {
@@ -111,6 +155,7 @@ export async function action({ request }) {
         is_enabled: isEnabled ? 1 : 0,
         selected_template: tplKey,
         position: rest.widgetPlacement || 'above_cart',
+        layout: rest.layout || 'list',
     };
 
     try {
@@ -239,42 +284,35 @@ function CountdownStrip({ hours, minutes, label, expiredLabel, bgColor, textColo
 }
 
 /* ─── COUPON SELECTOR ─────────────────────────────────────────────────────── */
-function CouponSelector({ discounts, selectedCouponId, search, onSearchChange, onSelect }) {
+function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear }) {
     const filtered = (discounts || []).filter((c) => {
         if (!search) return true;
         const q = search.toLowerCase();
         return c.code.toLowerCase().includes(q) || (c.title || "").toLowerCase().includes(q);
     });
 
-    const selectedCoupon = (discounts || []).find((c) => c.id === selectedCouponId);
+    const selectedIds = selectedCouponIds || [];
+    const selectedCount = selectedIds.length;
 
     return (
         <BlockStack gap="300">
-            <Text as="p" variant="bodySm" tone="subdued">Choose which coupon to display in this widget</Text>
+            <Text as="p" variant="bodySm" tone="subdued">Choose which coupons to display in this widget — select one or more.</Text>
 
-            {selectedCoupon && (
+            {selectedCount > 0 && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: "8px", border: "1.5px solid #b5e3d8", background: "#f1f8f5" }}>
                     <InlineStack gap="200" blockAlign="center">
                         <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <Icon source={DiscountIcon} />
                         </div>
-                        <BlockStack gap="050">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">{selectedCoupon.code}</Text>
-                            {selectedCoupon.title !== selectedCoupon.code && (
-                                <Text as="span" variant="bodySm" tone="subdued">{selectedCoupon.title}</Text>
-                            )}
-                        </BlockStack>
+                        <Text as="span" variant="bodySm" fontWeight="semibold">{selectedCount} coupon{selectedCount > 1 ? "s" : ""} selected</Text>
                     </InlineStack>
-                    <InlineStack gap="150" blockAlign="center">
-                        <Badge tone="success">Selected</Badge>
-                        <button
-                            onClick={() => onSelect("")}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#637381", display: "flex", alignItems: "center", padding: "2px" }}
-                            title="Clear selection"
-                        >
-                            <Icon source={XSmallIcon} />
-                        </button>
-                    </InlineStack>
+                    <button
+                        onClick={() => onClear && onClear()}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#637381", fontSize: "13px", padding: "2px" }}
+                        title="Clear all"
+                    >
+                        Clear all
+                    </button>
                 </div>
             )}
 
@@ -303,11 +341,11 @@ function CouponSelector({ discounts, selectedCouponId, search, onSearchChange, o
                             </div>
                         ) : (
                             filtered.map((coupon, idx) => {
-                                const isSelected = coupon.id === selectedCouponId;
+                                const isSelected = selectedIds.includes(coupon.id);
                                 return (
                                     <button
                                         key={coupon.id}
-                                        onClick={() => onSelect(isSelected ? "" : coupon.id)}
+                                        onClick={() => onToggle(coupon.id)}
                                         style={{
                                             width: "100%",
                                             display: "flex",
@@ -353,9 +391,57 @@ function CouponSelector({ discounts, selectedCouponId, search, onSearchChange, o
     );
 }
 
+/* Per-coupon override editor — text, colors, and display pages for one coupon */
+function CouponOverridePanel({ coupon, override, onChange, alwaysOpen }) {
+    const [openState, setOpen] = useState(false);
+    const open = alwaysOpen || openState;
+    const ov = override || {};
+    const colorRow = (label, key, def) => (
+        <InlineStack gap="200" blockAlign="center">
+            <div style={{ flex: 1 }}><Text as="span" variant="bodySm">{label}</Text></div>
+            <input type="color" value={ov[key] || def} onChange={(e) => onChange({ [key]: e.target.value })}
+                style={{ width: "36px", height: "28px", border: "1px solid #c9cccf", borderRadius: "6px", cursor: "pointer", padding: 0, background: "none" }} />
+        </InlineStack>
+    );
+    return (
+        <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
+            {!alwaysOpen && (
+                <button onClick={() => setOpen((o) => !o)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: open ? "#f6f6f7" : "#fff", border: "none", cursor: "pointer", textAlign: "left" }}>
+                    <Text as="span" variant="bodySm" fontWeight="semibold">{coupon.code}</Text>
+                    <span style={{ color: "#637381", fontSize: "11px" }}>{open ? "▲" : "▼"}</span>
+                </button>
+            )}
+            {open && (
+                <div style={{ padding: "12px", borderTop: "1px solid #e1e3e5" }}>
+                    <BlockStack gap="300">
+                        <TextField label="Heading" value={ov.headingText ?? ""} onChange={(v) => onChange({ headingText: v })} placeholder="Uses template default if empty" autoComplete="off" />
+                        <TextField label="Subtext" value={ov.subtextText ?? ""} onChange={(v) => onChange({ subtextText: v })} placeholder="Uses template default if empty" autoComplete="off" />
+                        {colorRow("Background", "bgColor", "#ffffff")}
+                        {colorRow("Text", "textColor", "#111827")}
+                        {colorRow("Accent", "accentColor", "#3b82f6")}
+                        {colorRow("Button", "buttonColor", "#3b82f6")}
+                        {colorRow("Button text", "buttonTextColor", "#ffffff")}
+                        <Select label="Show on" value={ov.displayCondition || "all"} onChange={(v) => onChange({ displayCondition: v })}
+                            options={[{ label: "All product pages", value: "all" }, { label: "Specific products", value: "product_handle" }, { label: "Specific collections", value: "collection_handle" }]} />
+                        {ov.displayCondition === "product_handle" && (
+                            <TextField label="Product handles (comma-separated)" value={(ov.productHandles || []).join(", ")} autoComplete="off"
+                                onChange={(v) => onChange({ productHandles: v.split(",").map((x) => x.trim()).filter(Boolean) })} helpText="e.g. blue-shirt, red-hat" />
+                        )}
+                        {ov.displayCondition === "collection_handle" && (
+                            <TextField label="Collection handles (comma-separated)" value={(ov.collectionHandles || []).join(", ")} autoComplete="off"
+                                onChange={(v) => onChange({ collectionHandles: v.split(",").map((x) => x.trim()).filter(Boolean) })} />
+                        )}
+                    </BlockStack>
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function ProductWidgetPage() {
-    const { couponConfig, shop, discounts } = useLoaderData();
+    const { couponConfig, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
 
     const tKey = couponConfig?.activeTemplate || "template1";
@@ -391,9 +477,40 @@ export default function ProductWidgetPage() {
     const [timerBg,     setTimerBg]     = useState("#fef2f2");
     const [timerText,   setTimerText]   = useState("#991b1b");
     const [timerAccent, setTimerAccent] = useState("#dc2626");
-    const [selectedCouponId, setSelectedCouponId] = useState(
-        couponConfig?.selectedActiveCoupons?.[0] || ""
+    const [selectedCouponIds, setSelectedCouponIds] = useState(
+        Array.isArray(couponConfig?.selectedActiveCoupons) ? couponConfig.selectedActiveCoupons.filter(Boolean) : []
     );
+    const toggleCoupon = (id) => {
+        setSelectedCouponIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+        setHasChanges(true);
+    };
+    // Per-coupon overrides: { [couponId]: { headingText, subtextText, bgColor, textColor, accentColor, buttonColor, buttonTextColor, displayCondition, productHandles } }
+    const [couponOverrides, setCouponOverrides] = useState(() => {
+        const styleMap = couponConfig?.temp1CouponStyle || couponConfig?.temp2CouponStyle || couponConfig?.temp3CouponStyle || {};
+        const condArr = couponConfig?.temp1CouponCondition || couponConfig?.temp2CouponCondition || couponConfig?.temp3CouponCondition || [];
+        const out = {};
+        Object.keys(styleMap || {}).forEach((cid) => { out[cid] = { ...styleMap[cid] }; });
+        (Array.isArray(condArr) ? condArr : []).forEach((c) => {
+            if (!c || !c.couponId) return;
+            out[c.couponId] = { ...(out[c.couponId] || {}), displayCondition: c.displayCondition || "all", productHandles: c.productHandles || [], collectionHandles: c.collectionHandles || [] };
+        });
+        return out;
+    });
+    const updateOverride = (cid, patch) => {
+        setCouponOverrides((prev) => ({ ...prev, [cid]: { ...(prev[cid] || {}), ...patch } }));
+        setHasChanges(true);
+    };
+    // Which selected coupon is currently being customized (drives the editor fields + preview)
+    const [editingCouponId, setEditingCouponId] = useState(
+        (Array.isArray(couponConfig?.selectedActiveCoupons) && couponConfig.selectedActiveCoupons[0]) || ""
+    );
+    // Display layout for the coupon banner: list (stacked) / carousel (slider) / grid
+    const [couponLayout, setCouponLayout] = useState(couponConfig?.layout || "list");
+    useEffect(() => {
+        if (selectedCouponIds.length && !selectedCouponIds.includes(editingCouponId)) {
+            setEditingCouponId(selectedCouponIds[0]);
+        }
+    }, [selectedCouponIds, editingCouponId]);
     const [couponSearch,  setCouponSearch]  = useState("");
     const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.position || "above_cart");
     const [hasChanges,    setHasChanges]    = useState(false);
@@ -426,13 +543,33 @@ export default function ProductWidgetPage() {
 
     const handleSave = () => {
         const tplKeyMap = { "classic-banner": "template1", "minimal-card": "template2", "bold-vibrant": "template3" };
+        // Build per-coupon style + condition overrides for the selected coupons
+        const couponStyles = {};
+        const couponConditions = [];
+        selectedCouponIds.forEach((cid) => {
+            const ov = couponOverrides[cid] || {};
+            const couponObj = (discounts || []).find((c) => c.id === cid);
+            const style = {};
+            // Save the real discount code so "Copy Code" copies the code, not the GID number
+            if (couponObj?.code) style.couponCode = couponObj.code;
+            ["headingText", "subtextText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor"].forEach((k) => {
+                if (ov[k] !== undefined && ov[k] !== "") style[k] = ov[k];
+            });
+            if (Object.keys(style).length) couponStyles[cid] = style;
+            if (ov.displayCondition && ov.displayCondition !== "all") {
+                couponConditions.push({ couponId: cid, displayCondition: ov.displayCondition, productHandles: ov.productHandles || [], collectionHandles: ov.collectionHandles || [] });
+            }
+        });
         fetcher.submit(
             {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
                 displayCondition: showOn,
-                selectedActiveCoupons: selectedCouponId ? [selectedCouponId] : [],
+                selectedActiveCoupons: selectedCouponIds,
                 template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
+                couponStyles,
+                couponConditions,
+                layout: couponLayout,
                 timerEnabled, timerHours, timerMins, timerLabel, timerExpired, timerBg, timerText, timerAccent,
                 widgetPlacement,
             },
@@ -441,9 +578,18 @@ export default function ProductWidgetPage() {
     };
 
     /* live preview */
-    const selectedCoupon = (discounts || []).find((c) => c.id === selectedCouponId);
-    const previewCode = selectedCoupon?.code || "CODE";
-    const btn = { background: buttonColor, color: btnTextColor, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
+    // Effective values for the coupon currently being customized (override → global default)
+    const editOv = couponOverrides[editingCouponId] || {};
+    const editingCoupon = (discounts || []).find((c) => c.id === editingCouponId);
+    const pvHeading = editOv.headingText || heading;
+    const pvSubtext = editOv.subtextText || subtext;
+    const pvBg = editOv.bgColor || bgColor;
+    const pvText = editOv.textColor || textColor;
+    const pvAccent = editOv.accentColor || accentColor;
+    const pvButton = editOv.buttonColor || buttonColor;
+    const pvBtnText = editOv.buttonTextColor || btnTextColor;
+    const previewCode = editingCoupon?.code || (discounts || []).find((c) => c.id === selectedCouponIds[0])?.code || "CODE";
+    const btn = { background: pvButton, color: pvBtnText, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
 
     const timerStrip = timerEnabled ? (
         <CountdownStrip hours={timerHours} minutes={timerMins} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
@@ -452,11 +598,11 @@ export default function ProductWidgetPage() {
     const renderPreview = () => {
         if (selectedTemplate === "classic-banner") {
             return (
-                <div style={{ background: bgColor, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${accentColor}` }}>
+                <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${pvAccent}` }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
                         <div>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: textColor, marginBottom: "3px" }}>{heading}</div>
-                            <div style={{ fontSize: "13px", color: textColor, opacity: 0.65 }}>{subtext}</div>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px" }}>{pvHeading}</div>
+                            <div style={{ fontSize: "13px", color: pvText, opacity: 0.65 }}>{pvSubtext}</div>
                         </div>
                         <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0 }}>{previewCode}</button>
                     </div>
@@ -466,15 +612,15 @@ export default function ProductWidgetPage() {
         }
         if (selectedTemplate === "minimal-card") {
             return (
-                <div style={{ background: bgColor, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
+                <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
                     <div style={{ display: "flex", gap: "12px" }}>
-                        <div style={{ background: accentColor + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", border: `1px dashed ${accentColor}50` }}>
-                            <div style={{ fontSize: "9px", letterSpacing: "2px", color: accentColor, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
-                            <div style={{ fontSize: "15px", fontWeight: 800, color: accentColor, letterSpacing: "3px" }}>{previewCode}</div>
+                        <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", border: `1px dashed ${pvAccent}50` }}>
+                            <div style={{ fontSize: "9px", letterSpacing: "2px", color: pvAccent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
+                            <div style={{ fontSize: "15px", fontWeight: 800, color: pvAccent, letterSpacing: "3px" }}>{previewCode}</div>
                         </div>
                         <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: textColor, marginBottom: "4px" }}>{heading}</div>
-                            <div style={{ fontSize: "12px", color: textColor, opacity: 0.65, marginBottom: "12px" }}>{subtext}</div>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px" }}>{pvHeading}</div>
+                            <div style={{ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px" }}>{pvSubtext}</div>
                             <button style={{ ...btn, padding: "6px 16px", fontSize: "13px" }}>Redeem Now</button>
                         </div>
                     </div>
@@ -483,16 +629,16 @@ export default function ProductWidgetPage() {
             );
         }
         return (
-            <div style={{ background: bgColor, borderRadius: `${borderRadius}px`, padding: `${padding}px` }}>
+            <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px` }}>
                 <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-                    <div style={{ width: "44px", height: "44px", background: accentColor + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ width: "44px", height: "44px", background: pvAccent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <Icon source={DiscountIcon} />
                     </div>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: textColor, marginBottom: "4px" }}>{heading}</div>
-                        <div style={{ fontSize: "12px", color: textColor, opacity: 0.85, marginBottom: "10px" }}>{subtext}</div>
+                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px" }}>{pvHeading}</div>
+                        <div style={{ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px" }}>{pvSubtext}</div>
                         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                            <div style={{ border: `2px dashed ${accentColor}`, borderRadius: "6px", padding: "5px 14px", color: accentColor, fontSize: "13px", fontWeight: 700, letterSpacing: "2px" }}>{previewCode}</div>
+                            <div style={{ border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, letterSpacing: "2px" }}>{previewCode}</div>
                             <button style={{ ...btn, padding: "6px 18px", fontSize: "13px" }}>Apply</button>
                         </div>
                     </div>
@@ -541,17 +687,18 @@ export default function ProductWidgetPage() {
                 <div style={{ flex: 1, display: "grid", gridTemplateColumns: "58% 42%", minHeight: 0, overflow: "hidden" }}>
                     {/* Left column — settings (scrolls internally) */}
                     <div style={{ overflowY: "auto", padding: "12px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            {/* Setup guide */}
-                            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                                <div style={{ width: 32, height: 32, borderRadius: "8px", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    <Icon source={ThemeIcon} />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <Text as="p" variant="bodySm" fontWeight="semibold">Enable in your store theme</Text>
-                                    <Text as="p" variant="bodySm" tone="subdued">Go to <strong>Customize in Store</strong> → App embeds → turn on <em>Coupon Banner</em>. Pick Above or Below Add to Cart and save.</Text>
-                                </div>
-                                <Button url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim" variant="plain">Open →</Button>
-                            </div>
+                            {/* Theme embed status */}
+                            {!couponEmbedEnabled ? (
+                                <Banner
+                                    title="Coupon Banner is not visible on your store yet"
+                                    tone="warning"
+                                    action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
+                                >
+                                    <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>. You can also set the placement (Above / Below Add to Cart) there.</p>
+                                </Banner>
+                            ) : (
+                                <Banner tone="success" title="Coupon Banner is live on your store" />
+                            )}
                             <Card>
                                 <BlockStack gap="300">
                                     <Text as="h2" variant="headingMd">Select Template</Text>
@@ -576,10 +723,11 @@ export default function ProductWidgetPage() {
                                     <AccordionSection id="coupon" icon={DiscountIcon} title="Coupon Selection" isOpen={openSection === "coupon"} onToggle={toggleSection} tip={SECTION_TIPS.coupon}>
                                         <CouponSelector
                                             discounts={discounts}
-                                            selectedCouponId={selectedCouponId}
+                                            selectedCouponIds={selectedCouponIds}
                                             search={couponSearch}
                                             onSearchChange={setCouponSearch}
-                                            onSelect={(id) => { setSelectedCouponId(id); mark(); }}
+                                            onToggle={toggleCoupon}
+                                            onClear={() => { setSelectedCouponIds([]); setHasChanges(true); }}
                                         />
                                     </AccordionSection>
 
@@ -616,15 +764,47 @@ export default function ProductWidgetPage() {
                                         </BlockStack>
                                     </AccordionSection>
 
-                                    <AccordionSection id="text" icon={MagicIcon} title="Text Content" isOpen={openSection === "text"} onToggle={toggleSection} tip={SECTION_TIPS.text}>
-                                        <BlockStack gap="300">
-                                            <TextField label="Heading Text" value={heading} onChange={(v) => { setHeading(v); mark(); }} autoComplete="off" />
-                                            <TextField label="Subtext" value={subtext} onChange={(v) => { setSubtext(v); mark(); }} autoComplete="off" />
-                                        </BlockStack>
+                                    <AccordionSection id="text" icon={MagicIcon} title="Customize Coupon" isOpen={openSection === "text"} onToggle={toggleSection} tip={SECTION_TIPS.text}>
+                                        {selectedCouponIds.length === 0 ? (
+                                            <Text as="p" variant="bodySm" tone="subdued">Select coupons in “Coupon Selection” first — then pick one here to edit its text, colors, and pages.</Text>
+                                        ) : (
+                                            <BlockStack gap="300">
+                                                <Select
+                                                    label="Editing coupon"
+                                                    helpText="The preview on the right shows this coupon. Edit its text, colors, and pages below."
+                                                    value={editingCouponId || selectedCouponIds[0]}
+                                                    onChange={setEditingCouponId}
+                                                    options={selectedCouponIds.map((cid) => {
+                                                        const c = (discounts || []).find((x) => x.id === cid);
+                                                        return { label: c?.code || cid, value: cid };
+                                                    })}
+                                                />
+                                                <CouponOverridePanel
+                                                    key={editingCouponId}
+                                                    alwaysOpen
+                                                    coupon={editingCoupon || { id: editingCouponId, code: editingCouponId }}
+                                                    override={couponOverrides[editingCouponId]}
+                                                    onChange={(patch) => updateOverride(editingCouponId, patch)}
+                                                />
+                                            </BlockStack>
+                                        )}
                                     </AccordionSection>
 
-                                    <AccordionSection id="design" icon={ColorIcon} title="Design & Colors" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
+                                    <AccordionSection id="design" icon={ColorIcon} title="Layout & Default Style" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
                                         <BlockStack gap="400">
+                                            <Select
+                                                label="Banner layout"
+                                                helpText="How multiple coupons are arranged on the product page."
+                                                value={couponLayout}
+                                                onChange={(v) => { setCouponLayout(v); mark(); }}
+                                                options={[
+                                                    { label: "List — stacked", value: "list" },
+                                                    { label: "Carousel — horizontal slider", value: "carousel" },
+                                                    { label: "Grid — 2 columns", value: "grid" },
+                                                ]}
+                                            />
+                                            <Divider />
+                                            <Text as="p" variant="bodySm" tone="subdued">Default style — used for coupons that don’t have their own colors set in “Customize Coupon”.</Text>
                                             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
                                                 <ColorSwatch label="Background" value={bgColor} onChange={(v) => { setBgColor(v); mark(); }} />
                                                 <ColorSwatch label="Text Color" value={textColor} onChange={(v) => { setTextColor(v); mark(); }} />

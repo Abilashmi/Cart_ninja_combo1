@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useCartEditor } from '../context/CartEditorContext';
 import { Icon, Button } from '@shopify/polaris';
 import {
@@ -320,7 +320,13 @@ function CouponSliderPreview({ cs }) {
 }
 
 function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
-  const products = upsellProducts.slice(0, upsell.limit);
+  // Manual rules show every selected product; only AI mode is capped by limit.
+  // Mirror the storefront so the preview count matches what customers see.
+  const manualCount = (upsell.manualRules || []).reduce(
+    (sum, r) => sum + ((r.upsellProductIds || r.upsellProducts || []).length), 0
+  );
+  const count = upsell.useAI ? (upsell.limit || 3) : (manualCount || upsell.limit || 3);
+  const products = upsellProducts.slice(0, Math.max(1, count));
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
 
@@ -372,6 +378,21 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
   const activeSectionLabel = getSectionLabel(activeSection, body);
+
+  // Replay animation each time the animation setting changes
+  const [animKey, setAnimKey] = useState(0);
+  const prevAnimRef = useRef(settings.design?.animation);
+  useEffect(() => {
+    if (settings.design?.animation !== prevAnimRef.current) {
+      prevAnimRef.current = settings.design?.animation;
+      setAnimKey((k) => k + 1);
+    }
+  }, [settings.design?.animation]);
+
+  const replayAnimation = useCallback(() => setAnimKey((k) => k + 1), []);
+
+  const animation = settings.design?.animation ?? 'slide';
+  const animClass = animation !== 'none' ? `cart-preview-anim-${animation}` : '';
 
   const pb = body.progressBar;
   const cs = body.couponSlider;
@@ -426,7 +447,12 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 5, flexShrink: 0, alignItems: 'center' }}>
+          {animation !== 'none' && (
+            <button onClick={replayAnimation} title="Replay animation" style={{ padding: '3px 8px', border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer', color: '#6d7175', letterSpacing: '0.3px' }}>
+              ▶ Replay
+            </button>
+          )}
           <Button onClick={onDiscard} size="slim">Discard</Button>
           <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
         </div>
@@ -459,7 +485,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
               <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px)', opacity: 0.4 }} />
 
               {/* Cart Drawer */}
-              <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+              <div key={animKey} className={animClass} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
 
                 {/* Design/General/CSS global overlay */}
                 {['design', 'general', 'customCSS'].includes(activeSection) && (
@@ -481,11 +507,14 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
                 {/* ── BODY (scrollable) ── */}
                 <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
 
-                  {/* Announcements */}
-                  {body.announcements.enabled && (
+                  {/* Announcements — show when enabled, or show muted placeholder when section is active */}
+                  {(body.announcements.enabled || activeSection === 'announcements') && (
                     <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <div style={{ padding: '8px 18px', textAlign: 'center', fontSize: `${body.announcements.fontSize}px`, fontWeight: 500, backgroundColor: body.announcements.bgColor, color: body.announcements.textColor }}>
-                        {body.announcements.text}
+                      <div
+                        className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
+                        style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: 'center' }}
+                      >
+                        {body.announcements.text || 'Your announcement text here…'}
                       </div>
                     </HighlightZone>
                   )}

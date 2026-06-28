@@ -20,9 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
         $stmt = $pdo->prepare("
-            SELECT *
-            FROM cart_drawer
-            WHERE shop = :shop
+            SELECT cd.*,
+              cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
+              cdc.announcement_text_color, cdc.announcement_font_size,
+              cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
+              cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width,
+              cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations
+            FROM cart_drawer cd
+            LEFT JOIN cart_drawer_config cdc ON cdc.shop_domain = cd.shop COLLATE utf8mb4_unicode_ci
+            WHERE cd.shop = :shop
             LIMIT 1
         ");
 

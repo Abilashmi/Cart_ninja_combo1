@@ -22,7 +22,7 @@ export const formatToIST = (dateString = null, timeZone = 'Asia/Kolkata') => {
    PHP BACKEND CONFIG
 ========================= */
 export const BASE_PHP_URL =
-  process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
+  process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
 
 /* =========================
    DATABASE HELPERS (PHP REPLACEMENT)

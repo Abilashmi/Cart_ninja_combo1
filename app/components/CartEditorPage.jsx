@@ -96,7 +96,7 @@ function CartEditorContent() {
           completion_text_color:  pb.colors?.message    || pb.completionTextColor || '#10b981',
           enable_confetti:        pb.confetti           ?? pb.enableConfetti ?? 1,
           tiers: (pb.tiers || []).map((t, i) => ({
-            min_value:      t.minValue      ?? 0,
+            min_value:      t.minimumSpend  ?? t.minValue ?? 0,
             min_quantity:   t.minQuantity   ?? 0,
             description:    t.description   || 'Milestone',
             reward_type:    t.rewardType    || 'free_shipping',

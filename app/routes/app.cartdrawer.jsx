@@ -3,19 +3,23 @@ import CartEditorPage from '../components/CartEditorPage';
 import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/cart-drawer-record.server';
 import { getDb } from '../services/db.server';
 
-const PHP_BASE = process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
-
-async function phpGet(endpoint, shop) {
-  try {
-    const res = await fetch(
-      `${PHP_BASE}/${endpoint}?shop=${encodeURIComponent(shop)}`,
-      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
-    );
-    const json = await res.json();
-    return json?.status === 'success' ? json.data : null;
-  } catch {
-    return null;
-  }
+async function fetchProgressBar(db, shop) {
+  const [rows] = await db.execute(
+    'SELECT * FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]
+  );
+  const settings = rows[0] || null;
+  if (!settings) return null;
+  const [tierRows] = await db.execute(
+    'SELECT * FROM progress_bar_tiers WHERE settings_id = ? AND is_active = 1 ORDER BY sort_order ASC',
+    [settings.id]
+  );
+  settings.tiers = tierRows.map((t) => ({
+    ...t,
+    reward_products: t.reward_products
+      ? (() => { try { return JSON.parse(t.reward_products); } catch { return []; } })()
+      : [],
+  }));
+  return settings;
 }
 
 export const loader = async ({ request }) => {
@@ -23,7 +27,7 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
   const db = getDb();
 
-  const [discountQuery, productsQuery, cartRecord, configRows, pbRecord, csRecord, upsellRecord] = await Promise.all([
+  const [discountQuery, productsQuery, cartRecord, configRecord, pbRecord, csRecord, upsellRecord] = await Promise.all([
     admin.graphql(`
       query DiscountList {
         discountNodes(first: 100, reverse: true) {
@@ -72,11 +76,20 @@ export const loader = async ({ request }) => {
     `),
     fetchCartDrawerRecord(shop),
     db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop])
-      .then(([rows]) => rows[0] || null)
-      .catch(() => null),
-    phpGet('progress_bar.php', shop),
-    phpGet('coupon_slider_settings.php', shop),
-    phpGet('upsell_settings.php', shop),
+      .then(([rows]) => rows[0] || null).catch(() => null),
+    fetchProgressBar(db, shop).catch(() => null),
+    db.execute('SELECT * FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [shop])
+      .then(([rows]) => {
+        const r = rows[0] || null;
+        if (r) { try { r.selected_coupons = r.selected_coupons ? JSON.parse(r.selected_coupons) : []; } catch { r.selected_coupons = []; } }
+        return r;
+      }).catch(() => null),
+    db.execute('SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [shop])
+      .then(([rows]) => {
+        const r = rows[0] || null;
+        if (r) { try { r.manual_rules = r.manual_rules ? JSON.parse(r.manual_rules) : []; } catch { r.manual_rules = []; } }
+        return r;
+      }).catch(() => null),
   ]);
 
   console.log('[loader] shop:', shop);
@@ -115,7 +128,7 @@ export const loader = async ({ request }) => {
     allProducts,
     drawerEnabled,
     cartRecord: cartRecord ?? null,
-    configRecord: configRows,
+    configRecord: configRecord,
     pbRecord: pbRecord ?? null,
     csRecord: csRecord ?? null,
     upsellRecord: upsellRecord ?? null,

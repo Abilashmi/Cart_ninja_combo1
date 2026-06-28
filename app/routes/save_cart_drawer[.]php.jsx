@@ -1,43 +1,54 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { getDb } from '../services/db.server';
 
-const LOCAL_DATA_FILE = path.resolve("cartdrawer-config-data.json");
-
-async function readLocalConfigMap() {
-    try {
-        const raw = await fs.readFile(LOCAL_DATA_FILE, "utf-8");
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-        return {};
-    }
-}
+const CORS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+};
 
 export async function loader({ request }) {
-    const url = new URL(request.url);
-    const shopDomain = (url.searchParams.get("shopdomain") || url.searchParams.get("shop") || "").toLowerCase();
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS });
+  }
 
-    const localMap = await readLocalConfigMap();
+  const url = new URL(request.url);
+  const shopDomain = (url.searchParams.get('shopdomain') || url.searchParams.get('shop') || '').toLowerCase().trim();
 
-    // Find by exact shop key, or fall back to first available entry
-    const shopData = (shopDomain && localMap[shopDomain])
-        ? localMap[shopDomain]
-        : Object.values(localMap)[0] || null;
+  if (!shopDomain) {
+    return new Response(
+      JSON.stringify({ status: 'error', message: 'shopdomain parameter required' }),
+      { status: 400, headers: CORS }
+    );
+  }
 
-    if (!shopData) {
-        return new Response(
-            JSON.stringify({ status: "error", message: "No config found for this shop" }),
-            { status: 404, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
-        );
+  try {
+    const db = getDb();
+    const [rows] = await db.execute(`
+      SELECT cd.*,
+        cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
+        cdc.announcement_text_color, cdc.announcement_font_size,
+        cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
+        cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width
+      FROM cart_drawer cd
+      LEFT JOIN cart_drawer_config cdc ON cdc.shop_domain = cd.shop
+      WHERE cd.shop = ?
+      LIMIT 1
+    `, [shopDomain]);
+
+    const result = rows[0] || null;
+    if (!result) {
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'No data found for this shop' }),
+        { status: 404, headers: CORS }
+      );
     }
 
-    // The local JSON already stores data in the exact PHP API format
-    // (progress_data, coupon_data, upsell_data as JSON strings, progress_status etc. as ints)
-    // so pass it through directly as the "data" field.
-    return new Response(JSON.stringify({ status: "success", data: shopData }), {
-        headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        },
-    });
+    return new Response(JSON.stringify({ status: 'success', data: result }), { headers: CORS });
+  } catch (e) {
+    console.error('[save_cart_drawer] DB error:', e);
+    return new Response(
+      JSON.stringify({ status: 'error', message: 'Database error' }),
+      { status: 500, headers: CORS }
+    );
+  }
 }
