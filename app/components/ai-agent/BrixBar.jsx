@@ -42,6 +42,7 @@ export default function BrixBar({
   floating = false,
   side = 'center',
   placeholder = 'Ask Brix anything about your cart, upsells, or analytics…',
+  zIndex = 9998,
 }) {
   const cfg = SIZES[size] || SIZES.md;
   const location = useLocation();
@@ -133,8 +134,8 @@ export default function BrixBar({
 
   const outerInlineStyle = { width: '100%', maxWidth: cfg.maxWidth, margin: (center ?? false) ? '0 auto' : undefined };
   const outerFloatStyle = side === 'left'
-    ? { position: 'fixed', bottom: 20, left: leftNavOffset, right: 'calc(45% + 20px)', zIndex: 9998 }
-    : { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: cfg.maxWidth, zIndex: 9998 };
+    ? { position: 'fixed', bottom: 20, left: leftNavOffset, right: 'calc(45% + 20px)', zIndex }
+    : { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: cfg.maxWidth, zIndex };
   const outerStyle = floating ? outerFloatStyle : outerInlineStyle;
 
   const panelHead = (

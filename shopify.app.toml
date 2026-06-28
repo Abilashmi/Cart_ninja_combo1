@@ -44,7 +44,7 @@ redirect_urls = [
 ]
 
 [app_proxy]
-url = "https://expand-figure-acceptance-chamber.trycloudflare.com/cartdrawerv2_ui/php_backend/"
+url = "https://themes-continuously-publicity-climb.trycloudflare.com/cartdrawerv2_ui/php_backend/"
 prefix = "apps"
 subpath = "cart-app"
 

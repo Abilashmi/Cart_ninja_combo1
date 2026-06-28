@@ -294,8 +294,8 @@ const INTERACTION_OPTIONS = [
 ];
 
 const LAYOUT_OPTIONS = [
-  { label: 'Horizontal — Side by side', value: 'horizontal' },
-  { label: 'Vertical — Stacked list',   value: 'vertical'   },
+  { label: 'Carousel — Horizontal scroll', value: 'carousel' },
+  { label: 'Grid — 2-column grid',         value: 'grid'     },
 ];
 
 const PLACEMENT_OPTIONS = [
@@ -505,7 +505,12 @@ export default function FBTPage() {
 
   const [selectedTemplate,  setSelectedTemplate]  = useState(apiKeyToTemplateId(fbtConfig.activeTemplate));
   const [interactionStyle,  setInteractionStyle]  = useState(fbtConfig.interactionType === 'quickAdd' ? 'quick-add' : fbtConfig.interactionType || 'classic');
-  const [layout,            setLayout]            = useState(fbtConfig.layout || 'horizontal');
+  const [layout,            setLayout]            = useState(() => {
+    const l = fbtConfig.layout || 'carousel';
+    if (l === 'horizontal') return 'carousel';
+    if (l === 'vertical')   return 'grid';
+    return l;
+  });
   const [bgColor,           setBgColor]           = useState(fbtConfig.bgColor        || '#ffffff');
   const [textColor,         setTextColor]         = useState(fbtConfig.textColor      || '#111827');
   const [priceColor,        setPriceColor]        = useState(fbtConfig.priceColor     || '#059669');
@@ -572,7 +577,7 @@ export default function FBTPage() {
       if (t.id === selectedTemplate) {
         templates[t.apiKey] = { name: t.name, ...curSettings };
       } else {
-        templates[t.apiKey] = { name: t.name, layout: 'horizontal', interactionType: 'classic',
+        templates[t.apiKey] = { name: t.name, layout: 'carousel', interactionType: 'classic',
           showPrices: true, showAddAllButton: true, ...t.colors, borderRadius: t.borderRadius };
       }
     }
@@ -629,102 +634,69 @@ export default function FBTPage() {
     );
   };
 
-  /* ── previewProducts: per-template product grid ── */
-  const previewProducts = (() => {
-    if (selectedTemplate === 'classic-grid') {
-      if (layout === 'horizontal') {
-        return (
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: '8px' }}>
-            {MOCK_PRODUCTS.map((p, i) => (
-              <div key={p.id} style={{ display: 'contents' }}>
-                <div style={{
-                  flex: 1, background: '#fff', border: `1px solid ${borderColor}`,
-                  borderRadius: `${borderRadius}px`, padding: '14px 10px',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-                }}>
-                  <ImagePlaceholder size={64} />
-                  <div style={{ color: textColor, fontSize: '11px', textAlign: 'center', lineHeight: 1.4, fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ flex: 1 }} />
-                  {showPrices && <div style={{ color: priceColor, fontSize: '14px', fontWeight: 700, textAlign: 'center', width: '100%' }}>₹{p.price}</div>}
-                  <InlineStack align="center">{renderAction(i)}</InlineStack>
-                </div>
-                {i < MOCK_PRODUCTS.length - 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', color: '#9ca3af', fontSize: '18px', fontWeight: 400, flexShrink: 0, padding: '0 2px' }}>+</div>
-                )}
-              </div>
-            ))}
-          </div>
-        );
-      }
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {MOCK_PRODUCTS.map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: '#fff', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-              <ImagePlaceholder size={48} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                {showPrices && <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700 }}>₹{p.price}</div>}
-              </div>
-              {renderAction(i)}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (selectedTemplate === 'modern-cards') {
-      if (layout === 'horizontal') {
-        return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-            {MOCK_PRODUCTS.map((p, i) => (
-              <div key={p.id} style={{ background: '#fff', borderRadius: `${borderRadius}px`, boxShadow: '0 2px 10px rgba(0,0,0,0.09)', padding: '14px 10px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-                <ImagePlaceholder size={60} />
-                <div style={{ color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.3, textAlign: 'center', width: '100%' }}>{p.name}</div>
-                {showPrices && <div style={{ color: priceColor, fontSize: '14px', fontWeight: 700 }}>₹{p.price}</div>}
-                <InlineStack align="center">{renderAction(i)}</InlineStack>
-              </div>
-            ))}
-          </div>
-        );
-      }
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {MOCK_PRODUCTS.map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: '#fff', borderRadius: `${borderRadius}px`, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <ImagePlaceholder size={48} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-                {showPrices && <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700 }}>₹{p.price}</div>}
-              </div>
-              {renderAction(i)}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // vertical-list
-    return (
-      <div style={{ borderRadius: `${borderRadius}px`, overflow: 'hidden', border: `1px solid ${borderColor}` }}>
-        {MOCK_PRODUCTS.map((p, i) => (
-          <div key={p.id} style={{
-            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px',
-            background: i % 2 === 0 ? '#fff' : '#fafafa',
-            borderTop: i > 0 ? `1px solid ${borderColor}` : 'none',
-            borderLeft: `3px solid ${buttonColor}`,
-          }}>
-            <ImagePlaceholder size={44} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: textColor, fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-              {showPrices && <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700 }}>₹{p.price}</div>}
-            </div>
-            <div style={{ flexShrink: 0, minWidth: '70px' }}>{renderAction(i)}</div>
-          </div>
-        ))}
-      </div>
-    );
+  /* ── previewProducts: carousel or grid, with per-template card style ── */
+  const cardStyle = (() => {
+    if (selectedTemplate === 'modern-cards') return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+      border: 'none',
+      padding: '12px 8px',
+    };
+    if (selectedTemplate === 'vertical-list') return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      border: `1px solid ${borderColor}`,
+      borderLeft: `4px solid ${buttonColor}`,
+      padding: '10px 8px',
+    };
+    /* classic-grid */
+    return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      border: `1px solid ${borderColor}`,
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+      padding: '10px 8px',
+    };
   })();
+
+  const PreviewCard = ({ p, i }) => (
+    <div style={{
+      ...cardStyle,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+      boxSizing: 'border-box',
+    }}>
+      <ImagePlaceholder size={56} />
+      <div style={{
+        color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
+        textAlign: 'center', width: '100%',
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+        overflow: 'hidden', wordBreak: 'break-word',
+      }}>{p.name}</div>
+      {showPrices && (
+        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>₹{p.price}</div>
+      )}
+      <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
+        {renderAction(i)}
+      </div>
+    </div>
+  );
+
+  const previewProducts = layout === 'carousel' ? (
+    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+      {MOCK_PRODUCTS.map((p, i) => (
+        <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
+          <PreviewCard p={p} i={i} />
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+      {MOCK_PRODUCTS.map((p, i) => (
+        <PreviewCard key={p.id} p={p} i={i} />
+      ))}
+    </div>
+  );
 
   const interactionLabel = INTERACTION_OPTIONS.find(o => o.value === interactionStyle)?.label.split('—')[0].trim() ?? '';
   const templateName = TEMPLATES.find(t => t.id === selectedTemplate)?.name ?? '';

@@ -8,6 +8,7 @@ import {
   WandIcon, CheckCircleIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
+import { getDb } from '../services/db.server';
 import { BundleStackMock } from '../components/feature/BundleStackMock';
 import BrixBar from '../components/ai-agent/BrixBar';
 import TemplateManager from '../components/bundles/TemplateManager';
@@ -23,27 +24,33 @@ export const loader = async ({ request }) => {
   let discounts = [];
 
   try {
-    const { default: prisma } = await import('../db.server');
-
-    const allRows = await prisma.$queryRawUnsafe(
-      `SELECT id, title, is_active as active, page_url, page_handle, config, created_at as createdAt, updated_at as updatedAt
+    const db = getDb();
+    const [allRows] = await db.execute(
+      `SELECT id, name, is_active, page_handle, customization_data, created_at, updated_at
        FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
-      shop
-    ).catch(() => []);
+      [shop]
+    );
 
-    templates = (Array.isArray(allRows) ? allRows : []).map(row => ({
-      ...row,
-      active: Boolean(row.active),
-      config: typeof row.config === 'string' ? JSON.parse(row.config || '{}') : (row.config || {}),
-      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : new Date().toISOString(),
-      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : new Date().toISOString(),
-    }));
+    templates = (Array.isArray(allRows) ? allRows : []).map(row => {
+      let config = {};
+      try { config = JSON.parse(row.customization_data || '{}'); } catch { /* keep {} */ }
+      return {
+        id: row.id,
+        title: row.name || 'Untitled',
+        active: Boolean(row.is_active),
+        page_url: row.page_handle || null,
+        page_handle: row.page_handle || null,
+        config,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+      };
+    });
 
     templateCount = templates.filter(t => t.active).length;
     publishedPages = templates.filter(t => t.page_url);
     publishedCount = publishedPages.length;
-  } catch {
-    // Template table may not exist on a fresh install.
+  } catch (e) {
+    console.error('[bundles index loader]', e.message);
   }
 
   try {
@@ -98,23 +105,26 @@ export const action = async ({ request }) => {
   const id = formData.get('id');
 
   try {
-    const { default: prisma } = await import('../db.server');
+    const db = getDb();
     if (intent === 'delete' && id) {
-      await prisma.$queryRawUnsafe(
-        `DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?`,
-        Number(id), shop
-      ).catch(() => {});
+      await db.execute(
+        'DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        [Number(id), shop]
+      );
       return { success: true, message: 'Template deleted.' };
     }
     if (intent === 'toggle_active' && id) {
       const active = formData.get('active') === 'true' ? 1 : 0;
-      await prisma.$queryRawUnsafe(
-        `UPDATE combo_templates SET is_active = ? WHERE id = ? AND shop_domain = ?`,
-        active, Number(id), shop
-      ).catch(() => {});
+      await db.execute(
+        'UPDATE combo_templates SET is_active = ? WHERE id = ? AND shop_domain = ?',
+        [active, Number(id), shop]
+      );
       return { success: true, message: active ? 'Template activated.' : 'Template deactivated.' };
     }
-  } catch { /* silent */ }
+  } catch (e) {
+    console.error('[bundles index action]', e.message);
+    return { success: false, error: e.message };
+  }
   return { success: true, message: 'Done.' };
 };
 

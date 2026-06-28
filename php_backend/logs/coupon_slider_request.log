@@ -1933,3 +1933,186 @@
     }
 }
 ---
+{
+    "timestamp": "2026-06-28 16:23:12",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template1\",\"selectedTemplateCoupon\":null,\"selectedCouponsGlobal\":[],\"template1\":{\"styles\":{\"headingText\":\"GET 10% OFF!\",\"subtextText\":\"Apply at checkout for savings\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"accentColor\":\"#3b82f6\",\"buttonColor\":\"#3b82f6\",\"buttonTextColor\":\"#ffffff\",\"borderRadius\":12,\"fontSize\":16,\"padding\":16},\"couponStyles\":{},\"couponConditions\":[]},\"displayCondition\":\"all\",\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"above_cart\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 16:23:12",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template1",
+        "selectedTemplateCoupon": "[]"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 16:24:56",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template1\",\"selectedTemplateCoupon\":\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"selectedCouponsGlobal\":[\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\"],\"template1\":{\"styles\":{\"headingText\":\"GET 10% OFF!\",\"subtextText\":\"Apply at checkout for savings\",\"bgColor\":\"#e22c2c\",\"textColor\":\"#111827\",\"accentColor\":\"#3b82f6\",\"buttonColor\":\"#3b82f6\",\"buttonTextColor\":\"#ffffff\",\"borderRadius\":12,\"fontSize\":16,\"padding\":16},\"couponStyles\":{\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\":{\"couponCode\":\"T82HUF5B\",\"bgColor\":\"#4c2f2f\",\"textColor\":\"#f5f5f5\",\"accentColor\":\"#f58300\",\"buttonColor\":\"#da622f\",\"buttonTextColor\":\"#ffffff\"},\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\":{\"couponCode\":\"UYY27RIW\"}},\"couponConditions\":[]},\"displayCondition\":\"all\",\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"above_cart\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 16:24:56",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template1",
+        "selectedTemplateCoupon": "[\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1167110373583\",\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1166758805711\"]"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 16:25:33",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template1\",\"selectedTemplateCoupon\":\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"selectedCouponsGlobal\":[\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\"],\"template1\":{\"styles\":{\"headingText\":\"GET 10% OFF!\",\"subtextText\":\"Apply at checkout for savings\",\"bgColor\":\"#e22c2c\",\"textColor\":\"#111827\",\"accentColor\":\"#3b82f6\",\"buttonColor\":\"#3b82f6\",\"buttonTextColor\":\"#ffffff\",\"borderRadius\":12,\"fontSize\":16,\"padding\":16},\"couponStyles\":{\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\":{\"couponCode\":\"T82HUF5B\",\"bgColor\":\"#4c2f2f\",\"textColor\":\"#f5f5f5\",\"accentColor\":\"#f58300\",\"buttonColor\":\"#da622f\",\"buttonTextColor\":\"#ffffff\"},\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\":{\"couponCode\":\"UYY27RIW\",\"bgColor\":\"#332828\",\"textColor\":\"#ffffff\",\"accentColor\":\"#e92bc0\",\"buttonColor\":\"#ff42cd\",\"buttonTextColor\":\"#ffffff\"}},\"couponConditions\":[]},\"displayCondition\":\"all\",\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"above_cart\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 16:25:33",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template1",
+        "selectedTemplateCoupon": "[\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1167110373583\",\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1166758805711\"]"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:32:07",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1782660727&signature=7427d8a40e9d3adef6b1e7b89c0a43c382a5b16850bb1e0a9f33dcbbaca41242",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1782660727",
+            "signature": "7427d8a40e9d3adef6b1e7b89c0a43c382a5b16850bb1e0a9f33dcbbaca41242"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:32:07",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:35:01",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1782660901&signature=b7beb6cb5fa870d028e2c5ad36c647ec8872b1027e4b54fdcd575664385748c1",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1782660901",
+            "signature": "b7beb6cb5fa870d028e2c5ad36c647ec8872b1027e4b54fdcd575664385748c1"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:35:01",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:42:58",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template1\",\"selectedTemplateCoupon\":\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"selectedCouponsGlobal\":[\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\",\"gid:\/\/shopify\/DiscountCodeNode\/1166756937935\"],\"template1\":{\"styles\":{\"headingText\":\"GET 10% OFF!\",\"subtextText\":\"Apply at checkout for savings\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"accentColor\":\"#3b82f6\",\"buttonColor\":\"#3b82f6\",\"buttonTextColor\":\"#ffffff\",\"borderRadius\":12,\"fontSize\":16,\"padding\":16},\"couponStyles\":{\"gid:\/\/shopify\/DiscountCodeNode\/1167110373583\":{\"couponCode\":\"T82HUF5B\"},\"gid:\/\/shopify\/DiscountCodeNode\/1166756937935\":{\"couponCode\":\"MN6BK780\"}},\"couponConditions\":[]},\"displayCondition\":\"all\",\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"above_cart\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:42:58",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template1",
+        "selectedTemplateCoupon": "[\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1167110373583\",\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1166756937935\"]"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:43:06",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1782661385&signature=14c4130f4477b5af1cb318f3c4d3e3454ef1ceeb25004364fdcbba7054e634db",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1782661385",
+            "signature": "14c4130f4477b5af1cb318f3c4d3e3454ef1ceeb25004364fdcbba7054e634db"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 17:43:06",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 18:23:22",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template1\",\"selectedTemplateCoupon\":\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\",\"selectedCouponsGlobal\":[\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\",\"gid:\/\/shopify\/DiscountCodeNode\/1166756937935\"],\"template1\":{\"styles\":{\"headingText\":\"GET 10% OFF!\",\"subtextText\":\"Apply at checkout for savings\",\"bgColor\":\"#ffffff\",\"textColor\":\"#111827\",\"accentColor\":\"#3b82f6\",\"buttonColor\":\"#3b82f6\",\"buttonTextColor\":\"#ffffff\",\"borderRadius\":12,\"fontSize\":16,\"padding\":16},\"couponStyles\":{\"gid:\/\/shopify\/DiscountCodeNode\/1166758805711\":{\"couponCode\":\"UYY27RIW\",\"headingText\":\"holkbg\",\"subtextText\":\"uyyg\"},\"gid:\/\/shopify\/DiscountCodeNode\/1166756937935\":{\"couponCode\":\"MN6BK780\",\"headingText\":\"gch\",\"subtextText\":\"hfbb\"}},\"couponConditions\":[]},\"displayCondition\":\"all\",\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"above_cart\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-06-28 18:23:22",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template1",
+        "selectedTemplateCoupon": "[\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1166758805711\",\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1166756937935\"]"
+    }
+}
+---

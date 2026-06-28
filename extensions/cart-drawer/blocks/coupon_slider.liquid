@@ -133,90 +133,85 @@ function buildCard(tpl,s,code,h,sub){
   card.className='ps-card';
 
   if(tpl==='template1'){
-    /* ── Template 1: Classic Banner ──────────────────────────────────────
-       White/colored bg · left accent bar · ROW: [heading+subtext] [Copy Code btn]
-       Matches admin preview exactly. */
+    /* ── Template 1: Classic Banner ─────────────────────────────────────
+       Left accent bar · ROW: [heading + subtext] [Copy Code btn]
+       Card must be wide enough that text never wraps per-character.       */
     card.style.cssText=
       'background:'+bg+';'
-      +'border-left:5px solid '+ac+';'
+      +'border-left:4px solid '+ac+';'
       +'border-radius:'+br+'px;'
-      +'padding:'+((p)+10)+'px '+((p)+14)+'px;'
-      +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
+      +'padding:16px 18px;'
+      +'box-shadow:0 2px 12px rgba(0,0,0,0.07);'
       +'display:flex;flex-direction:row;'
-      +'justify-content:space-between;align-items:center;'
-      +'gap:12px;flex:0 0 240px;min-width:240px;box-sizing:border-box;';
+      +'align-items:center;justify-content:space-between;'
+      +'gap:14px;flex:0 0 320px;min-width:320px;box-sizing:border-box;';
     card.innerHTML=
-      '<div style="flex:1;min-width:0;">'
-        +'<div style="font-weight:800;font-size:'+( fs+4 )+'px;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
-        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.55;color:'+tc+';word-wrap:break-word;margin-top:2px;line-height:1.2;">'+sub+'</div>'
+      '<div style="flex:1;min-width:100px;overflow:hidden;">'
+        +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+        +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
       +'</div>'
       +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
         +'background:'+bc+';color:'+btc+';border:none;'
-        +'padding:10px 24px;border-radius:'+br+'px;'
-        +'font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
+        +'padding:9px 16px;border-radius:'+br+'px;'
+        +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
         +'Copy Code'
       +'</button>';
 
   }else if(tpl==='template2'){
-    /* ── Template 2: Ticket / Minimal Card ───────────────────────────────
-       Punched-circle ticket with left code panel + right content + Redeem Now btn */
+    /* ── Template 2: Ticket ──────────────────────────────────────────────
+       Punched-circle ticket: left code panel | right heading+subtext+btn  */
     card.style.cssText=
       'background:'+bg+';'
       +'border-radius:'+br+'px;'
       +'display:flex;flex-direction:row;'
       +'overflow:visible;'
       +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
-      +'flex:0 0 260px;min-width:260px;'
-      +'box-sizing:border-box;position:relative;align-items:center;';
+      +'flex:0 0 320px;min-width:320px;'
+      +'box-sizing:border-box;position:relative;align-items:stretch;';
     card.innerHTML=
-      /* punch-out circles */
-      '<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;left:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
-      +'<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;right:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
-      /* left panel */
-      +'<div style="width:36%;min-height:110px;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'20 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 8px;flex-shrink:0;border-right:2px dashed '+ac+'50;position:relative;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
-        +'<span style="font-size:9px;font-weight:700;opacity:0.75;text-transform:uppercase;letter-spacing:1.5px;color:'+ac+';margin-bottom:10px;display:block;white-space:nowrap;">Your Code</span>'
-        +'<span style="font-size:13px;font-weight:900;font-family:monospace;letter-spacing:1px;color:'+ac+';text-align:center;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+code+'</span>'
+      '<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
+      +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
+      +'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
+        +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+ac+';margin-bottom:8px;display:block;white-space:nowrap;">Your Code</span>'
+        +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
       +'</div>'
-      /* right panel */
-      +'<div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;">'
-        +'<div style="font-size:'+( fs+3 )+'px;font-weight:900;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
-        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.6;color:'+tc+';word-wrap:break-word;line-height:1.3;margin-bottom:4px;">'+sub+'</div>'
+      +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
+        +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+        +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
         +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
-          +'padding:9px 26px;border-radius:'+br+'px;'
+          +'padding:7px 14px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
-          +'Copy'
+          +'Copy Code'
         +'</button>'
       +'</div>';
 
   }else if(tpl==='template3'){
     /* ── Template 3: Bold & Vibrant ──────────────────────────────────────
-       COLUMN: [icon + heading+subtext row] then [dashed code pill + Apply btn row] */
+       COLUMN: [icon + heading+subtext] then [code pill + Copy btn]        */
     card.style.cssText=
       'background:'+bg+';'
       +'border-radius:'+br+'px;'
-      +'padding:'+( p+6 )+'px '+( p+12 )+'px;'
-      +'display:flex;flex-direction:column;'
-      +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
-      +'border:1px solid '+ac+'15;'
-      +'flex:0 0 240px;min-width:240px;box-sizing:border-box;';
+      +'padding:16px 18px;'
+      +'display:flex;flex-direction:column;gap:12px;'
+      +'box-shadow:0 2px 12px rgba(0,0,0,0.07);'
+      +'border:1px solid '+ac+'20;'
+      +'flex:0 0 280px;min-width:280px;box-sizing:border-box;';
     card.innerHTML=
-      /* top row: icon + text */
-      '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">'
-        +'<div style="width:42px;height:42px;border-radius:10px;background:'+ac+'12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;">🏷️</div>'
+      '<div style="display:flex;align-items:flex-start;gap:10px;">'
+        +'<div style="width:38px;height:38px;border-radius:9px;background:'+ac+'15;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;">🏷️</div>'
         +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-size:'+( fs+1 )+'px;font-weight:700;color:'+tc+';line-height:1.3;margin-bottom:4px;word-wrap:break-word;">'+h+'</div>'
-          +'<div style="font-size:'+( fs-2 )+'px;opacity:0.5;color:'+tc+';word-wrap:break-word;line-height:1.3;">'+sub+'</div>'
+          +'<div style="font-size:'+(fs+1)+'px;font-weight:700;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
         +'</div>'
       +'</div>'
-      /* bottom row: code pill + Apply btn */
-      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-        +'<div style="padding:6px 14px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;letter-spacing:1.5px;flex:1;min-width:120px;text-align:center;word-wrap:break-word;">'+code+'</div>'
+      +'<div style="display:flex;align-items:center;gap:8px;">'
+        +'<div style="flex:1;padding:7px 10px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+code+'</div>'
         +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
-          +'padding:8px 20px;border-radius:'+br+'px;'
+          +'padding:8px 14px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
-          +'Copy Code'
+          +'Copy'
         +'</button>'
       +'</div>';
 
@@ -225,13 +220,6 @@ function buildCard(tpl,s,code,h,sub){
   return card;
 }
 
-function checkOverflow(el){
-  var w=el.querySelector('.ps-coupon-wrapper');
-  var navGroup=el.querySelector('.ps-nav-group');
-  if(!w||!navGroup)return;
-  var hasOverflow=w.scrollWidth>w.clientWidth;
-  navGroup.style.display=hasOverflow?'flex':'none';
-}
 
 function renderSlider(el,data,ctx){
   var tpl=data.selectedTemplate||'template1';
@@ -304,34 +292,37 @@ function renderSlider(el,data,ctx){
   el.innerHTML=
     '<div class="ps-slider">'
       +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
-      +'<div class="ps-slider-header">'
-        +'<div class="ps-nav-group" style="display:none;">'
-          +'<button class="ps-nav ps-prev">&#8592;</button>'
-          +'<button class="ps-nav ps-next">&#8594;</button>'
-        +'</div>'
+      +'<div class="ps-slider-row">'
+        +'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>'
+        +'<div class="ps-coupon-wrapper"></div>'
+        +'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>'
       +'</div>'
-      +'<div class="ps-coupon-wrapper '+(data.layout==='carousel'?'ps-layout-carousel':data.layout==='grid'?'ps-layout-grid':'')+'"></div>'
     +'</div>';
 
   var w=el.querySelector('.ps-coupon-wrapper');
+  var prv=el.querySelector('.ps-prev');
+  var nxt=el.querySelector('.ps-next');
 
   itemsToRender.forEach(function(item){
     w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext));
   });
 
-  /* Check overflow on initial render */
-  setTimeout(function(){checkOverflow(el);},0);
-
-  /* Nav scroll */
-  var nxt=el.querySelector('.ps-next'),prv=el.querySelector('.ps-prev');
-  if(nxt&&prv){
-    nxt.addEventListener('click',function(){w.scrollBy({left:320,behavior:'smooth'});});
-    prv.addEventListener('click',function(){w.scrollBy({left:-320,behavior:'smooth'});});
+  /* Nav state: disable prev at start, next at end */
+  function updateNavState(){
+    var atStart=w.scrollLeft<=2;
+    var atEnd=w.scrollLeft+w.clientWidth>=w.scrollWidth-2;
+    if(prv){prv.disabled=atStart;prv.style.opacity=atStart?'0.35':'1';}
+    if(nxt){nxt.disabled=atEnd;nxt.style.opacity=atEnd?'0.35':'1';}
   }
 
-  /* Monitor scroll and resize to update nav visibility */
-  w.addEventListener('scroll',function(){checkOverflow(el);});
-  window.addEventListener('resize',function(){checkOverflow(el);});
+  /* Scroll by roughly one card width */
+  var cardW=(itemsToRender.length>0&&w.firstChild)?w.firstChild.offsetWidth+12:280;
+  if(nxt)nxt.addEventListener('click',function(){w.scrollBy({left:cardW,behavior:'smooth'});});
+  if(prv)prv.addEventListener('click',function(){w.scrollBy({left:-cardW,behavior:'smooth'});});
+
+  w.addEventListener('scroll',updateNavState);
+  window.addEventListener('resize',updateNavState);
+  setTimeout(updateNavState,120);
 
   /* Copy to clipboard */
   el.addEventListener('click',function(e){
@@ -436,25 +427,34 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 })();
 </script>
 <style>
-.ps-slider{position:relative;width:100%;padding:4px 0}
-.ps-slider-header{display:none}
-.ps-nav-group{display:none}
-/* Responsive: full-width cards stacked vertically so text never breaks per-character */
-.ps-coupon-wrapper{display:flex;flex-direction:column;gap:12px;padding:6px 0}
-.ps-coupon-wrapper > .ps-card{flex:none!important;width:100%!important;min-width:0!important}
-/* Carousel: horizontal slider with fixed-width cards */
-.ps-coupon-wrapper.ps-layout-carousel{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x mandatory}
-.ps-coupon-wrapper.ps-layout-carousel::-webkit-scrollbar{display:none}
-.ps-coupon-wrapper.ps-layout-carousel > .ps-card{width:260px!important;flex:0 0 260px!important;scroll-snap-align:start}
-/* Grid: 2 columns */
-.ps-coupon-wrapper.ps-layout-grid{display:grid;grid-template-columns:1fr 1fr}
-.ps-coupon-wrapper.ps-layout-grid > .ps-card{width:auto!important}
-@media(max-width:520px){.ps-coupon-wrapper.ps-layout-grid{grid-template-columns:1fr}}
-.ps-nav{width:36px;height:36px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-.ps-nav:hover{background:#f8fafc;border-color:#cbd5e1}
-.ps-card{box-shadow:0 4px 16px rgba(0,0,0,.08)}
-.ps-section-title{margin-top:0}
-@media(max-width:768px){
-  .ps-coupon-wrapper{gap:10px}
+.ps-slider{width:100%;padding:4px 0}
+.ps-section-title{margin:0 0 10px}
+/* Row: [←] [scrollable cards] [→] */
+.ps-slider-row{display:flex;align-items:center;gap:8px}
+.ps-coupon-wrapper{
+  flex:1;min-width:0;
+  display:flex;flex-direction:row;flex-wrap:nowrap;
+  gap:12px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;
+  padding:4px 2px;
 }
+.ps-coupon-wrapper::-webkit-scrollbar{display:none}
+.ps-card{scroll-snap-align:start;flex-shrink:0}
+/* Nav arrows */
+.ps-nav{
+  width:34px;height:34px;border-radius:50%;
+  border:1.5px solid #e2e8f0;background:#fff;
+  cursor:pointer;font-size:15px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  box-shadow:0 2px 6px rgba(0,0,0,0.09);
+  transition:background .15s,border-color .15s,transform .1s;
+  color:#374151;
+  line-height:1;
+}
+.ps-nav:hover:not(:disabled){background:#f1f5f9;border-color:#94a3b8;transform:scale(1.08)}
+.ps-nav:disabled{opacity:0.35;cursor:default}
 </style>

@@ -1293,7 +1293,7 @@ const DEFAULT_COMBO_CONFIG = {
   preview_bar_full_width: true,
   preview_bar_padding_top: 16,
   preview_item_color: '#000',
-  max_selections: 3,
+  max_selections: 1,
   max_products: 5,
   preview_bar_padding_bottom: 16,
   show_preview_bar: true,
@@ -1355,11 +1355,11 @@ const DEFAULT_COMBO_CONFIG = {
   collection_title: 'Create Your Combo',
   collection_description: 'Select items to build your perfect combo.',
   heading_align: 'left',
-  heading_size: 28,
+  heading_size: 32,
   heading_color: '#333333',
-  heading_font_weight: '700', // Bold by default for titles
+  heading_font_weight: '700',
   description_align: 'left',
-  description_size: 15,
+  description_size: 16,
   description_color: '#666666',
   description_font_weight: '400', // Normal by default for descriptions
   title_container_padding_top: 0,
@@ -1383,14 +1383,14 @@ const DEFAULT_COMBO_CONFIG = {
   // Show the "All/Collections" tab by default so Combo Design Two
   // has a visible and working collections tab in the preview layout.
   show_tab_all: true,
-  tab_count: 4,
+  tab_count: 1,
   progress_text: '',
   discount_threshold: 5,
   // Product Card Typography
-  product_title_size_desktop: 15,
-  product_title_size_mobile: 13,
-  product_price_size_desktop: 15,
-  product_price_size_mobile: 13,
+  product_title_size_desktop: 16,
+  product_title_size_mobile: 14,
+  product_price_size_desktop: 16,
+  product_price_size_mobile: 14,
   product_card_padding: 10,
   products_gap: 12,
   // Layout 3 defaults
@@ -1411,10 +1411,10 @@ const DEFAULT_COMBO_CONFIG = {
   description_size_mobile: 13,
   heading_align_mobile: 'left',
   description_align_mobile: 'left',
-  product_title_size_desktop: 15,
-  product_title_size_mobile: 12,
-  product_price_size_desktop: 15,
-  product_price_size_mobile: 12,
+  product_title_size_desktop: 16,
+  product_title_size_mobile: 14,
+  product_price_size_desktop: 16,
+  product_price_size_mobile: 14,
   // Responsive Spacing Overrides
   products_gap_desktop: 16,
   products_gap_mobile: 10,
@@ -2005,14 +2005,19 @@ export default function Customize() {
     previewDevice === 'mobile'
       ? MOBILE_PREVIEW_BASE_HEIGHT
       : DESKTOP_PREVIEW_BASE_HEIGHT;
+  // Use zoom (not transform:scale) so layout dimensions follow the visual size —
+  // this means the panel auto-sizes to content height with nothing clipped.
   const previewScale = Math.max(containerWidth, 1) / previewBaseWidth;
+  const clampedScale = Math.min(Math.max(previewScale, 0.1), 1);
   const scaledCanvasStyle = {
     width: `${previewBaseWidth}px`,
-    transform: `scale(${previewScale})`,
+    zoom: clampedScale,
     transformOrigin: 'top left',
   };
+  // No fixed height — let the zoomed content determine panel height naturally.
   const scaledPanelStyle = {
-    height: `${Math.round(previewBaseHeight * previewScale)}px`,
+    width: '100%',
+    overflow: 'visible',
   };
 
   // Discount modal state
@@ -2975,8 +2980,6 @@ export default function Customize() {
   return (
     <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
-      <BrixBar size="md" floating />
-
       <Page
         fullWidth
         backAction={{
@@ -3052,7 +3055,7 @@ export default function Customize() {
           canPreview={!!initialTemplate?.id}
           issueCount={validationIssues.length}
         />
-        <BrixBar size="md" floating placeholder="Ask Brix to help with your bundle — layout, copy, colours, products…" />
+        <BrixBar size="md" floating zIndex={400} placeholder="Ask Brix to help with your bundle — layout, copy, colours, products…" />
         {validationIssues.length > 0 && (
           <ValidationPanel
             issues={validationIssues}
@@ -3256,7 +3259,7 @@ export default function Customize() {
 
 .preview-stage{background:linear-gradient(180deg,#f8f9fb 0%,#f2f4f7 100%);border:1px solid #e3e6eb;border-radius:12px;padding:12px}
 .preview-scale-panel{width:100%;overflow:visible}
-.preview-scale-canvas{transform-origin:top left;will-change:transform}
+.preview-scale-canvas{will-change:zoom}
 .preview-stage--desktop{display:flex;flex-direction:column;gap:10px}
 .preview-browser-chrome{width:100%;height:34px;border-radius:10px;border:1px solid #d7dce4;background:linear-gradient(180deg,#fff 0%,#f4f6fa 100%);display:flex;align-items:center;gap:6px;padding:0 10px}
 .preview-browser-chrome span{width:10px;height:10px;border-radius:50%;background:#d5dae3}
@@ -3265,7 +3268,7 @@ export default function Customize() {
 .preview-browser-chrome span:nth-child(3){background:#3ddc84}
 .preview-viewport{width:100%;overflow-y:auto;overflow-x:hidden;background:#fff;margin:0 auto;transition:all .25s ease;position:relative}
 .preview-viewport>*{max-width:100%}
-.preview-stage--desktop .preview-viewport{width:1200px;height:800px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
+.preview-stage--desktop .preview-viewport{width:1200px;min-height:400px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
 .preview-stage--mobile{display:flex;justify-content:center;padding:4px;background:linear-gradient(180deg,#f6f7f9 0%,#eef1f5 100%)}
 .preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
       `}</style>
@@ -4157,20 +4160,20 @@ function ComboPreview({
       ? config.banner_fit_mode
       : 'initial';
 
-  // const previewItemSize = config.preview_item_size; // unused
+  // With CSS zoom (not transform:scale), font sizes render at correct visual size — no compensation needed.
   const productTitleSize = isMobile
-    ? config.product_title_size_mobile || 12
-    : config.product_title_size_desktop || 15;
+    ? config.product_title_size_mobile || 14
+    : config.product_title_size_desktop || 16;
   const productPriceSize = isMobile
-    ? config.product_price_size_mobile || 12
+    ? config.product_price_size_mobile || 14
     : config.product_price_size_desktop || 15;
 
   const headingSize = isMobile
     ? (config.heading_size_mobile ?? config.heading_size ?? 22)
-    : (config.heading_size ?? 28);
+    : (config.heading_size ?? 32);
   const descriptionSize = isMobile
     ? (config.description_size_mobile ?? config.description_size ?? 13)
-    : (config.description_size ?? 15);
+    : (config.description_size ?? 16);
 
   const headingColor = isMobile
     ? config.heading_color_mobile || config.heading_color
