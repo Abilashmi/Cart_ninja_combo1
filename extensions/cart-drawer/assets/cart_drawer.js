@@ -178,6 +178,7 @@
         return {
             enabled,
             mode,
+            position: data.position || 'top',
             showOnEmpty: data.showOnEmpty !== false,
             barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
             barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
@@ -193,24 +194,48 @@
         const enabled = isEnabled(d.coupon_status) || isEnabled(d.couponStatus) || isEnabled(data.enabled);
 
         const title = data && typeof data.title === 'object' && data.title ? data.title : {};
-        const rawAlign = title.alignment || data.titleAlignment || 'left';
-        const safeAlign = rawAlign === 'center' || rawAlign === 'right' || rawAlign === 'left' ? rawAlign : 'left';
+        const rawAlign = (title.alignment || data.titleTextAlign || data.titleAlignment || 'left');
+        const safeAlign = ['left','center','right'].includes(rawAlign) ? rawAlign : 'left';
+
+        const iconEmoji = { discount: '🏷️', gift: '🎁', shipping: '🚚', star: '⭐', percent: '%', cash: '💰' };
+
+        // Convert new editor format (selectedCoupons = full objects) to internal
+        // format preserving ALL styling so renderCouponSection matches the preview.
+        let selectedActiveCoupons = data.selectedActiveCoupons || [];
+        let allCouponDetails = data.allCouponDetails || [];
+        if (!selectedActiveCoupons.length && Array.isArray(data.selectedCoupons) && data.selectedCoupons.length) {
+            selectedActiveCoupons = data.selectedCoupons.map(c => c.id).filter(Boolean);
+            allCouponDetails = data.selectedCoupons.map(c => ({
+                id:              c.id,
+                code:            c.code       || c.labelText    || '',
+                label:           c.labelText  || c.code         || '',
+                description:     c.description || '',
+                bgColor:         c.bgColor    || '#4f46e5',
+                textColor:       c.textColor  || '#ffffff',
+                borderRadius:    c.borderRadius ?? 8,
+                buttonBgColor:   c.buttonBgColor  || '#000000',
+                buttonTextColor: c.buttonTextColor || '#ffffff',
+                buttonText:      c.buttonText || 'Apply',
+                icon:            c.icon       || 'discount',
+                iconUrl:         iconEmoji[c.icon] || '🎟️',
+            }));
+        }
 
         return {
             enabled,
-            style: data.style || data.selectedStyle || 'style-2',
-            position: data.position || 'top',
-            layout: data.layout || 'grid',
+            template: data.template || data.style || data.selectedStyle || 'classic-banner',
+            position:  data.position  || 'top',
+            layout:    data.layout    || 'grid',
             alignment: data.alignment || 'horizontal',
             title: {
-                text: title.text || data.titleText || 'Apply Coupon',
-                fontSize: parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
-                textColor: title.textColor || data.titleTextColor || '#1e293b',
+                text:      title.text  || data.sectionTitle || data.titleText || 'Apply Coupon',
+                fontSize:  parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
+                textColor: title.textColor || data.titleColor || data.titleTextColor || '#1e293b',
                 alignment: safeAlign,
             },
-            selectedActiveCoupons: data.selectedActiveCoupons || [],
+            selectedActiveCoupons,
             couponOverrides: data.couponOverrides || {},
-            allCouponDetails: data.allCouponDetails || [],
+            allCouponDetails,
         };
     }
 
@@ -701,56 +726,67 @@
     `;
 
         const progress = CONFIG.progress;
-        if (progress.enabled && (progress.showOnEmpty || !isEmpty)) {
+        const coupon   = CONFIG.coupon;
+        const upsell   = CONFIG.upsell;
+
+        // Helper: build the progress-bar HTML block
+        function renderProgressBar() {
+            if (!progress.enabled || (!progress.showOnEmpty && isEmpty)) return '';
             const pInfo = getProgressInfo(cartTotal, cartQty, progress);
             const fgColor = progress.barForegroundColor || '#2563eb';
-            drawerHtml += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">
+            let html = `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">
         <div style="text-align:center;margin-bottom:28px;">`;
             if (pInfo.upcoming) {
                 const amountLeft = pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `${CURRENCY_SYMBOL}${Math.round(pInfo.nextAmount)}`;
-                drawerHtml += `<p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away</p>
+                html += `<p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away</p>
                        <p style="margin:0;font-size:14px;font-weight:700;color:${fgColor};">Unlock: ${pInfo.upcoming.rewardText}</p>`;
             } else {
-                drawerHtml += `<div style="color:#10b981;display:flex;align-items:center;justify-content:center;gap:8px;"><span style="font-size:20px;">🎉</span><span style="font-size:15px;font-weight:700;">${progress.completionText}</span></div>`;
+                html += `<div style="color:#10b981;display:flex;align-items:center;justify-content:center;gap:8px;"><span style="font-size:20px;">🎉</span><span style="font-size:15px;font-weight:700;">${progress.completionText}</span></div>`;
             }
-            drawerHtml += `</div><div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${progress.barBackgroundColor || '#e2e8f0'};border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">
+            html += `</div><div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${progress.barBackgroundColor || '#e2e8f0'};border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">
         <div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;">&nbsp;</div>`;
-            pInfo.tiers.forEach((ms, idx) => {
+            pInfo.tiers.forEach((ms) => {
                 const isCompleted = pInfo.currentVal >= ms.target;
                 const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
                 const iconFill = isCompleted ? '#fff' : fgColor;
                 const iconHtml = getMilestoneIconHtml(ms, iconFill);
                 const nodeSize = isCompleted ? 40 : 32;
-                drawerHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">
+                html += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">
           <div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'};border:2.5px solid ${fgColor};display:flex;align-items:center;justify-content:center;color:${iconFill};">
             <span style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;">${iconHtml}</span>
           </div>
         </div>`;
             });
-            drawerHtml += `</div></div>`;
+            html += `</div></div>`;
+            return html;
         }
+
+        // Helper: coupon block (only if enabled + coupons exist)
+        function renderCouponIfEnabled() {
+            if (!coupon.enabled || !coupon.selectedActiveCoupons.length) return '';
+            return renderCouponSection(coupon, cartTotal);
+        }
+
+        // Prepare upsell html asynchronously before concatenating
+        let topUpsellHtml = '';
+        let bottomUpsellHtml = '';
+        if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
+            if (upsell.position === 'top') {
+                topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+            } else {
+                bottomUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+            }
+        }
+
+        // ── TOP widgets (position === 'top' or default) ─────────────────────
+        if (progress.position !== 'bottom') drawerHtml += renderProgressBar();
+        if (coupon.position !== 'bottom')   drawerHtml += renderCouponIfEnabled();
+        if (topUpsellHtml)                  drawerHtml += topUpsellHtml;
 
         if (isEmpty) {
             drawerHtml += `<div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;">
         <div style="font-size:40px;">🛒</div><p style="margin:0;font-size:16px;font-weight:600;color:#111;">Your cart is empty</p>
       </div>`;
-        }
-
-        const upsell = CONFIG.upsell;
-        let topUpsellHtml = '';
-        let bottomUpsellHtml = '';
-
-        // Prepare upsell html asynchronously before concatenating
-        if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
-            if (upsell.position === 'top') {
-                topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
-            } else if (upsell.position === 'bottom') {
-                bottomUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
-            }
-        }
-
-        if (topUpsellHtml) {
-            drawerHtml += topUpsellHtml;
         }
 
         if (!isEmpty) {
@@ -783,15 +819,12 @@
           </div>
         </div>`;
             });
-            const coupon = CONFIG.coupon;
-            if (coupon.enabled && coupon.selectedActiveCoupons.length > 0) {
-                drawerHtml += renderCouponSection(coupon, cartTotal);
-            }
         }
 
-        if (bottomUpsellHtml) {
-            drawerHtml += bottomUpsellHtml;
-        }
+        // ── BOTTOM widgets ───────────────────────────────────────────────────
+        if (progress.position === 'bottom') drawerHtml += renderProgressBar();
+        if (coupon.position === 'bottom')   drawerHtml += renderCouponIfEnabled();
+        if (bottomUpsellHtml)               drawerHtml += bottomUpsellHtml;
 
         drawerHtml += `</div>`; // end body
 
@@ -840,38 +873,93 @@
     }
 
     function renderCouponSection(couponConfig, cartTotal) {
-        const selectedIds = couponConfig.selectedActiveCoupons || [];
+        const selectedIds  = couponConfig.selectedActiveCoupons || [];
         const savedDetails = couponConfig.allCouponDetails || [];
+        const template     = couponConfig.template || 'classic-banner';
+        const isGrid       = couponConfig.layout === 'grid';
+        const isVertical   = couponConfig.alignment === 'vertical';
 
-        const title = couponConfig.title || {};
-        const titleText = title.text || 'Apply Coupon';
+        const title         = couponConfig.title || {};
+        const titleText     = title.text      || 'Apply Coupon';
         const titleFontSize = parseInt(title.fontSize ?? 14, 10) || 14;
-        const titleTextColor = title.textColor || '#1e293b';
-        const titleAlign = title.alignment === 'center' || title.alignment === 'right' || title.alignment === 'left' ? title.alignment : 'left';
+        const titleColor    = title.textColor || '#1e293b';
+        const titleAlign    = ['left','center','right'].includes(title.alignment) ? title.alignment : 'left';
 
-        const couponsToShow = selectedIds.map(id => {
-            const saved = savedDetails.find(d => d.id === id);
-            if (saved) {
-                return {
-                    id, code: saved.code || 'CODE', label: saved.label || 'Offer', backgroundColor: saved.backgroundColor || '#000', iconUrl: saved.iconUrl || '🎟️'
-                };
-            }
-            return null;
-        }).filter(c => c);
+        const couponsToShow = selectedIds
+            .map(id => savedDetails.find(d => d.id === id) || null)
+            .filter(Boolean);
 
         if (couponsToShow.length === 0) return '';
-        let html = `<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p></div>
-            <div id="cc-coupon-list" class="cc-hide-scrollbar" style="display:flex;gap:12px;overflow-x:auto;">`;
 
-        couponsToShow.forEach(coupon => {
-            const isApplied = appliedCouponCodes.includes(coupon.code);
-            html += `<div data-coupon-card style="min-width:180px;flex:0 0 auto;padding:16px;background:#fff;border-radius:16px;border:1px solid #e2e8f0;display:flex;flex-direction:column;align-items:center;text-align:center;">
-        <div style="width:56px;height:56px;border-radius:16px;background:${coupon.backgroundColor};display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;">${coupon.iconUrl}</div>
-        <p style="margin:8px 0 2px 0;font-size:15px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;background:${isApplied ? '#10b981' : '#1e293b'};color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;">${isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
-      </div>`;
+        // Section wrapper
+        let html = `<div style="padding:10px 16px 14px;background:#fff;">`;
+
+        // Title
+        if (titleText) {
+            html += `<div style="font-size:${titleFontSize}px;font-weight:600;color:${titleColor};text-align:${titleAlign};margin-bottom:8px;">${escapeHtml(titleText)}</div>`;
+        }
+
+        // Layout container — grid (2 col) or horizontal scroll carousel
+        const containerStyle = isGrid
+            ? `display:grid;grid-template-columns:1fr 1fr;gap:8px;`
+            : `display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;`;
+        html += `<div style="${containerStyle}">`;
+
+        couponsToShow.forEach(c => {
+            const isApplied   = appliedCouponCodes.includes(c.code);
+            const icon        = c.iconUrl || '🎟️';
+            const appliedBtn  = `✓ Applied`;
+            const btnText     = isApplied ? appliedBtn : escapeHtml(c.buttonText || 'Apply');
+            const btnBg       = isApplied ? '#10b981'  : (c.buttonBgColor  || '#000000');
+            const btnColor    = isApplied ? '#ffffff'  : (c.buttonTextColor || '#ffffff');
+            const radius      = c.borderRadius ?? 8;
+            const bgColor     = c.bgColor    || '#4f46e5';
+            const textColor   = c.textColor  || '#ffffff';
+            const desc        = c.description || '';
+            const label       = c.label || c.code || '';
+            const itemWidth   = !isGrid ? (isVertical ? '86px' : '140px') : 'auto';
+            const flexShrink  = !isGrid ? '0' : '1';
+            const wrapStyle   = `min-width:${itemWidth};flex-shrink:${flexShrink};display:flex;flex-direction:column;box-sizing:border-box;`;
+
+            let cardHtml = '';
+
+            if (template === 'minimal-card') {
+                cardHtml = `<div style="background:#ffffff;border-radius:${radius}px;border:1px solid #e5e7eb;border-left:3px solid ${bgColor};padding:7px 8px;display:flex;flex-direction:column;gap:4px;height:100%;box-sizing:border-box;">
+                    <div style="display:flex;align-items:center;gap:5px;">
+                        <span style="color:${bgColor};font-size:13px;flex-shrink:0;">${icon}</span>
+                        <span style="font-size:10px;font-weight:700;color:${bgColor};letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(label)}</span>
+                    </div>
+                    ${!isVertical && desc ? `<div style="font-size:9px;color:#6b7280;line-height:1.3;flex:1;">${escapeHtml(desc)}</div>` : ''}
+                    <button onclick="ccApplyCoupon('${escapeHtml(c.code)}')" style="margin-top:auto;padding:3px 0;border-radius:4px;border:1px solid ${isApplied ? '#10b981' : bgColor};background:${isApplied ? '#10b981' : 'transparent'};color:${isApplied ? '#fff' : bgColor};font-size:9px;font-weight:600;cursor:pointer;width:100%;text-align:center;">${btnText}</button>
+                </div>`;
+
+            } else if (template === 'bold-vibrant') {
+                cardHtml = `<div style="background:${bgColor};border-radius:${radius}px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;box-shadow:0 2px 8px ${bgColor}55;height:100%;box-sizing:border-box;">
+                    <span style="color:${textColor};font-size:20px;line-height:1;">${icon}</span>
+                    <div style="font-size:11px;font-weight:800;color:${textColor};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(label)}</div>
+                    ${!isVertical && desc ? `<div style="font-size:8px;color:${textColor};opacity:.85;line-height:1.3;flex:1;">${escapeHtml(desc)}</div>` : ''}
+                    <button onclick="ccApplyCoupon('${escapeHtml(c.code)}')" style="margin-top:auto;padding:4px 10px;border-radius:4px;border:none;background:${btnBg};color:${btnColor};font-size:9px;font-weight:700;cursor:pointer;width:100%;text-align:center;letter-spacing:.5px;">${btnText}</button>
+                </div>`;
+
+            } else {
+                // classic-banner (default)
+                const flexDir = isVertical ? 'column' : 'row';
+                const align   = isVertical ? 'center' : 'flex-start';
+                cardHtml = `<div style="background:${bgColor};color:${textColor};border-radius:${radius}px;padding:7px 8px;display:flex;flex-direction:column;gap:4px;height:100%;box-sizing:border-box;">
+                    <div style="display:flex;flex-direction:${flexDir};align-items:${align};gap:5px;">
+                        <span style="color:${textColor};font-size:${isVertical ? 18 : 14}px;line-height:1;flex-shrink:0;">${icon}</span>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:10px;font-weight:700;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(label)}</div>
+                            ${!isVertical && desc ? `<div style="font-size:9px;opacity:.85;line-height:1.3;">${escapeHtml(desc)}</div>` : ''}
+                        </div>
+                        <button onclick="ccApplyCoupon('${escapeHtml(c.code)}')" style="margin-top:auto;padding:${isVertical ? '4px 6px' : '3px 6px'};border-radius:4px;border:none;background:${btnBg};color:${btnColor};font-size:9px;font-weight:600;cursor:pointer;flex-shrink:0;align-self:${isVertical ? 'stretch' : 'center'};text-align:center;">${btnText}</button>
+                    </div>
+                </div>`;
+            }
+
+            html += `<div style="${wrapStyle}">${cardHtml}</div>`;
         });
+
         html += `</div></div>`;
         return html;
     }

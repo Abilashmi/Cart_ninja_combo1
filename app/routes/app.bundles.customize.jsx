@@ -1,6 +1,4 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import fs from 'fs';
-import path from 'path';
 import {
   useLoaderData,
   useFetcher,
@@ -756,19 +754,7 @@ export const loader = async ({ request }) => {
     console.error('[Customize Loader] Initial product fetch error:', error);
   }
 
-  const blocksDir = path.join(
-    process.cwd(),
-    'extensions',
-    'combo-templates',
-    'blocks'
-  );
-  let layoutFiles = [];
-  try {
-    if (fs.existsSync(blocksDir))
-      layoutFiles = fs
-        .readdirSync(blocksDir)
-        .filter((f) => f.endsWith('.liquid'));
-  } catch (e) { }
+  const layoutFiles = [];
 
   let activeDiscounts = [];
   try {
@@ -2232,6 +2218,33 @@ export default function Customize() {
     return Object.keys(prev).reduce((acc, k) => { acc[k] = k === key; return acc; }, {});
   }, []);
 
+  const SECTION_CATEGORY = {
+    general: 'layout', banner: 'layout', products: 'layout',
+    content: 'style', productCard: 'style', previewBar: 'style',
+    buttons: 'style', variants: 'style', collectionTabsStyles: 'style',
+    progressBar: 'advanced', discount: 'advanced', aiSettings: 'advanced', customCss: 'advanced',
+  };
+
+  const handleOpenSection = useCallback((sectionKey = 'general') => {
+    const category = SECTION_CATEGORY[sectionKey] || 'layout';
+    setActiveCategory(category);
+    setExpandedSections((prev) => ({ ...prev, [sectionKey]: true }));
+    setTimeout(() => {
+      const content = document.querySelector('.cst-sidebar-content');
+      if (content) content.scrollTop = 0;
+      const cards = document.querySelectorAll('.cst-section-card');
+      const orderMap = { layout: ['general','banner','products','content'], style: ['content','productCard','collectionTabsStyles','previewBar','variants','buttons'], advanced: ['progressBar','discount','aiSettings','customCss'] };
+      const idx = (orderMap[category] || []).indexOf(sectionKey);
+      const target = cards[Math.max(0, idx)];
+      if (target) {
+        target.classList.remove('cst-flash');
+        void target.offsetWidth;
+        target.classList.add('cst-flash');
+        target.addEventListener('animationend', () => target.classList.remove('cst-flash'), { once: true });
+      }
+    }, 60);
+  }, [setActiveCategory]);
+
   const generateAiSuggestion = useCallback(
     async (requestedTarget) => {
       const currentTitle = String(config.collection_title || '').trim();
@@ -2854,7 +2867,7 @@ export default function Customize() {
       >
         <BrixBar size="md" floating />
         <style>{`
-.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:32px;align-items:stretch}
+.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
 .tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
 .tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
@@ -2978,7 +2991,7 @@ export default function Customize() {
   };
 
   return (
-    <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: '120px' }}>
 
       <Page
         fullWidth
@@ -3053,15 +3066,9 @@ export default function Customize() {
           onReset={() => setResetModalOpen(true)}
           onAiGenerate={() => setAiBundleOpen(true)}
           canPreview={!!initialTemplate?.id}
-          issueCount={validationIssues.length}
+          issueCount={0}
         />
         <BrixBar size="md" floating zIndex={400} placeholder="Ask Brix to help with your bundle — layout, copy, colours, products…" />
-        {validationIssues.length > 0 && (
-          <ValidationPanel
-            issues={validationIssues}
-            onFix={() => setActiveCategory('layout')}
-          />
-        )}
         <Modal
           open={aiBundleOpen}
           onClose={() => { if (!aiBundleLoading) { setAiBundleOpen(false); setAiError(''); } }}
@@ -3246,7 +3253,7 @@ export default function Customize() {
       </Modal>
 
       <style>{`
-.customize-layout-grid{display:grid;grid-template-columns:370px minmax(0,1fr);gap:14px;align-items:start}
+.customize-layout-grid{display:grid;grid-template-columns:370px minmax(0,1fr);gap:14px;align-items:start;padding-bottom:32px}
 .cz-panel-col{zoom:0.9}
 .customize-left-sticky{position:sticky;top:16px;z-index:10}
 .cz-panel-col{order:1}
@@ -3322,6 +3329,7 @@ export default function Customize() {
                           allStepProducts={allStepProducts}
                           setAllStepProducts={setAllStepProducts}
                           onUpdateConfig={updateConfig}
+                          onRequestSection={handleOpenSection}
                         />
                         {config.custom_css && (
                           <style dangerouslySetInnerHTML={{ __html: `.preview-viewport { ${config.custom_css} }` }} />
@@ -4065,10 +4073,22 @@ function ComboPreview({
   setAllStepProducts = () => { },
   stepProductsLoading = false,
   onUpdateConfig = () => { },
+  onRequestSection = () => { },
 }) {
   const isMobile = device === 'mobile';
   const sliderRef = useRef(null);
   const tabScrollRef = useRef(null);
+
+  // ── Section inspect state (Shopify HighlightZone pattern) ──────────────
+  const [inspectActive, setInspectActive] = useState(null);
+  const [inspectHover, setInspectHover]   = useState(null);
+
+  const SECTION_LABELS = {
+    progressBar: 'Progress Bar', banner: 'Banner', content: 'Title & Description',
+    general: 'Steps & Collections', products: 'Products Grid', previewBar: 'Preview Bar',
+  };
+
+  // Wraps any preview section with hover/click inspection border
 
   // Custom Styles for the Preview
   const previewStyles = `
@@ -5037,13 +5057,20 @@ function ComboPreview({
   };
 
   const renderPreviewBar = () => (
-    <CdoPreviewBar
-      config={config}
-      selectedProducts={selectedProducts}
-      totalPrice={totalPrice}
-      finalPrice={finalPrice}
-      isMobile={isMobile}
-    />
+    <div
+      style={{ outline: inspectActive === 'previewBar' ? '2px solid #1a9de0' : inspectHover === 'previewBar' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
+      onMouseEnter={() => setInspectHover('previewBar')}
+      onMouseLeave={() => setInspectHover(null)}
+      onClick={(e) => { e.stopPropagation(); setInspectActive('previewBar'); onRequestSection('previewBar'); }}
+    >
+      <CdoPreviewBar
+        config={config}
+        selectedProducts={selectedProducts}
+        totalPrice={totalPrice}
+        finalPrice={finalPrice}
+        isMobile={isMobile}
+      />
+    </div>
   );
 
   const handleVariantChange = (productId, variantId) => {
@@ -6647,7 +6674,12 @@ function ComboPreview({
               zIndex: 100,
               borderBottom: '1px solid #eee',
               boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+              outline: inspectActive === 'progressBar' ? '2px solid #1a9de0' : inspectHover === 'progressBar' ? '2px dashed #1a9de0' : undefined,
+              cursor: 'pointer',
             }}
+            onMouseEnter={() => setInspectHover('progressBar')}
+            onMouseLeave={() => setInspectHover(null)}
+            onClick={(e) => { e.stopPropagation(); setInspectActive('progressBar'); onRequestSection('progressBar'); }}
           >
             <div
               style={{
@@ -6783,7 +6815,12 @@ function ComboPreview({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              outline: inspectActive === 'banner' ? '2px solid #1a9de0' : inspectHover === 'banner' ? '2px dashed #1a9de0' : undefined,
+              cursor: 'pointer',
             }}
+            onMouseEnter={() => setInspectHover('banner')}
+            onMouseLeave={() => setInspectHover(null)}
+            onClick={(e) => { e.stopPropagation(); setInspectActive('banner'); onRequestSection('banner'); }}
           >
             {config.banner_image_url || config.banner_image_mobile_url ? (
               <img
@@ -6808,7 +6845,12 @@ function ComboPreview({
 
         {/* Title & Description */}
         {config.show_title_description !== false && (
-          <div style={{ padding: '24px 20px' }}>
+          <div
+            style={{ padding: '24px 20px', outline: inspectActive === 'content' ? '2px solid #1a9de0' : inspectHover === 'content' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
+            onMouseEnter={() => setInspectHover('content')}
+            onMouseLeave={() => setInspectHover(null)}
+            onClick={(e) => { e.stopPropagation(); setInspectActive('content'); onRequestSection('content'); }}
+          >
             <div
               style={{
                 width: isMobile ? '100%' : `${config.title_width || 100}%`,
@@ -6865,7 +6907,12 @@ function ComboPreview({
         )}
 
         {/* Collections / Steps */}
-        <div style={{ padding: '20px', flex: 1 }}>
+        <div
+          style={{ padding: '20px', flex: 1, outline: inspectActive === 'general' ? '2px solid #1a9de0' : inspectHover === 'general' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
+          onMouseEnter={() => setInspectHover('general')}
+          onMouseLeave={() => setInspectHover(null)}
+          onClick={(e) => { e.stopPropagation(); setInspectActive('general'); onRequestSection('general'); }}
+        >
           {activeSteps.map((step, index) => {
             const stepTitle =
               config[`step_${step}_title`] || `Category ${step}`;

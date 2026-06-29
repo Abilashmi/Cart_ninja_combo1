@@ -206,7 +206,7 @@ function ProgressBarPreview({ pb }) {
         )}
       </div>
 
-      <div style={{ position: 'relative', paddingBottom: '52px', margin: '0 12px' }}>
+      <div style={{ position: 'relative', paddingBottom: '56px', margin: '0 36px' }}>
         <div style={{ height: '8px', borderRadius: `${radius}px`, backgroundColor: bgColor, position: 'relative', overflow: 'visible' }}>
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, backgroundColor: fillColor, borderRadius: `${radius}px`, transition: 'width 0.3s ease' }} />
         </div>
@@ -222,7 +222,8 @@ function ProgressBarPreview({ pb }) {
                   <IconComp width="13" height="13" fill="currentColor" />
                 </span>
               </div>
-              <div style={{ position: 'absolute', top: '100%', marginTop: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              {/* left:50% + translateX(-50%) centres the label under the icon's midpoint, preventing edge-tier overflow */}
+              <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                 {unlocked ? (
                   <>
                     <div style={{ fontSize: '7px', fontWeight: 700, color: '#059669', background: '#d1fae5', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>REACHED</div>
@@ -459,7 +460,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
       </div>
 
       {/* ── Stage: centers the device frame ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '0 12px', overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '16px 12px', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Device frame ── */}
         <div style={{ width: isDesktop ? 360 : 320, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: isDesktop ? 10 : 36, border: isDesktop ? '1px solid #d0d0d0' : '3px solid #1a1a1a', background: '#f9f9f9', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
@@ -505,7 +506,7 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
                 </HighlightZone>
 
                 {/* ── BODY (scrollable) ── */}
-                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 8px' }}>
 
                   {/* Announcements — show when enabled, or show muted placeholder when section is active */}
                   {(body.announcements.enabled || activeSection === 'announcements') && (

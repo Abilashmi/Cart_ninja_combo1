@@ -109,8 +109,8 @@ function BuilderSidebarComponent({
 .cst-section-header-left{display:flex;align-items:center;gap:10px;min-width:0}
 .cst-chevron{flex-shrink:0;color:#8c9196;transition:transform .2s ease}
 .cst-chevron.expanded{transform:rotate(90deg)}
-.cst-section-title{font-size:13px;font-weight:600;color:#202223;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cst-section-badge{flex-shrink:0;font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:#e8eaed;color:#5c5f62;letter-spacing:.3px;text-transform:uppercase}
+.cst-section-title{font-size:14.5px;font-weight:600;color:#202223;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cst-section-badge{flex-shrink:0;font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;background:#e8eaed;color:#5c5f62;letter-spacing:.3px;text-transform:uppercase}
 .cst-section-body{padding:16px;border-top:1px solid #e1e3e5}
 .cst-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cst-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -135,7 +135,7 @@ function BuilderSidebarComponent({
 .cst-sidebar-tab.active{border-bottom-color:#000;color:#000}
 .cst-sidebar-tab.active .cst-tab-icon{color:#000}
 .cst-tab-icon{color:#8c9196;transition:color .2s ease;display:flex;align-items:center;justify-content:center}
-.cst-tab-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.cst-tab-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .cst-sidebar-content{padding:16px;flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
 .cst-sidebar-content::-webkit-scrollbar{width:4px}
 .cst-sidebar-content::-webkit-scrollbar-track{background:transparent}
@@ -157,12 +157,12 @@ function BuilderSidebarComponent({
 .cst-tab-reorder{display:flex;align-items:center;gap:8px;background:#f6f8fa;border:1px solid #e1e3e5;border-radius:8px;padding:8px 10px}
 .cst-flash{animation:cstFlash 1.4s ease}
 @keyframes cstFlash{0%{box-shadow:0 0 0 0 rgba(245,158,11,0);background:#fffaf0}25%{box-shadow:0 0 0 3px rgba(245,158,11,.5);background:#fff7e6}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
-.cst-sidebar-content .Polaris-Text--headingMd{font-size:13px!important;line-height:1.3}
-.cst-sidebar-content .Polaris-Text--headingSm{font-size:12px!important}
-.cst-sidebar-content .Polaris-Text--bodySm,.cst-sidebar-content .Polaris-Text--bodyMd{font-size:12px!important}
-.cst-sidebar-content .Polaris-Label__Text{font-size:12px!important}
-.cst-sidebar-content .Polaris-TextField__Input,.cst-sidebar-content .Polaris-Select__Input{font-size:12px!important}
-.cst-sidebar-content .Polaris-Checkbox__Label{font-size:12px!important}
+.cst-sidebar-content .Polaris-Text--headingMd{font-size:14px!important;line-height:1.3}
+.cst-sidebar-content .Polaris-Text--headingSm{font-size:13px!important}
+.cst-sidebar-content .Polaris-Text--bodySm,.cst-sidebar-content .Polaris-Text--bodyMd{font-size:13px!important}
+.cst-sidebar-content .Polaris-Label__Text{font-size:13px!important}
+.cst-sidebar-content .Polaris-TextField__Input,.cst-sidebar-content .Polaris-Select__Input{font-size:13px!important}
+.cst-sidebar-content .Polaris-Checkbox__Label{font-size:13px!important}
 .cst-sidebar-content .Polaris-TextField,.cst-sidebar-content .Polaris-Select{--p-font-size-350:12px;--p-font-size-300:11px}
 .cst-section-body{padding:12px!important}
     `}</style>

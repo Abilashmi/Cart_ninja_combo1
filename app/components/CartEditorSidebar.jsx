@@ -154,7 +154,7 @@ export function CartEditorSidebar({ onDiscard }) {
       </div>
 
       {/* ── Accordion ── */}
-      <div style={{ flex: 1, overflowY: 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
         {SECTION_GROUPS.map((group) => (
           <div key={group.title}>
             <div style={{ padding: '4px 12px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
@@ -190,7 +190,7 @@ export function CartEditorSidebar({ onDiscard }) {
                   </button>
 
                   {isOpen && SectionComponent && (
-                    <div style={{ padding: '8px 12px 12px', background: '#fafbfb', borderTop: '1px solid #e1e3e5', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+                    <div style={{ padding: '8px 12px 16px', background: '#fafbfb', borderTop: '1px solid #e1e3e5' }}>
                       <SectionComponent />
                     </div>
                   )}
@@ -199,6 +199,8 @@ export function CartEditorSidebar({ onDiscard }) {
             })}
           </div>
         ))}
+        {/* Bottom spacer so last field is never hidden behind the BrixBar */}
+        <div style={{ height: 32 }} />
       </div>
 
       {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ── */}
