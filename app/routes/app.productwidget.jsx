@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLoaderData, useRouteError, useFetcher } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
@@ -156,6 +157,10 @@ export async function action({ request }) {
         selected_template: tplKey,
         position: rest.widgetPlacement || 'above_cart',
         layout: rest.layout || 'list',
+        display_condition: rest.displayCondition || 'all',
+        product_handles: JSON.stringify(Array.isArray(rest.productHandles) ? rest.productHandles : []),
+        collection_handles: JSON.stringify(Array.isArray(rest.collectionHandles) ? rest.collectionHandles : []),
+        tag_handles: JSON.stringify(Array.isArray(rest.tagHandles) ? rest.tagHandles : []),
     };
 
     try {
@@ -393,6 +398,7 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
 
 /* Per-coupon override editor — text, colors, and display pages for one coupon */
 function CouponOverridePanel({ coupon, override, onChange, alwaysOpen }) {
+    const shopify = useAppBridge();
     const [openState, setOpen] = useState(false);
     const open = alwaysOpen || openState;
     const ov = override || {};
@@ -425,12 +431,42 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen }) {
                         <Select label="Show on" value={ov.displayCondition || "all"} onChange={(v) => onChange({ displayCondition: v })}
                             options={[{ label: "All product pages", value: "all" }, { label: "Specific products", value: "product_handle" }, { label: "Specific collections", value: "collection_handle" }]} />
                         {ov.displayCondition === "product_handle" && (
-                            <TextField label="Product handles (comma-separated)" value={(ov.productHandles || []).join(", ")} autoComplete="off"
-                                onChange={(v) => onChange({ productHandles: v.split(",").map((x) => x.trim()).filter(Boolean) })} helpText="e.g. blue-shirt, red-hat" />
+                            <BlockStack gap="200">
+                                <Button size="slim" onClick={async () => {
+                                    const result = await shopify.resourcePicker({ type: 'product', multiple: true });
+                                    if (result) onChange({ productHandles: result.map(p => p.handle) });
+                                }}>Browse Products</Button>
+                                {(ov.productHandles || []).length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                        {(ov.productHandles || []).map(h => (
+                                            <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                {h}
+                                                <button onClick={() => onChange({ productHandles: (ov.productHandles || []).filter(x => x !== h) })}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </BlockStack>
                         )}
                         {ov.displayCondition === "collection_handle" && (
-                            <TextField label="Collection handles (comma-separated)" value={(ov.collectionHandles || []).join(", ")} autoComplete="off"
-                                onChange={(v) => onChange({ collectionHandles: v.split(",").map((x) => x.trim()).filter(Boolean) })} />
+                            <BlockStack gap="200">
+                                <Button size="slim" onClick={async () => {
+                                    const result = await shopify.resourcePicker({ type: 'collection', multiple: true });
+                                    if (result) onChange({ collectionHandles: result.map(c => c.handle) });
+                                }}>Browse Collections</Button>
+                                {(ov.collectionHandles || []).length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                        {(ov.collectionHandles || []).map(h => (
+                                            <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                {h}
+                                                <button onClick={() => onChange({ collectionHandles: (ov.collectionHandles || []).filter(x => x !== h) })}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </BlockStack>
                         )}
                     </BlockStack>
                 </div>
@@ -443,6 +479,7 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen }) {
 export default function ProductWidgetPage() {
     const { couponConfig, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
+    const shopify = useAppBridge();
 
     const tKey = couponConfig?.activeTemplate || "template1";
     const activeTpl = couponConfig?.templates?.[tKey] || FAKE_COUPON_CONFIG.templates.template1;
@@ -466,9 +503,11 @@ export default function ProductWidgetPage() {
     const [borderRadius,setBorderRadius]= useState(activeTpl.borderRadius ?? 12);
     const [fontSize,    setFontSize]    = useState(activeTpl.fontSize    ?? 16);
     const [padding,     setPadding]     = useState(activeTpl.padding     ?? 16);
-    const [showOn,      setShowOn]      = useState(couponConfig?.displayCondition || "all");
-    const [handleInput, setHandleInput] = useState("");
-    const [tagInput,    setTagInput]    = useState("");
+    const [showOn,           setShowOn]           = useState(couponConfig?.display_condition || couponConfig?.displayCondition || "all");
+    const [productHandles,   setProductHandles]   = useState(() => { try { return JSON.parse(couponConfig?.product_handles || '[]'); } catch { return []; } });
+    const [collectionHandles,setCollectionHandles]= useState(() => { try { return JSON.parse(couponConfig?.collection_handles || '[]'); } catch { return []; } });
+    const [tagInput,         setTagInput]         = useState("");
+    const [tagHandles,       setTagHandles]        = useState(() => { try { return JSON.parse(couponConfig?.tag_handles || '[]'); } catch { return []; } });
     const [timerEnabled,setTimerEnabled]= useState(false);
     const [timerHours,  setTimerHours]  = useState(0);
     const [timerMins,   setTimerMins]   = useState(15);
@@ -565,6 +604,9 @@ export default function ProductWidgetPage() {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
                 displayCondition: showOn,
+                productHandles,
+                collectionHandles,
+                tagHandles,
                 selectedActiveCoupons: selectedCouponIds,
                 template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
                 couponStyles,
@@ -733,23 +775,45 @@ export default function ProductWidgetPage() {
 
                                     <AccordionSection id="display" icon={SettingsIcon} title="Display Condition" isOpen={openSection === "display"} onToggle={toggleSection} tip={SECTION_TIPS.display}>
                                         <BlockStack gap="300">
-                                            <Select label="Show this coupon on" options={SHOW_ON_OPTIONS} value={showOn} onChange={(v) => { setShowOn(v); setHandleInput(""); setTagInput(""); mark(); }} />
+                                            <Select label="Show this coupon on" options={SHOW_ON_OPTIONS} value={showOn} onChange={(v) => { setShowOn(v); mark(); }} />
                                             {showOn === "products" && (
                                                 <BlockStack gap="200">
-                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Product Handle</Text>
-                                                    <InlineStack gap="200" blockAlign="center">
-                                                        <div style={{ flex: 1 }}><TextField label="" labelHidden placeholder="e.g. classic-leather-bag" value={handleInput} onChange={setHandleInput} autoComplete="off" /></div>
-                                                        <Button disabled={!handleInput.trim()}>Add</Button>
-                                                    </InlineStack>
+                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Select Products</Text>
+                                                    <Button size="slim" onClick={async () => {
+                                                        const result = await shopify.resourcePicker({ type: 'product', multiple: true });
+                                                        if (result) { setProductHandles(result.map(p => p.handle)); mark(); }
+                                                    }}>Browse Products</Button>
+                                                    {productHandles.length > 0 && (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {productHandles.map(h => (
+                                                                <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                                    {h}
+                                                                    <button onClick={() => { setProductHandles(prev => prev.filter(x => x !== h)); mark(); }}
+                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </BlockStack>
                                             )}
                                             {showOn === "collections" && (
                                                 <BlockStack gap="200">
-                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Collection Handle</Text>
-                                                    <InlineStack gap="200" blockAlign="center">
-                                                        <div style={{ flex: 1 }}><TextField label="" labelHidden placeholder="e.g. summer-sale" value={handleInput} onChange={setHandleInput} autoComplete="off" /></div>
-                                                        <Button disabled={!handleInput.trim()}>Add</Button>
-                                                    </InlineStack>
+                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Select Collections</Text>
+                                                    <Button size="slim" onClick={async () => {
+                                                        const result = await shopify.resourcePicker({ type: 'collection', multiple: true });
+                                                        if (result) { setCollectionHandles(result.map(c => c.handle)); mark(); }
+                                                    }}>Browse Collections</Button>
+                                                    {collectionHandles.length > 0 && (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {collectionHandles.map(h => (
+                                                                <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                                    {h}
+                                                                    <button onClick={() => { setCollectionHandles(prev => prev.filter(x => x !== h)); mark(); }}
+                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </BlockStack>
                                             )}
                                             {showOn === "tags" && (
@@ -757,8 +821,24 @@ export default function ProductWidgetPage() {
                                                     <Text as="p" variant="bodySm" fontWeight="semibold">Target Product Tags</Text>
                                                     <InlineStack gap="200" blockAlign="center">
                                                         <div style={{ flex: 1 }}><TextField label="" labelHidden placeholder="e.g. VIP, summer" value={tagInput} onChange={setTagInput} autoComplete="off" /></div>
-                                                        <Button disabled={!tagInput.trim()}>Add</Button>
+                                                        <Button size="slim" disabled={!tagInput.trim()} onClick={() => {
+                                                            if (!tagInput.trim()) return;
+                                                            setTagHandles(prev => [...new Set([...prev, ...tagInput.split(',').map(t => t.trim()).filter(Boolean)])]);
+                                                            setTagInput('');
+                                                            mark();
+                                                        }}>Add</Button>
                                                     </InlineStack>
+                                                    {tagHandles.length > 0 && (
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {tagHandles.map(t => (
+                                                                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                                    {t}
+                                                                    <button onClick={() => { setTagHandles(prev => prev.filter(x => x !== t)); mark(); }}
+                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </BlockStack>
                                             )}
                                         </BlockStack>

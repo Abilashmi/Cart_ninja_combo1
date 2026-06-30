@@ -14,6 +14,16 @@ function flag($v, $default = 1) {
     return ($v === true || $v === 1 || $v === '1') ? 1 : 0;
 }
 
+// One-time migration: add display condition columns if they don't exist yet
+try {
+    $pdo->exec("ALTER TABLE coupon_slider_settings
+        ADD COLUMN IF NOT EXISTS display_condition VARCHAR(50) NOT NULL DEFAULT 'all',
+        ADD COLUMN IF NOT EXISTS product_handles TEXT,
+        ADD COLUMN IF NOT EXISTS collection_handles TEXT,
+        ADD COLUMN IF NOT EXISTS tag_handles TEXT
+    ");
+} catch (PDOException $e) { /* columns already exist or db doesn't support IF NOT EXISTS */ }
+
 // ── GET ──────────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $shop = $_GET['shop'] ?? null;
@@ -52,8 +62,9 @@ INSERT INTO coupon_slider_settings
     (shop_domain, is_enabled, selected_template, title_text, title_color,
      title_font_size, title_font_weight, title_alignment, section_bg_color,
      card_bg_color, card_border_color, card_border_width, card_border_radius,
-     card_shadow, auto_slide, slide_interval, position, layout, selected_coupons)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     card_shadow, auto_slide, slide_interval, position, layout, selected_coupons,
+     display_condition, product_handles, collection_handles, tag_handles)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON DUPLICATE KEY UPDATE
     is_enabled        = VALUES(is_enabled),
     selected_template = VALUES(selected_template),
@@ -73,6 +84,10 @@ ON DUPLICATE KEY UPDATE
     position          = VALUES(position),
     layout            = VALUES(layout),
     selected_coupons  = VALUES(selected_coupons),
+    display_condition = VALUES(display_condition),
+    product_handles   = VALUES(product_handles),
+    collection_handles= VALUES(collection_handles),
+    tag_handles       = VALUES(tag_handles),
     updated_at        = CURRENT_TIMESTAMP(3)
 ";
 
@@ -97,6 +112,10 @@ $stmt->execute([
     $body['position']               ?? 'above_cart',
     $body['layout']                 ?? 'grid',
     $selectedCoupons,
+    $body['display_condition']      ?? 'all',
+    $body['product_handles']        ?? null,
+    $body['collection_handles']     ?? null,
+    $body['tag_handles']            ?? null,
 ]);
 
 $s = $pdo->prepare('SELECT * FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1');

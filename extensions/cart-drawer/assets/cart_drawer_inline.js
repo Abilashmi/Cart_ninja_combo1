@@ -28,6 +28,7 @@
   let appliedCouponCodes = [];
   let _lastCopiedCode = null;
   let _ccConfigLoading = false;
+  let _ccActive = false; // true only when drawer is fully configured and active
 
 
   const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -121,6 +122,7 @@
 
         if (!cartActive) {
           CONFIG = null;
+          _ccActive = false;
           return;
         }
 
@@ -156,8 +158,24 @@
             showRecommendations: d.empty_cart_show_recommendations != null ? isEnabled(d.empty_cart_show_recommendations) : true,
           },
         };
+        _ccActive = true;
 
         await enrichUpsellProducts(CONFIG.upsell);
+      } else {
+        // API returned error / no record for this shop — fall back to defaults
+        // so the drawer still works even if the merchant hasn't saved settings yet.
+        if (!CONFIG) {
+          CONFIG = {
+            cartStatus: true,
+            progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
+            coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', title: { text: 'Apply Coupon', fontSize: 14, textColor: '#1e293b', alignment: 'left' }, couponOverrides: {}, allCouponDetails: [] },
+            upsell: { enabled: false, manualRules: [], direction: 'vertical', layout: 'carousel', position: 'bottom', showOnEmptyCart: false, showIfInCart: false, limit: 3, buttonText: 'Add to cart', upsellTitle: { text: 'Recommended for you', color: '#111827', bold: false, italic: false, underline: false }, activeTemplate: 'grid' },
+            announcement: { enabled: false, text: '', bgColor: '#4f46e5', textColor: '#ffffff', fontSize: 14 },
+            header: { title: 'Your Cart', bgColor: '#f9fafb', textColor: '#000000', borderBottom: true },
+            design: { animation: 'slide', borderRadius: 0, shadow: true },
+          };
+          _ccActive = true;
+        }
       }
 
       if (couponRes && couponRes.ok) {
@@ -181,6 +199,7 @@
           header: { title: 'Your Cart', bgColor: '#f9fafb', textColor: '#000000', borderBottom: true },
           design: { animation: 'slide', borderRadius: 0, shadow: true },
         };
+        _ccActive = true;
       }
     } finally {
       _ccConfigLoading = false;
@@ -555,10 +574,14 @@
   };
 
   // 3. Form submit intercept — prevents page navigation and converts to AJAX
-  // This is critical for themes that do a real form POST to /cart/add
+  // This is critical for themes that do a real form POST to /cart/add.
+  // Only intercepts when _ccActive is true — if the drawer is disabled or not
+  // yet configured, we let the theme handle add-to-cart naturally so the user
+  // always gets feedback even when the drawer config is missing/unavailable.
   document.addEventListener('submit', function (e) {
     const form = e.target;
     if (!form || !form.action || !form.action.includes('/cart/add')) return;
+    if (!_ccActive) return; // drawer not active — let theme handle it
     e.preventDefault();
     e.stopPropagation();
     const formData = new FormData(form);
@@ -726,6 +749,7 @@
       '[data-ajax-cart-trigger]'
     );
     if (cartTrigger) {
+      if (!_ccActive) return; // drawer not configured — let theme handle cart navigation
       e.preventDefault();
       e.stopImmediatePropagation();
       openDrawer();

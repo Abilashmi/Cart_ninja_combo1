@@ -1,5 +1,6 @@
 import { useNavigate, useLoaderData, useFetcher } from 'react-router';
-import { useCallback } from 'react';
+import { useCallback, useState, useRef } from 'react';
+import { Frame, Toast } from '@shopify/polaris';
 import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
@@ -21,8 +22,12 @@ function CartEditorContent() {
   const navigate = useNavigate();
   const { isDirty, resetDirty, body, footer, status, settings, header } = useCartEditor();
   const legacyFetcher = useFetcher();
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
+  const savedTimerRef = useRef(null);
 
   const handleSave = useCallback(async () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    setSaveStatus('saving');
     const pb  = body.progressBar;
     const cs  = body.couponSlider;
     const up  = body.upsellProducts;
@@ -142,10 +147,13 @@ function CartEditorContent() {
       // Clear AI agent localStorage so it doesn't override fresh DB values on next reload
       try { localStorage.removeItem('cartninja_cart_config'); } catch {}
 
-      console.log('[Save] all saved successfully');
       resetDirty();
+      setSaveStatus('saved');
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
       console.error('[Save] error:', err.message);
+      setSaveStatus('error');
+      savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000);
       alert(`Save failed: ${err.message}`);
     }
   }, [body, footer, status, settings, header, legacyFetcher, resetDirty]);
@@ -156,14 +164,22 @@ function CartEditorContent() {
   }, [isDirty, navigate]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
-      <div style={{ width: 460, minWidth: 460, flexShrink: 0, height: '100vh', overflow: 'hidden' }}>
-        <CartEditorSidebar onDiscard={handleDiscard} />
+    <Frame>
+      {saveStatus === 'saved' && (
+        <Toast content="Saved" onDismiss={() => setSaveStatus('idle')} />
+      )}
+      {saveStatus === 'error' && (
+        <Toast content="Save failed" error onDismiss={() => setSaveStatus('idle')} />
+      )}
+      <div style={{ display: 'flex', flexDirection: 'row', width: '100%', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
+        <div style={{ width: 460, minWidth: 460, flexShrink: 0, height: '100vh', overflow: 'hidden' }}>
+          <CartEditorSidebar onDiscard={handleDiscard} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, height: '100vh', overflow: 'hidden' }}>
+          <CartPreview onSave={handleSave} onDiscard={handleDiscard} isDirty={isDirty} saveStatus={saveStatus} />
+        </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0, height: '100vh', overflow: 'hidden' }}>
-        <CartPreview onSave={handleSave} onDiscard={handleDiscard} isDirty={isDirty} />
-      </div>
-    </div>
+    </Frame>
   );
 }
 

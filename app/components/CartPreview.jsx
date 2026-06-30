@@ -368,7 +368,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
   );
 }
 
-export function CartPreview({ onSave, onDiscard, isDirty }) {
+export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings } = useCartEditor();
 
   const designTheme = settings.design?.theme;
@@ -455,7 +455,15 @@ export function CartPreview({ onSave, onDiscard, isDirty }) {
             </button>
           )}
           <Button onClick={onDiscard} size="slim">Discard</Button>
-          <Button variant="primary" onClick={onSave} disabled={!isDirty} size="slim">Save</Button>
+          <Button
+            variant="primary"
+            onClick={onSave}
+            disabled={saveStatus === 'saving' || saveStatus === 'saved' || !isDirty}
+            loading={saveStatus === 'saving'}
+            size="slim"
+          >
+            Save
+          </Button>
         </div>
       </div>
 
