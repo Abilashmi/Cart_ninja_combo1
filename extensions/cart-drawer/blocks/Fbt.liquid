@@ -43,6 +43,28 @@
   .ps-fbt-products.carousel::-webkit-scrollbar {
     display: none;
   }
+  .ps-fbt-nav {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.2s;
+  }
+  .ps-fbt-nav[disabled] {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  @media (max-width: 768px) {
+    .ps-fbt-nav-group {
+      display: none !important;
+    }
+  }
   .ps-fbt-products.grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -379,7 +401,15 @@
     var isCarouselLayout=config.layout==='carousel'||config.layout==='horizontal';
     container.innerHTML=
       '<div class="ps-fbt-wrapper" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';">'
-        +'<div class="ps-fbt-title" style="color:'+config.textColor+';letter-spacing:-0.5px;">Frequently Bought Together</div>'
+        +'<div class="ps-fbt-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">'
+          +'<div class="ps-fbt-title" style="color:'+config.textColor+';letter-spacing:-0.5px;margin-bottom:0;">Frequently Bought Together</div>'
+          +(isCarouselLayout?(
+            '<div class="ps-fbt-nav-group" style="display:flex;gap:6px;flex-shrink:0;">'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-prev" aria-label="Show previous products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8249;</button>'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-next" aria-label="Show more products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8250;</button>'
+            +'</div>'
+          ):'')
+        +'</div>'
         +'<div class="ps-fbt-products"></div>'
         +'<div class="ps-fbt-footer" style="border-color:'+config.borderColor+';justify-content:'+(config.showPrices?'space-between':'flex-end')+';">'
           +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">Select items</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
@@ -391,6 +421,8 @@
     var totalLabelEl=container.querySelector('.ps-total-label');
     var totalEl=container.querySelector('.ps-total-price');
     var addBtn=container.querySelector('.ps-fbt-addall');
+    var navPrev=container.querySelector('.ps-fbt-nav-prev');
+    var navNext=container.querySelector('.ps-fbt-nav-next');
 
     if(isCarouselLayout){
       wrapper.style.cssText='display:flex;flex-direction:row;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch;';
@@ -400,6 +432,21 @@
     wrapper.dataset.interaction=config.interactionType;
     wrapper.dataset.layout=config.layout;
     wrapper.classList.add(isCarouselLayout?'carousel':'grid');
+
+    if(isCarouselLayout&&navPrev&&navNext){
+      var scrollByAmount=function(){return Math.max(wrapper.clientWidth*0.8,150);};
+      var updateNavState=function(){
+        var maxScroll=wrapper.scrollWidth-wrapper.clientWidth;
+        if(maxScroll<=4){navPrev.setAttribute('disabled','');navNext.setAttribute('disabled','');return;}
+        if(wrapper.scrollLeft<=4)navPrev.setAttribute('disabled','');else navPrev.removeAttribute('disabled');
+        if(wrapper.scrollLeft>=maxScroll-4)navNext.setAttribute('disabled','');else navNext.removeAttribute('disabled');
+      };
+      navPrev.onclick=function(){wrapper.scrollBy({left:-scrollByAmount(),behavior:'smooth'});};
+      navNext.onclick=function(){wrapper.scrollBy({left:scrollByAmount(),behavior:'smooth'});};
+      wrapper.addEventListener('scroll',updateNavState,{passive:true});
+      window.addEventListener('resize',updateNavState);
+      setTimeout(updateNavState,50);
+    }
 
     var selectedProductIds=new Set();
     var productQuantities=new Map();

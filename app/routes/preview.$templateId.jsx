@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLoaderData } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useLoaderData, useParams } from 'react-router';
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
 
@@ -142,13 +142,13 @@ export const loader = async ({ params, request }) => {
                   title
                   codes(first: 1) { edges { node { code } } }
                   status
-                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount } } }
+                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount { amount currencyCode } } } }
                 }
                 ... on DiscountCodeBxgy {
                   title
                   codes(first: 1) { edges { node { code } } }
                   status
-                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount } } }
+                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount { amount currencyCode } } } }
                 }
                 ... on DiscountCodeFreeShipping {
                   title
@@ -162,6 +162,7 @@ export const loader = async ({ params, request }) => {
       }
     `);
     const discJson = await discRes.json();
+    if (discJson.errors) console.error('[Preview] Discount query errors:', discJson.errors);
     if (!discJson.errors) {
       activeDiscounts = (discJson.data?.discountNodes?.edges || [])
         .map(({ node }) => {
@@ -172,8 +173,8 @@ export const loader = async ({ params, request }) => {
           let valueType = '';
           let value = 0;
           if (gets) {
-            if ('percentage' in gets) { valueType = 'percentage'; value = parseFloat(gets.percentage || 0); }
-            else if ('amount' in gets) { valueType = 'fixed_amount'; value = parseFloat(gets.amount || 0); }
+            if ('percentage' in gets) { valueType = 'percentage'; value = parseFloat(gets.percentage || 0) * 100; }
+            else if ('amount' in gets) { valueType = 'fixed_amount'; value = parseFloat(gets.amount?.amount || 0); }
           }
           return { id: node.id, title: d.title || code, code, type: d.__typename || '', status: d.status || 'ACTIVE', valueType, value };
         })
@@ -255,6 +256,29 @@ function Lightbox({ images, onClose, onPrev, onNext, goTo }) {
             </button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PriceSummary({ totalSelected, totalPrice, finalPrice, discountApplicable }) {
+  if (totalSelected === 0) return null;
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline',
+      gap: '8px', margin: '0 0 8px', fontSize: '15px',
+    }}>
+      {discountApplicable ? (
+        <>
+          <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '13px' }}>
+            ${totalPrice.toFixed(2)}
+          </span>
+          <span style={{ color: '#22c55e', fontWeight: 800 }}>
+            ${finalPrice.toFixed(2)}
+          </span>
+        </>
+      ) : (
+        <span style={{ fontWeight: 700 }}>${totalPrice.toFixed(2)}</span>
       )}
     </div>
   );
@@ -524,6 +548,7 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
         )}
 
         <div style={{ padding: '20px' }}>
+          <PriceSummary totalSelected={totalSelected} totalPrice={totalPrice} finalPrice={finalPrice} discountApplicable={discountApplicable} />
           <ProgressBar selectedCount={totalSelected} maxProducts={maxProducts} config={config} />
           <LimitReachedBanner isReached={totalSelected >= maxProducts} maxProducts={maxProducts} config={config} />
           {activeProducts.length === 0 ? (
@@ -662,6 +687,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
         )}
 
         <div style={{ padding: '20px' }}>
+          <PriceSummary totalSelected={totalSelected} totalPrice={totalPrice} finalPrice={finalPrice} discountApplicable={discountApplicable} />
           <ProgressBar selectedCount={totalSelected} maxProducts={maxProducts} config={config} />
           <LimitReachedBanner isReached={totalSelected >= maxProducts} maxProducts={maxProducts} config={config} />
           {activeSteps.map((step) => {
@@ -775,6 +801,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
 
 export default function ComboPreviewPage() {
   const { templateName, config, productsByHandle, collectionNameMap, shop, activeDiscounts } = useLoaderData();
+  const { templateId } = useParams();
   const layout = config.layout || 'layout1';
 
   const [selected, setSelected] = useState(new Set());
@@ -782,6 +809,27 @@ export default function ComboPreviewPage() {
 
   const totalSelected = selected.size;
   const maxProducts = parseInt(config.max_products) || 5;
+
+  const trackEvent = (eventType, revenue) => {
+    try {
+      fetch('/api/bundle-analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          shop_domain: shop,
+          template_id: templateId,
+          event_type: eventType,
+          revenue: revenue || 0,
+        }),
+      }).catch(() => {});
+    } catch {}
+  };
+
+  useEffect(() => {
+    trackEvent('view');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Price & discount computation
   const productPriceMap = {};
@@ -848,9 +896,17 @@ export default function ComboPreviewPage() {
       }
     });
     if (cartLines.length === 0) return;
+    trackEvent('click', finalPrice);
     const shopDomain = shop.replace(/^https?:\/\//, '');
-    const cartUrl = `https://${shopDomain}/cart/${cartLines.join(',')}`;
-    window.location.href = cartUrl;
+    const params = new URLSearchParams();
+    params.set('attributes[combo_source]', 'ComboForge');
+    params.set('attributes[combo_template_id]', String(templateId));
+    params.set('attributes[combo_template_name]', templateName);
+    const cartPath = `/cart/${cartLines.join(',')}?${params.toString()}`;
+    const destination = discountApplicable && selectedDiscount?.code
+      ? `https://${shopDomain}/discount/${encodeURIComponent(selectedDiscount.code)}?redirect=${encodeURIComponent(cartPath)}`
+      : `https://${shopDomain}${cartPath}`;
+    window.location.href = destination;
   };
 
   const lightboxImages = lightboxProduct

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLoaderData } from 'react-router';
 import {
   Card, BlockStack, InlineGrid, Text, Badge, Select, Spinner, Divider,
@@ -15,21 +15,12 @@ const DEFAULT_ANALYTICS = {
   daily: [], top_templates: [], discount_usage: [],
 };
 
-function buildDemoData(days = 14) {
-  const daily = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    daily.push({
-      date: label,
-      views: Math.floor(Math.random() * 120) + 30,
-      clicks: Math.floor(Math.random() * 60) + 10,
-      conversions: Math.floor(Math.random() * 15) + 2,
-      revenue: parseFloat((Math.random() * 800 + 100).toFixed(2)),
-    });
-  }
-  return daily;
+function dateRangeToDates(days) {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - days + 1);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { startDate: fmt(start), endDate: fmt(end) };
 }
 
 export const loader = async ({ request }) => {
@@ -50,9 +41,13 @@ function KpiCard({ label, value, sub, accent }) {
   );
 }
 
-const CHART_COLORS = {
-  views: '#667eea', clicks: '#f59e0b', conversions: '#10b981', revenue: '#8b5cf6',
-};
+function EmptyNote({ message }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+      <Text as="span" variant="bodySm" tone="subdued">{message}</Text>
+    </div>
+  );
+}
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -82,6 +77,20 @@ export default function AppBundlesAnalytics() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('14');
   const [activeChart, setActiveChart] = useState('traffic');
+  const [funnel, setFunnel] = useState({ cart_creates: 0, loading: false });
+
+  const fetchFunnel = useCallback(async (days) => {
+    if (!shop) return;
+    setFunnel(prev => ({ ...prev, loading: true }));
+    try {
+      const { startDate, endDate } = dateRangeToDates(parseInt(days, 10));
+      const res = await fetch(`/api/analytics/funnel?startDate=${startDate}&endDate=${endDate}`);
+      const p = await res.json();
+      setFunnel({ cart_creates: (res.ok && p?.success) ? p.data.cart_creates : 0, loading: false });
+    } catch {
+      setFunnel({ cart_creates: 0, loading: false });
+    }
+  }, [shop]);
 
   useEffect(() => {
     setLoading(true);
@@ -90,16 +99,16 @@ export default function AppBundlesAnalytics() {
       .then(data => {
         const d = data.data || DEFAULT_ANALYTICS;
         setAnalytics(d);
-        // Use real daily data if available, demo otherwise (no data recorded yet)
-        setDailyData(d.daily?.length ? d.daily : buildDemoData(parseInt(dateRange, 10)));
+        setDailyData(d.daily || []);
         setLoading(false);
       })
       .catch(() => {
         setAnalytics(DEFAULT_ANALYTICS);
-        setDailyData(buildDemoData(parseInt(dateRange, 10)));
+        setDailyData([]);
         setLoading(false);
       });
-  }, [dateRange]);
+    fetchFunnel(dateRange);
+  }, [dateRange, fetchFunnel]);
 
   const totals = analytics || DEFAULT_ANALYTICS;
   const aov = totals.total_orders > 0
@@ -109,14 +118,7 @@ export default function AppBundlesAnalytics() {
     ? ((totals.total_conversions / totals.total_views) * 100).toFixed(1)
     : '0.0';
 
-  // Use real data from DB, fall back to demo only when no events recorded yet
-  const DEMO_TOP_TEMPLATES = [
-    { name: 'Summer Bundle Grid', views: 1240, clicks: 387, conversions: 58, revenue: 4820 },
-    { name: 'Velocity Carousel', views: 890, clicks: 201, conversions: 34, revenue: 2910 },
-    { name: 'Editorial Split', views: 530, clicks: 142, conversions: 19, revenue: 1650 },
-    { name: 'Premium Storefront', views: 320, clicks: 88, conversions: 11, revenue: 980 },
-  ];
-  const topTemplates = totals.top_templates?.length ? totals.top_templates : DEMO_TOP_TEMPLATES;
+  const topTemplates = totals.top_templates || [];
 
   return (
     <BlockStack gap="500">
@@ -195,46 +197,52 @@ export default function AppBundlesAnalytics() {
               </div>
 
               <div style={{ height: '280px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  {activeChart === 'traffic' ? (
-                    <AreaChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                      <defs>
-                        <linearGradient id="gViews" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#667eea" stopOpacity={0.25} />
-                          <stop offset="95%" stopColor="#667eea" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend />
-                      <Area type="monotone" dataKey="views" stroke="#667eea" fill="url(#gViews)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="clicks" stroke="#f59e0b" fill="url(#gClicks)" strokeWidth={2} />
-                    </AreaChart>
-                  ) : activeChart === 'revenue' ? (
-                    <BarChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  ) : (
-                    <LineChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend />
-                      <Line type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
-                    </LineChart>
-                  )}
-                </ResponsiveContainer>
+                {dailyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    {activeChart === 'traffic' ? (
+                      <AreaChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="gViews" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#667eea" stopOpacity={0.25} />
+                            <stop offset="95%" stopColor="#667eea" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Area type="monotone" dataKey="views" stroke="#667eea" fill="url(#gViews)" strokeWidth={2} />
+                        <Area type="monotone" dataKey="clicks" stroke="#f59e0b" fill="url(#gClicks)" strokeWidth={2} />
+                      </AreaChart>
+                    ) : activeChart === 'revenue' ? (
+                      <BarChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={dailyData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Line type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </LineChart>
+                    )}
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                    <EmptyNote message="No activity in this range yet." />
+                  </div>
+                )}
               </div>
             </BlockStack>
           </Card>
@@ -249,42 +257,44 @@ export default function AppBundlesAnalytics() {
                   <div style={{ width: '6px', height: '20px', borderRadius: '3px', background: 'linear-gradient(135deg, #10b981, #059669)' }} />
                   <Text variant="headingMd" as="h2">Top Templates</Text>
                 </div>
-                <div style={{ borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
-                    padding: '8px 12px', background: '#f9fafb',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}>
-                    {['Template', 'Views', 'Clicks', 'Revenue'].map(h => (
-                      <Text key={h} variant="bodyXs" as="span" tone="subdued" fontWeight="semibold">
-                        {h.toUpperCase()}
-                      </Text>
+                {topTemplates.length > 0 ? (
+                  <div style={{ borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                      padding: '8px 12px', background: '#f9fafb',
+                      borderBottom: '1px solid #e5e7eb',
+                    }}>
+                      {['Template', 'Views', 'Clicks', 'Revenue'].map(h => (
+                        <Text key={h} variant="bodyXs" as="span" tone="subdued" fontWeight="semibold">
+                          {h.toUpperCase()}
+                        </Text>
+                      ))}
+                    </div>
+                    {topTemplates.map((t, i) => (
+                      <div key={t.template_id || t.name || i} style={{
+                        display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                        padding: '10px 12px', alignItems: 'center',
+                        borderBottom: i < topTemplates.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '22px', height: '22px', borderRadius: '6px',
+                            background: ['#667eea20', '#f59e0b20', '#10b98120', '#8b5cf620'][i % 4],
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '11px', fontWeight: '700',
+                            color: ['#667eea', '#f59e0b', '#10b981', '#8b5cf6'][i % 4],
+                          }}>
+                            {i + 1}
+                          </div>
+                          <Text variant="bodyXs" as="p" fontWeight="semibold">{t.name}</Text>
+                        </div>
+                        <Text variant="bodyXs" as="p">{t.views.toLocaleString()}</Text>
+                        <Text variant="bodyXs" as="p">{t.clicks.toLocaleString()}</Text>
+                        <Text variant="bodyXs" as="p">${t.revenue.toLocaleString()}</Text>
+                      </div>
                     ))}
                   </div>
-                  {topTemplates.map((t, i) => (
-                    <div key={t.name || i} style={{
-                      display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
-                      padding: '10px 12px', alignItems: 'center',
-                      borderBottom: i < topTemplates.length - 1 ? '1px solid #f3f4f6' : 'none',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{
-                          width: '22px', height: '22px', borderRadius: '6px',
-                          background: ['#667eea20', '#f59e0b20', '#10b98120', '#8b5cf620'][i],
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '11px', fontWeight: '700',
-                          color: ['#667eea', '#f59e0b', '#10b981', '#8b5cf6'][i],
-                        }}>
-                          {i + 1}
-                        </div>
-                        <Text variant="bodyXs" as="p" fontWeight="semibold">{t.name}</Text>
-                      </div>
-                      <Text variant="bodyXs" as="p">{t.views.toLocaleString()}</Text>
-                      <Text variant="bodyXs" as="p">{t.clicks.toLocaleString()}</Text>
-                      <Text variant="bodyXs" as="p">${t.revenue.toLocaleString()}</Text>
-                    </div>
-                  ))}
-                </div>
+                ) : <EmptyNote message="No template activity yet in this range." />}
               </BlockStack>
             </Card>
 
@@ -298,7 +308,7 @@ export default function AppBundlesAnalytics() {
                 {[
                   { label: 'Impressions', value: totals.total_views, color: '#667eea', pct: 100 },
                   { label: 'Clicks', value: totals.total_clicks, color: '#f59e0b', pct: totals.total_views > 0 ? Math.round((totals.total_clicks / totals.total_views) * 100) : 0 },
-                  { label: 'Add to Cart', value: Math.round(totals.total_clicks * 0.6), color: '#10b981', pct: totals.total_views > 0 ? Math.round((totals.total_clicks * 0.6 / totals.total_views) * 100) : 0 },
+                  { label: 'Add to Cart', value: funnel.cart_creates, color: '#10b981', pct: totals.total_views > 0 ? Math.round((funnel.cart_creates / totals.total_views) * 100) : 0 },
                   { label: 'Orders', value: totals.total_conversions, color: '#8b5cf6', pct: totals.total_views > 0 ? Math.round((totals.total_conversions / totals.total_views) * 100) : 0 },
                 ].map(step => (
                   <div key={step.label}>
@@ -316,6 +326,7 @@ export default function AppBundlesAnalytics() {
                     </div>
                   </div>
                 ))}
+                <Text as="p" variant="bodyXs" tone="subdued">&quot;Add to Cart&quot; reflects storefront cart activity signals, which may under-report on some stores — treat as directional.</Text>
 
                 <Divider />
                 <div style={{

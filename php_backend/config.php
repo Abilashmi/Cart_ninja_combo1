@@ -38,4 +38,3 @@ try {
     echo json_encode(["status" => "error", "message" => "DB Connection Failed"]);
     exit;
 }
-

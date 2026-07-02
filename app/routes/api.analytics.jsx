@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { getDb } from "../services/db.server";
 
 const DEFAULT_ANALYTICS_UPSTREAMS = [
   "https://int.thecartninja.com/analytics.php"
@@ -120,6 +121,43 @@ async function resolveShop(request, url) {
   }
 }
 
+// Local, dev-time source of truth for real order revenue/AOV/conversion rate —
+// populated by app/routes/webhooks.orders.paid.jsx into store_order_events on
+// the same MySQL DB as getDb(). Click counts (checkout/coupon/upsell) still
+// come from the PHP upstream below. Once ready to run this against production,
+// no code change is needed here — it already reads from whatever DB_HOST/
+// DB_NAME the deployed app is configured with.
+async function getLocalOrderStats(shop, startDate, endDate, checkoutClicks) {
+  const stats = { total_revenue: 0, avg_order_value: 0, conversion_rate: 0, order_count: 0 };
+
+  try {
+    const db = getDb();
+    let query = `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total FROM store_order_events WHERE shop_domain = ?`;
+    const params = [shop];
+    if (startDate) {
+      query += ` AND created_at >= ?`;
+      params.push(`${startDate} 00:00:00`);
+    }
+    if (endDate) {
+      query += ` AND created_at <= ?`;
+      params.push(`${endDate} 23:59:59`);
+    }
+
+    const [rows] = await db.execute(query, params);
+    const orderCount = Number(rows[0]?.n || 0);
+    const totalRevenue = parseFloat(rows[0]?.total || 0);
+
+    stats.order_count = orderCount;
+    stats.total_revenue = totalRevenue;
+    stats.avg_order_value = orderCount > 0 ? totalRevenue / orderCount : 0;
+    stats.conversion_rate = checkoutClicks > 0 ? (orderCount / checkoutClicks) * 100 : 0;
+  } catch (error) {
+    console.error("[api.analytics] Local order stats query failed:", error.message);
+  }
+
+  return stats;
+}
+
 async function getErrorBody(response) {
   try {
     const body = await response.clone().json();
@@ -183,10 +221,17 @@ export async function loader({ request }) {
       }
 
       const payload = await response.json();
+      const clickData = normalizeAnalyticsPayload(payload);
+      const orderStats = await getLocalOrderStats(shop, startDate, endDate, clickData.checkout_click);
 
       return Response.json({
         success: true,
-        data: normalizeAnalyticsPayload(payload),
+        data: {
+          ...clickData,
+          cartdrawer_total_revenue: orderStats.total_revenue,
+          avg_order_value: orderStats.avg_order_value,
+          conversion_rate: orderStats.conversion_rate,
+        },
       });
     } catch (error) {
       upstreamErrors.push(`${baseUrl} -> ${error?.message || "Request failed"}`);
@@ -194,12 +239,16 @@ export async function loader({ request }) {
   }
 
   const detail = upstreamErrors.slice(0, 3).join(" | ") || "No upstream configured.";
-  return Response.json(
-    {
-      success: false,
-      error: `Analytics upstream unavailable. ${detail}`,
-      data: { ...DEFAULT_ANALYTICS },
+  const orderStats = await getLocalOrderStats(shop, startDate, endDate, 0);
+
+  return Response.json({
+    success: true,
+    error: `Click-tracking upstream unavailable (revenue/AOV still shown from local orders). ${detail}`,
+    data: {
+      ...DEFAULT_ANALYTICS,
+      cartdrawer_total_revenue: orderStats.total_revenue,
+      avg_order_value: orderStats.avg_order_value,
+      conversion_rate: orderStats.conversion_rate,
     },
-    { status: 502 }
-  );
+  });
 }

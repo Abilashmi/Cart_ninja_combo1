@@ -8,6 +8,32 @@
   const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
   const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
   const CLICK_API = API_BASE + '/click.php';
+  const SESSION_API = API_BASE + '/session_ping.php';
+
+  // Client-generated session id (30-min rolling expiry) — visitor/session
+  // approximation for the analytics module. Not a substitute for a real
+  // consent-gated analytics pixel; see analytics plan decision D3.
+  function ccGetOrCreateSessionId() {
+    try {
+      var idKey = 'cc_session_id';
+      var expiryKey = 'cc_session_expiry';
+      var now = Date.now();
+      var existing = localStorage.getItem(idKey);
+      var expiry = parseInt(localStorage.getItem(expiryKey) || '0', 10);
+      if (existing && expiry > now) {
+        localStorage.setItem(expiryKey, String(now + 30 * 60 * 1000));
+        return existing;
+      }
+      var id = 'sess_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(idKey, id);
+      localStorage.setItem(expiryKey, String(now + 30 * 60 * 1000));
+      return id;
+    } catch (e) {
+      return 'sess_' + Date.now().toString(36);
+    }
+  }
+
+  const CC_SESSION_ID = ccGetOrCreateSessionId();
 
   // Utility: Get currency symbol from code
   function getCurrencySymbol(code) {
@@ -22,6 +48,20 @@
   }
 
   const CURRENCY_SYMBOL = getCurrencySymbol(CURRENCY_CODE);
+
+  // Inline SVG paths matching Polaris icons used in the admin preview
+  const CC_ICON_PATHS = {
+    discount: '<path d="M3.25 5.5c0-1.242 1.007-2.25 2.25-2.25.414 0 .75.336.75.75s-.336.75-.75.75-.75.336-.75.75-.336.75-.75.75-.75-.336-.75-.75Z"/><path d="M12.78 7.22c.293.293.293.768 0 1.06l-4.5 4.5c-.293.293-.767.293-1.06 0-.293-.292-.293-.767 0-1.06l4.5-4.5c.293-.293.767-.293 1.06 0Z"/><path d="M9 8c0 .553-.448 1-1 1s-1-.447-1-1c0-.552.448-1 1-1s1 .448 1 1Z"/><path d="M12 13c.552 0 1-.447 1-1 0-.552-.448-1-1-1s-1 .448-1 1c0 .553.448 1 1 1Z"/><path d="M3.25 14.5c0 1.243 1.007 2.25 2.25 2.25.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75s-.75-.335-.75-.75c0-.414-.336-.75-.75-.75s-.75.336-.75.75Z"/><path d="M16.75 14.5c0 1.243-1.007 2.25-2.25 2.25-.414 0-.75-.335-.75-.75 0-.414.336-.75.75-.75s.75-.335.75-.75c0-.414.336-.75.75-.75s.75.336.75.75Z"/><path d="M16.75 5.5c0-1.242-1.007-2.25-2.25-2.25-.414 0-.75.336-.75.75s.336.75.75.75.75.336.75.75.336.75.75.75.75-.336.75-.75Z"/><path d="M16 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 16.75c.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75 0 .415.336.75.75.75h2Z"/><path d="M4 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 4.75c.414 0 .75-.336.75-.75s-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75s.336.75.75.75h2Z"/>',
+    gift: '<path d="M7.835 9.5h-.96c-.343 0-.625-.28-.625-.628 0-.344.28-.622.619-.622.242 0 .463.142.563.363l.403.887Z"/><path d="M10.665 9.5h.96c.343 0 .625-.28.625-.628 0-.344-.28-.622-.619-.622-.242 0-.463.142-.563.363l-.403.887Z"/><path fill-rule="evenodd" d="M8.5 4h-3.25c-1.519 0-2.75 1.231-2.75 2.75v2.25h1.25c.414 0 .75.336.75.75s-.336.75-.75.75h-1.25v2.75c0 1.519 1.231 2.75 2.75 2.75h3.441c-.119-.133-.191-.308-.191-.5v-2c0-.414.336-.75.75-.75s.75.336.75.75v2c0 .192-.072.367-.191.5h4.941c1.519 0 2.75-1.231 2.75-2.75v-2.75h-2.75c-.414 0-.75-.336-.75-.75s.336-.75.75-.75h2.75v-2.25c0-1.519-1.231-2.75-2.75-2.75h-4.75v2.25c0 .414-.336.75-.75.75s-.75-.336-.75-.75v-2.25Zm.297 3.992c-.343-.756-1.097-1.242-1.928-1.242-1.173 0-2.119.954-2.119 2.122 0 1.171.95 2.128 2.125 2.128h.858c-.595.51-1.256.924-1.84 1.008-.41.058-.694.438-.635.848.058.41.438.695.848.636 1.11-.158 2.128-.919 2.803-1.53.121-.11.235-.217.341-.322.106.105.22.213.34.322.676.611 1.693 1.372 2.804 1.53.41.059.79-.226.848-.636.059-.41-.226-.79-.636-.848-.583-.084-1.244-.498-1.839-1.008h.858c1.176 0 2.125-.957 2.125-2.128 0-1.168-.946-2.122-2.119-2.122-.83 0-1.585.486-1.928 1.242l-.453.996-.453-.996Z"/>',
+    shipping: '<path fill-rule="evenodd" d="M4.75 4.5a.75.75 0 0 0 0 1.5h3.25a1 1 0 0 1 0 2h-4.75a.75.75 0 0 0 0 1.5h3a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 0 0 1.5h.458a2.5 2.5 0 1 0 4.78.75h3.024a2.5 2.5 0 1 0 4.955-.153 1.75 1.75 0 0 0 1.033-1.597v-1.22a1.75 1.75 0 0 0-1.326-1.697l-1.682-.42a.25.25 0 0 1-.18-.174l-.426-1.494a2.75 2.75 0 0 0-2.645-1.995h-6.991Zm2.75 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
+    star: '<path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/>',
+    percent: '<path fill-rule="evenodd" d="M11.527 3.327c-.6-1.306-2.455-1.306-3.054 0a1.68 1.68 0 0 1-2.112.874c-1.347-.5-2.66.813-2.16 2.16a1.68 1.68 0 0 1-.874 2.112c-1.306.6-1.306 2.455 0 3.054a1.68 1.68 0 0 1 .874 2.112c-.5 1.347.813 2.659 2.16 2.16a1.68 1.68 0 0 1 2.112.874c.6 1.306 2.455 1.306 3.054 0a1.68 1.68 0 0 1 2.112-.874c1.347.499 2.66-.813 2.16-2.16a1.68 1.68 0 0 1 .874-2.112c1.306-.6 1.306-2.455 0-3.054a1.68 1.68 0 0 1-.874-2.112c.5-1.347-.813-2.66-2.16-2.16a1.68 1.68 0 0 1-2.112-.874Zm-2.527 4.923a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3.53.53-4 4a.75.75 0 1 1-1.06-1.06l4-4a.75.75 0 1 1 1.06 1.06Zm.47 3.47a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
+    cash: '<path d="M9.5 6.5a.75.75 0 0 1 1.5 0v.25h.75a.75.75 0 0 1 0 1.5h-2.25a.5.5 0 0 0 0 1h1a2 2 0 1 1 0 4v.25a.75.75 0 0 1-1.5 0v-.25h-.75a.75.75 0 0 1 0-1.5h2.25a.5.5 0 0 0 0-1h-1a2 2 0 1 1 0-4v-.25Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
+  };
+  function ccIconSvg(key, size, color) {
+    const paths = CC_ICON_PATHS[key] || CC_ICON_PATHS.discount;
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="' + size + '" height="' + size + '" fill="' + color + '" style="display:block;flex-shrink:0;">' + paths + '</svg>';
+  }
 
   let CONFIG = null;
   let COUPONS = [];
@@ -322,24 +362,72 @@
     const enabled = isEnabled(d.coupon_status) || isEnabled(d.couponStatus) || isEnabled(data.enabled);
 
     const title = data && typeof data.title === 'object' && data.title ? data.title : {};
-    const rawAlign = title.alignment || data.titleAlignment || 'left';
+    // data.titleTextAlign is the Cart Editor field name; data.titleAlignment is the legacy name
+    const rawAlign = title.alignment || data.titleTextAlign || data.titleAlignment || 'left';
     const safeAlign = rawAlign === 'center' || rawAlign === 'right' || rawAlign === 'left' ? rawAlign : 'left';
+
+    // Normalize position: product-widget placement values leak into coupon_data
+    const rawPos = data.position || 'top';
+    const position = (rawPos === 'above_cart' || rawPos === 'above_atc') ? 'top'
+                   : (rawPos === 'below_cart' || rawPos === 'below_atc') ? 'bottom'
+                   : rawPos;
+
+    // Map Cart Editor template names → storefront style names
+    // minimal-card  = style-1 (white bg, colored left border, outline button)
+    // bold-vibrant  = style-2 (full colored bg, centered, large icon)
+    // classic-banner = style-3 (colored header + white body + dashed code box)
+    const TEMPLATE_STYLE_MAP = {
+      'minimal-card':  'style-1',
+      'bold-vibrant':  'style-2',
+      'classic-banner':'style-3',
+      'template1':     'style-1',
+      'template2':     'style-2',
+      'template3':     'style-3',
+    };
+    const style = data.style || data.selectedStyle
+      || TEMPLATE_STYLE_MAP[data.template]
+      || 'style-2';
+
+    // Handle Cart Editor format: selectedCoupons (full objects) → selectedActiveCoupons (IDs) + allCouponDetails
+    let selectedActiveCoupons = data.selectedActiveCoupons || [];
+    let allCouponDetails = data.allCouponDetails || [];
+
+    if (!selectedActiveCoupons.length && Array.isArray(data.selectedCoupons) && data.selectedCoupons.length) {
+      selectedActiveCoupons = data.selectedCoupons.map(c => c.id).filter(Boolean);
+      allCouponDetails = data.selectedCoupons.map(c => ({
+        id: c.id,
+        code: c.code || c.labelText || '',
+        label: c.labelText || c.code || '',
+        description: c.description || '',
+        backgroundColor: c.bgColor || c.backgroundColor || '#4f46e5',
+        textColor: c.textColor || '#ffffff',
+        borderRadius: c.borderRadius ?? 8,
+        iconKey: c.icon || 'discount',
+        button: {
+          text: c.buttonText || 'Apply',
+          backgroundColor: c.buttonBgColor || c.buttonBackgroundColor || '#000000',
+          textColor: c.buttonTextColor || '#ffffff',
+        },
+      }));
+    }
 
     return {
       enabled,
-      style: data.style || data.selectedStyle || 'style-2',
-      position: data.position || 'top',
+      style,
+      position,
       layout: data.layout || 'grid',
       alignment: data.alignment || 'horizontal',
       title: {
-        text: title.text || data.titleText || 'Apply Coupon',
+        // Cart Editor saves sectionTitle; legacy saves titleText; structured saves title.text
+        text: title.text || data.sectionTitle || data.titleText || 'Apply Coupon',
         fontSize: parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
-        textColor: title.textColor || data.titleTextColor || '#1e293b',
+        // Cart Editor saves titleColor; legacy saves titleTextColor; structured saves title.textColor
+        textColor: title.textColor || data.titleColor || data.titleTextColor || '#1e293b',
         alignment: safeAlign,
       },
-      selectedActiveCoupons: data.selectedActiveCoupons || [],
+      selectedActiveCoupons,
       couponOverrides: data.couponOverrides || {},
-      allCouponDetails: data.allCouponDetails || [],
+      allCouponDetails,
     };
   }
 
@@ -854,6 +942,7 @@
   ccWatchCartCount();
   document.addEventListener('DOMContentLoaded', ccWatchCartCount);
   window.addEventListener('load', ccWatchCartCount);
+  sendSessionPing();
 
   /* =================== EVENT TRACKING =================== */
 
@@ -865,6 +954,7 @@
         shop_id: shopId,
         domain: SHOP,
         event_type: eventType,
+        session_id: CC_SESSION_ID,
       };
 
 
@@ -875,6 +965,24 @@
           Accept: 'application/json',
         },
         body: JSON.stringify(payload),
+      });
+    } catch (e) {
+    }
+  }
+
+  async function sendSessionPing() {
+    try {
+      await originalFetch(SESSION_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          domain: SHOP,
+          session_id: CC_SESSION_ID,
+          page_type: (document.body && document.body.getAttribute('data-template')) || null,
+        }),
       });
     } catch (e) {
     }
@@ -999,6 +1107,7 @@
 
   function applyCoupon(code) {
     if (!code) return;
+    // Copy to clipboard
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(code).then(null, () => ccCopyTextFallback(code));
@@ -1007,6 +1116,12 @@
       }
     } catch (e) {
       ccCopyTextFallback(code);
+    }
+    // Toggle applied state so checkout URL picks it up
+    if (appliedCouponCodes.includes(code)) {
+      appliedCouponCodes = appliedCouponCodes.filter(c => c !== code);
+    } else {
+      appliedCouponCodes = [code];
     }
     _lastCopiedCode = code;
     setTimeout(() => {
@@ -1460,7 +1575,7 @@
       <span style="font-size:18px;color:#0f172a;font-weight:900;">${CURRENCY_SYMBOL}${finalTotal.toFixed(0)}</span>
     </div>
   </div>
-  <a href="/checkout" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
+  <a href="${appliedCouponCodes.length > 0 ? '/checkout?discount=' + encodeURIComponent(appliedCouponCodes[0]) : '/checkout'}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
     <button style="width:100%;padding:16px;background:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.backgroundColor) || '#111827'};color:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.textColor) || '#fff'};border:none;border-radius:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.borderRadius !== undefined) ? CONFIG.checkoutButtonStyle.borderRadius : 12}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
       ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
     </button>
@@ -1536,9 +1651,9 @@
             description: saved.description || '',
             discountType: saved.discountType || 'percentage',
             discountValue: parseFloat(saved.discountValue || 0),
-            backgroundColor: saved.backgroundColor || '#000',
+            backgroundColor: saved.backgroundColor || '#4f46e5',
             textColor: saved.textColor || '#fff',
-            iconUrl: saved.iconUrl || '🎟️',
+            iconKey: saved.iconKey || 'discount',
             buttonText: btn.text ?? 'Apply',
             buttonBackgroundColor: btn.backgroundColor ?? '#000000',
             buttonTextColor: btn.textColor ?? '#ffffff',
@@ -1564,7 +1679,7 @@
             discountValue: parseFloat(override.discountValue || apiCoupon.value || 0),
             backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#6366f1',
             textColor: override.textColor || apiCoupon.textColor || '#ffffff',
-            iconUrl: override.iconUrl || apiCoupon.iconUrl || '🎟️',
+            iconKey: override.iconKey || apiCoupon.iconKey || apiCoupon.icon || 'discount',
             buttonText:
               override['button.text'] ??
               override.button?.text ??
@@ -1629,68 +1744,63 @@
     couponsToShow.forEach((coupon) => {
 
       if (style === 'style-1') {
-        const baseColor = coupon.backgroundColor || '#1a1a2e';
-        const icon = coupon.iconUrl || '☀️';
-        const btnBg = coupon.buttonBackgroundColor || baseColor;
-        const btnTc = coupon.buttonTextColor || '#ffffff';
-        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (coupon.buttonText || 'Apply');
+        // minimal-card: white bg, colored left border, small svg icon, outline button
+        const baseColor = coupon.backgroundColor || '#4f46e5';
+        const borderR = coupon.borderRadius || 8;
+        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const iconSvg = ccIconSvg(coupon.iconKey, 14, baseColor);
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="min-width:220px;width:100%;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;align-items:center;gap:10px;position:relative;">
-      <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${baseColor};border-radius:12px 0 0 12px;"></div>
-      <div style="width:40px;height:40px;border-radius:8px;background:${baseColor}20;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${icon}</div>
-      <div style="flex:1;min-width:0;">
-        <p style="margin:0;font-size:13px;font-weight:700;color:#1e293b;line-height:1.3;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:2px 0 0 0;font-size:11px;color:#64748b;line-height:1.3;">${escapeHtml(coupon.label || coupon.description)}</p>
+    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:#fff;border:1px solid #e5e7eb;border-left:3px solid ${baseColor};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+      <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
+        <span style="color:${baseColor};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>
+        <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(coupon.label || coupon.code)}</span>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 12px;background:${coupon.code === _lastCopiedCode ? '#10b981' : btnBg};color:${btnTc};border:none;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;flex-shrink:0;">
+      <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${coupon.code === _lastCopiedCode ? '#10b981' : baseColor};background:${coupon.code === _lastCopiedCode ? '#10b981' : 'transparent'};color:${coupon.code === _lastCopiedCode ? '#fff' : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
         ${escapeHtml(btnLabel)}
       </button>
     </div>
   `;
       } else if (style === 'style-2') {
-        const btnBg = coupon.buttonBackgroundColor || '#1e293b';
-        const btnTc = coupon.buttonTextColor || '#ffffff';
-        const btnLabel = coupon.buttonText || 'Apply';
+        // bold-vibrant: full colored bg, centered, svg icon (textColor), bold labelText, button
+        const bg = coupon.backgroundColor || '#4f46e5';
+        const tc = coupon.textColor || '#ffffff';
+        const btnBg = coupon.code === _lastCopiedCode ? '#10b981' : (coupon.buttonBackgroundColor || '#000000');
+        const btnTc = coupon.code === _lastCopiedCode ? '#fff' : (coupon.buttonTextColor || '#ffffff');
+        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied!' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const borderR = coupon.borderRadius || 8;
+        const iconSvg = ccIconSvg(coupon.iconKey, 20, tc);
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${coupon.code === _lastCopiedCode ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };border-radius:${coupon.borderRadius || 8}px;box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;min-width:160px;">
-      <div style="width:48px;height:48px;border-radius:14px;background:${coupon.backgroundColor
-          };display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 10px ${coupon.backgroundColor}40;">${coupon.iconUrl}</div>
-      <div style="width:100%;">
-        <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;text-align:center;line-height:1.3;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0;font-size:11px;color:#64748b;text-align:center;line-height:1.3;">${escapeHtml(coupon.description)}</p>
-      </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${coupon.code === _lastCopiedCode ? '#10b981' : btnBg
-          };color:${coupon.code === _lastCopiedCode ? '#fff' : btnTc};border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;">
-        ${coupon.code === _lastCopiedCode ? '✓ Copied!' : escapeHtml(btnLabel)}
-        ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied to clipboard</div>` : ''}
+    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 8px;background:${bg};border-radius:${borderR}px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;box-shadow:0 2px 8px ${bg}55;box-sizing:border-box;height:100%;">
+      <span style="color:${tc};display:flex;line-height:0;">${iconSvg}</span>
+      <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(coupon.label || coupon.code)}</div>
+      ${coupon.description ? `<div style="font-size:8px;color:${tc};opacity:0.85;line-height:1.3;flex:1;">${escapeHtml(coupon.description)}</div>` : ''}
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
+        ${escapeHtml(btnLabel)}
       </button>
     </div>
   `;
       } else {
-        // Style 3: Colored header + white body with dashed code box
-        const btnTc = coupon.buttonTextColor || '#2563eb';
-        const btnLabel = coupon.buttonText || 'COPY';
-        const discountBadge = coupon.discountValue > 0 ? `${coupon.discountValue}% OFF` : (coupon.label || '');
+        // classic-banner: full colored bg, svg icon (textColor) + labelText + description, button right
+        const bg = coupon.backgroundColor || '#4f46e5';
+        const tc = coupon.textColor || '#ffffff';
+        const btnBg = coupon.code === _lastCopiedCode ? '#10b981' : (coupon.buttonBackgroundColor || '#000000');
+        const btnTc = coupon.code === _lastCopiedCode ? '#fff' : (coupon.buttonTextColor || '#ffffff');
+        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const borderR = coupon.borderRadius || 8;
+        const iconSvg = ccIconSvg(coupon.iconKey, 14, tc);
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;border-radius:${coupon.borderRadius || 8}px;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;min-width:200px;">
-      <div style="background:${coupon.backgroundColor};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
-        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-          <span style="font-size:16px;flex-shrink:0;">${coupon.iconUrl}</span>
-          <span style="font-size:13px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</span>
-        </div>
-        ${discountBadge ? `<div style="background:rgba(255,255,255,0.2);padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;white-space:nowrap;margin-left:8px;">${escapeHtml(discountBadge)}</div>` : ''}
-      </div>
-      ${coupon.description ? `<div style="padding:6px 14px 2px 14px;"><p style="margin:0;font-size:11px;color:#64748b;line-height:1.3;">${escapeHtml(coupon.description)}</p></div>` : ''}
-      <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;display:flex;align-items:center;">
-          <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;line-height:1;">${escapeHtml(coupon.code)}</p>
-        </div>
-        <div style="position:relative;flex-shrink:0;">
-          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${coupon.code === _lastCopiedCode ? '#10b981' : btnTc};font-size:12px;font-weight:700;cursor:pointer;padding:4px;white-space:nowrap;">${coupon.code === _lastCopiedCode ? 'COPIED' : escapeHtml(btnLabel)}</button>
-          ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-14px;right:0;font-size:8px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied!</div>` : ''}
+    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:${bg};color:${tc};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+      <div style="display:flex;align-items:flex-start;gap:5px;">
+        <span style="color:${tc};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</div>
+          <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
         </div>
       </div>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
+        ${escapeHtml(btnLabel)}
+      </button>
     </div>
   `;
       }

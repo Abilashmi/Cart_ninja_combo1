@@ -174,45 +174,11 @@ model WidgetSettings {
 }
 
 // ─── Combo Forge Models ────────────────────────────────────────────────────────
-
-model ComboTemplate {
-  id                String   @id @default(uuid()) @db.VarChar(36)
-  shop              String   @db.VarChar(255)
-  name              String   @db.VarChar(255)
-  slug              String?  @db.VarChar(255)
-  templateType      String   @default("grid") @db.VarChar(50)
-  status            String   @default("draft") @db.VarChar(50)
-  isActive          Boolean  @default(true)
-  version           Int      @default(1)
-  description       String?  @db.Text
-  customizationData String?  @db.LongText
-  features          String?  @db.LongText
-  pageId            String?  @db.VarChar(255)
-  pageHandle        String?  @db.VarChar(255)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  analytics ComboAnalytic[]
-
-  @@index([shop])
-  @@index([shop, status])
-}
-
-model ComboAnalytic {
-  id         String   @id @default(uuid()) @db.VarChar(36)
-  shop       String   @db.VarChar(255)
-  templateId String?  @db.VarChar(36)
-  eventType  String   @db.VarChar(50)
-  revenue    Float    @default(0)
-  recordedAt DateTime @default(now())
-
-  template ComboTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-
-  @@index([shop])
-  @@index([shop, eventType])
-  @@index([templateId])
-  @@index([recordedAt])
-}
+// NOTE: combo_templates / combo_analytics are raw-SQL tables (see
+// prisma/migrations/20260618000003_create_combo_forge_tables), not managed by
+// Prisma models here — that migration explicitly drops the orphaned
+// `comboanalytic`/`combotemplate` tables these models used to generate.
+// Do not re-add ComboTemplate/ComboAnalytic models; use getDb() raw queries.
 
 model ComboSubscription {
   id               String    @id @default(uuid()) @db.VarChar(36)

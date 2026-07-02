@@ -23,7 +23,7 @@ function hydrateFromRecord(record, base) {
     body: {
       ...base.body,
       progressBar: { ...base.body.progressBar, ...pb, enabled: dbFlag(record.progress_status) },
-      couponSlider: { ...base.body.couponSlider, ...cs, enabled: dbFlag(record.coupon_status) },
+      couponSlider: { ...base.body.couponSlider, ...cs, enabled: dbFlag(record.coupon_status), ...(cs.position != null ? { position: normalizeCouponPosition(cs.position, base.body.couponSlider.position) } : {}) },
       upsellProducts: { ...base.body.upsellProducts, ...up, enabled: dbFlag(record.upsell_status) },
     },
     footer: {
@@ -143,8 +143,21 @@ function hydrateFromProgressBar(pb, base) {
   };
 }
 
+function normalizeCouponPosition(pos, fallback) {
+  if (pos === 'top' || pos === 'bottom') return pos;
+  // Product-widget placement values leaked into coupon_slider_settings.position
+  if (pos === 'above_cart' || pos === 'above_atc') return 'top';
+  if (pos === 'below_cart' || pos === 'below_atc') return 'bottom';
+  return fallback;
+}
+
 function hydrateFromCouponSlider(cs, base) {
   if (!cs) return base;
+  // coupon_slider_settings.selected_coupons stores raw GIDs (from Product Widget).
+  // Only adopt them as full coupon objects if each element is a plain object;
+  // GID strings are NOT compatible with the Cart Editor coupon card format.
+  const rawSelected = Array.isArray(cs.selected_coupons) ? cs.selected_coupons : [];
+  const hasFullObjects = rawSelected.length > 0 && rawSelected.every(c => c && typeof c === 'object');
   return {
     ...base,
     body: {
@@ -157,9 +170,10 @@ function hydrateFromCouponSlider(cs, base) {
         titleColor:     cs.title_color       ?? base.body.couponSlider.titleColor,
         titleFontSize:  Number(cs.title_font_size ?? base.body.couponSlider.titleFontSize),
         titleTextAlign: cs.title_alignment   ?? base.body.couponSlider.titleTextAlign,
-        position:       cs.position          ?? base.body.couponSlider.position,
+        position:       normalizeCouponPosition(cs.position, base.body.couponSlider.position),
         layout:         cs.layout            ?? base.body.couponSlider.layout,
-        selectedCoupons: Array.isArray(cs.selected_coupons) ? cs.selected_coupons : [],
+        // Only override selectedCoupons if the stored items are full coupon objects, not bare GIDs
+        ...(hasFullObjects ? { selectedCoupons: rawSelected } : {}),
       },
     },
   };

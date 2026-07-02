@@ -22,6 +22,8 @@ export const loader = async ({ request }) => {
   let publishedPages = [];
   let templates = [];
   let discounts = [];
+  let totalConversions = 0;
+  let totalRevenue = 0;
 
   try {
     const db = getDb();
@@ -49,6 +51,14 @@ export const loader = async ({ request }) => {
     templateCount = templates.filter(t => t.active).length;
     publishedPages = templates.filter(t => t.page_url);
     publishedCount = publishedPages.length;
+
+    const [convRows] = await db.execute(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total
+       FROM combo_analytics WHERE shop_domain = ? AND event_type = 'order'`,
+      [shop]
+    );
+    totalConversions = Number(convRows[0]?.n || 0);
+    totalRevenue = parseFloat(convRows[0]?.total || 0);
   } catch (e) {
     console.error('[bundles index loader]', e.message);
   }
@@ -94,7 +104,7 @@ export const loader = async ({ request }) => {
       .filter(Boolean);
   } catch { /* silent */ }
 
-  return { templateCount, publishedCount, publishedPages, templates, shop, discounts };
+  return { templateCount, publishedCount, publishedPages, templates, shop, discounts, totalConversions, totalRevenue };
 };
 
 export const action = async ({ request }) => {
@@ -129,14 +139,14 @@ export const action = async ({ request }) => {
 };
 
 export default function AppBundlesIndex() {
-  const { templateCount, publishedCount, templates, shop } = useLoaderData();
+  const { templateCount, publishedCount, templates, shop, totalConversions, totalRevenue } = useLoaderData();
   const navigate = useNavigate();
 
   const stats = [
     { label: 'Active Templates', value: String(templateCount),  icon: PageIcon,          accent: '#1a9de0', soft: '#eef0ff' },
     { label: 'Published Pages',  value: String(publishedCount), icon: StoreIcon,         accent: '#059669', soft: '#e7f8f0' },
-    { label: 'Conversions',      value: '0',                    icon: ChartVerticalIcon, accent: '#1a9de0', soft: '#d4f1fe' },
-    { label: 'Bundle Revenue',   value: '$0.00',                icon: CashDollarIcon,    accent: '#d97706', soft: '#fdf2e3' },
+    { label: 'Conversions',      value: String(totalConversions), icon: ChartVerticalIcon, accent: '#1a9de0', soft: '#d4f1fe' },
+    { label: 'Bundle Revenue',   value: `$${totalRevenue.toFixed(2)}`, icon: CashDollarIcon, accent: '#d97706', soft: '#fdf2e3' },
   ];
 
   const steps = [

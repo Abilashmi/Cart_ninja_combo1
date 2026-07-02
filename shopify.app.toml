@@ -32,9 +32,37 @@ api_version = "2026-04"
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "/webhooks/compliance"
 
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "/webhooks/orders/paid"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/updated" ]
+  uri = "/webhooks/orders/updated"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/cancelled" ]
+  uri = "/webhooks/orders/cancelled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "refunds/create" ]
+  uri = "/webhooks/refunds/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "carts/create" ]
+  uri = "/webhooks/carts/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "carts/update" ]
+  uri = "/webhooks/carts/update"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_discounts,write_discounts,write_products,read_content,write_content,read_online_store_pages,write_online_store_pages,read_themes"
+scopes = "read_discounts,write_discounts,write_products,read_content,write_content,read_online_store_pages,write_online_store_pages,read_themes,read_orders"
 
 [auth]
 redirect_urls = [
@@ -44,7 +72,7 @@ redirect_urls = [
 ]
 
 [app_proxy]
-url = "https://selection-relay-voltage-specifications.trycloudflare.com/cartdrawerv2_ui/php_backend/"
+url = "https://myers-complicated-mighty-neighbors.trycloudflare.com/cartdrawerv2_ui/php_backend/"
 prefix = "apps"
 subpath = "cart-app"
 

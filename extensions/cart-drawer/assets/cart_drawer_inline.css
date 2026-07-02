@@ -277,14 +277,11 @@
 }
 
 /* ========== COUPON CARDS ========== */
+/* Sizing (width/padding/font-size) is set inline per-card in cart_drawer_inline.js
+   to match the admin live preview — this rule must not fight it with min/max-width. */
 .cc-coupon-card {
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
-  flex: 0 0 280px;
   scroll-snap-align: start;
   transition: all 0.2s ease;
-  border-radius: 14px;
   box-sizing: border-box;
 }
 
@@ -298,13 +295,6 @@
     width: 100vw;
   }
 
-  .cc-coupon-card {
-    width: 82vw !important;
-    min-width: 82vw !important;
-    max-width: 82vw !important;
-    flex: 0 0 82vw !important;
-  }
-
   .cc-upsell-card.cc-layout-carousel {
     padding: 14px;
     gap: 12px;
@@ -313,15 +303,5 @@
   .cc-layout-carousel .cc-upsell-image-wrapper {
     width: 72px;
     height: 72px;
-  }
-}
-
-/* ========== TABLET ========== */
-@media (min-width: 481px) and (max-width: 768px) {
-  .cc-coupon-card {
-    width: calc(50% - 6px) !important;
-    min-width: calc(50% - 6px) !important;
-    max-width: calc(50% - 6px) !important;
-    flex: 0 0 calc(50% - 6px) !important;
   }
 }
