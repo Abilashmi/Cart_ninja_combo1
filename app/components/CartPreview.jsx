@@ -7,6 +7,7 @@ import {
   DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon,
 } from '@shopify/polaris-icons';
 import { upsellProducts } from '../data/mockData';
+import { PreviewLockBadge } from './plan/PlanGate';
 
 
 const SECTION_LABELS = {
@@ -532,6 +533,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {showProgressBar && pb.position === 'top' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} />
+                      <PreviewLockBadge featureKey="progress_bar" />
                     </HighlightZone>
                   )}
 
@@ -546,6 +548,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {showUpsell && up.position === 'top' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
+                      <PreviewLockBadge featureKey="ai_cart_upsell" />
                     </HighlightZone>
                   )}
 
@@ -591,6 +594,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {showUpsell && up.position === 'bottom' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
+                      <PreviewLockBadge featureKey="ai_cart_upsell" />
                     </HighlightZone>
                   )}
 
@@ -619,6 +623,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {showProgressBar && pb.position === 'bottom' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} />
+                      <PreviewLockBadge featureKey="progress_bar" />
                     </HighlightZone>
                   )}
 

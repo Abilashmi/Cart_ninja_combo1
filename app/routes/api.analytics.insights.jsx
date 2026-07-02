@@ -3,6 +3,7 @@ import { getDb } from "../services/db.server";
 import { ensureAnalyticsTables } from "../services/analytics-schema.server";
 import { getPeriodTotals, getTopProducts, getFunnel } from "../services/analytics-query.server";
 import { pctChange, previousPeriodRange } from "../utils/analytics.shared";
+import { getShopPlan, canAccessFeature } from "../services/plan-permissions.server";
 
 const AI_API_KEY = process.env.OPENAI_API_KEY || process.env.NVIDIA_API_KEY || "";
 const USE_NVIDIA = AI_API_KEY.startsWith("nvapi-");
@@ -18,6 +19,15 @@ const VALID_SEVERITIES = new Set(["critical", "warning", "tip", "win"]);
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const planKey = await getShopPlan(shop);
+  if (!canAccessFeature(planKey, "ai_analytics")) {
+    return Response.json(
+      { success: false, error: "AI Analytics requires the Pro plan.", locked: true },
+      { status: 403 }
+    );
+  }
+
   const url = new URL(request.url);
   const today = new Date().toISOString().slice(0, 10);
   const startDate = url.searchParams.get("startDate") || today;

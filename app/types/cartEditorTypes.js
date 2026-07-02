@@ -121,6 +121,7 @@ export const defaultCartEditorState = {
       mobileButtonType: 'standard',
     },
     customCSS: '',
+    watermarkEnabled: true,
   },
 };
 

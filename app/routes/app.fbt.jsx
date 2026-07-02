@@ -12,6 +12,10 @@ import {
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { PreviewBadge } from '../components/plan/PlanGate';
+import { usePlan } from '../components/PlanContext';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { canPublishFeature } from '../config/plans';
 
 function parseJson(val, fallback) {
   if (!val) return fallback;
@@ -192,7 +196,14 @@ export const action = async ({ request }) => {
     const mode = body.mode || (aiEnabled ? 'ai' : 'manual');
     const activeTpl = templates[selectedTemplate] || Object.values(templates)[0] || {};
     const widgetPlacement = body.widgetPlacement || 'above_cart';
-    const isEnabled = body.isEnabled === false ? 0 : 1;
+    // Backend enforcement (defense-in-depth): FBT is 'preview' on Free — the
+    // admin UI already locks the enable toggle off, but a Free shop could
+    // also POST directly here. The storefront-facing GET in
+    // save_fbt_widget.php already forces isEnabled off too, but keep the
+    // saved row itself truthful.
+    const planKey = await getShopPlan(shop);
+    const fbtPublishable = canPublishFeature(planKey, 'fbt');
+    const isEnabled = fbtPublishable && body.isEnabled !== false ? 1 : 0;
 
     const db = getDb();
 
@@ -497,9 +508,16 @@ function ColorField({ label, value, onChange }) {
 export default function FBTPage() {
   const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled } = useLoaderData();
   const fetcher = useFetcher();
+  const { canPublishFeature } = usePlan();
+  const fbtPublishable = canPublishFeature('fbt');
 
   /* state */
   const [isEnabled,         setIsEnabled]         = useState(fbtConfig?.is_enabled !== 0);
+  // Free plan can't publish FBT at all — the backend already forces this
+  // off in the storefront-facing response regardless of this toggle, so
+  // reflect that truthfully in the UI instead of letting the merchant
+  // "turn it on" and think it's live.
+  const fbtEffectiveEnabled = isEnabled && fbtPublishable;
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [openSection,       setOpenSection]       = useState(null);
 
@@ -715,21 +733,26 @@ export default function FBTPage() {
 
         {/* ── Top bar ── */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: '#fff', borderBottom: '1px solid #e1e3e5', borderLeft: '4px solid #008060' }}>
-          <div style={{ width: 30, height: 30, borderRadius: 7, background: isEnabled ? '#008060' : '#babec3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 7, background: fbtEffectiveEnabled ? '#008060' : '#babec3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <div style={{ filter: 'brightness(0) invert(1)', display: 'flex' }}><Icon source={ProductIcon} /></div>
           </div>
           <div>
-            <Text as="h1" variant="headingMd">Frequently Bought Together</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h1" variant="headingMd">Frequently Bought Together</Text>
+              <PreviewBadge featureKey="fbt" />
+            </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">Cross-sell widget on <span style={{ color: '#008060', fontWeight: 500 }}>product pages</span></Text>
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Badge tone={isEnabled ? 'success' : undefined}>{isEnabled ? 'Active' : 'Inactive'}</Badge>
+            <Badge tone={fbtEffectiveEnabled ? 'success' : undefined}>{fbtEffectiveEnabled ? 'Active' : 'Inactive'}</Badge>
             <button
-              onClick={() => { setIsEnabled(p => !p); mark(); }}
-              style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: isEnabled ? '#008060' : '#babec3', position: 'relative', cursor: 'pointer', transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
+              onClick={() => { if (!fbtPublishable) return; setIsEnabled(p => !p); mark(); }}
+              disabled={!fbtPublishable}
+              title={!fbtPublishable ? 'Upgrade to Starter to enable this on your storefront' : undefined}
+              style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: fbtEffectiveEnabled ? '#008060' : '#babec3', position: 'relative', cursor: fbtPublishable ? 'pointer' : 'not-allowed', opacity: fbtPublishable ? 1 : 0.5, transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
               aria-label="Toggle FBT widget"
             >
-              <span style={{ position: 'absolute', top: '3px', left: isEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
+              <span style={{ position: 'absolute', top: '3px', left: fbtEffectiveEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
             </button>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
             <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
@@ -901,11 +924,14 @@ export default function FBTPage() {
         {/* ── Two-column body ── */}
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '58% 42%', minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Left column — settings (scrolls internally) */}
-          <div style={{ overflowY: 'auto', padding: '12px', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Left column — settings (scrolls internally). Extra bottom padding
+              keeps the last field from hiding behind the floating BrixBar
+              (fixed at 20px from viewport bottom). */}
+          <div style={{ overflowY: 'auto', padding: '12px 12px 100px', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-              {/* Theme embed status */}
-              {!fbtEmbedEnabled && (
+              {/* Theme embed status — only relevant once the plan can actually
+                  publish this; on Free the toggle above is already locked off. */}
+              {fbtPublishable && !fbtEmbedEnabled && (
                 <Banner
                   title="FBT Widget is not visible on your store yet"
                   tone="warning"
@@ -992,8 +1018,9 @@ export default function FBTPage() {
               </Card>
             </div>
 
-          {/* Right column — Preview */}
-          <div style={{ overflowY: 'auto', padding: '8px' }}>
+          {/* Right column — Preview. Extra bottom padding keeps the preview
+              footer from hiding behind the floating BrixBar. */}
+          <div style={{ overflowY: 'auto', padding: '8px 8px 100px' }}>
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Preview</Text>

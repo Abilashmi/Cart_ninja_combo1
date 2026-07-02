@@ -1,8 +1,10 @@
 import { authenticate } from "../shopify.server";
+import { getChargeHistory } from "../services/billing.server";
 
 /**
  * GET /api/billing/charges
- * Fetches billing charge history from PHP backend
+ * Fetches overage charge history directly from order_overage_charges
+ * (Node-native — no PHP hop).
  */
 export async function loader({ request }) {
   try {
@@ -10,49 +12,14 @@ export async function loader({ request }) {
     const shop = session.shop;
 
     const url = new URL(request.url);
-    const days = url.searchParams.get("days") || "30";
+    const days = parseInt(url.searchParams.get("days") || "30", 10);
 
-    if (!shop) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Shop not found" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Call PHP endpoint
-    const phpUrl = `https://int.thecartninja.com/get-billing-history.php?shop=${encodeURIComponent(shop)}&days=${encodeURIComponent(days)}`;
-
-    const response = await fetch(phpUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "ngrok-skip-browser-warning": "true",
-      },
-    });
-
-    if (!response.ok) {
-      return new Response(
-        JSON.stringify({ success: false, error: "PHP backend error" }),
-        { status: response.status, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const data = await response.json();
-
-    if (!data.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: data.error }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    const history = await getChargeHistory(shop, days);
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: {
-          history: data.charges,
-          totals: data.totals,
-        },
+        data: { history },
       }),
       {
         status: 200,

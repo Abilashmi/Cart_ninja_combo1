@@ -1,5 +1,7 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { canPublishFeature } from '../config/plans';
 
 function flag(v, d = 0) {
   if (v == null) return d;
@@ -44,8 +46,25 @@ export async function action({ request }) {
     (v !== undefined && v !== null) ? v
       : (exVal !== undefined && exVal !== null ? exVal : def);
 
-  const selectedCoupons = Array.isArray(body.selectedCoupons)
-    ? JSON.stringify(body.selectedCoupons)
+  // Backend enforcement (defense-in-depth): Open Countdown (the per-coupon
+  // timer) is 'locked' on Free. The admin UI lets a Free shop fully edit/save
+  // it (CustomizableLockedSection — no blur), but a Free shop could also
+  // POST directly to this endpoint. Strip timerEnabled from each coupon in
+  // that case — the rest of the coupon slider config still saves normally.
+  const planKey = await getShopPlan(shop);
+  const countdownAllowed = canPublishFeature(planKey, 'open_countdown');
+  // Coupon Lock Pro itself is 'preview' on Free — the widget can never be
+  // enabled on this plan, not even by a direct POST bypassing the UI's
+  // disabled toggle.
+  const couponLockPublishable = canPublishFeature(planKey, 'coupon_lock_pro');
+
+  const selectedCouponsArr = Array.isArray(body.selectedCoupons)
+    ? (countdownAllowed
+        ? body.selectedCoupons
+        : body.selectedCoupons.map((c) => ({ ...c, timerEnabled: false })))
+    : null;
+  const selectedCoupons = selectedCouponsArr
+    ? JSON.stringify(selectedCouponsArr)
     : (ex.selected_coupons ?? null);
 
   await db.execute(`
@@ -77,7 +96,9 @@ export async function action({ request }) {
       updated_at        = CURRENT_TIMESTAMP(3)
   `, [
     shop,
-    body.is_enabled !== undefined ? flag(body.is_enabled, 0) : (ex.is_enabled ?? 0),
+    couponLockPublishable
+      ? (body.is_enabled !== undefined ? flag(body.is_enabled, 0) : (ex.is_enabled ?? 0))
+      : 0,
     pick(body.selected_template ?? body.template, ex.selected_template, 'template1'),
     pick(body.title_text ?? body.sectionTitle,    ex.title_text,        'Apply Coupon'),
     pick(body.title_color ?? body.titleColor,     ex.title_color,       '#1e293b'),

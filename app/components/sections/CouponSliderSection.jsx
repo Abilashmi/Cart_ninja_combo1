@@ -11,6 +11,7 @@ import {
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
+import { CustomizableLockedSection } from '../plan/PlanGate';
 
 const COUPON_ICON_MAP = {
   discount: DiscountCodeIcon,
@@ -110,6 +111,7 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
           <ColorField label="Button Text Color" value={item.buttonTextColor} onChange={(v) => onUpdate({ buttonTextColor: v })} />
         </InlineStack>
         <Divider />
+        <CustomizableLockedSection featureKey="open_countdown">
         <Text as="h4" variant="headingSm">Countdown Timer</Text>
         <FeatureToggle
           label="Enable timer for this coupon"
@@ -135,6 +137,7 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
             </InlineStack>
           </>
         )}
+        </CustomizableLockedSection>
       </FormLayout>
       <InlineStack gap="200">
         <Button onClick={onClose}>Done</Button>

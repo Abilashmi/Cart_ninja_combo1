@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 
 const LOCAL_CART_DATA_FILE = path.resolve("cartdrawer-config-data.json");
-const PHP_BASE = process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
+const PHP_BASE = process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
 
 function normalizeShopDomain(shopDomain) {
     return (shopDomain || "").toString().trim().toLowerCase();

@@ -1,11 +1,15 @@
 import { authenticate } from "../shopify.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
+import { confirmPlanFromWebhook } from "../services/plan-permissions.server";
 
-const PHP_URL = "https://int.thecartninja.com/update-subscription-status.php";
+const PHP_URL = `${BASE_PHP_URL}/update-subscription-status.php`;
 
 /**
  * Webhook: app_subscriptions/update
  * Triggered when a subscription status changes.
- * Syncs status to PHP backend so it's available for order-tracking logic.
+ * Resolves the shop's canonical plan_key (promoting the pending_plan_key
+ * recorded by app.subscribe.jsx's action when the subscription becomes
+ * active) and syncs status to PHP backend so it's available there too.
  */
 export async function action({ request }) {
   if (request.method !== "POST") {
@@ -25,17 +29,20 @@ export async function action({ request }) {
 
     console.log(`[Webhook] app_subscriptions/update for ${shop}: status=${status}, plan=${name}`);
 
-    // Sync to PHP backend
+    const planKey = await confirmPlanFromWebhook(shop, status);
+
+    // Sync to PHP backend (mirrors plan_key/subscription fields there too)
     await syncSubscriptionToPHP({
       shop_domain:          shop,
       subscription_id:      id,
       subscription_status:  status,
       plan_name:            name,
+      plan_key:             planKey,
       trial_ends_on:        trial_ends_on  || null,
       billing_on:           billing_on     || null,
     });
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, plan_key: planKey }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from "react";
+import { useLoaderData } from "react-router";
 import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
 import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
+import { getShopPlan } from "../services/plan-permissions.server";
+import { PLANS } from "../config/plans";
 
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   if (!session) return { redirect: "/auth" };
-  return { shop: session.shop };
+  const planKey = await getShopPlan(session.shop);
+  return { shop: session.shop, planKey };
 }
 
 export default function BillingDashboard() {
+  const { planKey } = useLoaderData();
+  const plan = PLANS[planKey] || PLANS.free;
   const [today, setToday] = useState(null);
   const [charges, setCharges] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,11 +86,12 @@ export default function BillingDashboard() {
     );
   }
 
-  const freeOrders = today.free_orders || 50;
+  const unlimited = today.unlimited || plan.orderCap === null;
+  const freeOrders = today.free_orders ?? plan.orderCap ?? 0;
   const totalOrders = today.total_orders || 0;
   const overageOrders = today.overage_orders || 0;
   const pendingCharge = today.pending_charge || 0;
-  const percentUsed = totalOrders > 0 ? (totalOrders / freeOrders) * 100 : 0;
+  const percentUsed = unlimited ? 0 : (totalOrders > 0 ? (totalOrders / freeOrders) * 100 : 0);
   const hasOverage = overageOrders > 0;
 
   return (
@@ -102,17 +109,23 @@ export default function BillingDashboard() {
               </InlineStack>
 
               {/* Progress Bar */}
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text variant="bodySm" tone="subdued">Orders: {totalOrders} / {freeOrders} (free)</Text>
-                  <Text variant="bodySm" tone="subdued">{percentUsed.toFixed(1)}%</Text>
-                </InlineStack>
-                <ProgressBar
-                  progress={Math.min(percentUsed / 100, 1)}
-                  tone={hasOverage ? "critical" : "success"}
-                  size="large"
-                />
-              </BlockStack>
+              {!unlimited && (
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text variant="bodySm" tone="subdued">Orders: {totalOrders} / {freeOrders} (free)</Text>
+                    <Text variant="bodySm" tone="subdued">{percentUsed.toFixed(1)}%</Text>
+                  </InlineStack>
+                  <ProgressBar
+                    progress={Math.min(percentUsed / 100, 1)}
+                    tone={hasOverage ? "critical" : "success"}
+                    size="large"
+                  />
+                </BlockStack>
+              )}
+
+              {unlimited && (
+                <Text variant="bodySm" tone="subdued">Orders today: {totalOrders} — unlimited on the {plan.label} plan, no overage charges.</Text>
+              )}
 
               {/* Overage Alert */}
               {hasOverage && (
@@ -122,7 +135,7 @@ export default function BillingDashboard() {
                       <Icon source={AlertCircleIcon} tone="critical" />
                       <BlockStack gap="100">
                         <Text fontWeight="bold">Overage Charges</Text>
-                        <Text>{overageOrders} orders above limit × $0.10/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text></Text>
+                        <Text>{overageOrders} orders above limit × ${plan.overageRate.toFixed(2)}/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text></Text>
                       </BlockStack>
                     </InlineStack>
                     <Button
@@ -204,7 +217,11 @@ export default function BillingDashboard() {
           <Card padding="600">
             <BlockStack gap="300">
               <Text variant="headingMd" fontWeight="bold">Usage-Based Billing</Text>
-              <Text tone="subdued">Your plan includes 50 completed orders per day. Each additional order is charged at $0.10. Usage charges are recorded automatically and added to your next monthly invoice — no separate approval needed.</Text>
+              <Text tone="subdued">
+                {unlimited
+                  ? `Your ${plan.label} plan includes unlimited orders per day — no overage charges.`
+                  : `Your ${plan.label} plan includes ${freeOrders} completed orders per day. Each additional order is charged at $${plan.overageRate.toFixed(2)}. Usage charges are recorded automatically and added to your next monthly invoice — no separate approval needed.`}
+              </Text>
             </BlockStack>
           </Card>
         </Layout.Section>

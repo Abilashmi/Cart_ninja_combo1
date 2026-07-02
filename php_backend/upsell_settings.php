@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/plan_helpers.php';
 
 $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
 $expected = getenv('SHOPIFY_API_KEY') ?: '';
@@ -27,6 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $row['manual_rules'] = json_decode($row['manual_rules'], true) ?? [];
     } elseif ($row) {
         $row['manual_rules'] = [];
+    }
+
+    // Enforce plan gating: AI Cart Upsell is locked on Free — the merchant can
+    // still design/save it in the admin, but it must not render on the
+    // storefront until they upgrade. This only mutates the response payload;
+    // the stored row is left untouched so the merchant's design is preserved.
+    if ($row) {
+        $planKey = resolve_plan_key($pdo, $shop);
+        if (!plan_can_publish_feature($planKey, 'ai_cart_upsell')) {
+            $row['is_enabled'] = 0;
+        }
     }
 
     echo json_encode(['status' => 'success', 'data' => $row ?: null]);

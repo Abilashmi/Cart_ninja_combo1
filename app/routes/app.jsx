@@ -7,34 +7,38 @@ import { authenticate } from "../shopify.server";
 import { getShopCurrencySymbol } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
+import { getShopPlan } from "../services/plan-permissions.server";
+import { getFeatureState } from "../config/plans";
 
 export const loader = async ({ request }) => {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
 
-    const subRes = await admin.graphql(`
-        query {
-            currentAppInstallation {
-                activeSubscriptions { id status }
-            }
-        }
-    `);
-    const subData = await subRes.json();
-    const subs = subData.data?.currentAppInstallation?.activeSubscriptions || [];
-    const isPro = subs.some(s => s.status === "ACTIVE");
+    const planKey = await getShopPlan(session.shop);
 
     const currencySymbol = await getShopCurrencySymbol(admin);
     // eslint-disable-next-line no-undef
-    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, isPro };
+    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, planKey };
 };
 
+// s-app-nav / s-link are Shopify App Bridge native web components — they
+// only render plain text content (no React icon components inside), so a
+// locked nav item is marked with a lock glyph appended to its label,
+// mirroring the existing "✦ Pro" suffix pattern.
+function navLabel(label, featureKey, planKey) {
+    if (featureKey && getFeatureState(planKey, featureKey) === 'locked') {
+        return `${label} 🔒`;
+    }
+    return label;
+}
+
 export default function App() {
-    const { apiKey, currencySymbol, isPro } = useLoaderData();
+    const { apiKey, currencySymbol, planKey } = useLoaderData();
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>
             <PolarisAppProvider i18n={enTranslations}>
                 <CurrencyProvider symbol={currencySymbol}>
-                    <PlanProvider isPro={isPro}>
+                    <PlanProvider plan={planKey}>
                         <s-app-nav>
                             <s-link href="/app">Home</s-link>
                             <s-link href="/app/brix-ai">Brix AI</s-link>
@@ -43,7 +47,7 @@ export default function App() {
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
-                            <s-link href="/app/bundles">Build a Combo ✦ Pro</s-link>
+                            <s-link href="/app/bundles">{navLabel('Build a Combo', 'build_a_combo', planKey)}</s-link>
                             <s-link href="/app/subscribe">Plans</s-link>
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>

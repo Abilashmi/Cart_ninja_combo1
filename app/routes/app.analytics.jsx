@@ -21,6 +21,8 @@ import { formatAmount } from "../utils/currency.shared";
 import { FeatureHeaderBar } from "../components/feature/FeatureHeaderBar";
 import { BrowserTabStrip } from "../components/feature/BrowserTabStrip";
 import BrixBar from "../components/ai-agent/BrixBar";
+import { usePlan, ProUpgradeBanner } from "../components/PlanContext";
+import { LockedValue, LockedChartArea } from "../components/plan/PlanGate";
 
 /* ─── helpers ─────────────────────────────────────────── */
 
@@ -64,20 +66,22 @@ function EmptyNote({ message }) {
   );
 }
 
-function StatBlock({ label, value, tone }) {
+function StatBlock({ label, value, tone, locked }) {
   return (
     <div style={{ padding: '14px', borderRadius: 10, background: '#f9fafb', border: '1px solid #f3f4f6', textAlign: 'center' }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: tone || '#111827', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: tone || '#111827', lineHeight: 1 }}>
+        <LockedValue locked={locked}>{locked ? '••••' : value}</LockedValue>
+      </div>
     </div>
   );
 }
 
-function KpiCard({ label, value, change, icon, accent = '#008060', spark, sparkKey }) {
+function KpiCard({ label, value, change, icon, accent = '#008060', spark, sparkKey, locked }) {
   const gradId = `kpi-${label.replace(/\W+/g, '-').toLowerCase()}`;
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '20px 20px 14px', border: '1px solid #e1e3e5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', position: 'relative', overflow: 'hidden', minHeight: 128 }}>
-      {spark && sparkKey && (
+      {!locked && spark && sparkKey && (
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 76, opacity: 0.13, pointerEvents: 'none' }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={spark} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
@@ -102,9 +106,13 @@ function KpiCard({ label, value, change, icon, accent = '#008060', spark, sparkK
             )}
             <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
           </InlineStack>
-          <ChangeBadge change={change} />
+          {!locked && <ChangeBadge change={change} />}
         </InlineStack>
-        <div style={{ marginTop: 16 }}><Text as="p" variant="heading2xl" fontWeight="bold">{value}</Text></div>
+        <div style={{ marginTop: 16 }}>
+          <Text as="p" variant="heading2xl" fontWeight="bold">
+            <LockedValue locked={locked}>{locked ? '••••••' : value}</LockedValue>
+          </Text>
+        </div>
       </div>
     </div>
   );
@@ -152,7 +160,7 @@ function InsightCard({ tag, title, description, recommendation, severity }) {
   );
 }
 
-function ProductRow({ rank, name, revenue, unitsSold, accentColor, currencySymbol, currencyCode }) {
+function ProductRow({ rank, name, revenue, unitsSold, accentColor, currencySymbol, currencyCode, locked }) {
   const RANK_COLORS = ['#667eea', '#f59e0b', '#10b981', '#2ecc71', '#f97316'];
   const color = accentColor || RANK_COLORS[(rank - 1) % RANK_COLORS.length];
   return (
@@ -160,9 +168,13 @@ function ProductRow({ rank, name, revenue, unitsSold, accentColor, currencySymbo
       <div style={{ width: 24, height: 24, borderRadius: 6, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color, flexShrink: 0 }}>{rank}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <Text as="p" variant="bodySm" fontWeight="semibold">{name}</Text>
-        <Text as="span" variant="bodyXs" tone="subdued">{(unitsSold || 0).toLocaleString()} units sold</Text>
+        <Text as="span" variant="bodyXs" tone="subdued">
+          <LockedValue locked={locked}>{locked ? '•• units sold' : `${(unitsSold || 0).toLocaleString()} units sold`}</LockedValue>
+        </Text>
       </div>
-      <Text as="span" variant="bodySm" fontWeight="semibold">{formatAmount(revenue, currencySymbol, currencyCode)}</Text>
+      <Text as="span" variant="bodySm" fontWeight="semibold">
+        <LockedValue locked={locked}>{locked ? '$•••' : formatAmount(revenue, currencySymbol, currencyCode)}</LockedValue>
+      </Text>
     </div>
   );
 }
@@ -175,11 +187,36 @@ const ANALYTICS_TABS = [
 
 const Y_CURRENCY = (sym) => (v) => `${sym}${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`;
 
+// Decorative-only fake series for locked chart placeholders — never real
+// data (the backend already refuses to send real numbers to a locked plan).
+const PLACEHOLDER_PRODUCT_NAMES = ['Sample Product A', 'Sample Product B', 'Sample Product C'];
+
+// Decorative-only placeholder insight cards shown (blurred) to tease the
+// AI Insights Pro tab — never real AI output, since the backend already
+// refuses to generate real insights for a locked plan.
+const PLACEHOLDER_INSIGHTS = [
+  { id: 'placeholder-1', tag: 'Revenue', severity: 'tip', title: 'Sample insight title', description: 'Sample insight description text goes here to show the general shape of an AI recommendation.', recommendation: 'Sample recommended action.' },
+  { id: 'placeholder-2', tag: 'Upsell', severity: 'win', title: 'Sample insight title', description: 'Sample insight description text goes here to show the general shape of an AI recommendation.', recommendation: 'Sample recommended action.' },
+];
+
+const PLACEHOLDER_CHART_DATA = [
+  { date: '1', revenue: 40, store: 30, bundle: 12 },
+  { date: '2', revenue: 55, store: 42, bundle: 18 },
+  { date: '3', revenue: 48, store: 38, bundle: 15 },
+  { date: '4', revenue: 70, store: 50, bundle: 26 },
+  { date: '5', revenue: 62, store: 46, bundle: 22 },
+  { date: '6', revenue: 80, store: 58, bundle: 30 },
+  { date: '7', revenue: 74, store: 55, bundle: 28 },
+];
+
 /* ─── main page ─────────────────────────────────────── */
 
 export default function AnalyticsPage() {
   const { shop } = useLoaderData();
   const { symbol: currencySymbol, code: currencyCode } = useCurrency();
+  const { canAccessFeature } = usePlan();
+  const hasAiAnalyticsAccess = canAccessFeature('ai_analytics');
+  const hasFullAnalyticsAccess = canAccessFeature('full_analytics');
 
   const today     = new Date();
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
@@ -286,11 +323,16 @@ export default function AnalyticsPage() {
   }, [shop]);
 
   const runAll = useCallback((start, end) => {
+    // Free/Starter plans can't access Full Analytics — the backend already
+    // refuses these requests (403), so skip firing them client-side too and
+    // just show the blurred placeholder state instead of a false "fetch
+    // failed" error.
+    if (!hasFullAnalyticsAccess) return;
     fetchSummary(start, end);
     fetchChart(start, end);
     fetchTopProducts(start, end);
     fetchBundleAnalytics(start, end);
-  }, [fetchSummary, fetchChart, fetchTopProducts, fetchBundleAnalytics]);
+  }, [hasFullAnalyticsAccess, fetchSummary, fetchChart, fetchTopProducts, fetchBundleAnalytics]);
 
   useEffect(() => {
     setIsClient(true);
@@ -301,7 +343,7 @@ export default function AnalyticsPage() {
   useEffect(() => { setTempDates(selectedDates); }, [selectedDates]);
 
   useEffect(() => {
-    if (selectedTab === 2 && shop) fetchInsights(selectedDates.start, selectedDates.end, false);
+    if (selectedTab === 2 && shop && hasAiAnalyticsAccess) fetchInsights(selectedDates.start, selectedDates.end, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTab]);
 
@@ -317,7 +359,7 @@ export default function AnalyticsPage() {
     setSelectedDates({ start, end });
     setPopoverActive(false);
     runAll(start, end);
-    if (selectedTab === 2) fetchInsights(start, end, false);
+    if (selectedTab === 2 && hasAiAnalyticsAccess) fetchInsights(start, end, false);
   };
 
   const dateLabel = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} – ${selectedDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
@@ -394,7 +436,9 @@ export default function AnalyticsPage() {
 
         <BrowserTabStrip tabs={ANALYTICS_TABS} selected={selectedTab} onSelect={setSelectedTab} accent="#1a9de0" fitted />
 
-        {summary.error && (
+        {!hasFullAnalyticsAccess && selectedTab !== 2 && <ProUpgradeBanner featureKey="full_analytics" />}
+
+        {hasFullAnalyticsAccess && summary.error && (
           <div style={{ padding: '12px 16px', background: '#fff4f4', border: '1px solid #fca5a5', borderRadius: '8px' }}>
             <Text variant="bodySm" tone="critical">Unable to fetch analytics data right now. Please try again shortly.</Text>
           </div>
@@ -405,7 +449,7 @@ export default function AnalyticsPage() {
           <BlockStack gap="500">
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14 }}>
-              {overviewKpis.map(kpi => <KpiCard key={kpi.label} {...kpi} />)}
+              {overviewKpis.map(kpi => <KpiCard key={kpi.label} {...kpi} locked={!hasFullAnalyticsAccess} />)}
             </div>
 
             {/* Progress Tiers */}
@@ -427,28 +471,30 @@ export default function AnalyticsPage() {
                     <Text as="h3" variant="headingMd">Revenue Trend</Text>
                     <Text as="p" variant="bodySm" tone="subdued">Total store revenue over the selected period</Text>
                   </BlockStack>
-                  <ChangeBadge change={changePct.revenue ?? null} />
+                  {!hasFullAnalyticsAccess ? null : <ChangeBadge change={changePct.revenue ?? null} />}
                 </InlineStack>
-                <div style={{ height: 260 }}>
-                  {isClient && chartData.length > 0 && (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="revTrend" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%"  stopColor="#008060" stopOpacity={0.18} />
-                            <stop offset="95%" stopColor="#008060" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                        <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} dy={6} />
-                        <YAxis fontSize={11} tickLine={false} axisLine={false} width={52} tickFormatter={Y_CURRENCY(currencySymbol)} />
-                        <Tooltip formatter={(v) => [formatAmount(v, currencySymbol, currencyCode), 'Revenue']} />
-                        <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#008060" strokeWidth={2.5} fill="url(#revTrend)" dot={false} activeDot={{ r: 5, fill: '#008060' }} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-                {!chartLoading && !hasRevenue && <EmptyNote message="No revenue data for this period." />}
+                <LockedChartArea locked={!hasFullAnalyticsAccess} height={260}>
+                  <div style={{ height: 260 }}>
+                    {isClient && (hasFullAnalyticsAccess ? chartData.length > 0 : true) && (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={hasFullAnalyticsAccess ? chartData : PLACEHOLDER_CHART_DATA} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="revTrend" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor="#008060" stopOpacity={0.18} />
+                              <stop offset="95%" stopColor="#008060" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                          <XAxis dataKey="date" fontSize={11} tickLine={false} axisLine={false} dy={6} />
+                          <YAxis fontSize={11} tickLine={false} axisLine={false} width={52} tickFormatter={hasFullAnalyticsAccess ? Y_CURRENCY(currencySymbol) : () => ''} />
+                          <Tooltip formatter={(v) => [formatAmount(v, currencySymbol, currencyCode), 'Revenue']} />
+                          <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#008060" strokeWidth={2.5} fill="url(#revTrend)" dot={false} activeDot={{ r: 5, fill: '#008060' }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </LockedChartArea>
+                {hasFullAnalyticsAccess && !chartLoading && !hasRevenue && <EmptyNote message="No revenue data for this period." />}
               </BlockStack>
             </Card>
 
@@ -460,10 +506,10 @@ export default function AnalyticsPage() {
                     <Text as="h3" variant="headingMd">Coupon Activity</Text>
                     <Text as="p" variant="bodySm" tone="subdued">Total coupon banner clicks and applications this period</Text>
                   </BlockStack>
-                  {A.coupon_click_count > 0 ? (
+                  {(!hasFullAnalyticsAccess || A.coupon_click_count > 0) ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <StatBlock label="Clicks" value={A.coupon_click_count.toLocaleString()} />
-                      <StatBlock label="Applied" value={A.coupon_applied_count.toLocaleString()} tone="#008060" />
+                      <StatBlock label="Clicks" value={A.coupon_click_count.toLocaleString()} locked={!hasFullAnalyticsAccess} />
+                      <StatBlock label="Applied" value={A.coupon_applied_count.toLocaleString()} tone="#008060" locked={!hasFullAnalyticsAccess} />
                     </div>
                   ) : <EmptyNote message="No coupon activity yet in this period." />}
                   <Text as="p" variant="bodyXs" tone="subdued">Per-coupon-code breakdown isn&apos;t tracked yet — totals cover all coupon banners.</Text>
@@ -476,9 +522,11 @@ export default function AnalyticsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Best selling products by revenue in this period</Text>
                   </BlockStack>
                   <BlockStack gap="250">
-                    {topProducts.items.length
-                      ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} currencySymbol={currencySymbol} currencyCode={currencyCode} />)
-                      : <EmptyNote message="No product sales yet in this period." />}
+                    {!hasFullAnalyticsAccess
+                      ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
+                      : topProducts.items.length
+                        ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} currencySymbol={currencySymbol} currencyCode={currencyCode} />)
+                        : <EmptyNote message="No product sales yet in this period." />}
                   </BlockStack>
                 </BlockStack>
               </Card>
@@ -503,20 +551,28 @@ export default function AnalyticsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Upsell contribution to your total store revenue</Text>
                   </BlockStack>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <StatBlock label="Store Revenue" value={formatAmount(A.revenue, currencySymbol, currencyCode)} />
+                    <StatBlock label="Store Revenue" value={formatAmount(A.revenue, currencySymbol, currencyCode)} locked={!hasFullAnalyticsAccess} />
                     <div style={{ padding: '14px', borderRadius: 10, background: '#faf5ff', border: '1px solid #ede9fe', textAlign: 'center' }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: '#2ecc71', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Upsell Revenue</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>{formatAmount(A.upsell_revenue, currencySymbol, currencyCode)}</div>
-                      <div style={{ fontSize: 11, color: '#2ecc71', marginTop: 5 }}>{upsellShare}% of store revenue</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#7c3aed', lineHeight: 1 }}>
+                        <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? '$•••' : formatAmount(A.upsell_revenue, currencySymbol, currencyCode)}</LockedValue>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#2ecc71', marginTop: 5 }}>
+                        <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? '••% of store revenue' : `${upsellShare}% of store revenue`}</LockedValue>
+                      </div>
                     </div>
                   </div>
                   <div>
                     <div style={{ height: 10, borderRadius: 6, background: '#f3f4f6', overflow: 'hidden' }}>
-                      <div style={{ width: `${upsellShare}%`, height: '100%', background: 'linear-gradient(90deg, #2ecc71, #7c3aed)', borderRadius: 6 }} />
+                      <div style={{ width: `${hasFullAnalyticsAccess ? upsellShare : 45}%`, height: '100%', background: 'linear-gradient(90deg, #2ecc71, #7c3aed)', borderRadius: 6, filter: hasFullAnalyticsAccess ? undefined : 'blur(3px)' }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                      <Text as="span" variant="bodyXs" tone="subdued">Upsell {upsellShare}%</Text>
-                      <Text as="span" variant="bodyXs" tone="subdued">Other {100 - upsellShare}%</Text>
+                      <Text as="span" variant="bodyXs" tone="subdued">
+                        <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? 'Upsell ••%' : `Upsell ${upsellShare}%`}</LockedValue>
+                      </Text>
+                      <Text as="span" variant="bodyXs" tone="subdued">
+                        <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? 'Other ••%' : `Other ${100 - upsellShare}%`}</LockedValue>
+                      </Text>
                     </div>
                   </div>
                 </BlockStack>
@@ -542,7 +598,11 @@ export default function AnalyticsPage() {
                     </span>
                     <Text as="p" variant="bodySm" tone="subdued">{kpi.label}</Text>
                   </InlineStack>
-                  <div style={{ marginTop: 16 }}><Text as="p" variant="heading2xl" fontWeight="bold">{kpi.value}</Text></div>
+                  <div style={{ marginTop: 16 }}>
+                    <Text as="p" variant="heading2xl" fontWeight="bold">
+                      <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? '••••••' : kpi.value}</LockedValue>
+                    </Text>
+                  </div>
                 </div>
               ))}
             </div>
@@ -556,40 +616,50 @@ export default function AnalyticsPage() {
                 </BlockStack>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <StatBlock label="Store Revenue" value={formatAmount(storeRevenue, currencySymbol, currencyCode)} />
+                  <StatBlock label="Store Revenue" value={formatAmount(storeRevenue, currencySymbol, currencyCode)} locked={!hasFullAnalyticsAccess} />
                   <div style={{ padding: '16px', borderRadius: 10, background: '#edfaf4', border: '1px solid #ddd6fe', textAlign: 'center' }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Bundle Revenue</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#1a9de0', lineHeight: 1 }}>{formatAmount(bundleRevenue, currencySymbol, currencyCode)}</div>
-                    <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 5 }}>{bundleShare}% of store revenue</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#1a9de0', lineHeight: 1 }}>
+                      <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? '$•••' : formatAmount(bundleRevenue, currencySymbol, currencyCode)}</LockedValue>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 5 }}>
+                      <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? '••% of store revenue' : `${bundleShare}% of store revenue`}</LockedValue>
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <div style={{ height: 10, borderRadius: 6, background: '#f3f4f6', overflow: 'hidden' }}>
-                    <div style={{ width: `${bundleShare}%`, height: '100%', background: 'linear-gradient(90deg, #7c3aed, #1a9de0)', borderRadius: 6, transition: 'width 0.6s ease' }} />
+                    <div style={{ width: `${hasFullAnalyticsAccess ? bundleShare : 55}%`, height: '100%', background: 'linear-gradient(90deg, #7c3aed, #1a9de0)', borderRadius: 6, transition: 'width 0.6s ease', filter: hasFullAnalyticsAccess ? undefined : 'blur(3px)' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                    <Text as="span" variant="bodyXs" tone="subdued">Bundles {bundleShare}%</Text>
-                    <Text as="span" variant="bodyXs" tone="subdued">Other {100 - bundleShare}%</Text>
+                    <Text as="span" variant="bodyXs" tone="subdued">
+                      <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? 'Bundles ••%' : `Bundles ${bundleShare}%`}</LockedValue>
+                    </Text>
+                    <Text as="span" variant="bodyXs" tone="subdued">
+                      <LockedValue locked={!hasFullAnalyticsAccess}>{!hasFullAnalyticsAccess ? 'Other ••%' : `Other ${100 - bundleShare}%`}</LockedValue>
+                    </Text>
                   </div>
                 </div>
 
                 <div>
                   <Text as="p" variant="bodyXs" tone="subdued" fontWeight="semibold">Daily bundle revenue vs store revenue</Text>
-                  <div style={{ height: 140, marginTop: 8 }}>
-                    {isClient && bundleChartData.length > 0 && (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={bundleChartData} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                          <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
-                          <YAxis fontSize={10} tickLine={false} axisLine={false} width={44} tickFormatter={Y_CURRENCY(currencySymbol)} />
-                          <Tooltip formatter={(v, name) => [formatAmount(v, currencySymbol, currencyCode), name]} />
-                          <Bar dataKey="store"  name="Store Revenue"  fill="#d4f1fe" radius={[3,3,0,0]} maxBarSize={30} />
-                          <Bar dataKey="bundle" name="Bundle Revenue" fill="#7c3aed" radius={[3,3,0,0]} maxBarSize={30} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
+                  <LockedChartArea locked={!hasFullAnalyticsAccess} height={140}>
+                    <div style={{ height: 140, marginTop: 8 }}>
+                      {isClient && (hasFullAnalyticsAccess ? bundleChartData.length > 0 : true) && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={hasFullAnalyticsAccess ? bundleChartData : PLACEHOLDER_CHART_DATA} margin={{ top: 0, right: 4, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                            <XAxis dataKey="date" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis fontSize={10} tickLine={false} axisLine={false} width={44} tickFormatter={hasFullAnalyticsAccess ? Y_CURRENCY(currencySymbol) : () => ''} />
+                            <Tooltip formatter={(v, name) => [formatAmount(v, currencySymbol, currencyCode), name]} />
+                            <Bar dataKey="store"  name="Store Revenue"  fill="#d4f1fe" radius={[3,3,0,0]} maxBarSize={30} />
+                            <Bar dataKey="bundle" name="Bundle Revenue" fill="#7c3aed" radius={[3,3,0,0]} maxBarSize={30} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                  </LockedChartArea>
                 </div>
               </BlockStack>
             </Card>
@@ -602,9 +672,11 @@ export default function AnalyticsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Best performing products store-wide in this period</Text>
                   </BlockStack>
                   <BlockStack gap="250">
-                    {topProducts.items.length
-                      ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} />)
-                      : <EmptyNote message="No product sales yet in this period." />}
+                    {!hasFullAnalyticsAccess
+                      ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
+                      : topProducts.items.length
+                        ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} />)
+                        : <EmptyNote message="No product sales yet in this period." />}
                   </BlockStack>
                 </BlockStack>
               </Card>
@@ -626,7 +698,27 @@ export default function AnalyticsPage() {
                   <Text as="p" variant="bodySm" tone="subdued">Most clicked bundle templates and their revenue contribution</Text>
                 </BlockStack>
                 <BlockStack gap="250">
-                  {bundle?.top_templates?.length ? bundle.top_templates.map((tpl, i) => {
+                  {!hasFullAnalyticsAccess
+                    ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => {
+                        const COLORS = ['#7c3aed', '#1a9de0', '#2ecc71'];
+                        const color = COLORS[i % COLORS.length];
+                        return (
+                          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 24, height: 24, borderRadius: 6, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color, flexShrink: 0 }}>{i + 1}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                                <Text as="span" variant="bodySm" fontWeight="semibold">{name}</Text>
+                                <Text as="span" variant="bodyXs" tone="subdued"><LockedValue locked>•• clicks</LockedValue></Text>
+                              </div>
+                              <div style={{ height: 6, borderRadius: 3, background: '#f3f4f6' }}>
+                                <div style={{ width: `${70 - i * 15}%`, height: '100%', borderRadius: 3, background: color, filter: 'blur(2px)' }} />
+                              </div>
+                            </div>
+                            <Text as="span" variant="bodySm" fontWeight="semibold"><LockedValue locked>$•••</LockedValue></Text>
+                          </div>
+                        );
+                      })
+                    : bundle?.top_templates?.length ? bundle.top_templates.map((tpl, i) => {
                     const maxClicks = bundle.top_templates[0].clicks || 1;
                     const pct = Math.round((tpl.clicks / maxClicks) * 100);
                     const COLORS = ['#7c3aed', '#1a9de0', '#2ecc71', '#a78bfa', '#7dd3fc'];
@@ -665,33 +757,47 @@ export default function AnalyticsPage() {
                 </div>
                 <div style={{ fontSize: 13, color: '#a5b4fc' }}>Actionable recommendations generated from your store&apos;s real analytics data</div>
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ textAlign: 'right' }}>
-                  {insights.loading && <div style={{ fontSize: 11, color: '#a5b4fc' }}>Generating insights…</div>}
-                  {!insights.loading && insights.stale && insights.generatedAt && (
-                    <div style={{ fontSize: 11, color: '#fbbf24' }}>Showing insights from {new Date(insights.generatedAt).toLocaleString()}</div>
-                  )}
-                  {!insights.loading && !insights.stale && insights.generatedAt && (
-                    <div style={{ fontSize: 11, color: '#a5b4fc' }}>Updated {new Date(insights.generatedAt).toLocaleString()}</div>
-                  )}
+              {hasAiAnalyticsAccess && (
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    {insights.loading && <div style={{ fontSize: 11, color: '#a5b4fc' }}>Generating insights…</div>}
+                    {!insights.loading && insights.stale && insights.generatedAt && (
+                      <div style={{ fontSize: 11, color: '#fbbf24' }}>Showing insights from {new Date(insights.generatedAt).toLocaleString()}</div>
+                    )}
+                    {!insights.loading && !insights.stale && insights.generatedAt && (
+                      <div style={{ fontSize: 11, color: '#a5b4fc' }}>Updated {new Date(insights.generatedAt).toLocaleString()}</div>
+                    )}
+                  </div>
+                  <Button icon={RefreshIcon} onClick={() => fetchInsights(selectedDates.start, selectedDates.end, true)} loading={insights.loading} size="slim">
+                    Regenerate
+                  </Button>
                 </div>
-                <Button icon={RefreshIcon} onClick={() => fetchInsights(selectedDates.start, selectedDates.end, true)} loading={insights.loading} size="slim">
-                  Regenerate
-                </Button>
-              </div>
+              )}
             </div>
 
-            {insights.loading && insights.items.length === 0 && <EmptyNote message="Generating insights from your real analytics data…" />}
+            {!hasAiAnalyticsAccess && <ProUpgradeBanner featureKey="ai_analytics" />}
 
-            {!insights.loading && insights.items.length === 0 && insights.reason === 'insufficient_data' && (
+            {!hasAiAnalyticsAccess && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                {PLACEHOLDER_INSIGHTS.map(insight => (
+                  <LockedChartArea key={insight.id} locked height={150}>
+                    <InsightCard {...insight} />
+                  </LockedChartArea>
+                ))}
+              </div>
+            )}
+
+            {hasAiAnalyticsAccess && insights.loading && insights.items.length === 0 && <EmptyNote message="Generating insights from your real analytics data…" />}
+
+            {hasAiAnalyticsAccess && !insights.loading && insights.items.length === 0 && insights.reason === 'insufficient_data' && (
               <EmptyNote message="Not enough data yet to generate insights — check back after a few more orders." />
             )}
 
-            {!insights.loading && insights.items.length === 0 && insights.reason !== 'insufficient_data' && (
+            {hasAiAnalyticsAccess && !insights.loading && insights.items.length === 0 && insights.reason !== 'insufficient_data' && (
               <EmptyNote message={insights.error ? "Couldn't generate insights right now. Try Regenerate." : "No insights available yet."} />
             )}
 
-            {insights.items.length > 0 && (
+            {hasAiAnalyticsAccess && insights.items.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
                 {insights.items.map(insight => <InsightCard key={insight.id} {...insight} />)}
               </div>

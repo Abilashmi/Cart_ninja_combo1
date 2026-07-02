@@ -1,5 +1,7 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { canPublishFeature } from '../config/plans';
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -24,6 +26,14 @@ export async function action({ request }) {
   const db = getDb();
 
   console.log('[cart-drawer-config] POST shop:', shop, '| is_enabled:', body.is_enabled);
+
+  // Backend enforcement (defense-in-depth): Custom CSS is 'locked' on Free.
+  // The admin UI lets a Free shop fully edit/save it (CustomizableLockedSection
+  // — no blur), but a Free shop could also POST directly to this endpoint.
+  // Strip custom_css in that case — all other cart_drawer_config fields
+  // save normally.
+  const planKey = await getShopPlan(shop);
+  const customCssAllowed = canPublishFeature(planKey, 'custom_css');
 
   await db.execute(`
     INSERT INTO cart_drawer_config (
@@ -75,7 +85,7 @@ export async function action({ request }) {
     body.checkout_button_bg_color          ?? '#111827',
     body.checkout_button_text_color        ?? '#ffffff',
     body.checkout_button_border_radius     ?? 4,
-    body.custom_css                        ?? null,
+    customCssAllowed ? (body.custom_css ?? null) : null,
     flag(body.announcement_enabled         ?? 0, 0),
     body.announcement_text                 ?? null,
     body.announcement_bg_color             ?? '#111827',

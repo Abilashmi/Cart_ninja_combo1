@@ -1,11 +1,43 @@
 import React from 'react';
-import { Card, BlockStack, Text } from '@shopify/polaris';
+import { Card, BlockStack, Text, Checkbox, Badge, InlineStack } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
+import { CustomizableLockedSection } from '../plan/PlanGate';
+import { usePlan } from '../PlanContext';
+import { PLANS } from '../../config/plans';
+
+function WatermarkToggle() {
+  const { footer, updateWatermark } = useCartEditor();
+  const { plan } = usePlan();
+  const removable = PLANS[plan]?.watermarkRemovable;
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h3" variant="headingSm">Branding</Text>
+          {!removable && <Badge tone="info">Requires Starter</Badge>}
+        </InlineStack>
+        <Checkbox
+          label='Show "Powered by BRIX" watermark'
+          checked={removable ? footer.watermarkEnabled !== false : true}
+          disabled={!removable}
+          onChange={(checked) => updateWatermark(checked)}
+          helpText={removable
+            ? 'You can remove this on your current plan.'
+            : 'The Free plan always displays this watermark on your storefront.'}
+        />
+      </BlockStack>
+    </Card>
+  );
+}
 
 export function CustomCSSSection() {
   const { footer, updateCustomCSS } = useCartEditor();
 
   return (
+    <BlockStack gap="400">
+      <WatermarkToggle />
+    <CustomizableLockedSection featureKey="custom_css">
     <BlockStack gap="400">
       <Text as="p" variant="bodyMd" tone="subdued">
         Add custom CSS to override default cart drawer styles.
@@ -36,6 +68,8 @@ export function CustomCSSSection() {
           </Text>
         </BlockStack>
       </Card>
+    </BlockStack>
+    </CustomizableLockedSection>
     </BlockStack>
   );
 }

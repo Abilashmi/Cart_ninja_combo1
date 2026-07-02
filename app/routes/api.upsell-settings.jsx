@@ -1,5 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -24,6 +25,17 @@ export async function loader({ request }) {
     [session.shop]
   );
   const data = parseManualRules(rows[0] || null);
+
+  // Defense-in-depth: the PHP GET handler (hit via the App Proxy) is the real
+  // storefront choke point, but also force is_enabled false here in case this
+  // Node route is ever consumed directly. Stored row is left untouched.
+  if (data) {
+    const planKey = await getShopPlan(session.shop);
+    if (!canPublishFeature(planKey, 'ai_cart_upsell')) {
+      data.is_enabled = 0;
+    }
+  }
+
   return Response.json({ success: !!data, data });
 }
 

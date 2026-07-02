@@ -1,18 +1,21 @@
 import { useLoaderData, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 import {
-  Page, Card, BlockStack, InlineStack, Text, Badge, Button, ProgressBar, Divider, Banner,
+  Page, Card, BlockStack, InlineStack, Text, Badge, Button, ProgressBar, Divider, Banner, Icon,
 } from '@shopify/polaris';
 import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
 import BrixBar from '../components/ai-agent/BrixBar';
-import { ExternalIcon } from '@shopify/polaris-icons';
+import { ExternalIcon, CheckCircleIcon, LockIcon } from '@shopify/polaris-icons';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { PLANS } from '../config/plans';
+import { usePlan } from '../components/PlanContext';
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Fetch subscription status
-  let isPro = false;
+  const planKey = await getShopPlan(shop);
+
   let subscriptionId = null;
   try {
     const res = await admin.graphql(`
@@ -25,7 +28,6 @@ export const loader = async ({ request }) => {
     const data = await res.json();
     const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
     const activeSub = subs.find(s => s.status === 'ACTIVE');
-    isPro = Boolean(activeSub);
     subscriptionId = activeSub?.id || null;
   } catch (e) {
     console.error('[Account loader] Failed to fetch subscription:', e);
@@ -50,7 +52,7 @@ export const loader = async ({ request }) => {
     console.error('[Account loader] Failed to fetch shop info:', e);
   }
 
-  return { shop, shopInfo, isPro, subscriptionId };
+  return { shop, shopInfo, planKey, subscriptionId };
 };
 
 function InfoRow({ label, value }) {
@@ -83,11 +85,14 @@ function UsageRow({ label, used, limit }) {
 }
 
 export default function AccountPage() {
-  const { shop, shopInfo, isPro, subscriptionId } = useLoaderData();
+  const { shop, shopInfo, planKey, subscriptionId } = useLoaderData();
   const navigate = useNavigate();
+  const { canAccessFeature } = usePlan();
 
-  const planName = isPro ? 'Pro' : 'Free';
-  const planPrice = isPro ? '$29/mo' : 'Free';
+  const plan = PLANS[planKey] || PLANS.free;
+  const isPro = planKey === 'pro';
+  const planName = plan.label;
+  const planPrice = plan.price.monthly > 0 ? `$${plan.price.monthly}/mo` : 'Free';
 
   // Usage limits based on plan
   const limits = {
@@ -193,6 +198,20 @@ export default function AccountPage() {
             <Text as="p" variant="bodyMd" tone="subdued">
               Need help? Our team is ready to assist you with setup, configuration, or any issues.
             </Text>
+            <BlockStack gap="150">
+              <InlineStack gap="200" blockAlign="center">
+                <Icon source={canAccessFeature('priority_email_support') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('priority_email_support') ? 'success' : 'subdued'} />
+                <Text as="span" variant="bodySm" tone={canAccessFeature('priority_email_support') ? undefined : 'subdued'}>
+                  Priority Email Support{!canAccessFeature('priority_email_support') ? ' — requires Starter' : ''}
+                </Text>
+              </InlineStack>
+              <InlineStack gap="200" blockAlign="center">
+                <Icon source={canAccessFeature('ai_support_247') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('ai_support_247') ? 'success' : 'subdued'} />
+                <Text as="span" variant="bodySm" tone={canAccessFeature('ai_support_247') ? undefined : 'subdued'}>
+                  24/7 AI Support{!canAccessFeature('ai_support_247') ? ' — requires Starter' : ''}
+                </Text>
+              </InlineStack>
+            </BlockStack>
             <InlineStack gap="300" wrap>
               <Button
                 onClick={() => window.open('mailto:support@thecartninja.com', '_blank')}

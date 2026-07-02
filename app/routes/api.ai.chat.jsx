@@ -1,4 +1,5 @@
 import { authenticate } from '../shopify.server';
+import { checkAndConsumeCredit, AI_BRIX_EXHAUSTED_MESSAGE } from '../services/ai-credits.server';
 
 const SYSTEM_PROMPT = `You are Brix AI, a helpful assistant for Shopify merchants using the Brix cart drawer app.
 You help merchants optimise their cart drawer, upsell products, set up coupon banners, and understand analytics.
@@ -7,9 +8,14 @@ acknowledge the request and confirm what you are doing. Limit responses to 3-4 s
 
 export async function action({ request }) {
   try {
-    await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const { message, messages: history = [] } = await request.json();
     if (!message) return Response.json({ success: false, error: 'No message provided' }, { status: 400 });
+
+    const credit = await checkAndConsumeCredit(session.shop);
+    if (!credit.allowed) {
+      return Response.json({ success: true, message: AI_BRIX_EXHAUSTED_MESSAGE, creditsExhausted: true });
+    }
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const isNvidia = apiKey.startsWith('nvapi-');

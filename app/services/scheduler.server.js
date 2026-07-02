@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { reconcileAllShops } from "./analytics-aggregator.server";
+import { runDailyOverageBilling } from "./billing.server";
 
 // HMR-safe singleton, same idiom as app/db.server.js's global.prismaGlobal —
 // prevents duplicate cron jobs from stacking across Vite dev-server reloads.
@@ -18,6 +19,14 @@ export function initScheduler() {
   cron.schedule("0 3 * * *", () => {
     reconcileAllShops({ days: 35 }).catch((err) =>
       console.error("[scheduler] deep reconcile failed", err.message)
+    );
+  });
+
+  // Daily order-overage billing: charges shops that exceeded their plan's
+  // order cap yesterday. Runs shortly after midnight UTC.
+  cron.schedule("15 0 * * *", () => {
+    runDailyOverageBilling().catch((err) =>
+      console.error("[scheduler] daily overage billing failed", err.message)
     );
   });
 

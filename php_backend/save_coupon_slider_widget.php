@@ -1,5 +1,6 @@
 ﻿<?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/plan_helpers.php';
 
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN';
 
@@ -233,6 +234,12 @@ if ($requestMethod === 'GET') {
             $result['widgetPlacement'] = 'above_cart';
             $result['layout'] = 'list';
         }
+
+        // Enforce plan gating: Coupon Lock Pro is 'preview' on Free — merchant can
+        // design/save it, but it must not render on the storefront until they
+        // upgrade. Only the response is mutated; the stored row is left untouched.
+        $planKey = resolve_plan_key($pdo, $shopDomain);
+        $result['is_enabled'] = ($result['is_enabled'] && plan_can_publish_feature($planKey, 'coupon_lock_pro')) ? 1 : 0;
 
         echo json_encode([
             'status' => 'success',

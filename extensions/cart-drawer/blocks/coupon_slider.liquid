@@ -411,6 +411,10 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
           el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';
           return;
         }
+        /* Plan gating: on Free, Coupon Lock Pro is Preview Only — the
+           backend already forces is_enabled off, but never trust the
+           client alone. Leave the element hidden and skip rendering. */
+        if(!res.data.is_enabled){return;}
         _cache[shop]=res.data;
         return getDisplayContext(el).then(function(ctx){
           renderSlider(el,res.data,ctx);

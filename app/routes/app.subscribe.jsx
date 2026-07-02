@@ -1,34 +1,97 @@
-import { redirect, useActionData, useNavigation, useSubmit } from "react-router";
+import { useActionData, useLoaderData, useNavigation, useSubmit, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
 import {
-    Page, BlockStack, InlineStack, Text, Icon, Divider, Banner, Box,
+    Page, BlockStack, Text, Icon, Divider, Banner, Box, Modal,
 } from "@shopify/polaris";
-import { CheckCircleIcon, XCircleIcon, TargetIcon } from "@shopify/polaris-icons";
+import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
+import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
+import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
+
+// Ordered feature rows shown on every plan card, pulled from the single
+// FEATURES registry — adding/removing a feature there updates this page
+// automatically, no copy to maintain here.
+const FEATURE_ROWS = Object.keys(FEATURES);
 
 export async function loader({ request }) {
-    const { admin } = await authenticate.admin(request);
-    const res = await admin.graphql(`
-        query {
-            currentAppInstallation {
-                activeSubscriptions { id status }
-            }
-        }
-    `);
-    const data = await res.json();
-    const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
-    // Already on Pro — go to billing dashboard
-    if (subs.some(s => s.status === "ACTIVE")) {
-        throw redirect("/app/billing");
-    }
-    return {};
+    const { session } = await authenticate.admin(request);
+    const currentPlanKey = await getShopPlan(session.shop);
+    return { currentPlanKey };
 }
 
 export async function action({ request }) {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    const shop = session.shop;
     const formData = await request.formData();
+    const planKey = formData.get("planKey");
     const interval = formData.get("interval") === "ANNUAL" ? "ANNUAL" : "EVERY_30_DAYS";
-    const price = interval === "ANNUAL" ? "290.00" : "29.00";
+
+    if (!PLANS[planKey]) {
+        return { error: "Invalid plan selected." };
+    }
+
+    const plan = PLANS[planKey];
+
+    // Downgrading/selecting Free: cancel any active subscription instead of
+    // creating a new charge.
+    if (planKey === "free") {
+        try {
+            const subRes = await admin.graphql(`
+                query {
+                    currentAppInstallation {
+                        activeSubscriptions { id status }
+                    }
+                }
+            `);
+            const subData = await subRes.json();
+            const activeSub = (subData.data?.currentAppInstallation?.activeSubscriptions || [])
+                .find(s => s.status === "ACTIVE");
+
+            if (activeSub) {
+                const cancelRes = await admin.graphql(`
+                    mutation AppSubscriptionCancel($id: ID!) {
+                        appSubscriptionCancel(id: $id) {
+                            appSubscription { id status }
+                            userErrors { field message }
+                        }
+                    }
+                `, { variables: { id: activeSub.id } });
+                const cancelData = await cancelRes.json();
+                const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors;
+                if (userErrors?.length > 0) {
+                    return { error: userErrors[0].message };
+                }
+            }
+            await setPendingPlanKey(shop, "free");
+            return { downgraded: true };
+        } catch (err) {
+            return { error: err.message || "Failed to downgrade to Free." };
+        }
+    }
+
+    const price = interval === "ANNUAL" ? plan.price.annual : plan.price.monthly;
+
+    const lineItems = [
+        {
+            plan: {
+                appRecurringPricingDetails: {
+                    price: { amount: price.toFixed(2), currencyCode: "USD" },
+                    interval,
+                },
+            },
+        },
+    ];
+
+    if (plan.overageRate > 0) {
+        lineItems.push({
+            plan: {
+                appUsagePricingDetails: {
+                    terms: `$${plan.overageRate.toFixed(2)} per order above ${plan.orderCap} orders/day.`,
+                    cappedAmount: { amount: "1000.00", currencyCode: "USD" },
+                },
+            },
+        });
+    }
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -50,27 +113,12 @@ export async function action({ request }) {
         }
     `;
 
+    // eslint-disable-next-line no-undef
+    const appUrl = process.env.SHOPIFY_APP_URL || "";
     const variables = {
-        name: "Cart Ninja Pro",
-        lineItems: [
-            {
-                plan: {
-                    appRecurringPricingDetails: {
-                        price: { amount: price, currencyCode: "USD" },
-                        interval,
-                    },
-                },
-            },
-            {
-                plan: {
-                    appUsagePricingDetails: {
-                        terms: "$0.10 per order above 50 orders/day. Capped at $500/month.",
-                        cappedAmount: { amount: "500.00", currencyCode: "USD" },
-                    },
-                },
-            },
-        ],
-        returnUrl: "https://c6c6-2409-40f4-208e-58d6-b4bc-8653-1ae-d600.ngrok-free.app/app/billing",
+        name: `Cart Ninja ${plan.label}`,
+        lineItems,
+        returnUrl: `${appUrl}/app/billing`,
         trialDays: 14,
     };
 
@@ -87,80 +135,34 @@ export async function action({ request }) {
         return { error: "No confirmation URL returned from Shopify." };
     }
 
+    // Record the intended plan now, before the merchant confirms on
+    // Shopify's page — the app_subscriptions/update webhook promotes this
+    // to shops.plan_key once the subscription actually becomes active.
+    await setPendingPlanKey(shop, planKey);
+
     return { confirmationUrl };
 }
 
-const PRO_FEATURES = [
-    "Cart drawer customization",
-    "Coupon slider",
-    "Product recommendations (FBT, Grid, Carousel)",
-    "Free shipping progress bar",
-    "Star ratings on cart items",
-    "Advanced analytics dashboard",
-    "50 orders/day included",
-    "Overage: $0.10/order above 50/day (max $500/mo)",
-    "Priority support",
-];
+function featureIcon(state) {
+    if (state === 'enabled') return { source: CheckCircleIcon, tone: 'success' };
+    if (state === 'preview') return { source: EyeCheckMarkIcon, tone: 'caution' };
+    return { source: XCircleIcon, tone: 'critical' };
+}
 
-const PLANS = [
-  {
-    key: 'starter', badge: 'free forever', name: 'Starter', tagline: 'Launch & learn',
-    price: '$0', period: '/ month', note: 'Always free', orderCap: 'Up to 50 orders / month',
-    highlight: false, billingInterval: null,
-    features: [
-      { label: 'Slide-out cart drawer',                      ok: true  },
-      { label: 'Auto-open on add to cart',                   ok: true  },
-      { label: 'Custom header + announcement banner',        ok: true  },
-      { label: 'Design controls (width, animation, shadow)', ok: true  },
-      { label: 'Checkout button styling',                    ok: true  },
-      { label: 'Coupon creator',                             ok: true  },
-      { label: 'Basic analytics (revenue, AOV, clicks)',     ok: true  },
-      { label: 'AI upsells',                                 ok: false },
-      { label: 'Build a combo',                              ok: false },
-      { label: 'Full analytics',                             ok: false },
-    ],
-  },
-  {
-    key: 'plus', badge: 'most popular', name: 'Plus', tagline: 'Grow your AOV',
-    price: '$29', period: '/ month', note: 'Billed monthly — cancel anytime', orderCap: 'Up to 500 orders / month',
-    highlight: true, billingInterval: 'EVERY_30_DAYS',
-    features: [
-      { label: 'Everything in Starter',                         ok: true },
-      { label: 'Free-shipping progress bar + confetti',         ok: true },
-      { label: 'In-cart coupon countdown timers',               ok: true },
-      { label: 'AI in-cart upsells',                            ok: true },
-      { label: 'Frequently bought together',                    ok: true },
-      { label: 'Coupon banner (product / collection targeting)', ok: true },
-      { label: 'Build a combo — 3 layouts + AI content',        ok: true },
-      { label: 'Full analytics dashboard + funnels',            ok: true },
-      { label: 'Mobile swipe-to-checkout',                      ok: true },
-      { label: 'Priority email support',                        ok: true },
-    ],
-  },
-  {
-    key: 'pro', badge: 'best value', name: 'Pro', tagline: 'High-volume brands',
-    price: '$79', period: '/ month', note: 'Billed monthly — cancel anytime', orderCap: 'Unlimited orders / month',
-    highlight: false, billingInterval: 'EVERY_30_DAYS',
-    features: [
-      { label: 'Everything in Plus',              ok: true },
-      { label: 'Unlimited combo templates',       ok: true },
-      { label: 'Custom bundle layout builder',    ok: true },
-      { label: 'Unlimited AI content generation', ok: true },
-      { label: 'Multi-store support',             ok: true },
-      { label: 'Dedicated onboarding call',       ok: true },
-      { label: 'Slack / direct support channel',  ok: true },
-      { label: 'Early access to new features',    ok: true },
-      { label: 'Custom branding removal',         ok: true },
-      { label: 'Revenue attribution reporting',   ok: true },
-    ],
-  },
-];
+function featureLabelSuffix(state) {
+    if (state === 'preview') return ' (Preview only)';
+    return '';
+}
 
 export default function SubscribePage() {
+    const { currentPlanKey } = useLoaderData();
     const actionData = useActionData();
     const navigation = useNavigation();
     const submit = useSubmit();
+    const [searchParams] = useSearchParams();
+    const highlight = searchParams.get('highlight');
     const isSubmitting = navigation.state === "submitting";
+    const [downgradeConfirm, setDowngradeConfirm] = useState(false);
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
@@ -168,20 +170,38 @@ export default function SubscribePage() {
         }
     }, [actionData]);
 
-    const handleUpgrade = (billingInterval) => {
-        if (!billingInterval) return;
-        submit({ interval: billingInterval }, { method: "POST" });
+    useEffect(() => {
+        if (actionData?.downgraded) {
+            setDowngradeConfirm(false);
+            // Reload so the loader re-resolves the (now free) plan.
+            window.location.reload();
+        }
+    }, [actionData]);
+
+    const handleSelect = (planKey) => {
+        if (planKey === currentPlanKey) return;
+        if (planKey === 'free') {
+            setDowngradeConfirm(true);
+            return;
+        }
+        submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
     };
 
-    // Loader redirects Pro users to /app/billing, so current plan is always 'starter' here
-    const getBtn = (p) => {
-        if (!p.billingInterval) return { label: 'Current Plan', variant: 'current' };
-        return { label: 'Start for free — 14-day trial', variant: 'upgrade' };
+    const confirmDowngrade = () => {
+        submit({ planKey: "free" }, { method: "POST" });
     };
 
-    const btnStyle = (variant, highlight) => {
+    const getBtn = (planKey) => {
+        if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
+        const rank = PLAN_KEYS.indexOf(planKey);
+        const currentRank = PLAN_KEYS.indexOf(currentPlanKey);
+        if (planKey === 'free') return { label: 'Downgrade to Free', variant: 'downgrade' };
+        return { label: rank > currentRank ? `Upgrade to ${PLANS[planKey].label} — 14-day trial` : `Switch to ${PLANS[planKey].label}`, variant: 'upgrade' };
+    };
+
+    const btnStyle = (variant, highlightCard) => {
         if (variant === 'current') return { background: '#f3f4f6', color: '#9ca3af', border: '1px solid #e5e7eb', cursor: 'default' };
-        return { background: highlight ? '#fff' : '#1a1a1a', color: highlight ? '#1a1a1a' : '#fff', border: 'none', cursor: 'pointer' };
+        return { background: highlightCard ? '#fff' : '#1a1a1a', color: highlightCard ? '#1a1a1a' : '#fff', border: 'none', cursor: 'pointer' };
     };
 
     return (
@@ -201,63 +221,99 @@ export default function SubscribePage() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'start' }}>
-                    {PLANS.map((p) => {
-                        const btn = getBtn(p);
-                        const isCurrent = !p.billingInterval;
+                    {PLAN_KEYS.map((planKey) => {
+                        const p = PLANS[planKey];
+                        const isCurrent = planKey === currentPlanKey;
+                        const isHighlightPlan = planKey === 'starter';
+                        const btn = getBtn(planKey);
                         return (
-                            <div key={p.key} style={{ background: '#fff', borderRadius: 16, border: `${p.highlight ? '2px' : '1px'} solid ${p.highlight ? '#1a9de0' : isCurrent ? '#1a1a1a' : '#e5e7eb'}`, boxShadow: p.highlight ? '0 8px 32px rgba(26,157,224,0.14)' : isCurrent ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                            <div key={planKey} style={{ background: '#fff', borderRadius: 16, border: `${isHighlightPlan ? '2px' : '1px'} solid ${isHighlightPlan ? '#1a9de0' : isCurrent ? '#1a1a1a' : '#e5e7eb'}`, boxShadow: isHighlightPlan ? '0 8px 32px rgba(26,157,224,0.14)' : isCurrent ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
 
-                                {/* Current plan ribbon */}
                                 {isCurrent && (
                                     <div style={{ position: 'absolute', top: 12, right: 12, background: '#1a1a1a', color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999, letterSpacing: '0.3px' }}>ACTIVE</div>
                                 )}
 
-                                {/* Badge bar */}
-                                <div style={{ padding: '9px 22px', background: p.highlight ? '#1a9de0' : '#f9fafb', borderBottom: `1px solid ${p.highlight ? '#0e8bc8' : '#e5e7eb'}` }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: p.highlight ? '#fff' : '#6b7280', letterSpacing: '0.3px' }}>{p.badge}</span>
+                                <div style={{ padding: '9px 22px', background: isHighlightPlan ? '#1a9de0' : '#f9fafb', borderBottom: `1px solid ${isHighlightPlan ? '#0e8bc8' : '#e5e7eb'}` }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: isHighlightPlan ? '#fff' : '#6b7280', letterSpacing: '0.3px' }}>
+                                        {isHighlightPlan ? 'most popular' : planKey === 'pro' ? 'best value' : 'free forever'}
+                                    </span>
                                 </div>
 
                                 <div style={{ padding: '22px 22px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                    <Text as="h2" variant="headingLg" fontWeight="bold">{p.name}</Text>
+                                    <Text as="h2" variant="headingLg" fontWeight="bold">{p.label}</Text>
                                     <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">{p.tagline}</Text></div>
 
                                     <div style={{ margin: '16px 0 4px', display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-                                        <span style={{ fontSize: 40, fontWeight: 800, color: '#1a1a1a', lineHeight: 1 }}>{p.price}</span>
-                                        <span style={{ fontSize: 14, color: '#6b7280', marginBottom: 5 }}>{p.period}</span>
+                                        <span style={{ fontSize: 40, fontWeight: 800, color: '#1a1a1a', lineHeight: 1 }}>${p.price.monthly}</span>
+                                        <span style={{ fontSize: 14, color: '#6b7280', marginBottom: 5 }}>/ month</span>
                                     </div>
-                                    <Text as="p" variant="bodyXs" tone={p.highlight ? 'success' : 'subdued'}>{p.note}</Text>
+                                    <Text as="p" variant="bodyXs" tone={isHighlightPlan ? 'success' : 'subdued'}>
+                                        {p.price.monthly === 0 ? 'Always free' : 'Billed monthly — cancel anytime'}
+                                    </Text>
 
                                     <Divider />
 
-                                    {/* Order cap pill */}
                                     <div style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: 8, background: '#1a1a1a', borderRadius: 8, padding: '9px 14px' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}><Icon source={TargetIcon} tone="base" /></span>
-                                        <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{p.orderCap}</span>
+                                        <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                                            {p.orderCap === null ? 'Unlimited orders / day' : `${p.orderCap} orders / day — then $${p.overageRate.toFixed(2)}/order`}
+                                        </span>
                                     </div>
 
-                                    {/* Feature list */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 20 }}>
-                                        {p.features.map((f) => (
-                                            <div key={f.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                                        {FEATURE_ROWS.map((featureKey) => {
+                                            const state = FEATURES[featureKey].states[planKey];
+                                            const icon = featureIcon(state);
+                                            const isHighlighted = highlight === featureKey;
+                                            return (
+                                                <div key={featureKey} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, background: isHighlighted ? '#fffbeb' : 'transparent', borderRadius: 6, padding: isHighlighted ? '2px 4px' : 0 }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
+                                                        <Icon source={icon.source} tone={icon.tone} />
+                                                    </span>
+                                                    <Text as="p" variant="bodyXs" tone={state === 'locked' ? 'subdued' : undefined}>
+                                                        {FEATURES[featureKey].label}{featureLabelSuffix(state)}
+                                                    </Text>
+                                                </div>
+                                            );
+                                        })}
+                                        {planKey !== 'free' && (
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
                                                 <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
-                                                    <Icon source={f.ok ? CheckCircleIcon : XCircleIcon} tone={f.ok ? 'success' : 'critical'} />
+                                                    <Icon source={CheckCircleIcon} tone="success" />
                                                 </span>
-                                                <Text as="p" variant="bodyXs" tone={f.ok ? undefined : 'subdued'}>{f.label}</Text>
+                                                <Text as="p" variant="bodyXs">
+                                                    {planKey === 'starter' ? 'Build a Combo — up to 3 templates' : 'Build a Combo — unlimited templates'}
+                                                </Text>
                                             </div>
-                                        ))}
+                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
+                                                <Icon source={CheckCircleIcon} tone="success" />
+                                            </span>
+                                            <Text as="p" variant="bodyXs">
+                                                AI BRIX — {p.aiBrixCredits === null ? 'unlimited credits' : `${p.aiBrixCredits} credits / month`}
+                                            </Text>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
+                                                <Icon source={p.watermarkRemovable ? CheckCircleIcon : XCircleIcon} tone={p.watermarkRemovable ? 'success' : 'critical'} />
+                                            </span>
+                                            <Text as="p" variant="bodyXs" tone={p.watermarkRemovable ? undefined : 'subdued'}>
+                                                {p.watermarkRemovable ? 'Remove "Powered by BRIX" watermark' : '"Powered by BRIX" watermark (always on)'}
+                                            </Text>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* CTA */}
                                 <div style={{ padding: '0 22px 22px' }}>
                                     <button
-                                        onClick={() => handleUpgrade(p.billingInterval)}
+                                        onClick={() => handleSelect(planKey)}
                                         disabled={btn.variant === 'current' || isSubmitting}
-                                        style={{ width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, transition: 'opacity 0.15s', ...btnStyle(btn.variant, p.highlight) }}
+                                        style={{ width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, transition: 'opacity 0.15s', ...btnStyle(btn.variant, isHighlightPlan) }}
                                         onMouseOver={e => { if (btn.variant !== 'current') e.currentTarget.style.opacity = '0.85'; }}
                                         onMouseOut={e => { e.currentTarget.style.opacity = '1'; }}
                                     >
-                                        {isSubmitting && btn.variant !== 'current' ? 'Starting trial…' : btn.label}
+                                        {isSubmitting ? 'Please wait…' : btn.label}
                                     </button>
                                 </div>
                             </div>
@@ -271,6 +327,32 @@ export default function SubscribePage() {
 
                 <div style={{ height: 72 }} />
             </div>
+
+            {downgradeConfirm && (
+                <Modal
+                    open
+                    onClose={() => setDowngradeConfirm(false)}
+                    title="Downgrade to Free?"
+                    primaryAction={{
+                        content: isSubmitting ? 'Downgrading…' : 'Downgrade to Free',
+                        onAction: confirmDowngrade,
+                        loading: isSubmitting,
+                        destructive: true,
+                    }}
+                    secondaryActions={[{ content: 'Cancel', onAction: () => setDowngradeConfirm(false) }]}
+                >
+                    <Modal.Section>
+                        <BlockStack gap="300">
+                            <Text as="p">
+                                Downgrading cancels your current subscription. Features like Progress Bar, AI Cart
+                                Upsell, Full Analytics, Custom CSS, and Build a Combo will be locked. FBT and Coupon
+                                Lock Pro will switch to preview-only and stop showing on your storefront. Your saved
+                                designs are kept — nothing is deleted.
+                            </Text>
+                        </BlockStack>
+                    </Modal.Section>
+                </Modal>
+            )}
         </Page>
     );
 }

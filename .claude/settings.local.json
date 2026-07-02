@@ -13,7 +13,12 @@
       "PowerShell(& \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysql.exe\" -u root cart_drawer_ninja -e \"DESCRIBE cart_drawer_config;\" 2>&1)",
       "Read(//c/xampp/**)",
       "Bash(./mysql/bin/mysql.exe -u root -e \"SHOW DATABASES;\")",
-      "Bash(curl -s -m 15 \"https://int.thecartninja.com/save_fbt_widget.php?shopdomain=cartapp-2.myshopify.com\")"
+      "Bash(curl -s -m 15 \"https://int.thecartninja.com/save_fbt_widget.php?shopdomain=cartapp-2.myshopify.com\")",
+      "Bash(npx eslint *)",
+      "Bash(php -l php_backend/save_cart_drawer.php)",
+      "Bash(node -e ' *)",
+      "Bash(timeout 100 npm run typecheck)",
+      "Bash(php -l \"c:/xampp/htdocs/cartdrawerv2_ui/php_backend/save_cart_drawer.php\")"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -1,5 +1,7 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { canPublishFeature } from '../config/plans';
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -40,6 +42,18 @@ export async function action({ request }) {
   const body = await request.json();
   const db = getDb();
 
+  // Backend enforcement (defense-in-depth): Progress Bar (and its bundled
+  // confetti-on-completion toggle) is 'locked' on Free. The admin UI lets a
+  // Free shop fully customize and save the design (CustomizableLockedSection
+  // — no blur, editing allowed), but never lets it publish. This endpoint is
+  // what actually enforces that, since a Free shop could also POST directly
+  // here. Force is_enabled/enable_confetti off in that case — the rest of
+  // the design fields are still saved so nothing is lost if the merchant
+  // upgrades later.
+  const planKey = await getShopPlan(shop);
+  const progressBarAllowed = canPublishFeature(planKey, 'progress_bar');
+  const confettiAllowed = canPublishFeature(planKey, 'confetti');
+
   await db.execute(`
     INSERT INTO progress_bar_settings
       (shop_domain, is_enabled, mode, show_on_empty, bar_background_color,
@@ -61,7 +75,7 @@ export async function action({ request }) {
       updated_at            = CURRENT_TIMESTAMP(3)
   `, [
     shop,
-    flag(body.is_enabled          ?? 0, 0),
+    progressBarAllowed ? flag(body.is_enabled ?? 0, 0) : 0,
     body.mode                     ?? 'amount',
     flag(body.show_on_empty       ?? 1),
     body.bar_background_color     ?? '#e5e7eb',
@@ -71,7 +85,7 @@ export async function action({ request }) {
     body.placement                ?? 'top',
     body.completion_text          ?? "You've unlocked free shipping!",
     body.completion_text_color    ?? '#10b981',
-    flag(body.enable_confetti     ?? 1),
+    confettiAllowed ? flag(body.enable_confetti ?? 1) : 0,
   ]);
 
   const [idRows] = await db.execute(

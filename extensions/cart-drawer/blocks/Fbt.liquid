@@ -371,6 +371,10 @@
         .then(function(response){
           if(!response||response.status!=='success')return;
           var data=response.data;
+          /* Plan gating: on Free, FBT is Preview Only — the backend already
+             forces `publishable`/`isEnabled` off, but never trust the client
+             alone. Bail out before rendering anything on the storefront. */
+          if(data.publishable===false||data.isEnabled===false)return;
           var selectedTemplate=data.selectedTemp||data.selectedTemplate||data.activeTemplate||'fbt1';
           var templateMap={fbt1:data.temp1||(data.templates&&data.templates.fbt1),fbt2:data.temp2||(data.templates&&data.templates.fbt2),fbt3:data.temp3||(data.templates&&data.templates.fbt3)};
           var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);

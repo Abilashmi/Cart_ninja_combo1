@@ -1,10 +1,20 @@
 import { authenticate } from "../shopify.server";
 import { getPeriodTotals } from "../services/analytics-query.server";
 import { pctChange, previousPeriodRange } from "../utils/analytics.shared";
+import { getShopPlan, canAccessFeature } from "../services/plan-permissions.server";
 
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  const planKey = await getShopPlan(shop);
+  if (!canAccessFeature(planKey, "full_analytics")) {
+    return Response.json(
+      { success: false, error: "Full Analytics requires the Starter plan or above.", locked: true },
+      { status: 403 }
+    );
+  }
+
   const url = new URL(request.url);
   const today = new Date().toISOString().slice(0, 10);
   const startDate = url.searchParams.get("startDate") || today;

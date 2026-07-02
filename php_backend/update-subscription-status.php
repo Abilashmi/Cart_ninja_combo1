@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/plan_helpers.php';
 
 /**
  * POST /update-subscription-status.php
@@ -33,6 +34,7 @@ $shop             = $input['shop_domain']         ?? null;
 $subscriptionId   = $input['subscription_id']     ?? null;
 $status           = $input['subscription_status'] ?? null;
 $planName         = $input['plan_name']            ?? 'Cart Ninja Pro';
+$planKey          = $input['plan_key']             ?? null;
 $trialEndsOn      = $input['trial_ends_on']        ?? null;
 $billingOn        = $input['billing_on']           ?? null;
 
@@ -64,35 +66,47 @@ try {
     if (!empty($alterations)) {
         $pdo->exec("ALTER TABLE shops " . implode(', ', $alterations));
     }
+    plan_ensure_columns($pdo);
 
-    // ===== MAP Shopify status → plan_name =====
+    // ===== MAP Shopify status → plan_name (legacy, human-readable) =====
     // active/pending = on paid plan; everything else = free
     $resolvedPlan = in_array($status, ['active', 'pending']) ? $planName : 'free';
 
-    // ===== UPSERT subscription data =====
-    $stmt = $pdo->prepare("
-        INSERT INTO shops
-            (shop_domain, subscription_id, subscription_status, plan_name, trial_ends_on, billing_on, subscription_updated_at, updated_at)
-        VALUES
-            (:shop, :sub_id, :sub_status, :plan, :trial, :billing, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE
-            subscription_id         = VALUES(subscription_id),
-            subscription_status     = VALUES(subscription_status),
-            plan_name               = VALUES(plan_name),
-            trial_ends_on           = VALUES(trial_ends_on),
-            billing_on              = VALUES(billing_on),
-            subscription_updated_at = NOW(),
-            updated_at              = NOW()
-    ");
-
-    $stmt->execute([
+    // plan_key is the canonical value — Node's confirmPlanFromWebhook()
+    // already wrote it directly to this same MySQL database, so this PHP
+    // sync only needs to mirror it when the caller explicitly provides it.
+    // Never inferred by parsing $planName.
+    $updatePlanKeySql = '';
+    $params = [
         ':shop'       => $shop,
         ':sub_id'     => $subscriptionId,
         ':sub_status' => $status,
         ':plan'       => $resolvedPlan,
         ':trial'      => $trialEndsOn,
         ':billing'    => $billingOn,
-    ]);
+    ];
+    if ($planKey !== null && plan_is_valid_key($planKey)) {
+        $updatePlanKeySql = ', plan_key = VALUES(plan_key)';
+        $params[':plan_key'] = $planKey;
+    }
+
+    // ===== UPSERT subscription data =====
+    $stmt = $pdo->prepare("
+        INSERT INTO shops
+            (shop_domain, subscription_id, subscription_status, plan_name" . ($planKey !== null && plan_is_valid_key($planKey) ? ", plan_key" : "") . ", trial_ends_on, billing_on, subscription_updated_at, updated_at)
+        VALUES
+            (:shop, :sub_id, :sub_status, :plan" . ($planKey !== null && plan_is_valid_key($planKey) ? ", :plan_key" : "") . ", :trial, :billing, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            subscription_id         = VALUES(subscription_id),
+            subscription_status     = VALUES(subscription_status),
+            plan_name               = VALUES(plan_name)" . $updatePlanKeySql . ",
+            trial_ends_on           = VALUES(trial_ends_on),
+            billing_on              = VALUES(billing_on),
+            subscription_updated_at = NOW(),
+            updated_at              = NOW()
+    ");
+
+    $stmt->execute($params);
 
     echo json_encode([
         'success' => true,

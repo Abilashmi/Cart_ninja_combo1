@@ -14,6 +14,8 @@ import {
     DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
     ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
 } from "@shopify/polaris-icons";
+import { PreviewBadge } from "../components/plan/PlanGate";
+import { usePlan } from "../components/PlanContext";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -480,12 +482,19 @@ export default function ProductWidgetPage() {
     const { couponConfig, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
     const shopify = useAppBridge();
+    const { canPublishFeature } = usePlan();
+    const couponPublishable = canPublishFeature('coupon_lock_pro');
 
     const tKey = couponConfig?.activeTemplate || "template1";
     const activeTpl = couponConfig?.templates?.[tKey] || FAKE_COUPON_CONFIG.templates.template1;
 
     /* state */
     const [isEnabled,   setIsEnabled]   = useState(couponConfig?.is_enabled !== 0);
+    // Free plan can't publish Coupon Lock Pro at all — the backend already
+    // forces is_enabled off in the storefront-facing response regardless of
+    // this toggle, so reflect that truthfully in the UI too instead of
+    // letting the merchant "turn it on" and think it's live.
+    const effectiveEnabled = isEnabled && couponPublishable;
     const [selectedTemplate, setSelectedTemplate] = useState(() => {
         if (tKey === "template1" || tKey === "classic-banner") return "classic-banner";
         if (tKey === "template2" || tKey === "minimal-card")   return "minimal-card";
@@ -700,22 +709,27 @@ export default function ProductWidgetPage() {
 
                 {/* ── Top bar ── */}
                 <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", background: "#fff", borderBottom: "1px solid #e1e3e5", borderLeft: "4px solid #ea580c" }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 7, background: isEnabled ? "#ea580c" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 7, background: effectiveEnabled ? "#ea580c" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <div style={{ filter: "brightness(0) invert(1)", display: "flex" }}><Icon source={DiscountIcon} /></div>
                     </div>
                     <div>
-                        <Text as="h1" variant="headingMd">Coupon Banner</Text>
+                        <InlineStack gap="200" blockAlign="center">
+                            <Text as="h1" variant="headingMd">Coupon Banner</Text>
+                            <PreviewBadge featureKey="coupon_lock_pro" />
+                        </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">Promo banner on <span style={{ color: "#008060", fontWeight: 500 }}>product pages</span></Text>
                     </div>
                     <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
                         {fetcher.data?.success === false && <Text as="span" variant="bodySm" tone="critical">Save failed. Please try again.</Text>}
-                        <Badge tone={isEnabled ? "success" : undefined}>{isEnabled ? "Active" : "Inactive"}</Badge>
+                        <Badge tone={effectiveEnabled ? "success" : undefined}>{effectiveEnabled ? "Active" : "Inactive"}</Badge>
                         <button
-                            onClick={() => { setIsEnabled(p => !p); mark(); }}
+                            onClick={() => { if (!couponPublishable) return; setIsEnabled(p => !p); mark(); }}
                             aria-label="Toggle Coupon Banner"
-                            style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: isEnabled ? "#008060" : "#babec3", position: "relative", cursor: "pointer", transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
+                            disabled={!couponPublishable}
+                            title={!couponPublishable ? "Upgrade to Starter to enable this on your storefront" : undefined}
+                            style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: effectiveEnabled ? "#008060" : "#babec3", position: "relative", cursor: couponPublishable ? "pointer" : "not-allowed", opacity: couponPublishable ? 1 : 0.5, transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
                         >
-                            <span style={{ position: "absolute", top: "3px", left: isEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
+                            <span style={{ position: "absolute", top: "3px", left: effectiveEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" }} />
                         </button>
                         <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
                         <Button icon={ThemeIcon} url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim">Customize in Store</Button>
@@ -725,21 +739,28 @@ export default function ProductWidgetPage() {
                     </div>
                 </div>
 
+
                 {/* ── Two-column body ── */}
                 <div style={{ flex: 1, display: "grid", gridTemplateColumns: "58% 42%", minHeight: 0, overflow: "hidden" }}>
-                    {/* Left column — settings (scrolls internally) */}
-                    <div style={{ overflowY: "auto", padding: "12px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            {/* Theme embed status */}
-                            {!couponEmbedEnabled ? (
-                                <Banner
-                                    title="Coupon Banner is not visible on your store yet"
-                                    tone="warning"
-                                    action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
-                                >
-                                    <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>. You can also set the placement (Above / Below Add to Cart) there.</p>
-                                </Banner>
-                            ) : (
-                                <Banner tone="success" title="Coupon Banner is live on your store" />
+                    {/* Left column — settings (scrolls internally). Extra bottom padding
+                        keeps the last field's helpText from hiding behind the floating
+                        BrixBar (fixed at 20px from viewport bottom). */}
+                    <div style={{ overflowY: "auto", padding: "12px 12px 100px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            {/* Theme embed status — only relevant once the plan can actually
+                                publish this; on Free the toggle above is already locked off,
+                                so no embed-status messaging is shown here at all. */}
+                            {couponPublishable && (
+                                !couponEmbedEnabled ? (
+                                    <Banner
+                                        title="Coupon Banner is not visible on your store yet"
+                                        tone="warning"
+                                        action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
+                                    >
+                                        <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>. You can also set the placement (Above / Below Add to Cart) there.</p>
+                                    </Banner>
+                                ) : (
+                                    <Banner tone="success" title="Coupon Banner is live on your store" />
+                                )
                             )}
                             <Card>
                                 <BlockStack gap="300">
@@ -942,8 +963,9 @@ export default function ProductWidgetPage() {
                             </Card>
                         </div>
 
-                    {/* Right column — Live Preview */}
-                    <div style={{ overflowY: "auto", padding: "12px" }}>
+                    {/* Right column — Live Preview. Extra bottom padding keeps the
+                        preview footer from hiding behind the floating BrixBar. */}
+                    <div style={{ overflowY: "auto", padding: "12px 12px 100px" }}>
                         <Card>
                             <BlockStack gap="400">
                                 <Text as="h2" variant="headingMd">Preview</Text>

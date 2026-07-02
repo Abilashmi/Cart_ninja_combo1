@@ -10,6 +10,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
+import { PLANS } from "../config/plans";
 import { formatAmount } from '../utils/currency.shared';
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
@@ -73,10 +74,9 @@ export const loader = async ({ request }) => {
 
 /* ─── Static content ─── */
 
-const PLAN_LABEL = { starter: 'Starter Plan', plus: 'Plus Plan', pro: 'Pro Plan' };
 const PLAN_BADGE_STYLE = {
+  free:    { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151' },
   starter: { background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e' },
-  plus:    { background: '#edfaf4', border: '1px solid #7dd3fc', color: '#1a9de0' },
   pro:     { background: '#e8f9fe', border: '1px solid #93c5fd', color: '#1a9de0' },
 };
 
@@ -588,7 +588,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ padding: '5px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, ...PLAN_BADGE_STYLE[plan] }}>
-              {PLAN_LABEL[plan]}
+              {PLANS[plan]?.label || 'Free'} Plan
             </span>
             <ModeToggle />
           </div>

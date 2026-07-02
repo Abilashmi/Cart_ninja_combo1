@@ -166,6 +166,7 @@ export const action = async ({ request }) => {
       checkoutFooterText: body.checkoutFooterText ?? existing.checkoutFooterText ?? null,
       customCSS: body.customCSS ?? existing.customCSS ?? null,
       checkout_button_style: body.checkout_button_style ?? existing.checkout_button_style ?? null,
+      watermark_enabled: body.watermark_enabled ?? existing.watermark_enabled ?? 1,
     };
     const result = await persistCartDrawerRecord(shop, newRecord);
     return Response.json({ intent: 'saveCartConfig', success: result.ok });

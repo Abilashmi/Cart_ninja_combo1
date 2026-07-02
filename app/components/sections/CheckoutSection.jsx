@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, FormLayout, TextField, RangeSlider, BlockStack, Text, InlineStack, Select } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { ColorField } from './ColorField';
+import { CustomizableLockedSection } from '../plan/PlanGate';
 
 export function CheckoutSection() {
   const { footer, updateCheckoutButton } = useCartEditor();
@@ -55,6 +56,7 @@ export function CheckoutSection() {
           />
         </FormLayout>
       </Card>
+      <CustomizableLockedSection featureKey="mobile_swipe_checkout">
       <Card>
         <FormLayout>
           <Text as="h3" variant="headingMd">Mobile Button Type</Text>
@@ -104,6 +106,7 @@ export function CheckoutSection() {
           )}
         </FormLayout>
       </Card>
+      </CustomizableLockedSection>
     </BlockStack>
   );
 }

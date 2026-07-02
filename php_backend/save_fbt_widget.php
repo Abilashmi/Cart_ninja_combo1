@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/plan_helpers.php';
 
 function normalizeAiProductCount($value) {
     if ($value === null || $value === '') {
@@ -167,6 +168,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     $result['widgetPlacement'] = $row['widget_placement'];
                 }
             } catch (PDOException $ignored) {}
+        }
+
+        // Enforce plan gating: FBT is 'preview' on Free — merchant can design/save it,
+        // but it must not render on the storefront until they upgrade. This only
+        // mutates the response payload; the stored row is left untouched so the
+        // merchant's design is preserved if they upgrade later.
+        $planKey = resolve_plan_key($pdo, $shopDomain);
+        $publishable = plan_can_publish_feature($planKey, 'fbt');
+        $result['publishable'] = $publishable;
+
+        if (!$publishable) {
+            $result['isEnabled'] = false;
+            if (isset($result['temp1']) && is_array($result['temp1'])) {
+                $result['temp1']['isEnabled'] = false;
+            }
+            if (isset($result['temp2']) && is_array($result['temp2'])) {
+                $result['temp2']['isEnabled'] = false;
+            }
+            if (isset($result['temp3']) && is_array($result['temp3'])) {
+                $result['temp3']['isEnabled'] = false;
+            }
         }
 
         echo json_encode([

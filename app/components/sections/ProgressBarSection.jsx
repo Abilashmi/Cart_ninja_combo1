@@ -4,6 +4,7 @@ import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, Dis
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
+import { CustomizableLockedSection } from '../plan/PlanGate';
 
 const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
@@ -174,6 +175,7 @@ export function ProgressBarSection() {
   const activeTier = progressBar.tiers[activeTierIndex] || progressBar.tiers[0];
 
   return (
+    <CustomizableLockedSection featureKey="progress_bar">
     <BlockStack gap="400">
       <FeatureToggle
         label="Enable Progress Bar"
@@ -322,5 +324,6 @@ export function ProgressBarSection() {
       />
       </>)}
     </BlockStack>
+    </CustomizableLockedSection>
   );
 }

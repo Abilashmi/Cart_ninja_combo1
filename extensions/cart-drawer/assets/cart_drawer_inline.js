@@ -174,6 +174,11 @@
           checkoutButtonStyle: parseCheckoutButtonStyle(d),
           checkoutName: d.checkoutName || 'Checkout Now',
           checkoutFooterText: d.checkoutFooterText || 'Shipping and taxes calculated at checkout',
+          // Server (php_backend/save_cart_drawer.php) already intersects this
+          // with the shop's plan — Free always sends true regardless of the
+          // merchant's toggle. Default true here too so a fetch hiccup never
+          // silently drops the badge.
+          showWatermark: d.showWatermark !== false,
           announcement: {
             enabled: isEnabled(d.announcement_enabled),
             text: d.announcement_text || '',
@@ -213,6 +218,7 @@
             announcement: { enabled: false, text: '', bgColor: '#4f46e5', textColor: '#ffffff', fontSize: 14 },
             header: { title: 'Your Cart', bgColor: '#f9fafb', textColor: '#000000', borderBottom: true },
             design: { animation: 'slide', borderRadius: 0, shadow: true },
+            showWatermark: true,
           };
           _ccActive = true;
         }
@@ -1583,6 +1589,10 @@
   <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
+  ${CONFIG.showWatermark !== false ? `
+  <p style="margin:8px 0 0 0;text-align:center;font-size:10px;color:#cbd5e1;font-weight:600;letter-spacing:0.2px;">
+    Powered by BRIX
+  </p>` : ''}
 </div>
 `;
 

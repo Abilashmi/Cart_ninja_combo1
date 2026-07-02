@@ -37,6 +37,7 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.borderRadius != null ? { borderRadius: cbStyle.borderRadius } : {}),
       },
       customCSS: record.customCSS || base.footer.customCSS,
+      watermarkEnabled: record.watermark_enabled != null ? dbFlag(record.watermark_enabled) : base.footer.watermarkEnabled,
     },
   };
 }
@@ -533,6 +534,14 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     }));
   }, []);
 
+  const updateWatermark = useCallback((enabled) => {
+    setState(prev => ({
+      ...prev,
+      footer: { ...prev.footer, watermarkEnabled: enabled },
+      isDirty: true,
+    }));
+  }, []);
+
   const resetDirty = useCallback(() => {
     setState(prev => ({ ...prev, isDirty: false }));
   }, []);
@@ -562,6 +571,7 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     updateEmptyCart,
     updateCheckoutButton,
     updateCustomCSS,
+    updateWatermark,
     addCouponSliderItem,
     removeCouponSliderItem,
     updateCouponSliderItem,

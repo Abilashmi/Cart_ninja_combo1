@@ -1,5 +1,7 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { getShopPlan, canAccessFeature } from '../services/plan-permissions.server';
+import { PLANS } from '../config/plans';
 
 const PAGE_BODY = `<!-- Combo Bundle Template -->
 <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"></div>
@@ -155,6 +157,32 @@ export async function action({ request }) {
     }
 
     // ── Create new template ─────────────────────────────────────────────────
+    // Backend enforcement of Build a Combo plan gating — defense-in-depth
+    // against a Free shop (or a Starter shop at its cap) hitting this API
+    // directly, bypassing the dashboard's own pre-emptive UI lock.
+    const planKey = await getShopPlan(shop);
+    if (!canAccessFeature(planKey, 'build_a_combo')) {
+      return Response.json({
+        success: false,
+        error: 'Build a Combo requires the Starter plan or higher.',
+        limitReached: true,
+      }, { status: 403 });
+    }
+    const comboTemplateLimit = PLANS[planKey]?.comboTemplateLimit;
+    if (comboTemplateLimit !== null && comboTemplateLimit !== undefined) {
+      const [countRows] = await db.execute(
+        'SELECT COUNT(*) AS cnt FROM combo_templates WHERE shop_domain = ?',
+        [shop]
+      );
+      if (countRows[0].cnt >= comboTemplateLimit) {
+        return Response.json({
+          success: false,
+          error: `Your ${PLANS[planKey].label} plan allows up to ${comboTemplateLimit} combo template${comboTemplateLimit === 1 ? '' : 's'}. Upgrade to add more.`,
+          limitReached: true,
+        }, { status: 403 });
+      }
+    }
+
     const [insertResult] = await db.execute(
       `INSERT INTO combo_templates (shop_domain, name, template_type, status, is_active, customization_data, page_handle, page_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

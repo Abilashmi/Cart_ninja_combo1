@@ -5,7 +5,9 @@ import {
   useNavigation,
 } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
-import { Text, Popover, ActionList, Modal } from '@shopify/polaris';
+import { Text, Popover, ActionList, Modal, BlockStack } from '@shopify/polaris';
+import { usePlan } from '../PlanContext';
+import { PLANS } from '../../config/plans';
 
 // --- Add action to save new templates ---
 // Layout designs metadata (same as dashboard)
@@ -97,6 +99,9 @@ export default function TemplateManager() {
   const navigate = useNavigate();
   const shopify = { toast: { show: (msg) => console.log('[Toast]', msg) } };
   const navigation = useNavigation();
+  const { plan, canAccessFeature } = usePlan();
+  const comboTemplateLimit = PLANS[plan]?.comboTemplateLimit;
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   const isMainNavigating =
     navigation.state !== 'idle' &&
@@ -235,7 +240,16 @@ export default function TemplateManager() {
 
   // --- Create Template Button Handler ---
   // Send users into the template picker first, then into the builder after selection.
+  // Pre-emptive plan check: block before the merchant builds a whole template
+  // and only then hits the 403 at save time (server still enforces this too,
+  // see api.bundle-templates.jsx).
   const handleCreateTemplate = () => {
+    const atCap = comboTemplateLimit !== null && comboTemplateLimit !== undefined
+      && templates.length >= comboTemplateLimit;
+    if (!canAccessFeature('build_a_combo') || atCap) {
+      setUpgradeModalOpen(true);
+      return;
+    }
     navigate('/app/bundles/customize?mode=template-picker');
   };
 
@@ -1437,6 +1451,24 @@ export default function TemplateManager() {
             Are you sure you want to mark <b>{targetTemplate?.title}</b> as{' '}
             {targetTemplate?.active ? 'inactive' : 'active'}?
           </Text>
+        </Modal.Section>
+      </Modal>
+
+      <Modal
+        open={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        title="Upgrade to build more combos"
+        primaryAction={{ content: 'View plans', onAction: () => navigate('/app/subscribe?highlight=build_a_combo') }}
+        secondaryActions={[{ content: 'Cancel', onAction: () => setUpgradeModalOpen(false) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p">
+              {!canAccessFeature('build_a_combo')
+                ? 'Build a Combo is available on the Starter plan and above.'
+                : `Your ${PLANS[plan]?.label || 'Starter'} plan allows up to ${comboTemplateLimit} combo template${comboTemplateLimit === 1 ? '' : 's'}. Upgrade to Pro for unlimited templates.`}
+            </Text>
+          </BlockStack>
         </Modal.Section>
       </Modal>
 

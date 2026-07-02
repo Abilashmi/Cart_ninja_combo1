@@ -4,6 +4,7 @@ import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
+import { CustomizableLockedSection } from '../plan/PlanGate';
 
 const CONFIG_OPTIONS = [
   { value: 'ai', label: 'AI Recommendations', desc: 'Let AI automatically suggest relevant products based on cart contents', icon: MagicIcon },
@@ -180,6 +181,7 @@ export function UpsellSection() {
   const closePicker = () => setPickerConfig(null);
 
   return (
+    <CustomizableLockedSection featureKey="ai_cart_upsell">
     <BlockStack gap="400">
       <FeatureToggle
         label="Enable Upsell Products"
@@ -388,5 +390,6 @@ export function UpsellSection() {
         title={pickerConfig?.type === 'trigger' ? 'Select Trigger Products' : 'Select Upsell Products'}
       />
     </BlockStack>
+    </CustomizableLockedSection>
   );
 }
