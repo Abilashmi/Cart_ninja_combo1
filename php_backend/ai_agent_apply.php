@@ -72,6 +72,17 @@ foreach ($actions as $action) {
             $applied[] = $action;
             break;
 
+        case 'enableFBT':
+        case 'disableFBT':
+            $enabled = $action === 'enableFBT' ? 1 : 0;
+            $pdo->prepare("
+                INSERT INTO fbt_widget_settings (shop_domain, is_enabled)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled), updated_at = CURRENT_TIMESTAMP(3)
+            ")->execute([$shop, $enabled]);
+            $applied[] = $action;
+            break;
+
         case 'applyTheme':
             $theme = $settings['theme'] ?? null;
             if ($theme) {
@@ -96,4 +107,39 @@ foreach ($actions as $action) {
     }
 }
 
-echo json_encode(['status' => 'success', 'applied' => $applied]);
+// Read back the real, current per-shop state so the caller can sync its UI
+// instead of trusting that "applied" == "actually reflected everywhere".
+$after = ['cart' => []];
+
+$cdc = $pdo->prepare("SELECT is_enabled, announcement_enabled FROM cart_drawer_config WHERE shop_domain = ?");
+$cdc->execute([$shop]);
+if ($row = $cdc->fetch(PDO::FETCH_ASSOC)) {
+    $after['cart']['drawerEnabled'] = (bool) $row['is_enabled'];
+    $after['cart']['announcement'] = ['enabled' => (bool) $row['announcement_enabled']];
+}
+
+$pb = $pdo->prepare("SELECT is_enabled FROM progress_bar_settings WHERE shop_domain = ?");
+$pb->execute([$shop]);
+if ($row = $pb->fetch(PDO::FETCH_ASSOC)) {
+    $after['cart']['goalBar'] = ['enabled' => (bool) $row['is_enabled']];
+}
+
+$up = $pdo->prepare("SELECT is_enabled FROM upsell_widget_settings WHERE shop_domain = ?");
+$up->execute([$shop]);
+if ($row = $up->fetch(PDO::FETCH_ASSOC)) {
+    $after['cart']['upsell'] = ['enabled' => (bool) $row['is_enabled']];
+}
+
+$cs = $pdo->prepare("SELECT is_enabled FROM coupon_slider_settings WHERE shop_domain = ?");
+$cs->execute([$shop]);
+if ($row = $cs->fetch(PDO::FETCH_ASSOC)) {
+    $after['cart']['couponSlider'] = ['enabled' => (bool) $row['is_enabled']];
+}
+
+$fbt = $pdo->prepare("SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ?");
+$fbt->execute([$shop]);
+if ($row = $fbt->fetch(PDO::FETCH_ASSOC)) {
+    $after['fbt'] = ['widgetEnabled' => (bool) $row['is_enabled']];
+}
+
+echo json_encode(['status' => 'success', 'applied' => $applied, 'after' => $after]);

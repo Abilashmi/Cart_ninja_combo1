@@ -67,6 +67,11 @@ function syncAfterToFeatureStore(after) {
     if (cart.upsell?.enabled != null) featureStore.set('upsells', cart.upsell.enabled);
     if (cart.goalBar?.enabled != null) featureStore.set('progress_bar', cart.goalBar.enabled);
     if (cart.trustBadges?.enabled != null) featureStore.set('trust_badges', cart.trustBadges.enabled);
+    // CartEditorContext listens for this event to update its live state
+    // (e.g. the drawer on/off status) without requiring a page reload.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cartEditorConfigUpdated', { detail: cart }));
+    }
   }
   if (fbt?.widgetEnabled != null) featureStore.set('fbt', fbt.widgetEnabled);
 }

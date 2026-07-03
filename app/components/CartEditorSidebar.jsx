@@ -48,13 +48,6 @@ export function CartEditorSidebar({ onDiscard }) {
   const isTogglingStatus = statusFetcher.state !== 'idle';
   const isActive = status === 'active';
 
-  useEffect(() => {
-    const sync = () => setStatus(featureStore.get('cart_drawer') ? 'active' : 'inactive');
-    sync();
-    window.addEventListener('featureStateChanged', sync);
-    return () => window.removeEventListener('featureStateChanged', sync);
-  }, [setStatus]);
-
   // Sync preview-zone clicks into the local accordion
   useEffect(() => {
     if (!contextSection || contextSection === openSection) return;
