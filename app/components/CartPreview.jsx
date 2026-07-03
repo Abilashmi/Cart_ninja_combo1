@@ -455,7 +455,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
               ▶ Replay
             </button>
           )}
-          <Button onClick={onDiscard} size="slim">Discard</Button>
+          <Button onClick={onDiscard} disabled={saveStatus === 'saving' || !isDirty} size="slim">Discard</Button>
           <Button
             variant="primary"
             onClick={onSave}

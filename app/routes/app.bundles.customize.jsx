@@ -1642,6 +1642,16 @@ export default function Customize() {
     initialTemplate?.title || 'Untitled Template'
   );
   const [saveStatus, setSaveStatus] = useState(initialTemplate?.id ? 'saved' : null);
+
+  // Re-enable the "Save Template" button once the merchant changes anything
+  // after a successful save — otherwise it stays disabled forever even
+  // though there's new, unsaved work. Skips the very first mount so loading
+  // an existing template doesn't immediately flip it to "unsaved".
+  const skipDirtyEffectRef = useRef(true);
+  useEffect(() => {
+    if (skipDirtyEffectRef.current) { skipDirtyEffectRef.current = false; return; }
+    setSaveStatus((prev) => (prev === 'saved' ? 'unsaved' : prev));
+  }, [config, saveTitle]);
   const [publishToPage, setPublishToPage] = useState(true);
   const [targetPageTitle, setTargetPageTitle] = useState(
     initialTemplate?.page_url || 'About Us'
@@ -3060,6 +3070,7 @@ export default function Customize() {
           onUndo={() => {}}
           onRedo={() => {}}
           onSave={handleSaveClick}
+          saveDisabled={saveStatus === 'saved'}
           onPreview={handlePreview}
           onDuplicate={handleDuplicate}
           onToggleActive={handleToggleActive}

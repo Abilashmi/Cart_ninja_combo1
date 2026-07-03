@@ -110,13 +110,34 @@ export default function TemplateManager() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
+  // Tracks the in-flight optimistic delete/toggle so a failed server-side
+  // mutation can be rolled back instead of leaving a "ghost" template that's
+  // hidden from the dashboard (via deletedIds) but still counts toward the
+  // plan's combo template cap in api.bundle-templates.jsx, silently blocking
+  // future saves with a "limit reached" error the merchant can't explain.
+  const lastMutationRef = useRef(null);
+
   useEffect(() => {
     if (fetcher.data?.success) {
       shopify.toast.show(fetcher.data.message || 'Success');
+      lastMutationRef.current = null;
     } else if (fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
+      const last = lastMutationRef.current;
+      if (last?.type === 'delete') {
+        deletedIds.current.delete(last.id);
+        setTemplates((prev) => (prev.some((t) => String(t.id) === last.id)
+          ? prev
+          : [...prev, ...(initialTemplates || []).filter((t) => String(t.id) === last.id)]
+        ));
+      } else if (last?.type === 'toggle') {
+        setTemplates((prev) => prev.map((t) =>
+          String(t.id) === last.id ? { ...t, active: last.prevActive } : t
+        ));
+      }
+      lastMutationRef.current = null;
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, initialTemplates]);
 
   const [templates, setTemplates] = useState(initialTemplates || []);
   const deletedIds = useRef(new Set());
@@ -192,6 +213,7 @@ export default function TemplateManager() {
   const confirmDelete = () => {
     if (targetTemplate) {
       const deletedId = String(targetTemplate.id);
+      lastMutationRef.current = { type: 'delete', id: deletedId };
       deletedIds.current.add(deletedId);
       setTemplates((prev) => prev.filter((t) => String(t.id) !== deletedId));
       fetcher.submit(
@@ -207,6 +229,7 @@ export default function TemplateManager() {
     if (targetTemplate) {
       const toggledId = String(targetTemplate.id);
       const newActive = !targetTemplate.active;
+      lastMutationRef.current = { type: 'toggle', id: toggledId, prevActive: targetTemplate.active };
       setTemplates((prev) =>
         prev.map((t) =>
           String(t.id) === toggledId ? { ...t, active: newActive } : t

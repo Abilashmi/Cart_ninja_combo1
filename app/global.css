@@ -867,6 +867,14 @@ p {
   }
 }
 
+/* The floating Brix AI bar (BrixBar) uses zIndex 9998 to stay above page
+   content; Polaris toasts default to a much lower stacking context
+   (--p-z-index-12, 520) and end up hidden behind it. Toasts are transient
+   confirmations (e.g. "Settings saved!") so they must always win. */
+.Polaris-Frame-ToastManager {
+  z-index: 10000 !important;
+}
+
 .premium-customize-btn {
   padding: 10px 24px !important;
   border-radius: 8px !important;

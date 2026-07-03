@@ -748,19 +748,17 @@ export default function ProductWidgetPage() {
                     <div style={{ overflowY: "auto", padding: "12px 12px 100px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
                             {/* Theme embed status — only relevant once the plan can actually
                                 publish this; on Free the toggle above is already locked off,
-                                so no embed-status messaging is shown here at all. */}
-                            {couponPublishable && (
-                                !couponEmbedEnabled ? (
-                                    <Banner
-                                        title="Coupon Banner is not visible on your store yet"
-                                        tone="warning"
-                                        action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
-                                    >
-                                        <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>. You can also set the placement (Above / Below Add to Cart) there.</p>
-                                    </Banner>
-                                ) : (
-                                    <Banner tone="success" title="Coupon Banner is live on your store" />
-                                )
+                                so no embed-status messaging is shown here at all. Once the
+                                embed is enabled, no banner is shown (matches the FBT Widget
+                                settings page behavior). */}
+                            {couponPublishable && !couponEmbedEnabled && (
+                                <Banner
+                                    title="Coupon Banner is not visible on your store yet"
+                                    tone="warning"
+                                    action={{ content: 'Enable in theme editor', url: `https://${shop}/admin/themes/current/editor?context=apps`, target: '_blank' }}
+                                >
+                                    <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>.</p>
+                                </Banner>
                             )}
                             <Card>
                                 <BlockStack gap="300">
@@ -946,16 +944,14 @@ export default function ProductWidgetPage() {
                                         <Select
                                             label="Widget Placement"
                                             options={[
-                                                { label: "Above the Add to Cart button",       value: "above_cart" },
-                                                { label: "Below the Add to Cart button",       value: "below_cart" },
-                                                { label: "Customize (let customers position)", value: "custom"     },
+                                                { label: "Above the Add to Cart button", value: "above_cart" },
+                                                { label: "Below the Add to Cart button", value: "below_cart" },
                                             ]}
                                             value={widgetPlacement}
                                             onChange={(v) => { setWidgetPlacement(v); mark(); }}
                                             helpText={
                                                 widgetPlacement === "above_cart" ? "Position locked above the Add to Cart button on storefront." :
-                                                widgetPlacement === "below_cart" ? "Position locked below the Add to Cart button on storefront." :
-                                                "Customers can drag and reposition the widget on the product page."
+                                                "Position locked below the Add to Cart button on storefront."
                                             }
                                         />
                                     </div>

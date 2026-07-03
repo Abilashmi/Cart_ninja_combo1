@@ -1,23 +1,12 @@
 {% schema %}
 {
-  "name": "Coupon Banner (Pro)",
+  "name": "Coupon Banner",
   "target": "body",
   "enabled_on": { "templates": ["product"] },
   "settings": [
     {
       "type": "paragraph",
-      "content": "Requires an active Pro plan. On Free plan, this widget will not display on your storefront even if enabled here."
-    },
-    {
-      "type": "select",
-      "id": "placement",
-      "label": "Widget Placement",
-      "options": [
-        { "value": "above_atc", "label": "Above Add to Cart" },
-        { "value": "below_atc", "label": "Below Add to Cart" }
-      ],
-      "default": "above_atc",
-      "info": "Choose where the coupon banner appears on the product page."
+      "content": "Placement and availability are controlled from the app's Coupon Banner settings page."
     }
   ]
 }

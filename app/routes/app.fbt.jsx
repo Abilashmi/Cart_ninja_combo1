@@ -552,10 +552,17 @@ export default function FBTPage() {
 
   const isSaving = fetcher.state !== 'idle';
 
-  // toast on save (success or error)
+  // toast on save (success or error) — only clear the dirty flag once the
+  // server actually confirms the save, so a failed save leaves Save enabled
+  // for the merchant to retry instead of silently graying out.
+  // NOTE: this must depend only on fetcher.data, not toastActive — otherwise
+  // dismissing the toast (setToastActive(false)) re-triggers this effect,
+  // which sees the same fetcher.data still set and immediately flips
+  // toastActive back to true, making the Cancel/close button look broken.
   useEffect(() => {
-    if (fetcher.data && !toastActive) setToastActive(true);
-  }, [fetcher.data, toastActive]);
+    if (fetcher.data) setToastActive(true);
+    if (fetcher.data?.success) setHasChanges(false);
+  }, [fetcher.data]);
 
   const mark = () => setHasChanges(true);
   const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);
@@ -614,7 +621,6 @@ export default function FBTPage() {
       },
       { method: 'POST', encType: 'application/json' }
     );
-    setHasChanges(false);
   };
 
   /* ── renderAction: per-product button based on interaction style ── */
@@ -700,7 +706,54 @@ export default function FBTPage() {
     </div>
   );
 
-  const previewProducts = layout === 'carousel' ? (
+  /* The 3 templates are meant to be genuinely different structural layouts,
+     not just recolored cards — Classic Grid is a connected row joined by "+"
+     separators, Vertical List is stacked full-width rows, and Modern Cards
+     keeps the existing carousel/grid card arrangement (with its own
+     borderless/shadowed cardStyle already applied above). Previously this
+     preview only ever rendered PreviewCard in a carousel-or-grid shell for
+     all 3 templates, so switching templates looked like nothing changed. */
+  const previewProducts = selectedTemplate === 'vertical-list' ? (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {MOCK_PRODUCTS.map((p, i) => (
+        <div key={p.id} style={{
+          display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px',
+          borderBottom: i < MOCK_PRODUCTS.length - 1 ? `1px solid ${borderColor}` : 'none',
+        }}>
+          <ImagePlaceholder size={44} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              color: textColor, fontSize: '12px', fontWeight: 600,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{p.name}</div>
+            {showPrices && (
+              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>₹{p.price}</div>
+            )}
+          </div>
+          <div style={{ flexShrink: 0 }}>{renderAction(i)}</div>
+        </div>
+      ))}
+    </div>
+  ) : selectedTemplate === 'classic-grid' ? (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: '10px' }}>
+      {MOCK_PRODUCTS.flatMap((p, i) => {
+        const nodes = [
+          <div key={p.id} style={{ flex: '1 1 90px', minWidth: '90px' }}>
+            <PreviewCard p={p} i={i} />
+          </div>,
+        ];
+        if (i < MOCK_PRODUCTS.length - 1) {
+          nodes.push(
+            <span key={`plus-${i}`} aria-hidden="true" style={{
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+              color: textColor, opacity: 0.4, fontSize: '18px', fontWeight: 700,
+            }}>+</span>
+          );
+        }
+        return nodes;
+      })}
+    </div>
+  ) : layout === 'carousel' ? (
     <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
       {MOCK_PRODUCTS.map((p, i) => (
         <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
@@ -757,7 +810,7 @@ export default function FBTPage() {
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
             <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
-            <Button onClick={() => { setHasChanges(false); }} size="slim">Discard</Button>
+            <Button onClick={() => { setHasChanges(false); }} disabled={!hasChanges} size="slim">Discard</Button>
             <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
           </div>
         </div>
@@ -1001,13 +1054,11 @@ export default function FBTPage() {
                         label="Widget Placement"
                         helpText={
                           widgetPlacement === 'above_cart' ? 'Pinned above Add to Cart — position locked on storefront.' :
-                          widgetPlacement === 'below_cart' ? 'Pinned below Add to Cart — position locked on storefront.' :
-                          'Customers can drag and reposition the widget on the product page.'
+                          'Pinned below Add to Cart — position locked on storefront.'
                         }
                         options={[
-                          { label: 'Above the Add to Cart button',        value: 'above_cart' },
-                          { label: 'Below the Add to Cart button',        value: 'below_cart' },
-                          { label: 'Customize (let customers position)',   value: 'custom'     },
+                          { label: 'Above the Add to Cart button', value: 'above_cart' },
+                          { label: 'Below the Add to Cart button', value: 'below_cart' },
                         ]}
                         value={widgetPlacement}
                         onChange={(v) => { setWidgetPlacement(v); mark(); }}

@@ -1,22 +1,12 @@
 {% schema %}
 {
-  "name": "FBT Widget (Pro)",
+  "name": "FBT Widget",
   "target": "body",
   "enabled_on": { "templates": ["product"] },
   "settings": [
     {
       "type": "paragraph",
-      "content": "Requires an active Pro plan. On Free plan, this widget will not display on your storefront even if enabled here."
-    },
-    {
-      "type": "select",
-      "id": "placement",
-      "label": "Widget Placement",
-      "options": [
-        { "value": "below_atc", "label": "Below Add to Cart" },
-        { "value": "above_atc", "label": "Above Add to Cart" }
-      ],
-      "default": "below_atc"
+      "content": "Placement and availability are controlled from the app's FBT Widget settings page."
     }
   ]
 }
@@ -392,6 +382,8 @@
           }
           var selectedTemplate=data.selectedTemp||data.selectedTemplate||data.activeTemplate||'fbt1';
           var templateMap={fbt1:data.temp1||(data.templates&&data.templates.fbt1),fbt2:data.temp2||(data.templates&&data.templates.fbt2),fbt3:data.temp3||(data.templates&&data.templates.fbt3)};
+          var TEMPLATE_STYLE_MAP={fbt1:'classic-grid',fbt2:'modern-cards',fbt3:'vertical-list'};
+          var templateStyle=TEMPLATE_STYLE_MAP[selectedTemplate]||'classic-grid';
           var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);
           if(!config)return;
           var apiPlacement=(templateMap[selectedTemplate]&&templateMap[selectedTemplate].widgetPlacement)||data.widgetPlacement||'below_cart';
@@ -409,17 +401,26 @@
           });
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
-          renderFBT(el,config,matchedProducts,currencySymbol,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
+          renderFBT(el,config,matchedProducts,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
           placeWidget(apiPlacement);
         })
         .catch(function(){});
     }
   });
 
-  function renderFBT(container,config,products,currencySymbol,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId){
-    var isCarouselLayout=config.layout==='carousel'||config.layout==='horizontal';
+  function renderFBT(container,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId){
+    /* Each of the 3 templates is a genuinely different structural layout, not
+       just a recolor: "classic-grid" is a connected row of cards joined by
+       "+" separators, "modern-cards" is a shadowed borderless card row, and
+       "vertical-list" is a stacked full-width row list. Previously all three
+       shared identical markup and only differed by color/border-radius, so
+       merchants saw the same layout regardless of which template they picked. */
+    var isListStyle=templateStyle==='vertical-list';
+    var isModernStyle=templateStyle==='modern-cards';
+    var isClassicStyle=!isListStyle&&!isModernStyle;
+    var isCarouselLayout=!isListStyle&&products.length>3;
     container.innerHTML=
-      '<div class="ps-fbt-wrapper" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';">'
+      '<div class="ps-fbt-wrapper" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;'+(isModernStyle?'border:none;box-shadow:0 4px 20px rgba(0,0,0,0.08);':'border:1px solid '+config.borderColor+';')+'">'
         +'<div class="ps-fbt-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">'
           +'<div class="ps-fbt-title" style="color:'+config.textColor+';letter-spacing:-0.5px;margin-bottom:0;">Frequently Bought Together</div>'
           +(isCarouselLayout?(
@@ -443,14 +444,16 @@
     var navPrev=container.querySelector('.ps-fbt-nav-prev');
     var navNext=container.querySelector('.ps-fbt-nav-next');
 
-    if(isCarouselLayout){
+    if(isListStyle){
+      wrapper.style.cssText='display:flex;flex-direction:column;gap:0;';
+    }else if(isCarouselLayout){
       wrapper.style.cssText='display:flex;flex-direction:row;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch;';
     }else{
-      wrapper.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+      wrapper.style.cssText='display:flex;flex-direction:row;flex-wrap:wrap;gap:10px;';
     }
     wrapper.dataset.interaction=config.interactionType;
     wrapper.dataset.layout=config.layout;
-    wrapper.classList.add(isCarouselLayout?'carousel':'grid');
+    wrapper.classList.add(isListStyle?'list':(isCarouselLayout?'carousel':'grid'));
 
     if(isCarouselLayout&&navPrev&&navNext){
       var scrollByAmount=function(){return Math.max(wrapper.clientWidth*0.8,150);};
@@ -479,9 +482,23 @@
 
     function updateCardStyle(entry){
       var pid=String(entry.product.id);var qty=getProductQuantity(pid);var isActive=qty>0;
-      var cardWidth=isCarouselLayout?'140px':'100%';
+      if(isListStyle){
+        var rowIdx=products.findIndex(function(p){return String(p.id)===pid;});
+        var isLastRow=rowIdx===products.length-1;
+        /* CSS Grid with explicit column widths (image fixed, text flexible,
+           button auto-sized) instead of flexbox — guarantees the middle
+           text column always gets real space regardless of how wide the
+           button/theme container happen to be, and keeps the button a fixed
+           gutter away from the edge instead of hugging it. */
+        entry.card.style.cssText='display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;width:100%;padding:12px 16px 12px 4px;'+(isLastRow?'':'border-bottom:1px solid '+config.borderColor+';')+'background:'+config.bgColor+';color:'+config.textColor+';box-sizing:border-box;';
+        return;
+      }
+      var cardWidth=isCarouselLayout?'140px':'1 1 120px';
       var snapAlign=isCarouselLayout?'scroll-snap-align:start;':'';
-      entry.card.style.cssText='width:'+cardWidth+';flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 8px;border-radius:'+config.borderRadius+'px;background:'+config.bgColor+';border:1px solid '+(isActive?config.buttonColor:config.borderColor)+';box-shadow:0 1px 4px rgba(0,0,0,0.06);transition:border-color 0.2s ease;position:relative;overflow:visible;box-sizing:border-box;color:'+config.textColor+';'+snapAlign;
+      var borderStyle=isModernStyle
+        ?'border:none;box-shadow:0 6px 18px rgba(0,0,0,0.14);'
+        :'border:1px solid '+(isActive?config.buttonColor:config.borderColor)+';box-shadow:0 1px 4px rgba(0,0,0,0.06);';
+      entry.card.style.cssText=(isCarouselLayout?'width:':'flex:')+cardWidth+';min-width:120px;max-width:220px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 8px;border-radius:'+config.borderRadius+'px;background:'+config.bgColor+';'+borderStyle+'transition:border-color 0.2s ease;position:relative;overflow:visible;box-sizing:border-box;color:'+config.textColor+';'+snapAlign;
     }
 
     function renderControl(entry){
@@ -536,20 +553,48 @@
 
     function updateUI(){cardEntries.forEach(function(entry){updateCardStyle(entry);renderControl(entry);});updateFooter();}
 
-    products.forEach(function(product){
-      var safeTitle=escapeHtml(product.title||product.name||product.productTitle||product.product_title||'Product');
-      var imageUrl=String(product.image||'').replace(/'/g,'%27');
-      var price=toPriceNumber(product.price);
+    products.forEach(function(product,idx){
+      var handleFallback=String((product&&product.handle)||'').replace(/[-_]+/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+      var safeTitle=escapeHtml((product&&(product.title||product.name||product.productTitle||product.product_title))||handleFallback||'Product');
+      var imageUrl=String((product&&product.image)||'').replace(/'/g,'%27');
+      var price=toPriceNumber(product&&product.price);
       var card=document.createElement('div');
-      card.className='ps-product-card';
-      card.innerHTML=
-        '<div class="ps-product-image" style="width:100%;height:64px;background:'+config.borderColor+'22;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
-        +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
-          +'<div class="ps-product-title" style="color:'+config.textColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
-          +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
-        +'</div>'
-        +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
+      if(isListStyle){
+        card.className='ps-product-row';
+        card.innerHTML=
+          '<div style="width:48px;height:48px;border-radius:8px;background:'+config.borderColor+'22;overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
+          /* NOTE: intentionally NOT reusing the .ps-product-title/.ps-product-price
+             classes here — those carry -webkit-line-clamp:2 + display:-webkit-box
+             from the grid-card style below, which conflicts with this row's
+             single-line white-space:nowrap and silently collapses the text to
+             zero visible height. Distinct class names + fully inline styles
+             avoid that collision entirely. Parent row is CSS Grid
+             (48px / 1fr / auto columns), so this middle cell just needs
+             min-width:0 to allow the ellipsis to kick in instead of
+             overflowing — its actual width comes from the grid track. */
+          +'<div style="min-width:0;">'
+            +'<div class="ps-product-row-title" style="display:block;color:'+config.textColor+';font-size:13px;font-weight:600;line-height:1.35;white-space:normal;word-break:break-word;">'+safeTitle+'</div>'
+            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+          +'</div>'
+          +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:flex-end;"></div>';
+      }else{
+        card.className='ps-product-card';
+        card.innerHTML=
+          '<div class="ps-product-image" style="width:100%;height:64px;background:'+config.borderColor+'22;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
+          +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
+            +'<div class="ps-product-title" style="color:'+config.textColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
+            +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+          +'</div>'
+          +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
+      }
       wrapper.appendChild(card);
+      if(isClassicStyle&&idx<products.length-1){
+        var plus=document.createElement('span');
+        plus.setAttribute('aria-hidden','true');
+        plus.textContent='+';
+        plus.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:16px;font-size:18px;font-weight:700;color:'+config.textColor+';opacity:0.4;align-self:center;';
+        wrapper.appendChild(plus);
+      }
       cardEntries.set(String(product.id),{product:product,card:card,actionSlot:card.querySelector('.ps-product-action'),requiredBadge:null});
     });
 

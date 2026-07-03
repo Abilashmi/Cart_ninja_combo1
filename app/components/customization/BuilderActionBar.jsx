@@ -31,6 +31,7 @@ export function BuilderActionBar({
   onAiGenerate,
   canPreview,
   issueCount = 0,
+  saveDisabled = false,
 }) {
   const status = saveStatus ? STATUS[saveStatus] : null;
 
@@ -99,7 +100,7 @@ export function BuilderActionBar({
         <Button onClick={onToggleActive} tone={isActive ? undefined : 'success'} variant={isActive ? 'secondary' : 'primary'}>
           {isActive ? 'Deactivate' : 'Activate'}
         </Button>
-        <Button variant="primary" onClick={onSave}>Save Template</Button>
+        <Button variant="primary" onClick={onSave} disabled={saveDisabled}>Save Template</Button>
       </div>
     </div>
   );
