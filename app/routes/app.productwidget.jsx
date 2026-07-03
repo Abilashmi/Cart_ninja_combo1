@@ -14,7 +14,7 @@ import {
     DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
     ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
 } from "@shopify/polaris-icons";
-import { PreviewBadge } from "../components/plan/PlanGate";
+import { ProBadge } from "../components/plan/PlanGate";
 import { usePlan } from "../components/PlanContext";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
@@ -715,7 +715,7 @@ export default function ProductWidgetPage() {
                     <div>
                         <InlineStack gap="200" blockAlign="center">
                             <Text as="h1" variant="headingMd">Coupon Banner</Text>
-                            <PreviewBadge featureKey="coupon_lock_pro" />
+                            <ProBadge featureKey="coupon_lock_pro" />
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">Promo banner on <span style={{ color: "#008060", fontWeight: 500 }}>product pages</span></Text>
                     </div>

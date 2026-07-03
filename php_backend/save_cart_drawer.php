@@ -44,6 +44,15 @@ function applyPlanGatingToCartDrawerResult(array $result, string $planKey): arra
     if (!plan_can_publish_feature($planKey, 'progress_bar')) {
         $result['progress_status'] = 0;
         $result['progressStatus'] = 0;
+        // The storefront widget also falls back to an `enabled` flag baked
+        // into progress_data itself (admin always saves pb.enabled there
+        // regardless of plan) — strip it too or the top-level flags above
+        // do nothing and the widget still renders.
+        $progressData = json_decode($result['progress_data'] ?? '', true);
+        if (is_array($progressData)) {
+            $progressData['enabled'] = false;
+            $result['progress_data'] = json_encode($progressData, JSON_UNESCAPED_UNICODE);
+        }
     } elseif (!plan_can_publish_feature($planKey, 'confetti')) {
         // Progress bar itself is allowed, but confetti specifically is not
         // (e.g. plan differences between the two features in the future).
@@ -52,6 +61,18 @@ function applyPlanGatingToCartDrawerResult(array $result, string $planKey): arra
             $progressData['confetti'] = false;
             $progressData['enableConfetti'] = false;
             $result['progress_data'] = json_encode($progressData, JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    // ---- AI Cart Upsell ----
+    if (!plan_can_publish_feature($planKey, 'ai_cart_upsell')) {
+        $result['upsell_status'] = 0;
+        $result['upsellStatus'] = 0;
+        // Same embedded-flag leak as progress bar above.
+        $upsellData = json_decode($result['upsell_data'] ?? '', true);
+        if (is_array($upsellData)) {
+            $upsellData['enabled'] = false;
+            $result['upsell_data'] = json_encode($upsellData, JSON_UNESCAPED_UNICODE);
         }
     }
 
@@ -313,12 +334,26 @@ if (empty($planConfigForWatermark['watermarkRemovable'])) {
 
 if (!plan_can_publish_feature($planKey, 'progress_bar')) {
     $progressStatus = 0;
+    $progressDataArr = json_decode($progressData ?? '', true);
+    if (is_array($progressDataArr)) {
+        $progressDataArr['enabled'] = false;
+        $progressData = json_encode($progressDataArr, JSON_UNESCAPED_UNICODE);
+    }
 } elseif (!plan_can_publish_feature($planKey, 'confetti')) {
     $progressDataArr = json_decode($progressData ?? '', true);
     if (is_array($progressDataArr)) {
         $progressDataArr['confetti'] = false;
         $progressDataArr['enableConfetti'] = false;
         $progressData = json_encode($progressDataArr, JSON_UNESCAPED_UNICODE);
+    }
+}
+
+if (!plan_can_publish_feature($planKey, 'ai_cart_upsell')) {
+    $upsellStatus = 0;
+    $upsellDataArr = json_decode($upsellData ?? '', true);
+    if (is_array($upsellDataArr)) {
+        $upsellDataArr['enabled'] = false;
+        $upsellData = json_encode($upsellDataArr, JSON_UNESCAPED_UNICODE);
     }
 }
 

@@ -1,9 +1,13 @@
 {% schema %}
 {
-  "name": "FBT Widget",
+  "name": "FBT Widget (Pro)",
   "target": "body",
   "enabled_on": { "templates": ["product"] },
   "settings": [
+    {
+      "type": "paragraph",
+      "content": "Requires an active Pro plan. On Free plan, this widget will not display on your storefront even if enabled here."
+    },
     {
       "type": "select",
       "id": "placement",
@@ -22,6 +26,7 @@
   data-shop="{{ shop.permanent_domain }}"
   data-currency="{{ shop.currency }}"
   data-placement="{{ block.settings.placement | default: 'below_atc' }}"
+  data-design-mode="{{ request.design_mode }}"
   style="display:none">
 </ps-fbt-widget>
 
@@ -373,8 +378,18 @@
           var data=response.data;
           /* Plan gating: on Free, FBT is Preview Only — the backend already
              forces `publishable`/`isEnabled` off, but never trust the client
-             alone. Bail out before rendering anything on the storefront. */
-          if(data.publishable===false||data.isEnabled===false)return;
+             alone. On the live storefront, bail out before rendering anything.
+             In the theme editor (design mode), show an upgrade placeholder so
+             the merchant understands why the app embed is empty. */
+          if(data.publishable===false||data.isEnabled===false){
+            if(el.dataset.designMode==='true'){
+              el.style.display='block';
+              el.style.width='100%';
+              el.style.margin='16px 0';
+              el.innerHTML='<div style="padding:16px;border:1.5px dashed #d1d5db;border-radius:8px;color:#6b7280;font-size:13px;text-align:center;">🔒 FBT Widget is not available on your current plan.<br>Upgrade to enable this widget on your storefront.</div>';
+            }
+            return;
+          }
           var selectedTemplate=data.selectedTemp||data.selectedTemplate||data.activeTemplate||'fbt1';
           var templateMap={fbt1:data.temp1||(data.templates&&data.templates.fbt1),fbt2:data.temp2||(data.templates&&data.templates.fbt2),fbt3:data.temp3||(data.templates&&data.templates.fbt3)};
           var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);

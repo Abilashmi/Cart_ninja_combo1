@@ -12,7 +12,7 @@ import {
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
-import { PreviewBadge } from '../components/plan/PlanGate';
+import { ProBadge } from '../components/plan/PlanGate';
 import { usePlan } from '../components/PlanContext';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
@@ -739,7 +739,7 @@ export default function FBTPage() {
           <div>
             <InlineStack gap="200" blockAlign="center">
               <Text as="h1" variant="headingMd">Frequently Bought Together</Text>
-              <PreviewBadge featureKey="fbt" />
+              <ProBadge featureKey="fbt" />
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">Cross-sell widget on <span style={{ color: '#008060', fontWeight: 500 }}>product pages</span></Text>
           </div>

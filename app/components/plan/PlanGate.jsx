@@ -97,7 +97,7 @@ export function LockedOverlay({ featureKey, children, minHeight = 160 }) {
  * LockedOverlay, this never blurs or dims the wrapped content. Renders
  * nothing when the feature is fully enabled on the current plan.
  */
-export function PreviewLockBadge({ featureKey }) {
+export function PreviewLockBadge({ featureKey, inline = false }) {
   const { getFeatureState } = usePlan();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -115,10 +115,9 @@ export function PreviewLockBadge({ featureKey }) {
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         style={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          zIndex: 60,
+          ...(inline
+            ? { position: 'relative', flexShrink: 0 }
+            : { position: 'absolute', top: 6, right: 6, zIndex: 60 }),
           display: 'flex',
           alignItems: 'center',
           gap: 6,
@@ -167,19 +166,29 @@ export function PreviewLockBadge({ featureKey }) {
  * For "design-type" features that are locked on the current plan but should
  * still be fully editable (merchant can design/save, just can't publish):
  * renders children completely normally (no blur, no disabled inputs) with a
- * PreviewLockBadge corner badge explaining the plan requirement. Use this
- * instead of LockedOverlay for features where the backend already enforces
- * "not published" independently of the editor UI (progress bar, custom CSS,
- * mobile swipe checkout, confetti, open countdown, AI cart upsell). Keep
- * using LockedOverlay for features with no meaningful "design without
- * publishing" state (Full Analytics, AI Analytics, Build a Combo).
+ * PreviewLockBadge explaining the plan requirement, placed in its own
+ * right-aligned row above the content. Use this instead of LockedOverlay for
+ * features where the backend already enforces "not published" independently
+ * of the editor UI (progress bar, custom CSS, mobile swipe checkout,
+ * confetti, open countdown, AI cart upsell). Keep using LockedOverlay for
+ * features with no meaningful "design without publishing" state (Full
+ * Analytics, AI Analytics, Build a Combo).
+ *
+ * Deliberately not an absolutely-positioned corner badge here (unlike inside
+ * CartPreview) — these wrap sidebar sections whose first child is usually a
+ * FeatureToggle, and an overlay in the top-right corner would sit directly
+ * on top of that toggle's switch and make it unclickable.
  */
 export function CustomizableLockedSection({ featureKey, children }) {
+  const { canPublishFeature } = usePlan();
+  if (canPublishFeature(featureKey)) return children;
   return (
-    <div style={{ position: 'relative' }}>
+    <BlockStack gap="200">
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <PreviewLockBadge featureKey={featureKey} inline />
+      </div>
       {children}
-      <PreviewLockBadge featureKey={featureKey} />
-    </div>
+    </BlockStack>
   );
 }
 
@@ -234,6 +243,33 @@ export function LockedChartArea({ locked, children, height = 200 }) {
         <Text as="span" variant="bodyXs" fontWeight="semibold" tone="subdued">Upgrade to unlock</Text>
       </div>
     </div>
+  );
+}
+
+/**
+ * Single gold-gradient pill for placing next to a feature's enable toggle —
+ * combines the lock icon, "Pro", and (when the plan can design/save but not
+ * publish) "Preview Only" into one badge instead of two separate ones.
+ * Renders nothing once the current plan can actually publish the feature —
+ * use alongside disabling the toggle itself via canPublishFeature.
+ */
+export function ProBadge({ featureKey }) {
+  const { canPublishFeature, canPreviewFeature } = usePlan();
+  if (canPublishFeature(featureKey)) return null;
+  const isPreview = canPreviewFeature(featureKey);
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      background: 'linear-gradient(135deg, #f6d976 0%, #b8860b 100%)',
+      color: '#ffffff', borderRadius: 999,
+      padding: '3px 10px 3px 8px', fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
+      lineHeight: 1.5, whiteSpace: 'nowrap',
+    }}>
+      <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, flexShrink: 0 }}>
+        <Icon source={LockIcon} tone="inherit" />
+      </span>
+      Pro{isPreview ? ' · Preview Only' : ''}
+    </span>
   );
 }
 

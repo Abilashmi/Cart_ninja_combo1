@@ -5,8 +5,16 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
+import { getShopPlan, setPendingPlanKey, confirmPlanFromWebhook } from "../services/plan-permissions.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
+
+// TEMP: while testing plan-switching on a dev store (no real payment
+// method, so Shopify's real appSubscriptionCreate approval always fails
+// with "cannot accept the provided charge"), skip the real Shopify billing
+// flow entirely and just apply the selected plan immediately. Flip this
+// back to false (or delete the short-circuit block below) before any real
+// merchant uses this — otherwise nobody is ever actually billed.
+const TEMP_INSTANT_PLAN_SWITCH = true;
 
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
@@ -28,6 +36,12 @@ export async function action({ request }) {
 
     if (!PLANS[planKey]) {
         return { error: "Invalid plan selected." };
+    }
+
+    if (TEMP_INSTANT_PLAN_SWITCH) {
+        await setPendingPlanKey(shop, planKey);
+        await confirmPlanFromWebhook(shop, "active");
+        return { switched: true, planKey };
     }
 
     const plan = PLANS[planKey];
@@ -99,12 +113,14 @@ export async function action({ request }) {
             $lineItems: [AppSubscriptionLineItemInput!]!
             $returnUrl: URL!
             $trialDays: Int
+            $test: Boolean
         ) {
             appSubscriptionCreate(
                 name: $name
                 lineItems: $lineItems
                 returnUrl: $returnUrl
                 trialDays: $trialDays
+                test: $test
             ) {
                 userErrors { field message }
                 confirmationUrl
@@ -120,6 +136,12 @@ export async function action({ request }) {
         lineItems,
         returnUrl: `${appUrl}/app/billing`,
         trialDays: 14,
+        // TEMP: hardcoded true so plan-switching can be tested on a dev store
+        // (dev stores have no real payment method, so a non-test charge is
+        // always rejected at approval with "cannot accept the provided
+        // charge"). Must be replaced with a real prod/dev condition before
+        // launch, or paying merchants will never actually be billed.
+        test: true,
     };
 
     const res = await admin.graphql(mutation, { variables });

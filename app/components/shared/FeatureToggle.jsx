@@ -1,16 +1,21 @@
 import React from 'react';
 import { InlineStack, Text } from '@shopify/polaris';
 
-export function FeatureToggle({ label, enabled, onToggle }) {
+export function FeatureToggle({ label, enabled, onToggle, disabled = false, badge = null }) {
   return (
     <InlineStack align="space-between" blockAlign="center">
-      {label && <Text as="span" variant="bodyMd" fontWeight="semibold">{label}</Text>}
+      <InlineStack gap="200" blockAlign="center">
+        {label && <Text as="span" variant="bodyMd" fontWeight="semibold">{label}</Text>}
+        {badge}
+      </InlineStack>
       <button
         type="button"
         role="switch"
         aria-checked={enabled}
         aria-label={label || (enabled ? 'Turn off' : 'Turn on')}
-        onClick={() => onToggle(!enabled)}
+        onClick={() => { if (disabled) return; onToggle(!enabled); }}
+        disabled={disabled}
+        title={disabled ? 'Upgrade your plan to enable this' : undefined}
         style={{
           width: '44px',
           height: '24px',
@@ -18,7 +23,8 @@ export function FeatureToggle({ label, enabled, onToggle }) {
           borderRadius: '999px',
           border: `1px solid ${enabled ? '#008060' : '#c9cccf'}`,
           background: enabled ? '#008060' : '#dfe3e8',
-          cursor: 'pointer',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
           position: 'relative',
           transition: 'background 0.18s ease, border-color 0.18s ease',
           flexShrink: 0,

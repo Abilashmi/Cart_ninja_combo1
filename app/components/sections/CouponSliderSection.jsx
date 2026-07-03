@@ -12,6 +12,7 @@ import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
+import { usePlan } from '../PlanContext';
 
 const COUPON_ICON_MAP = {
   discount: DiscountCodeIcon,
@@ -451,6 +452,8 @@ export function CouponSliderSection() {
   const { body, updateCouponSlider } = useCartEditor();
   const { couponSlider } = body;
   const [selectedTab, setSelectedTab] = useState(0);
+  const { canPublishFeature } = usePlan();
+  const couponPublishable = canPublishFeature('coupon_lock_pro');
 
   const tabs = [
     { id: 'coupon-styles', content: 'Coupon Styles', panelID: 'coupon-styles-panel' },
@@ -461,7 +464,8 @@ export function CouponSliderSection() {
     <BlockStack gap="400">
       <FeatureToggle
         label="Enable Coupon Slider"
-        enabled={couponSlider.enabled}
+        enabled={couponSlider.enabled && couponPublishable}
+        disabled={!couponPublishable}
         onToggle={(v) => updateCouponSlider({ enabled: v })}
       />
       <Text as="p" variant="bodyMd" tone="subdued">
