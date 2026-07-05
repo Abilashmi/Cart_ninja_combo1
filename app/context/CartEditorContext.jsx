@@ -319,6 +319,11 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
             ...(cart.announcement?.textColor ? { textColor: cart.announcement.textColor } : {}),
           },
         },
+        header: {
+          ...prev.header,
+          ...(cart.header?.bgColor ? { bgColor: cart.header.bgColor } : {}),
+          ...(cart.header?.textColor ? { textColor: cart.header.textColor } : {}),
+        },
         footer: {
           ...prev.footer,
           checkoutButton: {

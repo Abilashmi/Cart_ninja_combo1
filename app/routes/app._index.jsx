@@ -63,7 +63,7 @@ export const loader = async ({ request }) => {
     const today = new Date().toISOString().split('T')[0];
     const res = await fetch(
       `${origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`,
-      { headers: { Accept: 'application/json', 'ngrok-skip-browser-warning': 'true' } },
+      { headers: { Accept: 'application/json', 'ngrok-skip-browser-warning': 'true' }, signal: AbortSignal.timeout(5000) },
     );
     const data = await res.json();
     if (res.ok && data?.success) initialAnalytics = normalizeAnalytics(data.data);
@@ -400,7 +400,13 @@ export default function DashboardPage() {
 
   const analytics = normalizeAnalytics(initialAnalytics);
 
-  const [mode, setMode] = useState(null);
+  // Always starts as 'normal' so the first paint matches the server-rendered
+  // HTML exactly (no hydration mismatch) and nothing is blank while waiting
+  // on localStorage. The effect below upgrades this to 'tutorial' right
+  // after mount for first-time visitors — previously `mode` started as
+  // `null` with an early `if (!mode) return null`, which blanked the whole
+  // page until that same effect fired.
+  const [mode, setMode] = useState('normal');
   const [completedSteps, setCompletedSteps] = useState([1]);
   const [selectedLesson, setSelectedLesson] = useState(1);
   // watchedTimes: { [lessonN]: timestamp } — persisted in localStorage
@@ -415,8 +421,8 @@ export default function DashboardPage() {
       const stored = localStorage.getItem(STORAGE_KEY);
       const today = new Date().toDateString();
       if (!stored) { localStorage.setItem(STORAGE_KEY, today); setMode('tutorial'); }
-      else { setMode(stored === today ? 'tutorial' : 'normal'); }
-    } catch { setMode('normal'); }
+      else if (stored === today) { setMode('tutorial'); }
+    } catch {}
     try {
       const steps = localStorage.getItem('cn_completed_steps');
       if (steps) setCompletedSteps(JSON.parse(steps));
@@ -472,8 +478,6 @@ export default function DashboardPage() {
       {mode === 'tutorial' ? 'Go to Dashboard' : 'Getting Started'}
     </button>
   );
-
-  if (!mode) return null;
 
   /* ─── TUTORIAL MODE ─── */
   if (mode === 'tutorial') {
@@ -595,6 +599,9 @@ export default function DashboardPage() {
         </div>
 
         {/* KPI tiles */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <button onClick={() => navigate('/app/analytics')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600, padding: 0 }}>View full analytics →</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
           {kpis.map(k => (
             <div key={k.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '22px 22px 18px', overflow: 'hidden' }}>

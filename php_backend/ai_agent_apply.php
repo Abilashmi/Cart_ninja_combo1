@@ -30,6 +30,7 @@ function flag($v, $default = 1) {
 }
 
 $applied = [];
+$unsupported = [];
 
 foreach ($actions as $action) {
     switch ($action) {
@@ -104,6 +105,14 @@ foreach ($actions as $action) {
             }
             $applied[] = $action;
             break;
+
+        default:
+            // Recognized by the client-side keyword matcher but with no real
+            // backing DB column/handler here (e.g. trust badges, matchTheme,
+            // optimizeMobile). Must NOT be added to $applied, or the caller
+            // will report "Completed" for a no-op.
+            $unsupported[] = $action;
+            break;
     }
 }
 
@@ -111,11 +120,31 @@ foreach ($actions as $action) {
 // instead of trusting that "applied" == "actually reflected everywhere".
 $after = ['cart' => []];
 
-$cdc = $pdo->prepare("SELECT is_enabled, announcement_enabled FROM cart_drawer_config WHERE shop_domain = ?");
+$cdc = $pdo->prepare("
+    SELECT is_enabled, announcement_enabled,
+           header_bg_color, header_text_color,
+           checkout_button_bg_color, checkout_button_text_color
+    FROM cart_drawer_config WHERE shop_domain = ?
+");
 $cdc->execute([$shop]);
 if ($row = $cdc->fetch(PDO::FETCH_ASSOC)) {
     $after['cart']['drawerEnabled'] = (bool) $row['is_enabled'];
     $after['cart']['announcement'] = ['enabled' => (bool) $row['announcement_enabled']];
+    // Read back header/checkout colors too — needed so applyTheme results
+    // (and any other color-writing action) actually reach CartEditorContext's
+    // live-sync listener instead of only showing up after a page reload.
+    if ($row['header_bg_color'] !== null || $row['header_text_color'] !== null) {
+        $after['cart']['header'] = [
+            'bgColor' => $row['header_bg_color'],
+            'textColor' => $row['header_text_color'],
+        ];
+    }
+    if ($row['checkout_button_bg_color'] !== null || $row['checkout_button_text_color'] !== null) {
+        $after['cart']['checkoutButton'] = [
+            'backgroundColor' => $row['checkout_button_bg_color'],
+            'textColor' => $row['checkout_button_text_color'],
+        ];
+    }
 }
 
 $pb = $pdo->prepare("SELECT is_enabled FROM progress_bar_settings WHERE shop_domain = ?");
@@ -142,4 +171,5 @@ if ($row = $fbt->fetch(PDO::FETCH_ASSOC)) {
     $after['fbt'] = ['widgetEnabled' => (bool) $row['is_enabled']];
 }
 
-echo json_encode(['status' => 'success', 'applied' => $applied, 'after' => $after]);
+$status = empty($unsupported) ? 'success' : (empty($applied) ? 'unsupported' : 'partial');
+echo json_encode(['status' => $status, 'applied' => $applied, 'unsupported' => $unsupported, 'after' => $after]);

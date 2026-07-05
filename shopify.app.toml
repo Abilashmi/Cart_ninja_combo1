@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
-name = "The Cart Ninja"
+name = "Brix"
 application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
 embedded = true
 
@@ -72,7 +72,7 @@ redirect_urls = [
 ]
 
 [app_proxy]
-url = "https://campaign-jake-causing-dod.trycloudflare.com/cartdrawerv2_ui/php_backend/"
+url = "https://entrepreneurs-high-what-treasures.trycloudflare.com/cartdrawerv2_ui/php_backend/"
 prefix = "apps"
 subpath = "cart-app"
 

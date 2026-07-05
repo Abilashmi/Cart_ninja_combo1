@@ -3,15 +3,29 @@
  * Fetches currency symbol and settings from Shopify API
  */
 
+// This loader runs on every /app/* navigation (it lives on the shared
+// layout route), so an uncached Admin GraphQL round trip here directly adds
+// to the perceived time for every single in-app navigation. A shop's
+// currency essentially never changes, so cache it in-process for a while —
+// mirrors the plan_key cache in plan-permissions.server.js.
+const CURRENCY_CACHE_TTL_MS = 5 * 60_000;
+const currencyCache = new Map(); // shop -> { symbol, expiresAt }
+
 /**
  * Fetch shop currency symbol from Shopify
  * @param {Object} admin - Shopify admin API client
+ * @param {string} [shop] - Shop domain, used as the cache key
  * @returns {Promise<string>} Currency symbol (e.g., "$", "₹", "€")
  */
-export async function getShopCurrencySymbol(admin) {
+export async function getShopCurrencySymbol(admin, shop) {
   if (!admin) {
     console.warn("[Currency] No admin client provided, defaulting to $");
     return "$";
+  }
+
+  if (shop) {
+    const cached = currencyCache.get(shop);
+    if (cached && cached.expiresAt > Date.now()) return cached.symbol;
   }
 
   try {
@@ -31,7 +45,9 @@ export async function getShopCurrencySymbol(admin) {
       return "$";
     }
 
-    return getCurrencySymbolFromCode(currencyCode);
+    const symbol = getCurrencySymbolFromCode(currencyCode);
+    if (shop) currencyCache.set(shop, { symbol, expiresAt: Date.now() + CURRENCY_CACHE_TTL_MS });
+    return symbol;
   } catch (error) {
     console.error("[Currency] Error fetching currency:", error);
     return "$";

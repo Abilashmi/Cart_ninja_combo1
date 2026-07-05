@@ -100,7 +100,7 @@ export async function action({ request }) {
         lineItems.push({
             plan: {
                 appUsagePricingDetails: {
-                    terms: `$${plan.overageRate.toFixed(2)} per order above ${plan.orderCap} orders/day.`,
+                    terms: `$${plan.overageRate.toFixed(2)} per order above ${plan.orderCap} orders/month.`,
                     cappedAmount: { amount: "1000.00", currencyCode: "USD" },
                 },
             },
@@ -221,9 +221,9 @@ export default function SubscribePage() {
         return { label: rank > currentRank ? `Upgrade to ${PLANS[planKey].label} — 14-day trial` : `Switch to ${PLANS[planKey].label}`, variant: 'upgrade' };
     };
 
-    const btnStyle = (variant, highlightCard) => {
+    const btnStyle = (variant) => {
         if (variant === 'current') return { background: '#f3f4f6', color: '#9ca3af', border: '1px solid #e5e7eb', cursor: 'default' };
-        return { background: highlightCard ? '#fff' : '#1a1a1a', color: highlightCard ? '#1a1a1a' : '#fff', border: 'none', cursor: 'pointer' };
+        return { background: '#1a1a1a', color: '#fff', border: 'none', cursor: 'pointer' };
     };
 
     return (
@@ -278,7 +278,7 @@ export default function SubscribePage() {
                                     <div style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: 8, background: '#1a1a1a', borderRadius: 8, padding: '9px 14px' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}><Icon source={TargetIcon} tone="base" /></span>
                                         <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                                            {p.orderCap === null ? 'Unlimited orders / day' : `${p.orderCap} orders / day — then $${p.overageRate.toFixed(2)}/order`}
+                                            {p.orderCap === null ? 'Unlimited orders' : `${p.orderCap} orders / month — then $${p.overageRate.toFixed(2)}/order`}
                                         </span>
                                     </div>
 
@@ -331,7 +331,7 @@ export default function SubscribePage() {
                                     <button
                                         onClick={() => handleSelect(planKey)}
                                         disabled={btn.variant === 'current' || isSubmitting}
-                                        style={{ width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, transition: 'opacity 0.15s', ...btnStyle(btn.variant, isHighlightPlan) }}
+                                        style={{ width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, transition: 'opacity 0.15s', ...btnStyle(btn.variant) }}
                                         onMouseOver={e => { if (btn.variant !== 'current') e.currentTarget.style.opacity = '0.85'; }}
                                         onMouseOut={e => { e.currentTarget.style.opacity = '1'; }}
                                     >

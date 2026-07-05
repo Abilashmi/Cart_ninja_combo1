@@ -522,11 +522,11 @@ export default function AnalyticsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Best selling products by revenue in this period</Text>
                   </BlockStack>
                   <BlockStack gap="250">
-                    {!hasFullAnalyticsAccess
-                      ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
-                      : topProducts.items.length
-                        ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} currencySymbol={currencySymbol} currencyCode={currencyCode} />)
-                        : <EmptyNote message="No product sales yet in this period." />}
+                    {!topProducts.items.length
+                      ? <EmptyNote message="No product sales yet in this period." />
+                      : !hasFullAnalyticsAccess
+                        ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
+                        : topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} currencySymbol={currencySymbol} currencyCode={currencyCode} />)}
                   </BlockStack>
                 </BlockStack>
               </Card>
@@ -672,11 +672,11 @@ export default function AnalyticsPage() {
                     <Text as="p" variant="bodySm" tone="subdued">Best performing products store-wide in this period</Text>
                   </BlockStack>
                   <BlockStack gap="250">
-                    {!hasFullAnalyticsAccess
-                      ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
-                      : topProducts.items.length
-                        ? topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} />)
-                        : <EmptyNote message="No product sales yet in this period." />}
+                    {!topProducts.items.length
+                      ? <EmptyNote message="No product sales yet in this period." />
+                      : !hasFullAnalyticsAccess
+                        ? PLACEHOLDER_PRODUCT_NAMES.map((name, i) => <ProductRow key={name} rank={i + 1} name={name} revenue={0} unitsSold={0} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} locked />)
+                        : topProducts.items.map((p, i) => <ProductRow key={p.product_id || p.name} rank={i + 1} name={p.name} revenue={p.revenue} unitsSold={p.units_sold} accentColor="#7c3aed" currencySymbol={currencySymbol} currencyCode={currencyCode} />)}
                   </BlockStack>
                 </BlockStack>
               </Card>

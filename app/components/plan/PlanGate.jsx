@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Icon, Modal, Text, BlockStack } from '@shopify/polaris';
+import { Button, Icon, Modal, Text, BlockStack, Tooltip } from '@shopify/polaris';
 import { LockIcon } from '@shopify/polaris-icons';
 import { usePlan } from '../PlanContext';
 import { PLANS, getMinPlanForFeature } from '../../config/plans';
@@ -255,21 +255,28 @@ export function LockedChartArea({ locked, children, height = 200 }) {
  */
 export function ProBadge({ featureKey }) {
   const { canPublishFeature, canPreviewFeature } = usePlan();
+  const navigate = useNavigate();
   if (canPublishFeature(featureKey)) return null;
   const isPreview = canPreviewFeature(featureKey);
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      background: 'linear-gradient(135deg, #f6d976 0%, #b8860b 100%)',
-      color: '#ffffff', borderRadius: 999,
-      padding: '3px 10px 3px 8px', fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
-      lineHeight: 1.5, whiteSpace: 'nowrap',
-    }}>
-      <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, flexShrink: 0 }}>
-        <Icon source={LockIcon} tone="inherit" />
-      </span>
-      Pro{isPreview ? ' · Preview Only' : ''}
-    </span>
+    <Tooltip content="Visit plans">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); navigate('/app/subscribe'); }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: 'linear-gradient(135deg, #f6d976 0%, #b8860b 100%)',
+          color: '#ffffff', border: 'none', borderRadius: 999,
+          padding: '3px 10px 3px 8px', fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
+          lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, flexShrink: 0 }}>
+          <Icon source={LockIcon} tone="inherit" />
+        </span>
+        Pro{isPreview ? ' · Preview Only' : ''}
+      </button>
+    </Tooltip>
   );
 }
 

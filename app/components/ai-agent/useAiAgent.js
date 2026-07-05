@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { aiApi } from './api';
 import { featureStore } from './featureStore';
+import { useCurrency } from '../CurrencyContext';
+import { formatAmount } from '../../utils/currency.shared';
 
 function getPageFromPath(pathname) {
   const staticKeys = [
@@ -40,22 +42,63 @@ function extractActions(text) {
     actions.push({ module: 'styling', action: 'applyTemplate', engine: 'applyTemplate', settings: { template: 'luxury' }, label: 'Luxury Gold Theme' });
     return actions;
   }
-  if (/match.?theme|sync.?theme|detect.?theme|auto.?theme|copy.?theme/i.test(lower)) {
+  // Deliberately not an early return here (unlike the applyTemplate/optimizeMobile
+  // cases above) — "enable cart editor and match my theme" should produce both
+  // a cartDrawer action and a matchTheme action from one message.
+  // Also fires for phrasing that references the live storefront instead of
+  // the word "theme" directly (e.g. "change my cart by seeing my website") —
+  // scraping the live site's CSS is exactly what matchTheme does.
+  const mentionsLiveSite = /(see|view|check|look at|visit|browse|scan).{0,20}(website|site|store)\b|\b(website|site|store)\b.{0,20}(see|view|check|look at|visit|browse|scan)/i.test(lower);
+  const wantsVisualChange = /cart|colou?r|theme|design|style|look/i.test(lower);
+  if (
+    /match.?theme|sync.?theme|detect.?theme|auto.?theme|copy.?theme|(colou?r|palette).{0,25}\btheme\b|\btheme\b.{0,25}(colou?r|palette)/i.test(lower)
+    || (mentionsLiveSite && wantsVisualChange)
+  ) {
     actions.push({ module: 'styling', action: 'matchTheme', engine: 'matchTheme', label: 'Match Store Theme' });
-    return actions;
   }
   if (/optimize.*mobile|mobile.*optimize|responsive/i.test(lower)) {
     actions.push({ module: 'optimization', action: 'optimizeMobile', engine: 'optimizeMobile', label: 'Optimize Mobile' });
     return actions;
   }
 
-  if (/cart.*drawer|drawer/.test(lower)) actions.push({ module: 'cartDrawer', action: wantDisable ? 'disable' : 'enable' });
+  if (/cart.*drawer|drawer|cart.*editor/.test(lower)) actions.push({ module: 'cartDrawer', action: wantDisable ? 'disable' : 'enable' });
   if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: 'progressBar', action: wantDisable ? 'disable' : 'enable' });
   if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: 'trustBadges', action: wantDisable ? 'disable' : 'enable' });
   if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'upsells', action: wantDisable ? 'disable' : 'enable' });
   if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'fbt', action: wantDisable ? 'disable' : 'enable' });
 
   return actions;
+}
+
+function isRevenueQuery(text) {
+  return /revenue|how much (did|do|have) we (made?|earn(ed)?)|total sales|sales (this|so far)|earnings/i.test(text);
+}
+
+// "This month" range in the merchant's local time, matching the Analytics
+// page's own month-to-date default.
+function monthToDateRange() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const startDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+  const endDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return { startDate, endDate };
+}
+
+async function fetchRevenueSummary() {
+  const { startDate, endDate } = monthToDateRange();
+  try {
+    const res = await fetch(`/api/analytics/summary?startDate=${startDate}&endDate=${endDate}&compare=false`);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403 || data.locked) {
+      return { locked: true, error: data.error || 'Full Analytics requires the Starter plan or above.' };
+    }
+    if (!res.ok || !data.success) {
+      return { error: data.error || `HTTP ${res.status}` };
+    }
+    return { current: data.data?.current || null };
+  } catch (e) {
+    return { error: e.message || 'Network error' };
+  }
 }
 
 function syncAfterToFeatureStore(after) {
@@ -113,9 +156,30 @@ async function applyActionsViaApi(actions) {
       return { success: false, error: err.error || `HTTP ${res.status}` };
     }
     const data = await res.json();
-    return { success: true, synced: data.synced, before: data.before, after: data.after };
+    return {
+      success: data.success,
+      synced: data.synced,
+      before: data.before,
+      after: data.after,
+      applied: data.applied || [],
+      unsupported: data.unsupported || [],
+    };
   } catch (e) {
     return { success: false, error: e.message || 'Network error' };
+  }
+}
+
+// matchTheme can't go through applyActionsViaApi/ai_agent_apply.php — it needs
+// a live admin session (to resolve the storefront URL) and an outbound fetch
+// of the storefront's CSS, which only the Node route can do.
+async function matchThemeViaApi() {
+  try {
+    const res = await fetch('/api/ai-agent/match-theme', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!data.success) return { error: data.error || `HTTP ${res.status}` };
+    return { theme: data.theme, after: data.after };
+  } catch (e) {
+    return { error: e.message || 'Network error' };
   }
 }
 
@@ -132,6 +196,7 @@ function lsSet(key, val) {
 }
 
 export default function useAiAgent(location) {
+  const { symbol: currencySymbol, code: currencyCode } = useCurrency();
   const [conversations, setConversations] = useState(() => lsGet(LS_CONVS, []));
   const [activeConvId, setActiveConvId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -225,18 +290,70 @@ export default function useAiAgent(location) {
     setError(null);
     let reply;
     try {
+      if (isRevenueQuery(text)) {
+        const summary = await fetchRevenueSummary();
+        let replyText;
+        if (summary.locked) {
+          replyText = `Revenue data isn't available on your current plan.\n${summary.error}`;
+        } else if (summary.error) {
+          replyText = `Couldn't fetch revenue right now.\nReason: ${summary.error}`;
+        } else {
+          const c = summary.current || {};
+          const revenueStr = formatAmount(c.revenue || 0, currencySymbol, currencyCode);
+          const aovStr = formatAmount(c.aov || 0, currencySymbol, currencyCode);
+          replyText = `Revenue this month: ${revenueStr} across ${c.order_count || 0} orders (AOV ${aovStr}).`;
+        }
+        reply = { id: 'a-' + Date.now(), role: 'agent', text: replyText, json: { message: replyText } };
+        setMessages(prev => [...prev, reply]);
+        return;
+      }
       const detectedActions = extractActions(text);
       if (detectedActions.length > 0) {
-        const result = await applyActionsViaApi(detectedActions);
-        if (result.success) {
-          syncAfterToFeatureStore(result.after);
-          const labels = detectedActions.map(a => a.label || ACTION_LABELS[a.module] || a.module).join(', ');
-          const statusLine = result.synced !== false ? 'Status: Completed' : 'Status: Applied (waiting for store sync)';
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: `Task: ${labels}\n${statusLine}`, json: { message: `Task: ${labels}\n${statusLine}`, actions: detectedActions, status: 'success' } };
-        } else {
-          const labels = detectedActions.map(a => a.label || ACTION_LABELS[a.module] || a.module).join(', ');
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: `Task: ${labels}\nStatus: Failed\nReason: ${result.error}`, json: { message: `Task: ${labels}\nStatus: Failed\nReason: ${result.error}`, actions: detectedActions, status: 'failed', error: result.error } };
+        const engineFor = (a) => a.engine || MODULE_TO_ENGINE[a.module]?.[a.action];
+        const themeAction = detectedActions.find(a => engineFor(a) === 'matchTheme');
+        const otherActions = detectedActions.filter(a => engineFor(a) !== 'matchTheme');
+
+        const lines = [];
+        let mergedAfter = null;
+        let anyFailed = false;
+
+        if (otherActions.length > 0) {
+          const result = await applyActionsViaApi(otherActions);
+          if (result.error) {
+            anyFailed = true;
+            otherActions.forEach(a => lines.push(`${a.label || ACTION_LABELS[a.module] || a.module}: Failed (${result.error})`));
+          } else {
+            mergedAfter = result.after;
+            // Report each action's real outcome instead of one blanket status —
+            // PHP silently ignores actions it has no handler for (trust badges,
+            // optimizeMobile, applyTemplate), so trust `applied`/`unsupported`
+            // from the server, not "the request didn't error".
+            otherActions.forEach(a => {
+              const label = a.label || ACTION_LABELS[a.module] || a.module;
+              const engine = engineFor(a);
+              if (engine && result.applied.includes(engine)) lines.push(`${label}: Completed`);
+              else if (engine && result.unsupported.includes(engine)) { lines.push(`${label}: Not supported yet (no backend handler)`); anyFailed = true; }
+              else { lines.push(`${label}: Unknown (no response for this action)`); anyFailed = true; }
+            });
+          }
         }
+
+        if (themeAction) {
+          const themeResult = await matchThemeViaApi();
+          if (themeResult.error) {
+            anyFailed = true;
+            lines.push(`Match Store Theme: Failed (${themeResult.error})`);
+          } else {
+            mergedAfter = themeResult.after || mergedAfter;
+            const t = themeResult.theme || {};
+            lines.push(`Match Store Theme: Completed — applied ${t.headerBgColor} background / ${t.checkoutBgColor} button color detected from your live theme`);
+          }
+        }
+
+        if (mergedAfter) syncAfterToFeatureStore(mergedAfter);
+        const labels = detectedActions.map(a => a.label || ACTION_LABELS[a.module] || a.module).join(', ');
+        const text2 = `Task: ${labels}\n${lines.join('\n')}`;
+        reply = { id: 'a-' + Date.now(), role: 'agent', text: text2, json: { message: text2, actions: detectedActions, status: anyFailed ? 'partial' : 'success' } };
       } else {
         try {
           const history = messages.map(m => ({ role: m.role, text: m.text }));
@@ -259,7 +376,7 @@ export default function useAiAgent(location) {
       setLoading(null);
       setTyping(false);
     }
-  }, [activeConvId, messages, createConversation]);
+  }, [activeConvId, messages, createConversation, currencySymbol, currencyCode]);
 
   const deleteConversation = useCallback(async (convId) => {
     setConversations(prev => prev.filter(c => c.id !== convId));

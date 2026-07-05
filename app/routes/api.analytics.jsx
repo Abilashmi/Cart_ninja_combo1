@@ -212,6 +212,7 @@ export async function loader({ request }) {
           Accept: "application/json",
           "ngrok-skip-browser-warning": "true",
         },
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!response.ok) {

@@ -25,5 +25,11 @@ export async function action({ request }) {
   });
 
   const result = await res.json();
-  return Response.json({ success: result.status === 'success', applied: result.applied ?? [], after: result.after ?? null });
+  return Response.json({
+    success: result.status === 'success' || result.status === 'partial',
+    status: result.status,
+    applied: result.applied ?? [],
+    unsupported: result.unsupported ?? [],
+    after: result.after ?? null,
+  });
 }

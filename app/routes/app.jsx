@@ -15,7 +15,7 @@ export const loader = async ({ request }) => {
 
     const planKey = await getShopPlan(session.shop);
 
-    const currencySymbol = await getShopCurrencySymbol(admin);
+    const currencySymbol = await getShopCurrencySymbol(admin, session.shop);
     // eslint-disable-next-line no-undef
     return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, planKey };
 };
@@ -81,3 +81,14 @@ export function ErrorBoundary() {
 export const headers = (headersArgs) => {
     return boundary.headers(headersArgs);
 };
+
+// This is the shared layout loader for every /app/* page — it re-runs on
+// every child navigation by default, which meant a fresh Admin GraphQL call
+// (currency) and shop/session lookup on every single in-app nav click. Plan
+// key and currency effectively never change mid-session, so skip re-running
+// this loader for plain GET navigations between child routes; it still runs
+// after form submissions and always runs on a hard reload.
+export function shouldRevalidate({ formMethod, defaultShouldRevalidate }) {
+    if (formMethod) return defaultShouldRevalidate;
+    return false;
+}
