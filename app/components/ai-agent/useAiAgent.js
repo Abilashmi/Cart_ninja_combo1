@@ -25,7 +25,78 @@ const ACTION_LABELS = {
   styling: 'Styling', optimization: 'Optimization',
 };
 
+// FBT admin template picker (app/routes/app.fbt.jsx) maps these labels to
+// fbt_widget_settings.selected_template's enum('fbt1','fbt2','fbt3').
+const FBT_TEMPLATE_MAP = [
+  { re: /classic\s*grid/i, value: 'fbt1', label: 'Classic Grid' },
+  { re: /modern\s*cards?/i, value: 'fbt2', label: 'Modern Cards' },
+  { re: /vertical\s*list/i, value: 'fbt3', label: 'Vertical List' },
+];
+const FBT_TEMPLATE_LABELS = Object.fromEntries(FBT_TEMPLATE_MAP.map(t => [t.value, t.label]));
+
+// Pulls an explicit template/mode choice out of an FBT-related message, if
+// present, so "classic grid ... ai recommended" actually configures the
+// widget instead of just flipping is_enabled.
+function extractFbtSettings(lower) {
+  const settings = {};
+  const template = FBT_TEMPLATE_MAP.find(t => t.re.test(lower));
+  if (template) settings.fbtTemplate = template.value;
+
+  if (/\bai\b[\s\S]{0,20}(recommend|mode|config)|\b(recommend|mode|config)[\s\S]{0,20}\bai\b/i.test(lower)) {
+    settings.fbtMode = 'ai';
+  } else if (/\bmanual\b[\s\S]{0,20}(mode|config)/i.test(lower)) {
+    settings.fbtMode = 'manual';
+  }
+  return settings;
+}
+
+// Pulls a spending goal amount and/or a completion message out of a progress
+// bar message (e.g. "enable progress bar, free shipping at $50, message
+// 'Almost there!'"). Only ever sets the FIRST/primary goal — multi-tier
+// setup still requires the manual Progress Bar panel.
+function extractProgressBarSettings(text) {
+  const settings = {};
+  const numMatch = text.match(/[$₹]?\s*(\d+(?:\.\d{1,2})?)/);
+  if (numMatch) {
+    const n = parseFloat(numMatch[1]);
+    if (Number.isFinite(n) && n > 0) settings.goalAmount = n;
+  }
+  const quoteMatch = text.match(/["']([^"']{3,80})["']/);
+  if (quoteMatch) settings.goalMessage = quoteMatch[1];
+  return settings;
+}
+
+// Pulls a left/right side preference out of a cart drawer message.
+function extractCartDrawerSettings(lower) {
+  const settings = {};
+  if (/\bleft\b/i.test(lower)) settings.cartDrawerPosition = 'left';
+  else if (/\bright\b/i.test(lower)) settings.cartDrawerPosition = 'right';
+  return settings;
+}
+
+// Distinguishes a command ("Add Upsells", "enable the cart drawer") from an
+// inquiry about existing state ("is there anything already set in the upsell
+// rule", "do I have upsells enabled") — both can contain the exact same
+// module keyword, but only the former should fire an action. Base-form verbs
+// ("enable", "add") signal a command; questions about state tend to start
+// with an interrogative and use past-participle phrasing ("enabled", "set
+// up") that this intentionally does NOT match.
+const QUESTION_STARTERS = /^\s*(is|are|does|do|did|what|how|why|has|have)\b/i;
+const COMMAND_VERBS = /\b(enable|disable|add|remove|delete|activate|deactivate|create|configure|show|hide|stop|start|turn ?on|turn ?off|set ?up|apply|use)\b/i;
+function looksLikeQuestion(text) {
+  return QUESTION_STARTERS.test(text) && !COMMAND_VERBS.test(text);
+}
+
+// "create/add/make a discount/coupon ..." — deliberately narrow (verb + noun
+// within a short span) so it doesn't fire on unrelated mentions of the word
+// "discount" the way the old unscoped upsell regex used to.
+const DISCOUNT_INTENT = /\b(create|add|make|set ?up|generate)\b[\s\S]{0,30}\b(discount|coupon)\b|\b(discount|coupon)\b[\s\S]{0,30}\b(create|add|make|set ?up|generate)\b/i;
+function looksLikeDiscountIntent(text) {
+  return !looksLikeQuestion(text) && DISCOUNT_INTENT.test(text);
+}
+
 function extractActions(text) {
+  if (looksLikeQuestion(text)) return [];
   const lower = text.toLowerCase();
   const actions = [];
   const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
@@ -61,11 +132,11 @@ function extractActions(text) {
     return actions;
   }
 
-  if (/cart.*drawer|drawer|cart.*editor/.test(lower)) actions.push({ module: 'cartDrawer', action: wantDisable ? 'disable' : 'enable' });
-  if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: 'progressBar', action: wantDisable ? 'disable' : 'enable' });
+  if (/cart.*drawer|drawer|cart.*editor/.test(lower)) actions.push({ module: 'cartDrawer', action: wantDisable ? 'disable' : 'enable', settings: extractCartDrawerSettings(lower) });
+  if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: 'progressBar', action: wantDisable ? 'disable' : 'enable', settings: extractProgressBarSettings(text) });
   if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: 'trustBadges', action: wantDisable ? 'disable' : 'enable' });
   if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'upsells', action: wantDisable ? 'disable' : 'enable' });
-  if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'fbt', action: wantDisable ? 'disable' : 'enable' });
+  if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'fbt', action: wantDisable ? 'disable' : 'enable', settings: extractFbtSettings(lower) });
 
   return actions;
 }
@@ -183,6 +254,68 @@ async function matchThemeViaApi() {
   }
 }
 
+// Pulls two real product titles from the shop's catalog to use as a concrete
+// example in the upsell follow-up question, instead of a generic placeholder
+// the merchant might mistake for required product names.
+async function fetchSampleProductNames() {
+  try {
+    const res = await fetch('/api/upsell');
+    const data = await res.json().catch(() => ({}));
+    // "Gift Card" is Shopify's default product on every store and never a
+    // sensible upsell-trigger example; skip it so the sample pair reads
+    // naturally instead of picking whatever happens to be first/second.
+    const products = (data?.data?.allProducts || []).filter(p => p.title !== 'Gift Card');
+    if (products.length >= 2) return [products[0].title, products[1].title];
+  } catch { /* fall through to the generic placeholder */ }
+  return null;
+}
+
+// One turn of the conversational upsell-rule flow — posts the merchant's
+// reply plus whatever's already been resolved to api.ai-agent.upsell-rule-turn.
+async function upsellRuleTurnViaApi(message, pending) {
+  try {
+    const res = await fetch('/api/ai-agent/upsell-rule-turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        needSide: pending?.needSide || 'both',
+        resolvedTrigger: pending?.resolvedTrigger,
+        resolvedOffer: pending?.resolvedOffer,
+        ambiguousSide: pending?.ambiguousSide,
+        ambiguousCandidates: pending?.ambiguousCandidates,
+      }),
+    });
+    return await res.json();
+  } catch (e) {
+    return { status: 'error', message: e.message || 'Network error' };
+  }
+}
+
+// One turn of the conversational discount-creation flow — posts the
+// merchant's reply plus whatever code/percentage is already resolved.
+async function discountTurnViaApi(message, pending) {
+  try {
+    const res = await fetch('/api/ai-agent/discount-turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        resolvedCode: pending?.resolvedCode,
+        resolvedPercentage: pending?.resolvedPercentage,
+      }),
+    });
+    return await res.json();
+  } catch (e) {
+    return { status: 'error', message: e.message || 'Network error' };
+  }
+}
+
+function mergeCredits(prev, incoming) {
+  if (!incoming) return prev;
+  return { ...prev, ...incoming, used: incoming.limit - incoming.remaining };
+}
+
 const LS_CONVS = 'brixbar_convs';
 const LS_MSGS  = 'brixbar_msgs';
 
@@ -206,6 +339,14 @@ export default function useAiAgent(location) {
   const [tools, setTools] = useState([]);
   const [error, setError] = useState(null);
   const [initialized, setInitialized] = useState(false);
+  const [credits, setCredits] = useState(null);
+  // In-memory only, deliberately not persisted to localStorage — a persisted
+  // pending clarification would otherwise survive a reload/navigation and
+  // could hijack a much later, completely unrelated message (e.g. a fresh
+  // "Add Upsells" click getting misread as the answer to a stale question).
+  const [pendingUpsellRule, setPendingUpsellRule] = useState(null);
+  // Same in-memory-only treatment and same reason as pendingUpsellRule above.
+  const [pendingDiscount, setPendingDiscount] = useState(null);
 
   const currentPage = getPageFromPath(location?.pathname || '/app');
 
@@ -236,7 +377,15 @@ export default function useAiAgent(location) {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    aiApi.getCredits()
+      .then(res => { if (res.success) setCredits(res.credits); })
+      .catch(() => {});
+  }, []);
+
   const createConversation = useCallback(async (title) => {
+    setPendingUpsellRule(null);
+    setPendingDiscount(null);
     try {
       const res = await aiApi.createConversation(title);
       if (res?.success && res?.conversation) {
@@ -269,6 +418,8 @@ export default function useAiAgent(location) {
   }, []);
 
   const selectConversation = useCallback((convId) => {
+    setPendingUpsellRule(null);
+    setPendingDiscount(null);
     setActiveConvId(convId);
     const saved = lsGet(LS_MSGS, {});
     if (saved[convId]?.length > 0) setMessages(saved[convId]);
@@ -289,7 +440,77 @@ export default function useAiAgent(location) {
     setTyping(true);
     setError(null);
     let reply;
+    let followUpReply = null;
     try {
+      if (pendingUpsellRule) {
+        if ((pendingUpsellRule.attempts || 0) >= 3) {
+          const t = 'Let\'s finish this in the Cart Editor\'s Upsell settings instead — you can add the rule there directly.';
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          setPendingUpsellRule(null);
+          setMessages(prev => [...prev, reply]);
+          return;
+        }
+
+        const result = await upsellRuleTurnViaApi(text, pendingUpsellRule);
+        if (result.credits) setCredits(prev => mergeCredits(prev, result.credits));
+
+        if (result.status === 'saved') {
+          const t = `✓ New upsell rule added: when a customer adds "${result.trigger.title}", recommend "${result.offer.title}".`;
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          setPendingUpsellRule(null);
+        } else if (result.status === 'clarify') {
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: result.message, json: { message: result.message } };
+          setPendingUpsellRule({
+            needSide: result.needSide,
+            resolvedTrigger: result.resolvedTrigger,
+            resolvedOffer: result.resolvedOffer,
+            ambiguousSide: result.ambiguousSide,
+            ambiguousCandidates: result.ambiguousCandidates,
+            attempts: (pendingUpsellRule.attempts || 0) + 1,
+          });
+        } else {
+          const t = result.message || 'Something went wrong setting up that rule. Please try again.';
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          if (result.status === 'locked') setPendingUpsellRule(null);
+          else setPendingUpsellRule({ ...pendingUpsellRule, attempts: (pendingUpsellRule.attempts || 0) + 1 });
+        }
+        setMessages(prev => [...prev, reply]);
+        return;
+      }
+
+      if (pendingDiscount || looksLikeDiscountIntent(text)) {
+        const pending = pendingDiscount || { attempts: 0 };
+        if ((pending.attempts || 0) >= 3) {
+          const t = 'Let\'s finish this in Discounts instead — you can create the code there directly.';
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          setPendingDiscount(null);
+          setMessages(prev => [...prev, reply]);
+          return;
+        }
+
+        const result = await discountTurnViaApi(text, pending);
+        if (result.credits) setCredits(prev => mergeCredits(prev, result.credits));
+
+        if (result.status === 'saved') {
+          const t = `✓ Discount created: "${result.code}" — ${result.percentage}% off.`;
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          setPendingDiscount(null);
+        } else if (result.status === 'clarify') {
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: result.message, json: { message: result.message } };
+          setPendingDiscount({
+            resolvedCode: result.resolvedCode,
+            resolvedPercentage: result.resolvedPercentage,
+            attempts: (pending.attempts || 0) + 1,
+          });
+        } else {
+          const t = result.message || 'Something went wrong creating that discount. Please try again.';
+          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
+          setPendingDiscount({ ...pending, attempts: (pending.attempts || 0) + 1 });
+        }
+        setMessages(prev => [...prev, reply]);
+        return;
+      }
+
       if (isRevenueQuery(text)) {
         const summary = await fetchRevenueSummary();
         let replyText;
@@ -331,7 +552,29 @@ export default function useAiAgent(location) {
             otherActions.forEach(a => {
               const label = a.label || ACTION_LABELS[a.module] || a.module;
               const engine = engineFor(a);
-              if (engine && result.applied.includes(engine)) lines.push(`${label}: Completed`);
+              const isUpsellEnable = a.module === 'upsells' && a.action === 'enable';
+              const isFbtEnable = a.module === 'fbt' && a.action === 'enable';
+              const isProgressBarEnable = a.module === 'progressBar' && a.action === 'enable';
+              const isCartDrawerEnable = a.module === 'cartDrawer' && a.action === 'enable';
+              if (engine && result.applied.includes(engine)) {
+                if (isUpsellEnable) {
+                  lines.push(`${label}: Enabled — set up a trigger below`);
+                } else if (isFbtEnable && (a.settings?.fbtTemplate || a.settings?.fbtMode)) {
+                  const parts = [];
+                  if (a.settings.fbtTemplate) parts.push(`template set to ${FBT_TEMPLATE_LABELS[a.settings.fbtTemplate] || a.settings.fbtTemplate}`);
+                  if (a.settings.fbtMode) parts.push(`mode set to ${a.settings.fbtMode === 'ai' ? 'AI recommended' : 'Manual'}`);
+                  lines.push(`${label}: Enabled — ${parts.join(', ')}`);
+                } else if (isProgressBarEnable && (a.settings?.goalAmount || a.settings?.goalMessage)) {
+                  const parts = [];
+                  if (a.settings.goalAmount) parts.push(`goal set to ${a.settings.goalAmount}`);
+                  if (a.settings.goalMessage) parts.push(`message set to "${a.settings.goalMessage}"`);
+                  lines.push(`${label}: Enabled — ${parts.join(', ')}`);
+                } else if (isCartDrawerEnable && a.settings?.cartDrawerPosition) {
+                  lines.push(`${label}: Enabled — opens on the ${a.settings.cartDrawerPosition}`);
+                } else {
+                  lines.push(`${label}: Completed`);
+                }
+              }
               else if (engine && result.unsupported.includes(engine)) { lines.push(`${label}: Not supported yet (no backend handler)`); anyFailed = true; }
               else { lines.push(`${label}: Unknown (no response for this action)`); anyFailed = true; }
             });
@@ -354,10 +597,43 @@ export default function useAiAgent(location) {
         const labels = detectedActions.map(a => a.label || ACTION_LABELS[a.module] || a.module).join(', ');
         const text2 = `Task: ${labels}\n${lines.join('\n')}`;
         reply = { id: 'a-' + Date.now(), role: 'agent', text: text2, json: { message: text2, actions: detectedActions, status: anyFailed ? 'partial' : 'success' } };
+
+        const upsellEnable = otherActions.find(a => a.module === 'upsells' && a.action === 'enable');
+        if (upsellEnable && !anyFailed) {
+          // Try resolving trigger/offer straight from this same message first
+          // (e.g. "Add Upsells, trigger Blue Hoodie offer Wool Socks") before
+          // falling back to asking — don't ask for information already given.
+          const ruleResult = await upsellRuleTurnViaApi(text, null);
+          if (ruleResult.credits) setCredits(prev => mergeCredits(prev, ruleResult.credits));
+
+          if (ruleResult.status === 'saved') {
+            const t = `✓ New upsell rule added: when a customer adds "${ruleResult.trigger.title}", recommend "${ruleResult.offer.title}".`;
+            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: t, json: { message: t } };
+          } else if (ruleResult.status === 'locked') {
+            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: ruleResult.message, json: { message: ruleResult.message } };
+          } else if (ruleResult.status === 'clarify' && (ruleResult.resolvedTrigger || ruleResult.resolvedOffer)) {
+            // Partially resolved from the original message — ask only for
+            // whatever's still missing, don't restart from scratch.
+            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: ruleResult.message, json: { message: ruleResult.message } };
+            setPendingUpsellRule({
+              needSide: ruleResult.needSide,
+              resolvedTrigger: ruleResult.resolvedTrigger,
+              resolvedOffer: ruleResult.resolvedOffer,
+              attempts: 1,
+            });
+          } else {
+            const sample = await fetchSampleProductNames();
+            const example = sample ? `${sample[0]} triggers ${sample[1]}` : 'Blue Hoodie triggers Wool Socks';
+            const followUpText = `Which product should trigger this upsell, and what should it offer? (e.g. "${example}")`;
+            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: followUpText, json: { message: followUpText } };
+            setPendingUpsellRule({ needSide: 'both', attempts: 0 });
+          }
+        }
       } else {
         try {
           const history = messages.map(m => ({ role: m.role, text: m.text }));
           const res = await aiApi.sendMessage(convId, text, history);
+          if (res.credits) setCredits(prev => mergeCredits(prev, res.credits));
           if (res.success && res.message) {
             const msgObj = res.message;
             const msgText = typeof msgObj === 'string' ? msgObj : (msgObj.text || msgObj.summary || msgObj.message || '');
@@ -368,7 +644,7 @@ export default function useAiAgent(location) {
           reply = { id: 'a-' + Date.now(), role: 'agent', text: 'I couldn\'t process that. Try "Enable Cart Drawer", "Add Upsells", or "Enable Progress Bar".', json: { message: 'I couldn\'t process that. Try "Enable Cart Drawer", "Add Upsells", or "Enable Progress Bar".' } };
         }
       }
-      setMessages(prev => [...prev, reply]);
+      setMessages(prev => [...prev, reply, ...(followUpReply ? [followUpReply] : [])]);
     } catch (e) {
       setMessages(prev => [...prev, { id: 'e-' + Date.now(), role: 'agent', text: 'Sorry, something went wrong. Please try again.', error: true }]);
       setError(e.message);
@@ -376,7 +652,7 @@ export default function useAiAgent(location) {
       setLoading(null);
       setTyping(false);
     }
-  }, [activeConvId, messages, createConversation, currencySymbol, currencyCode]);
+  }, [activeConvId, messages, createConversation, currencySymbol, currencyCode, pendingUpsellRule, pendingDiscount]);
 
   const deleteConversation = useCallback(async (convId) => {
     setConversations(prev => prev.filter(c => c.id !== convId));
@@ -388,7 +664,7 @@ export default function useAiAgent(location) {
   }, []);
 
   return {
-    conversations, activeConvId, messages, loading, typing, suggestions, tools, error, initialized, currentPage,
+    conversations, activeConvId, messages, loading, typing, suggestions, tools, error, initialized, currentPage, credits,
     createConversation, selectConversation, sendMessage, deleteConversation, renameConversation,
     setActiveConvId, setMessages, setConversations,
   };

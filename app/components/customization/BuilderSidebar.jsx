@@ -118,6 +118,8 @@ function BuilderSidebarComponent({
 .cst-inline-group{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .cst-row{display:flex;flex-direction:row;gap:8px;overflow-x:auto;padding-bottom:4px}
 .cst-row>div{flex:1 1 120px;min-width:0}
+.cst-row--vertical{flex-direction:column;overflow-x:visible;padding-bottom:0}
+.cst-row--vertical>div{flex:0 0 auto;width:100%}
 .cst-nested-block{background:#f6f8fa;border:1px solid #e1e3e5;border-radius:8px;padding:16px;margin-top:12px}
 .cst-nested-title{margin-bottom:14px}
 .cst-step-block{background:#f6f8fa;border:1px solid #e1e3e5;border-radius:10px;padding:16px;margin-bottom:12px;position:relative}

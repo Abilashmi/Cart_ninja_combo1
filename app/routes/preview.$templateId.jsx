@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLoaderData, useParams } from 'react-router';
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
@@ -10,7 +10,7 @@ const PRODUCT_FRAGMENT = `
     handle
     featuredImage { url altText width height }
     images(first: 10) { nodes { url altText width height } }
-    variants(first: 1) { nodes { id } }
+    variants(first: 25) { nodes { id title price image { url altText } } }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
   }
 `;
@@ -115,6 +115,12 @@ export const loader = async ({ params, request }) => {
         image: e.node.featuredImage ? { url: e.node.featuredImage.url, altText: e.node.featuredImage.altText } : null,
         images: (e.node.images?.nodes || []).map((img) => ({
           url: img.url, altText: img.altText,
+        })),
+        variants: (e.node.variants?.nodes || []).map((v) => ({
+          id: v.id,
+          title: v.title,
+          price: v.price,
+          image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
         })),
         variantId: e.node.variants?.nodes?.[0]?.id || null,
         price: e.node.priceRangeV2?.minVariantPrice?.amount || '0.00',
@@ -338,22 +344,7 @@ function ProgressBar({ selectedCount, maxProducts, config }) {
   );
 }
 
-function LimitReachedBanner({ isReached, maxProducts, config }) {
-  if (!isReached) return null;
-  const msg = (config.limit_reached_message || 'Limit reached! You can only select {{limit}} items.')
-    .replace('{{limit}}', maxProducts);
-  return (
-    <div style={{
-      padding: '12px 16px', margin: '0 0 16px',
-      background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
-      color: '#b91c1c', fontSize: '13px', fontWeight: 600, textAlign: 'center',
-    }}>
-      ⚠ {msg}
-    </div>
-  );
-}
-
-function ProductCard({ product, config, isAdded, onToggleAdd, onImageClick }) {
+function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemove, onImageClick }) {
   const btnBg = config.add_btn_bg || config.product_add_btn_color || '#000';
   const btnTextColor = config.add_btn_text_color || config.product_add_btn_text_color || '#fff';
   const btnRadius = config.add_btn_border_radius ?? 8;
@@ -364,6 +355,55 @@ function ProductCard({ product, config, isAdded, onToggleAdd, onImageClick }) {
   const textColor = config.text_color || '#1a1a1a';
   const primaryColor = config.primary_color || '#000000';
 
+  const variants = product.variants || [];
+  const hasVariants = variants.length > 1;
+
+  const [pendingVariantId, setPendingVariantId] = useState(
+    variants[0]?.id || product.variantId || ''
+  );
+  const [imgIndex, setImgIndex] = useState(0);
+
+  const activeVariantId = pendingVariantId;
+  const activeVariant = variants.find((v) => String(v.id) === String(activeVariantId));
+  const selection = selectedMap[activeVariantId];
+  const isAdded = !!selection;
+  const qty = selection?.qty || 0;
+  const displayPrice = activeVariant?.price != null ? parseFloat(activeVariant.price) : parseFloat(product.price || 0);
+
+  // Other sizes/variants of this same product already in the combo, so
+  // switching the selector doesn't make them appear to vanish.
+  const otherAdded = hasVariants
+    ? variants.filter((v) => String(v.id) !== String(activeVariantId) && selectedMap[v.id])
+    : [];
+
+  const images = (product.images && product.images.length > 0)
+    ? product.images
+    : (product.image ? [product.image] : []);
+  const safeImgIndex = imgIndex >= images.length ? 0 : imgIndex;
+  const displayImage = activeVariant?.image || images[safeImgIndex] || product.image;
+
+  const handleVariantSelect = (variantId) => {
+    setPendingVariantId(variantId);
+  };
+
+  const handleAddClick = () => {
+    onAdd(product, activeVariantId, 1);
+  };
+
+  const handleInc = () => {
+    if (!isAdded) {
+      onAdd(product, activeVariantId, 1);
+    } else {
+      onQtyChange(activeVariantId, qty + 1);
+    }
+  };
+
+  const handleDec = () => {
+    if (!isAdded) return;
+    if (qty <= 1) onRemove(activeVariantId);
+    else onQtyChange(activeVariantId, qty - 1);
+  };
+
   return (
     <div style={{
       border: `2px solid ${isAdded ? '#22c55e' : '#eee'}`,
@@ -371,22 +411,56 @@ function ProductCard({ product, config, isAdded, onToggleAdd, onImageClick }) {
       overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column',
       transition: 'border-color 0.2s',
     }}>
-      <div onClick={() => onImageClick(product)}
+      <div
         style={{
-          height: '160px', background: '#f5f5f5',
+          height: '180px', background: '#f5f5f5',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          overflow: 'hidden', cursor: 'pointer',
+          overflow: 'hidden', cursor: 'pointer', position: 'relative',
         }}>
-        {product.image ? (
-          <img src={product.image.url} alt={product.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <path d="M21 15l-5-5L5 21" />
-          </svg>
+        <div onClick={() => onImageClick(product)} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {displayImage ? (
+            <img src={displayImage.url} alt={displayImage.altText || product.title}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          ) : (
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="M21 15l-5-5L5 21" />
+            </svg>
+          )}
+        </div>
+
+        {!activeVariant?.image && images.length > 1 && (
+          <>
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i <= 0 ? images.length - 1 : i - 1)); }}
+              style={{
+                position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)',
+                width: '26px', height: '26px', borderRadius: '50%', border: 'none',
+                background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>‹</button>
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i >= images.length - 1 ? 0 : i + 1)); }}
+              style={{
+                position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
+                width: '26px', height: '26px', borderRadius: '50%', border: 'none',
+                background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>›</button>
+            <div style={{
+              position: 'absolute', bottom: '6px', left: '50%', transform: 'translateX(-50%)',
+              display: 'flex', gap: '4px',
+            }}>
+              {images.map((_, i) => (
+                <span key={i} onClick={(e) => { e.stopPropagation(); setImgIndex(i); }} style={{
+                  width: '6px', height: '6px', borderRadius: '50%', cursor: 'pointer',
+                  background: i === safeImgIndex ? primaryColor : 'rgba(0,0,0,0.25)',
+                }} />
+              ))}
+            </div>
+          </>
         )}
       </div>
       <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -397,25 +471,67 @@ function ProductCard({ product, config, isAdded, onToggleAdd, onImageClick }) {
         }}>
           {product.title}
         </div>
+
+        {hasVariants && (
+          <select
+            value={activeVariantId || ''}
+            onChange={(e) => handleVariantSelect(e.target.value)}
+            style={{
+              marginBottom: '8px', fontSize: '12px', padding: '5px 6px',
+              border: '1px solid #ddd', borderRadius: '6px', background: '#fff', color: textColor,
+            }}
+          >
+            {variants.map((v) => (
+              <option key={v.id} value={v.id}>{v.title}</option>
+            ))}
+          </select>
+        )}
+
+        {otherAdded.length > 0 && (
+          <div style={{ fontSize: '11px', color: '#22c55e', marginBottom: '6px' }}>
+            Also in combo: {otherAdded.map((v) => `${v.title} ×${selectedMap[v.id].qty}`).join(', ')}
+          </div>
+        )}
+
         <div style={{ fontSize: '14px', fontWeight: 700, color: primaryColor, marginBottom: '8px' }}>
-          {product.currency === 'INR' ? '₹' : '$'}{parseFloat(product.price).toFixed(2)}
+          {product.currency === 'INR' ? '₹' : '$'}{displayPrice.toFixed(2)}
         </div>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 0 0', borderTop: '1px solid #eee',
           justifyContent: 'space-between',
         }}>
-          <button type="button" onClick={() => onToggleAdd(product)}
-            style={{
-              flex: 1, background: isAdded ? '#22c55e' : btnBg,
-              color: isAdded ? '#fff' : btnTextColor,
-              border: 'none', padding: '8px 12px',
-              borderRadius: `${btnRadius}px`, cursor: 'pointer',
-              fontWeight: btnFontWeight, fontSize: `${btnFontSize}px`,
-              transition: 'all 0.2s',
-            }}>
-            {isAdded ? '✓ Added' : addBtnText}
-          </button>
+          {isAdded ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+              <button type="button" onClick={handleDec}
+                style={{
+                  width: 30, height: 30, border: '1px solid #ddd', background: '#f9f9f9',
+                  borderRadius: '6px 0 0 6px', cursor: 'pointer', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                }}>−</button>
+              <span style={{
+                flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 14,
+                border: '1px solid #ddd', borderLeft: 'none', borderRight: 'none', padding: '6px 0',
+              }}>{qty}</span>
+              <button type="button" onClick={handleInc}
+                style={{
+                  width: 30, height: 30, border: '1px solid #ddd', background: '#f9f9f9',
+                  borderRadius: '0 6px 6px 0', cursor: 'pointer', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                }}>+</button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleAddClick}
+              style={{
+                flex: 1, background: btnBg, color: btnTextColor,
+                border: 'none', padding: '8px 12px',
+                borderRadius: `${btnRadius}px`, cursor: 'pointer',
+                fontWeight: btnFontWeight, fontSize: `${btnFontSize}px`,
+                transition: 'all 0.2s',
+              }}>
+              {addBtnText}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -423,7 +539,8 @@ function ProductCard({ product, config, isAdded, onToggleAdd, onImageClick }) {
 }
 
 function Layout2Preview({ config, productsByHandle, collectionNameMap, templateName,
-                          selected, onToggleAdd, onImageClick, totalSelected, maxProducts, onCheckout,
+                          selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
+                          totalSelected, maxProducts, onCheckout,
                           totalPrice, finalPrice, discountApplicable }) {
   const tabs = [];
   if (config.show_tab_all !== false) {
@@ -550,7 +667,6 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
         <div style={{ padding: '20px' }}>
           <PriceSummary totalSelected={totalSelected} totalPrice={totalPrice} finalPrice={finalPrice} discountApplicable={discountApplicable} />
           <ProgressBar selectedCount={totalSelected} maxProducts={maxProducts} config={config} />
-          <LimitReachedBanner isReached={totalSelected >= maxProducts} maxProducts={maxProducts} config={config} />
           {activeProducts.length === 0 ? (
             <div style={{
               padding: '32px 16px', textAlign: 'center',
@@ -573,8 +689,10 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
               {activeProducts.map((p) => (
                 <ProductCard key={p.id}
                   product={p} config={config}
-                  isAdded={selected.has(p.id)}
-                  onToggleAdd={onToggleAdd}
+                  selectedMap={selectedMap}
+                  onAdd={onAdd}
+                  onQtyChange={onQtyChange}
+                  onRemove={onRemove}
                   onImageClick={onImageClick}
                 />
               ))}
@@ -628,7 +746,8 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
 }
 
 function Layout1Preview({ config, productsByHandle, collectionNameMap, templateName,
-                          selected, onToggleAdd, onImageClick, totalSelected, maxProducts, onCheckout,
+                          selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
+                          totalSelected, maxProducts, onCheckout,
                           totalPrice, finalPrice, discountApplicable }) {
   const allSteps = [1, 2, 3, 4, 5];
   const activeSteps = allSteps.filter((step) => {
@@ -689,7 +808,6 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
         <div style={{ padding: '20px' }}>
           <PriceSummary totalSelected={totalSelected} totalPrice={totalPrice} finalPrice={finalPrice} discountApplicable={discountApplicable} />
           <ProgressBar selectedCount={totalSelected} maxProducts={maxProducts} config={config} />
-          <LimitReachedBanner isReached={totalSelected >= maxProducts} maxProducts={maxProducts} config={config} />
           {activeSteps.map((step) => {
             const stepTitle = config[`step_${step}_title`] || `Category ${step}`;
             const stepSubtitle = config[`step_${step}_subtitle`] || 'Select your items';
@@ -742,8 +860,10 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                     {stepProducts.map((p) => (
                       <ProductCard key={p.id}
                         product={p} config={config}
-                        isAdded={selected.has(p.id)}
-                        onToggleAdd={onToggleAdd}
+                        selectedMap={selectedMap}
+                        onAdd={onAdd}
+                        onQtyChange={onQtyChange}
+                        onRemove={onRemove}
                         onImageClick={onImageClick}
                       />
                     ))}
@@ -804,11 +924,30 @@ export default function ComboPreviewPage() {
   const { templateId } = useParams();
   const layout = config.layout || 'layout1';
 
-  const [selected, setSelected] = useState(new Set());
+  const [selectedMap, setSelectedMap] = useState({}); // { [variantId]: { productId, qty } }
   const [lightboxProduct, setLightboxProduct] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
 
-  const totalSelected = selected.size;
+  const totalSelected = Object.values(selectedMap).reduce((sum, s) => sum + (s.qty || 0), 0);
   const maxProducts = parseInt(config.max_products) || 5;
+
+  const showToast = useCallback((message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2800);
+  }, []);
+
+  const productMap = {};
+  const variantPriceMap = {};
+  Object.values(productsByHandle).forEach((prods) => {
+    prods.forEach((p) => {
+      productMap[p.id] = p;
+      (p.variants || []).forEach((v) => {
+        variantPriceMap[v.id] = v.price != null ? parseFloat(v.price) : parseFloat(p.price || 0);
+      });
+    });
+  });
 
   const trackEvent = (eventType, revenue) => {
     try {
@@ -832,11 +971,10 @@ export default function ComboPreviewPage() {
   }, []);
 
   // Price & discount computation
-  const productPriceMap = {};
-  Object.values(productsByHandle).forEach((prods) => {
-    prods.forEach((p) => { productPriceMap[p.id] = parseFloat(p.price) || 0; });
-  });
-  const totalPrice = [...selected].reduce((sum, pid) => sum + (productPriceMap[pid] || 0), 0);
+  const totalPrice = Object.entries(selectedMap).reduce((sum, [variantId, sel]) => {
+    const price = variantPriceMap[variantId] || 0;
+    return sum + price * (sel.qty || 0);
+  }, 0);
 
   const selectedDiscount = config.has_discount_offer && config.selected_discount_id
     ? (activeDiscounts || []).find((d) => String(d.id) === String(config.selected_discount_id))
@@ -854,19 +992,43 @@ export default function ComboPreviewPage() {
   const finalPrice = discountApplicable ? discountedPrice : totalPrice;
   // End price computation
 
-  const onToggleAdd = (product) => {
-    setSelected((prev) => {
-      if (prev.has(product.id)) {
-        const next = new Set(prev);
-        next.delete(product.id);
-        return next;
-      }
-      if (prev.size >= maxProducts) {
-        alert((config.limit_reached_message || 'Limit reached! You can only select {{limit}} items.').replace('{{limit}}', maxProducts));
+  const onAdd = (product, variantId, qty = 1) => {
+    setSelectedMap((prev) => {
+      if (prev[variantId]) return prev;
+      const currentTotalQty = Object.values(prev).reduce((sum, s) => sum + (s.qty || 0), 0);
+      if (currentTotalQty + qty > maxProducts) {
+        showToast((config.limit_reached_message || 'Limit reached! You can only select {{limit}} items.').replace('{{limit}}', maxProducts));
         return prev;
       }
-      const next = new Set(prev);
-      next.add(product.id);
+      return { ...prev, [variantId]: { productId: product.id, qty } };
+    });
+  };
+
+  const onQtyChange = (variantId, qty) => {
+    setSelectedMap((prev) => {
+      if (!prev[variantId]) return prev;
+      if (qty <= 0) {
+        const next = { ...prev };
+        delete next[variantId];
+        return next;
+      }
+      const otherTotalQty = Object.entries(prev).reduce(
+        (sum, [vid, s]) => (vid === String(variantId) ? sum : sum + (s.qty || 0)),
+        0
+      );
+      if (otherTotalQty + qty > maxProducts) {
+        showToast((config.limit_reached_message || 'Limit reached! You can only select {{limit}} items.').replace('{{limit}}', maxProducts));
+        return { ...prev, [variantId]: { ...prev[variantId], qty: Math.max(1, maxProducts - otherTotalQty) } };
+      }
+      return { ...prev, [variantId]: { ...prev[variantId], qty } };
+    });
+  };
+
+  const onRemove = (variantId) => {
+    setSelectedMap((prev) => {
+      if (!prev[variantId]) return prev;
+      const next = { ...prev };
+      delete next[variantId];
       return next;
     });
   };
@@ -881,19 +1043,10 @@ export default function ComboPreviewPage() {
 
   const onCheckout = () => {
     if (totalSelected === 0) return;
-    const variantMap = {};
-    Object.values(productsByHandle).forEach((prods) => {
-      prods.forEach((p) => {
-        if (p.variantId) variantMap[p.id] = p.variantId;
-      });
-    });
     const cartLines = [];
-    selected.forEach((pid) => {
-      const vid = variantMap[pid];
-      if (vid) {
-        const shortId = vid.split('/').pop();
-        cartLines.push(`${shortId}:1`);
-      }
+    Object.entries(selectedMap).forEach(([variantId, sel]) => {
+      const shortId = String(variantId).split('/').pop();
+      cartLines.push(`${shortId}:${sel.qty || 1}`);
     });
     if (cartLines.length === 0) return;
     trackEvent('click', finalPrice);
@@ -922,7 +1075,30 @@ export default function ComboPreviewPage() {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
+        @keyframes combo-toast-in {
+          from { opacity: 0; transform: translate(-50%, -12px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
       `}</style>
+
+      {toast && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed', top: '20px', left: '50%',
+            transform: 'translate(-50%, 0)', zIndex: 10000,
+            background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px',
+            color: '#b91c1c', fontSize: '13px', fontWeight: 600,
+            padding: '12px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            maxWidth: '90vw', animation: 'combo-toast-in 0.25s ease-out',
+          }}
+        >
+          <span>⚠</span>
+          <span>{toast}</span>
+        </div>
+      )}
+
       <div style={{
         background: '#ffffff',
         padding: '12px 24px', display: 'flex', alignItems: 'center',
@@ -945,13 +1121,13 @@ export default function ComboPreviewPage() {
             Preview: <span style={{ color: '#6b7280' }}>{templateName}</span>
           </span>
         </div>
-        {selected.size > 0 && (
+        {totalSelected > 0 && (
           <div style={{
             background: '#f0fdf4', border: '1px solid #bbf7d0',
             borderRadius: '8px', padding: '5px 12px',
             color: '#15803d', fontSize: '13px', fontWeight: 600,
           }}>
-            {selected.size} selected
+            {totalSelected} selected
           </div>
         )}
       </div>
@@ -962,8 +1138,10 @@ export default function ComboPreviewPage() {
           productsByHandle={productsByHandle}
           collectionNameMap={collectionNameMap}
           templateName={templateName}
-          selected={selected}
-          onToggleAdd={onToggleAdd}
+          selectedMap={selectedMap}
+          onAdd={onAdd}
+          onQtyChange={onQtyChange}
+          onRemove={onRemove}
           onImageClick={onImageClick}
           totalSelected={totalSelected}
           maxProducts={maxProducts}
@@ -978,8 +1156,10 @@ export default function ComboPreviewPage() {
           productsByHandle={productsByHandle}
           collectionNameMap={collectionNameMap}
           templateName={templateName}
-          selected={selected}
-          onToggleAdd={onToggleAdd}
+          selectedMap={selectedMap}
+          onAdd={onAdd}
+          onQtyChange={onQtyChange}
+          onRemove={onRemove}
           onImageClick={onImageClick}
           totalSelected={totalSelected}
           maxProducts={maxProducts}

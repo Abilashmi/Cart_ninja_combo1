@@ -1,5 +1,5 @@
 import { authenticate } from '../shopify.server';
-import { checkAndConsumeCredit, AI_BRIX_EXHAUSTED_MESSAGE } from '../services/ai-credits.server';
+import { checkAndConsumeCredit } from '../services/ai-credits.server';
 
 const SYSTEM_PROMPT = `You are Brix AI, a helpful assistant for Shopify merchants using the Brix cart drawer app.
 You help merchants optimise their cart drawer, upsell products, set up coupon banners, and understand analytics.
@@ -8,14 +8,11 @@ acknowledge the request and confirm what you are doing. Limit responses to 3-4 s
 
 export async function action({ request }) {
   try {
-    const { session } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const { message, messages: history = [] } = await request.json();
     if (!message) return Response.json({ success: false, error: 'No message provided' }, { status: 400 });
 
-    const credit = await checkAndConsumeCredit(session.shop);
-    if (!credit.allowed) {
-      return Response.json({ success: true, message: AI_BRIX_EXHAUSTED_MESSAGE, creditsExhausted: true });
-    }
+    const credit = await checkAndConsumeCredit(session.shop, admin);
 
     const apiKey = process.env.OPENAI_API_KEY || '';
     const isNvidia = apiKey.startsWith('nvapi-');
@@ -36,15 +33,17 @@ export async function action({ request }) {
       body: JSON.stringify({ model, messages: chatMessages, max_tokens: 200, temperature: 0.7 }),
     });
 
+    const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
+
     if (!res.ok) {
       const err = await res.text();
       console.error('[api.ai.chat] AI error:', err);
-      return Response.json({ success: true, message: 'I\'m here to help! Try commands like "Enable upsells" or "Show progress bar".' });
+      return Response.json({ success: true, message: 'I\'m here to help! Try commands like "Enable upsells" or "Show progress bar".', credits });
     }
 
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || 'I\'m not sure how to help with that. Try a specific action like "Enable Cart Drawer".';
-    return Response.json({ success: true, message: text });
+    return Response.json({ success: true, message: text, credits });
   } catch (e) {
     console.error('[api.ai.chat]', e);
     return Response.json({ success: true, message: 'Something went wrong. Please try again.' });

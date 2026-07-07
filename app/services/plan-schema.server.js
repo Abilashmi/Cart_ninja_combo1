@@ -55,5 +55,25 @@ export async function ensurePlanTables(db) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS ai_brix_overage_charges (
+      id                       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      shop_domain              VARCHAR(255) NOT NULL,
+      period_key               VARCHAR(7) NOT NULL,
+      credit_number            INT NOT NULL,
+      plan_key                 VARCHAR(20) NOT NULL,
+      overage_rate             DECIMAL(6,4) NOT NULL,
+      charge_amount            DECIMAL(10,2) NOT NULL,
+      status                   VARCHAR(20) NOT NULL DEFAULT 'pending',
+      shopify_usage_record_id  VARCHAR(255) NULL,
+      error_message            VARCHAR(500) NULL,
+      created_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at               DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_shop_period_credit (shop_domain, period_key, credit_number),
+      INDEX idx_shop (shop_domain)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   ensured = true;
 }

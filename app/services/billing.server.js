@@ -12,7 +12,10 @@ function yesterdayDateStr() {
 
 // Extracts the active subscription's usage-pricing line item for a shop,
 // shared by the daily cron job and the manual "Record Usage Charge" button.
-async function findUsageLineItem(admin) {
+// A subscription can carry more than one AppUsagePricing line item (e.g. one
+// for order overage, one for AI BRIX credit overage) so `termsIncludes` picks
+// out the right one by matching a substring of its `terms` text.
+async function findUsageLineItem(admin, termsIncludes) {
   const subRes = await admin.graphql(`
     query {
       currentAppInstallation {
@@ -21,7 +24,7 @@ async function findUsageLineItem(admin) {
           status
           lineItems {
             id
-            plan { pricingDetails { __typename } }
+            plan { pricingDetails { __typename ... on AppUsagePricing { terms } } }
           }
         }
       }
@@ -34,14 +37,15 @@ async function findUsageLineItem(admin) {
 
   const usageLineItem = activeSub.lineItems?.find(
     li => li.plan.pricingDetails.__typename === 'AppUsagePricing'
+      && li.plan.pricingDetails.terms?.includes(termsIncludes)
   );
-  if (!usageLineItem) return { error: 'Subscription has no usage pricing line item' };
+  if (!usageLineItem) return { error: 'Subscription has no matching usage pricing line item' };
 
   return { usageLineItem };
 }
 
-async function createUsageCharge(admin, { amount, description }) {
-  const { usageLineItem, error } = await findUsageLineItem(admin);
+async function createUsageCharge(admin, { amount, description, termsIncludes }) {
+  const { usageLineItem, error } = await findUsageLineItem(admin, termsIncludes);
   if (error) return { success: false, error };
 
   const res = await admin.graphql(
@@ -117,6 +121,7 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
   const result = await createUsageCharge(admin, {
     amount: chargeAmount,
     description: `${overageOrders} overage orders × $${plan.overageRate.toFixed(2)} (${date})`,
+    termsIncludes: 'per order above',
   });
 
   if (result.success) {
@@ -132,6 +137,66 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
     `UPDATE order_overage_charges SET status = 'failed', error_message = ?, updated_at = NOW()
      WHERE shop_domain = ? AND date = ?`,
     [result.error, shop, date]
+  );
+  return { success: false, error: result.error };
+}
+
+// Charges one AI BRIX credit used past a shop's monthly plan cap. Idempotent
+// on (shop, periodKey, creditNumber) — called live from the chat route each
+// time a shop crosses into overage, so a retry of the same overage credit
+// must not double-charge.
+export async function chargeAiCreditOverage(admin, shop, periodKey, creditNumber, planKey, overageRate) {
+  const db = getDb();
+  await ensurePlanTables(db);
+
+  const [existing] = await db.execute(
+    'SELECT status FROM ai_brix_overage_charges WHERE shop_domain = ? AND period_key = ? AND credit_number = ? LIMIT 1',
+    [shop, periodKey, creditNumber]
+  );
+  if (existing.length > 0 && existing[0].status === 'charged') {
+    return { skipped: true, reason: 'already charged' };
+  }
+
+  const chargeAmount = overageRate;
+
+  await db.execute(
+    `INSERT INTO ai_brix_overage_charges
+       (shop_domain, period_key, credit_number, plan_key, overage_rate, charge_amount, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending')
+     ON DUPLICATE KEY UPDATE
+       plan_key = VALUES(plan_key), overage_rate = VALUES(overage_rate),
+       charge_amount = VALUES(charge_amount), status = 'pending', updated_at = NOW()`,
+    [shop, periodKey, creditNumber, planKey, overageRate, chargeAmount]
+  );
+
+  if (!admin) {
+    await db.execute(
+      `UPDATE ai_brix_overage_charges SET status = 'failed', error_message = ?, updated_at = NOW()
+       WHERE shop_domain = ? AND period_key = ? AND credit_number = ?`,
+      ['No admin client available for this shop', shop, periodKey, creditNumber]
+    );
+    return { success: false, error: 'No admin client available for this shop' };
+  }
+
+  const result = await createUsageCharge(admin, {
+    amount: chargeAmount,
+    description: `AI BRIX credit #${creditNumber} over cap × $${overageRate.toFixed(2)} (${periodKey})`,
+    termsIncludes: 'per AI BRIX credit',
+  });
+
+  if (result.success) {
+    await db.execute(
+      `UPDATE ai_brix_overage_charges SET status = 'charged', shopify_usage_record_id = ?, error_message = NULL, updated_at = NOW()
+       WHERE shop_domain = ? AND period_key = ? AND credit_number = ?`,
+      [result.usageRecordId, shop, periodKey, creditNumber]
+    );
+    return { success: true, chargeAmount, usageRecordId: result.usageRecordId };
+  }
+
+  await db.execute(
+    `UPDATE ai_brix_overage_charges SET status = 'failed', error_message = ?, updated_at = NOW()
+     WHERE shop_domain = ? AND period_key = ? AND credit_number = ?`,
+    [result.error, shop, periodKey, creditNumber]
   );
   return { success: false, error: result.error };
 }

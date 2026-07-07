@@ -106,6 +106,9 @@ const COURSE_SECTIONS = [
 ];
 const ALL_LESSONS = COURSE_SECTIONS.flatMap(s => s.lessons);
 
+// TODO: paste the embed URL (YouTube/Vimeo/CDN) here once the intro video is published
+const WELCOME_VIDEO_URL = '';
+
 const STEPS = [
   { id: 1, title: 'Enable App Embed',       desc: 'Activate Brix in your Shopify theme editor.',               to: null,                  color: '#667eea', icon: SettingsIcon,     minPlan: 'starter' },
   { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart.',  to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter' },
@@ -502,13 +505,45 @@ export default function DashboardPage() {
             <ModeToggle />
           </div>
 
-          {/* Brix Academy */}
+          {/* Brix Academy — full course player temporarily disabled
           <div>
             <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Text as="h2" variant="headingMd" fontWeight="semibold">Brix Academy</Text>
               <span style={{ fontSize: 11, fontWeight: 700, background: '#1a1a1a', color: '#fff', borderRadius: 999, padding: '2px 9px' }}>7 lessons</span>
             </div>
             <CoursePlayer selected={selectedLesson} onSelect={setSelectedLesson} watchedTimes={watchedTimes} onWatch={handleWatch} />
+          </div>
+          */}
+
+          {/* Brix Academy — intro video */}
+          <div>
+            <div style={{ marginBottom: 14, textAlign: 'center' }}>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">Brix Academy</Text>
+              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Watch the intro video to get started</Text></div>
+            </div>
+            <div style={{ maxWidth: 720, margin: '0 auto' }}>
+              {WELCOME_VIDEO_URL ? (
+                <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #e1e3e5' }}>
+                  <iframe
+                    src={WELCOME_VIDEO_URL}
+                    title="Welcome to Brix"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                  />
+                </div>
+              ) : (
+                <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #e1e3e5', background: 'linear-gradient(135deg, #f8fafc 0%, #667eea18 60%, #f8fafc 100%)' }}>
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                    <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fff', border: '2px solid #667eea', boxShadow: '0 4px 16px #667eea30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 0, height: 0, borderTop: '12px solid transparent', borderBottom: '12px solid transparent', borderLeft: '20px solid #667eea', marginLeft: 4 }} />
+                    </div>
+                    <Text as="p" variant="bodySm" fontWeight="semibold">Welcome to Brix</Text>
+                    <Text as="p" variant="bodyXs" tone="subdued">Video coming soon</Text>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Setup Checklist */}

@@ -46,38 +46,97 @@ export async function action({ request }) {
 
     const plan = PLANS[planKey];
 
-    // Downgrading/selecting Free: cancel any active subscription instead of
-    // creating a new charge.
-    if (planKey === "free") {
-        try {
-            const subRes = await admin.graphql(`
-                query {
-                    currentAppInstallation {
-                        activeSubscriptions { id status }
-                    }
-                }
-            `);
-            const subData = await subRes.json();
-            const activeSub = (subData.data?.currentAppInstallation?.activeSubscriptions || [])
-                .find(s => s.status === "ACTIVE");
+    // Every plan (including Free) needs a subscription to carry the AI BRIX
+    // credit-overage usage line item — Shopify's appUsageRecordCreate can
+    // only attach a charge to a line item inside an active subscription.
+    const aiCreditLineItem = {
+        plan: {
+            appUsagePricingDetails: {
+                terms: `$${plan.aiBrixOverageRate.toFixed(2)} per AI BRIX credit above ${plan.aiBrixCredits} credits/month.`,
+                cappedAmount: { amount: "1000.00", currencyCode: "USD" },
+            },
+        },
+    };
 
-            if (activeSub) {
-                const cancelRes = await admin.graphql(`
-                    mutation AppSubscriptionCancel($id: ID!) {
-                        appSubscriptionCancel(id: $id) {
-                            appSubscription { id status }
-                            userErrors { field message }
-                        }
-                    }
-                `, { variables: { id: activeSub.id } });
-                const cancelData = await cancelRes.json();
-                const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors;
-                if (userErrors?.length > 0) {
-                    return { error: userErrors[0].message };
+    async function cancelActiveSubscription() {
+        const subRes = await admin.graphql(`
+            query {
+                currentAppInstallation {
+                    activeSubscriptions { id status }
                 }
             }
+        `);
+        const subData = await subRes.json();
+        const activeSub = (subData.data?.currentAppInstallation?.activeSubscriptions || [])
+            .find(s => s.status === "ACTIVE");
+        if (!activeSub) return null;
+
+        const cancelRes = await admin.graphql(`
+            mutation AppSubscriptionCancel($id: ID!) {
+                appSubscriptionCancel(id: $id) {
+                    appSubscription { id status }
+                    userErrors { field message }
+                }
+            }
+        `, { variables: { id: activeSub.id } });
+        const cancelData = await cancelRes.json();
+        const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors;
+        if (userErrors?.length > 0) return { error: userErrors[0].message };
+        return null;
+    }
+
+    // Downgrading/selecting Free: cancel any existing paid subscription, then
+    // create a usage-only one (no recurring line item) so $0.01/credit AI
+    // BRIX overage billing still works on Free.
+    if (planKey === "free") {
+        try {
+            const cancelErr = await cancelActiveSubscription();
+            if (cancelErr?.error) {
+                return { error: cancelErr.error };
+            }
+
+            const mutation = `
+                mutation AppSubscriptionCreate(
+                    $name: String!
+                    $lineItems: [AppSubscriptionLineItemInput!]!
+                    $returnUrl: URL!
+                    $test: Boolean
+                ) {
+                    appSubscriptionCreate(
+                        name: $name
+                        lineItems: $lineItems
+                        returnUrl: $returnUrl
+                        test: $test
+                    ) {
+                        userErrors { field message }
+                        confirmationUrl
+                        appSubscription { id status }
+                    }
+                }
+            `;
+            // eslint-disable-next-line no-undef
+            const appUrl = process.env.SHOPIFY_APP_URL || "";
+            const res = await admin.graphql(mutation, {
+                variables: {
+                    name: `Cart Ninja ${plan.label} (AI BRIX overage)`,
+                    lineItems: [aiCreditLineItem],
+                    returnUrl: `${appUrl}/app/billing`,
+                    // TEMP: see the paid-plan mutation below for why this is
+                    // hardcoded true on dev stores.
+                    test: true,
+                },
+            });
+            const data = await res.json();
+            const userErrors = data.data?.appSubscriptionCreate?.userErrors;
+            if (userErrors?.length > 0) {
+                return { error: userErrors[0].message };
+            }
+            const confirmationUrl = data.data?.appSubscriptionCreate?.confirmationUrl;
+            if (!confirmationUrl) {
+                return { error: "No confirmation URL returned from Shopify." };
+            }
             await setPendingPlanKey(shop, "free");
-            return { downgraded: true };
+            return { confirmationUrl };
         } catch (err) {
             return { error: err.message || "Failed to downgrade to Free." };
         }
@@ -106,6 +165,8 @@ export async function action({ request }) {
             },
         });
     }
+
+    lineItems.push(aiCreditLineItem);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -188,15 +249,14 @@ export default function SubscribePage() {
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
+            setDowngradeConfirm(false);
             window.top.location.href = actionData.confirmationUrl;
         }
     }, [actionData]);
 
     useEffect(() => {
-        if (actionData?.downgraded) {
+        if (actionData?.switched) {
             setDowngradeConfirm(false);
-            // Reload so the loader re-resolves the (now free) plan.
-            window.location.reload();
         }
     }, [actionData]);
 
@@ -313,7 +373,7 @@ export default function SubscribePage() {
                                                 <Icon source={CheckCircleIcon} tone="success" />
                                             </span>
                                             <Text as="p" variant="bodyXs">
-                                                AI BRIX — {p.aiBrixCredits === null ? 'unlimited credits' : `${p.aiBrixCredits} credits / month`}
+                                                AI BRIX — {p.aiBrixCredits} credits / month, then ${p.aiBrixOverageRate.toFixed(2)}/credit
                                             </Text>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>

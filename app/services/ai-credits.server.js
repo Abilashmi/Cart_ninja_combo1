@@ -1,7 +1,8 @@
 import { getDb } from './db.server';
 import { ensurePlanTables } from './plan-schema.server';
 import { getShopPlan } from './plan-permissions.server';
-import { getAiBrixCreditLimit } from '../config/plans';
+import { getAiBrixCreditLimit, getAiBrixOverageRate } from '../config/plans';
+import { chargeAiCreditOverage } from './billing.server';
 
 function currentPeriodKey() {
   const now = new Date();
@@ -9,29 +10,18 @@ function currentPeriodKey() {
   return `${now.getUTCFullYear()}-${month}`;
 }
 
-export const AI_BRIX_EXHAUSTED_MESSAGE =
-  "You've used all your AI BRIX credits for this month. Upgrade your plan or wait until your credits reset.";
-
-// Checks whether the shop has AI BRIX credits remaining this month, and if
-// so, consumes one. Pro (unlimited) always allows and still increments for
-// telemetry, never blocking.
-export async function checkAndConsumeCredit(shop) {
+// Increments the shop's message count for this period and — once that count
+// passes the plan's monthly cap — bills the overage credit via Shopify usage
+// billing (see chargeAiCreditOverage). Chat is never blocked: past the cap,
+// the shop simply pays per extra credit at its plan's overage rate.
+export async function checkAndConsumeCredit(shop, admin) {
   const db = getDb();
   await ensurePlanTables(db);
 
   const planKey = await getShopPlan(shop);
   const limit = getAiBrixCreditLimit(planKey);
+  const overageRate = getAiBrixOverageRate(planKey);
   const periodKey = currentPeriodKey();
-
-  const [rows] = await db.execute(
-    'SELECT credits_used FROM ai_brix_credit_usage WHERE shop_domain = ? AND period_key = ? LIMIT 1',
-    [shop, periodKey]
-  );
-  const creditsUsed = rows[0]?.credits_used || 0;
-
-  if (limit !== null && creditsUsed >= limit) {
-    return { allowed: false, remaining: 0, limit, planKey };
-  }
 
   await db.execute(
     `INSERT INTO ai_brix_credit_usage (shop_domain, period_key, credits_used)
@@ -40,6 +30,52 @@ export async function checkAndConsumeCredit(shop) {
     [shop, periodKey]
   );
 
-  const remaining = limit === null ? null : Math.max(0, limit - (creditsUsed + 1));
-  return { allowed: true, remaining, limit, planKey };
+  const [rows] = await db.execute(
+    'SELECT credits_used FROM ai_brix_credit_usage WHERE shop_domain = ? AND period_key = ? LIMIT 1',
+    [shop, periodKey]
+  );
+  const creditsUsedAfter = rows[0]?.credits_used || 1;
+  const isOverage = creditsUsedAfter > limit;
+
+  let overageCharge = null;
+  if (isOverage) {
+    const creditNumber = creditsUsedAfter - limit;
+    overageCharge = await chargeAiCreditOverage(admin, shop, periodKey, creditNumber, planKey, overageRate);
+  }
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, limit - creditsUsedAfter),
+    limit,
+    planKey,
+    isOverage,
+    overageRate,
+    overageCharge,
+  };
+}
+
+// Read-only status for the credits pill — does not consume a credit.
+export async function getCreditStatus(shop) {
+  const db = getDb();
+  await ensurePlanTables(db);
+
+  const planKey = await getShopPlan(shop);
+  const limit = getAiBrixCreditLimit(planKey);
+  const overageRate = getAiBrixOverageRate(planKey);
+  const periodKey = currentPeriodKey();
+
+  const [rows] = await db.execute(
+    'SELECT credits_used FROM ai_brix_credit_usage WHERE shop_domain = ? AND period_key = ? LIMIT 1',
+    [shop, periodKey]
+  );
+  const used = rows[0]?.credits_used || 0;
+
+  return {
+    planKey,
+    limit,
+    used,
+    remaining: Math.max(0, limit - used),
+    isOverage: used > limit,
+    overageRate,
+  };
 }

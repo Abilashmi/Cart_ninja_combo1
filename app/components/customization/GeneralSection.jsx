@@ -185,7 +185,7 @@ function GeneralSectionComponent({
               autoComplete="off"
             />
           </div>
-          <div className="cst-row" style={{ marginTop: 12 }}>
+          <div className="cst-row cst-row--vertical" style={{ marginTop: 12, gap: 10 }}>
             {[...Array(tabCount)].map((_, index) => {
               const i = index + 1;
               return (

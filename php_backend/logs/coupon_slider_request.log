@@ -8094,3 +8094,159 @@
     }
 }
 ---
+{
+    "timestamp": "2026-07-07 09:35:43",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783409743&signature=524d8bba3dfe6884a1f1733a78988c759a38d0c4a90ca368356a74f70be05208",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783409743",
+            "signature": "524d8bba3dfe6884a1f1733a78988c759a38d0c4a90ca368356a74f70be05208"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:35:43",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:36:23",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783409783&signature=d9c4fa8891aa6729d4bbbc17e9586d16eec58ef385db615c18a4a97bff993808",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783409783",
+            "signature": "d9c4fa8891aa6729d4bbbc17e9586d16eec58ef385db615c18a4a97bff993808"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:36:23",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:36:50",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783409809&signature=e02cfcdd8d90dee7f79e7129108683f3c0ebce074785314e1f71b45e9c5d1f43",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783409809",
+            "signature": "e02cfcdd8d90dee7f79e7129108683f3c0ebce074785314e1f71b45e9c5d1f43"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:36:50",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:41:15",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783410074&signature=2fe5c669f43a3e14c5ef14c73212fe33bcb134209f5ff365f678e1d8b11d6bca",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783410074",
+            "signature": "2fe5c669f43a3e14c5ef14c73212fe33bcb134209f5ff365f678e1d8b11d6bca"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:41:15",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:58:58",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783411138&signature=4d84aeda2f5915b345ef7b99fdede90121a297da6294871e21c0c802775b125c",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783411138",
+            "signature": "4d84aeda2f5915b345ef7b99fdede90121a297da6294871e21c0c802775b125c"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 09:58:58",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 10:10:25",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783411824&signature=5ab1fac4b41f11d2e03ea7746f91abc2b94d54fd747926389f16d94e5aef10f1",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783411824",
+            "signature": "5ab1fac4b41f11d2e03ea7746f91abc2b94d54fd747926389f16d94e5aef10f1"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-07 10:10:25",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---

@@ -107,6 +107,38 @@ function applyPlanGatingToCartDrawerResult(array $result, string $planKey): arra
     return $result;
 }
 
+/**
+ * Bridges the Cart Editor's Upsell section — which saves rules to
+ * upsell_widget_settings.manual_rules, not to cart_drawer.upsell_data — into
+ * the payload this endpoint returns. Without this, a rule created via the
+ * admin (or the AI agent) is correctly persisted but the storefront widget,
+ * which only ever reads cart_drawer.upsell_data here, never sees it.
+ * Rules from upsell_widget_settings take precedence when present since
+ * that's the actively-maintained source of truth for manual rules.
+ */
+function mergeUpsellWidgetSettings($pdo, $shopDomain, array $result): array {
+    $stmt = $pdo->prepare('SELECT is_enabled, manual_rules FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1');
+    $stmt->execute([$shopDomain]);
+    $row = $stmt->fetch();
+    if (!$row) return $result;
+
+    $upsellData = json_decode($result['upsell_data'] ?? '', true);
+    if (!is_array($upsellData)) $upsellData = [];
+
+    $manualRules = json_decode($row['manual_rules'] ?? '', true);
+    if (is_array($manualRules) && count($manualRules) > 0) {
+        $upsellData['manualRules'] = $manualRules;
+    }
+
+    $isEnabled = (bool)((int)($row['is_enabled'] ?? 0));
+    $upsellData['enabled'] = $isEnabled;
+    $result['upsell_status'] = $isEnabled ? 1 : 0;
+    $result['upsellStatus'] = $isEnabled ? 1 : 0;
+
+    $result['upsell_data'] = json_encode($upsellData, JSON_UNESCAPED_UNICODE);
+    return $result;
+}
+
 /* ============================================================
  ======================= GET REQUEST ========================
  ============================================================ */
@@ -149,6 +181,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             ]);
             exit;
         }
+
+        $result = mergeUpsellWidgetSettings($pdo, $shopDomain, $result);
 
         $planKey = resolve_plan_key($pdo, $shopDomain);
         $result = applyPlanGatingToCartDrawerResult($result, $planKey);

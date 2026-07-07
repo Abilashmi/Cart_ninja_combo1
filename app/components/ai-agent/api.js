@@ -57,4 +57,8 @@ export const aiApi = {
       body: JSON.stringify({ conversationId, message, messages }),
     });
   },
+
+  async getCredits() {
+    return request(`${BASE}/credits`);
+  },
 };

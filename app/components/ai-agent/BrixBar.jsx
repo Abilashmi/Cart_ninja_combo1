@@ -46,7 +46,7 @@ export default function BrixBar({
 }) {
   const cfg = SIZES[size] || SIZES.md;
   const location = useLocation();
-  const { messages, loading, sendMessage, setMessages, setActiveConvId, conversations, selectConversation } = useAiAgent(location);
+  const { messages, loading, sendMessage, setMessages, setActiveConvId, conversations, selectConversation, credits } = useAiAgent(location);
 
   const [input, setInput] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -145,6 +145,17 @@ export default function BrixBar({
       </div>
       <span className="bxb-panel-name">Brix</span>
       <span className="bxb-panel-status"><span className="bxb-panel-dot" />Connected</span>
+      {credits && (
+        <span
+          className="bxb-panel-credits"
+          title={credits.isOverage ? `Over your monthly cap — billed $${credits.overageRate?.toFixed(2)}/credit` : 'AI credits remaining'}
+          style={credits.isOverage ? { color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' } : undefined}
+        >
+          {credits.isOverage
+            ? `Overage $${credits.overageRate?.toFixed(2)}/credit`
+            : `${credits.remaining}/${credits.limit} credits`}
+        </span>
+      )}
       <button className="bxb-panel-action" onClick={handleNewChat}>New chat</button>
       <button className="bxb-hist-close" onClick={() => setExpanded(false)} aria-label="Close chat">{CLOSE_ICON}</button>
     </div>
@@ -214,6 +225,7 @@ export default function BrixBar({
         .bxb-panel-name{font-size:12px;font-weight:600;color:#1a1a1a}
         .bxb-panel-status{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:#059669}
         .bxb-panel-dot{width:5px;height:5px;border-radius:50%;background:#059669}
+        .bxb-panel-credits{display:flex;align-items:center;font-size:10px;font-weight:700;color:#1a9de0;background:#e8f9ff;border:1px solid #d4f1fe;border-radius:999px;padding:2px 8px;white-space:nowrap;margin-left:6px}
         .bxb-panel-action{background:none;border:none;cursor:pointer;font-size:11px;color:#374151;font-weight:600;padding:3px 6px;border-radius:5px;margin-left:auto}
         .bxb-panel-action:hover{background:#f3f4f6}
         .bxb-msgs{max-height:${cfg.panelH}px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}

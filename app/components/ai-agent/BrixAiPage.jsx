@@ -80,8 +80,6 @@ function MessageRow({ msg }) {
   );
 }
 
-const AI_CREDITS = { left: 49, total: 50 };
-
 const QUICK_CHIPS = [
   "Enable Cart Drawer",
   "Add Free Shipping Goal",
@@ -97,7 +95,7 @@ export default function BrixAiPage() {
   const location = useLocation();
   const {
     messages, loading, sendMessage, setMessages, setActiveConvId,
-    conversations, selectConversation,
+    conversations, selectConversation, credits,
   } = useAiAgent(location);
 
   const [input, setInput] = useState("");
@@ -160,7 +158,7 @@ export default function BrixAiPage() {
         .bai-welcome-compact .bai-wc-icon{width:52px;height:52px;border-radius:14px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
         .bai-welcome-compact h2{font-size:28px;font-weight:800;letter-spacing:-.3px;color:#1a1a1a;margin:0 0 8px}
         .bai-welcome-compact p{font-size:14px;color:#6b7280;line-height:1.6;margin:0}
-        .bai-input-inner{max-width:680px;margin:0 auto;position:relative}
+        .bai-input-inner{max-width:720px;margin:0 auto;position:relative}
         .bai-bar{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e1e3e5;border-radius:9999px;padding:8px 8px 8px 22px;box-shadow:0 2px 14px rgba(0,0,0,.07);transition:border-color .15s,box-shadow .15s}
         .bai-bar:focus-within{border-color:#9ca3af;box-shadow:0 2px 20px rgba(0,0,0,.11)}
         .bai-search-icon{flex-shrink:0}
@@ -226,10 +224,18 @@ export default function BrixAiPage() {
             <span className="bai-header-dot" />
             Connected
           </span>
-          <span className="bai-header-credits" title="AI credits remaining">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a9de0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-            {AI_CREDITS.left}/{AI_CREDITS.total} credits left
-          </span>
+          {credits && (
+            <span
+              className="bai-header-credits"
+              title={credits.isOverage ? `Over your monthly cap — billed $${credits.overageRate?.toFixed(2)}/credit` : 'AI credits remaining'}
+              style={credits.isOverage ? { color: '#b45309', background: '#fffbeb', borderColor: '#fde68a' } : undefined}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+              {credits.isOverage
+                ? `Overage active — $${credits.overageRate?.toFixed(2)}/credit`
+                : `${credits.remaining}/${credits.limit} credits left`}
+            </span>
+          )}
           {hasThread && (
             <button className="bai-header-new" onClick={handleNewChat}>New chat</button>
           )}
@@ -248,7 +254,7 @@ export default function BrixAiPage() {
             </div>
           </div>
 
-          <div className={`bai-input-zone${hasThread ? " active" : ""}`}>
+          <div className={`bai-input-zone${hasThread || showHistory ? " active" : ""}`}>
             <div className={`bai-welcome-compact${hasThread ? " hidden" : ""}`}>
               <div className="bai-wc-icon">
                 <svg width="24" height="24" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="1.6">

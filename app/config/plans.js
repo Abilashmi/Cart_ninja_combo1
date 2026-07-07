@@ -15,6 +15,7 @@ export const PLANS = {
     orderCap: 50,
     overageRate: 0.30,
     aiBrixCredits: 10,
+    aiBrixOverageRate: 0.01,
     comboTemplateLimit: 0,
     watermarkRemovable: false,
   },
@@ -27,6 +28,7 @@ export const PLANS = {
     orderCap: 500,
     overageRate: 0.10,
     aiBrixCredits: 30,
+    aiBrixOverageRate: 0.03,
     comboTemplateLimit: 3,
     watermarkRemovable: true,
   },
@@ -38,7 +40,8 @@ export const PLANS = {
     rank: 2,
     orderCap: null,
     overageRate: 0,
-    aiBrixCredits: null,
+    aiBrixCredits: 90,
+    aiBrixOverageRate: 0.09,
     comboTemplateLimit: null,
     watermarkRemovable: true,
   },
@@ -52,7 +55,7 @@ export const FEATURES = {
   cart_drawer:              { label: 'Cart Drawer',                     states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
   announcement_bar:         { label: 'Announcement Bar',                states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
   empty_cart_customization: { label: 'Empty Cart Customization',        states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
-  ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits
+  ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
 
   fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   coupon_lock_pro:          { label: 'Coupon Lock Pro',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
@@ -115,6 +118,10 @@ function resolvePlan(planKey) {
 
 export function getAiBrixCreditLimit(planKey) {
   return resolvePlan(planKey).aiBrixCredits;
+}
+
+export function getAiBrixOverageRate(planKey) {
+  return resolvePlan(planKey).aiBrixOverageRate;
 }
 
 export function getComboTemplateLimit(planKey) {
