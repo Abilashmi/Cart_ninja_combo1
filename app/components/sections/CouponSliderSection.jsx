@@ -204,6 +204,17 @@ function CouponStylesTab() {
             value={couponSlider.alignment}
             onChange={(v) => updateCouponSlider({ alignment: v })}
           />
+          <Select
+            label="Single Coupon Alignment"
+            helpText="Where to position the coupon when only one is shown in the cart drawer"
+            options={[
+              { label: 'Left', value: 'left' },
+              { label: 'Center', value: 'center' },
+              { label: 'Right', value: 'right' },
+            ]}
+            value={couponSlider.singleCouponAlignment ?? 'left'}
+            onChange={(v) => updateCouponSlider({ singleCouponAlignment: v })}
+          />
         </FormLayout>
       </Card>
       <Card>

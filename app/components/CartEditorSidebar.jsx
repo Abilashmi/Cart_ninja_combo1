@@ -120,7 +120,7 @@ export function CartEditorSidebar({ onDiscard }) {
           <button onClick={onDiscard} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, color: '#6d7175' }}>
             <Icon source={ArrowLeftIcon} />
           </button>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#202223', flex: 1 }}>Cart Editor</span>
+          <span className="cart-editor-sidebar-title" style={{ fontWeight: 700, color: '#202223', flex: 1 }}>Cart Editor</span>
           <button onClick={handleToggleStatus} disabled={isTogglingStatus}
             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, border: 'none', fontSize: 10, fontWeight: 600, cursor: 'pointer', background: isActive ? '#aee9d1' : '#e4e5e7', color: isActive ? '#005e46' : '#6d7175', opacity: isTogglingStatus ? 0.6 : 1 }}
           >
@@ -150,7 +150,7 @@ export function CartEditorSidebar({ onDiscard }) {
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
         {SECTION_GROUPS.map((group) => (
           <div key={group.title}>
-            <div style={{ padding: '4px 12px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
+            <div className="cart-editor-group-label" style={{ padding: '4px 12px 2px', fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
               {group.title}
             </div>
 
@@ -169,11 +169,11 @@ export function CartEditorSidebar({ onDiscard }) {
                     <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isOpen ? '#008060' : '#8c9196' }}>
                       <Icon source={IconComponent} />
                     </span>
-                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: isOpen ? '#008060' : '#202223', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                    <span className="cart-editor-row-label" style={{ flex: 1, fontWeight: 500, color: isOpen ? '#008060' : '#202223', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                       {item.label}
                     </span>
                     {item.toggleable && (
-                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, fontWeight: 600, flexShrink: 0, background: isEnabled ? '#aee9d1' : '#e4e5e7', color: isEnabled ? '#005e46' : '#6d7175' }}>
+                      <span className="cart-editor-row-badge" style={{ padding: '1px 6px', borderRadius: 10, fontWeight: 600, flexShrink: 0, background: isEnabled ? '#aee9d1' : '#e4e5e7', color: isEnabled ? '#005e46' : '#6d7175' }}>
                         {isEnabled ? 'On' : 'Off'}
                       </span>
                     )}

@@ -68,6 +68,7 @@ export const defaultCartEditorState = {
       position: 'top',
       layout: 'grid',
       alignment: 'horizontal',
+      singleCouponAlignment: 'left',
       showWhenEmpty: false,
       sectionTitle: 'Apply Coupon',
       titleFontSize: 14,

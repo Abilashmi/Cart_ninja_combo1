@@ -8250,3 +8250,367 @@
     }
 }
 ---
+{
+    "timestamp": "2026-07-08 08:24:08",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783491848&signature=bc8f3a9e3cbfe53de053eb5c81670a9603162da1c095fa63a9f5ce6408ca37b5",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783491848",
+            "signature": "bc8f3a9e3cbfe53de053eb5c81670a9603162da1c095fa63a9f5ce6408ca37b5"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:24:08",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:24:10",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783491850&signature=90274551b39f2d963866e281e464944c124699c373ce5508cc94b53363c8a261",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783491850",
+            "signature": "90274551b39f2d963866e281e464944c124699c373ce5508cc94b53363c8a261"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:24:10",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:24:11",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783491851&signature=a360d8decdc10976f0dfaad5929cadf05f9ba0dcd15af31178e29bd8900665a8",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783491851",
+            "signature": "a360d8decdc10976f0dfaad5929cadf05f9ba0dcd15af31178e29bd8900665a8"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:24:11",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:55",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783492013&signature=e75b8626005d74c917c0f680dd9ba64047c7d7de33be1c1d2a734007edb0cda9",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783492013",
+            "signature": "e75b8626005d74c917c0f680dd9ba64047c7d7de33be1c1d2a734007edb0cda9"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:56",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:57",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783492017&signature=bec069688c783e041d3172bdf25ecd3748f8168f999f7fc6ec1384d07a5faa53",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783492017",
+            "signature": "bec069688c783e041d3172bdf25ecd3748f8168f999f7fc6ec1384d07a5faa53"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:57",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:58",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783492018&signature=3713416af1041d443ce7cc30d87ae3e9843e8fe8bfa23df60778f8f5c8189177",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783492018",
+            "signature": "3713416af1041d443ce7cc30d87ae3e9843e8fe8bfa23df60778f8f5c8189177"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:26:58",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:27:19",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783492039&signature=9f911b8d72069473e6ae67b1c8e21f432b8f49b4cc9ce7da65a30eaabd3ca030",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783492039",
+            "signature": "9f911b8d72069473e6ae67b1c8e21f432b8f49b4cc9ce7da65a30eaabd3ca030"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:27:19",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:27:43",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783492062&signature=3b7e560b04cb50a061f0e85d63f0f450e4670c7c70d29f5500f7b1a698db23c0",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783492062",
+            "signature": "3b7e560b04cb50a061f0e85d63f0f450e4670c7c70d29f5500f7b1a698db23c0"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:27:43",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:29",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783493428&signature=c3351dee89089a1a384dd027c7e1f88bf9c56bc78fb9a9af5e23263fd04d31ad",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783493428",
+            "signature": "c3351dee89089a1a384dd027c7e1f88bf9c56bc78fb9a9af5e23263fd04d31ad"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:29",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:30",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783493430&signature=32ad06c8dc9bf9aeb82a5592b417b7fb2af95c1c0e6182152396d34857e2171d",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783493430",
+            "signature": "32ad06c8dc9bf9aeb82a5592b417b7fb2af95c1c0e6182152396d34857e2171d"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:30",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:31",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783493431&signature=885028348e31789583cbc0728397e138a53c1cdab1dcd46f707a587f40ee4681",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783493431",
+            "signature": "885028348e31789583cbc0728397e138a53c1cdab1dcd46f707a587f40ee4681"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 08:50:31",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:46",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783496506&signature=c120c4efdef47f983d239a8fa2edadefc66000f0cdbcb77ea72d2b55f898a3bd",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783496506",
+            "signature": "c120c4efdef47f983d239a8fa2edadefc66000f0cdbcb77ea72d2b55f898a3bd"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:47",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:48",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783496508&signature=f5fc4b0cb3fe1ec3d2f5927520193300cc7f0ccef860bdf70633f5794d7c9620",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783496508",
+            "signature": "f5fc4b0cb3fe1ec3d2f5927520193300cc7f0ccef860bdf70633f5794d7c9620"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:48",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:51",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com&shop=cartstoreviewer.myshopify.com&logged_in_customer_id=&path_prefix=%2Fapps%2Fcart-app&timestamp=1783496511&signature=575602e62b2f183d41b74e293545efb8e1b91096674e2c959cddd473a309cae6",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com",
+            "shop": "cartstoreviewer.myshopify.com",
+            "logged_in_customer_id": "",
+            "path_prefix": "\/apps\/cart-app",
+            "timestamp": "1783496511",
+            "signature": "575602e62b2f183d41b74e293545efb8e1b91096674e2c959cddd473a309cae6"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-08 09:41:51",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---

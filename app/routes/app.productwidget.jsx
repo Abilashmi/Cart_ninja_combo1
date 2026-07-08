@@ -399,15 +399,16 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
 }
 
 /* Per-coupon override editor — text, colors, and display pages for one coupon */
-function CouponOverridePanel({ coupon, override, onChange, alwaysOpen }) {
+function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateDefaults }) {
     const shopify = useAppBridge();
     const [openState, setOpen] = useState(false);
     const open = alwaysOpen || openState;
     const ov = override || {};
+    const td = templateDefaults || {};
     const colorRow = (label, key, def) => (
         <InlineStack gap="200" blockAlign="center">
             <div style={{ flex: 1 }}><Text as="span" variant="bodySm">{label}</Text></div>
-            <input type="color" value={ov[key] || def} onChange={(e) => onChange({ [key]: e.target.value })}
+            <input type="color" value={ov[key] || td[key] || def} onChange={(e) => onChange({ [key]: e.target.value })}
                 style={{ width: "36px", height: "28px", border: "1px solid #c9cccf", borderRadius: "6px", cursor: "pointer", padding: 0, background: "none" }} />
         </InlineStack>
     );
@@ -884,12 +885,13 @@ export default function ProductWidgetPage() {
                                                     coupon={editingCoupon || { id: editingCouponId, code: editingCouponId }}
                                                     override={couponOverrides[editingCouponId]}
                                                     onChange={(patch) => updateOverride(editingCouponId, patch)}
+                                                    templateDefaults={{ bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor }}
                                                 />
                                             </BlockStack>
                                         )}
                                     </AccordionSection>
 
-                                    <AccordionSection id="design" icon={ColorIcon} title="Layout & Default Style" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
+                                    <AccordionSection id="design" icon={ColorIcon} title="Layout" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
                                         <BlockStack gap="400">
                                             <Select
                                                 label="Banner layout"
@@ -902,15 +904,6 @@ export default function ProductWidgetPage() {
                                                     { label: "Grid — 2 columns", value: "grid" },
                                                 ]}
                                             />
-                                            <Divider />
-                                            <Text as="p" variant="bodySm" tone="subdued">Default style — used for coupons that don’t have their own colors set in “Customize Coupon”.</Text>
-                                            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
-                                                <ColorSwatch label="Background" value={bgColor} onChange={(v) => { setBgColor(v); mark(); }} />
-                                                <ColorSwatch label="Text Color" value={textColor} onChange={(v) => { setTextColor(v); mark(); }} />
-                                                <ColorSwatch label="Accent" value={accentColor} onChange={(v) => { setAccentColor(v); mark(); }} />
-                                                <ColorSwatch label="Button Color" value={buttonColor} onChange={(v) => { setButtonColor(v); mark(); }} />
-                                                <ColorSwatch label="Button Text" value={btnTextColor} onChange={(v) => { setBtnTextColor(v); mark(); }} />
-                                            </div>
                                             <Divider />
                                             <RangeSlider label={`Border Radius: ${borderRadius}px`} value={borderRadius} min={0} max={24} onChange={(v) => { setBorderRadius(v); mark(); }} output />
                                             <RangeSlider label={`Font Size: ${fontSize}px`} value={fontSize} min={10} max={28} onChange={(v) => { setFontSize(v); mark(); }} output />

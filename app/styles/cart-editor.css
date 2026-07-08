@@ -997,3 +997,19 @@
     min-height: 100vh;
   }
 }
+
+/* ─── Sidebar text sizing ────────────────────────────────────────────────────
+   Base sizes match the compact 360px sidebar; bumped slightly on larger
+   laptop/desktop screens where the fixed-width sidebar otherwise reads small. */
+
+.cart-editor-sidebar-title { font-size: 13px; }
+.cart-editor-group-label { font-size: 9px; }
+.cart-editor-row-label { font-size: 12px; }
+.cart-editor-row-badge { font-size: 9px; }
+
+@media (min-width: 1440px) {
+  .cart-editor-sidebar-title { font-size: 14px; }
+  .cart-editor-group-label { font-size: 10px; }
+  .cart-editor-row-label { font-size: 13px; }
+  .cart-editor-row-badge { font-size: 10px; }
+}

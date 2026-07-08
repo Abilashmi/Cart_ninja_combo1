@@ -423,6 +423,7 @@
       position,
       layout: data.layout || 'grid',
       alignment: data.alignment || 'horizontal',
+      singleCouponAlignment: ['left', 'center', 'right'].includes(data.singleCouponAlignment) ? data.singleCouponAlignment : 'left',
       title: {
         // Cart Editor saves sectionTitle; legacy saves titleText; structured saves title.text
         text: title.text || data.sectionTitle || data.titleText || 'Apply Coupon',
@@ -1735,9 +1736,12 @@
 
     if (couponsToShow.length === 0) return '';
 
-    /* -- Coupon list is always a horizontal carousel so nav arrows work -- */
-    const couponListStyle =
-      'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
+    /* -- Coupon list is a horizontal carousel so nav arrows work, unless -- */
+    /* -- there's only one coupon, in which case it's positioned per the -- */
+    /* -- merchant's chosen single-coupon alignment.                     -- */
+    const couponListStyle = couponsToShow.length === 1
+      ? `display:flex;flex-direction:row;gap:12px;justify-content:${{ left: 'flex-start', center: 'center', right: 'flex-end' }[couponConfig.singleCouponAlignment] || 'flex-start'};padding:0 4px 20px 4px;`
+      : 'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
 
     let html = `
 <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">

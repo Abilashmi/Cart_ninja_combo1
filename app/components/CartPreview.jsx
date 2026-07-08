@@ -298,10 +298,19 @@ function CouponCard({ coupon, template, isVertical }) {
   );
 }
 
+const SINGLE_ALIGN_TO_JUSTIFY = { left: 'flex-start', center: 'center', right: 'flex-end' };
+
 function CouponSliderPreview({ cs }) {
   const displayCoupons = cs.selectedCoupons.length > 0 ? cs.selectedCoupons : MOCK_PREVIEW_COUPONS;
   const isGrid = cs.layout === 'grid';
   const isVertical = cs.alignment === 'vertical';
+  const isSingle = displayCoupons.length === 1;
+
+  const containerStyle = isSingle
+    ? { display: 'flex', gap: '6px', justifyContent: SINGLE_ALIGN_TO_JUSTIFY[cs.singleCouponAlignment] || 'flex-start' }
+    : isGrid
+      ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }
+      : { display: 'flex', gap: '6px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' };
 
   return (
     <div className="cart-preview-coupon-section">
@@ -310,9 +319,9 @@ function CouponSliderPreview({ cs }) {
           {cs.sectionTitle}
         </div>
       )}
-      <div style={isGrid ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' } : { display: 'flex', gap: '6px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
+      <div style={containerStyle}>
         {displayCoupons.map((coupon) => (
-          <div key={coupon.id} style={{ minWidth: 0, width: (!isGrid && !isVertical) ? '140px' : (!isGrid && isVertical) ? '86px' : undefined, flexShrink: isGrid ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
+          <div key={coupon.id} style={{ minWidth: 0, width: isSingle ? '140px' : (!isGrid && !isVertical) ? '140px' : (!isGrid && isVertical) ? '86px' : undefined, flexShrink: (isGrid && !isSingle) ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
             <CouponCard coupon={coupon} template={cs.template} isVertical={isVertical} />
           </div>
         ))}

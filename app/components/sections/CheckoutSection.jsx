@@ -74,35 +74,9 @@ export function CheckoutSection() {
             onChange={(v) => updateCheckoutButton({ mobileButtonType: v })}
           />
           {checkoutButton.mobileButtonType === 'swipe' && (
-            <div style={{
-              pointerEvents: 'none',
-              borderRadius: `${checkoutButton.borderRadius}px`,
-              background: checkoutButton.bgColor,
-              height: '48px',
-              display: 'flex',
-              alignItems: 'center',
-              overflow: 'hidden',
-              position: 'relative',
-            }}>
-              <div style={{
-                width: '42px', height: '42px', margin: '3px',
-                borderRadius: `${Math.max(checkoutButton.borderRadius - 2, 4)}px`,
-                background: 'rgba(255,255,255,0.92)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
-                flexShrink: 0, zIndex: 1, position: 'relative',
-              }}>
-                <span style={{ color: checkoutButton.bgColor, fontSize: '18px', lineHeight: 1 }}>›</span>
-              </div>
-              <span style={{
-                position: 'absolute', left: 0, right: 0,
-                textAlign: 'center', color: checkoutButton.textColor,
-                fontSize: '13px', fontWeight: 600, letterSpacing: '0.3px',
-                pointerEvents: 'none',
-              }}>
-                Swipe to checkout
-              </span>
-            </div>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Switch the live preview to mobile view to see the swipe button.
+            </Text>
           )}
         </FormLayout>
       </Card>

@@ -4789,7 +4789,9 @@ function ComboPreview({
         selectedVariant.image?.src ||
         selectedVariant.image?.url ||
         product.image?.src ||
+        product.image?.url ||
         product.featuredMedia?.preview?.image?.url ||
+        product.images?.nodes?.[0]?.url ||
         'https://placehold.co/100x100',
       price: parseFloat(selectedVariant.price || 0),
       quantity: Number(qty),
@@ -5307,7 +5309,9 @@ function ComboPreview({
               selectedVariant?.image?.src ||
               selectedVariant?.image?.url ||
               product.image?.src ||
+              product.image?.url ||
               product.featuredMedia?.preview?.image?.url ||
+              product.images?.nodes?.[0]?.url ||
               'https://placehold.co/300x300?text=Product'
             }
             alt={product.title}
@@ -6508,7 +6512,10 @@ function ComboPreview({
                     >
                       <img
                         src={
+                          product.image?.src ||
+                          product.image?.url ||
                           product.featuredMedia?.preview?.image?.url ||
+                          product.images?.nodes?.[0]?.url ||
                           'https://placehold.co/300x300'
                         }
                         alt={product.title}
