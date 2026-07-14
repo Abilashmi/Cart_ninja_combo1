@@ -1,18 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router';
 import useAiAgent from './useAiAgent';
+import MarkdownMessage from './MarkdownMessage';
 
 const SIZES = {
   lg: { maxWidth: '960px', inputFont: 17, padLeft: 28, btnText: true,  iconSize: 26, panelH: 380 },
   md: { maxWidth: '720px', inputFont: 14, padLeft: 18, btnText: true,  iconSize: 20, panelH: 300 },
   sm: { maxWidth: '100%',  inputFont: 13, padLeft: 14, btnText: false, iconSize: 17, panelH: 240 },
 };
-
-const CHECK_ICON = (
-  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 7l3 3 5-5" />
-  </svg>
-);
 
 const HISTORY_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -25,6 +21,18 @@ const CLOSE_ICON = (
     <path d="M2 2l10 10M12 2L2 12" />
   </svg>
 );
+
+// Client-timed stage labels shown while a flow turn is in flight — no real
+// server-side step signaling, just enough to visibly "think" before replying.
+const THINKING_STAGES = ['Analyzing…', 'Preparing changes…', 'Waiting for confirmation…'];
+function ThinkingLabel() {
+  const [stage, setStage] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setStage(s => (s + 1) % THINKING_STAGES.length), 900);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="bxb-loading-text">{THINKING_STAGES[stage]}</span>;
+}
 
 function relativeDate(dateStr) {
   if (!dateStr) return '';
@@ -52,6 +60,11 @@ export default function BrixBar({
   const [expanded, setExpanded] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef(null);
+  const histListRef = useRef(null);
+  const barRef = useRef(null);
+  const [aboveSpace, setAboveSpace] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const inIframe = typeof window !== 'undefined' && window !== window.parent;
   const leftNavOffset = inIframe ? 20 : 260;
@@ -62,6 +75,36 @@ export default function BrixBar({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, loading]);
+
+  // The list keeps whatever scroll position it was left at (a native DOM
+  // property, not React state) — without this, reopening history after
+  // scrolling down previously shows stale mid-list entries instead of the
+  // newest conversations at the top.
+  useEffect(() => {
+    if (showHistory && histListRef.current) histListRef.current.scrollTop = 0;
+  }, [showHistory]);
+
+  // The panel opens upward from the bar, so its usable height is however much
+  // room actually exists above it on screen — not a fixed guess. A hardcoded
+  // vh-based cap previously let the panel (including its header) render
+  // above the visible viewport when that guess didn't match reality.
+  useEffect(() => {
+    if (!floating || !(hasThread || showHistory)) return undefined;
+    const measure = () => {
+      if (!barRef.current) return;
+      const top = barRef.current.getBoundingClientRect().top;
+      setAboveSpace(Math.max(160, top - 20));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [floating, hasThread, showHistory]);
+
+  const abovePanelStyle = floating && aboveSpace != null ? { maxHeight: Math.min(440, aboveSpace) } : undefined;
 
   const handleSend = useCallback((text) => {
     const t = (text ?? '').trim();
@@ -95,38 +138,38 @@ export default function BrixBar({
       );
     }
     const j = msg.json;
-    const failed = j?.status === 'failed';
-    if (j?.actions?.length > 0) {
-      return (
-        <div key={msg.id} className="bxb-row bxb-row-agent">
-          <div className="bxb-card">
-            {(j.message || '').split('\n').filter(Boolean).map((line, i) => (
-              <div key={i} className="bxb-card-line">{line}</div>
-            ))}
-            <div className="bxb-card-divider" />
-            {j.actions.map((a, i) => (
-              <div key={i} className="bxb-card-change">
-                <span className={`bxb-card-bullet ${failed ? 'err' : ''}`}>{failed ? '✖' : CHECK_ICON}</span>
-                <span>{a.label || a.module}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    const lines = (j?.message || msg.text || '').split('\n').filter(Boolean);
+    const choices = j?.choices;
+    // Plain conversational bubble only — no action/status card, no feature
+    // badges, no divider, no timestamp/evidence metadata below the message.
+    // Execution details (j.actions, j.evidence) stay in state for anyone
+    // debugging via devtools, but are never rendered.
+    const raw = j?.message || msg.text || '';
+    const bodyText = raw.replace(/^\s*[✓✅]\s*/, '');
+    const card = (
+      <div className="bxb-card">
+        <MarkdownMessage text={bodyText} variant="bxb-md" />
+      </div>
+    );
+
     return (
       <div key={msg.id} className="bxb-row bxb-row-agent">
-        <div className="bxb-card">
-          {lines.map((line, i) => {
-            const ok = line.startsWith('✓') || line.startsWith('✅');
-            return (
-              <div key={i} className={`bxb-card-line ${ok ? 'ok' : ''}`}>
-                {ok && <span className="bxb-card-line-icon">{CHECK_ICON}</span>}
-                {line.replace(/^[✓✅]\s*/, '')}
-              </div>
-            );
-          })}
+        <div className="bxb-agent-stack">
+          {card}
+          {choices?.length > 0 && (
+            <div className="bxb-choices">
+              {choices.map((c, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`bxb-choice-btn${c.value === '__confirm__' ? ' confirm' : c.value === '__cancel__' ? ' cancel' : ''}`}
+                  onClick={() => handleSend(c.value)}
+                  disabled={!!loading}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -168,15 +211,15 @@ export default function BrixBar({
         <div className="bxb-row bxb-row-agent">
           <div className="bxb-loading">
             <div className="bxb-spinner" />
-            <span className="bxb-loading-text">Brix is thinking…</span>
+            <ThinkingLabel />
           </div>
         </div>
       )}
     </div>
   );
 
-  const historyPanel = (
-    <div className="bxb-hist-panel">
+  const historyPanelContent = (
+    <>
       <div className="bxb-panel-head">
         <div className="bxb-panel-icon">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
@@ -185,7 +228,7 @@ export default function BrixBar({
         <button className="bxb-panel-action" onClick={handleNewChat}>New chat</button>
         <button className="bxb-hist-close" onClick={() => setShowHistory(false)} aria-label="Close history">{CLOSE_ICON}</button>
       </div>
-      <div className="bxb-hist-list">
+      <div className="bxb-hist-list" ref={histListRef}>
         {conversations.length === 0 ? (
           <div className="bxb-hist-empty">No previous chats yet</div>
         ) : (
@@ -197,10 +240,10 @@ export default function BrixBar({
           ))
         )}
       </div>
-    </div>
+    </>
   );
 
-  return (
+  const bxbNode = (
     <div className="bxb" style={{ ...outerStyle, position: floating ? outerStyle.position : 'relative' }}>
       <style>{`
         .bxb-bar{display:flex;align-items:center;gap:${size==='sm'?8:10}px;background:${floating?'rgba(255,255,255,0.84)':'#fff'};${floating?'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);':''}border:1px solid ${floating?'rgba(220,220,220,0.7)':'#e1e3e5'};border-radius:9999px;padding:${size==='sm'?`6px 6px 6px ${cfg.padLeft}px`:size==='lg'?`10px 10px 10px ${cfg.padLeft}px`:`8px 8px 8px ${cfg.padLeft}px`};box-shadow:${floating?'0 4px 24px rgba(0,0,0,0.10),0 1px 4px rgba(0,0,0,0.06)':'0 2px 10px rgba(0,0,0,.06)'}}
@@ -216,11 +259,11 @@ export default function BrixBar({
         .bxb-send-lg{padding:13px 28px;font-size:15px}
         .bxb-send-md{padding:10px 20px;font-size:14px}
         .bxb-send-sm{width:32px;height:32px}
-        .bxb-panel,.bxb-hist-panel{background:${floating?'rgba(255,255,255,0.92)':'#fff'};${floating?'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);':''}border:1px solid ${floating?'rgba(210,210,210,0.65)':'#e1e3e5'};border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.09);animation:bxbIn .18s ease}
-        .bxb-panel{margin-top:10px}
-        .bxb-panel-above{position:absolute;bottom:calc(100% + 10px);left:0;right:0}
+        .bxb-panel,.bxb-hist-panel{background:${floating?'rgba(255,255,255,0.92)':'#fff'};${floating?'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);':''}border:1px solid ${floating?'rgba(210,210,210,0.65)':'#e1e3e5'};border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.09);animation:bxbIn .18s ease;display:flex;flex-direction:column;max-height:min(440px, calc(100vh - 120px))}
+        .bxb-panel,.bxb-hist-panel{margin-top:10px}
+        .bxb-panel-above{position:absolute;bottom:calc(100% + 10px);left:0;right:0;margin-top:0}
         @keyframes bxbIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-        .bxb-panel-head{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #f0f0f0}
+        .bxb-panel-head{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
         .bxb-panel-icon{width:20px;height:20px;border-radius:5px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .bxb-panel-name{font-size:12px;font-weight:600;color:#1a1a1a}
         .bxb-panel-status{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:10px;color:#059669}
@@ -228,27 +271,42 @@ export default function BrixBar({
         .bxb-panel-credits{display:flex;align-items:center;font-size:10px;font-weight:700;color:#1a9de0;background:#e8f9ff;border:1px solid #d4f1fe;border-radius:999px;padding:2px 8px;white-space:nowrap;margin-left:6px}
         .bxb-panel-action{background:none;border:none;cursor:pointer;font-size:11px;color:#374151;font-weight:600;padding:3px 6px;border-radius:5px;margin-left:auto}
         .bxb-panel-action:hover{background:#f3f4f6}
-        .bxb-msgs{max-height:${cfg.panelH}px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+        .bxb-msgs{flex:1;min-height:0;max-height:${cfg.panelH}px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
         .bxb-row{display:flex}
         .bxb-row-user{justify-content:flex-end}
         .bxb-row-agent{justify-content:flex-start}
         .bxb-bubble-user{max-width:80%;background:#1a1a1a;color:#fff;padding:7px 12px;border-radius:12px;border-bottom-right-radius:4px;font-size:13px;line-height:1.45;word-wrap:break-word}
-        .bxb-card{max-width:88%;background:#f9fafb;border:1px solid #e8e8e8;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;color:#1a1a1a}
-        .bxb-card-line{padding:2px 0;display:flex;align-items:center;gap:5px}
-        .bxb-card-line.ok{color:#059669}
-        .bxb-card-line-icon{flex-shrink:0;color:#059669;display:flex}
-        .bxb-card-divider{height:1px;background:#e8e8e8;margin:6px 0}
-        .bxb-card-change{display:flex;align-items:center;gap:5px;padding:2px 0}
-        .bxb-card-bullet{color:#059669;display:flex;flex-shrink:0}
-        .bxb-card-bullet.err{color:#DC2626}
+        .bxb-agent-stack{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:88%}
+        .bxb-card{background:#f9fafb;border:1px solid #e8e8e8;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;color:#1a1a1a}
+        .bxb-choices{display:flex;flex-wrap:wrap;gap:6px}
+        .bxb-choice-btn{background:#fff;border:1px solid #d1d5db;border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;color:#1a1a1a;cursor:pointer;transition:background .15s,border-color .15s,opacity .15s}
+        .bxb-choice-btn:hover:not(:disabled){background:#f3f4f6;border-color:#9ca3af}
+        .bxb-choice-btn:disabled{opacity:.5;cursor:default}
+        .bxb-choice-btn.confirm{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+        .bxb-choice-btn.confirm:hover:not(:disabled){opacity:.85}
+        .bxb-choice-btn.cancel{color:#DC2626;border-color:#fecaca}
+        .bxb-choice-btn.cancel:hover:not(:disabled){background:#fef2f2}
+        .bxb-md p{margin:0 0 6px}
+        .bxb-md p:last-child{margin-bottom:0}
+        .bxb-md :is(h1,h2,h3,h4,h5,h6){font-size:13px;font-weight:700;margin:6px 0 4px;color:#1a1a1a}
+        .bxb-md ul,.bxb-md ol{margin:4px 0 6px;padding-left:18px}
+        .bxb-md li{margin:2px 0}
+        .bxb-md strong{font-weight:700}
+        .bxb-md em{font-style:italic}
+        .bxb-md code{background:#eef0f2;border-radius:4px;padding:1px 5px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+        .bxb-md pre{background:#eef0f2;border-radius:8px;padding:8px 10px;overflow-x:auto;margin:6px 0}
+        .bxb-md pre code{background:none;padding:0}
+        .bxb-md blockquote{border-left:3px solid #d1d5db;margin:6px 0;padding:2px 0 2px 10px;color:#4b5563}
+        .bxb-md table{border-collapse:collapse;margin:6px 0;font-size:12px;width:100%}
+        .bxb-md th,.bxb-md td{border:1px solid #e5e7eb;padding:4px 8px;text-align:left}
+        .bxb-md a{color:#1a73e8;text-decoration:underline}
         .bxb-loading{display:flex;align-items:center;gap:6px;padding:7px 11px;background:#f9fafb;border:1px solid #e8e8e8;border-radius:12px;max-width:80%}
         .bxb-spinner{width:12px;height:12px;border:2px solid #e8e8e8;border-top-color:#374151;border-radius:50%;animation:bxbSpin .6s linear infinite;flex-shrink:0}
         @keyframes bxbSpin{to{transform:rotate(360deg)}}
         .bxb-loading-text{font-size:11px;color:#888}
-        .bxb-hist-panel{position:absolute;bottom:calc(100% + 10px);left:0;right:0}
         .bxb-hist-close{background:none;border:none;cursor:pointer;padding:4px;color:#6b7280;border-radius:4px;display:flex;align-items:center;margin-left:4px}
         .bxb-hist-close:hover{background:#f3f4f6;color:#1a1a1a}
-        .bxb-hist-list{max-height:280px;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+        .bxb-hist-list{flex:1;min-height:0;max-height:280px;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
         .bxb-hist-empty{padding:16px 12px;text-align:center;font-size:12px;color:#9ca3af}
         .bxb-hist-item{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;padding:8px 10px;border-radius:8px;text-align:left;transition:background .12s}
         .bxb-hist-item:hover{background:#f3f4f6}
@@ -256,16 +314,20 @@ export default function BrixBar({
         .bxb-hist-date{font-size:11px;color:#9ca3af;flex-shrink:0;white-space:nowrap}
       `}</style>
 
-      {showHistory && historyPanel}
+      {showHistory && floating && (
+        <div className="bxb-hist-panel bxb-panel-above" style={abovePanelStyle}>
+          {historyPanelContent}
+        </div>
+      )}
 
       {hasThread && floating && !showHistory && (
-        <div className="bxb-panel bxb-panel-above">
+        <div className="bxb-panel bxb-panel-above" style={abovePanelStyle}>
           {panelHead}
           {chatBody}
         </div>
       )}
 
-      <div className="bxb-bar">
+      <div className="bxb-bar" ref={barRef}>
         <svg className="bxb-search-icon" width={cfg.iconSize} height={cfg.iconSize} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
         </svg>
@@ -305,6 +367,23 @@ export default function BrixBar({
           {chatBody}
         </div>
       )}
+
+      {showHistory && !floating && (
+        <div className="bxb-hist-panel">
+          {historyPanelContent}
+        </div>
+      )}
     </div>
   );
+
+  // Polaris's `.Polaris-Page` wrapper sets `zoom` (see app/global.css), which
+  // in Chromium/WebKit creates a new containing block for `position: fixed`
+  // descendants exactly like `transform` does. That silently breaks this
+  // component's viewport-pinned floating bar, anchoring it to the Page box
+  // instead — portaling straight to <body> sidesteps the ancestor entirely.
+  if (floating) {
+    if (!mounted) return null;
+    return createPortal(bxbNode, document.body);
+  }
+  return bxbNode;
 }

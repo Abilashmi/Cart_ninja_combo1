@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FormLayout, Select, Checkbox, Text, RangeSlider } from '@shopify/polaris';
+import { FormLayout, Select, Checkbox, Text } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 
 function ProductsSectionComponent({
@@ -38,7 +38,7 @@ function ProductsSectionComponent({
                         {PxField && <PxField label="Size" value={config.arrow_size || 40} onChange={(v) => updateConfig('arrow_size', v)} />}
                         {PxField && <PxField label="Radius (%)" value={config.arrow_border_radius || 50} onChange={(v) => updateConfig('arrow_border_radius', v)} suffix="%" max={50} />}
                       </div>
-                      <RangeSlider label="Opacity" value={config.arrow_opacity ?? 0.9} onChange={(v) => updateConfig('arrow_opacity', v)} min={0} max={1} step={0.1} output />
+                      {PxField && <PxField label="Opacity" value={config.arrow_opacity ?? 0.9} onChange={(v) => updateConfig('arrow_opacity', v)} min={0} max={1} step={0.1} suffix="" />}
                       <Select label="Arrow Position" options={[{ label: 'Inside Slider', value: 'inside' }, { label: 'Outside Slider', value: 'outside' }]} value={config.arrow_position || 'inside'} onChange={(v) => updateConfig('arrow_position', v)} />
                     </div>
                   )}
@@ -48,7 +48,7 @@ function ProductsSectionComponent({
                   <Checkbox label="Enable Touch/Swipe" checked={config.enable_touch_swipe !== false} onChange={(v) => updateConfig('enable_touch_swipe', v)} />
                   {config.enable_touch_swipe !== false && (
                     <div className="cst-nested-block">
-                      <RangeSlider label="Sensitivity" value={config.swipe_sensitivity || 5} onChange={(v) => updateConfig('swipe_sensitivity', v)} min={1} max={10} output />
+                      {PxField && <PxField label="Sensitivity" value={config.swipe_sensitivity || 5} onChange={(v) => updateConfig('swipe_sensitivity', v)} min={1} max={10} suffix="" />}
                     </div>
                   )}
                 </div>

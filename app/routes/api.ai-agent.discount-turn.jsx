@@ -1,5 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
+import { callLlm, parseJsonReply } from '../services/ai-llm.server';
 
 const EXTRACTION_PROMPT = `You are extracting Shopify discount details from a merchant's chat message.
 Extract:
@@ -14,40 +15,12 @@ Optionally, ONLY if clearly mentioned:
 Reply with ONLY JSON, no prose. Omit any optional field not mentioned.
 If you cannot identify a code or a percentage at all, reply {"unclear":true}.`;
 
-function parseJsonReply(text) {
-  const stripped = String(text || '').replace(/```json|```/gi, '').trim();
-  try {
-    return JSON.parse(stripped);
-  } catch {
-    return { unclear: true };
-  }
-}
-
 async function callExtractionLlm(message) {
-  const apiKey = process.env.OPENAI_API_KEY || '';
-  const isNvidia = apiKey.startsWith('nvapi-');
-  const endpoint = isNvidia
-    ? 'https://integrate.api.nvidia.com/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-  const model = isNvidia ? 'meta/llama-3.1-8b-instruct' : 'gpt-4o-mini';
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: EXTRACTION_PROMPT },
-        { role: 'user', content: message },
-      ],
-      max_tokens: 150,
-      temperature: 0,
-    }),
-  });
-
-  if (!res.ok) return { unclear: true };
-  const data = await res.json();
-  return parseJsonReply(data.choices?.[0]?.message?.content);
+  const text = await callLlm([
+    { role: 'system', content: EXTRACTION_PROMPT },
+    { role: 'user', content: message },
+  ], { maxTokens: 150, temperature: 0 });
+  return parseJsonReply(text);
 }
 
 function stillNeeded(code, percentage) {
@@ -134,11 +107,41 @@ async function persistLocalCopy(request, shop, { code, percentage, minimumAmount
   }
 }
 
+const CONFIRM_CHOICES = [
+  { label: '✅ Confirm', value: '__confirm__' },
+  { label: '✖ Cancel', value: '__cancel__' },
+];
+
+function confirmSummary({ code, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
+  const extras = [];
+  if (minimumAmount) extras.push(`min. order ₹${minimumAmount}`);
+  if (endDate) extras.push(`ends ${endDate}`);
+  if (usageLimit) extras.push(`limit ${usageLimit} uses`);
+  if (onePerCustomer) extras.push('one per customer');
+  const extraText = extras.length ? ` (${extras.join(', ')})` : '';
+  return `I'll create discount code "${code}" for ${percentage}% off${extraText}. Shall I create this?`;
+}
+
 export async function action({ request }) {
   try {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
-    const { message, resolvedCode, resolvedPercentage } = await request.json();
+    const { message, resolvedCode, resolvedPercentage, resolvedExtras, finalize } = await request.json();
+
+    if (finalize) {
+      const credit = await checkAndConsumeCredit(shop, admin);
+      const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
+      const extras = resolvedExtras || {};
+      const result = await createDiscount(admin, { code: resolvedCode, percentage: resolvedPercentage, ...extras });
+      if (!result.success) {
+        return Response.json({ status: 'clarify', message: `Couldn't create that discount: ${result.error}. Try a different code.`, needFields: 'code', resolvedPercentage, credits });
+      }
+      await persistLocalCopy(request, shop, {
+        code: resolvedCode, percentage: resolvedPercentage, ...extras, discountId: result.discountId,
+      });
+      return Response.json({ status: 'saved', code: resolvedCode, percentage: resolvedPercentage, credits });
+    }
+
     if (!message) return Response.json({ status: 'error', message: 'No message provided' }, { status: 400 });
 
     const credit = await checkAndConsumeCredit(shop, admin);
@@ -155,24 +158,21 @@ export async function action({ request }) {
       if (Number.isFinite(n) && n > 0 && n <= 100) percentage = n;
     }
 
+    const extras = {
+      minimumAmount: extracted.minimumAmount, endDate: extracted.endDate,
+      usageLimit: extracted.usageLimit, onePerCustomer: extracted.onePerCustomer,
+    };
+
     if (code && percentage != null) {
-      const result = await createDiscount(admin, {
-        code, percentage,
-        minimumAmount: extracted.minimumAmount,
-        endDate: extracted.endDate,
-        usageLimit: extracted.usageLimit,
-        onePerCustomer: extracted.onePerCustomer,
+      return Response.json({
+        status: 'confirm',
+        message: confirmSummary({ code, percentage, ...extras }),
+        choices: CONFIRM_CHOICES,
+        resolvedCode: code,
+        resolvedPercentage: percentage,
+        resolvedExtras: extras,
+        credits,
       });
-      if (!result.success) {
-        return Response.json({ status: 'clarify', message: `Couldn't create that discount: ${result.error}. Try a different code.`, needFields: 'code', resolvedPercentage: percentage, credits });
-      }
-      await persistLocalCopy(request, shop, {
-        code, percentage,
-        minimumAmount: extracted.minimumAmount, endDate: extracted.endDate,
-        usageLimit: extracted.usageLimit, onePerCustomer: extracted.onePerCustomer,
-        discountId: result.discountId,
-      });
-      return Response.json({ status: 'saved', code, percentage, credits });
     }
 
     if (extracted.unclear && !code && percentage == null) {

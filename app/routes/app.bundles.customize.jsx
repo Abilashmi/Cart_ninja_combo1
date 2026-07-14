@@ -13,7 +13,6 @@ import {
   Spinner,
   TextField,
   Select,
-  RangeSlider,
   Checkbox,
   Button,
   ButtonGroup,
@@ -613,199 +612,212 @@ export const loader = async ({ request }) => {
     return Response.json({ collections, products, shopPages });
   }
 
-  // INITIAL LOAD MODE (Fast)
-  const db = await getDb(shop).catch(() => ({ templates: [], discounts: [] }));
-
-  let localTemplate = null;
-  let localTemplates = [];
-  try {
-    const rows = await prisma.$queryRawUnsafe(
-      `SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
-      shop
-    );
-    localTemplates = Array.isArray(rows) ? rows : [];
-    if (templateId) {
-      const found = localTemplates.find((t) => String(t.id) === String(templateId));
-      if (found) {
-        localTemplate = {
-          id: Number(found.id),
-          title: found.name || 'Untitled',
-          active: Boolean(found.is_active),
-          config: (() => { try { return JSON.parse(found.customization_data || '{}'); } catch { return {}; } })(),
-          template_type: found.template_type || 'grid',
-          shop,
-        };
+  // INITIAL LOAD MODE (Fast) — the PHP templates/discounts fetch, the SQLite
+  // combo_templates read, and the three Admin GraphQL calls (collections,
+  // products, discounts) are all independent of each other, so they run
+  // concurrently instead of one after another. Each keeps its own try/catch
+  // so a failure in one doesn't wipe out data already fetched by the others.
+  const [db, localData, initialCollections, initialProducts, activeDiscounts] = await Promise.all([
+    getDb(shop).catch(() => ({ templates: [], discounts: [] })),
+    (async () => {
+      let localTemplate = null;
+      let localTemplates = [];
+      try {
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
+          shop
+        );
+        localTemplates = Array.isArray(rows) ? rows : [];
+        if (templateId) {
+          const found = localTemplates.find((t) => String(t.id) === String(templateId));
+          if (found) {
+            localTemplate = {
+              id: Number(found.id),
+              title: found.name || 'Untitled',
+              active: Boolean(found.is_active),
+              config: (() => { try { return JSON.parse(found.customization_data || '{}'); } catch { return {}; } })(),
+              template_type: found.template_type || 'grid',
+              shop,
+            };
+          }
+        }
+      } catch (e) {
+        console.error('[Customize] SQLite read error:', e);
       }
-    }
-  } catch (e) {
-    console.error('[Customize] SQLite read error:', e);
-  }
+      return { localTemplate, localTemplates };
+    })(),
+    (async () => {
+      try {
+        const colRes = await admin.graphql(
+          `#graphql
+          query InitialCollections {
+            collections(first: 250) {
+              nodes {
+                id
+                title
+                handle
+                productsCount { count }
+              }
+            }
+          }`
+        );
 
+        const colJson = await colRes.json();
+        if (colJson.errors) {
+          console.error(
+            '[Customize Loader] InitialCollections GraphQL errors (check app scopes — needs write_products):',
+            JSON.stringify(colJson.errors)
+          );
+        }
+        const collections = (colJson.data?.collections?.nodes || []).map((n) => ({
+          id: n.id,
+          title: n.title,
+          handle: n.handle,
+          productsCount: n.productsCount?.count ?? 0,
+        }));
+        console.log(`[Customize Loader] Initial collections loaded: ${collections.length}`);
+        return collections;
+      } catch (error) {
+        console.error('[Customize Loader] Initial collection fetch error:', error);
+        return [];
+      }
+    })(),
+    // Fetch initial products server-side so the preview is never empty on first render
+    (async () => {
+      try {
+        const prodRes = await admin.graphql(
+          `#graphql
+          query InitialProducts {
+            products(first: 60) {
+              nodes {
+                id
+                title
+                handle
+                vendor
+                totalInventory
+                descriptionHtml
+                images(first: 2) { nodes { url } }
+                featuredMedia { preview { image { url } } }
+                collections(first: 5) { nodes { handle title } }
+                variants(first: 10) {
+                  nodes {
+                    id
+                    title
+                    price
+                    availableForSale
+                    inventoryQuantity
+                    image { url }
+                  }
+                }
+              }
+            }
+          }`
+        );
+        const prodJson = await prodRes.json();
+        if (prodJson.errors) {
+          console.error('[Customize Loader] InitialProducts GraphQL errors:', JSON.stringify(prodJson.errors));
+        }
+        const products = (prodJson.data?.products?.nodes || []).map((p) => {
+          const variants = p.variants?.nodes || [];
+          return {
+            id: p.id,
+            title: p.title,
+            handle: p.handle,
+            vendor: p.vendor,
+            descriptionHtml: p.descriptionHtml,
+            totalInventory: p.totalInventory,
+            available:
+              p.availableForSale === true ||
+              Number(p.totalInventory || 0) > 0 ||
+              variants.some(
+                (v) => v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0
+              ),
+            image: p.featuredMedia?.preview?.image
+              ? { src: p.featuredMedia.preview.image.url }
+              : null,
+            secondImageSrc: p.images?.nodes?.length > 1 ? p.images.nodes[1].url : null,
+            collections: (p.collections?.nodes || []).map((c) => ({
+              handle: c.handle,
+              title: c.title,
+            })),
+            variants: variants.map((v) => ({
+              id: v.id,
+              title: v.title,
+              price: v.price,
+              inventoryQuantity: v.inventoryQuantity,
+              available:
+                v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0,
+              image: v.image ? { src: v.image.url } : null,
+            })),
+          };
+        });
+        console.log(`[Customize Loader] Initial products loaded: ${products.length}`);
+        return products;
+      } catch (error) {
+        console.error('[Customize Loader] Initial product fetch error:', error);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const discRes = await admin.graphql(`#graphql
+          query BundleDiscounts {
+            discountNodes(first: 50, reverse: true) {
+              edges {
+                node {
+                  id
+                  discount {
+                    ... on DiscountCodeBasic {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                    ... on DiscountCodeBxgy {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                    ... on DiscountCodeFreeShipping {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                  }
+                }
+              }
+            }
+          }`);
+        const discJson = await discRes.json();
+        if (discJson.errors) return [];
+        return (discJson.data?.discountNodes?.edges || [])
+          .map(({ node }) => {
+            const d = node.discount;
+            if (!d) return null;
+            const code = d.codes?.edges?.[0]?.node?.code || '';
+            return {
+              id: node.id,
+              title: d.title || code,
+              code,
+              type: d.__typename || '',
+              status: d.status || 'ACTIVE',
+            };
+          })
+          .filter(Boolean)
+          .filter((d) => d.status === 'ACTIVE');
+      } catch (error) {
+        console.error('[Customize Loader] Discount fetch error:', error);
+        return [];
+      }
+    })(),
+  ]);
+
+  const { localTemplate } = localData;
   const shopTemplates = (db.templates || []).filter((t) => t.shop === shop);
   const initialTemplate = localTemplate || (templateId
     ? shopTemplates.find((t) => String(t.id) === String(templateId)) || null
     : null);
 
-  let initialCollections = [];
-  try {
-    const colRes = await admin.graphql(
-      `#graphql
-      query InitialCollections {
-        collections(first: 250) {
-          nodes {
-            id
-            title
-            handle
-            productsCount { count }
-          }
-        }
-      }`
-    );
-
-    const colJson = await colRes.json();
-    if (colJson.errors) {
-      console.error(
-        '[Customize Loader] InitialCollections GraphQL errors (check app scopes — needs write_products):',
-        JSON.stringify(colJson.errors)
-      );
-    }
-    initialCollections = (colJson.data?.collections?.nodes || []).map((n) => ({
-      id: n.id,
-      title: n.title,
-      handle: n.handle,
-      productsCount: n.productsCount?.count ?? 0,
-    }));
-    console.log(`[Customize Loader] Initial collections loaded: ${initialCollections.length}`);
-  } catch (error) {
-    console.error('[Customize Loader] Initial collection fetch error:', error);
-  }
-
-  // Fetch initial products server-side so the preview is never empty on first render
-  let initialProducts = [];
-  try {
-    const prodRes = await admin.graphql(
-      `#graphql
-      query InitialProducts {
-        products(first: 60) {
-          nodes {
-            id
-            title
-            handle
-            vendor
-            totalInventory
-            descriptionHtml
-            images(first: 2) { nodes { url } }
-            featuredMedia { preview { image { url } } }
-            collections(first: 5) { nodes { handle title } }
-            variants(first: 10) {
-              nodes {
-                id
-                title
-                price
-                availableForSale
-                inventoryQuantity
-                image { url }
-              }
-            }
-          }
-        }
-      }`
-    );
-    const prodJson = await prodRes.json();
-    if (prodJson.errors) {
-      console.error('[Customize Loader] InitialProducts GraphQL errors:', JSON.stringify(prodJson.errors));
-    }
-    initialProducts = (prodJson.data?.products?.nodes || []).map((p) => {
-      const variants = p.variants?.nodes || [];
-      return {
-        id: p.id,
-        title: p.title,
-        handle: p.handle,
-        vendor: p.vendor,
-        descriptionHtml: p.descriptionHtml,
-        totalInventory: p.totalInventory,
-        available:
-          p.availableForSale === true ||
-          Number(p.totalInventory || 0) > 0 ||
-          variants.some(
-            (v) => v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0
-          ),
-        image: p.featuredMedia?.preview?.image
-          ? { src: p.featuredMedia.preview.image.url }
-          : null,
-        secondImageSrc: p.images?.nodes?.length > 1 ? p.images.nodes[1].url : null,
-        collections: (p.collections?.nodes || []).map((c) => ({
-          handle: c.handle,
-          title: c.title,
-        })),
-        variants: variants.map((v) => ({
-          id: v.id,
-          title: v.title,
-          price: v.price,
-          inventoryQuantity: v.inventoryQuantity,
-          available:
-            v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0,
-          image: v.image ? { src: v.image.url } : null,
-        })),
-      };
-    });
-    console.log(`[Customize Loader] Initial products loaded: ${initialProducts.length}`);
-  } catch (error) {
-    console.error('[Customize Loader] Initial product fetch error:', error);
-  }
-
   const layoutFiles = [];
-
-  let activeDiscounts = [];
-  try {
-    const discRes = await admin.graphql(`#graphql
-      query BundleDiscounts {
-        discountNodes(first: 50, reverse: true) {
-          edges {
-            node {
-              id
-              discount {
-                ... on DiscountCodeBasic {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-                ... on DiscountCodeBxgy {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-                ... on DiscountCodeFreeShipping {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-              }
-            }
-          }
-        }
-      }`);
-    const discJson = await discRes.json();
-    if (!discJson.errors) {
-      activeDiscounts = (discJson.data?.discountNodes?.edges || [])
-        .map(({ node }) => {
-          const d = node.discount;
-          if (!d) return null;
-          const code = d.codes?.edges?.[0]?.node?.code || '';
-          return {
-            id: node.id,
-            title: d.title || code,
-            code,
-            type: d.__typename || '',
-            status: d.status || 'ACTIVE',
-          };
-        })
-        .filter(Boolean)
-        .filter((d) => d.status === 'ACTIVE');
-    }
-  } catch (error) {
-    console.error('[Customize Loader] Discount fetch error:', error);
-  }
 
   return Response.json({
     initialTemplate,
@@ -858,6 +870,9 @@ function PxField({
         suffix={suffix}
         autoComplete="off"
         inputMode="numeric"
+        step={step}
+        min={min}
+        max={max}
       />
     </div>
   );
@@ -1149,6 +1164,12 @@ const DEMO_PRODUCTS = [
   },
 ];
 
+// Self-contained sample banner (gradient + product-card shapes) shown
+// wherever no merchant-supplied banner image is set yet. An inline SVG data
+// URI rather than a hosted image URL — a previous hosted sample banner
+// (a Shopify CDN file link) went dead (404), so this can never break again.
+const SAMPLE_BANNER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI0MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNjY3ZWVhIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzc2NGJhMiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNDAwIiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iMTUwIiBjeT0iMzIwIiByPSIxMjAiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMDgiLz4KICA8Y2lyY2xlIGN4PSIxMDgwIiBjeT0iNzAiIHI9IjE1MCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4wOCIvPgogIDxyZWN0IHg9IjkwIiB5PSIxMTAiIHdpZHRoPSIyMzAiIGhlaWdodD0iMTgwIiByeD0iMTQiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMTYiLz4KICA8cmVjdCB4PSIzNDUiIHk9IjExMCIgd2lkdGg9IjIzMCIgaGVpZ2h0PSIxODAiIHJ4PSIxNCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4yMiIvPgogIDxyZWN0IHg9IjYwMCIgeT0iMTEwIiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4MCIgcng9IjE0IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjE2Ii8+CiAgPHJlY3QgeD0iMTMwIiB5PSIxNTAiIHdpZHRoPSIxNTAiIGhlaWdodD0iMTAwIiByeD0iOCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4yNSIvPgogIDxyZWN0IHg9IjM4NSIgeT0iMTUwIiB3aWR0aD0iMTUwIiBoZWlnaHQ9IjEwMCIgcng9IjgiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMzUiLz4KICA8cmVjdCB4PSI2NDAiIHk9IjE1MCIgd2lkdGg9IjE1MCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjI1Ii8+CiAgPHRleHQgeD0iNjAwIiB5PSIzNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuOSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2FtcGxlIEJhbm5lcjwvdGV4dD4KPC9zdmc+';
+
 const DEFAULT_COMBO_CONFIG = {
   show_tab_all: true,
   grid_layout_type: 'grid',
@@ -1415,16 +1436,13 @@ const DEFAULT_COMBO_CONFIG = {
   // Banner Slider Settings
   enable_banner_slider: true,
   slider_speed: 5,
-  banner_1_image:
-    'https://cdn.shopify.com/s/files/1/0070/7032/files/fresh-vegetables-and-fruits.jpg?v=1614349455',
+  banner_1_image: SAMPLE_BANNER_IMAGE,
   banner_1_title: 'Fresh Farm Produce',
   banner_1_subtitle: 'Get 20% off on all organic items',
-  banner_2_image:
-    'https://cdn.shopify.com/s/files/1/0070/7032/files/fresh-fruits.jpg?v=1614349455',
+  banner_2_image: SAMPLE_BANNER_IMAGE,
   banner_2_title: 'Seasonal Fruits',
   banner_2_subtitle: 'Picked fresh from the orchard',
-  banner_3_image:
-    'https://cdn.shopify.com/s/files/1/0070/7032/files/fresh-vegetables.jpg?v=1614349455',
+  banner_3_image: SAMPLE_BANNER_IMAGE,
   banner_3_title: 'Green Wellness',
   banner_3_subtitle: 'Healthy greens for a healthy life',
   // Advanced Timer & Bundle Settings
@@ -4395,7 +4413,7 @@ function ComboPreview({
 
     const bannerImage =
       bannerUrl ||
-      'https://cdn.shopify.com/s/files/1/0070/7032/files/fresh-vegetables-and-fruits.jpg?v=1614349455';
+      SAMPLE_BANNER_IMAGE;
 
     if (config.layout === 'layout2') {
       return (
@@ -4406,7 +4424,12 @@ function ComboPreview({
             margin: '0 auto',
             height: finalBannerHeight,
             overflow: 'hidden',
+            outline: inspectActive === 'banner' ? '2px solid #1a9de0' : inspectHover === 'banner' ? '2px dashed #1a9de0' : undefined,
+            cursor: 'pointer',
           }}
+          onMouseEnter={() => setInspectHover('banner')}
+          onMouseLeave={() => setInspectHover(null)}
+          onClick={(e) => { e.stopPropagation(); setInspectActive('banner'); onRequestSection('banner'); }}
         >
           <img
             src={bannerImage}
@@ -4428,7 +4451,6 @@ function ComboPreview({
             ? `calc(100% + ${paddingLeft + paddingRight}px)`
             : `${bannerWidth}%`,
           height: finalBannerHeight,
-          background: bannerUrl ? 'none' : '#e0e0e0',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -4436,22 +4458,23 @@ function ComboPreview({
           paddingBottom: config.banner_padding_bottom,
           margin: config.banner_full_width ? `0 -${paddingLeft}px` : '0 auto',
           overflow: 'hidden',
+          outline: inspectActive === 'banner' ? '2px solid #1a9de0' : inspectHover === 'banner' ? '2px dashed #1a9de0' : undefined,
+          cursor: 'pointer',
         }}
+        onMouseEnter={() => setInspectHover('banner')}
+        onMouseLeave={() => setInspectHover(null)}
+        onClick={(e) => { e.stopPropagation(); setInspectActive('banner'); onRequestSection('banner'); }}
       >
-        {bannerUrl ? (
-          <img
-            src={bannerUrl}
-            alt="Banner"
-            style={{
-              width: '100%',
-              height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%',
-              objectFit: bannerObjectFit,
-              display: 'block',
-            }}
-          />
-        ) : (
-          <span style={{ color: '#999' }}>Banner Image</span>
-        )}
+        <img
+          src={bannerImage}
+          alt="Banner"
+          style={{
+            width: '100%',
+            height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%',
+            objectFit: bannerObjectFit,
+            display: 'block',
+          }}
+        />
       </div>
     );
   };
@@ -6086,7 +6109,7 @@ function ComboPreview({
                     <img
                       src={
                         config.hero_image_url ||
-                        'https://cdn.shopify.com/s/files/1/0070/7032/files/fresh-vegetables-and-fruits.jpg?v=1614349455'
+                        SAMPLE_BANNER_IMAGE
                       }
                       alt="Hero"
                       style={{
@@ -6826,10 +6849,6 @@ function ComboPreview({
               height: finalBannerHeight,
               margin: config.banner_full_width ? '0 -20px' : '0 auto',
               overflow: 'hidden',
-              background:
-                config.banner_image_url || config.banner_image_mobile_url
-                  ? 'none'
-                  : '#e0e0e0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -6840,24 +6859,21 @@ function ComboPreview({
             onMouseLeave={() => setInspectHover(null)}
             onClick={(e) => { e.stopPropagation(); setInspectActive('banner'); onRequestSection('banner'); }}
           >
-            {config.banner_image_url || config.banner_image_mobile_url ? (
-              <img
-                src={
-                  isMobile && config.banner_image_mobile_url
-                    ? config.banner_image_mobile_url
-                    : config.banner_image_url
-                }
-                alt="Banner"
-                style={{
-                  width: '100%',
-                  height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%',
-                  objectFit: bannerObjectFit,
-                  display: 'block',
-                }}
-              />
-            ) : (
-              <span style={{ color: '#999' }}>Banner Image Placeholder</span>
-            )}
+            <img
+              src={
+                (isMobile && config.banner_image_mobile_url
+                  ? config.banner_image_mobile_url
+                  : config.banner_image_url) ||
+                SAMPLE_BANNER_IMAGE
+              }
+              alt="Banner"
+              style={{
+                width: '100%',
+                height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%',
+                objectFit: bannerObjectFit,
+                display: 'block',
+              }}
+            />
           </div>
         )}
 

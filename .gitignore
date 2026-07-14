@@ -38,3 +38,10 @@ cartdrawer-config-data.json
 ai-agent-fbt-data.json
 ai-agent-history-data.json
 ai-data/
+
+# Playwright (test tooling — see playwright.config.ts / tests/)
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.auth/
+.env.playwright

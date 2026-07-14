@@ -44,7 +44,7 @@ import {
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getStoredCoupons } from "./api.create_coupon-sample";
+import { getStoredCoupons } from "../services/coupon-sample.server";
 import { useCurrency } from "../components/CurrencyContext";
 
 const COUNTRIES = [

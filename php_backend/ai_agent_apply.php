@@ -77,12 +77,24 @@ foreach ($actions as $action) {
                 ")->execute([$goalMessage, $shop]);
             }
 
+            // Placement is a plain settings column (not tier-scoped) — 'top'
+            // or 'bottom', matching ProgressBarSection.jsx's own Select options.
+            $placement = $settings['placement'] ?? null;
+            if ($placement === 'top' || $placement === 'bottom') {
+                $pdo->prepare("
+                    UPDATE progress_bar_settings SET placement = ?, updated_at = CURRENT_TIMESTAMP(3)
+                    WHERE shop_domain = ?
+                ")->execute([$placement, $shop]);
+            }
+
             // Only ever sets the single FIRST/primary tier (by sort_order) —
             // multi-tier setup still requires the manual Progress Bar panel.
             // Updates that tier in place (or creates it if none exists yet)
             // rather than the manual save's delete-and-replace-all, so any
             // other tiers the merchant already configured are left alone.
             $goalAmount = $settings['goalAmount'] ?? null;
+            $rewardType = $settings['rewardType'] ?? 'free_shipping';
+            $iconPreset = $settings['iconPreset'] ?? 'shipping';
             if ($goalAmount !== null && $goalAmount > 0) {
                 $pdo->prepare("
                     UPDATE progress_bar_settings SET mode = 'amount', updated_at = CURRENT_TIMESTAMP(3)
@@ -103,15 +115,15 @@ foreach ($actions as $action) {
                     if ($tierId) {
                         $pdo->prepare("
                             UPDATE progress_bar_tiers
-                            SET min_value = ?, reward_type = 'free_shipping', updated_at = CURRENT_TIMESTAMP(3)
+                            SET min_value = ?, reward_type = ?, icon_preset = ?, updated_at = CURRENT_TIMESTAMP(3)
                             WHERE id = ?
-                        ")->execute([$goalAmount, $tierId]);
+                        ")->execute([$goalAmount, $rewardType, $iconPreset, $tierId]);
                     } else {
                         $pdo->prepare("
                             INSERT INTO progress_bar_tiers
-                                (shop_domain, settings_id, min_value, reward_type, is_active, sort_order)
-                            VALUES (?, ?, ?, 'free_shipping', 1, 0)
-                        ")->execute([$shop, $settingsId, $goalAmount]);
+                                (shop_domain, settings_id, min_value, reward_type, icon_preset, is_active, sort_order)
+                            VALUES (?, ?, ?, ?, ?, 1, 0)
+                        ")->execute([$shop, $settingsId, $goalAmount, $rewardType, $iconPreset]);
                     }
                 }
             }
@@ -219,12 +231,14 @@ $after = ['cart' => []];
 $cdc = $pdo->prepare("
     SELECT is_enabled, announcement_enabled,
            header_bg_color, header_text_color,
-           checkout_button_bg_color, checkout_button_text_color
+           checkout_button_bg_color, checkout_button_text_color,
+           updated_at
     FROM cart_drawer_config WHERE shop_domain = ?
 ");
 $cdc->execute([$shop]);
 if ($row = $cdc->fetch(PDO::FETCH_ASSOC)) {
     $after['cart']['drawerEnabled'] = (bool) $row['is_enabled'];
+    $after['cart']['updatedAt'] = $row['updated_at'];
     $after['cart']['announcement'] = ['enabled' => (bool) $row['announcement_enabled']];
     // Read back header/checkout colors too — needed so applyTheme results
     // (and any other color-writing action) actually reach CartEditorContext's
@@ -243,16 +257,16 @@ if ($row = $cdc->fetch(PDO::FETCH_ASSOC)) {
     }
 }
 
-$pb = $pdo->prepare("SELECT is_enabled FROM progress_bar_settings WHERE shop_domain = ?");
+$pb = $pdo->prepare("SELECT is_enabled, updated_at FROM progress_bar_settings WHERE shop_domain = ?");
 $pb->execute([$shop]);
 if ($row = $pb->fetch(PDO::FETCH_ASSOC)) {
-    $after['cart']['goalBar'] = ['enabled' => (bool) $row['is_enabled']];
+    $after['cart']['goalBar'] = ['enabled' => (bool) $row['is_enabled'], 'updatedAt' => $row['updated_at']];
 }
 
-$up = $pdo->prepare("SELECT is_enabled FROM upsell_widget_settings WHERE shop_domain = ?");
+$up = $pdo->prepare("SELECT is_enabled, updated_at FROM upsell_widget_settings WHERE shop_domain = ?");
 $up->execute([$shop]);
 if ($row = $up->fetch(PDO::FETCH_ASSOC)) {
-    $after['cart']['upsell'] = ['enabled' => (bool) $row['is_enabled']];
+    $after['cart']['upsell'] = ['enabled' => (bool) $row['is_enabled'], 'updatedAt' => $row['updated_at']];
 }
 
 $cs = $pdo->prepare("SELECT is_enabled FROM coupon_slider_settings WHERE shop_domain = ?");
@@ -261,10 +275,10 @@ if ($row = $cs->fetch(PDO::FETCH_ASSOC)) {
     $after['cart']['couponSlider'] = ['enabled' => (bool) $row['is_enabled']];
 }
 
-$fbt = $pdo->prepare("SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ?");
+$fbt = $pdo->prepare("SELECT is_enabled, updated_at FROM fbt_widget_settings WHERE shop_domain = ?");
 $fbt->execute([$shop]);
 if ($row = $fbt->fetch(PDO::FETCH_ASSOC)) {
-    $after['fbt'] = ['widgetEnabled' => (bool) $row['is_enabled']];
+    $after['fbt'] = ['widgetEnabled' => (bool) $row['is_enabled'], 'updatedAt' => $row['updated_at']];
 }
 
 $status = empty($unsupported) ? 'success' : (empty($applied) ? 'unsupported' : 'partial');

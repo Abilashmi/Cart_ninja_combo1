@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, FormLayout, TextField, Select, RangeSlider, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal } from '@shopify/polaris';
+import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal } from '@shopify/polaris';
 import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, DiscountFilledIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
-import { CustomizableLockedSection } from '../plan/PlanGate';
+import { CustomizableLockedSection, ProBadge } from '../plan/PlanGate';
 
 const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
@@ -307,6 +307,7 @@ export function ProgressBarSection() {
                 label="Enable confetti popup on completion"
                 enabled={progressBar.confetti}
                 onToggle={(v) => updateProgressBar({ confetti: v })}
+                badge={<ProBadge featureKey="confetti" />}
               />
             </FormLayout>
           </Card>

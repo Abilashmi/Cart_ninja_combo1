@@ -1,7 +1,8 @@
 import React from 'react';
-import { Card, FormLayout, TextField, RangeSlider, BlockStack, Text, InlineStack, Select } from '@shopify/polaris';
+import { Card, FormLayout, TextField, BlockStack, Text, InlineStack, Select } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { ColorField } from './ColorField';
+import { SliderField } from '../shared/SliderField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
 
 export function CheckoutSection() {
@@ -45,12 +46,11 @@ export function CheckoutSection() {
               onChange={(v) => updateCheckoutButton({ textColor: v })}
             />
           </InlineStack>
-          <RangeSlider
+          <SliderField
             label="Border Radius"
             value={checkoutButton.borderRadius}
             min={0}
             max={24}
-            output
             suffix="px"
             onChange={(v) => updateCheckoutButton({ borderRadius: v })}
           />

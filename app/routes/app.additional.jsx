@@ -14,43 +14,46 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const planKey = await getShopPlan(shop);
-
-  let subscriptionId = null;
-  try {
-    const res = await admin.graphql(`
-      query {
-        currentAppInstallation {
-          activeSubscriptions { id status name }
-        }
+  const [planKey, subscriptionId, shopInfo] = await Promise.all([
+    getShopPlan(shop),
+    (async () => {
+      try {
+        const res = await admin.graphql(`
+          query {
+            currentAppInstallation {
+              activeSubscriptions { id status name }
+            }
+          }
+        `);
+        const data = await res.json();
+        const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
+        const activeSub = subs.find(s => s.status === 'ACTIVE');
+        return activeSub?.id || null;
+      } catch (e) {
+        console.error('[Account loader] Failed to fetch subscription:', e);
+        return null;
       }
-    `);
-    const data = await res.json();
-    const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
-    const activeSub = subs.find(s => s.status === 'ACTIVE');
-    subscriptionId = activeSub?.id || null;
-  } catch (e) {
-    console.error('[Account loader] Failed to fetch subscription:', e);
-  }
-
-  // Fetch shop info
-  let shopInfo = null;
-  try {
-    const res = await admin.graphql(`
-      query {
-        shop {
-          name
-          myshopifyDomain
-          plan { displayName }
-          createdAt
-        }
+    })(),
+    (async () => {
+      try {
+        const res = await admin.graphql(`
+          query {
+            shop {
+              name
+              myshopifyDomain
+              plan { displayName }
+              createdAt
+            }
+          }
+        `);
+        const data = await res.json();
+        return data.data?.shop || null;
+      } catch (e) {
+        console.error('[Account loader] Failed to fetch shop info:', e);
+        return null;
       }
-    `);
-    const data = await res.json();
-    shopInfo = data.data?.shop || null;
-  } catch (e) {
-    console.error('[Account loader] Failed to fetch shop info:', e);
-  }
+    })(),
+  ]);
 
   return { shop, shopInfo, planKey, subscriptionId };
 };

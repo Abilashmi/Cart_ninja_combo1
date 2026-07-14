@@ -13,11 +13,12 @@ import { getFeatureState } from "../config/plans";
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
 
-    const planKey = await getShopPlan(session.shop);
-
-    const currencySymbol = await getShopCurrencySymbol(admin, session.shop);
+    const [planKey, currencySymbol] = await Promise.all([
+        getShopPlan(session.shop),
+        getShopCurrencySymbol(admin, session.shop),
+    ]);
     // eslint-disable-next-line no-undef
-    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, planKey };
+    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, planKey, shop: session.shop };
 };
 
 // s-app-nav / s-link are Shopify App Bridge native web components. Plain
@@ -48,7 +49,7 @@ function navBadge(featureKey, planKey) {
 }
 
 export default function App() {
-    const { apiKey, currencySymbol, planKey } = useLoaderData();
+    const { apiKey, currencySymbol, planKey, shop } = useLoaderData();
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>
@@ -58,16 +59,16 @@ export default function App() {
                         <s-app-nav>
                             <s-link href="/app">Home</s-link>
                             <s-link href="/app/brix-ai">Brix AI</s-link>
-                            <s-link href="/app/analytics">Analytics</s-link>
                             <s-link href="/app/cartdrawer">Cart Editor</s-link>
+                            <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
-                            <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/subscribe">Plans</s-link>
+                            <s-link href="/app/analytics">Analytics</s-link>
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
-                        <Outlet context={{ currencySymbol }} />
+                        <Outlet context={{ currencySymbol, shop }} />
                     </PlanProvider>
                 </CurrencyProvider>
             </PolarisAppProvider>

@@ -7,9 +7,10 @@ import { BASE_PHP_URL } from "../utils/api-helpers";
 import {
     Page, Card, BlockStack, InlineStack, Text, Button,
     TextField, Badge, Checkbox, Divider, Select,
-    Icon, RangeSlider, Collapsible, Toast, Frame, Banner,
+    Icon, Collapsible, Toast, Frame, Banner,
 } from "@shopify/polaris";
 import BrixBar from "../components/ai-agent/BrixBar";
+import { SliderField } from "../components/shared/SliderField";
 import {
     DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
     ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
@@ -82,11 +83,12 @@ export async function loader({ request }) {
     const shop = session.shop;
     const url = new URL(request.url);
 
-    const [productsResponse, discountsResponse, couponRes, fbtRes] = await Promise.all([
+    const [productsResponse, discountsResponse, couponRes, fbtRes, embedStatus] = await Promise.all([
         admin.graphql(`query getProducts { products(first: 50, query: "status:active") { edges { node { id title handle featuredImage { url } variants(first: 1) { edges { node { id price } } } } } } }`),
         admin.graphql(`query DiscountList { discountNodes(first: 100, reverse: true) { edges { node { id discount { ... on DiscountCodeBasic { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeBxgy { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeFreeShipping { title codes(first: 1) { edges { node { code } } } status } } } } } }`),
         fetch(`${BASE_PHP_URL}/coupon_slider_settings.php?shop=${encodeURIComponent(shop)}`, { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }).catch(() => null),
         fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
+        getEmbedStatus(shop, session.accessToken),
     ]);
 
     let products = [];
@@ -131,7 +133,7 @@ export async function loader({ request }) {
     } catch (e) { console.error("Failed to fetch FBT settings:", e); }
     if (!fbtConfig) fbtConfig = { ...FAKE_FBT_CONFIG, templates: { ...FAKE_FBT_CONFIG.templates } };
 
-    const { couponEmbedEnabled, fbtEmbedEnabled } = await getEmbedStatus(shop, session.accessToken);
+    const { couponEmbedEnabled, fbtEmbedEnabled } = embedStatus;
 
     return { couponConfig, fbtConfig, products, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled };
 }
@@ -905,9 +907,9 @@ export default function ProductWidgetPage() {
                                                 ]}
                                             />
                                             <Divider />
-                                            <RangeSlider label={`Border Radius: ${borderRadius}px`} value={borderRadius} min={0} max={24} onChange={(v) => { setBorderRadius(v); mark(); }} output />
-                                            <RangeSlider label={`Font Size: ${fontSize}px`} value={fontSize} min={10} max={28} onChange={(v) => { setFontSize(v); mark(); }} output />
-                                            <RangeSlider label={`Padding: ${padding}px`} value={padding} min={8} max={32} onChange={(v) => { setPadding(v); mark(); }} output />
+                                            <SliderField label="Border Radius" value={borderRadius} min={0} max={24} suffix="px" onChange={(v) => { setBorderRadius(v); mark(); }} />
+                                            <SliderField label="Font Size" value={fontSize} min={10} max={28} suffix="px" onChange={(v) => { setFontSize(v); mark(); }} />
+                                            <SliderField label="Padding" value={padding} min={8} max={32} suffix="px" onChange={(v) => { setPadding(v); mark(); }} />
                                         </BlockStack>
                                     </AccordionSection>
 

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FormLayout, TextField, Select, Checkbox, Text, RangeSlider } from '@shopify/polaris';
+import { FormLayout, TextField, Select, Checkbox, Text } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 
 function BannerSectionComponent({ config, expanded, onToggle, updateConfig, PxField }) {
@@ -33,7 +33,7 @@ function BannerSectionComponent({ config, expanded, onToggle, updateConfig, PxFi
                   <Checkbox label="Enable Banner Slider (Rotates 3 images)" checked={!!config.enable_banner_slider} onChange={(v) => updateConfig('enable_banner_slider', v)} />
                   {config.enable_banner_slider && (
                     <div className="cst-nested-block">
-                      <RangeSlider label="Auto-Rotation Speed (Seconds)" value={config.slider_speed || 5} onChange={(v) => updateConfig('slider_speed', v)} min={2} max={15} output />
+                      {PxField && <PxField label="Auto-Rotation Speed (Seconds)" value={config.slider_speed || 5} onChange={(v) => updateConfig('slider_speed', v)} min={2} max={15} suffix="s" />}
                       {[1, 2, 3].map((i) => (
                         <div key={i} className="cst-slider-item">
                           <Text variant="headingSm" as="h6">Banner {i}</Text>

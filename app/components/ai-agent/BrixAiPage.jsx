@@ -1,12 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router";
 import useAiAgent from "./useAiAgent";
-
-const CHECK_ICON = (
-  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 7l3 3 5-5" />
-  </svg>
-);
+import MarkdownMessage from "./MarkdownMessage";
 
 const HISTORY_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -31,50 +26,49 @@ function relativeDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function MessageRow({ msg }) {
+function MessageRow({ msg, onChoice, loading }) {
   const isUser = msg.role === "user";
-  const j = msg.json;
-  if (!isUser && j?.actions?.length > 0) {
-    const failed = j.status === "failed";
-    return (
-      <div className="bai-row bai-row-agent">
-        <div className="bai-card">
-          {(j.message || "").split("\n").filter(Boolean).map((line, i) => (
-            <div key={i} className="bai-card-line">{line}</div>
-          ))}
-          <div className="bai-card-divider" />
-          {j.actions.map((a, i) => (
-            <div key={i} className="bai-card-change">
-              <span className={`bai-card-bullet${failed ? " err" : ""}`}>
-                {failed ? "✖" : CHECK_ICON}
-              </span>
-              <span>{a.label || a.module}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  const text = j?.message || msg.text || "";
   if (isUser) {
     return (
       <div className="bai-row bai-row-user">
-        <div className="bai-bubble-user">{text}</div>
+        <div className="bai-bubble-user">{msg.text}</div>
       </div>
     );
   }
+
+  const j = msg.json;
+  const choices = j?.choices;
+  // Plain conversational bubble only — no action/status card, no feature
+  // badges, no divider, no timestamp/evidence metadata below the message.
+  // Execution details (j.actions, j.evidence) stay in state for anyone
+  // debugging via devtools, but are never rendered.
+  const raw = j?.message || msg.text || "";
+  const bodyText = raw.replace(/^\s*[✓✅]\s*/, "");
+  const card = (
+    <div className="bai-card">
+      <MarkdownMessage text={bodyText} variant="bai-md" />
+    </div>
+  );
+
   return (
     <div className="bai-row bai-row-agent">
-      <div className="bai-card">
-        {text.split("\n").filter(Boolean).map((line, i) => {
-          const ok = line.startsWith("✓") || line.startsWith("✅");
-          return (
-            <div key={i} className={`bai-card-line${ok ? " ok" : ""}`}>
-              {ok && <span className="bai-card-line-icon">{CHECK_ICON}</span>}
-              {line.replace(/^[✓✅]\s*/, "")}
-            </div>
-          );
-        })}
+      <div className="bai-agent-stack">
+        {card}
+        {choices?.length > 0 && (
+          <div className="bai-choices">
+            {choices.map((c, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`bai-choice-btn${c.value === "__confirm__" ? " confirm" : c.value === "__cancel__" ? " cancel" : ""}`}
+                onClick={() => onChoice?.(c.value)}
+                disabled={!!loading}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -102,6 +96,7 @@ export default function BrixAiPage() {
   const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
+  const histListRef = useRef(null);
 
   const hasThread = messages.length > 0 || !!loading;
 
@@ -112,6 +107,14 @@ export default function BrixAiPage() {
   useEffect(() => {
     if (inputRef.current) inputRef.current.focus();
   }, []);
+
+  // The list keeps whatever scroll position it was left at (a native DOM
+  // property, not React state) — without this, reopening history after
+  // scrolling down previously shows stale mid-list entries instead of the
+  // newest conversations at the top.
+  useEffect(() => {
+    if (showHistory && histListRef.current) histListRef.current.scrollTop = 0;
+  }, [showHistory]);
 
   const handleSend = useCallback((text) => {
     const t = (text ?? input).trim();
@@ -140,8 +143,6 @@ export default function BrixAiPage() {
         .bai-header{display:flex;align-items:center;gap:8px;padding:14px 24px;border-bottom:1px solid #e1e3e5;flex-shrink:0;z-index:2;background:#fff}
         .bai-header-icon{width:22px;height:22px;border-radius:6px;background:#1a1a1a;display:flex;align-items:center;justify-content:center}
         .bai-header-title{font-size:15px;font-weight:700;color:#1a1a1a}
-        .bai-header-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#059669;margin-left:4px}
-        .bai-header-dot{width:6px;height:6px;border-radius:50%;background:#059669}
         .bai-header-credits{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#1a9de0;background:#e8f9ff;border:1px solid #d4f1fe;border-radius:999px;padding:3px 10px}
         .bai-header-new{background:none;border:1px solid #e1e3e5;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;transition:background .12s,border-color .12s}
         .bai-header-new:hover{background:#f3f4f6;border-color:#d1d5db}
@@ -180,30 +181,46 @@ export default function BrixAiPage() {
         .bai-row-user{justify-content:flex-end}
         .bai-row-agent{justify-content:flex-start}
         .bai-bubble-user{max-width:80%;background:#1a1a1a;color:#fff;padding:10px 16px;border-radius:18px 18px 4px 18px;font-size:14px;line-height:1.55;word-wrap:break-word;animation:baiSlideIn .18s ease}
-        .bai-card{max-width:85%;background:#f9fafb;border:1px solid #e8e8e8;border-radius:4px 18px 18px 18px;padding:12px 16px;font-size:14px;line-height:1.55;color:#1a1a1a;animation:baiSlideIn .18s ease}
-        .bai-card-line{padding:2px 0;display:flex;align-items:center;gap:5px}
-        .bai-card-line.ok{color:#059669}
-        .bai-card-line-icon{flex-shrink:0;color:#059669;display:flex}
-        .bai-card-divider{height:1px;background:#e8e8e8;margin:6px 0}
-        .bai-card-change{display:flex;align-items:center;gap:5px;padding:2px 0}
-        .bai-card-bullet{color:#059669;display:flex;flex-shrink:0}
-        .bai-card-bullet.err{color:#dc2626}
+        .bai-agent-stack{display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:85%}
+        .bai-card{background:#f9fafb;border:1px solid #e8e8e8;border-radius:4px 18px 18px 18px;padding:12px 16px;font-size:14px;line-height:1.55;color:#1a1a1a;animation:baiSlideIn .18s ease}
+        .bai-choices{display:flex;flex-wrap:wrap;gap:8px}
+        .bai-choice-btn{background:#fff;border:1px solid #d1d5db;border-radius:9999px;padding:7px 16px;font-size:13px;font-weight:600;color:#1a1a1a;cursor:pointer;transition:background .12s,border-color .12s,opacity .12s}
+        .bai-choice-btn:hover:not(:disabled){background:#f3f4f6;border-color:#9ca3af}
+        .bai-choice-btn:disabled{opacity:.5;cursor:default}
+        .bai-choice-btn.confirm{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+        .bai-choice-btn.confirm:hover:not(:disabled){opacity:.85}
+        .bai-choice-btn.cancel{color:#dc2626;border-color:#fecaca}
+        .bai-choice-btn.cancel:hover:not(:disabled){background:#fef2f2}
+        .bai-md p{margin:0 0 6px}
+        .bai-md p:last-child{margin-bottom:0}
+        .bai-md :is(h1,h2,h3,h4,h5,h6){font-size:14px;font-weight:700;margin:6px 0 4px;color:#1a1a1a}
+        .bai-md ul,.bai-md ol{margin:4px 0 6px;padding-left:18px}
+        .bai-md li{margin:2px 0}
+        .bai-md strong{font-weight:700}
+        .bai-md em{font-style:italic}
+        .bai-md code{background:#eef0f2;border-radius:4px;padding:1px 5px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+        .bai-md pre{background:#eef0f2;border-radius:8px;padding:8px 10px;overflow-x:auto;margin:6px 0}
+        .bai-md pre code{background:none;padding:0}
+        .bai-md blockquote{border-left:3px solid #d1d5db;margin:6px 0;padding:2px 0 2px 10px;color:#4b5563}
+        .bai-md table{border-collapse:collapse;margin:6px 0;font-size:13px;width:100%}
+        .bai-md th,.bai-md td{border:1px solid #e5e7eb;padding:4px 8px;text-align:left}
+        .bai-md a{color:#1a73e8;text-decoration:underline}
         .bai-typing{display:flex;gap:5px;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e8e8e8;border-radius:4px 18px 18px 18px;max-width:80px}
         .bai-typing span{width:7px;height:7px;border-radius:50%;background:#9ca3af;animation:baiDot 1.2s ease-in-out infinite}
         .bai-typing span:nth-child(2){animation-delay:.2s}
         .bai-typing span:nth-child(3){animation-delay:.4s}
         @keyframes baiDot{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1);opacity:1}}
         @keyframes baiSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        .bai-hist-panel{position:absolute;bottom:calc(100% + 10px);left:0;right:0;background:#fff;border:1px solid #e1e3e5;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.09);animation:baiPanelIn .18s ease;z-index:100}
+        .bai-hist-panel{position:absolute;bottom:calc(100% + 10px);left:0;right:0;background:#fff;border:1px solid #e1e3e5;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.09);animation:baiPanelIn .18s ease;z-index:100;display:flex;flex-direction:column;max-height:min(400px, calc(100vh - 120px))}
         @keyframes baiPanelIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-        .bai-hist-head{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid #f0f0f0}
+        .bai-hist-head{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
         .bai-hist-head-icon{width:20px;height:20px;border-radius:5px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .bai-hist-head-title{font-size:12px;font-weight:600;color:#1a1a1a}
         .bai-hist-new{background:none;border:none;cursor:pointer;font-size:11px;color:#374151;font-weight:600;padding:3px 6px;border-radius:5px;margin-left:auto}
         .bai-hist-new:hover{background:#f3f4f6}
         .bai-hist-close{background:none;border:none;cursor:pointer;padding:4px;color:#6b7280;border-radius:4px;display:flex;align-items:center}
         .bai-hist-close:hover{background:#f3f4f6;color:#1a1a1a}
-        .bai-hist-list{max-height:260px;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+        .bai-hist-list{flex:1;min-height:0;max-height:260px;overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
         .bai-hist-empty{padding:20px 14px;text-align:center;font-size:12px;color:#9ca3af}
         .bai-hist-item{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;padding:9px 10px;border-radius:8px;text-align:left;transition:background .12s}
         .bai-hist-item:hover{background:#f3f4f6}
@@ -220,10 +237,6 @@ export default function BrixAiPage() {
             </svg>
           </div>
           <span className="bai-header-title">Brix AI</span>
-          <span className="bai-header-badge">
-            <span className="bai-header-dot" />
-            Connected
-          </span>
           {credits && (
             <span
               className="bai-header-credits"
@@ -245,7 +258,7 @@ export default function BrixAiPage() {
         <div className="bai-body">
           <div className={`bai-msgs-wrap${hasThread ? " visible" : ""}`} ref={scrollRef}>
             <div className="bai-msgs-inner">
-              {messages.map((msg) => <MessageRow key={msg.id} msg={msg} />)}
+              {messages.map((msg) => <MessageRow key={msg.id} msg={msg} onChoice={handleSend} loading={loading} />)}
               {loading && (
                 <div className="bai-row bai-row-agent">
                   <div className="bai-typing"><span /><span /><span /></div>
@@ -255,7 +268,7 @@ export default function BrixAiPage() {
           </div>
 
           <div className={`bai-input-zone${hasThread || showHistory ? " active" : ""}`}>
-            <div className={`bai-welcome-compact${hasThread ? " hidden" : ""}`}>
+            <div className={`bai-welcome-compact${hasThread || showHistory ? " hidden" : ""}`}>
               <div className="bai-wc-icon">
                 <svg width="24" height="24" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="1.6">
                   <path d="M7 2l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
@@ -278,7 +291,7 @@ export default function BrixAiPage() {
                     <button className="bai-hist-new" onClick={handleNewChat}>New chat</button>
                     <button className="bai-hist-close" onClick={() => setShowHistory(false)}>{CLOSE_ICON}</button>
                   </div>
-                  <div className="bai-hist-list">
+                  <div className="bai-hist-list" ref={histListRef}>
                     {conversations.length === 0 ? (
                       <div className="bai-hist-empty">No previous chats yet</div>
                     ) : (

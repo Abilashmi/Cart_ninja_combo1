@@ -37,6 +37,11 @@ if (host === "localhost") {
 
 export default defineConfig({
   server: {
+    // Explicit IPv4 loopback: on Windows, Node resolves "localhost" to the
+    // IPv6 address ::1 first, so an unspecified host causes Vite to bind
+    // IPv6-only. The Shopify CLI's dev proxy connects to 127.0.0.1 (IPv4),
+    // which then fails with ECONNREFUSED because nothing is listening there.
+    host: "127.0.0.1",
     allowedHosts: [host],
     cors: {
       preflightContinue: true,

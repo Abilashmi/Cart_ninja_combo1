@@ -8,6 +8,7 @@ import {
   ArrowRightIcon, StarIcon, SettingsIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
+import { getAnalyticsData } from "../services/analytics.server";
 import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
 import { PLANS } from "../config/plans";
@@ -59,14 +60,13 @@ export const loader = async ({ request }) => {
 
   let initialAnalytics = { ...DEFAULT_ANALYTICS };
   try {
-    const origin = new URL(request.url).origin;
     const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(
-      `${origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`,
-      { headers: { Accept: 'application/json', 'ngrok-skip-browser-warning': 'true' }, signal: AbortSignal.timeout(5000) },
-    );
-    const data = await res.json();
-    if (res.ok && data?.success) initialAnalytics = normalizeAnalytics(data.data);
+    // Calls the analytics loader logic directly in-process instead of
+    // fetching this app's own /api/analytics route over HTTP — a self-fetch
+    // would round-trip out through the public tunnel URL and back on every
+    // home-page load.
+    const data = await getAnalyticsData(shop, today, today);
+    if (data?.success) initialAnalytics = normalizeAnalytics(data.data);
   } catch {}
 
   return { shop, initialAnalytics };
@@ -107,7 +107,7 @@ const COURSE_SECTIONS = [
 const ALL_LESSONS = COURSE_SECTIONS.flatMap(s => s.lessons);
 
 // TODO: paste the embed URL (YouTube/Vimeo/CDN) here once the intro video is published
-const WELCOME_VIDEO_URL = '';
+const WELCOME_VIDEO_URL = 'https://www.youtube.com/embed/Ap1wvi6FN9I';
 
 const STEPS = [
   { id: 1, title: 'Enable App Embed',       desc: 'Activate Brix in your Shopify theme editor.',               to: null,                  color: '#667eea', icon: SettingsIcon,     minPlan: 'starter' },
@@ -418,6 +418,28 @@ export default function DashboardPage() {
   const [fbkHovered, setFbkHovered] = useState(0);
   const [fbkNote, setFbkNote] = useState('');
   const [fbkSubmitted, setFbkSubmitted] = useState(false);
+  const [fbkSubmitting, setFbkSubmitting] = useState(false);
+  const [fbkError, setFbkError] = useState('');
+
+  const submitFeedback = async () => {
+    if (!fbkRating || fbkSubmitting) return;
+    setFbkSubmitting(true);
+    setFbkError('');
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: fbkRating, note: fbkNote }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save feedback');
+      setFbkSubmitted(true);
+    } catch (e) {
+      setFbkError(e.message || 'Something went wrong — please try again.');
+    } finally {
+      setFbkSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -521,7 +543,7 @@ export default function DashboardPage() {
               <Text as="h2" variant="headingMd" fontWeight="semibold">Brix Academy</Text>
               <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Watch the intro video to get started</Text></div>
             </div>
-            <div style={{ maxWidth: 720, margin: '0 auto' }}>
+            <div style={{ width: '100%' }}>
               {WELCOME_VIDEO_URL ? (
                 <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #e1e3e5' }}>
                   <iframe
@@ -555,7 +577,7 @@ export default function DashboardPage() {
             <SetupChecklist completedSteps={completedSteps} markStep={markStep} canUse={canUse} navigate={navigate} toggleMode={toggleMode} />
           </div>
 
-          {/* Mini Tutorials */}
+          {/* Mini Tutorials — hidden for now (video section)
           <div>
             <div style={{ marginBottom: 14 }}>
               <Text as="h2" variant="headingMd" fontWeight="semibold">Mini Tutorials</Text>
@@ -581,6 +603,7 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
+          */}
 
           {/* Tips & Tricks */}
           <div>
@@ -669,7 +692,7 @@ export default function DashboardPage() {
               </div>
               <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">Thanks for sharing!</Text>
               <Text as="p" variant="bodyXs" tone="subdued" alignment="center">Your feedback helps us improve Brix.</Text>
-              <button onClick={() => { setFbkSubmitted(false); setFbkRating(0); setFbkNote(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 12 }}>Rate again</button>
+              <button onClick={() => { setFbkSubmitted(false); setFbkRating(0); setFbkNote(''); setFbkError(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 12 }}>Rate again</button>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'start', gap: 24 }}>
@@ -689,20 +712,23 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
-              <textarea value={fbkNote} onChange={e => setFbkNote(e.target.value)} placeholder="What's working, what could be better…" rows={3}
-                style={{ width: '100%', padding: '10px 13px', border: '1px solid #e5e7eb', borderRadius: 9, fontSize: 12, color: '#1a1a1a', background: '#fafafa', resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box', alignSelf: 'stretch' }}
-                onFocus={e => { e.target.style.borderColor = '#9ca3af'; e.target.style.background = '#fff'; }}
-                onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#fafafa'; }}
-              />
-              <button onClick={() => fbkRating && setFbkSubmitted(true)} disabled={!fbkRating}
-                style={{ padding: '10px 22px', background: fbkRating ? '#1a1a1a' : '#f3f4f6', color: fbkRating ? '#fff' : '#9ca3af', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: fbkRating ? 'pointer' : 'default', whiteSpace: 'nowrap', alignSelf: 'stretch' }}>
-                Send Feedback
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: 'stretch' }}>
+                <textarea value={fbkNote} onChange={e => setFbkNote(e.target.value)} placeholder="What's working, what could be better…" rows={3}
+                  style={{ width: '100%', padding: '10px 13px', border: '1px solid #e5e7eb', borderRadius: 9, fontSize: 12, color: '#1a1a1a', background: '#fafafa', resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
+                  onFocus={e => { e.target.style.borderColor = '#9ca3af'; e.target.style.background = '#fff'; }}
+                  onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#fafafa'; }}
+                />
+                {fbkError && <Text as="p" variant="bodyXs" tone="critical">{fbkError}</Text>}
+              </div>
+              <button onClick={submitFeedback} disabled={!fbkRating || fbkSubmitting}
+                style={{ padding: '10px 22px', background: fbkRating ? '#1a1a1a' : '#f3f4f6', color: fbkRating ? '#fff' : '#9ca3af', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: fbkRating && !fbkSubmitting ? 'pointer' : 'default', whiteSpace: 'nowrap', alignSelf: 'stretch', opacity: fbkSubmitting ? 0.7 : 1 }}>
+                {fbkSubmitting ? 'Sending…' : 'Send Feedback'}
               </button>
             </div>
           )}
         </div>
 
-        {/* Mini Tutorials */}
+        {/* Mini Tutorials — hidden for now (video section)
         <div>
           <div style={{ marginBottom: 14 }}>
             <Text as="h2" variant="headingMd" fontWeight="semibold">Mini Tutorials</Text>
@@ -728,6 +754,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+        */}
 
         {/* Quick Links */}
         <div>
@@ -760,7 +787,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Refer & Earn */}
+        {/* Refer & Earn — hidden for now
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 48, height: 48, borderRadius: 13, background: 'linear-gradient(135deg, #1a9de0, #2ecc71)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 14px #1a9de040' }}>
@@ -787,6 +814,7 @@ export default function DashboardPage() {
             Share &amp; Earn →
           </button>
         </div>
+        */}
 
         <div style={{ height: 72 }} />
       </div>

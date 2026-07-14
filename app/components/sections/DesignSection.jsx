@@ -1,7 +1,8 @@
 import React from 'react';
-import { Card, FormLayout, Select, RangeSlider, BlockStack, Text } from '@shopify/polaris';
+import { Card, FormLayout, Select, BlockStack, Text } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
+import { SliderField } from '../shared/SliderField';
 
 export function DesignSection() {
   const { settings, updateDesign } = useCartEditor();
@@ -22,12 +23,12 @@ export function DesignSection() {
             value={design.width}
             onChange={(v) => updateDesign({ width: v })}
           />
-          <RangeSlider
+          <SliderField
             label="Border Radius"
             value={design.borderRadius}
             min={0}
             max={24}
-            output
+            suffix="px"
             onChange={(v) => updateDesign({ borderRadius: v })}
           />
           <FeatureToggle

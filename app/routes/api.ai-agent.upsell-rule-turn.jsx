@@ -2,6 +2,16 @@ import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 import { resolveProductByName, pickFromCandidates, appendUpsellRule } from '../services/upsell-rules.server';
+import { callLlm, parseJsonReply } from '../services/ai-llm.server';
+
+const CONFIRM_CHOICES = [
+  { label: '✅ Confirm', value: '__confirm__' },
+  { label: '✖ Cancel', value: '__cancel__' },
+];
+
+function confirmSummary(trigger, offer) {
+  return `When a customer adds "${trigger.title}" to cart, I'll recommend "${offer.title}". Shall I add this rule?`;
+}
 
 function extractionSystemPrompt(needSide) {
   if (needSide === 'trigger') {
@@ -27,40 +37,12 @@ Reply with ONLY JSON, no prose:
 - {"unclear":true} if you cannot tell`;
 }
 
-function parseJsonReply(text) {
-  const stripped = String(text || '').replace(/```json|```/gi, '').trim();
-  try {
-    return JSON.parse(stripped);
-  } catch {
-    return { unclear: true };
-  }
-}
-
 async function callExtractionLlm(message, needSide) {
-  const apiKey = process.env.OPENAI_API_KEY || '';
-  const isNvidia = apiKey.startsWith('nvapi-');
-  const endpoint = isNvidia
-    ? 'https://integrate.api.nvidia.com/v1/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-  const model = isNvidia ? 'meta/llama-3.1-8b-instruct' : 'gpt-4o-mini';
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: extractionSystemPrompt(needSide) },
-        { role: 'user', content: message },
-      ],
-      max_tokens: 100,
-      temperature: 0,
-    }),
-  });
-
-  if (!res.ok) return { unclear: true };
-  const data = await res.json();
-  return parseJsonReply(data.choices?.[0]?.message?.content);
+  const text = await callLlm([
+    { role: 'system', content: extractionSystemPrompt(needSide) },
+    { role: 'user', content: message },
+  ], { maxTokens: 100, temperature: 0 });
+  return parseJsonReply(text);
 }
 
 function stillNeededSide(trigger, offer) {
@@ -74,14 +56,25 @@ export async function action({ request }) {
     const shop = session.shop;
     const {
       message, needSide = 'both', resolvedTrigger, resolvedOffer,
-      ambiguousSide, ambiguousCandidates,
+      ambiguousSide, ambiguousCandidates, finalize,
     } = await request.json();
-    if (!message) return Response.json({ status: 'error', message: 'No message provided' }, { status: 400 });
 
     const planKey = await getShopPlan(shop);
     if (!canPublishFeature(planKey, 'ai_cart_upsell')) {
       return Response.json({ status: 'locked', message: 'Upsell rules need the Starter plan or above.' });
     }
+
+    if (finalize) {
+      const credit = await checkAndConsumeCredit(shop, admin);
+      const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
+      await appendUpsellRule(shop, {
+        triggerProductId: resolvedTrigger.id, triggerTitle: resolvedTrigger.title,
+        offerProductId: resolvedOffer.id, offerTitle: resolvedOffer.title,
+      });
+      return Response.json({ status: 'saved', trigger: resolvedTrigger, offer: resolvedOffer, credits });
+    }
+
+    if (!message) return Response.json({ status: 'error', message: 'No message provided' }, { status: 400 });
 
     const credit = await checkAndConsumeCredit(shop, admin);
     const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
@@ -108,11 +101,10 @@ export async function action({ request }) {
       if (ambiguousSide === 'trigger') trigger = picked; else offer = picked;
 
       if (trigger && offer) {
-        await appendUpsellRule(shop, {
-          triggerProductId: trigger.id, triggerTitle: trigger.title,
-          offerProductId: offer.id, offerTitle: offer.title,
+        return Response.json({
+          status: 'confirm', message: confirmSummary(trigger, offer), choices: CONFIRM_CHOICES,
+          resolvedTrigger: trigger, resolvedOffer: offer, credits,
         });
-        return Response.json({ status: 'saved', trigger, offer, credits });
       }
       const need = stillNeededSide(trigger, offer);
       return Response.json({
@@ -153,11 +145,10 @@ export async function action({ request }) {
     }
 
     if (trigger && offer) {
-      await appendUpsellRule(shop, {
-        triggerProductId: trigger.id, triggerTitle: trigger.title,
-        offerProductId: offer.id, offerTitle: offer.title,
+      return Response.json({
+        status: 'confirm', message: confirmSummary(trigger, offer), choices: CONFIRM_CHOICES,
+        resolvedTrigger: trigger, resolvedOffer: offer, credits,
       });
-      return Response.json({ status: 'saved', trigger, offer, credits });
     }
 
     if (clarifyMsgs.length > 0) {

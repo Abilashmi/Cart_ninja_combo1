@@ -21,88 +21,107 @@ export const loader = async ({ request }) => {
   let publishedCount = 0;
   let publishedPages = [];
   let templates = [];
-  let discounts = [];
   let totalConversions = 0;
   let totalRevenue = 0;
 
-  try {
-    const db = getDb();
-    const [allRows] = await db.execute(
-      `SELECT id, name, is_active, page_handle, customization_data, created_at, updated_at
-       FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
-      [shop]
-    );
-
-    templates = (Array.isArray(allRows) ? allRows : []).map(row => {
-      let config = {};
-      try { config = JSON.parse(row.customization_data || '{}'); } catch { /* keep {} */ }
-      return {
-        id: row.id,
-        title: row.name || 'Untitled',
-        active: Boolean(row.is_active),
-        page_url: row.page_handle || null,
-        page_handle: row.page_handle || null,
-        config,
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
-      };
-    });
-
-    templateCount = templates.filter(t => t.active).length;
-    publishedPages = templates.filter(t => t.page_url);
-    publishedCount = publishedPages.length;
-
-    const [convRows] = await db.execute(
-      `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total
-       FROM combo_analytics WHERE shop_domain = ? AND event_type = 'order'`,
-      [shop]
-    );
-    totalConversions = Number(convRows[0]?.n || 0);
-    totalRevenue = parseFloat(convRows[0]?.total || 0);
-  } catch (e) {
-    console.error('[bundles index loader]', e.message);
-  }
-
-  try {
-    const res = await admin.graphql(`
-      query DiscountList {
-        discountNodes(first: 100, reverse: true) {
-          edges {
-            node {
-              id
-              discount {
-                ... on DiscountCodeBasic {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-                ... on DiscountCodeBxgy {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-                ... on DiscountCodeFreeShipping {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
+  // These three round-trips (two MySQL queries + one Admin GraphQL call) are
+  // fully independent of each other, so they run concurrently instead of one
+  // after another. Each keeps its own try/catch so a failure in one doesn't
+  // wipe out data already fetched by the others.
+  const [templatesResult, analyticsResult, discounts] = await Promise.all([
+    (async () => {
+      try {
+        const db = getDb();
+        const [allRows] = await db.execute(
+          `SELECT id, name, is_active, page_handle, customization_data, created_at, updated_at
+           FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC`,
+          [shop]
+        );
+        return (Array.isArray(allRows) ? allRows : []).map(row => {
+          let config = {};
+          try { config = JSON.parse(row.customization_data || '{}'); } catch { /* keep {} */ }
+          return {
+            id: row.id,
+            title: row.name || 'Untitled',
+            active: Boolean(row.is_active),
+            page_url: row.page_handle || null,
+            page_handle: row.page_handle || null,
+            config,
+            createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+            updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+          };
+        });
+      } catch (e) {
+        console.error('[bundles index loader] templates query failed:', e.message);
+        return [];
+      }
+    })(),
+    (async () => {
+      try {
+        const db = getDb();
+        const [convRows] = await db.execute(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total
+           FROM combo_analytics WHERE shop_domain = ? AND event_type = 'order'`,
+          [shop]
+        );
+        return { totalConversions: Number(convRows[0]?.n || 0), totalRevenue: parseFloat(convRows[0]?.total || 0) };
+      } catch (e) {
+        console.error('[bundles index loader] analytics query failed:', e.message);
+        return { totalConversions: 0, totalRevenue: 0 };
+      }
+    })(),
+    (async () => {
+      try {
+        const res = await admin.graphql(`
+          query DiscountList {
+            discountNodes(first: 100, reverse: true) {
+              edges {
+                node {
+                  id
+                  discount {
+                    ... on DiscountCodeBasic {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                    ... on DiscountCodeBxgy {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                    ... on DiscountCodeFreeShipping {
+                      title
+                      codes(first: 1) { edges { node { code } } }
+                      status
+                    }
+                  }
                 }
               }
             }
           }
-        }
+        `);
+        const json = await res.json();
+        return (json.data?.discountNodes?.edges || [])
+          .map(({ node }) => {
+            const d = node.discount;
+            if (!d) return null;
+            const code = d.codes?.edges?.[0]?.node?.code || '';
+            if (!code || d.status !== 'ACTIVE') return null;
+            return { id: node.id, code, title: d.title || code };
+          })
+          .filter(Boolean);
+      } catch {
+        return [];
       }
-    `);
-    const json = await res.json();
-    discounts = (json.data?.discountNodes?.edges || [])
-      .map(({ node }) => {
-        const d = node.discount;
-        if (!d) return null;
-        const code = d.codes?.edges?.[0]?.node?.code || '';
-        if (!code || d.status !== 'ACTIVE') return null;
-        return { id: node.id, code, title: d.title || code };
-      })
-      .filter(Boolean);
-  } catch { /* silent */ }
+    })(),
+  ]);
+
+  templates = templatesResult;
+  templateCount = templates.filter(t => t.active).length;
+  publishedPages = templates.filter(t => t.page_url);
+  publishedCount = publishedPages.length;
+  totalConversions = analyticsResult.totalConversions;
+  totalRevenue = analyticsResult.totalRevenue;
 
   return { templateCount, publishedCount, publishedPages, templates, shop, discounts, totalConversions, totalRevenue };
 };

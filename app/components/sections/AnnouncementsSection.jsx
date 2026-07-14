@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
-import { Card, FormLayout, TextField, RangeSlider, BlockStack, Text, InlineStack } from '@shopify/polaris';
+import { Card, FormLayout, TextField, BlockStack, Text, InlineStack } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
+import { SliderField } from '../shared/SliderField';
 import { ColorField } from './ColorField';
 
 export function AnnouncementsSection() {
@@ -53,12 +54,11 @@ export function AnnouncementsSection() {
                 onChange={(v) => updateAnnouncements({ textColor: v })}
               />
             </InlineStack>
-            <RangeSlider
+            <SliderField
               label="Font Size"
               value={announcements.fontSize}
               min={10}
               max={20}
-              output
               suffix="px"
               onChange={(v) => updateAnnouncements({ fontSize: v })}
             />

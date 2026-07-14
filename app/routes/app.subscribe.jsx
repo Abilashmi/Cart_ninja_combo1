@@ -237,6 +237,20 @@ function featureLabelSuffix(state) {
     return '';
 }
 
+// Full Analytics is fully "enabled" (in the gating sense) on both Starter
+// and Pro, but Starter's actual analytics page only surfaces Overview and
+// Build a Combo data — Pro adds the rest. The generic state-based suffix
+// above can't express that (both tiers share the same 'enabled' state), so
+// this is a presentation-only override scoped to this one row on this one
+// page — does not affect app/config/plans.js or the analytics page's own
+// gating logic, which is intentionally left untouched.
+function featureRowLabel(featureKey, planKey, state) {
+    if (featureKey === 'full_analytics' && planKey === 'starter') {
+        return 'Full Analytics — Overview & Build a Combo only';
+    }
+    return FEATURES[featureKey].label + featureLabelSuffix(state);
+}
+
 export default function SubscribePage() {
     const { currentPlanKey } = useLoaderData();
     const actionData = useActionData();
@@ -353,7 +367,7 @@ export default function SubscribePage() {
                                                         <Icon source={icon.source} tone={icon.tone} />
                                                     </span>
                                                     <Text as="p" variant="bodyXs" tone={state === 'locked' ? 'subdued' : undefined}>
-                                                        {FEATURES[featureKey].label}{featureLabelSuffix(state)}
+                                                        {featureRowLabel(featureKey, planKey, state)}
                                                     </Text>
                                                 </div>
                                             );

@@ -3,10 +3,11 @@ import { useLoaderData, useRouteError, useFetcher } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
-  Select, Checkbox, Divider, RadioButton, RangeSlider, Collapsible,
+  Select, Checkbox, Divider, RadioButton, Collapsible,
   Icon, Modal, TextField, Toast, Frame, Banner,
 } from '@shopify/polaris';
 import BrixBar from '../components/ai-agent/BrixBar';
+import { SliderField } from '../components/shared/SliderField';
 import {
   SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
 } from '@shopify/polaris-icons';
@@ -28,143 +29,158 @@ export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
-  /* fetch products from Shopify */
-  let allProducts = [];
-  try {
-    const prodRes = await admin.graphql(`
-      query getProducts {
-        products(first: 50) {
-          edges {
-            node {
-              id
-              title
-              handle
-              featuredImage { url }
-              variants(first: 1) {
-                edges {
-                  node { id price }
+  // Products (Admin GraphQL), FBT config (MySQL), and theme-embed detection
+  // (2 sequential Shopify REST calls) are all independent of each other, so
+  // they run concurrently instead of one after another. Each keeps its own
+  // try/catch so a failure in one doesn't affect the others' results.
+  const [allProducts, { fbtConfig, manualRules }, fbtEmbedEnabled] = await Promise.all([
+    /* fetch products from Shopify */
+    (async () => {
+      try {
+        const prodRes = await admin.graphql(`
+          query getProducts {
+            products(first: 50) {
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  featuredImage { url }
+                  variants(first: 1) {
+                    edges {
+                      node { id price }
+                    }
+                  }
                 }
               }
             }
           }
+        `);
+        const prodData = await prodRes.json();
+        return (prodData?.data?.products?.edges || []).map(e => ({
+          id: e.node.id,
+          title: e.node.title,
+          handle: e.node.handle,
+          image: e.node.featuredImage?.url || '',
+          price: e.node.variants?.edges?.[0]?.node?.price || '0',
+        }));
+      } catch (e) {
+        console.error('[FBT loader] products:', e);
+        return [];
+      }
+    })(),
+    /* fetch FBT config from new normalized tables */
+    (async () => {
+      let fbtConfig = null;
+      let manualRules = [];
+      try {
+        const db = getDb();
+        const [settings] = await db.execute(
+          'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
+        );
+        const [rules] = await db.execute(
+          'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]
+        );
+        if (settings.length > 0) {
+          const s = settings[0];
+          fbtConfig = {
+            is_enabled: s.is_enabled,
+            activeTemplate: s.selected_template || 'fbt1',
+            mode: s.mode || 'manual',
+            layout: s.layout || 'horizontal',
+            interactionType: s.interaction_type || 'classic',
+            showPrices: s.show_prices !== 0,
+            showAddAllButton: s.show_add_all_button !== 0,
+            bgColor: s.bg_color || '#ffffff',
+            textColor: s.text_color || '#111827',
+            priceColor: s.price_color || '#059669',
+            buttonColor: s.button_color || '#111827',
+            buttonTextColor: s.button_text_color || '#ffffff',
+            borderColor: s.border_color || '#e5e7eb',
+            borderRadius: s.border_radius ?? 8,
+            aiEnabled: s.mode === 'ai',
+            aiProductCount: s.ai_product_count || 3,
+            widgetPlacement: s.widget_placement || 'above_cart',
+          };
+          manualRules = rules.map(r => ({
+            id: r.id,
+            name: r.name,
+            displayScope: r.trigger_scope || 'all',
+            triggerProducts: parseJson(r.trigger_products, []),
+            triggerCollections: parseJson(r.trigger_collections, []),
+            fbtProducts: parseJson(r.fbt_products, []),
+          }));
+        } else {
+          // Fall back to legacy fbt_widget table
+          const [legacy] = await db.execute('SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
+          if (legacy.length > 0) {
+            const row = legacy[0];
+            const tpl = parseJson(row.temp1, {});
+            fbtConfig = {
+              is_enabled: 1,
+              activeTemplate: row.selectedTemp || 'fbt1',
+              mode: row.selectedMode || 'manual',
+              layout: tpl.layout || 'horizontal',
+              interactionType: tpl.interactionType || 'classic',
+              showPrices: tpl.showPrices !== false,
+              showAddAllButton: tpl.showAddAllButton !== false,
+              bgColor: tpl.bgColor || '#ffffff',
+              textColor: tpl.textColor || '#111827',
+              priceColor: tpl.priceColor || '#059669',
+              buttonColor: tpl.buttonColor || '#111827',
+              buttonTextColor: tpl.buttonTextColor || '#ffffff',
+              borderColor: tpl.borderColor || '#e5e7eb',
+              borderRadius: tpl.borderRadius ?? 8,
+              aiEnabled: row.ai_enabled === 1,
+              aiProductCount: row.ai_product_count || 3,
+              widgetPlacement: tpl.widgetPlacement || 'above_cart',
+            };
+            manualRules = parseJson(row.condition, []);
+          }
         }
+      } catch (e) {
+        console.error('[FBT loader] DB read:', e.message);
       }
-    `);
-    const prodData = await prodRes.json();
-    allProducts = (prodData?.data?.products?.edges || []).map(e => ({
-      id: e.node.id,
-      title: e.node.title,
-      handle: e.node.handle,
-      image: e.node.featuredImage?.url || '',
-      price: e.node.variants?.edges?.[0]?.node?.price || '0',
-    }));
-  } catch (e) { console.error('[FBT loader] products:', e); }
-
-  /* fetch FBT config from new normalized tables */
-  let fbtConfig = null;
-  let manualRules = [];
-  try {
-    const db = getDb();
-    const [settings] = await db.execute(
-      'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
-    );
-    const [rules] = await db.execute(
-      'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]
-    );
-    if (settings.length > 0) {
-      const s = settings[0];
-      fbtConfig = {
-        is_enabled: s.is_enabled,
-        activeTemplate: s.selected_template || 'fbt1',
-        mode: s.mode || 'manual',
-        layout: s.layout || 'horizontal',
-        interactionType: s.interaction_type || 'classic',
-        showPrices: s.show_prices !== 0,
-        showAddAllButton: s.show_add_all_button !== 0,
-        bgColor: s.bg_color || '#ffffff',
-        textColor: s.text_color || '#111827',
-        priceColor: s.price_color || '#059669',
-        buttonColor: s.button_color || '#111827',
-        buttonTextColor: s.button_text_color || '#ffffff',
-        borderColor: s.border_color || '#e5e7eb',
-        borderRadius: s.border_radius ?? 8,
-        aiEnabled: s.mode === 'ai',
-        aiProductCount: s.ai_product_count || 3,
-        widgetPlacement: s.widget_placement || 'above_cart',
-      };
-      manualRules = rules.map(r => ({
-        id: r.id,
-        name: r.name,
-        displayScope: r.trigger_scope || 'all',
-        triggerProducts: parseJson(r.trigger_products, []),
-        triggerCollections: parseJson(r.trigger_collections, []),
-        fbtProducts: parseJson(r.fbt_products, []),
-      }));
-    } else {
-      // Fall back to legacy fbt_widget table
-      const [legacy] = await db.execute('SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
-      if (legacy.length > 0) {
-        const row = legacy[0];
-        const tpl = parseJson(row.temp1, {});
-        fbtConfig = {
-          is_enabled: 1,
-          activeTemplate: row.selectedTemp || 'fbt1',
-          mode: row.selectedMode || 'manual',
-          layout: tpl.layout || 'horizontal',
-          interactionType: tpl.interactionType || 'classic',
-          showPrices: tpl.showPrices !== false,
-          showAddAllButton: tpl.showAddAllButton !== false,
-          bgColor: tpl.bgColor || '#ffffff',
-          textColor: tpl.textColor || '#111827',
-          priceColor: tpl.priceColor || '#059669',
-          buttonColor: tpl.buttonColor || '#111827',
-          buttonTextColor: tpl.buttonTextColor || '#ffffff',
-          borderColor: tpl.borderColor || '#e5e7eb',
-          borderRadius: tpl.borderRadius ?? 8,
-          aiEnabled: row.ai_enabled === 1,
-          aiProductCount: row.ai_product_count || 3,
-          widgetPlacement: tpl.widgetPlacement || 'above_cart',
-        };
-        manualRules = parseJson(row.condition, []);
-      }
-    }
-  } catch (e) { console.error('[FBT loader] DB read:', e.message); }
-
-  // Detect if FBT app embed is enabled in the active theme.
-  // Optimistic default: if we CANNOT read the theme (missing read_themes scope,
-  // API error, etc.) we assume it's enabled so we never show a false warning.
-  // We only downgrade to "disabled" when we successfully parse the theme and
-  // confirm no enabled FBT app-embed block exists.
-  let fbtEmbedEnabled = true;
-  try {
-    const themesRes = await fetch(
-      `https://${shop}/admin/api/2024-04/themes.json?role=main`,
-      { headers: { 'X-Shopify-Access-Token': session.accessToken } }
-    );
-    if (themesRes.ok) {
-      const { themes } = await themesRes.json();
-      const mainTheme = (themes || []).find(t => t.role === 'main') || themes?.[0];
-      if (mainTheme) {
-        const assetRes = await fetch(
-          `https://${shop}/admin/api/2024-04/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+      return { fbtConfig, manualRules };
+    })(),
+    // Detect if FBT app embed is enabled in the active theme.
+    // Optimistic default: if we CANNOT read the theme (missing read_themes scope,
+    // API error, etc.) we assume it's enabled so we never show a false warning.
+    // We only downgrade to "disabled" when we successfully parse the theme and
+    // confirm no enabled FBT app-embed block exists.
+    (async () => {
+      try {
+        const themesRes = await fetch(
+          `https://${shop}/admin/api/2024-04/themes.json?role=main`,
           { headers: { 'X-Shopify-Access-Token': session.accessToken } }
         );
-        if (assetRes.ok) {
-          const { asset } = await assetRes.json();
-          const settingsData = JSON.parse(asset?.value || '{}');
-          const current = settingsData?.current || {};
-          // Scan all sections + top-level app-embed blocks (theme structure varies)
-          const allBlocks = [];
-          Object.values(current.sections || {}).forEach(s => Object.values(s?.blocks || {}).forEach(b => allBlocks.push(b)));
-          Object.values(current.blocks || {}).forEach(b => allBlocks.push(b));
-          fbtEmbedEnabled = allBlocks.some(b => {
-            if (b.disabled) return false;
-            return (b.type || '').toLowerCase().includes('fbt');
-          });
+        if (themesRes.ok) {
+          const { themes } = await themesRes.json();
+          const mainTheme = (themes || []).find(t => t.role === 'main') || themes?.[0];
+          if (mainTheme) {
+            const assetRes = await fetch(
+              `https://${shop}/admin/api/2024-04/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+              { headers: { 'X-Shopify-Access-Token': session.accessToken } }
+            );
+            if (assetRes.ok) {
+              const { asset } = await assetRes.json();
+              const settingsData = JSON.parse(asset?.value || '{}');
+              const current = settingsData?.current || {};
+              // Scan all sections + top-level app-embed blocks (theme structure varies)
+              const allBlocks = [];
+              Object.values(current.sections || {}).forEach(s => Object.values(s?.blocks || {}).forEach(b => allBlocks.push(b)));
+              Object.values(current.blocks || {}).forEach(b => allBlocks.push(b));
+              return allBlocks.some(b => {
+                if (b.disabled) return false;
+                return (b.type || '').toLowerCase().includes('fbt');
+              });
+            }
+          }
         }
-      }
-    }
-  } catch { /* keep optimistic true on any error */ }
+      } catch { /* keep optimistic true on any error */ }
+      return true;
+    })(),
+  ]);
 
   return {
     shop,
@@ -629,9 +645,18 @@ export default function FBTPage() {
     const btnBase = { borderRadius: `${borderRadius}px`, border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: '7px 14px', background: buttonColor, color: buttonTextColor, transition: 'background 0.15s' };
 
     if (interactionStyle === 'bundle') {
+      const isLastChecked = s.checked && activeCount <= 1;
       return (
-        <input type="checkbox" checked={s.checked} onChange={(e) => updateProduct(i, { checked: e.target.checked })}
-          style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: 'pointer', flexShrink: 0 }} />
+        <input
+          type="checkbox"
+          checked={s.checked}
+          disabled={isLastChecked}
+          onChange={(e) => {
+            if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
+            updateProduct(i, { checked: e.target.checked });
+          }}
+          style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
+        />
       );
     }
 
@@ -653,7 +678,7 @@ export default function FBTPage() {
     return (
       <button onClick={() => updateProduct(i, { added: !s.added })}
         style={{ ...btnBase, background: s.added ? '#008060' : buttonColor, whiteSpace: 'nowrap' }}>
-        {s.added ? 'Added ✓' : 'Add'}
+        {s.added ? 'Added' : 'Add'}
       </button>
     );
   };
@@ -1045,7 +1070,7 @@ export default function FBTPage() {
 
                   <AccordionSection id="styling" icon={MagicIcon} title="Styling & Display" isOpen={openSection === 'styling'} onToggle={toggleSection} tip={SECTION_TIPS.styling}>
                     <BlockStack gap="300">
-                      <RangeSlider label={`Border Radius: ${borderRadius}px`} value={borderRadius} min={0} max={20} onChange={(v) => { setBorderRadius(v); mark(); }} output />
+                      <SliderField label="Border Radius" value={borderRadius} min={0} max={20} suffix="px" onChange={(v) => { setBorderRadius(v); mark(); }} />
                       <Divider />
                       <Checkbox label="Show Prices"          checked={showPrices}  onChange={(v) => { setShowPrices(v);  mark(); }} />
                       <Checkbox label="Show 'Add All' Button" checked={showAddAll} onChange={(v) => { setShowAddAll(v); mark(); }} />

@@ -1,5 +1,5 @@
 import { authenticate } from "../shopify.server";
-import { getStoredCoupons } from "./api.create_coupon-sample";
+import { getStoredCoupons } from "../services/coupon-sample.server";
 import { getDb } from "../services/db.server";
 
 function normalizeShopDomain(shopDomain) {

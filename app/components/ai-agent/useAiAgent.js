@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useOutletContext } from 'react-router';
 import { aiApi } from './api';
 import { featureStore } from './featureStore';
 import { useCurrency } from '../CurrencyContext';
@@ -25,6 +26,49 @@ const ACTION_LABELS = {
   styling: 'Styling', optimization: 'Optimization',
 };
 
+// Natural, markdown-formatted sentence for one action the backend actually
+// confirmed applied — only called after result.applied.includes(engine).
+// Never used for actions that failed/are unsupported (see failureLine below).
+function successLine(a, label) {
+  const isUpsellEnable = a.module === 'upsells' && a.action === 'enable';
+  const isFbtEnable = a.module === 'fbt' && a.action === 'enable';
+
+  if (a.module === 'cartDrawer') {
+    if (a.action === 'enable') {
+      const side = a.settings?.cartDrawerPosition ? ` It opens on the **${a.settings.cartDrawerPosition}** side of the screen.` : '';
+      return `I've enabled your **Cart Drawer** successfully. Customers will now see your customized cart drawer instead of Shopify's default cart.${side} Refresh your storefront and add a product to verify the change.`;
+    }
+    return `I've disabled your **Cart Drawer**. Customers will now use Shopify's default cart.`;
+  }
+  if (a.module === 'progressBar') {
+    return a.action === 'enable'
+      ? `I've enabled your **Progress Bar**. Customers will now see spending milestones inside the Cart Drawer to encourage larger purchases.`
+      : `I've disabled the **Progress Bar**.`;
+  }
+  if (a.module === 'upsells') {
+    return isUpsellEnable
+      ? `I've enabled **Upsells** — let's set up a trigger below so Brix knows which products to recommend.`
+      : `I've disabled **Upsells**.`;
+  }
+  if (a.module === 'fbt') {
+    if (isFbtEnable) {
+      const parts = [];
+      if (a.settings?.fbtTemplate) parts.push(`the **${FBT_TEMPLATE_LABELS[a.settings.fbtTemplate] || a.settings.fbtTemplate}** template`);
+      if (a.settings?.fbtMode) parts.push(`**${a.settings.fbtMode === 'ai' ? 'AI recommended' : 'Manual'}** mode`);
+      const detail = parts.length ? `, using ${parts.join(' and ')}` : '';
+      return `I've enabled **Frequently Bought Together**${detail}.`;
+    }
+    return `I've disabled **Frequently Bought Together**.`;
+  }
+  return `I've applied **${label}** successfully.`;
+}
+
+function failureLine(label, reason) {
+  if (reason === 'unsupported') return `**${label}** isn't available yet — there's no backend for that action.`;
+  if (reason === 'unknown') return `I couldn't confirm whether **${label}** was applied — the backend didn't return a result for it.`;
+  return `I couldn't apply **${label}** because the backend returned an error${reason ? ` (${reason})` : ''}.`;
+}
+
 // FBT admin template picker (app/routes/app.fbt.jsx) maps these labels to
 // fbt_widget_settings.selected_template's enum('fbt1','fbt2','fbt3').
 const FBT_TEMPLATE_MAP = [
@@ -47,22 +91,6 @@ function extractFbtSettings(lower) {
   } else if (/\bmanual\b[\s\S]{0,20}(mode|config)/i.test(lower)) {
     settings.fbtMode = 'manual';
   }
-  return settings;
-}
-
-// Pulls a spending goal amount and/or a completion message out of a progress
-// bar message (e.g. "enable progress bar, free shipping at $50, message
-// 'Almost there!'"). Only ever sets the FIRST/primary goal — multi-tier
-// setup still requires the manual Progress Bar panel.
-function extractProgressBarSettings(text) {
-  const settings = {};
-  const numMatch = text.match(/[$₹]?\s*(\d+(?:\.\d{1,2})?)/);
-  if (numMatch) {
-    const n = parseFloat(numMatch[1]);
-    if (Number.isFinite(n) && n > 0) settings.goalAmount = n;
-  }
-  const quoteMatch = text.match(/["']([^"']{3,80})["']/);
-  if (quoteMatch) settings.goalMessage = quoteMatch[1];
   return settings;
 }
 
@@ -95,11 +123,53 @@ function looksLikeDiscountIntent(text) {
   return !looksLikeQuestion(text) && DISCOUNT_INTENT.test(text);
 }
 
+// "create/build a bundle/combo ..." — same narrow verb+noun shape as discount
+// intent, for the same reason (avoid firing on any unrelated mention).
+const COMBO_INTENT = /\b(create|add|make|build|set ?up|start)\b[\s\S]{0,20}\b(bundle|combo)\b|\b(bundle|combo)\b[\s\S]{0,20}\b(create|add|make|build|set ?up|start)\b/i;
+function looksLikeComboIntent(text) {
+  return !looksLikeQuestion(text) && COMBO_INTENT.test(text);
+}
+
+const PROGRESS_BAR_RE = /progress.?bar|goal|free.?shipping|shipping.?progress/i;
+const WANT_DISABLE_RE = /disable|turn off|deactiv|remove|stop|hide|close/i;
+// "enable progress bar"/"set up a goal bar" etc — the setup flow asks for
+// reward type/goal/placement instead of blindly toggling it on. Disabling
+// needs no such clarification, so it's excluded here and stays an instant
+// toggle in extractActions below.
+function looksLikeProgressBarIntent(text) {
+  if (looksLikeQuestion(text)) return false;
+  const lower = text.toLowerCase();
+  return !WANT_DISABLE_RE.test(lower) && PROGRESS_BAR_RE.test(lower);
+}
+
+function looksLikeAovQuery(text) {
+  return /\b(increase|improve|boost|grow|raise)\b[\s\S]{0,25}\b(aov|average order value|revenue|sales|conversion)\b|how (do|can) i (sell more|increase (revenue|sales|aov))|grow (my )?revenue|make more (money|sales)/i.test(text);
+}
+
+// Autonomy rules: "choose the best upsell / recommend products / optimize my
+// cart / increase AOV" etc. skip the trigger/offer question entirely — Brix
+// analyzes real sales data (getBestUpsellPair) and picks a pair itself.
+// Checked BEFORE looksLikeAovQuery, which used to claim overlapping phrasing
+// ("increase AOV") for its own read-only insights report — these action
+// phrases mean "decide and do it for me", not "just show me a report".
+const AUTO_UPSELL_RE = new RegExp([
+  'best[\\s\\S]{0,15}upsell',
+  '(recommend|suggest)[\\s\\S]{0,15}(products?|bundles?)',
+  'smart[\\s\\S]{0,15}recommendation',
+  '(configure|set ?up)[\\s\\S]{0,15}ai[\\s\\S]{0,10}upsell',
+  'generate[\\s\\S]{0,15}recommendation',
+  '(optimi[sz]e|improve)[\\s\\S]{0,15}(my )?cart',
+  'increase[\\s\\S]{0,15}(aov|average order value)',
+].join('|'), 'i');
+function looksLikeAutoUpsellIntent(text) {
+  return !looksLikeQuestion(text) && AUTO_UPSELL_RE.test(text);
+}
+
 function extractActions(text) {
   if (looksLikeQuestion(text)) return [];
   const lower = text.toLowerCase();
   const actions = [];
-  const wantDisable = /disable|turn off|deactiv|remove|stop|hide|close/.test(lower);
+  const wantDisable = WANT_DISABLE_RE.test(lower);
 
   if (/(?:apply|set|use|enable)?\s*(premium\s*dark|dark\s*(?:theme|preset))/i.test(lower)) {
     actions.push({ module: 'styling', action: 'applyTemplate', engine: 'applyTemplate', settings: { template: 'premium' }, label: 'Premium Dark Theme' });
@@ -133,7 +203,10 @@ function extractActions(text) {
   }
 
   if (/cart.*drawer|drawer|cart.*editor/.test(lower)) actions.push({ module: 'cartDrawer', action: wantDisable ? 'disable' : 'enable', settings: extractCartDrawerSettings(lower) });
-  if (/progress.?bar|goal|free.?shipping|shipping.?progress/i.test(lower)) actions.push({ module: 'progressBar', action: wantDisable ? 'disable' : 'enable', settings: extractProgressBarSettings(text) });
+  // Enabling the progress bar now goes through the conversational setup flow
+  // (looksLikeProgressBarIntent, checked earlier in sendMessage) — only
+  // disabling it stays an instant toggle here, since that needs no follow-up.
+  if (PROGRESS_BAR_RE.test(lower) && wantDisable) actions.push({ module: 'progressBar', action: 'disable' });
   if (/trust.?badge|security|secure|badge/i.test(lower) && !/goal|progress|shipping/.test(lower)) actions.push({ module: 'trustBadges', action: wantDisable ? 'disable' : 'enable' });
   if (/upsell/i.test(lower) && !/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'upsells', action: wantDisable ? 'disable' : 'enable' });
   if (/fbt|frequently.*bought/i.test(lower)) actions.push({ module: 'fbt', action: wantDisable ? 'disable' : 'enable', settings: extractFbtSettings(lower) });
@@ -170,6 +243,14 @@ async function fetchRevenueSummary() {
   } catch (e) {
     return { error: e.message || 'Network error' };
   }
+}
+
+// Picks the most recent real updated_at out of whatever sections `after`
+// touched — never fabricated; returns null if the backend didn't include one.
+function pickEvidenceTimestamp(after) {
+  const candidates = [after?.cart?.updatedAt, after?.cart?.goalBar?.updatedAt, after?.cart?.upsell?.updatedAt, after?.fbt?.updatedAt].filter(Boolean);
+  if (!candidates.length) return null;
+  return candidates.map(d => new Date(d)).sort((a, b) => b - a)[0];
 }
 
 function syncAfterToFeatureStore(after) {
@@ -270,46 +351,120 @@ async function fetchSampleProductNames() {
   return null;
 }
 
-// One turn of the conversational upsell-rule flow — posts the merchant's
-// reply plus whatever's already been resolved to api.ai-agent.upsell-rule-turn.
-async function upsellRuleTurnViaApi(message, pending) {
+// ── Generalized "pending action" turn dispatch ──────────────────────────────
+// One in-memory (never persisted — see below) state machine drives all four
+// multi-turn flows. Each flow still has its own server route (mirrors the
+// existing discount-turn/upsell-rule-turn convention) but the client-side
+// ask -> confirm -> execute -> verify handling is shared.
+
+const FLOW_ENDPOINTS = {
+  upsellRule: '/api/ai-agent/upsell-rule-turn',
+  discount: '/api/ai-agent/discount-turn',
+  progressBar: '/api/ai-agent/progress-bar-turn',
+  combo: '/api/ai-agent/combo-turn',
+};
+
+const BAIL_TEXT = {
+  upsellRule: 'Let\'s finish this in the Cart Editor\'s Upsell settings instead — you can add the rule there directly.',
+  discount: 'Let\'s finish this in Discounts instead — you can create the code there directly.',
+  progressBar: 'Let\'s finish this in the Cart Editor\'s Progress Bar settings instead — you can configure it there directly.',
+  combo: 'Let\'s finish this in Build a Combo instead — you can create the bundle there directly.',
+};
+
+const REWARD_TYPE_DISPLAY = { free_shipping: 'Free Shipping', free_gift: 'Free Gift', discount: 'Discount', custom: 'Custom' };
+
+function buildTurnPayload(flow, message, pending) {
+  const p = pending || {};
+  switch (flow) {
+    case 'upsellRule':
+      return { message, needSide: p.needSide || 'both', resolvedTrigger: p.resolvedTrigger, resolvedOffer: p.resolvedOffer, ambiguousSide: p.ambiguousSide, ambiguousCandidates: p.ambiguousCandidates };
+    case 'discount':
+      return { message, resolvedCode: p.resolvedCode, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
+    case 'progressBar':
+      return { message, slots: p.slots };
+    case 'combo':
+      return { message, slots: p.slots, ambiguousCandidates: p.ambiguousCandidates };
+    default:
+      return { message };
+  }
+}
+
+function buildFinalizePayload(flow, pending) {
+  const p = pending || {};
+  switch (flow) {
+    case 'upsellRule':
+      return { finalize: true, resolvedTrigger: p.resolvedTrigger, resolvedOffer: p.resolvedOffer };
+    case 'discount':
+      return { finalize: true, resolvedCode: p.resolvedCode, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
+    case 'progressBar':
+      return { finalize: true, slots: p.slots };
+    case 'combo':
+      return { finalize: true, slots: p.slots };
+    default:
+      return { finalize: true };
+  }
+}
+
+async function postFlow(endpoint, body) {
   try {
-    const res = await fetch('/api/ai-agent/upsell-rule-turn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message,
-        needSide: pending?.needSide || 'both',
-        resolvedTrigger: pending?.resolvedTrigger,
-        resolvedOffer: pending?.resolvedOffer,
-        ambiguousSide: pending?.ambiguousSide,
-        ambiguousCandidates: pending?.ambiguousCandidates,
-      }),
-    });
+    const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     return await res.json();
   } catch (e) {
     return { status: 'error', message: e.message || 'Network error' };
   }
 }
 
-// One turn of the conversational discount-creation flow — posts the
-// merchant's reply plus whatever code/percentage is already resolved.
-async function discountTurnViaApi(message, pending) {
-  try {
-    const res = await fetch('/api/ai-agent/discount-turn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message,
-        resolvedCode: pending?.resolvedCode,
-        resolvedPercentage: pending?.resolvedPercentage,
-      }),
-    });
-    return await res.json();
-  } catch (e) {
-    return { status: 'error', message: e.message || 'Network error' };
+async function runFlowTurn(flow, message, pending) {
+  return postFlow(FLOW_ENDPOINTS[flow], buildTurnPayload(flow, message, pending));
+}
+async function finalizeFlow(flow, pending) {
+  return postFlow(FLOW_ENDPOINTS[flow], buildFinalizePayload(flow, pending));
+}
+async function storeInsightsViaApi() {
+  return postFlow('/api/ai-agent/store-insights', {});
+}
+
+async function autoUpsellViaApi() {
+  return postFlow('/api/ai-agent/auto-upsell', {});
+}
+
+// Natural, markdown-formatted confirmations — only ever shown after the
+// corresponding turn route returns 'saved', i.e. after a real DB write
+// succeeded (see the confirm-before-execute framework this generalizes).
+// Never rephrase these to imply something happened before that write.
+function savedMessage(flow, result) {
+  switch (flow) {
+    case 'upsellRule':
+      return `I've added a new upsell rule. When a customer adds **${result.trigger.title}** to their cart, they'll now be recommended **${result.offer.title}**.`;
+    case 'discount':
+      return `I've created your discount code. **${result.code}** gives customers **${result.percentage}% off** at checkout.`;
+    case 'progressBar': {
+      const s = result.slots || {};
+      const reward = REWARD_TYPE_DISPLAY[s.rewardType] || s.rewardType;
+      const placement = s.placement === 'top' ? 'top' : 'bottom';
+      return `I've enabled your **Progress Bar**. Customers will now see spending milestones toward **${reward}** at ₹${s.goalAmount}, shown at the ${placement} of the cart.`;
+    }
+    case 'combo':
+      return `I've created your bundle **"${result.slots?.templateName || ''}"** as a draft. Open **Build a Combo** to review and publish it.`;
+    default:
+      return "That's been applied successfully.";
   }
 }
+
+// Everything a route returns beyond status/message/credits/choices is
+// flow-specific turn state (slots, resolvedTrigger, ambiguousCandidates,
+// etc.) — carry all of it forward into the next pendingAction untouched.
+function restFields(result) {
+  const rest = { ...result };
+  delete rest.status;
+  delete rest.message;
+  delete rest.credits;
+  delete rest.choices;
+  return rest;
+}
+
+const CONFIRM_YES_RE = /^(__confirm__|y|yes|yeah|yep|confirm|ok|okay|sure|go ahead|do it|please do)\.?$/i;
+const CONFIRM_NO_RE = /^(__cancel__|n|no|nope|cancel|stop|nevermind|never mind)\.?$/i;
 
 function mergeCredits(prev, incoming) {
   if (!incoming) return prev;
@@ -330,6 +485,9 @@ function lsSet(key, val) {
 
 export default function useAiAgent(location) {
   const { symbol: currencySymbol, code: currencyCode } = useCurrency();
+  // BrixBar/BrixAiPage are always rendered inside app.jsx's <Outlet>
+  // subtree, which passes `shop` via context — no extra network request.
+  const { shop } = useOutletContext() || {};
   const [conversations, setConversations] = useState(() => lsGet(LS_CONVS, []));
   const [activeConvId, setActiveConvId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -344,9 +502,9 @@ export default function useAiAgent(location) {
   // pending clarification would otherwise survive a reload/navigation and
   // could hijack a much later, completely unrelated message (e.g. a fresh
   // "Add Upsells" click getting misread as the answer to a stale question).
-  const [pendingUpsellRule, setPendingUpsellRule] = useState(null);
-  // Same in-memory-only treatment and same reason as pendingUpsellRule above.
-  const [pendingDiscount, setPendingDiscount] = useState(null);
+  // One state machine drives all four conversational flows (upsellRule,
+  // discount, progressBar, combo) — see the "pending action" helpers above.
+  const [pendingAction, setPendingAction] = useState(null);
 
   const currentPage = getPageFromPath(location?.pathname || '/app');
 
@@ -384,8 +542,7 @@ export default function useAiAgent(location) {
   }, []);
 
   const createConversation = useCallback(async (title) => {
-    setPendingUpsellRule(null);
-    setPendingDiscount(null);
+    setPendingAction(null);
     try {
       const res = await aiApi.createConversation(title);
       if (res?.success && res?.conversation) {
@@ -411,15 +568,14 @@ export default function useAiAgent(location) {
         setMessages(res.messages.map(m => ({
           id: m.id, role: m.role === 'assistant' ? 'agent' : 'user',
           text: m.message, summary: m.summary, actions: m.actions,
-          createdAt: m.createdAt,
+          createdAt: m.created_at,
         })));
       }
     } catch { setMessages([]); }
   }, []);
 
   const selectConversation = useCallback((convId) => {
-    setPendingUpsellRule(null);
-    setPendingDiscount(null);
+    setPendingAction(null);
     setActiveConvId(convId);
     const saved = lsGet(LS_MSGS, {});
     if (saved[convId]?.length > 0) setMessages(saved[convId]);
@@ -434,80 +590,160 @@ export default function useAiAgent(location) {
       if (!conv) return;
       convId = conv.id;
     }
-    const userMsg = { id: 'u-' + Date.now(), role: 'user', text: text.trim() };
+    // Fire-and-forget persistence to MySQL (ai_messages table) so chat
+    // history survives reloads/devices — mirrors the localStorage cache but
+    // is the only copy that outlives this browser. Failures are swallowed;
+    // the UI already has its own source of truth in `messages` state.
+    const persist = (msg) => {
+      aiApi.saveMessage(convId, msg.role === 'agent' ? 'assistant' : 'user', msg.text || '').catch(() => {});
+    };
+
+    const userMsg = { id: 'u-' + uid(), role: 'user', text: text.trim() };
     setMessages(prev => [...prev, userMsg]);
+    persist(userMsg);
+
+    // A new conversation is already prepended by createConversation above,
+    // but continuing an EXISTING one never moved it in the list before —
+    // it stayed pinned at its original creation-time position no matter how
+    // recently it was actually used. Bump it to the top here too, so the
+    // history list reflects "most recently active", not just "most recently
+    // created" (matches the ORDER BY updated_at DESC the server already uses).
+    setConversations(prev => {
+      const idx = prev.findIndex(c => c.id === convId);
+      if (idx <= 0) return prev;
+      const bumped = { ...prev[idx], updatedAt: new Date().toISOString() };
+      return [bumped, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
+    });
+
     setLoading('executing');
     setTyping(true);
     setError(null);
-    let reply;
-    let followUpReply = null;
+
+    const agentMsg = (t, choices) => ({
+      id: 'a-' + uid(), role: 'agent', text: t,
+      json: choices?.length ? { message: t, choices } : { message: t },
+    });
+
+    // Applies a flow turn/finalize result identically regardless of which
+    // flow produced it or whether it was a fresh start or a follow-up reply.
+    const handleFlowResult = (flow, result, prevPending) => {
+      if (result.credits) setCredits(prev => mergeCredits(prev, result.credits));
+      if (result.status === 'saved') {
+        const msg = agentMsg(savedMessage(flow, result));
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        setPendingAction(null);
+      } else if (result.status === 'confirm') {
+        const msg = agentMsg(result.message, result.choices);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        setPendingAction({ flow, awaitingConfirm: true, attempts: 0, ...restFields(result) });
+      } else if (result.status === 'ask') {
+        // A normal next-question step in a multi-slot wizard (progressBar/
+        // combo) — healthy forward progress, not a failure, so it must NOT
+        // count toward the 3-attempt cap (a flow with 3-4 required slots
+        // would otherwise hit the cap right as it's about to finish).
+        const msg = agentMsg(result.message, result.choices);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        setPendingAction({ flow, awaitingConfirm: false, attempts: 0, ...restFields(result) });
+      } else if (result.status === 'clarify') {
+        // A genuinely unresolved/ambiguous reply (bad product/collection
+        // name, unclear extraction) — this DOES count toward the cap.
+        const msg = agentMsg(result.message, result.choices);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        setPendingAction({ flow, awaitingConfirm: false, attempts: (prevPending?.attempts || 0) + 1, ...restFields(result) });
+      } else if (result.status === 'locked') {
+        const msg = agentMsg(result.message);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        setPendingAction(null);
+      } else {
+        const msg = agentMsg(result.message || 'Something went wrong. Please try again.');
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        // Preserve whatever was already resolved (flow, slots, awaitingConfirm)
+        // untouched — a generic error shouldn't discard prior turn progress —
+        // and just count the failed attempt toward the 3-try cap.
+        setPendingAction(prevPending ? { ...prevPending, attempts: (prevPending.attempts || 0) + 1 } : { flow, awaitingConfirm: false, attempts: 1 });
+      }
+    };
+
     try {
-      if (pendingUpsellRule) {
-        if ((pendingUpsellRule.attempts || 0) >= 3) {
-          const t = 'Let\'s finish this in the Cart Editor\'s Upsell settings instead — you can add the rule there directly.';
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          setPendingUpsellRule(null);
-          setMessages(prev => [...prev, reply]);
+      if (pendingAction) {
+        if (pendingAction.awaitingConfirm) {
+          if (CONFIRM_YES_RE.test(text.trim())) {
+            const result = await finalizeFlow(pendingAction.flow, pendingAction);
+            handleFlowResult(pendingAction.flow, result, pendingAction);
+            return;
+          }
+          if (CONFIRM_NO_RE.test(text.trim())) {
+            setPendingAction(null);
+            const msg = agentMsg('Okay, cancelled.');
+            setMessages(prev => [...prev, msg]);
+            persist(msg);
+            return;
+          }
+          // Not a yes/no reply — fall through and forward it as another turn
+          // below so the merchant can correct an earlier answer instead of
+          // being forced to confirm or cancel.
+        }
+
+        if ((pendingAction.attempts || 0) >= 3) {
+          setPendingAction(null);
+          const msg = agentMsg(BAIL_TEXT[pendingAction.flow] || 'Let\'s finish this manually instead.');
+          setMessages(prev => [...prev, msg]);
+          persist(msg);
           return;
         }
 
-        const result = await upsellRuleTurnViaApi(text, pendingUpsellRule);
-        if (result.credits) setCredits(prev => mergeCredits(prev, result.credits));
-
-        if (result.status === 'saved') {
-          const t = `✓ New upsell rule added: when a customer adds "${result.trigger.title}", recommend "${result.offer.title}".`;
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          setPendingUpsellRule(null);
-        } else if (result.status === 'clarify') {
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: result.message, json: { message: result.message } };
-          setPendingUpsellRule({
-            needSide: result.needSide,
-            resolvedTrigger: result.resolvedTrigger,
-            resolvedOffer: result.resolvedOffer,
-            ambiguousSide: result.ambiguousSide,
-            ambiguousCandidates: result.ambiguousCandidates,
-            attempts: (pendingUpsellRule.attempts || 0) + 1,
-          });
-        } else {
-          const t = result.message || 'Something went wrong setting up that rule. Please try again.';
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          if (result.status === 'locked') setPendingUpsellRule(null);
-          else setPendingUpsellRule({ ...pendingUpsellRule, attempts: (pendingUpsellRule.attempts || 0) + 1 });
-        }
-        setMessages(prev => [...prev, reply]);
+        const result = await runFlowTurn(pendingAction.flow, text, pendingAction);
+        handleFlowResult(pendingAction.flow, result, pendingAction);
         return;
       }
 
-      if (pendingDiscount || looksLikeDiscountIntent(text)) {
-        const pending = pendingDiscount || { attempts: 0 };
-        if ((pending.attempts || 0) >= 3) {
-          const t = 'Let\'s finish this in Discounts instead — you can create the code there directly.';
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          setPendingDiscount(null);
-          setMessages(prev => [...prev, reply]);
-          return;
-        }
-
-        const result = await discountTurnViaApi(text, pending);
+      if (looksLikeAutoUpsellIntent(text)) {
+        const result = await autoUpsellViaApi();
         if (result.credits) setCredits(prev => mergeCredits(prev, result.credits));
-
+        let replyText;
         if (result.status === 'saved') {
-          const t = `✓ Discount created: "${result.code}" — ${result.percentage}% off.`;
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          setPendingDiscount(null);
-        } else if (result.status === 'clarify') {
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: result.message, json: { message: result.message } };
-          setPendingDiscount({
-            resolvedCode: result.resolvedCode,
-            resolvedPercentage: result.resolvedPercentage,
-            attempts: (pending.attempts || 0) + 1,
-          });
+          replyText = `I've analyzed your store and selected the best AI-powered upsell recommendation based on your sales history — when a customer adds **${result.trigger.title}** to their cart, they'll now see **${result.offer.title}** recommended. This is now active in your Cart Drawer.`;
         } else {
-          const t = result.message || 'Something went wrong creating that discount. Please try again.';
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: t, json: { message: t } };
-          setPendingDiscount({ ...pending, attempts: (pending.attempts || 0) + 1 });
+          // 'insufficient' | 'locked' | 'error' — each route response already
+          // carries an honest, specific message; never override it with a
+          // generic success-sounding line.
+          replyText = result.message || "Something went wrong while generating a recommendation. Please try again.";
         }
-        setMessages(prev => [...prev, reply]);
+        const msg = agentMsg(replyText);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        return;
+      }
+
+      if (looksLikeAovQuery(text)) {
+        const result = await storeInsightsViaApi();
+        const msg = agentMsg(result.message, result.choices);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
+        return;
+      }
+
+      if (looksLikeComboIntent(text)) {
+        const result = await runFlowTurn('combo', text, null);
+        handleFlowResult('combo', result, null);
+        return;
+      }
+
+      if (looksLikeProgressBarIntent(text)) {
+        const result = await runFlowTurn('progressBar', text, null);
+        handleFlowResult('progressBar', result, null);
+        return;
+      }
+
+      if (looksLikeDiscountIntent(text)) {
+        const result = await runFlowTurn('discount', text, null);
+        handleFlowResult('discount', result, null);
         return;
       }
 
@@ -524,11 +760,14 @@ export default function useAiAgent(location) {
           const aovStr = formatAmount(c.aov || 0, currencySymbol, currencyCode);
           replyText = `Revenue this month: ${revenueStr} across ${c.order_count || 0} orders (AOV ${aovStr}).`;
         }
-        reply = { id: 'a-' + Date.now(), role: 'agent', text: replyText, json: { message: replyText } };
-        setMessages(prev => [...prev, reply]);
+        const msg = agentMsg(replyText);
+        setMessages(prev => [...prev, msg]);
+        persist(msg);
         return;
       }
+
       const detectedActions = extractActions(text);
+      let reply, followUpReply;
       if (detectedActions.length > 0) {
         const engineFor = (a) => a.engine || MODULE_TO_ENGINE[a.module]?.[a.action];
         const themeAction = detectedActions.find(a => engineFor(a) === 'matchTheme');
@@ -542,7 +781,7 @@ export default function useAiAgent(location) {
           const result = await applyActionsViaApi(otherActions);
           if (result.error) {
             anyFailed = true;
-            otherActions.forEach(a => lines.push(`${a.label || ACTION_LABELS[a.module] || a.module}: Failed (${result.error})`));
+            otherActions.forEach(a => lines.push(failureLine(a.label || ACTION_LABELS[a.module] || a.module, result.error)));
           } else {
             mergedAfter = result.after;
             // Report each action's real outcome instead of one blanket status —
@@ -552,31 +791,11 @@ export default function useAiAgent(location) {
             otherActions.forEach(a => {
               const label = a.label || ACTION_LABELS[a.module] || a.module;
               const engine = engineFor(a);
-              const isUpsellEnable = a.module === 'upsells' && a.action === 'enable';
-              const isFbtEnable = a.module === 'fbt' && a.action === 'enable';
-              const isProgressBarEnable = a.module === 'progressBar' && a.action === 'enable';
-              const isCartDrawerEnable = a.module === 'cartDrawer' && a.action === 'enable';
               if (engine && result.applied.includes(engine)) {
-                if (isUpsellEnable) {
-                  lines.push(`${label}: Enabled — set up a trigger below`);
-                } else if (isFbtEnable && (a.settings?.fbtTemplate || a.settings?.fbtMode)) {
-                  const parts = [];
-                  if (a.settings.fbtTemplate) parts.push(`template set to ${FBT_TEMPLATE_LABELS[a.settings.fbtTemplate] || a.settings.fbtTemplate}`);
-                  if (a.settings.fbtMode) parts.push(`mode set to ${a.settings.fbtMode === 'ai' ? 'AI recommended' : 'Manual'}`);
-                  lines.push(`${label}: Enabled — ${parts.join(', ')}`);
-                } else if (isProgressBarEnable && (a.settings?.goalAmount || a.settings?.goalMessage)) {
-                  const parts = [];
-                  if (a.settings.goalAmount) parts.push(`goal set to ${a.settings.goalAmount}`);
-                  if (a.settings.goalMessage) parts.push(`message set to "${a.settings.goalMessage}"`);
-                  lines.push(`${label}: Enabled — ${parts.join(', ')}`);
-                } else if (isCartDrawerEnable && a.settings?.cartDrawerPosition) {
-                  lines.push(`${label}: Enabled — opens on the ${a.settings.cartDrawerPosition}`);
-                } else {
-                  lines.push(`${label}: Completed`);
-                }
+                lines.push(successLine(a, label));
               }
-              else if (engine && result.unsupported.includes(engine)) { lines.push(`${label}: Not supported yet (no backend handler)`); anyFailed = true; }
-              else { lines.push(`${label}: Unknown (no response for this action)`); anyFailed = true; }
+              else if (engine && result.unsupported.includes(engine)) { lines.push(failureLine(label, 'unsupported')); anyFailed = true; }
+              else { lines.push(failureLine(label, 'unknown')); anyFailed = true; }
             });
           }
         }
@@ -585,48 +804,52 @@ export default function useAiAgent(location) {
           const themeResult = await matchThemeViaApi();
           if (themeResult.error) {
             anyFailed = true;
-            lines.push(`Match Store Theme: Failed (${themeResult.error})`);
+            lines.push(failureLine('Match Store Theme', themeResult.error));
           } else {
             mergedAfter = themeResult.after || mergedAfter;
             const t = themeResult.theme || {};
-            lines.push(`Match Store Theme: Completed — applied ${t.headerBgColor} background / ${t.checkoutBgColor} button color detected from your live theme`);
+            lines.push(`I've matched your Cart Drawer's colors to your live theme — applied a **${t.headerBgColor}** background and **${t.checkoutBgColor}** button color.`);
           }
         }
 
         if (mergedAfter) syncAfterToFeatureStore(mergedAfter);
-        const labels = detectedActions.map(a => a.label || ACTION_LABELS[a.module] || a.module).join(', ');
-        const text2 = `Task: ${labels}\n${lines.join('\n')}`;
-        reply = { id: 'a-' + Date.now(), role: 'agent', text: text2, json: { message: text2, actions: detectedActions, status: anyFailed ? 'partial' : 'success' } };
+        // A single action reads as its own natural sentence; multiple actions
+        // in one message get a short intro plus a bulleted rundown (Markdown
+        // list — rendered for real by MarkdownMessage, not raw ** characters).
+        const text2 = lines.length > 1
+          ? `${anyFailed ? "Here's what happened:" : "I've made the following updates:"}\n\n${lines.map(l => `- ${l}`).join('\n')}`
+          : lines[0];
+        // Real evidence only — shop domain from the authenticated session,
+        // timestamp only if the backend actually returned one. Never shown
+        // if neither is available (no fabricated evidence).
+        const evidenceTs = pickEvidenceTimestamp(mergedAfter);
+        const evidence = (shop || evidenceTs) ? { shop, updatedAt: evidenceTs?.toISOString() } : undefined;
+        reply = { id: 'a-' + uid(), role: 'agent', text: text2, json: { message: text2, actions: detectedActions, status: anyFailed ? 'partial' : 'success', evidence } };
 
         const upsellEnable = otherActions.find(a => a.module === 'upsells' && a.action === 'enable');
         if (upsellEnable && !anyFailed) {
           // Try resolving trigger/offer straight from this same message first
           // (e.g. "Add Upsells, trigger Blue Hoodie offer Wool Socks") before
           // falling back to asking — don't ask for information already given.
-          const ruleResult = await upsellRuleTurnViaApi(text, null);
+          const ruleResult = await runFlowTurn('upsellRule', text, null);
           if (ruleResult.credits) setCredits(prev => mergeCredits(prev, ruleResult.credits));
 
-          if (ruleResult.status === 'saved') {
-            const t = `✓ New upsell rule added: when a customer adds "${ruleResult.trigger.title}", recommend "${ruleResult.offer.title}".`;
-            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: t, json: { message: t } };
+          if (ruleResult.status === 'confirm') {
+            followUpReply = agentMsg(ruleResult.message, ruleResult.choices);
+            setPendingAction({ flow: 'upsellRule', awaitingConfirm: true, attempts: 0, ...restFields(ruleResult) });
           } else if (ruleResult.status === 'locked') {
-            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: ruleResult.message, json: { message: ruleResult.message } };
+            followUpReply = agentMsg(ruleResult.message);
           } else if (ruleResult.status === 'clarify' && (ruleResult.resolvedTrigger || ruleResult.resolvedOffer)) {
             // Partially resolved from the original message — ask only for
             // whatever's still missing, don't restart from scratch.
-            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: ruleResult.message, json: { message: ruleResult.message } };
-            setPendingUpsellRule({
-              needSide: ruleResult.needSide,
-              resolvedTrigger: ruleResult.resolvedTrigger,
-              resolvedOffer: ruleResult.resolvedOffer,
-              attempts: 1,
-            });
+            followUpReply = agentMsg(ruleResult.message, ruleResult.choices);
+            setPendingAction({ flow: 'upsellRule', awaitingConfirm: false, attempts: 1, ...restFields(ruleResult) });
           } else {
             const sample = await fetchSampleProductNames();
             const example = sample ? `${sample[0]} triggers ${sample[1]}` : 'Blue Hoodie triggers Wool Socks';
             const followUpText = `Which product should trigger this upsell, and what should it offer? (e.g. "${example}")`;
-            followUpReply = { id: 'a-' + Date.now() + '-followup', role: 'agent', text: followUpText, json: { message: followUpText } };
-            setPendingUpsellRule({ needSide: 'both', attempts: 0 });
+            followUpReply = agentMsg(followUpText);
+            setPendingAction({ flow: 'upsellRule', awaitingConfirm: false, attempts: 0, needSide: 'both' });
           }
         }
       } else {
@@ -638,21 +861,28 @@ export default function useAiAgent(location) {
             const msgObj = res.message;
             const msgText = typeof msgObj === 'string' ? msgObj : (msgObj.text || msgObj.summary || msgObj.message || '');
             const msgActions = (typeof msgObj === 'object' ? msgObj.actions : null) || res.actions || [];
-            reply = { id: 'a-' + Date.now(), role: 'agent', text: msgText, json: msgActions.length > 0 ? { message: msgText, actions: msgActions } : null };
+            reply = { id: 'a-' + uid(), role: 'agent', text: msgText, json: msgActions.length > 0 ? { message: msgText, actions: msgActions } : null };
           } else throw new Error('No response');
         } catch {
-          reply = { id: 'a-' + Date.now(), role: 'agent', text: 'I couldn\'t process that. Try "Enable Cart Drawer", "Add Upsells", or "Enable Progress Bar".', json: { message: 'I couldn\'t process that. Try "Enable Cart Drawer", "Add Upsells", or "Enable Progress Bar".' } };
+          reply = agentMsg('I couldn\'t process that. Try "Enable Cart Drawer", "Add Upsells", or "Enable Progress Bar".');
         }
       }
       setMessages(prev => [...prev, reply, ...(followUpReply ? [followUpReply] : [])]);
+      persist(reply);
+      if (followUpReply) persist(followUpReply);
     } catch (e) {
-      setMessages(prev => [...prev, { id: 'e-' + Date.now(), role: 'agent', text: 'Sorry, something went wrong. Please try again.', error: true }]);
+      const errMsg = {
+        id: 'e-' + uid(), role: 'agent', error: true,
+        text: `Sorry, something went wrong${e.message ? `: ${e.message}` : ''}. Please try again — if it keeps failing, the backend may be unavailable right now.`,
+      };
+      setMessages(prev => [...prev, errMsg]);
+      persist(errMsg);
       setError(e.message);
     } finally {
       setLoading(null);
       setTyping(false);
     }
-  }, [activeConvId, messages, createConversation, currencySymbol, currencyCode, pendingUpsellRule, pendingDiscount]);
+  }, [activeConvId, messages, createConversation, currencySymbol, currencyCode, pendingAction, shop]);
 
   const deleteConversation = useCallback(async (convId) => {
     setConversations(prev => prev.filter(c => c.id !== convId));

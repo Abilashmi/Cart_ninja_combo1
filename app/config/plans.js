@@ -13,7 +13,7 @@ export const PLANS = {
     price: { monthly: 0, annual: 0 },
     rank: 0,
     orderCap: 50,
-    overageRate: 0.30,
+    overageRate: 0.10,
     aiBrixCredits: 10,
     aiBrixOverageRate: 0.01,
     comboTemplateLimit: 0,
@@ -26,7 +26,7 @@ export const PLANS = {
     price: { monthly: 29, annual: 290 },
     rank: 1,
     orderCap: 500,
-    overageRate: 0.10,
+    overageRate: 0.30,
     aiBrixCredits: 30,
     aiBrixOverageRate: 0.03,
     comboTemplateLimit: 3,
@@ -58,16 +58,16 @@ export const FEATURES = {
   ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
 
   fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  coupon_lock_pro:          { label: 'Coupon Lock Pro',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  coupon_lock_pro:          { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
 
-  progress_bar:             { label: 'Progress Bar',                   states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  ai_cart_upsell:           { label: 'AI Cart Upsell',                 states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
+  progress_bar:             { label: 'Progress Bar',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  ai_cart_upsell:           { label: 'AI Cart Upsell',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   full_analytics:           { label: 'Full Analytics',                 states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  confetti:                 { label: 'Confetti',                       states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  mobile_swipe_checkout:    { label: 'Mobile Swipe Checkout',          states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
+  confetti:                 { label: 'Confetti',                       states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  mobile_swipe_checkout:    { label: 'Mobile Swipe Checkout',          states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   build_a_combo:            { label: 'Build a Combo',                  states: { free: 'locked', starter: 'enabled', pro: 'enabled' } }, // count-limited, see comboTemplateLimit
-  open_countdown:           { label: 'Open Countdown',                 states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  custom_css:                { label: 'Custom CSS',                    states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
+  open_countdown:           { label: 'Open Countdown',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  custom_css:                { label: 'Custom CSS',                    states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   priority_email_support:   { label: 'Priority Email Support',         states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
   ai_support_247:           { label: '24/7 AI Support',                states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
 
