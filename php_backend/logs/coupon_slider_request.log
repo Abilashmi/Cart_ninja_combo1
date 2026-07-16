@@ -10678,3 +10678,66 @@
     }
 }
 ---
+{
+    "timestamp": "2026-07-16 09:46:04",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-16 09:46:04",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---
+{
+    "timestamp": "2026-07-16 09:51:32",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "POST",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php",
+        "query": [],
+        "payloadPreview": "{\"shop\":\"cartstoreviewer.myshopify.com\",\"selectedTemplate\":\"template3\",\"selectedTemplateCoupon\":\"gid:\/\/shopify\/DiscountCodeNode\/1167574237391\",\"selectedCouponsGlobal\":[\"gid:\/\/shopify\/DiscountCodeNode\/1167574237391\"],\"template3\":{\"styles\":{\"headingText\":\"FLASH SALE!\",\"subtextText\":\"Use code: BOLD25 for extra 25% OFF\",\"bgColor\":\"#000000\",\"textColor\":\"#ffffff\",\"accentColor\":\"#f59e0b\",\"buttonColor\":\"#f59e0b\",\"buttonTextColor\":\"#111827\",\"borderRadius\":16,\"fontSize\":18,\"padding\":20},\"couponStyles\":{\"gid:\/\/shopify\/DiscountCodeNode\/1167574237391\":{\"couponCode\":\"65P1H0RF\"}},\"couponConditions\":[]},\"displayCondition\":\"all\",\"productHandles\":[],\"collectionHandles\":[],\"tagHandles\":[],\"layout\":\"carousel\",\"timerEnabled\":false,\"timerHours\":0,\"timerMins\":15,\"timerLabel\":\"Offer expires in\",\"timerExpired\":\"Offer expired!\",\"timerBg\":\"#fef2f2\",\"timerText\":\"#991b1b\",\"timerAccent\":\"#dc2626\",\"widgetPlacement\":\"top\"}"
+    }
+}
+---
+{
+    "timestamp": "2026-07-16 09:51:32",
+    "message": "POST save success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com",
+        "selectedTemplate": "template3",
+        "selectedTemplateCoupon": "[\"gid:\\\/\\\/shopify\\\/DiscountCodeNode\\\/1167574237391\"]"
+    }
+}
+---
+{
+    "timestamp": "2026-07-16 09:51:32",
+    "message": "Endpoint hit",
+    "context": {
+        "method": "GET",
+        "requestUri": "\/cartdrawerv2_ui\/php_backend\/save_coupon_slider_widget.php?shopdomain=cartstoreviewer.myshopify.com",
+        "query": {
+            "shopdomain": "cartstoreviewer.myshopify.com"
+        },
+        "payloadPreview": null
+    }
+}
+---
+{
+    "timestamp": "2026-07-16 09:51:32",
+    "message": "GET fetch success",
+    "context": {
+        "shopDomain": "cartstoreviewer.myshopify.com"
+    }
+}
+---

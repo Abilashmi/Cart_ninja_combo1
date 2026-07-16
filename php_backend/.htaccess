@@ -1,0 +1,7 @@
+# Makes getenv('SHOPIFY_API_KEY') resolve on Apache/mod_php hosting (Hostinger)
+# so the X-Forge-Secret check in db_proxy.php / progress_bar.php / etc. actually
+# enforces instead of silently no-op'ing. Must match SHOPIFY_API_KEY in the
+# Node app's fly.toml / .env.
+<IfModule mod_env.c>
+  SetEnv SHOPIFY_API_KEY "9f7189f9faf11f0771c1ef2f81c42b8d"
+</IfModule>

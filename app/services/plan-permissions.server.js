@@ -35,22 +35,26 @@ export async function getShopPlan(shop) {
   const cached = planCache.get(shop);
   if (cached && cached.expiresAt > Date.now()) return cached.planKey;
 
-  const db = getDb();
-  await ensurePlanTables(db);
-
-  const [rows] = await db.execute(
-    'SELECT plan_key, plan_name FROM shops WHERE shop_domain = ? LIMIT 1',
-    [shop]
-  );
-
   let planKey = 'free';
-  if (rows.length > 0) {
-    const row = rows[0];
-    if (row.plan_key && isValidPlanKey(row.plan_key)) {
-      planKey = row.plan_key;
-    } else {
-      planKey = aliasLegacyPlanName(row.plan_name);
+  try {
+    const db = getDb();
+    await ensurePlanTables(db);
+
+    const [rows] = await db.execute(
+      'SELECT plan_key, plan_name FROM shops WHERE shop_domain = ? LIMIT 1',
+      [shop]
+    );
+
+    if (rows.length > 0) {
+      const row = rows[0];
+      if (row.plan_key && isValidPlanKey(row.plan_key)) {
+        planKey = row.plan_key;
+      } else {
+        planKey = aliasLegacyPlanName(row.plan_name);
+      }
     }
+  } catch (error) {
+    console.error('[Plan] ❌ Failed to resolve shop plan:', error.message);
   }
 
   planCache.set(shop, { planKey, expiresAt: Date.now() + CACHE_TTL_MS });

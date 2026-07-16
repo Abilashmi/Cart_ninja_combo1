@@ -17,6 +17,8 @@ primary_region = "bom"
   SHOPIFY_API_KEY = "9f7189f9faf11f0771c1ef2f81c42b8d"
 
   SHOPIFY_APP_URL = "https://cartdrawer.fly.dev"
+
+  PHP_BASE_URL = "https://int.thecomboforge.com"
  
 [processes]
 

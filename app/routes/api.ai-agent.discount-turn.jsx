@@ -4,8 +4,9 @@ import { callLlm, parseJsonReply } from '../services/ai-llm.server';
 
 const EXTRACTION_PROMPT = `You are extracting Shopify discount details from a merchant's chat message.
 Extract:
-- code: the discount code/name (a short word or code, e.g. "SUMMER20")
+- code: the discount code (a short word or code, e.g. "SUMMER20")
 - percentage: the percent off, as a plain number 0-100 (e.g. 20 for "20% off")
+- title: the coupon's internal display name/title, ONLY if the merchant clearly gives one separate from the code (e.g. "call it Summer Sale", "name it 10% Off Storewide"). Do NOT copy the code into title — leave it out if no distinct name was given.
 Optionally, ONLY if clearly mentioned:
 - minimumAmount: minimum order amount required, as a plain number
 - endDate: an ISO 8601 date string if they mention an expiry/end date
@@ -15,6 +16,13 @@ Optionally, ONLY if clearly mentioned:
 Reply with ONLY JSON, no prose. Omit any optional field not mentioned.
 If you cannot identify a code or a percentage at all, reply {"unclear":true}.`;
 
+// Coupon Name/Title must never be left blank — if the merchant never gives one,
+// synthesize a meaningful default from the percentage (e.g. "10% Off Storewide")
+// rather than falling back to the code as a title.
+function defaultTitle(percentage) {
+  return `${percentage}% Off Storewide`;
+}
+
 async function callExtractionLlm(message) {
   const text = await callLlm([
     { role: 'system', content: EXTRACTION_PROMPT },
@@ -23,18 +31,13 @@ async function callExtractionLlm(message) {
   return parseJsonReply(text);
 }
 
-function stillNeeded(code, percentage) {
-  if (code && percentage != null) return null;
-  return !code ? (percentage == null ? 'both' : 'code') : 'percentage';
-}
-
 // Mirrors app.discounts.create.jsx's "amount_off_order" mutation input exactly
 // (percent off the whole order, applies to all products, doesn't combine with
 // other discounts, starts now) so a chat-created discount is indistinguishable
 // from a manually-created one in Shopify and in app.discount.jsx's list.
-async function createDiscount(admin, { code, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
+async function createDiscount(admin, { code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
   const discountInput = {
-    title: code,
+    title,
     code,
     startsAt: new Date().toISOString(),
     customerSelection: { all: true },
@@ -77,7 +80,7 @@ async function createDiscount(admin, { code, percentage, minimumAmount, endDate,
   return { success: true, discountId: result?.codeDiscountNode?.id };
 }
 
-async function persistLocalCopy(request, shop, { code, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, discountId }) {
+async function persistLocalCopy(request, shop, { code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, discountId }) {
   try {
     const apiUrl = new URL('/api/create_coupon-sample', request.url).href;
     await fetch(apiUrl, {
@@ -87,7 +90,7 @@ async function persistLocalCopy(request, shop, { code, percentage, minimumAmount
         shopDomain: shop,
         shopify_id: discountId,
         code,
-        title: code,
+        title,
         type: 'amount_off_order',
         valueType: 'percentage',
         value: percentage,
@@ -112,34 +115,35 @@ const CONFIRM_CHOICES = [
   { label: '✖ Cancel', value: '__cancel__' },
 ];
 
-function confirmSummary({ code, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
+function confirmSummary({ code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
   const extras = [];
   if (minimumAmount) extras.push(`min. order ₹${minimumAmount}`);
   if (endDate) extras.push(`ends ${endDate}`);
   if (usageLimit) extras.push(`limit ${usageLimit} uses`);
   if (onePerCustomer) extras.push('one per customer');
   const extraText = extras.length ? ` (${extras.join(', ')})` : '';
-  return `I'll create discount code "${code}" for ${percentage}% off${extraText}. Shall I create this?`;
+  return `I'll create "${title}" — code "${code}" for ${percentage}% off${extraText}. Shall I create this?`;
 }
 
 export async function action({ request }) {
   try {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
-    const { message, resolvedCode, resolvedPercentage, resolvedExtras, finalize } = await request.json();
+    const { message, resolvedCode, resolvedTitle, resolvedPercentage, resolvedExtras, finalize } = await request.json();
 
     if (finalize) {
       const credit = await checkAndConsumeCredit(shop, admin);
       const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
       const extras = resolvedExtras || {};
-      const result = await createDiscount(admin, { code: resolvedCode, percentage: resolvedPercentage, ...extras });
+      const title = resolvedTitle || defaultTitle(resolvedPercentage);
+      const result = await createDiscount(admin, { code: resolvedCode, title, percentage: resolvedPercentage, ...extras });
       if (!result.success) {
-        return Response.json({ status: 'clarify', message: `Couldn't create that discount: ${result.error}. Try a different code.`, needFields: 'code', resolvedPercentage, credits });
+        return Response.json({ status: 'clarify', message: `Couldn't create that discount: ${result.error}. Try a different code.`, needFields: 'code', resolvedTitle: title, resolvedPercentage, credits });
       }
       await persistLocalCopy(request, shop, {
-        code: resolvedCode, percentage: resolvedPercentage, ...extras, discountId: result.discountId,
+        code: resolvedCode, title, percentage: resolvedPercentage, ...extras, discountId: result.discountId,
       });
-      return Response.json({ status: 'saved', code: resolvedCode, percentage: resolvedPercentage, credits });
+      return Response.json({ status: 'saved', code: resolvedCode, title, percentage: resolvedPercentage, credits });
     }
 
     if (!message) return Response.json({ status: 'error', message: 'No message provided' }, { status: 400 });
@@ -158,17 +162,24 @@ export async function action({ request }) {
       if (Number.isFinite(n) && n > 0 && n <= 100) percentage = n;
     }
 
+    let title = resolvedTitle || null;
+    if (extracted.title && !title) title = String(extracted.title).trim();
+
     const extras = {
       minimumAmount: extracted.minimumAmount, endDate: extracted.endDate,
       usageLimit: extracted.usageLimit, onePerCustomer: extracted.onePerCustomer,
     };
 
+    // Code + percentage known: the Coupon Name is required before creating,
+    // but never blocks on it — synthesize a sensible default instead of asking.
     if (code && percentage != null) {
+      if (!title) title = defaultTitle(percentage);
       return Response.json({
         status: 'confirm',
-        message: confirmSummary({ code, percentage, ...extras }),
+        message: confirmSummary({ code, title, percentage, ...extras }),
         choices: CONFIRM_CHOICES,
         resolvedCode: code,
+        resolvedTitle: title,
         resolvedPercentage: percentage,
         resolvedExtras: extras,
         credits,
@@ -184,15 +195,25 @@ export async function action({ request }) {
       });
     }
 
-    const need = stillNeeded(code, percentage);
+    // Percentage given but no code yet: ask for the coupon name/title and the
+    // code together, so both are captured before the coupon is ever created.
+    if (percentage != null && !code) {
+      return Response.json({
+        status: 'clarify',
+        message: `Got it — ${percentage}% off. What would you like to name this coupon (Coupon Title), and what should the coupon code be?`,
+        needFields: 'codeAndTitle',
+        resolvedTitle: title,
+        resolvedPercentage: percentage,
+        credits,
+      });
+    }
+
     return Response.json({
       status: 'clarify',
-      message: need === 'percentage'
-        ? `Got it — code is "${code}". What percentage off?`
-        : `Got it — ${percentage}% off. What should the discount code be?`,
-      needFields: need,
+      message: `Got it — code is "${code}". What percentage off?`,
+      needFields: 'percentage',
       resolvedCode: code,
-      resolvedPercentage: percentage,
+      resolvedTitle: title,
       credits,
     });
   } catch (e) {

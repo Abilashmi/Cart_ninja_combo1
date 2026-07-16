@@ -379,7 +379,7 @@ function buildTurnPayload(flow, message, pending) {
     case 'upsellRule':
       return { message, needSide: p.needSide || 'both', resolvedTrigger: p.resolvedTrigger, resolvedOffer: p.resolvedOffer, ambiguousSide: p.ambiguousSide, ambiguousCandidates: p.ambiguousCandidates };
     case 'discount':
-      return { message, resolvedCode: p.resolvedCode, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
+      return { message, resolvedCode: p.resolvedCode, resolvedTitle: p.resolvedTitle, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
     case 'progressBar':
       return { message, slots: p.slots };
     case 'combo':
@@ -395,7 +395,7 @@ function buildFinalizePayload(flow, pending) {
     case 'upsellRule':
       return { finalize: true, resolvedTrigger: p.resolvedTrigger, resolvedOffer: p.resolvedOffer };
     case 'discount':
-      return { finalize: true, resolvedCode: p.resolvedCode, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
+      return { finalize: true, resolvedCode: p.resolvedCode, resolvedTitle: p.resolvedTitle, resolvedPercentage: p.resolvedPercentage, resolvedExtras: p.resolvedExtras };
     case 'progressBar':
       return { finalize: true, slots: p.slots };
     case 'combo':
@@ -437,7 +437,7 @@ function savedMessage(flow, result) {
     case 'upsellRule':
       return `I've added a new upsell rule. When a customer adds **${result.trigger.title}** to their cart, they'll now be recommended **${result.offer.title}**.`;
     case 'discount':
-      return `I've created your discount code. **${result.code}** gives customers **${result.percentage}% off** at checkout.`;
+      return `I've created your discount, **${result.title}** (code **${result.code}**), giving customers **${result.percentage}% off** at checkout.`;
     case 'progressBar': {
       const s = result.slots || {};
       const reward = REWARD_TYPE_DISPLAY[s.rewardType] || s.rewardType;
