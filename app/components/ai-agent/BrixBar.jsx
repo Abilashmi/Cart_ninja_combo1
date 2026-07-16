@@ -72,9 +72,18 @@ export default function BrixBar({
   const hasThread = expanded && (messages.length > 0 || loading);
   const hasHistory = conversations.length > 0;
 
+  // Runs after `aboveSpace` too: the panel's max-height is measured async
+  // (see the effect below) and can resize the scroll container *after* this
+  // effect already scrolled it, leaving the latest message just above the
+  // fold. requestAnimationFrame defers until that layout has settled.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, loading]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, loading, aboveSpace]);
 
   // The list keeps whatever scroll position it was left at (a native DOM
   // property, not React state) — without this, reopening history after

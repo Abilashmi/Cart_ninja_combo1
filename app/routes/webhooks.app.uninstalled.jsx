@@ -1,5 +1,5 @@
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
+import sessionDb from "../session-db.server";
 
 export const action = async ({ request }) => {
   const { shop, session, topic } = await authenticate.webhook(request);
@@ -9,7 +9,7 @@ export const action = async ({ request }) => {
   // Webhook requests can trigger multiple times and after an app has already been uninstalled.
   // If this webhook already ran, the session may have been deleted previously.
   if (session) {
-    await db.session.deleteMany({ where: { shop } });
+    await sessionDb.session.deleteMany({ where: { shop } });
   }
 
   // Make request to the remote DB to mark the shop as inactive

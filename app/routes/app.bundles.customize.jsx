@@ -37,7 +37,6 @@ import { CdoPreviewBar } from '../components/CdoPreviewBar';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
-import { TemplatePreviewThumb } from '../components/customization/TemplatePreviewThumb';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import prisma from '../db.server';
@@ -1168,11 +1167,10 @@ const DEMO_PRODUCTS = [
 // wherever no merchant-supplied banner image is set yet. An inline SVG data
 // URI rather than a hosted image URL — a previous hosted sample banner
 // (a Shopify CDN file link) went dead (404), so this can never break again.
-const SAMPLE_BANNER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI0MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjNjY3ZWVhIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzc2NGJhMiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNDAwIiBmaWxsPSJ1cmwoI2cpIi8+CiAgPGNpcmNsZSBjeD0iMTUwIiBjeT0iMzIwIiByPSIxMjAiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMDgiLz4KICA8Y2lyY2xlIGN4PSIxMDgwIiBjeT0iNzAiIHI9IjE1MCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4wOCIvPgogIDxyZWN0IHg9IjkwIiB5PSIxMTAiIHdpZHRoPSIyMzAiIGhlaWdodD0iMTgwIiByeD0iMTQiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMTYiLz4KICA8cmVjdCB4PSIzNDUiIHk9IjExMCIgd2lkdGg9IjIzMCIgaGVpZ2h0PSIxODAiIHJ4PSIxNCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4yMiIvPgogIDxyZWN0IHg9IjYwMCIgeT0iMTEwIiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4MCIgcng9IjE0IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjE2Ii8+CiAgPHJlY3QgeD0iMTMwIiB5PSIxNTAiIHdpZHRoPSIxNTAiIGhlaWdodD0iMTAwIiByeD0iOCIgZmlsbD0iI2ZmZmZmZiIgb3BhY2l0eT0iMC4yNSIvPgogIDxyZWN0IHg9IjM4NSIgeT0iMTUwIiB3aWR0aD0iMTUwIiBoZWlnaHQ9IjEwMCIgcng9IjgiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuMzUiLz4KICA8cmVjdCB4PSI2NDAiIHk9IjE1MCIgd2lkdGg9IjE1MCIgaGVpZ2h0PSIxMDAiIHJ4PSI4IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjI1Ii8+CiAgPHRleHQgeD0iNjAwIiB5PSIzNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuOSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U2FtcGxlIEJhbm5lcjwvdGV4dD4KPC9zdmc+';
+const SAMPLE_BANNER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI0MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2Y2ZjdmOSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNlOGVhZWUiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9Imdsb3cxIiBjeD0iNTAlIiBjeT0iNTAlIiByPSI1MCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAuOTUiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9Imdsb3cyIiBjeD0iNTAlIiBjeT0iNTAlIiByPSI1MCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAuNyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNDAwIiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxjaXJjbGUgY3g9IjE2MCIgY3k9IjMyMCIgcj0iMTkwIiBmaWxsPSJ1cmwoI2dsb3cxKSIvPgogIDxjaXJjbGUgY3g9IjEwNDAiIGN5PSI3MCIgcj0iMjEwIiBmaWxsPSJ1cmwoI2dsb3cyKSIvPgogIDxlbGxpcHNlIGN4PSI2MDAiIGN5PSIyMDUiIHJ4PSIyODAiIHJ5PSI5NSIgZmlsbD0iI2RkZTFlNiIgb3BhY2l0eT0iMC40NSIvPgogIDxjaXJjbGUgY3g9IjQxMCIgY3k9IjE1MCIgcj0iNjYiIGZpbGw9IiNkM2Q4ZGUiIG9wYWNpdHk9IjAuNCIvPgogIDxjaXJjbGUgY3g9Ijc5MCIgY3k9IjI1NSIgcj0iODYiIGZpbGw9IiNkM2Q4ZGUiIG9wYWNpdHk9IjAuMzIiLz4KICA8cmVjdCB4PSI0OTUiIHk9IjE2OCIgd2lkdGg9IjIxMCIgaGVpZ2h0PSI3NCIgcng9IjM3IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgPGNpcmNsZSBjeD0iMjMwIiBjeT0iMTMwIiByPSI4IiBmaWxsPSIjYzdjZGQ1IiBvcGFjaXR5PSIwLjUiLz4KICA8Y2lyY2xlIGN4PSI5NjAiIGN5PSIzMDAiIHI9IjEwIiBmaWxsPSIjYzdjZGQ1IiBvcGFjaXR5PSIwLjUiLz4KICA8Y2lyY2xlIGN4PSI4ODAiIGN5PSIxMjAiIHI9IjUiIGZpbGw9IiNjN2NkZDUiIG9wYWNpdHk9IjAuNCIvPgo8L3N2Zz4K';
 
 const DEFAULT_COMBO_CONFIG = {
   show_tab_all: true,
-  grid_layout_type: 'grid',
   show_nav_arrows: true,
   enable_touch_swipe: true,
   swipe_sensitivity: 5,
@@ -1185,8 +1183,6 @@ const DEFAULT_COMBO_CONFIG = {
   arrow_position: 'inside',
   scrollbar_color: '#dddddd',
   scrollbar_thickness: 4,
-  desktop_columns: 4,
-  mobile_columns: 2,
   layout: 'layout1', // default layout
   product_add_btn_text: 'Add',
   product_add_btn_color: '#000',
@@ -1252,7 +1248,6 @@ const DEFAULT_COMBO_CONFIG = {
   // Grid/Layout Spacing
   products_gap: 16,
   products_gap_mobile: 10,
-  grid_width: 100,
 
   // Title Container Spacing
   title_container_padding_top: 0,
@@ -2256,7 +2251,7 @@ export default function Customize() {
   const handleOpenSection = useCallback((sectionKey = 'general') => {
     const category = SECTION_CATEGORY[sectionKey] || 'layout';
     setActiveCategory(category);
-    setExpandedSections((prev) => ({ ...prev, [sectionKey]: true }));
+    setExpandedSections((prev) => onlyOpen(prev, sectionKey));
     setTimeout(() => {
       const content = document.querySelector('.cst-sidebar-content');
       if (content) content.scrollTop = 0;
@@ -2271,7 +2266,7 @@ export default function Customize() {
         target.addEventListener('animationend', () => target.classList.remove('cst-flash'), { once: true });
       }
     }, 60);
-  }, [setActiveCategory]);
+  }, [setActiveCategory, onlyOpen]);
 
   const generateAiSuggestion = useCallback(
     async (requestedTarget) => {
@@ -2899,6 +2894,7 @@ export default function Customize() {
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
 .tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
 .tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
+.tpl-pick-img{width:100%;height:320px;object-fit:contain;object-position:center;display:block;background:#f4f6fa}
 .tpl-pick-badge{position:absolute;top:12px;right:12px;background:#e3f1df;color:#1a7f45;padding:4px 12px;border-radius:24px;font-size:12px;font-weight:600;letter-spacing:.3px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .tpl-pick-body{padding:16px;display:flex;flex-direction:column;gap:8px;flex-grow:1}
 .tpl-pick-how{background:#f6f8fa;border:1px solid #e8eaed;border-radius:10px;padding:10px 12px}
@@ -2925,7 +2921,16 @@ export default function Customize() {
           {TEMPLATE_CATALOGUE.map((tpl) => (
             <div key={tpl.id} className="tpl-pick-card">
               <div className="tpl-pick-media">
-                <TemplatePreviewThumb kind={tpl.previewKind || 'steps'} compact />
+                <img
+                  src={tpl.img}
+                  alt={tpl.title}
+                  className="tpl-pick-img"
+                  onError={(e) => {
+                    if (tpl.fallbackImg && e.currentTarget.src.indexOf(tpl.fallbackImg) === -1) {
+                      e.currentTarget.src = tpl.fallbackImg;
+                    }
+                  }}
+                />
                 <div className="tpl-pick-badge">{tpl.badge}</div>
               </div>
               <div className="tpl-pick-body">
@@ -6727,7 +6732,7 @@ function ComboPreview({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                fontSize: '14px',
+                fontSize: '17px',
                 fontWeight: '800',
                 marginBottom: '12px',
               }}
@@ -6737,7 +6742,7 @@ function ComboPreview({
                   color: progressTextColor,
                   letterSpacing: '0.5px',
                   textTransform: 'uppercase',
-                  fontSize: '11px',
+                  fontSize: '15px',
                 }}
               >
                 {config.progress_text || 'Bundle Progress'}
@@ -6784,7 +6789,7 @@ function ComboPreview({
             <div
               style={{
                 marginTop: '12px',
-                fontSize: '13px',
+                fontSize: '16px',
                 color: '#6d7175',
                 display: 'flex',
                 alignItems: 'center',
@@ -6796,13 +6801,13 @@ function ComboPreview({
                   <span
                     style={{
                       display: 'inline-block',
-                      width: '16px',
-                      height: '16px',
+                      width: '18px',
+                      height: '18px',
                       background: `${config.progress_bar_color || '#1a6644'}15`,
                       borderRadius: '50%',
                       textAlign: 'center',
-                      lineHeight: '16px',
-                      fontSize: '10px',
+                      lineHeight: '18px',
+                      fontSize: '12px',
                       color: progressTextColor,
                     }}
                   >

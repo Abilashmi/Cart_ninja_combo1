@@ -65,6 +65,7 @@ export default function App() {
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
                             <s-link href="/app/subscribe">Plans</s-link>
+                            <s-link href="/app/billing">Billing</s-link>
                             <s-link href="/app/analytics">Analytics</s-link>
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>

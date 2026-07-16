@@ -72,7 +72,7 @@ redirect_urls = [
 ]
 
 [app_proxy]
-url = "https://journalist-coaches-pda-rolls.trycloudflare.com/cartdrawerv2_ui/php_backend/"
+url = "https://procedure-suited-friendly-shorts.trycloudflare.com/cartdrawerv2_ui/php_backend/"
 prefix = "apps"
 subpath = "cart-app"
 

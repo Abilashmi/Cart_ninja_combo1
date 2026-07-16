@@ -138,7 +138,7 @@ function BuilderSidebarComponent({
 .cst-sidebar-tab.active .cst-tab-icon{color:#000}
 .cst-tab-icon{color:#8c9196;transition:color .2s ease;display:flex;align-items:center;justify-content:center}
 .cst-tab-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-.cst-sidebar-content{padding:16px;flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.cst-sidebar-content{padding:16px 16px 100px;flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
 .cst-sidebar-content::-webkit-scrollbar{width:4px}
 .cst-sidebar-content::-webkit-scrollbar-track{background:transparent}
 .cst-sidebar-content::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px}

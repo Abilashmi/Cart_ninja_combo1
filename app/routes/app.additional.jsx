@@ -201,20 +201,20 @@ export default function AccountPage() {
             <Text as="p" variant="bodyMd" tone="subdued">
               Need help? Our team is ready to assist you with setup, configuration, or any issues.
             </Text>
-            <BlockStack gap="150">
-              <InlineStack gap="200" blockAlign="center">
+            <InlineStack gap="400" align="end" blockAlign="center" wrap>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon source={canAccessFeature('priority_email_support') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('priority_email_support') ? 'success' : 'subdued'} />
                 <Text as="span" variant="bodySm" tone={canAccessFeature('priority_email_support') ? undefined : 'subdued'}>
                   Priority Email Support{!canAccessFeature('priority_email_support') ? ' — requires Starter' : ''}
                 </Text>
-              </InlineStack>
-              <InlineStack gap="200" blockAlign="center">
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon source={canAccessFeature('ai_support_247') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('ai_support_247') ? 'success' : 'subdued'} />
                 <Text as="span" variant="bodySm" tone={canAccessFeature('ai_support_247') ? undefined : 'subdued'}>
                   24/7 AI Support{!canAccessFeature('ai_support_247') ? ' — requires Starter' : ''}
                 </Text>
-              </InlineStack>
-            </BlockStack>
+              </div>
+            </InlineStack>
             <InlineStack gap="300" wrap>
               <Button
                 onClick={() => window.open('mailto:support@thecartninja.com', '_blank')}
@@ -233,6 +233,10 @@ export default function AccountPage() {
           </BlockStack>
         </Card>
       </BlockStack>
+
+      {/* Clears the floating BrixBar (position: fixed, bottom: 20) so it
+          doesn't cover the last section when scrolled to the bottom. */}
+      <div style={{ height: 100 }} aria-hidden="true" />
     </Page>
   );
 }

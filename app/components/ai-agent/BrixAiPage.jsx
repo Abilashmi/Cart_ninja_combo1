@@ -78,11 +78,11 @@ const QUICK_CHIPS = [
   "Enable Cart Drawer",
   "Add Free Shipping Goal",
   "Add Upsells",
-  "Apply Premium Dark Theme",
-  "Analyze my store",
-  "Create a campaign",
-  "Diagnose low conversions",
-  "Optimize for mobile",
+  "Match my store theme",
+  "How can I increase my AOV?",
+  "Create a discount code",
+  "Recommend the best upsell for me",
+  "Build a bundle",
 ];
 
 export default function BrixAiPage() {
@@ -97,6 +97,8 @@ export default function BrixAiPage() {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const histListRef = useRef(null);
+  const inputZoneRef = useRef(null);
+  const [aboveSpace, setAboveSpace] = useState(null);
 
   const hasThread = messages.length > 0 || !!loading;
 
@@ -114,6 +116,28 @@ export default function BrixAiPage() {
   // newest conversations at the top.
   useEffect(() => {
     if (showHistory && histListRef.current) histListRef.current.scrollTop = 0;
+  }, [showHistory]);
+
+  // The history panel opens upward from the input row via `bottom: calc(100%
+  // + 10px)`. `.bai-page{height:100%}` silently falls back to auto height
+  // because `body` has no explicit height, so the input row isn't reliably
+  // pinned near the viewport bottom — a static `max-height: 100vh - 120px`
+  // CSS rule doesn't know that. Measure the real on-screen gap instead, same
+  // approach BrixBar.jsx uses for its floating panel.
+  useEffect(() => {
+    if (!showHistory) return undefined;
+    const measure = () => {
+      if (!inputZoneRef.current) return;
+      const top = inputZoneRef.current.getBoundingClientRect().top;
+      setAboveSpace(Math.max(120, top - 20));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
   }, [showHistory]);
 
   const handleSend = useCallback((text) => {
@@ -154,6 +178,7 @@ export default function BrixAiPage() {
         .bai-msgs-inner{max-width:720px;margin:0 auto;padding:28px 24px 16px;display:flex;flex-direction:column;gap:16px}
         .bai-input-zone{flex-shrink:0;padding:0 24px 20px;background:#fff;position:relative;transform:translateY(-10vh);transition:transform .48s cubic-bezier(0.22,1,0.36,1);z-index:1}
         .bai-input-zone.active{transform:translateY(0)}
+        .bai-input-zone.instant{transition:none}
         .bai-welcome-compact{text-align:center;padding:0 0 28px;overflow:hidden;transition:max-height .35s ease,opacity .25s ease,padding .35s ease;max-height:200px}
         .bai-welcome-compact.hidden{max-height:0;opacity:0;padding-bottom:0;pointer-events:none}
         .bai-welcome-compact .bai-wc-icon{width:52px;height:52px;border-radius:14px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
@@ -267,7 +292,7 @@ export default function BrixAiPage() {
             </div>
           </div>
 
-          <div className={`bai-input-zone${hasThread || showHistory ? " active" : ""}`}>
+          <div ref={inputZoneRef} className={`bai-input-zone${hasThread || showHistory ? " active" : ""}${showHistory ? " instant" : ""}`}>
             <div className={`bai-welcome-compact${hasThread || showHistory ? " hidden" : ""}`}>
               <div className="bai-wc-icon">
                 <svg width="24" height="24" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="1.6">
@@ -280,7 +305,10 @@ export default function BrixAiPage() {
 
             <div className="bai-input-inner">
               {showHistory && (
-                <div className="bai-hist-panel">
+                <div
+                  className="bai-hist-panel"
+                  style={aboveSpace != null ? { maxHeight: Math.min(400, aboveSpace) } : undefined}
+                >
                   <div className="bai-hist-head">
                     <div className="bai-hist-head-icon">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">

@@ -307,6 +307,10 @@ export default function AppBundlesIndex() {
         </InlineGrid>
 
       </BlockStack>
+
+      {/* Clears the floating BrixBar (position: fixed, bottom: 20) so it
+          doesn't cover the last section when scrolled to the bottom. */}
+      <div style={{ height: 100 }} aria-hidden="true" />
     </Page>
   );
 }

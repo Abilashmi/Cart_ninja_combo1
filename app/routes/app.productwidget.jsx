@@ -83,10 +83,11 @@ export async function loader({ request }) {
     const shop = session.shop;
     const url = new URL(request.url);
 
-    const [productsResponse, discountsResponse, couponRes, fbtRes, embedStatus] = await Promise.all([
+    const [productsResponse, discountsResponse, couponRes, couponWidgetRes, fbtRes, embedStatus] = await Promise.all([
         admin.graphql(`query getProducts { products(first: 50, query: "status:active") { edges { node { id title handle featuredImage { url } variants(first: 1) { edges { node { id price } } } } } } }`),
         admin.graphql(`query DiscountList { discountNodes(first: 100, reverse: true) { edges { node { id discount { ... on DiscountCodeBasic { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeBxgy { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeFreeShipping { title codes(first: 1) { edges { node { code } } } status } } } } } }`),
         fetch(`${BASE_PHP_URL}/coupon_slider_settings.php?shop=${encodeURIComponent(shop)}`, { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }).catch(() => null),
+        fetch(`${BASE_PHP_URL}/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
         fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
         getEmbedStatus(shop, session.accessToken),
     ]);
@@ -115,13 +116,42 @@ export async function loader({ request }) {
             .filter(Boolean);
     } catch (e) { console.error("Failed to fetch discounts:", e); }
 
-    let couponConfig = null;
+    let couponSettings = null;
     try {
         if (couponRes) {
             const d = await couponRes.json();
-            if (d.status === 'success' && d.data) couponConfig = d.data;
+            if (d.status === 'success' && d.data) couponSettings = d.data;
         }
     } catch (e) { console.error("Failed to fetch coupon settings:", e); }
+
+    let couponWidget = null;
+    try {
+        if (couponWidgetRes) {
+            const d = await couponWidgetRes.json();
+            if (d.status === 'success' && d.data) couponWidget = d.data;
+        }
+    } catch (e) { console.error("Failed to fetch coupon widget:", e); }
+
+    let couponConfig = null;
+    if (couponSettings || couponWidget) {
+        couponConfig = {
+            ...FAKE_COUPON_CONFIG,
+            ...(couponSettings || {}),
+            activeTemplate: couponWidget?.selectedTemplate || couponSettings?.selected_template || "template1",
+            templates: {
+                template1: { ...FAKE_COUPON_CONFIG.templates.template1, ...(couponWidget?.temp1DefaultStyle || {}) },
+                template2: { ...FAKE_COUPON_CONFIG.templates.template2, ...(couponWidget?.temp2DefaultStyle || {}) },
+                template3: { ...FAKE_COUPON_CONFIG.templates.template3, ...(couponWidget?.temp3DefaultStyle || {}) },
+            },
+            selectedActiveCoupons: Array.isArray(couponWidget?.selectedCouponsGlobal) ? couponWidget.selectedCouponsGlobal : [],
+            temp1CouponStyle: couponWidget?.temp1CouponStyle || {},
+            temp2CouponStyle: couponWidget?.temp2CouponStyle || {},
+            temp3CouponStyle: couponWidget?.temp3CouponStyle || {},
+            temp1CouponCondition: couponWidget?.temp1CouponCondition || [],
+            temp2CouponCondition: couponWidget?.temp2CouponCondition || [],
+            temp3CouponCondition: couponWidget?.temp3CouponCondition || [],
+        };
+    }
     if (!couponConfig) couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
 
     let fbtConfig = null;

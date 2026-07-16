@@ -3,14 +3,42 @@ import { useLoaderData } from "react-router";
 import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
 import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan } from "../services/plan-permissions.server";
+import { getShopPlan, confirmPlanFromWebhook } from "../services/plan-permissions.server";
 import { PLANS } from "../config/plans";
 
+// Shopify redirects here (`returnUrl` in app.subscribe.jsx's
+// appSubscriptionCreate) right after the merchant approves a subscription.
+// The app_subscriptions/update webhook is what normally promotes
+// pending_plan_key -> plan_key, but its arrival isn't guaranteed to beat
+// this redirect — so verify directly against Shopify's own subscription
+// state here and reconcile the DB immediately if the webhook hasn't landed
+// yet. confirmPlanFromWebhook is idempotent, so this is safe to run even
+// when the webhook already did it.
 export async function loader({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   if (!session) return { redirect: "/auth" };
-  const planKey = await getShopPlan(session.shop);
-  return { shop: session.shop, planKey };
+  const shop = session.shop;
+
+  try {
+    const res = await admin.graphql(`
+      query {
+        currentAppInstallation {
+          activeSubscriptions { id status }
+        }
+      }
+    `);
+    const data = await res.json();
+    const activeSub = (data.data?.currentAppInstallation?.activeSubscriptions || [])
+      .find((s) => s.status === "ACTIVE");
+    if (activeSub) {
+      await confirmPlanFromWebhook(shop, "active");
+    }
+  } catch (e) {
+    console.error("[Billing loader] Failed to verify subscription:", e.message);
+  }
+
+  const planKey = await getShopPlan(shop);
+  return { shop, planKey };
 }
 
 export default function BillingDashboard() {

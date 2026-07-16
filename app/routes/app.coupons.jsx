@@ -312,6 +312,7 @@ export default function CouponsPage() {
                     </div>
                 </Card>
             </BlockStack>
+            <div style={{ height: 100 }} aria-hidden="true" />
         </Page>
     );
 }

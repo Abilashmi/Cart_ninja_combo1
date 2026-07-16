@@ -9,90 +9,6 @@ import { Text, Popover, ActionList, Modal, BlockStack } from '@shopify/polaris';
 import { usePlan } from '../PlanContext';
 import { PLANS } from '../../config/plans';
 
-// --- Add action to save new templates ---
-// Layout designs metadata (same as dashboard)
-const layoutMetadata = [
-  {
-    id: 1,
-    title: 'The Guided Architect',
-    description:
-      'A conversion-focused multi-step builder with progress tracking and tiered discount logic.',
-    img: '/combo-design-one-preview.png',
-    fallbackImg:
-      'https://placehold.co/400x300/000000/ffffff?text=Guided+Architect',
-    badge: 'Core',
-    badgeTone: undefined,
-    blockName: 'combo_main',
-    features: [
-      'Visual progress tracking',
-      'Tiered discount engine',
-      'Step-by-step selection flow',
-      'Sticky summary footer',
-      'Ideal for complex kits',
-    ],
-    bestFor: 'Complex bundles and high-value kits',
-  },
-  {
-    id: 2,
-    title: 'The Velocity Stream',
-    description:
-      'An immersive, motion-driven experience featuring an auto-scrolling carousel for maximum engagement.',
-    img: '/combo-design-two-preview.png',
-    fallbackImg:
-      'https://placehold.co/400x300/000000/ffffff?text=Motion+Slider',
-    badge: 'Trending',
-    badgeTone: undefined,
-    blockName: 'combo_design_two',
-    features: [
-      'Smooth auto-scroll motion',
-      'Touch-optimized swiping',
-      'Dynamic navigation cues',
-      'Infinite loop storytelling',
-      'Visual-first discovery',
-    ],
-    bestFor: 'Visual storytelling and featured promotions',
-  },
-  {
-    id: 3,
-    title: 'The Editorial Split',
-    description:
-      'A premium, sophisticated layout that pairs high-impact imagery with detailed product storytelling.',
-    img: '/combo-design-four-preview.png',
-    fallbackImg:
-      'https://placehold.co/400x300/000000/ffffff?text=Editorial+Split',
-    badge: 'Premium',
-    badgeTone: undefined,
-    blockName: 'combo_design_four',
-    features: [
-      'Luxe split-screen design',
-      'Detail-rich narratives',
-      'High-contrast callouts',
-      'Dark mode elegance',
-      'Psychology-driven flow',
-    ],
-    bestFor: 'Luxury items and high-impact product stories',
-  },
-  {
-    id: 6,
-    title: 'Custom Bundle Layout',
-    description: 'Build your own custom bundle layout with flexible options',
-    img: '/combo-design-one-preview.png', // Placeholder
-    fallbackImg:
-      'https://placehold.co/400x300/000000/ffffff?text=Custom+Bundle',
-    badge: 'Flexible',
-    badgeTone: undefined, // distinct tone
-    blockName: 'custom_bundle_layout',
-    features: [
-      'Drag-and-drop builder',
-      'Custom CSS support',
-      'Dynamic pricing rules',
-      'Multi-step configuration',
-      'A/B testing ready',
-    ],
-    bestFor: 'Advanced experimental setups',
-  },
-];
-
 export default function TemplateManager() {
   const fetcher = useFetcher();
   const { templates: initialTemplates, shop, discounts } = useLoaderData();
@@ -487,13 +403,6 @@ export default function TemplateManager() {
             align-items: center;
             gap: 16px;
         }
-        .template-avatar {
-            width: 44px;
-            height: 44px;
-            border-radius: 8px;
-            background: #F3F4F6;
-            object-fit: cover;
-        }
         .template-name-text {
             font-size: 13px;
             font-weight: 700;
@@ -691,10 +600,10 @@ export default function TemplateManager() {
             }
             .library-table tr {
                 display: grid;
-                grid-template-areas: 
-                   "avatar title    title   actions"
-                   "avatar discount status  actions";
-                grid-template-columns: 48px max-content minmax(0, 1fr) auto;
+                grid-template-areas:
+                   "title    title   actions"
+                   "discount status  actions";
+                grid-template-columns: max-content minmax(0, 1fr) auto;
                 gap: 4px 10px;
                 align-items: center;
                 padding: 16px;
@@ -706,12 +615,6 @@ export default function TemplateManager() {
             }
             .library-table td, .template-name-wrap {
                 display: contents;
-            }
-            .template-avatar {
-                grid-area: avatar;
-                width: 48px;
-                height: 48px;
-                border-radius: 8px;
             }
             .template-name-text {
                 grid-area: title;
@@ -870,20 +773,6 @@ export default function TemplateManager() {
             </thead>
             <tbody>
               {paginatedTemplates.map((t) => {
-                const layoutMap = {
-                  layout1: 'combo_design_one',
-                  layout2: 'combo_design_two',
-                  layout3: 'combo_design_three',
-                  layout4: 'combo_design_four',
-                };
-                const blockName =
-                  layoutMap[t.config?.layout] || 'combo_design_one';
-                const meta = layoutMetadata.find(
-                  (m) => m.blockName === blockName
-                );
-                const avatarSrc =
-                  t.config?.banner_image_url || meta?.fallbackImg;
-
                 const discountId = t.config?.selected_discount_id;
                 const resolvedDiscount = discountId
                   ? discounts?.find((d) => String(d.id) === String(discountId))
@@ -899,11 +788,6 @@ export default function TemplateManager() {
                   <tr key={t.id}>
                     <td>
                       <div className="template-name-wrap">
-                        <img
-                          src={avatarSrc}
-                          alt="Thumb"
-                          className="template-avatar"
-                        />
                         <span className="template-name-text">{t.title}</span>
                       </div>
                     </td>

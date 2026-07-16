@@ -1,0 +1,70 @@
+# fly.toml app configuration file generated for cartdrawer
+
+# See https://fly.io/docs/reference/configuration/
+ 
+app = "cartdrawer"
+
+primary_region = "bom"
+ 
+[build]
+ 
+[env]
+
+  PORT = "3000"
+
+  SCOPES = "read_discounts,write_discounts,write_products"
+
+  SHOPIFY_API_KEY = "9f7189f9faf11f0771c1ef2f81c42b8d"
+
+  SHOPIFY_APP_URL = "https://cartdrawer.fly.dev"
+ 
+[processes]
+
+  app = "node ./dbsetup.js npm run start"
+ 
+[[mounts]]
+
+  source = "data"
+
+  destination = "/data"
+
+  auto_extend_size_threshold = 80
+
+  auto_extend_size_increment = "1GB"
+
+  auto_extend_size_limit = "10GB"
+ 
+[http_service]
+
+  internal_port = 3000
+
+  force_https = true
+
+  auto_stop_machines = "off"
+
+  auto_start_machines = true
+
+  min_machines_running = 0
+
+  processes = ["app"]
+ 
+  [[http_service.checks]]
+
+    grace_period = "30s"
+
+    interval = "10s"
+
+    timeout = "5s"
+
+    method = "GET"
+
+    path = "/auth/login"
+ 
+[[vm]]
+
+  memory = "1gb"
+
+  cpus = 1
+
+  memory_mb = 1024
+ 

@@ -806,7 +806,7 @@ export default function AnalyticsPage() {
         )}
 
       </BlockStack>
-      <div style={{ height: 72 }} />
+      <div style={{ height: 100 }} aria-hidden="true" />
     </Page>
   );
 }
