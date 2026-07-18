@@ -5,21 +5,49 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setPendingPlanKey, confirmPlanFromWebhook } from "../services/plan-permissions.server";
+import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
-
-// TEMP: while testing plan-switching on a dev store (no real payment
-// method, so Shopify's real appSubscriptionCreate approval always fails
-// with "cannot accept the provided charge"), skip the real Shopify billing
-// flow entirely and just apply the selected plan immediately. Flip this
-// back to false (or delete the short-circuit block below) before any real
-// merchant uses this — otherwise nobody is ever actually billed.
-const TEMP_INSTANT_PLAN_SWITCH = true;
 
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
 // automatically, no copy to maintain here.
 const FEATURE_ROWS = Object.keys(FEATURES);
+
+// Shopify's own app handle in the admin (visible in URLs like
+// admin.shopify.com/store/{shop}/charges/{appHandle}/... or
+// admin.shopify.com/store/{shop}/apps/{appHandle}) — distinct from
+// SHOPIFY_API_KEY/client_id, this is a slug Shopify assigns from the app's
+// name in the Partner Dashboard.
+const SHOPIFY_APP_HANDLE = "cart_app-1";
+
+// Shopify's Billing API returnUrl redirect (after a merchant approves a
+// subscription charge) lands as a bare top-level navigation with no
+// shop/host params attached — confirmed via logging in auth.login/route.jsx:
+// the Referer on that hop is just "https://admin.shopify.com/", no /store/
+// path segment to recover the shop from either. authenticate.admin() then
+// requires both params and bounces to a bare /auth/login with everything
+// stripped, stranding the merchant right after they paid.
+//
+// Routing returnUrl through Shopify's own admin.shopify.com/store/{shop}/
+// apps/{handle}/... URL pattern instead of the bare app domain sidesteps
+// this: Shopify's admin wrapper re-establishes host/embedded/shop params
+// itself before framing the app page, the same way it does for every
+// regular in-admin navigation into an installed app.
+function adminAppUrl(shop, path) {
+    const shopName = shop.replace(".myshopify.com", "");
+    return `https://admin.shopify.com/store/${shopName}/apps/${SHOPIFY_APP_HANDLE}${path}`;
+}
+
+// Shopify rejects real (non-test) charges on partner/dev stores with "cannot
+// accept the provided charge" since they have no real payment method — test
+// must be true there. On production stores it must be false, or merchants
+// are never actually billed. Checked live via the Admin API rather than an
+// env flag so the same code path is correct in both environments.
+async function isPartnerDevelopmentStore(admin) {
+    const res = await admin.graphql(`query { shop { plan { partnerDevelopment } } }`);
+    const data = await res.json();
+    return data.data?.shop?.plan?.partnerDevelopment === true;
+}
 
 export async function loader({ request }) {
     const { session } = await authenticate.admin(request);
@@ -38,27 +66,37 @@ export async function action({ request }) {
         return { error: "Invalid plan selected." };
     }
 
-    if (TEMP_INSTANT_PLAN_SWITCH) {
-        await setPendingPlanKey(shop, planKey);
-        await confirmPlanFromWebhook(shop, "active");
-        return { switched: true, planKey };
-    }
-
+    const isTestCharge = await isPartnerDevelopmentStore(admin);
     const plan = PLANS[planKey];
 
-    // Every plan (including Free) needs a subscription to carry the AI BRIX
-    // credit-overage usage line item — Shopify's appUsageRecordCreate can
-    // only attach a charge to a line item inside an active subscription.
-    const aiCreditLineItem = {
+    // Every plan (including Free) needs a subscription to carry a usage line
+    // item — Shopify's appUsageRecordCreate can only attach a charge to a
+    // line item inside an active subscription. Order-overage and AI BRIX
+    // credit-overage share this single line item rather than each getting
+    // their own: Shopify's Billing API rejects appSubscriptionCreate with
+    // "Cannot have more than one plan with the same pricing details" the
+    // instant a subscription carries a second appUsagePricingDetails line
+    // item, regardless of differing `terms`/`cappedAmount` — confirmed via
+    // direct GraphiQL testing, not just a same-value collision. Individual
+    // charges still identify their type via `description` on each
+    // appUsageRecordCreate call (see billing.server.js).
+    const usageTerms = [
+        plan.overageRate > 0
+            ? `$${plan.overageRate.toFixed(2)} per order above ${plan.orderCap} orders/month`
+            : null,
+        `$${plan.aiBrixOverageRate.toFixed(2)} per AI BRIX credit above ${plan.aiBrixCredits} credits/month`,
+    ].filter(Boolean).join(', plus ') + '.';
+    const combinedUsageCap = 1000 + 500; // order-overage cap + AI BRIX cap, combined
+    const usageLineItem = {
         plan: {
             appUsagePricingDetails: {
-                terms: `$${plan.aiBrixOverageRate.toFixed(2)} per AI BRIX credit above ${plan.aiBrixCredits} credits/month.`,
-                cappedAmount: { amount: "1000.00", currencyCode: "USD" },
+                terms: usageTerms,
+                cappedAmount: { amount: combinedUsageCap.toFixed(2), currencyCode: "USD" },
             },
         },
     };
 
-    async function cancelActiveSubscription() {
+    async function fetchActiveSubscriptionIds() {
         const subRes = await admin.graphql(`
             query {
                 currentAppInstallation {
@@ -67,34 +105,70 @@ export async function action({ request }) {
             }
         `);
         const subData = await subRes.json();
-        const activeSub = (subData.data?.currentAppInstallation?.activeSubscriptions || [])
-            .find(s => s.status === "ACTIVE");
-        if (!activeSub) return null;
+        // activeSubscriptions returns both ACTIVE and PENDING subscriptions
+        // (that's what "active" means in Shopify's Billing API — cancelled/
+        // declined/expired ones are already excluded) — a leftover PENDING
+        // subscription from an earlier attempt that was never approved on
+        // Shopify's confirmation page still counts toward the "same pricing
+        // details" conflict, so every entry here needs cancelling, not just
+        // ones with status === "ACTIVE".
+        return (subData.data?.currentAppInstallation?.activeSubscriptions || []).map(s => s.id);
+    }
 
-        const cancelRes = await admin.graphql(`
-            mutation AppSubscriptionCancel($id: ID!) {
-                appSubscriptionCancel(id: $id) {
-                    appSubscription { id status }
-                    userErrors { field message }
+    async function cancelActiveSubscription() {
+        const subIds = await fetchActiveSubscriptionIds();
+
+        for (const id of subIds) {
+            const cancelRes = await admin.graphql(`
+                mutation AppSubscriptionCancel($id: ID!) {
+                    appSubscriptionCancel(id: $id) {
+                        appSubscription { id status }
+                        userErrors { field message }
+                    }
                 }
-            }
-        `, { variables: { id: activeSub.id } });
-        const cancelData = await cancelRes.json();
-        const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors;
-        if (userErrors?.length > 0) return { error: userErrors[0].message };
+            `, { variables: { id } });
+            const cancelData = await cancelRes.json();
+            const userErrors = cancelData.data?.appSubscriptionCancel?.userErrors;
+            if (userErrors?.length > 0) return { error: userErrors[0].message };
+        }
+
+        if (subIds.length === 0) return null;
+
+        // Shopify's Billing API is eventually consistent: appSubscriptionCancel
+        // can return success while the cancelled subscription is still visible
+        // internally for a brief window, causing the very next
+        // appSubscriptionCreate call to fail with "Cannot have more than one
+        // plan with the same pricing details" even though activeSubscriptions
+        // no longer lists it. Poll until Shopify's own read confirms the
+        // cancellation before proceeding, instead of racing it.
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const remaining = await fetchActiveSubscriptionIds();
+            if (remaining.length === 0) return null;
+            await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+        }
         return null;
     }
 
-    // Downgrading/selecting Free: cancel any existing paid subscription, then
-    // create a usage-only one (no recurring line item) so $0.01/credit AI
-    // BRIX overage billing still works on Free.
+    // Cancel any existing active subscription before creating a new one for
+    // any plan (including switching between two paid plans) — Shopify
+    // rejects appSubscriptionCreate with "Cannot have more than one plan
+    // with the same pricing details" if an old subscription with identical
+    // line items is still active/pending, which silently blocked every
+    // plan switch here until this ran unconditionally.
+    try {
+        const cancelErr = await cancelActiveSubscription();
+        if (cancelErr?.error) {
+            return { error: cancelErr.error };
+        }
+    } catch (err) {
+        return { error: err.message || "Failed to cancel existing subscription." };
+    }
+
+    // Downgrading/selecting Free: create a usage-only subscription (no
+    // recurring line item) so order-overage and AI BRIX credit-overage
+    // billing still work on Free.
     if (planKey === "free") {
         try {
-            const cancelErr = await cancelActiveSubscription();
-            if (cancelErr?.error) {
-                return { error: cancelErr.error };
-            }
-
             const mutation = `
                 mutation AppSubscriptionCreate(
                     $name: String!
@@ -114,16 +188,12 @@ export async function action({ request }) {
                     }
                 }
             `;
-            // eslint-disable-next-line no-undef
-            const appUrl = process.env.SHOPIFY_APP_URL || "";
             const res = await admin.graphql(mutation, {
                 variables: {
-                    name: `Cart Ninja ${plan.label} (AI BRIX overage)`,
-                    lineItems: [aiCreditLineItem],
-                    returnUrl: `${appUrl}/app/billing`,
-                    // TEMP: see the paid-plan mutation below for why this is
-                    // hardcoded true on dev stores.
-                    test: true,
+                    name: `Cart Ninja ${plan.label} (usage overage)`,
+                    lineItems: [usageLineItem],
+                    returnUrl: adminAppUrl(shop, "/app/billing"),
+                    test: isTestCharge,
                 },
             });
             const data = await res.json();
@@ -155,18 +225,7 @@ export async function action({ request }) {
         },
     ];
 
-    if (plan.overageRate > 0) {
-        lineItems.push({
-            plan: {
-                appUsagePricingDetails: {
-                    terms: `$${plan.overageRate.toFixed(2)} per order above ${plan.orderCap} orders/month.`,
-                    cappedAmount: { amount: "1000.00", currencyCode: "USD" },
-                },
-            },
-        });
-    }
-
-    lineItems.push(aiCreditLineItem);
+    lineItems.push(usageLineItem);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -190,23 +249,18 @@ export async function action({ request }) {
         }
     `;
 
-    // eslint-disable-next-line no-undef
-    const appUrl = process.env.SHOPIFY_APP_URL || "";
     const variables = {
         name: `Cart Ninja ${plan.label}`,
         lineItems,
-        returnUrl: `${appUrl}/app/billing`,
+        returnUrl: adminAppUrl(shop, "/app/billing"),
         trialDays: 14,
-        // TEMP: hardcoded true so plan-switching can be tested on a dev store
-        // (dev stores have no real payment method, so a non-test charge is
-        // always rejected at approval with "cannot accept the provided
-        // charge"). Must be replaced with a real prod/dev condition before
-        // launch, or paying merchants will never actually be billed.
-        test: true,
+        test: isTestCharge,
     };
 
     const res = await admin.graphql(mutation, { variables });
     const data = await res.json();
+    console.log('[subscribe] create variables:', JSON.stringify(variables));
+    console.log('[subscribe] create full response:', JSON.stringify(data));
 
     const userErrors = data.data?.appSubscriptionCreate?.userErrors;
     if (userErrors?.length > 0) {
@@ -268,12 +322,6 @@ export default function SubscribePage() {
         }
     }, [actionData]);
 
-    useEffect(() => {
-        if (actionData?.switched) {
-            setDowngradeConfirm(false);
-        }
-    }, [actionData]);
-
     const handleSelect = (planKey) => {
         if (planKey === currentPlanKey) return;
         if (planKey === 'free') {
@@ -331,7 +379,7 @@ export default function SubscribePage() {
 
                                 <div style={{ padding: '9px 22px', background: isHighlightPlan ? '#1a9de0' : '#f9fafb', borderBottom: `1px solid ${isHighlightPlan ? '#0e8bc8' : '#e5e7eb'}` }}>
                                     <span style={{ fontSize: 11, fontWeight: 700, color: isHighlightPlan ? '#fff' : '#6b7280', letterSpacing: '0.3px' }}>
-                                        {isHighlightPlan ? 'most popular' : planKey === 'pro' ? 'best value' : 'free forever'}
+                                        {isHighlightPlan ? 'Most Popular' : planKey === 'pro' ? 'Best Value' : 'Free To Start With'}
                                     </span>
                                 </div>
 

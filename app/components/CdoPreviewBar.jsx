@@ -66,7 +66,7 @@ export const CdoPreviewBar = ({
 
     // Final tracking + redirect URL
     const trackingUrl =
-      `https://int.thecomboforge.com/clicks.php?` +
+      `https://int.thebrix.io/clicks.php?` +
       `shop_domain=${shopDomain}` +
       `&template_name=${encodeURIComponent(templateName)}` +
       `&template_id=${templateId}` +

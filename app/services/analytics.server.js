@@ -1,7 +1,8 @@
 import { getDb } from "./db.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 
 const DEFAULT_ANALYTICS_UPSTREAMS = [
-  "https://int.thecartninja.com/analytics.php"
+  `${BASE_PHP_URL}/analytics.php`
 ];
 
 const DEFAULT_ANALYTICS = {

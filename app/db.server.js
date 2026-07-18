@@ -16,6 +16,8 @@ function isReadStatement(sql) {
   return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql);
 }
 
+const DB_PROXY_TIMEOUT_MS = 15_000;
+
 async function rawExecute(sql, params) {
   const res = await fetch(`${BASE_PHP_URL}/db_proxy.php`, {
     method: 'POST',
@@ -24,6 +26,7 @@ async function rawExecute(sql, params) {
       'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
     },
     body: JSON.stringify({ sql, params }),
+    signal: AbortSignal.timeout(DB_PROXY_TIMEOUT_MS),
   });
 
   const text = await res.text();

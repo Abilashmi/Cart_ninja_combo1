@@ -69,8 +69,10 @@ try {
     plan_ensure_columns($pdo);
 
     // ===== MAP Shopify status → plan_name (legacy, human-readable) =====
-    // active/pending = on paid plan; everything else = free
-    $resolvedPlan = in_array($status, ['active', 'pending']) ? $planName : 'free';
+    // active/pending = on paid plan; everything else = free. Shopify sends
+    // status in uppercase (e.g. "ACTIVE") — compare case-insensitively, or
+    // this always falls through to 'free' regardless of actual status.
+    $resolvedPlan = in_array(strtolower($status), ['active', 'pending']) ? $planName : 'free';
 
     // plan_key is the canonical value — Node's confirmPlanFromWebhook()
     // already wrote it directly to this same MySQL database, so this PHP

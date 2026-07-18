@@ -8,14 +8,18 @@ export const action = async ({ request }) => {
   const current = payload.current;
 
   if (session) {
-    await sessionDb.session.update({
-      where: {
-        id: session.id,
-      },
-      data: {
-        scope: current.toString(),
-      },
-    });
+    try {
+      await sessionDb.session.update({
+        where: {
+          id: session.id,
+        },
+        data: {
+          scope: current.toString(),
+        },
+      });
+    } catch (error) {
+      console.error("Error updating session scope", error);
+    }
   }
 
   return new Response();

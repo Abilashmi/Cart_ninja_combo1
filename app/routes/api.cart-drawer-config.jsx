@@ -11,12 +11,17 @@ function flag(v, d = 1) {
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const db = getDb();
-  const [rows] = await db.execute(
-    'SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1',
-    [session.shop]
-  );
-  const data = rows[0] || null;
-  return Response.json({ success: !!data, data });
+  try {
+    const [rows] = await db.execute(
+      'SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1',
+      [session.shop]
+    );
+    const data = rows[0] || null;
+    return Response.json({ success: !!data, data });
+  } catch (error) {
+    console.error('[cart-drawer-config] loader DB error:', error.message);
+    return Response.json({ success: false, error: 'Failed to load cart drawer config' }, { status: 502 });
+  }
 }
 
 export async function action({ request }) {
@@ -27,6 +32,7 @@ export async function action({ request }) {
 
   console.log('[cart-drawer-config] POST shop:', shop, '| is_enabled:', body.is_enabled);
 
+  try {
   // Backend enforcement (defense-in-depth): Custom CSS is 'locked' on Free.
   // The admin UI lets a Free shop fully edit/save it (CustomizableLockedSection
   // — no blur), but a Free shop could also POST directly to this endpoint.
@@ -112,4 +118,8 @@ export async function action({ request }) {
     'SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]
   );
   return Response.json({ success: true, data: rows[0] || null });
+  } catch (error) {
+    console.error('[cart-drawer-config] action DB error:', error.message);
+    return Response.json({ success: false, error: 'Failed to save cart drawer config' }, { status: 502 });
+  }
 }

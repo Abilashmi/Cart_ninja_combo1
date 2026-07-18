@@ -8,7 +8,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-const PHP_BASE = process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
+const PHP_BASE = process.env.PHP_BASE_URL || 'https://int.thebrix.io';
 
 async function fetchFromPhpBackend(shopDomain) {
   try {

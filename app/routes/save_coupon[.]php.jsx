@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { authenticate } from "../shopify.server";
 
 const DATA_FILE = path.resolve("coupons-data.json");
 
@@ -38,9 +39,15 @@ export async function action({ request }) {
         return new Response(JSON.stringify({ status: "error", message: "Method not allowed" }), { status: 405 });
     }
 
+    // Not currently called from anywhere in the app, but this writes
+    // arbitrary coupon data keyed only by a client-supplied shop_domain —
+    // require a real Shopify admin session so it can't be hit anonymously
+    // for any shop if something ever wires a caller up to it.
+    const { session } = await authenticate.admin(request);
+
     try {
         const coupon = await request.json();
-        const shopDomain = (coupon.shop_domain || coupon.shopDomain || "").toLowerCase();
+        const shopDomain = session.shop;
 
         let all = {};
         try {

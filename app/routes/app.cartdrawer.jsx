@@ -98,8 +98,12 @@ export const loader = async ({ request }) => {
   console.log('[loader] upsellRecord:', JSON.stringify(upsellRecord));
   console.log('[loader] cartRecord.coupon_status:', cartRecord?.coupon_status);
 
-  const discountJson = await discountQuery.json();
-  const productsJson = await productsQuery.json();
+  // discountQuery/productsQuery are live Shopify Admin GraphQL calls (not the
+  // PHP proxy) — an API hiccup here shouldn't 500 the whole cart editor when
+  // the merchant's actual saved config (cartRecord/configRecord/etc. above)
+  // loaded fine; degrade to empty lists instead.
+  const discountJson = await discountQuery.json().catch(() => ({}));
+  const productsJson = await productsQuery.json().catch(() => ({}));
 
   const coupons = (discountJson.data?.discountNodes?.edges || [])
     .map(({ node }) => {

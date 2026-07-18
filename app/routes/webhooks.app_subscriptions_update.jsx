@@ -17,19 +17,24 @@ export async function action({ request }) {
   }
 
   try {
-    const { shop, body } = await authenticate.webhook(request);
+    const { shop, payload } = await authenticate.webhook(request);
 
     if (!shop) {
       console.error("[Webhook] No shop found");
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const payload = JSON.parse(body);
-    const { id, status, name, billing_on, cancelled_on, trial_ends_on, activated_on } = payload;
+    console.log(`[Webhook] app_subscriptions/update raw payload for ${shop}:`, JSON.stringify(payload));
 
-    console.log(`[Webhook] app_subscriptions/update for ${shop}: status=${status}, plan=${name}`);
+    // Shopify's app_subscriptions/update payload nests the subscription
+    // under `app_subscription` (snake_case fields) rather than at the top
+    // level — verified via the raw payload log above.
+    const sub = payload.app_subscription || payload;
+    const { admin_graphql_api_id: id, name, status, billing_on, trial_ends_on, plan_handle } = sub;
 
-    const planKey = await confirmPlanFromWebhook(shop, status);
+    console.log(`[Webhook] app_subscriptions/update for ${shop}: status=${status}, plan=${name}, plan_handle=${plan_handle}`);
+
+    const planKey = await confirmPlanFromWebhook(shop, status, plan_handle);
 
     // Sync to PHP backend (mirrors plan_key/subscription fields there too)
     await syncSubscriptionToPHP({

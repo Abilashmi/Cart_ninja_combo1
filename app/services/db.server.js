@@ -13,6 +13,11 @@ function isReadStatement(sql) {
   return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql);
 }
 
+// Every one of this app's ~45 DB call sites goes through this single fetch,
+// so a stalled (not just erroring) PHP host would otherwise hang every one
+// of them indefinitely rather than failing fast.
+const DB_PROXY_TIMEOUT_MS = 15_000;
+
 async function proxyExecute(sql, params = []) {
   const res = await fetch(`${BASE_PHP_URL}/db_proxy.php`, {
     method: 'POST',
@@ -21,6 +26,7 @@ async function proxyExecute(sql, params = []) {
       'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
     },
     body: JSON.stringify({ sql, params }),
+    signal: AbortSignal.timeout(DB_PROXY_TIMEOUT_MS),
   });
 
   const text = await res.text();
@@ -32,6 +38,7 @@ async function proxyExecute(sql, params = []) {
   }
 
   if (!res.ok || !json.success) {
+    console.error('[db_proxy] raw response body:', text.substring(0, 1000));
     throw new Error(json.error || `DB proxy error (HTTP ${res.status})`);
   }
 

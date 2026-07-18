@@ -1,6 +1,5 @@
 import { authenticate } from "../shopify.server";
-
-const PHP = "https://int.thecartninja.com";
+import { BASE_PHP_URL as PHP } from "../utils/api-helpers";
 
 /**
  * POST /webhooks/compliance
@@ -14,8 +13,7 @@ const PHP = "https://int.thecartninja.com";
  */
 export async function action({ request }) {
   try {
-    const { topic, shop, body } = await authenticate.webhook(request);
-    const payload = JSON.parse(body);
+    const { topic, shop, payload } = await authenticate.webhook(request);
 
     console.log(`[Compliance] ${topic} for ${shop}`);
 

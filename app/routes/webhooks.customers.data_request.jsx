@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 
-const PHP_URL = "https://int.thecartninja.com/customers-data-request.php";
+const PHP_URL = `${BASE_PHP_URL}/customers-data-request.php`;
 
 /**
  * Mandatory compliance webhook: customers/data_request
@@ -15,9 +16,8 @@ const PHP_URL = "https://int.thecartninja.com/customers-data-request.php";
  */
 export async function action({ request }) {
   try {
-    const { topic, shop, body } = await authenticate.webhook(request);
+    const { topic, shop, payload } = await authenticate.webhook(request);
 
-    const payload = JSON.parse(body);
     const { customer, orders_requested, data_request } = payload;
 
     console.log(`[GDPR] customers/data_request for shop: ${shop}`, {

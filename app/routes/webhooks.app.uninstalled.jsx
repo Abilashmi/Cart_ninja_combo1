@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import sessionDb from "../session-db.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 
 export const action = async ({ request }) => {
   const { shop, session, topic } = await authenticate.webhook(request);
@@ -8,13 +9,20 @@ export const action = async ({ request }) => {
 
   // Webhook requests can trigger multiple times and after an app has already been uninstalled.
   // If this webhook already ran, the session may have been deleted previously.
+  // Guarded so a transient DB error doesn't 500 this handler — Shopify
+  // retries app/uninstalled aggressively on non-2xx, and there's nothing to
+  // gain from a retry storm over what's likely already a stale/deleted row.
   if (session) {
-    await sessionDb.session.deleteMany({ where: { shop } });
+    try {
+      await sessionDb.session.deleteMany({ where: { shop } });
+    } catch (error) {
+      console.error("Error deleting session on uninstall", error);
+    }
   }
 
   // Make request to the remote DB to mark the shop as inactive
   try {
-    const response = await fetch("https://int.thecartninja.com/uninstall_shop.php", {
+    const response = await fetch(`${BASE_PHP_URL}/uninstall_shop.php`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

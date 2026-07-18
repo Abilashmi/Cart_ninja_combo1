@@ -217,6 +217,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// Writes only ever come from this app's own authenticated Node routes
+// (which already verified the Shopify admin session before calling here),
+// never directly from the storefront — unlike the public GET above, so this
+// must reject anyone who doesn't have the shared secret.
+$secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
+$expected = getenv('SHOPIFY_API_KEY') ?: '';
+if (!$expected || !hash_equals($expected, $secret)) {
+    http_response_code(403);
+    echo json_encode(["status" => "error", "message" => "Forbidden"]);
+    exit;
+}
+
 // ===== READ RAW PAYLOAD =====
 $rawInput = file_get_contents("php://input");
 $data = null;

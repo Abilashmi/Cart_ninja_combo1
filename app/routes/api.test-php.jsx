@@ -3,7 +3,7 @@ import { authenticate } from '../shopify.server';
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
-  const phpBase = process.env.PHP_BASE_URL || 'https://int.thecartninja.com';
+  const phpBase = process.env.PHP_BASE_URL || 'https://int.thebrix.io';
 
   let phpResult = null;
   let phpError = null;

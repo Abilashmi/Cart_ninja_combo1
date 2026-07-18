@@ -88,6 +88,17 @@ try {
 
   // ===== POST: Save template =====
   if ($method === 'POST') {
+    // Not called by the current app (templates are saved via
+    // prisma.$queryRawUnsafe into combo_templates instead), but this writes
+    // by client-supplied shop_domain with no other check — gate it so it
+    // can't be hit anonymously if anything ever calls it again.
+    $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
+    $expected = getenv('SHOPIFY_API_KEY') ?: '';
+    if (!$expected || !hash_equals($expected, $secret)) {
+      http_response_code(403);
+      echo json_encode(["status" => "error", "message" => "Forbidden"]);
+      exit;
+    }
     $pdo->beginTransaction();
     try {
       $id = $input['id'] ?? null;
@@ -302,6 +313,13 @@ try {
 
   // ===== DELETE =====
   if ($method === 'DELETE') {
+    $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
+    $expected = getenv('SHOPIFY_API_KEY') ?: '';
+    if (!$expected || !hash_equals($expected, $secret)) {
+      http_response_code(403);
+      echo json_encode(["status" => "error", "message" => "Forbidden"]);
+      exit;
+    }
     $id = $input['id'] ?? $_GET['id'] ?? null;
     if (!$id) {
       http_response_code(400);

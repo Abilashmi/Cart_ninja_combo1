@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 
-const PHP_URL = "https://int.thecartninja.com/shop-redact.php";
+const PHP_URL = `${BASE_PHP_URL}/shop-redact.php`;
 
 /**
  * Mandatory compliance webhook: shop/redact
@@ -12,9 +13,8 @@ const PHP_URL = "https://int.thecartninja.com/shop-redact.php";
  */
 export async function action({ request }) {
   try {
-    const { topic, shop, body } = await authenticate.webhook(request);
+    const { topic, shop, payload } = await authenticate.webhook(request);
 
-    const payload = JSON.parse(body);
     const { shop_id, shop_domain } = payload;
 
     console.log(`[GDPR] shop/redact for shop: ${shop_domain ?? shop} (id: ${shop_id})`);

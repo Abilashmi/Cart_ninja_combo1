@@ -12,10 +12,14 @@ function yesterdayDateStr() {
 
 // Extracts the active subscription's usage-pricing line item for a shop,
 // shared by the daily cron job and the manual "Record Usage Charge" button.
-// A subscription can carry more than one AppUsagePricing line item (e.g. one
-// for order overage, one for AI BRIX credit overage) so `termsIncludes` picks
-// out the right one by matching a substring of its `terms` text.
-async function findUsageLineItem(admin, termsIncludes) {
+// Shopify's Billing API allows only one AppUsagePricing line item per
+// subscription (confirmed directly via the API — a second one fails
+// appSubscriptionCreate with "Cannot have more than one plan with the same
+// pricing details" regardless of differing terms/cappedAmount), so order
+// overage and AI BRIX credit overage share this single line item —
+// individual charges are told apart by their `description`, not by which
+// line item they're attached to.
+async function findUsageLineItem(admin) {
   const subRes = await admin.graphql(`
     query {
       currentAppInstallation {
@@ -24,7 +28,7 @@ async function findUsageLineItem(admin, termsIncludes) {
           status
           lineItems {
             id
-            plan { pricingDetails { __typename ... on AppUsagePricing { terms } } }
+            plan { pricingDetails { __typename } }
           }
         }
       }
@@ -37,15 +41,14 @@ async function findUsageLineItem(admin, termsIncludes) {
 
   const usageLineItem = activeSub.lineItems?.find(
     li => li.plan.pricingDetails.__typename === 'AppUsagePricing'
-      && li.plan.pricingDetails.terms?.includes(termsIncludes)
   );
-  if (!usageLineItem) return { error: 'Subscription has no matching usage pricing line item' };
+  if (!usageLineItem) return { error: 'Subscription has no usage pricing line item' };
 
   return { usageLineItem };
 }
 
-async function createUsageCharge(admin, { amount, description, termsIncludes }) {
-  const { usageLineItem, error } = await findUsageLineItem(admin, termsIncludes);
+async function createUsageCharge(admin, { amount, description }) {
+  const { usageLineItem, error } = await findUsageLineItem(admin);
   if (error) return { success: false, error };
 
   const res = await admin.graphql(
@@ -121,7 +124,6 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
   const result = await createUsageCharge(admin, {
     amount: chargeAmount,
     description: `${overageOrders} overage orders × $${plan.overageRate.toFixed(2)} (${date})`,
-    termsIncludes: 'per order above',
   });
 
   if (result.success) {
@@ -181,7 +183,6 @@ export async function chargeAiCreditOverage(admin, shop, periodKey, creditNumber
   const result = await createUsageCharge(admin, {
     amount: chargeAmount,
     description: `AI BRIX credit #${creditNumber} over cap × $${overageRate.toFixed(2)} (${periodKey})`,
-    termsIncludes: 'per AI BRIX credit',
   });
 
   if (result.success) {

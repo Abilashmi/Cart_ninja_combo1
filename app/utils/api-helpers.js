@@ -21,8 +21,9 @@ export const formatToIST = (dateString = null, timeZone = 'Asia/Kolkata') => {
 /* =========================
    PHP BACKEND CONFIG
 ========================= */
-export const BASE_PHP_URL =
-  process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
+export const BASE_PHP_URL = (
+  process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend'
+).replace(/\/+$/, '');
 
 /* =========================
    DATABASE HELPERS (PHP REPLACEMENT)
@@ -113,6 +114,7 @@ export async function sendToPhp(payload, endpoint) {
         'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
     };
 
     const response = await fetch(phpUrl, fetchOptions);

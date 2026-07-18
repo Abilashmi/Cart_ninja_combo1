@@ -1,4 +1,4 @@
-const PHP_BASE = 'https://int.thecartninja.com';
+const PHP_BASE = 'https://int.thebrix.io';
 
 export async function sendToPhp(endpoint, payload) {
   const res = await fetch(`${PHP_BASE}/${endpoint}`, {
@@ -52,7 +52,7 @@ export async function fetchBundleAnalytics(shop) {
 export async function getBundleEmbedStatus(shop) {
   try {
     const res = await fetch(
-      `https://int.thecartninja.com/combo_embed_status.php?shop=${encodeURIComponent(shop)}`,
+      `${PHP_BASE}/combo_embed_status.php?shop=${encodeURIComponent(shop)}`,
       { headers: { 'ngrok-skip-browser-warning': 'true' } }
     );
     if (!res.ok) return { embedded: false };
@@ -63,7 +63,7 @@ export async function getBundleEmbedStatus(shop) {
 }
 
 export async function setBundleEmbedStatus(shop, embedded) {
-  const res = await fetch('https://int.thecartninja.com/combo_embed_status.php', {
+  const res = await fetch(`${PHP_BASE}/combo_embed_status.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
     body: JSON.stringify({ shop, embedded: embedded ? 1 : 0 }),

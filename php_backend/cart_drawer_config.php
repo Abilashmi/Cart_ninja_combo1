@@ -4,7 +4,7 @@ require_once __DIR__ . '/config.php';
 // Auth check (skipped in local when SHOPIFY_API_KEY not set)
 $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
 $expected = getenv('SHOPIFY_API_KEY') ?: '';
-if ($expected && $secret !== $expected) {
+if (!$expected || !hash_equals($expected, $secret)) {
     http_response_code(403);
     echo json_encode(['status' => 'error', 'message' => 'Forbidden']);
     exit;

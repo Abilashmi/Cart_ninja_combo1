@@ -17,6 +17,17 @@ if ($method !== 'POST') {
   exit;
 }
 
+// Not called by the current app, but this writes by client-supplied
+// shop_domain with no other check — gate it so it can't be hit
+// anonymously if anything ever calls it again.
+$secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
+$expected = getenv('SHOPIFY_API_KEY') ?: '';
+if (!$expected || !hash_equals($expected, $secret)) {
+    http_response_code(403);
+    echo json_encode(["status" => "error", "message" => "Forbidden"]);
+    exit;
+}
+
 $templateId = $input['template_id'] ?? null;
 $pageTitle = $input['page_title'] ?? 'Combo Page';
 $pageHandle = $input['page_handle'] ?? 'combo-' . time();

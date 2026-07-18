@@ -9,6 +9,7 @@ import {
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
 import { PLANS } from "../config/plans";
@@ -51,7 +52,7 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
 
   try {
-    fetch('https://int.thecartninja.com/install_shop.php', {
+    fetch(`${BASE_PHP_URL}/install_shop.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shop }),

@@ -21,7 +21,11 @@ require_once __DIR__ . '/config.php';
 
 $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
 $expected = getenv('SHOPIFY_API_KEY') ?: '';
-if ($expected && $secret !== $expected) {
+// Fail closed: if SHOPIFY_API_KEY isn't configured server-side, this
+// endpoint executes arbitrary SQL, so a missing secret must reject every
+// request rather than skip the check (the previous `$expected &&` guard
+// left this wide open whenever the env var was unset).
+if (!$expected || !hash_equals($expected, $secret)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Forbidden']);
     exit;

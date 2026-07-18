@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { BASE_PHP_URL } from "../utils/api-helpers";
 
 /**
  * Webhook: app_purchases_one_time_update
@@ -10,14 +11,13 @@ export async function action({ request }) {
   }
 
   try {
-    const { topic, shop, body } = await authenticate.webhook(request);
+    const { topic, shop, payload } = await authenticate.webhook(request);
 
     if (!shop) {
       console.error("[Webhook] No shop found");
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const payload = JSON.parse(body);
     console.log(`[Webhook] app_purchases_one_time_update for ${shop}:`, payload);
 
     const { id, status, name, price, decorated_return_url, cancelled_at } = payload;
@@ -52,9 +52,14 @@ export async function action({ request }) {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
+    // Return 200 even on internal errors — Shopify retries non-2xx webhook
+    // responses aggressively, and a transient PHP-backend hiccup here
+    // shouldn't trigger days of retries for a charge-status update that
+    // isn't safety-critical (the merchant's actual charge already happened
+    // on Shopify's side regardless of whether this sync succeeds).
     console.error("[Webhook] Error processing charge update:", error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
+      status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -66,7 +71,7 @@ export async function action({ request }) {
 async function updateChargeStatusInPHP(shop, status) {
   try {
     const response = await fetch(
-      "https://int.thecartninja.com/update-charge-status.php",
+      `${BASE_PHP_URL}/update-charge-status.php`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -37,19 +37,24 @@ export async function loader({ request }) {
   const shop = session.shop;
   const db = getDb();
 
-  const [settings] = await db.execute(
-    'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
-  );
-  const [rules] = await db.execute(
-    'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC',
-    [shop]
-  );
+  try {
+    const [settings] = await db.execute(
+      'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
+    );
+    const [rules] = await db.execute(
+      'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC',
+      [shop]
+    );
 
-  const data = settings.length
-    ? { ...settings[0], rules: rules.map(r => ({ ...r, trigger_products: parseJson(r.trigger_products, []), trigger_collections: parseJson(r.trigger_collections, []), fbt_products: parseJson(r.fbt_products, []) })) }
-    : { ...WIDGET_DEFAULTS, shop_domain: shop, rules: [] };
+    const data = settings.length
+      ? { ...settings[0], rules: rules.map(r => ({ ...r, trigger_products: parseJson(r.trigger_products, []), trigger_collections: parseJson(r.trigger_collections, []), fbt_products: parseJson(r.fbt_products, []) })) }
+      : { ...WIDGET_DEFAULTS, shop_domain: shop, rules: [] };
 
-  return Response.json({ success: true, data });
+    return Response.json({ success: true, data });
+  } catch (error) {
+    console.error('[fbt-settings] loader DB error:', error.message);
+    return Response.json({ success: false, error: 'Failed to load FBT settings' }, { status: 502 });
+  }
 }
 
 export async function action({ request }) {
@@ -57,6 +62,8 @@ export async function action({ request }) {
   const shop = session.shop;
   const body = await request.json();
   const db = getDb();
+
+  try {
 
   // DELETE rule
   if (request.method === 'DELETE' && body.ruleId) {
@@ -166,4 +173,8 @@ export async function action({ request }) {
   const [settings] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ?', [shop]);
   const [rules] = await db.execute('SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]);
   return Response.json({ success: true, data: { ...settings[0], rules } });
+  } catch (error) {
+    console.error('[fbt-settings] action DB error:', error.message);
+    return Response.json({ success: false, error: 'Failed to save FBT settings' }, { status: 502 });
+  }
 }

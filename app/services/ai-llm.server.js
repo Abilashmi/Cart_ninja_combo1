@@ -28,11 +28,21 @@ export function parseJsonReply(text, fallback = { unclear: true }) {
 
 async function requestLlm(messages, { maxTokens = 150, temperature = 0 } = {}) {
   const { apiKey, endpoint, model } = resolveProvider();
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
-  });
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
+      // Without this, a stalled provider hangs the calling route
+      // indefinitely instead of falling back — every AI feature in the app
+      // routes through this one function.
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    console.error('[ai-llm] request failed', err.message);
+    return { content: null, finishReason: null, errorStatus: null };
+  }
   if (!res.ok) {
     const bodyText = await res.text().catch(() => '');
     console.error('[ai-llm] provider error', res.status, bodyText.slice(0, 300));
