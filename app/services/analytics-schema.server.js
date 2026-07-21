@@ -170,6 +170,7 @@ export async function ensureAnalyticsTables(db) {
   `);
 
   await ensureDiscountCodeColumn(db);
+  await ensureBillableOrderColumns(db);
 
   ensured = true;
 }
@@ -182,6 +183,34 @@ async function ensureDiscountCodeColumn(db) {
   if (Number(rows?.[0]?.n || 0) === 0) {
     await db.execute(
       `ALTER TABLE combo_analytics ADD COLUMN discount_code VARCHAR(100) NULL AFTER template_id`
+    );
+  }
+}
+
+// Distinguishes orders billed toward the plan's order cap (placed while the
+// cart drawer was enabled) from the store's total order count, which stays
+// unfiltered for the merchant's own analytics dashboard. `is_billable` is
+// set once, at orders/paid time (see webhooks.orders.paid.jsx), from
+// cart_drawer.cartStatus at that moment — never recomputed retroactively,
+// since there's no history of past cartStatus values to reconstruct it from.
+async function ensureBillableOrderColumns(db) {
+  const [orderCols] = await db.execute(
+    `SELECT COUNT(*) AS n FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = 'is_billable'`
+  );
+  if (Number(orderCols?.[0]?.n || 0) === 0) {
+    await db.execute(
+      `ALTER TABLE store_orders ADD COLUMN is_billable TINYINT(1) NOT NULL DEFAULT 0 AFTER is_test`
+    );
+  }
+
+  const [rollupCols] = await db.execute(
+    `SELECT COUNT(*) AS n FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'analytics_daily_rollup' AND COLUMN_NAME = 'billable_order_count'`
+  );
+  if (Number(rollupCols?.[0]?.n || 0) === 0) {
+    await db.execute(
+      `ALTER TABLE analytics_daily_rollup ADD COLUMN billable_order_count INT NOT NULL DEFAULT 0 AFTER order_count`
     );
   }
 }

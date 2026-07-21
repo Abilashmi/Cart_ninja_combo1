@@ -456,8 +456,9 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
             {open && (
                 <div style={{ padding: "12px", borderTop: "1px solid #e1e3e5" }}>
                     <BlockStack gap="300">
-                        <TextField label="Heading" value={ov.headingText ?? ""} onChange={(v) => onChange({ headingText: v })} placeholder="Uses template default if empty" autoComplete="off" />
-                        <TextField label="Subtext" value={ov.subtextText ?? ""} onChange={(v) => onChange({ subtextText: v })} placeholder="Uses template default if empty" autoComplete="off" />
+                        <TextField label="Heading" value={ov.headingText ?? ""} onChange={(v) => onChange({ headingText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={30} showCharacterCount />
+                        <TextField label="Subtext" value={ov.subtextText ?? ""} onChange={(v) => onChange({ subtextText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={35} showCharacterCount multiline={2} />
+                        <TextField label="Button Text" value={ov.buttonText ?? ""} onChange={(v) => onChange({ buttonText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={10} showCharacterCount />
                         {colorRow("Background", "bgColor", "#ffffff")}
                         {colorRow("Text", "textColor", "#111827")}
                         {colorRow("Accent", "accentColor", "#3b82f6")}
@@ -633,7 +634,7 @@ export default function ProductWidgetPage() {
             const style = {};
             // Save the real discount code so "Copy Code" copies the code, not the GID number
             if (couponObj?.code) style.couponCode = couponObj.code;
-            ["headingText", "subtextText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor"].forEach((k) => {
+            ["headingText", "subtextText", "buttonText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor"].forEach((k) => {
                 if (ov[k] !== undefined && ov[k] !== "") style[k] = ov[k];
             });
             if (Object.keys(style).length) couponStyles[cid] = style;
@@ -674,6 +675,10 @@ export default function ProductWidgetPage() {
     const pvBtnText = editOv.buttonTextColor || btnTextColor;
     const previewCode = editingCoupon?.code || (discounts || []).find((c) => c.id === selectedCouponIds[0])?.code || "CODE";
     const btn = { background: pvButton, color: pvBtnText, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
+    // Default button label matches what the real storefront widget falls back
+    // to per template (see buildCard() in coupon-slider-render.liquid) —
+    // "Copy" for Bold & Vibrant, "Copy Code" everywhere else.
+    const pvButtonText = editOv.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code");
 
     const timerStrip = timerEnabled ? (
         <CountdownStrip hours={timerHours} minutes={timerMins} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
@@ -684,11 +689,11 @@ export default function ProductWidgetPage() {
             return (
                 <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${pvAccent}` }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-                        <div>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px" }}>{pvHeading}</div>
-                            <div style={{ fontSize: "13px", color: pvText, opacity: 0.65 }}>{pvSubtext}</div>
+                        <div style={{ flex: 1, minWidth: "100px", overflow: "hidden" }}>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
+                            <div style={{ fontSize: "13px", color: pvText, opacity: 0.65, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
                         </div>
-                        <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0 }}>{previewCode}</button>
+                        <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
                     </div>
                     {timerStrip}
                 </div>
@@ -698,14 +703,14 @@ export default function ProductWidgetPage() {
             return (
                 <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
                     <div style={{ display: "flex", gap: "12px" }}>
-                        <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", border: `1px dashed ${pvAccent}50` }}>
+                        <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${pvAccent}50`, boxSizing: "border-box" }}>
                             <div style={{ fontSize: "9px", letterSpacing: "2px", color: pvAccent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
-                            <div style={{ fontSize: "15px", fontWeight: 800, color: pvAccent, letterSpacing: "3px" }}>{previewCode}</div>
+                            <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>{previewCode}</div>
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px" }}>{pvHeading}</div>
-                            <div style={{ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px" }}>{pvSubtext}</div>
-                            <button style={{ ...btn, padding: "6px 16px", fontSize: "13px" }}>Redeem Now</button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
+                            <div style={{ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
+                            <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", whiteSpace: "nowrap" }}>{pvButtonText}</button>
                         </div>
                     </div>
                     {timerStrip}
@@ -718,12 +723,12 @@ export default function ProductWidgetPage() {
                     <div style={{ width: "44px", height: "44px", background: pvAccent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <Icon source={DiscountIcon} />
                     </div>
-                    <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px" }}>{pvHeading}</div>
-                        <div style={{ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px" }}>{pvSubtext}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
+                        <div style={{ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
                         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                            <div style={{ border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, letterSpacing: "2px" }}>{previewCode}</div>
-                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px" }}>Apply</button>
+                            <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewCode}</div>
+                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
                         </div>
                     </div>
                 </div>
@@ -971,12 +976,14 @@ export default function ProductWidgetPage() {
                                             options={[
                                                 { label: "Above the Add to Cart button", value: "above_cart" },
                                                 { label: "Below the Add to Cart button", value: "below_cart" },
+                                                { label: "Custom (place it yourself in the theme editor)", value: "custom" },
                                             ]}
                                             value={widgetPlacement}
                                             onChange={(v) => { setWidgetPlacement(v); mark(); }}
                                             helpText={
                                                 widgetPlacement === "above_cart" ? "Position locked above the Add to Cart button on storefront." :
-                                                "Position locked below the Add to Cart button on storefront."
+                                                widgetPlacement === "below_cart" ? "Position locked below the Add to Cart button on storefront." :
+                                                "Add the block yourself anywhere on the product page via the theme editor."
                                             }
                                         />
                                     </div>

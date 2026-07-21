@@ -123,9 +123,24 @@ p {
   font-weight: 600 !important;
 }
 
-.Polaris-Button--variantPrimary {
+/* :not(:disabled) so a disabled primary button doesn't get the forced
+   solid-black background below — otherwise disabled Save/Configure
+   buttons look identical to enabled ones across every page. */
+.Polaris-Button--variantPrimary:not(:disabled) {
   background: #111213 !important;
   box-shadow: none !important;
+}
+
+/* Polaris's own disabled-button colors come from CSS custom properties
+   (--pc-button-bg_disabled etc.) that aren't resolving in this app's setup,
+   so removing the override above just left disabled primary buttons with no
+   visible background at all rather than an obvious grey. Set it explicitly. */
+.Polaris-Button--variantPrimary:disabled,
+.Polaris-Button--variantPrimary[disabled] {
+  background: #d3d3d3 !important;
+  color: #8a8a8a !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
 }
 
 .Polaris-FormLayout {

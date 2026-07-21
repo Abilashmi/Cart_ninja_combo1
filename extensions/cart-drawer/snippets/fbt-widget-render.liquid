@@ -1,0 +1,633 @@
+<ps-fbt-widget
+  data-product-id="{{ product.id }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-currency="{{ shop.currency }}"
+  data-placement="{{ block.settings.placement | default: 'below_atc' }}"
+  data-design-mode="{{ request.design_mode }}"
+  style="display:none">
+</ps-fbt-widget>
+
+<style>
+  .ps-fbt-wrapper {
+    box-sizing: border-box;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  }
+  .ps-fbt-title {
+    font-weight: 800;
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+  .ps-fbt-products {
+    display: flex;
+    gap: 10px;
+  }
+  .ps-fbt-products.carousel::-webkit-scrollbar {
+    display: none;
+  }
+  .ps-fbt-nav {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.2s;
+  }
+  .ps-fbt-nav[disabled] {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+  @media (max-width: 768px) {
+    .ps-fbt-nav-group {
+      display: none !important;
+    }
+  }
+  .ps-fbt-products.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .ps-product-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 8px;
+    border: 1px solid;
+    transition: border-color 0.2s;
+    position: relative;
+    background: #fff;
+    box-sizing: border-box;
+  }
+  .ps-product-main {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+  .ps-product-card.horizontal .ps-product-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ps-product-image {
+    width: 100%;
+    height: 64px;
+    border-radius: 8px;
+    background-color: #f3f4f6;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ps-product-meta {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+  }
+  .ps-product-title {
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+  }
+  .ps-product-price {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .ps-product-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: auto;
+    width: 100%;
+    gap: 8px;
+  }
+  .ps-fbt-footer {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ps-fbt-addall {
+    padding: 10px 22px;
+    border-radius: 100px;
+    cursor: pointer;
+    font-weight: 800;
+    border: none;
+  }
+  .ps-classic-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .ps-stepper {
+    display: flex;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .ps-stepper button {
+    width: 28px;
+    height: 28px;
+    border: none;
+    cursor: pointer;
+  }
+  .ps-stepper span {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ps-bundle-check {
+    width: 20px;
+    height: 20px;
+    border: 2px solid;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    transition: none;
+  }
+  .ps-required {
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  @media (max-width: 768px) {
+    .ps-fbt-wrapper { padding: 14px; }
+    .ps-product-card { min-height: auto; }
+    .ps-product-main { width: 100%; }
+    .ps-product-title { font-size: 13px; line-height: 1.35; -webkit-line-clamp: 3; }
+    .ps-fbt-footer { flex-direction: column; align-items: stretch; gap: 10px; }
+    .ps-fbt-addall { width: 100%; }
+  }
+</style>
+
+<script>
+(function(){
+  if(customElements.get('ps-fbt-widget'))return;
+
+  function getCurrencySymbol(code){
+    var symbols={USD:'$',EUR:'€',GBP:'£',INR:'₹',JPY:'¥',AUD:'A$',CAD:'C$',CHF:'CHF',CNY:'¥',SEK:'kr',NZD:'NZ$',MXN:'$',SGD:'S$',HKD:'HK$',NOK:'kr',KRW:'₩',TRY:'₺',RUB:'₽',BRL:'R$',ZAR:'R',THB:'฿',MYR:'RM',PHP:'₱',IDR:'Rp',VND:'₫',KES:'KSh',NGN:'₦',PKR:'₨',BDT:'৳',AED:'د.إ',SAR:'﷼',QAR:'﷼'};
+    return symbols[code]||code;
+  }
+
+  function normalizeRules(source){
+    var parsed=source;
+    if(typeof parsed==='string'){try{parsed=JSON.parse(parsed);}catch(e){parsed=[];}}
+    if(!Array.isArray(parsed))return[];
+    return parsed.filter(function(r){return r&&typeof r==='object';}).map(function(rule,i){
+      return{id:rule.id||rule.ruleId||('rule-'+i),displayScope:rule.displayScope||'all',triggerProducts:Array.isArray(rule.triggerProducts)?rule.triggerProducts:[],triggerProductId:rule.triggerProductId||null,fbtProducts:Array.isArray(rule.fbtProducts)?rule.fbtProducts:[]};
+    }).filter(function(r){return r.fbtProducts.length>0;});
+  }
+
+  function normalizeConfig(config,currencySymbol){
+    if(!config||typeof config!=='object')return null;
+    var br=Number(config.borderRadius);
+    return{layout:config.layout||'carousel',interactionType:config.interactionType||'classic',bgColor:config.bgColor||'#ffffff',textColor:config.textColor||'#111827',priceColor:config.priceColor||'#059669',buttonColor:config.buttonColor||'#111827',buttonTextColor:config.buttonTextColor||config.buttonText||'#ffffff',borderColor:config.borderColor||'#e5e7eb',borderRadius:Number.isFinite(br)?br:8,showPrices:config.showPrices!==false,showAddAllButton:config.showAddAllButton!==false,currencySymbol:currencySymbol};
+  }
+
+  function toPriceNumber(v){var p=parseFloat(v);return isNaN(p)?0:p;}
+
+  function escapeHtml(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+  function extractNumericId(v){var s=String(v||'');var m=s.match(/(\d+)(?!.*\d)/);return m?m[1]:'';}
+
+  function normalizeVariantId(v){return extractNumericId(v)||'';}
+
+  function dedupe(products){var map=new Map();products.forEach(function(p){map.set(p.id,p);});return Array.from(map.values());}
+
+  function openCartDrawerFast(detail){
+    var payload=detail||{};
+    try{if(window.__CC_DRAWER_API&&typeof window.__CC_DRAWER_API.openNow==='function'){window.__CC_DRAWER_API.openNow(payload);return;}}catch(e){}
+    ['cc:open-now','theme:cart:open','cart:open','cart:refresh'].forEach(function(n){try{document.dispatchEvent(new CustomEvent(n,{detail:payload}));window.dispatchEvent(new CustomEvent(n,{detail:payload}));}catch(e){}});
+  }
+
+  async function buildVariantLookup(products){
+    var variantByProductId=new Map();
+    (products||[]).forEach(function(product){
+      var explicitVariant=normalizeVariantId(product&&(product.variantId||product.variant_id||(product.variant&&product.variant.id)));
+      var idFromGid=String(product&&product.id||'').includes('ProductVariant')?normalizeVariantId(product&&product.id):'';
+      var variantId=explicitVariant||idFromGid;
+      if(variantId)variantByProductId.set(String(product.id),variantId);
+    });
+    var unresolved=(products||[]).filter(function(p){return!variantByProductId.has(String(p.id));});
+    if(unresolved.length){
+      try{
+        var res=await fetch('/products.json?limit=250');
+        if(res.ok){
+          var json=await res.json();
+          var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
+          var firstVariantMap=new Map();
+          ajaxProducts.forEach(function(ap){
+            var pid=String(ap&&ap.id||'');
+            var variants=Array.isArray(ap&&ap.variants)?ap.variants:[];
+            var fv=variants.find(function(v){return v&&v.available;})||variants[0];
+            var fvid=normalizeVariantId(fv&&fv.id);
+            if(pid&&fvid)firstVariantMap.set(pid,fvid);
+          });
+          unresolved.forEach(function(product){
+            var numId=extractNumericId(product&&product.id);
+            var vid=firstVariantMap.get(numId);
+            if(vid)variantByProductId.set(String(product.id),vid);
+          });
+        }
+      }catch(e){}
+    }
+    unresolved=(products||[]).filter(function(p){return!variantByProductId.has(String(p.id));});
+    for(var i=0;i<unresolved.length;i++){
+      var product=unresolved[i];
+      var handle=String(product&&product.handle||'').trim();
+      if(!handle)continue;
+      try{
+        var hr=await fetch('/products/'+encodeURIComponent(handle)+'.js');
+        if(!hr.ok)continue;
+        var hj=await hr.json();
+        var hvariants=Array.isArray(hj&&hj.variants)?hj.variants:[];
+        var hfv=hvariants.find(function(v){return v&&v.available;})||hvariants[0];
+        var hvid=normalizeVariantId(hfv&&hfv.id);
+        if(hvid)variantByProductId.set(String(product.id),hvid);
+      }catch(e){}
+    }
+    return variantByProductId;
+  }
+
+  customElements.define('ps-fbt-widget',class extends HTMLElement{
+    connectedCallback(){
+      if(this._psInit)return;
+      this._psInit=true;
+      var el=this;
+      var shop=el.dataset.shop;
+      var currencyCode=el.dataset.currency||'USD';
+      var productId='gid://shopify/Product/'+el.dataset.productId;
+      var currencySymbol=getCurrencySymbol(currencyCode);
+
+      function findAtcBtn(){
+        var selectors=[
+          'form[action*="/cart/add"] [type="submit"]',
+          'button[name="add"]',
+          '[type="submit"][name="add"]',
+          '.product-form__submit',
+          '.product-form__buttons [type="submit"]',
+          '#AddToCart','#ProductSubmitButton',
+          '[id^="ProductSubmitButton"]','[id^="AddToCart"]',
+          '.add-to-cart','.add_to_cart','.btn--add-to-cart',
+          '[data-add-to-cart]','button[data-product-form-submit]',
+          '.product__submit button[type="submit"]',
+          'product-form button[type="submit"]',
+          '.shopify-payment-button__button',
+          'button[type="submit"].btn',
+        ];
+        /* Prefer a visible button (themes often have hidden duplicate forms) */
+        for(var i=0;i<selectors.length;i++){var b=document.querySelector(selectors[i]);if(b&&b.offsetParent!==null)return b;}
+        for(var j=0;j<selectors.length;j++){var b2=document.querySelector(selectors[j]);if(b2)return b2;}
+        return null;
+      }
+
+      function doPlace(apiPlacement){
+        var atcBtn=findAtcBtn();
+        el.style.display='block';
+        el.style.width='100%';
+        el.style.margin='16px 0';
+        el.style.boxSizing='border-box';
+        if(apiPlacement==='custom'||!atcBtn)return false;
+        /* Anchor as close to the Add-to-Cart button as possible so "above/below the
+           add to cart" is precise (not above the whole form / variant pickers).
+           Prefer a known buy-buttons wrapper, else the button's block parent. */
+        var anchor=
+          atcBtn.closest('.product-form__buttons') ||
+          atcBtn.closest('.product-form__buy-buttons') ||
+          atcBtn.closest('[class*="buy-buttons"]') ||
+          atcBtn.closest('[class*="buy_buttons"]') ||
+          atcBtn.closest('.product-form__submit') ||
+          atcBtn;
+        if(apiPlacement==='above_cart'){
+          anchor.parentNode.insertBefore(el,anchor);
+        } else {
+          anchor.parentNode.insertBefore(el,anchor.nextSibling);
+        }
+        return true;
+      }
+
+      function placeWidget(apiPlacement){
+        /* Try immediately; if the ATC button isn't in the DOM yet, observe until it is. */
+        if(doPlace(apiPlacement)||apiPlacement==='custom')return;
+        var done=false;
+        var obs=new MutationObserver(function(){
+          if(done)return;
+          if(findAtcBtn()){done=true;obs.disconnect();doPlace(apiPlacement);}
+        });
+        obs.observe(document.body,{childList:true,subtree:true});
+        /* Safety: stop observing after 6s and place wherever we can */
+        setTimeout(function(){if(!done){done=true;obs.disconnect();doPlace(apiPlacement);}},6000);
+      }
+
+      if(!shop){el.style.display='none';return;}
+
+      /* Fetch via the Shopify app proxy — same as the (working) coupon slider.
+         Same-origin with the storefront, so no CORS. In `shopify app dev` the proxy
+         routes to the local tunnel → local Node route → local MySQL. */
+      var API_URL='/apps/cart-app/save_fbt_widget.php?shopdomain='+encodeURIComponent(shop);
+      fetch(API_URL,{headers:{'ngrok-skip-browser-warning':'true'}})
+        .then(function(r){return r.json();})
+        .then(function(response){
+          if(!response||response.status!=='success')return;
+          var data=response.data;
+          /* Plan gating: on Free, FBT is Preview Only — the backend already
+             forces `publishable`/`isEnabled` off, but never trust the client
+             alone. On the live storefront, bail out before rendering anything.
+             In the theme editor (design mode), show an upgrade placeholder so
+             the merchant understands why the app embed is empty. */
+          if(data.publishable===false||data.isEnabled===false){
+            if(el.dataset.designMode==='true'){
+              el.style.display='block';
+              el.style.width='100%';
+              el.style.margin='16px 0';
+              el.innerHTML='<div style="padding:16px;border:1.5px dashed #d1d5db;border-radius:8px;color:#6b7280;font-size:13px;text-align:center;">🔒 FBT Widget is not available on your current plan.<br>Upgrade to enable this widget on your storefront.</div>';
+            }
+            return;
+          }
+          var selectedTemplate=data.selectedTemp||data.selectedTemplate||data.activeTemplate||'fbt1';
+          var templateMap={fbt1:data.temp1||(data.templates&&data.templates.fbt1),fbt2:data.temp2||(data.templates&&data.templates.fbt2),fbt3:data.temp3||(data.templates&&data.templates.fbt3)};
+          var TEMPLATE_STYLE_MAP={fbt1:'classic-grid',fbt2:'modern-cards',fbt3:'vertical-list'};
+          var templateStyle=TEMPLATE_STYLE_MAP[selectedTemplate]||'classic-grid';
+          var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);
+          if(!config)return;
+          var apiPlacement=(templateMap[selectedTemplate]&&templateMap[selectedTemplate].widgetPlacement)||data.widgetPlacement||'below_cart';
+          var rules=normalizeRules(data.condition||data.manualRules||data.manualConfiguration||[]);
+          var currentNumId=extractNumericId(productId);
+          var matchedProducts=[];
+          rules.forEach(function(rule){
+            var triggerCandidates=(rule.triggerProducts||[]).length?(rule.triggerProducts||[]):(rule.triggerProductId?[{id:rule.triggerProductId}]:[]);
+            var scope=rule.displayScope||'all';
+            if(scope==='all'){matchedProducts=matchedProducts.concat(rule.fbtProducts);return;}
+            /* single / specific / per_product → only on the trigger product's page.
+               Compare by numeric id since GID formats vary across sources. */
+            var match=triggerCandidates.some(function(p){return extractNumericId(p.id)===currentNumId;});
+            if(match)matchedProducts=matchedProducts.concat(rule.fbtProducts);
+          });
+          if(!matchedProducts.length)return;
+          matchedProducts=dedupe(matchedProducts);
+          renderFBT(el,config,matchedProducts,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
+          placeWidget(apiPlacement);
+        })
+        .catch(function(){});
+    }
+  });
+
+  function renderFBT(container,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId){
+    /* Each of the 3 templates is a genuinely different structural layout, not
+       just a recolor: "classic-grid" is a connected row of cards joined by
+       "+" separators, "modern-cards" is a shadowed borderless card row, and
+       "vertical-list" is a stacked full-width row list. Previously all three
+       shared identical markup and only differed by color/border-radius, so
+       merchants saw the same layout regardless of which template they picked. */
+    var isListStyle=templateStyle==='vertical-list';
+    var isModernStyle=templateStyle==='modern-cards';
+    var isClassicStyle=!isListStyle&&!isModernStyle;
+    var isCarouselLayout=!isListStyle&&products.length>3;
+    container.innerHTML=
+      '<div class="ps-fbt-wrapper" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;'+(isModernStyle?'border:none;box-shadow:0 4px 20px rgba(0,0,0,0.08);':'border:1px solid '+config.borderColor+';')+'">'
+        +'<div class="ps-fbt-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">'
+          +'<div class="ps-fbt-title" style="color:'+config.textColor+';letter-spacing:-0.5px;margin-bottom:0;">Frequently Bought Together</div>'
+          +(isCarouselLayout?(
+            '<div class="ps-fbt-nav-group" style="display:flex;gap:6px;flex-shrink:0;">'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-prev" aria-label="Show previous products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8249;</button>'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-next" aria-label="Show more products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8250;</button>'
+            +'</div>'
+          ):'')
+        +'</div>'
+        +'<div class="ps-fbt-products"></div>'
+        +'<div class="ps-fbt-footer" style="border-color:'+config.borderColor+';justify-content:'+(config.showPrices?'space-between':'flex-end')+';">'
+          +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">Select items</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
+          +(config.showAddAllButton?'<button class="ps-fbt-addall" style="background:'+config.buttonColor+';color:'+config.buttonTextColor+';display:none;">Add to Cart</button>':'')
+        +'</div>'
+      +'</div>';
+
+    var wrapper=container.querySelector('.ps-fbt-products');
+    var totalLabelEl=container.querySelector('.ps-total-label');
+    var totalEl=container.querySelector('.ps-total-price');
+    var addBtn=container.querySelector('.ps-fbt-addall');
+    var navPrev=container.querySelector('.ps-fbt-nav-prev');
+    var navNext=container.querySelector('.ps-fbt-nav-next');
+
+    if(isListStyle){
+      wrapper.style.cssText='display:flex;flex-direction:column;gap:0;';
+    }else if(isCarouselLayout){
+      wrapper.style.cssText='display:flex;flex-direction:row;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch;';
+    }else{
+      wrapper.style.cssText='display:flex;flex-direction:row;flex-wrap:wrap;gap:10px;';
+    }
+    wrapper.dataset.interaction=config.interactionType;
+    wrapper.dataset.layout=config.layout;
+    wrapper.classList.add(isListStyle?'list':(isCarouselLayout?'carousel':'grid'));
+
+    if(isCarouselLayout&&navPrev&&navNext){
+      var scrollByAmount=function(){return Math.max(wrapper.clientWidth*0.8,150);};
+      var updateNavState=function(){
+        var maxScroll=wrapper.scrollWidth-wrapper.clientWidth;
+        if(maxScroll<=4){navPrev.setAttribute('disabled','');navNext.setAttribute('disabled','');return;}
+        if(wrapper.scrollLeft<=4)navPrev.setAttribute('disabled','');else navPrev.removeAttribute('disabled');
+        if(wrapper.scrollLeft>=maxScroll-4)navNext.setAttribute('disabled','');else navNext.removeAttribute('disabled');
+      };
+      navPrev.onclick=function(){wrapper.scrollBy({left:-scrollByAmount(),behavior:'smooth'});};
+      navNext.onclick=function(){wrapper.scrollBy({left:scrollByAmount(),behavior:'smooth'});};
+      wrapper.addEventListener('scroll',updateNavState,{passive:true});
+      window.addEventListener('resize',updateNavState);
+      setTimeout(updateNavState,50);
+    }
+
+    var selectedProductIds=new Set();
+    var productQuantities=new Map();
+    var cardEntries=new Map();
+
+    if(config.interactionType==='quickAdd'){products.forEach(function(p){productQuantities.set(String(p.id),0);});}
+    else{products.forEach(function(p){selectedProductIds.add(String(p.id));});}
+
+    function getProductQuantity(pid){var id=String(pid);if(config.interactionType==='quickAdd')return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
+    function getSelectedCount(){if(config.interactionType==='quickAdd')return products.reduce(function(c,p){return c+(getProductQuantity(p.id)>0?1:0);},0);return selectedProductIds.size;}
+
+    function updateCardStyle(entry){
+      var pid=String(entry.product.id);var qty=getProductQuantity(pid);var isActive=qty>0;
+      if(isListStyle){
+        var rowIdx=products.findIndex(function(p){return String(p.id)===pid;});
+        var isLastRow=rowIdx===products.length-1;
+        /* CSS Grid with explicit column widths (image fixed, text flexible,
+           button auto-sized) instead of flexbox — guarantees the middle
+           text column always gets real space regardless of how wide the
+           button/theme container happen to be, and keeps the button a fixed
+           gutter away from the edge instead of hugging it. */
+        entry.card.style.cssText='display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;width:100%;padding:12px 16px 12px 4px;'+(isLastRow?'':'border-bottom:1px solid '+config.borderColor+';')+'background:'+config.bgColor+';color:'+config.textColor+';box-sizing:border-box;';
+        return;
+      }
+      var cardWidth=isCarouselLayout?'140px':'1 1 120px';
+      var snapAlign=isCarouselLayout?'scroll-snap-align:start;':'';
+      var borderStyle=isModernStyle
+        ?'border:none;box-shadow:0 6px 18px rgba(0,0,0,0.14);'
+        :'border:1px solid '+(isActive?config.buttonColor:config.borderColor)+';box-shadow:0 1px 4px rgba(0,0,0,0.06);';
+      entry.card.style.cssText=(isCarouselLayout?'width:':'flex:')+cardWidth+';min-width:120px;max-width:220px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 8px;border-radius:'+config.borderRadius+'px;background:'+config.bgColor+';'+borderStyle+'transition:border-color 0.2s ease;position:relative;overflow:visible;box-sizing:border-box;color:'+config.textColor+';'+snapAlign;
+    }
+
+    function renderControl(entry){
+      var product=entry.product;var pid=String(product.id);var actionSlot=entry.actionSlot;
+      var qty=getProductQuantity(pid);var isSelected=qty>0;
+      actionSlot.innerHTML='';
+      if(entry.requiredBadge){entry.requiredBadge.remove();entry.requiredBadge=null;}
+
+      if(config.interactionType==='classic'){
+        var btn=document.createElement('button');btn.className='ps-classic-btn';
+        btn.textContent=isSelected?'Added ✓':'Add';
+        btn.style.cssText='padding:6px 14px;border-radius:6px;border:none;background:'+(isSelected?'#008060':config.buttonColor)+';color:'+config.buttonTextColor+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;';
+        btn.onclick=function(){if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
+        actionSlot.appendChild(btn);return;
+      }
+
+      if(config.interactionType==='bundle'){
+        var isRequired=selectedProductIds.has(pid)&&selectedProductIds.size<=1;
+        var check=document.createElement('div');check.className='ps-bundle-check';
+        check.style.cssText='width:20px;height:20px;border-radius:4px;border:2px solid '+(isRequired?config.buttonColor+'66':config.buttonColor)+';background:'+(isSelected?config.buttonColor:'transparent')+';display:flex;align-items:center;justify-content:center;cursor:'+(isRequired?'not-allowed':'pointer')+';transition:all 0.2s;opacity:'+(isRequired?'0.7':'1')+';color:'+(isSelected?config.buttonTextColor:config.buttonColor)+';';
+        check.textContent=isSelected?'✓':'';
+        check.onclick=function(){if(isRequired)return;if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
+        if(isRequired){var badge=document.createElement('div');badge.className='ps-required';badge.textContent='REQUIRED';badge.style.cssText='position:absolute;top:-8px;right:-4px;padding:2px 6px;border-radius:4px;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:9px;font-weight:700;letter-spacing:0.5px;';entry.card.appendChild(badge);entry.requiredBadge=badge;}
+        actionSlot.appendChild(check);return;
+      }
+
+      var currentQty=productQuantities.get(pid)||0;
+      if(currentQty<=0){
+        var addButton=document.createElement('button');addButton.className='ps-classic-btn';addButton.textContent='Add';
+        addButton.style.cssText='padding:5px 14px;border-radius:6px;border:1px solid '+config.buttonColor+';background:transparent;color:'+config.buttonColor+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;';
+        addButton.onclick=function(){productQuantities.set(pid,1);updateUI();};
+        actionSlot.appendChild(addButton);return;
+      }
+      var stepper=document.createElement('div');stepper.style.cssText='display:flex;align-items:center;gap:0;border-radius:6px;overflow:hidden;border:1px solid '+config.buttonColor+';';
+      var minus=document.createElement('button');minus.textContent='−';minus.style.cssText='width:26px;height:26px;border:none;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:14px;font-weight:700;cursor:pointer;';
+      minus.onclick=function(){productQuantities.set(pid,Math.max(0,(productQuantities.get(pid)||0)-1));updateUI();};
+      var qtyText=document.createElement('span');qtyText.textContent=String(currentQty);qtyText.style.cssText='width:26px;text-align:center;font-size:12px;font-weight:700;color:'+config.textColor+';';
+      var plus=document.createElement('button');plus.textContent='+';plus.style.cssText='width:26px;height:26px;border:none;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:14px;font-weight:700;cursor:pointer;';
+      plus.onclick=function(){productQuantities.set(pid,(productQuantities.get(pid)||0)+1);updateUI();};
+      stepper.appendChild(minus);stepper.appendChild(qtyText);stepper.appendChild(plus);
+      actionSlot.appendChild(stepper);
+    }
+
+    function updateFooter(){
+      var total=0;
+      products.forEach(function(p){total+=getProductQuantity(p.id)*toPriceNumber(p.price);});
+      if(totalEl)totalEl.textContent=currencySymbol+total.toLocaleString('en-IN');
+      var selectedCount=getSelectedCount();
+      if(totalLabelEl)totalLabelEl.textContent=selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
+      if(addBtn){if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';addBtn.textContent='Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
+    }
+
+    function updateUI(){cardEntries.forEach(function(entry){updateCardStyle(entry);renderControl(entry);});updateFooter();}
+
+    products.forEach(function(product,idx){
+      var handleFallback=String((product&&product.handle)||'').replace(/[-_]+/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+      var safeTitle=escapeHtml((product&&(product.title||product.name||product.productTitle||product.product_title))||handleFallback||'Product');
+      var imageUrl=String((product&&product.image)||'').replace(/'/g,'%27');
+      var price=toPriceNumber(product&&product.price);
+      var card=document.createElement('div');
+      if(isListStyle){
+        card.className='ps-product-row';
+        card.innerHTML=
+          '<div style="width:48px;height:48px;border-radius:8px;background:'+config.borderColor+'22;overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
+          /* NOTE: intentionally NOT reusing the .ps-product-title/.ps-product-price
+             classes here — those carry -webkit-line-clamp:2 + display:-webkit-box
+             from the grid-card style below, which conflicts with this row's
+             single-line white-space:nowrap and silently collapses the text to
+             zero visible height. Distinct class names + fully inline styles
+             avoid that collision entirely. Parent row is CSS Grid
+             (48px / 1fr / auto columns), so this middle cell just needs
+             min-width:0 to allow the ellipsis to kick in instead of
+             overflowing — its actual width comes from the grid track. */
+          +'<div style="min-width:0;">'
+            +'<div class="ps-product-row-title" style="display:block;color:'+config.textColor+';font-size:13px;font-weight:600;line-height:1.35;white-space:normal;word-break:break-word;">'+safeTitle+'</div>'
+            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+          +'</div>'
+          +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:flex-end;"></div>';
+      }else{
+        card.className='ps-product-card';
+        card.innerHTML=
+          '<div class="ps-product-image" style="width:100%;height:64px;background:'+config.borderColor+'22;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
+          +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
+            +'<div class="ps-product-title" style="color:'+config.textColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
+            +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+          +'</div>'
+          +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
+      }
+      wrapper.appendChild(card);
+      if(isClassicStyle&&idx<products.length-1){
+        var plus=document.createElement('span');
+        plus.setAttribute('aria-hidden','true');
+        plus.textContent='+';
+        plus.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:16px;font-size:18px;font-weight:700;color:'+config.textColor+';opacity:0.4;align-self:center;';
+        wrapper.appendChild(plus);
+      }
+      cardEntries.set(String(product.id),{product:product,card:card,actionSlot:card.querySelector('.ps-product-action'),requiredBadge:null});
+    });
+
+    updateUI();
+
+    /* Responsive: re-apply card sizing when the viewport crosses the mobile breakpoint */
+    var _psResizeT;
+    window.addEventListener('resize',function(){
+      clearTimeout(_psResizeT);
+      _psResizeT=setTimeout(function(){cardEntries.forEach(updateCardStyle);},150);
+    });
+
+    if(addBtn){
+      addBtn.onclick=async function(){
+        var defaultLabel=addBtn.textContent||'Add to Cart';
+        addBtn.disabled=true;addBtn.textContent='Adding...';
+        try{
+          var variantLookup=await buildVariantLookup(products);
+          var items=[];var skipped=[];
+          var productById=new Map((products||[]).map(function(p){return[String(p.id),p];}));
+          products.forEach(function(product){
+            var id=String(product.id);var qty=getProductQuantity(id);
+            if(qty<=0){skipped.push({id:id,title:product.title,reason:'not-selected'});return;}
+            var variantId=variantLookup.get(id);
+            if(!variantId){skipped.push({id:id,title:product.title,reason:'variant-lookup-failed'});return;}
+            var fullProduct=productById.get(id);
+            items.push({id:String(variantId),quantity:qty,productId:id,productTitle:(fullProduct&&fullProduct.title)||'Product'});
+          });
+          if(!items.length){var reasons=skipped.map(function(p){return p.title+'('+p.reason+')';}).join(', ');throw new Error('Unable to add any products. Skipped: '+reasons);}
+          var result=await(async function(items){
+            async function postAdd(its){var r=await fetch('/cart/add.js',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:its})});if(!r.ok)throw new Error('cart add failed');return r;}
+            try{await postAdd(items);return{addedItems:items,failedItems:[]};}
+            catch(batchErr){
+              var settled=await Promise.all(items.map(async function(item){try{await postAdd([{id:item.id,quantity:item.quantity}]);return{ok:true,item:item};}catch(e){return{ok:false,item:item,error:e&&e.message};}}));
+              return{addedItems:settled.filter(function(s){return s.ok;}).map(function(s){return s.item;}),failedItems:settled.filter(function(s){return!s.ok;}).map(function(s){return Object.assign({},s.item,{error:s.error});})};
+            }
+          })(items);
+          if(!result.addedItems.length)throw new Error('Failed to add selected products to cart.');
+          openCartDrawerFast({source:'fbt',items:result.addedItems});
+          var totalQty=result.addedItems.reduce(function(s,item){return s+(Number(item.quantity)||0);},0);
+          addBtn.textContent=totalQty>1?'Added '+totalQty:'Added ✓';
+          setTimeout(function(){updateFooter();},1200);
+        }catch(err){addBtn.textContent=defaultLabel;}
+        finally{addBtn.disabled=false;}
+      };
+    }
+  }
+})();
+</script>

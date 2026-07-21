@@ -107,7 +107,7 @@ export function PreviewLockBadge({ featureKey, inline = false }) {
 
   const requiredPlanKey = getMinPlanForFeature(featureKey) || 'starter';
   const requiredPlan = PLANS[requiredPlanKey];
-  const label = state === 'preview' ? 'Preview only — upgrade to publish' : `Requires ${requiredPlan?.label || 'Starter'}`;
+  const label = state === 'preview' ? 'Try it for free — upgrade to publish' : `Requires ${requiredPlan?.label || 'Starter'}`;
 
   return (
     <>
@@ -274,7 +274,7 @@ export function ProBadge({ featureKey }) {
         <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, flexShrink: 0 }}>
           <Icon source={LockIcon} tone="inherit" />
         </span>
-        Pro{isPreview ? ' · Preview Only' : ''}
+        Pro{isPreview ? ' · Try it for free' : ''}
       </button>
     </Tooltip>
   );
@@ -294,7 +294,7 @@ export function PreviewBadge({ featureKey }) {
       <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, color: GOLD }}>
         <Icon source={LockIcon} tone="inherit" />
       </span>
-      Preview Only
+      Try it for free
     </span>
   );
 }
@@ -329,7 +329,7 @@ export function PreviewPublishBanner({ featureKey }) {
         </span>
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Text as="p" variant="bodySm" fontWeight="semibold">Preview Only</Text>
+        <Text as="p" variant="bodySm" fontWeight="semibold">Try it for free</Text>
         <Text as="p" variant="bodyXs" tone="subdued">
           You can design and save this feature, but it won&apos;t appear on your storefront until
           you upgrade to {requiredPlan?.label || 'Starter'}.

@@ -1,0 +1,14 @@
+{% schema %}
+{
+  "name": "Coupon Banner",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Drag this block to exactly where you want it on the product page. Design and availability are still controlled from the app's Coupon Banner settings page — set placement there to \"Custom\" to stop the app auto-positioning it."
+    }
+  ]
+}
+{% endschema %}
+{% render 'coupon-slider-render' %}

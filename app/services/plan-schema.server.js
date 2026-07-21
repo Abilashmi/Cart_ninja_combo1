@@ -17,6 +17,15 @@ export async function ensurePlanTables(db) {
   if (!existing.includes('pending_plan_key')) {
     alterations.push('ADD COLUMN `pending_plan_key` VARCHAR(20) NULL DEFAULT NULL');
   }
+  // Marks when a shop's plan_key was last checked directly against
+  // Shopify's Billing API (see reconcilePlanFromShopify in
+  // plan-permissions.server.js) — distinct from subscription_updated_at,
+  // which the webhook writes. Lets a one-time live reconciliation for
+  // shops that predate plan_key tracking run exactly once instead of on
+  // every request for shops that turn out to be genuinely free.
+  if (!existing.includes('plan_synced_at')) {
+    alterations.push('ADD COLUMN `plan_synced_at` DATETIME NULL DEFAULT NULL');
+  }
   if (alterations.length > 0) {
     await db.execute(`ALTER TABLE shops ${alterations.join(', ')}`);
   }

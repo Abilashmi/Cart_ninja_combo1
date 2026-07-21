@@ -95,6 +95,19 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
     return { skipped: true, reason: 'within cap or unlimited plan' };
   }
 
+  // Free trials shouldn't incur usage charges before the merchant has even
+  // been billed their base plan fee — trial_ends_on is synced onto `shops`
+  // from the app_subscriptions/update webhook (see
+  // php_backend/update-subscription-status.php). Comparing as date strings
+  // is safe since both sides are YYYY-MM-DD.
+  const [trialRows] = await db.execute(
+    `SELECT 1 FROM shops WHERE shop_domain = ? AND trial_ends_on IS NOT NULL AND ? <= trial_ends_on LIMIT 1`,
+    [shop, date]
+  );
+  if (trialRows.length > 0) {
+    return { skipped: true, reason: 'shop still within trial period — overage suppressed until trial ends' };
+  }
+
   const [existing] = await db.execute(
     'SELECT status FROM order_overage_charges WHERE shop_domain = ? AND date = ? LIMIT 1',
     [shop, date]
@@ -210,7 +223,7 @@ export async function runDailyOverageBilling(dateOverride) {
   const date = dateOverride || yesterdayDateStr();
 
   const [rows] = await db.execute(
-    'SELECT shop_domain, order_count FROM analytics_daily_rollup WHERE date = ? AND order_count > 0',
+    'SELECT shop_domain, billable_order_count FROM analytics_daily_rollup WHERE date = ? AND billable_order_count > 0',
     [date]
   );
 
@@ -219,7 +232,7 @@ export async function runDailyOverageBilling(dateOverride) {
     const shop = row.shop_domain;
     try {
       const { admin } = await unauthenticated.admin(shop);
-      const result = await chargeOverageForShopDate(db, admin, shop, date, row.order_count);
+      const result = await chargeOverageForShopDate(db, admin, shop, date, row.billable_order_count);
       results.push({ shop, date, ...result });
     } catch (err) {
       console.error(`[billing] overage charge failed for ${shop} on ${date}:`, err.message);
@@ -237,10 +250,10 @@ export async function chargeOverageForToday(admin, shop) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [rows] = await db.execute(
-    'SELECT order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
+    'SELECT billable_order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
     [shop, today]
   );
-  const orderCount = rows[0]?.order_count || 0;
+  const orderCount = rows[0]?.billable_order_count || 0;
 
   return chargeOverageForShopDate(db, admin, shop, today, orderCount);
 }
@@ -253,10 +266,10 @@ export async function getTodayUsage(shop) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [rows] = await db.execute(
-    'SELECT order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
+    'SELECT billable_order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
     [shop, today]
   );
-  const totalOrders = rows[0]?.order_count || 0;
+  const totalOrders = rows[0]?.billable_order_count || 0;
   const freeOrders = plan.orderCap;
   const overageOrders = freeOrders === null ? 0 : Math.max(0, totalOrders - freeOrders);
   const pendingCharge = overageOrders * plan.overageRate;

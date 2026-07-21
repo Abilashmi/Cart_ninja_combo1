@@ -131,7 +131,7 @@ export async function saveProductWidgetData(request) {
         }
 
         if (mode === "ai" && (!openaiKey || openaiKey.trim() === "")) {
-            return { success: false, error: "OpenAI API Key is required for AI mode" };
+            return { success: false, error: "An API key is required for AI mode" };
         }
 
         try {

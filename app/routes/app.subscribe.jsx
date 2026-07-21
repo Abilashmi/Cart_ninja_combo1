@@ -5,7 +5,7 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
+import { getShopPlan, setPendingPlanKey, hasApprovedSubscription } from "../services/plan-permissions.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
@@ -50,8 +50,18 @@ async function isPartnerDevelopmentStore(admin) {
 }
 
 export async function loader({ request }) {
-    const { session } = await authenticate.admin(request);
-    const currentPlanKey = await getShopPlan(session.shop);
+    const { admin, session } = await authenticate.admin(request);
+    const [planKey, approved] = await Promise.all([
+        getShopPlan(session.shop, admin),
+        hasApprovedSubscription(session.shop, admin),
+    ]);
+    // planKey defaults to 'free' locally for any shop with no DB row yet —
+    // that's a storage default, not a real "current plan." Treating it as
+    // one here would mark Free as already-selected/disabled for a shop that
+    // has never actually approved anything, blocking the very approval this
+    // page exists to collect. Only report a currentPlanKey once there's a
+    // real approved subscription behind it.
+    const currentPlanKey = approved ? planKey : null;
     return { currentPlanKey };
 }
 
@@ -287,7 +297,7 @@ function featureIcon(state) {
 }
 
 function featureLabelSuffix(state) {
-    if (state === 'preview') return ' (Preview only)';
+    if (state === 'preview') return ' (Try it for free)';
     return '';
 }
 
@@ -324,7 +334,11 @@ export default function SubscribePage() {
 
     const handleSelect = (planKey) => {
         if (planKey === currentPlanKey) return;
-        if (planKey === 'free') {
+        // Only a real downgrade (an existing approved plan being replaced)
+        // needs the "this cancels your subscription" warning — a shop with
+        // no currentPlanKey yet is approving for the first time, not
+        // downgrading from anything.
+        if (planKey === 'free' && currentPlanKey) {
             setDowngradeConfirm(true);
             return;
         }
@@ -337,6 +351,7 @@ export default function SubscribePage() {
 
     const getBtn = (planKey) => {
         if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
+        if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label} — 14-day trial`, variant: 'upgrade' };
         const rank = PLAN_KEYS.indexOf(planKey);
         const currentRank = PLAN_KEYS.indexOf(currentPlanKey);
         if (planKey === 'free') return { label: 'Downgrade to Free', variant: 'downgrade' };

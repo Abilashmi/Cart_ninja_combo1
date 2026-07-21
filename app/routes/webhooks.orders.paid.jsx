@@ -62,8 +62,22 @@ export const action = async ({ request }) => {
       financialStatusOverride: "paid",
     });
 
+    // Only orders placed while the cart drawer was enabled count toward the
+    // plan's order cap — stamped once here (orders/paid is the one place
+    // that also applies the rollup delta), not re-evaluated on later
+    // orders/updated webhooks for the same order.
+    const [drawerRows] = await db.execute(
+      `SELECT cartStatus FROM cart_drawer WHERE shop = ? LIMIT 1`,
+      [shop]
+    );
+    const isBillable = drawerRows.length > 0 && Number(drawerRows[0].cartStatus) === 1;
+    await db.execute(
+      `UPDATE store_orders SET is_billable = ? WHERE shop_domain = ? AND order_id = ?`,
+      [isBillable ? 1 : 0, shop, String(payload.id)]
+    );
+
     if (!alreadyCountedAsPaid) {
-      await applyOrderDelta(shop, dateStr, orderRevenue, 1);
+      await applyOrderDelta(shop, dateStr, orderRevenue, 1, isBillable ? 1 : 0);
     }
   } catch (error) {
     console.error("[Webhook orders/paid] Failed to record store_orders/rollup:", error.message);

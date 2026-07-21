@@ -556,6 +556,10 @@ export default function FBTPage() {
   const [showAddAll,        setShowAddAll]        = useState(fbtConfig.showAddAllButton !== false);
   const [configMode,        setConfigMode]        = useState(fbtConfig.mode === 'ai' ? 'ai' : 'manual');
   const [fbtCount,          setFbtCount]          = useState(String(fbtConfig.aiProductCount || 6));
+  // Tracks whether AI mode has actually been saved to the backend at least
+  // once (not just selected in the modal) — gates "Regenerate Suggestions",
+  // which only makes sense once there's something to regenerate.
+  const [aiConfigured,      setAiConfigured]      = useState(Boolean(fbtConfig.aiEnabled));
   const [placement,         setPlacement]         = useState('all');
   const [widgetPlacement,   setWidgetPlacement]   = useState(fbtConfig.widgetPlacement || 'above_cart');
   const [productStates,     setProductStates]     = useState(defaultProductStates());
@@ -567,6 +571,7 @@ export default function FBTPage() {
   const [draftRule,         setDraftRule]         = useState(null); /* rule being built */
 
   const isSaving = fetcher.state !== 'idle';
+  const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
 
   // toast on save (success or error) — only clear the dirty flag once the
   // server actually confirms the save, so a failed save leaves Save enabled
@@ -577,8 +582,11 @@ export default function FBTPage() {
   // toastActive back to true, making the Cancel/close button look broken.
   useEffect(() => {
     if (fetcher.data) setToastActive(true);
-    if (fetcher.data?.success) setHasChanges(false);
-  }, [fetcher.data]);
+    if (fetcher.data?.success) {
+      setHasChanges(false);
+      if (configMode === 'ai') setAiConfigured(true);
+    }
+  }, [fetcher.data, configMode]);
 
   const mark = () => setHasChanges(true);
   const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);
@@ -845,7 +853,12 @@ export default function FBTPage() {
             open={isConfigModalOpen}
             onClose={() => setIsConfigModalOpen(false)}
             title="Frequently Bought Together — Configuration"
-            primaryAction={{ content: 'Save', loading: isSaving, onAction: () => { setIsConfigModalOpen(false); handleSave(); } }}
+            primaryAction={{
+              content: 'Save',
+              loading: isSaving,
+              disabled: configMode === 'ai' && !aiCountValid,
+              onAction: () => { setIsConfigModalOpen(false); handleSave(); },
+            }}
             secondaryActions={[{ content: 'Cancel', onAction: () => setIsConfigModalOpen(false) }]}
           >
             <Modal.Section>
@@ -854,7 +867,7 @@ export default function FBTPage() {
                 <BlockStack gap="200">
                   {[
                     { value: 'manual', label: 'Manual Configuration', desc: 'Manually set which products to upsell',     icon: SettingsIcon },
-                    { value: 'ai',     label: 'AI Configuration (OpenAI)', desc: 'Let AI suggest products automatically', icon: MagicIcon    },
+                    { value: 'ai',     label: 'AI Configuration', desc: 'Let AI suggest products automatically', icon: MagicIcon    },
                   ].map((opt) => (
                     <div
                       key={opt.value}
@@ -882,17 +895,25 @@ export default function FBTPage() {
                     <Text as="h3" variant="headingSm">AI Coverage Run</Text>
                     <Text as="p" variant="bodyMd" tone="subdued">AI will generate recommendations for every store product and save them directly to backend.</Text>
                   </BlockStack>
+                  {aiConfigured && (
+                    <Banner tone="success">AI Configured — suggestions are generating for every product.</Banner>
+                  )}
                   <TextField
                     label="FBT products per product"
                     type="number"
                     value={fbtCount}
-                    onChange={setFbtCount}
+                    onChange={(v) => { setFbtCount(v); mark(); }}
                     autoComplete="off"
-                    helpText={`Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.`}
+                    error={!aiCountValid ? 'Enter a whole number greater than 0.' : undefined}
+                    helpText={aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : undefined}
                   />
                   <InlineStack gap="200">
-                    <Button variant="primary">Configure AI</Button>
-                    <Button>Regenerate Suggestions</Button>
+                    <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>
+                      {aiConfigured ? 'Update Configuration' : 'Configure AI'}
+                    </Button>
+                    {aiConfigured && (
+                      <Button disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>Regenerate Suggestions</Button>
+                    )}
                   </InlineStack>
                 </BlockStack>
               </Modal.Section>
@@ -1079,11 +1100,13 @@ export default function FBTPage() {
                         label="Widget Placement"
                         helpText={
                           widgetPlacement === 'above_cart' ? 'Pinned above Add to Cart — position locked on storefront.' :
-                          'Pinned below Add to Cart — position locked on storefront.'
+                          widgetPlacement === 'below_cart' ? 'Pinned below Add to Cart — position locked on storefront.' :
+                          'Add the block yourself anywhere on the product page via the theme editor.'
                         }
                         options={[
                           { label: 'Above the Add to Cart button', value: 'above_cart' },
                           { label: 'Below the Add to Cart button', value: 'below_cart' },
+                          { label: 'Custom (place it yourself in the theme editor)', value: 'custom' },
                         ]}
                         value={widgetPlacement}
                         onChange={(v) => { setWidgetPlacement(v); mark(); }}

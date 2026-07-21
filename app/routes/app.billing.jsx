@@ -37,7 +37,7 @@ export async function loader({ request }) {
     console.error("[Billing loader] Failed to verify subscription:", e.message);
   }
 
-  const planKey = await getShopPlan(shop);
+  const planKey = await getShopPlan(shop, admin);
   return { shop, planKey };
 }
 

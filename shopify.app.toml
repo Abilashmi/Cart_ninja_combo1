@@ -9,7 +9,7 @@
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Brix"
-application_url = "https://5fbb-103-130-91-10.ngrok-free.app"
+application_url = "https://cartdrawer.fly.dev"
 embedded = true
 
 [build]
@@ -69,16 +69,17 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_discounts,write_discounts,write_products,read_content,write_content,read_online_store_pages,write_online_store_pages,read_themes,read_orders"
+scopes = "read_discounts,write_discounts,read_products,read_online_store_pages,write_online_store_pages,read_themes,read_orders"
 
 [auth]
 redirect_urls = [
-  "https://5fbb-103-130-91-10.ngrok-free.app/auth/callback",
-  "https://5fbb-103-130-91-10.ngrok-free.app/auth/shopify/callback",
-  "https://5fbb-103-130-91-10.ngrok-free.app/api/auth/callback"
+  "https://cartdrawer.fly.dev/auth/callback",
+  "https://cartdrawer.fly.dev/auth/shopify/callback",
+  "https://cartdrawer.fly.dev/api/auth/callback"
 ]
 
 [app_proxy]
+
 url = "https://int.thebrix.io"
 prefix = "apps"
 subpath = "cart-app"
