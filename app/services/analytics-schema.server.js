@@ -171,6 +171,7 @@ export async function ensureAnalyticsTables(db) {
 
   await ensureDiscountCodeColumn(db);
   await ensureBillableOrderColumns(db);
+  await ensureOrderSourceColumns(db);
 
   ensured = true;
 }
@@ -212,5 +213,42 @@ async function ensureBillableOrderColumns(db) {
     await db.execute(
       `ALTER TABLE analytics_daily_rollup ADD COLUMN billable_order_count INT NOT NULL DEFAULT 0 AFTER order_count`
     );
+  }
+}
+
+// Per-source reporting overlay on top of is_billable/billable_order_count.
+// An order can be tagged with more than one source (e.g. an FBT item added
+// to a Combo Forge checkout) — these flags/counts are for the billing
+// dashboard breakdown only and never double the actual overage charge, which
+// stays driven solely by the single billable_order_count total.
+async function ensureOrderSourceColumns(db) {
+  const orderSourceCols = [
+    ['is_fbt_order', "ADD COLUMN is_fbt_order TINYINT(1) NOT NULL DEFAULT 0 AFTER is_billable"],
+    ['is_combo_order', "ADD COLUMN is_combo_order TINYINT(1) NOT NULL DEFAULT 0 AFTER is_fbt_order"],
+  ];
+  for (const [column, ddl] of orderSourceCols) {
+    const [rows] = await db.execute(
+      `SELECT COUNT(*) AS n FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'store_orders' AND COLUMN_NAME = ?`,
+      [column]
+    );
+    if (Number(rows?.[0]?.n || 0) === 0) {
+      await db.execute(`ALTER TABLE store_orders ${ddl}`);
+    }
+  }
+
+  const rollupSourceCols = [
+    ['fbt_order_count', "ADD COLUMN fbt_order_count INT NOT NULL DEFAULT 0 AFTER billable_order_count"],
+    ['combo_order_count', "ADD COLUMN combo_order_count INT NOT NULL DEFAULT 0 AFTER fbt_order_count"],
+  ];
+  for (const [column, ddl] of rollupSourceCols) {
+    const [rows] = await db.execute(
+      `SELECT COUNT(*) AS n FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'analytics_daily_rollup' AND COLUMN_NAME = ?`,
+      [column]
+    );
+    if (Number(rows?.[0]?.n || 0) === 0) {
+      await db.execute(`ALTER TABLE analytics_daily_rollup ${ddl}`);
+    }
   }
 }

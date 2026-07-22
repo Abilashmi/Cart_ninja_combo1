@@ -15,6 +15,7 @@ import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { ProBadge } from '../components/plan/PlanGate';
 import { usePlan } from '../components/PlanContext';
+import { useCurrency } from '../components/CurrencyContext';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 
@@ -354,6 +355,7 @@ function templateIdToApiKey(id) {
 
 /* ─── PRODUCT PICKER MODAL ────────────────────────────────────────────────── */
 function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, title }) {
+  const { symbol: currencySymbol } = useCurrency();
   const [localSelected, setLocalSelected] = useState([]);
 
   /* reset selection when modal opens or external selectedIds change */
@@ -401,7 +403,7 @@ function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, t
                     </div>
                     <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
                       <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">₹{product.price}</Text>
+                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
                     </BlockStack>
                     {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
                   </div>
@@ -523,6 +525,7 @@ function ColorField({ label, value, onChange }) {
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
   const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled } = useLoaderData();
+  const { symbol: currencySymbol } = useCurrency();
   const fetcher = useFetcher();
   const { canPublishFeature } = usePlan();
   const fbtPublishable = canPublishFeature('fbt');
@@ -731,7 +734,7 @@ export default function FBTPage() {
         overflow: 'hidden', wordBreak: 'break-word',
       }}>{p.name}</div>
       {showPrices && (
-        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>₹{p.price}</div>
+        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>{currencySymbol}{p.price}</div>
       )}
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
         {renderAction(i)}
@@ -760,7 +763,7 @@ export default function FBTPage() {
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{p.name}</div>
             {showPrices && (
-              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>₹{p.price}</div>
+              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>{currencySymbol}{p.price}</div>
             )}
           </div>
           <div style={{ flexShrink: 0 }}>{renderAction(i)}</div>
@@ -1152,7 +1155,7 @@ export default function FBTPage() {
                     <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
                       {interactionStyle === 'quick-add' ? 'Select items' : `Total (${activeCount} items)`}
                       <br />
-                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>₹{total}</span>
+                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{total}</span>
                     </div>
                     {showAddAll && (
                       <button style={{

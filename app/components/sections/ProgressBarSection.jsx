@@ -5,6 +5,7 @@ import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection, ProBadge } from '../plan/PlanGate';
+import { useCurrency } from '../CurrencyContext';
 
 const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
@@ -18,6 +19,7 @@ const PRODUCT_PICKER_STORAGE_KEY = 'cached_products';
 
 function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
   const { allProducts: contextProducts } = useCartEditor();
+  const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);
@@ -119,7 +121,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
                     </div>
                     <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
                       <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">₹{product.price}</Text>
+                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
                     </BlockStack>
                     {isSelected && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
                   </div>
@@ -135,6 +137,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
 
 export function ProgressBarSection() {
   const { body, updateProgressBar } = useCartEditor();
+  const { symbol: currencySymbol } = useCurrency();
   const { progressBar } = body;
   const [activeTierIndex, setActiveTierIndex] = useState(0);
   const [pickerTierIndex, setPickerTierIndex] = useState(null);
@@ -193,7 +196,7 @@ export function ProgressBarSection() {
           <Select
             label="Progress mode"
             options={[
-              { label: 'By amount spent (₹)', value: 'amount' },
+              { label: `By amount spent (${currencySymbol})`, value: 'amount' },
               { label: 'By item count', value: 'count' },
             ]}
             value={progressBar.mode}
@@ -247,7 +250,7 @@ export function ProgressBarSection() {
                   )}
                 </InlineStack>
                 <TextField
-                  label="Minimum spend (₹)"
+                  label={`Minimum spend (${currencySymbol})`}
                   type="number"
                   value={String(activeTier.minimumSpend)}
                   onChange={(v) => updateTier(activeTierIndex, { minimumSpend: Number(v) || 0 })}

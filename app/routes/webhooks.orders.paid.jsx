@@ -10,6 +10,11 @@ import { applyOrderDelta } from "../services/analytics-aggregator.server";
 // PHP backend's own order sync. No code change is needed to "go to production" —
 // this webhook runs the same way there, against whatever DB_HOST/DB_NAME env
 // vars the deployed app is configured with.
+function comboSourceFromAttrs(payload) {
+  const noteAttributes = payload.note_attributes || [];
+  return noteAttributes.find((a) => a.name === "combo_source")?.value;
+}
+
 async function ensureStoreOrderEventsTable(db) {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS store_order_events (
@@ -71,13 +76,25 @@ export const action = async ({ request }) => {
       [shop]
     );
     const isBillable = drawerRows.length > 0 && Number(drawerRows[0].cartStatus) === 1;
+
+    // Reporting-only source tags — an order can carry both. They never
+    // change what gets charged (that's still driven solely by is_billable /
+    // billable_order_count); they just say which feature(s) touched it.
+    const isFbtOrder = (Array.isArray(payload.line_items) ? payload.line_items : []).some((item) => {
+      const props = item.properties;
+      if (!props) return false;
+      const entries = Array.isArray(props) ? props : Object.entries(props).map(([name, value]) => ({ name, value }));
+      return entries.some((p) => (p.name === "_brix_source" || p.name === "_brix_fbt") && p.value === "fbt");
+    });
+    const isComboOrder = comboSourceFromAttrs(payload) === "ComboForge";
+
     await db.execute(
-      `UPDATE store_orders SET is_billable = ? WHERE shop_domain = ? AND order_id = ?`,
-      [isBillable ? 1 : 0, shop, String(payload.id)]
+      `UPDATE store_orders SET is_billable = ?, is_fbt_order = ?, is_combo_order = ? WHERE shop_domain = ? AND order_id = ?`,
+      [isBillable ? 1 : 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0, shop, String(payload.id)]
     );
 
     if (!alreadyCountedAsPaid) {
-      await applyOrderDelta(shop, dateStr, orderRevenue, 1, isBillable ? 1 : 0);
+      await applyOrderDelta(shop, dateStr, orderRevenue, 1, isBillable ? 1 : 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0);
     }
   } catch (error) {
     console.error("[Webhook orders/paid] Failed to record store_orders/rollup:", error.message);
@@ -87,7 +104,7 @@ export const action = async ({ request }) => {
     const noteAttributes = payload.note_attributes || [];
     const getAttr = (name) => noteAttributes.find((a) => a.name === name)?.value;
 
-    const comboSource = getAttr("combo_source");
+    const comboSource = comboSourceFromAttrs(payload);
     const templateId = getAttr("combo_template_id");
 
     if (comboSource === "ComboForge" && templateId) {

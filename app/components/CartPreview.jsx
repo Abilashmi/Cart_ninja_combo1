@@ -8,6 +8,7 @@ import {
 } from '@shopify/polaris-icons';
 import { upsellProducts } from '../data/mockData';
 import { PreviewLockBadge } from './plan/PlanGate';
+import { useCurrency } from './CurrencyContext';
 
 
 const SECTION_LABELS = {
@@ -168,6 +169,7 @@ function CouponTimerDisplay({ coupon }) {
 }
 
 function ProgressBarPreview({ pb }) {
+  const { symbol: currencySymbol } = useCurrency();
   const tiers = pb.tiers;
   if (!tiers.length) return null;
 
@@ -182,7 +184,7 @@ function ProgressBarPreview({ pb }) {
   const fillPct = Math.min(100, (currentValue / maxThreshold) * 100);
   const nextTier = tiers.find((t) => currentValue < t.minimumSpend);
   const diff = nextTier ? nextTier.minimumSpend - currentValue : 0;
-  const amountStr = isCount ? `${diff} item${diff !== 1 ? 's' : ''}` : `₹${diff}`;
+  const amountStr = isCount ? `${diff} item${diff !== 1 ? 's' : ''}` : `${currencySymbol}${diff}`;
   const radius = pb.borderRadius;
 
   const buildMessageLine = () => {
@@ -234,7 +236,7 @@ function ProgressBarPreview({ pb }) {
                   </>
                 ) : (
                   <div style={{ fontSize: '9px', color: '#374151', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '2px 6px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                    {isCount ? `${tier.minimumSpend}` : `₹${tier.minimumSpend}`}
+                    {isCount ? `${tier.minimumSpend}` : `${currencySymbol}${tier.minimumSpend}`}
                   </div>
                 )}
               </div>
@@ -380,6 +382,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings } = useCartEditor();
+  const { symbol: currencySymbol } = useCurrency();
 
   const designTheme = settings.design?.theme;
   const isDarkTheme = designTheme === "dark";
@@ -587,7 +590,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                         </div>
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: '#202223' }}>Sample Product</div>
-                          <div style={{ fontSize: 12, color: '#6d7175' }}>₹{CART_TOTAL} (1 × ₹{CART_TOTAL})</div>
+                          <div style={{ fontSize: 12, color: '#6d7175' }}>{currencySymbol}{CART_TOTAL} (1 × {currencySymbol}{CART_TOTAL})</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
                             <button style={{ width: 24, height: 24, border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                             <span style={{ fontSize: 13, fontWeight: 500 }}>1</span>
@@ -651,12 +654,12 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       {/* Subtotal */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                         <span style={{ fontSize: 12, color: '#6d7175' }}>Subtotal</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>₹{CART_TOTAL}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{currencySymbol}{CART_TOTAL}</span>
                       </div>
                       {/* Total */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
-                        <span style={{ fontSize: 14, fontWeight: 700 }}>₹{CART_TOTAL}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{currencySymbol}{CART_TOTAL}</span>
                       </div>
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (

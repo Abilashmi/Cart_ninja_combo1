@@ -2,6 +2,7 @@ import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { callLlm, parseJsonReply } from '../services/ai-llm.server';
 import { sendToPhp } from '../utils/api-helpers';
+import { getShopCurrencySymbol } from '../utils/currency.server';
 
 // Reward-type choices map onto progress_bar_tiers.reward_type + icon_preset —
 // see ProgressBarSection.jsx's TIER_ICON_MAP for the valid icon_preset values.
@@ -16,10 +17,10 @@ const REWARD_ICON_PRESET = {
   free_shipping: 'shipping', free_gift: 'gift', discount: 'diamond', custom: 'trophy',
 };
 
-const GOAL_AMOUNT_CHOICES = [
-  { label: '₹500', value: '500' },
-  { label: '₹1000', value: '1000' },
-  { label: '₹1500', value: '1500' },
+const goalAmountChoices = (currencySymbol) => [
+  { label: `${currencySymbol}500`, value: '500' },
+  { label: `${currencySymbol}1000`, value: '1000' },
+  { label: `${currencySymbol}1500`, value: '1500' },
 ];
 
 // placement column only supports 'top'/'bottom' — see ProgressBarSection.jsx's Select.
@@ -62,17 +63,17 @@ function normalizePlacement(v) {
   return s === 'top' || s === 'bottom' ? s : null;
 }
 
-function confirmSummary({ rewardType, goalAmount, placement }) {
+function confirmSummary({ rewardType, goalAmount, placement }, currencySymbol) {
   const placementLabel = placement === 'top' ? 'the top of the cart' : 'the bottom of the cart items';
-  return `I'll set up ${REWARD_TYPE_LABELS[rewardType]} at ₹${goalAmount}, shown at ${placementLabel}. Shall I turn this on?`;
+  return `I'll set up ${REWARD_TYPE_LABELS[rewardType]} at ${currencySymbol}${goalAmount}, shown at ${placementLabel}. Shall I turn this on?`;
 }
 
-function nextQuestion(slots) {
+function nextQuestion(slots, currencySymbol) {
   if (!slots.rewardType) {
     return { message: 'What kind of reward should customers unlock — Free Shipping, Free Gift, Discount, or Custom?', choices: REWARD_TYPE_CHOICES };
   }
   if (!slots.goalAmount) {
-    return { message: 'What cart total should unlock it? (e.g. ₹500, ₹1000, ₹1500, or type a custom amount)', choices: GOAL_AMOUNT_CHOICES };
+    return { message: `What cart total should unlock it? (e.g. ${currencySymbol}500, ${currencySymbol}1000, ${currencySymbol}1500, or type a custom amount)`, choices: goalAmountChoices(currencySymbol) };
   }
   if (!slots.placement) {
     return { message: 'Where should the progress bar appear — Top of the cart, or Bottom of the cart items?', choices: PLACEMENT_CHOICES };
@@ -84,6 +85,7 @@ export async function action({ request }) {
   try {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
+    const currencySymbol = await getShopCurrencySymbol(admin, shop);
     const { message, slots: incomingSlots, finalize } = await request.json();
     const slots = { ...(incomingSlots || {}) };
 
@@ -134,14 +136,14 @@ export async function action({ request }) {
       if (!slots.placement && extracted.placement) slots.placement = normalizePlacement(extracted.placement) || slots.placement;
     }
 
-    const next = nextQuestion(slots);
+    const next = nextQuestion(slots, currencySymbol);
     if (next) {
       return Response.json({ status: 'ask', message: next.message, choices: next.choices, slots, credits });
     }
 
     return Response.json({
       status: 'confirm',
-      message: confirmSummary(slots),
+      message: confirmSummary(slots, currencySymbol),
       choices: CONFIRM_CHOICES,
       slots,
       credits,

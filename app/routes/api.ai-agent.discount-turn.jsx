@@ -1,6 +1,13 @@
 import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { callLlm, parseJsonReply } from '../services/ai-llm.server';
+import { getCurrencySymbolFromCode } from '../utils/currency.server';
+
+async function getShopCurrencyCode(admin) {
+  const res = await admin.graphql(`query { shop { currencyCode } }`);
+  const data = await res.json();
+  return data?.data?.shop?.currencyCode || 'USD';
+}
 
 const EXTRACTION_PROMPT = `You are extracting Shopify discount details from a merchant's chat message.
 Extract:
@@ -35,7 +42,7 @@ async function callExtractionLlm(message) {
 // (percent off the whole order, applies to all products, doesn't combine with
 // other discounts, starts now) so a chat-created discount is indistinguishable
 // from a manually-created one in Shopify and in app.discount.jsx's list.
-async function createDiscount(admin, { code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
+async function createDiscount(admin, { code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, currencyCode }) {
   const discountInput = {
     title,
     code,
@@ -58,7 +65,7 @@ async function createDiscount(admin, { code, title, percentage, minimumAmount, e
   }
   if (minimumAmount && Number(minimumAmount) > 0) {
     discountInput.minimumRequirement = {
-      subtotal: { greaterThanOrEqualToSubtotal: { amount: Number(minimumAmount), currencyCode: 'INR' } },
+      subtotal: { greaterThanOrEqualToSubtotal: { amount: Number(minimumAmount), currencyCode } },
     };
   }
 
@@ -115,9 +122,9 @@ const CONFIRM_CHOICES = [
   { label: '✖ Cancel', value: '__cancel__' },
 ];
 
-function confirmSummary({ code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
+function confirmSummary({ code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }, currencySymbol) {
   const extras = [];
-  if (minimumAmount) extras.push(`min. order ₹${minimumAmount}`);
+  if (minimumAmount) extras.push(`min. order ${currencySymbol}${minimumAmount}`);
   if (endDate) extras.push(`ends ${endDate}`);
   if (usageLimit) extras.push(`limit ${usageLimit} uses`);
   if (onePerCustomer) extras.push('one per customer');
@@ -129,6 +136,8 @@ export async function action({ request }) {
   try {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
+    const currencyCode = await getShopCurrencyCode(admin);
+    const currencySymbol = getCurrencySymbolFromCode(currencyCode);
     const { message, resolvedCode, resolvedTitle, resolvedPercentage, resolvedExtras, finalize } = await request.json();
 
     if (finalize) {
@@ -136,7 +145,7 @@ export async function action({ request }) {
       const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
       const extras = resolvedExtras || {};
       const title = resolvedTitle || defaultTitle(resolvedPercentage);
-      const result = await createDiscount(admin, { code: resolvedCode, title, percentage: resolvedPercentage, ...extras });
+      const result = await createDiscount(admin, { code: resolvedCode, title, percentage: resolvedPercentage, ...extras, currencyCode });
       if (!result.success) {
         return Response.json({ status: 'clarify', message: `Couldn't create that discount: ${result.error}. Try a different code.`, needFields: 'code', resolvedTitle: title, resolvedPercentage, credits });
       }
@@ -176,7 +185,7 @@ export async function action({ request }) {
       if (!title) title = defaultTitle(percentage);
       return Response.json({
         status: 'confirm',
-        message: confirmSummary({ code, title, percentage, ...extras }),
+        message: confirmSummary({ code, title, percentage, ...extras }, currencySymbol),
         choices: CONFIRM_CHOICES,
         resolvedCode: code,
         resolvedTitle: title,

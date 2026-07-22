@@ -298,7 +298,7 @@
         const settled = await Promise.all(
           items.map(async (item) => {
             try {
-              await postCartAdd([{ id: item.id, quantity: item.quantity }]);
+              await postCartAdd([{ id: item.id, quantity: item.quantity, properties: item.properties }]);
               return { ok: true, item };
             } catch (itemError) {
               return {
@@ -571,6 +571,7 @@
                 quantity: qty,
                 productId: String(id),
                 productTitle: product?.title || 'Product',
+                properties: { _brix_source: 'fbt' },
               });
             });
 

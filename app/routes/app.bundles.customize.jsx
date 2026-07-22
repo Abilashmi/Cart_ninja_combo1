@@ -40,6 +40,7 @@ import { ValidationPanel } from '../components/customization/ValidationPanel';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import prisma from '../db.server';
+import { useCurrency } from '../components/CurrencyContext';
 
 export const action = async ({ request }) => {
   if (request.method !== 'POST') {
@@ -1559,6 +1560,7 @@ const TEMPLATE_CATALOGUE = [
 
 export default function Customize() {
   const shopify = useAppBridge();
+  const { symbol: currencySymbol } = useCurrency();
   const {
     activeDiscounts = [],
     initialTemplate = null,
@@ -3569,7 +3571,7 @@ export default function Customize() {
                   label="Discount type"
                   options={[
                     { label: 'Percentage off (%)', value: 'percentage' },
-                    { label: 'Fixed amount off (₹)', value: 'fixed_amount' },
+                    { label: `Fixed amount off (${currencySymbol})`, value: 'fixed_amount' },
                   ]}
                   value={dValueType}
                   onChange={setDValueType}
@@ -3579,7 +3581,7 @@ export default function Customize() {
                   type="number" min="0.01" step="0.01"
                   value={dValue}
                   onChange={(v) => { setDValue(v); if (dErrors.value) setDErrors((p) => ({ ...p, value: undefined })); }}
-                  suffix={dValueType === 'percentage' ? '%' : '₹'}
+                  suffix={dValueType === 'percentage' ? '%' : currencySymbol}
                   autoComplete="off"
                   error={dErrors.value}
                   placeholder={dValueType === 'percentage' ? '10' : '100'}
@@ -3743,7 +3745,7 @@ export default function Customize() {
                         label="Discount type"
                         options={[
                           { label: 'Percentage off', value: 'percentage' },
-                          { label: 'Fixed amount off (₹)', value: 'fixed_amount' },
+                          { label: `Fixed amount off (${currencySymbol})`, value: 'fixed_amount' },
                           { label: 'Free (100% off)', value: 'free' },
                         ]}
                         value={dGetValueType}
@@ -3755,7 +3757,7 @@ export default function Customize() {
                         value={dGetValue}
                         disabled={dGetValueType === 'free'}
                         onChange={(v) => { setDGetValue(v); if (dErrors.getValue) setDErrors((p) => ({ ...p, getValue: undefined })); }}
-                        suffix={dGetValueType === 'percentage' ? '%' : dGetValueType === 'free' ? '' : '₹'}
+                        suffix={dGetValueType === 'percentage' ? '%' : dGetValueType === 'free' ? '' : currencySymbol}
                         autoComplete="off"
                         error={dErrors.getValue}
                         helpText={dGetValueType === 'free' ? 'Customers get the item for free' : undefined}
@@ -3780,7 +3782,7 @@ export default function Customize() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[
                   { value: 'none', label: 'No minimum requirements' },
-                  { value: 'amount', label: 'Minimum purchase amount (₹)' },
+                  { value: 'amount', label: `Minimum purchase amount (${currencySymbol})` },
                   { value: 'quantity', label: 'Minimum quantity of items' },
                 ].map((opt) => (
                   <label

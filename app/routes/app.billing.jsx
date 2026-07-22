@@ -119,6 +119,9 @@ export default function BillingDashboard() {
   const totalOrders = today.total_orders || 0;
   const overageOrders = today.overage_orders || 0;
   const pendingCharge = today.pending_charge || 0;
+  const fbtOrders = today.fbt_orders || 0;
+  const comboOrders = today.combo_orders || 0;
+  const otherOrders = today.other_orders ?? Math.max(0, totalOrders - fbtOrders - comboOrders);
   const percentUsed = unlimited ? 0 : (totalOrders > 0 ? (totalOrders / freeOrders) * 100 : 0);
   const hasOverage = overageOrders > 0;
 
@@ -153,6 +156,17 @@ export default function BillingDashboard() {
 
               {unlimited && (
                 <Text variant="bodySm" tone="subdued">Orders today: {totalOrders} — unlimited on the {plan.label} plan, no overage charges.</Text>
+              )}
+
+              {/* Source breakdown — reporting only. Buckets can overlap (an
+                  order can involve both FBT and Combo), so they aren't summed
+                  into the charge; the charge always uses totalOrders alone. */}
+              {totalOrders > 0 && (
+                <InlineStack gap="200" wrap>
+                  <Badge tone="info">{`Frequently Bought Together: ${fbtOrders}`}</Badge>
+                  <Badge tone="info">{`Combo Forge: ${comboOrders}`}</Badge>
+                  <Badge>{`Other: ${otherOrders}`}</Badge>
+                </InlineStack>
               )}
 
               {/* Overage Alert */}

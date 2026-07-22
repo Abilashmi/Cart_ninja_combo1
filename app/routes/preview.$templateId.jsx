@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLoaderData, useParams } from 'react-router';
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
+import { getCurrencySymbol } from '../utils/currency.shared';
 
 const PRODUCT_FRAGMENT = `
   fragment ProductInfo on Product {
@@ -494,7 +495,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
         )}
 
         <div style={{ fontSize: '14px', fontWeight: 700, color: primaryColor, marginBottom: '8px' }}>
-          {product.currency === 'INR' ? '₹' : '$'}{displayPrice.toFixed(2)}
+          {getCurrencySymbol(product.currency)}{displayPrice.toFixed(2)}
         </div>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,

@@ -5,6 +5,7 @@ import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
+import { useCurrency } from '../CurrencyContext';
 
 const CONFIG_OPTIONS = [
   { value: 'ai', label: 'AI Recommendations', desc: 'Let AI automatically suggest relevant products based on cart contents', icon: MagicIcon },
@@ -21,6 +22,7 @@ const PRODUCT_CACHE_KEY = 'cached_products';
 
 function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
   const { allProducts: contextProducts } = useCartEditor();
+  const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState(false);
@@ -117,7 +119,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
                     </div>
                     <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
                       <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">₹{product.price}</Text>
+                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
                     </BlockStack>
                     {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
                   </div>

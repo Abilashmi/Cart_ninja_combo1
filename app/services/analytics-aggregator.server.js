@@ -12,17 +12,19 @@ function todayStr(date = new Date()) {
 // runs every 15 minutes (see scheduler.server.js), which is an acceptable lag
 // for those two fields.
 
-export async function applyOrderDelta(shop, dateStr, revenueDelta, orderCountDelta, billableOrderCountDelta = 0) {
+export async function applyOrderDelta(shop, dateStr, revenueDelta, orderCountDelta, billableOrderCountDelta = 0, fbtOrderCountDelta = 0, comboOrderCountDelta = 0) {
   const db = getDb();
   await ensureAnalyticsTables(db);
   await db.execute(
-    `INSERT INTO analytics_daily_rollup (shop_domain, date, revenue, order_count, billable_order_count)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO analytics_daily_rollup (shop_domain, date, revenue, order_count, billable_order_count, fbt_order_count, combo_order_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        revenue = revenue + VALUES(revenue),
        order_count = order_count + VALUES(order_count),
-       billable_order_count = billable_order_count + VALUES(billable_order_count)`,
-    [shop, dateStr, revenueDelta, orderCountDelta, billableOrderCountDelta]
+       billable_order_count = billable_order_count + VALUES(billable_order_count),
+       fbt_order_count = fbt_order_count + VALUES(fbt_order_count),
+       combo_order_count = combo_order_count + VALUES(combo_order_count)`,
+    [shop, dateStr, revenueDelta, orderCountDelta, billableOrderCountDelta, fbtOrderCountDelta, comboOrderCountDelta]
   );
 }
 
@@ -53,7 +55,9 @@ export async function reconcileDailyRollup(shopDomain, { days = 3 } = {}) {
     `SELECT DATE(created_at_shopify) AS date,
             COALESCE(SUM(CASE WHEN cancelled_at IS NULL THEN total_price - refunded_amount ELSE 0 END), 0) AS revenue,
             COALESCE(SUM(CASE WHEN cancelled_at IS NULL THEN 1 ELSE 0 END), 0) AS order_count,
-            COALESCE(SUM(CASE WHEN cancelled_at IS NULL AND is_billable = 1 THEN 1 ELSE 0 END), 0) AS billable_order_count
+            COALESCE(SUM(CASE WHEN cancelled_at IS NULL AND is_billable = 1 THEN 1 ELSE 0 END), 0) AS billable_order_count,
+            COALESCE(SUM(CASE WHEN cancelled_at IS NULL AND is_billable = 1 AND is_fbt_order = 1 THEN 1 ELSE 0 END), 0) AS fbt_order_count,
+            COALESCE(SUM(CASE WHEN cancelled_at IS NULL AND is_billable = 1 AND is_combo_order = 1 THEN 1 ELSE 0 END), 0) AS combo_order_count
      FROM store_orders
      WHERE shop_domain = ? AND created_at_shopify >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
      GROUP BY DATE(created_at_shopify)`,
@@ -106,7 +110,8 @@ export async function reconcileDailyRollup(shopDomain, { days = 3 } = {}) {
     const key = dateKey(d);
     if (!byDate.has(key)) {
       byDate.set(key, {
-        revenue: 0, order_count: 0, billable_order_count: 0, upsell_revenue: 0, coupon_applied_count: 0,
+        revenue: 0, order_count: 0, billable_order_count: 0, fbt_order_count: 0, combo_order_count: 0,
+        upsell_revenue: 0, coupon_applied_count: 0,
         checkout_click_count: 0, coupon_click_count: 0, upsell_click_count: 0,
         bundle_revenue: 0, bundle_order_count: 0, visitor_count: 0,
         cart_create_count: 0, cart_update_count: 0,
@@ -120,6 +125,8 @@ export async function reconcileDailyRollup(shopDomain, { days = 3 } = {}) {
     b.revenue = parseFloat(r.revenue) || 0;
     b.order_count = Number(r.order_count) || 0;
     b.billable_order_count = Number(r.billable_order_count) || 0;
+    b.fbt_order_count = Number(r.fbt_order_count) || 0;
+    b.combo_order_count = Number(r.combo_order_count) || 0;
   }
   for (const r of clickRows) {
     const b = bucket(r.date);
@@ -148,19 +155,22 @@ export async function reconcileDailyRollup(shopDomain, { days = 3 } = {}) {
   for (const [date, m] of byDate.entries()) {
     await db.execute(
       `INSERT INTO analytics_daily_rollup
-         (shop_domain, date, revenue, order_count, billable_order_count, upsell_revenue, coupon_applied_count,
+         (shop_domain, date, revenue, order_count, billable_order_count, fbt_order_count, combo_order_count,
+          upsell_revenue, coupon_applied_count,
           checkout_click_count, coupon_click_count, upsell_click_count, bundle_revenue,
           bundle_order_count, visitor_count, cart_create_count, cart_update_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          revenue = VALUES(revenue), order_count = VALUES(order_count), billable_order_count = VALUES(billable_order_count),
+         fbt_order_count = VALUES(fbt_order_count), combo_order_count = VALUES(combo_order_count),
          upsell_revenue = VALUES(upsell_revenue), coupon_applied_count = VALUES(coupon_applied_count),
          checkout_click_count = VALUES(checkout_click_count), coupon_click_count = VALUES(coupon_click_count),
          upsell_click_count = VALUES(upsell_click_count), bundle_revenue = VALUES(bundle_revenue),
          bundle_order_count = VALUES(bundle_order_count), visitor_count = VALUES(visitor_count),
          cart_create_count = VALUES(cart_create_count), cart_update_count = VALUES(cart_update_count)`,
       [
-        shopDomain, date, m.revenue, m.order_count, m.billable_order_count, m.upsell_revenue, m.coupon_applied_count,
+        shopDomain, date, m.revenue, m.order_count, m.billable_order_count, m.fbt_order_count, m.combo_order_count,
+        m.upsell_revenue, m.coupon_applied_count,
         m.checkout_click_count, m.coupon_click_count, m.upsell_click_count, m.bundle_revenue,
         m.bundle_order_count, m.visitor_count, m.cart_create_count, m.cart_update_count,
       ]

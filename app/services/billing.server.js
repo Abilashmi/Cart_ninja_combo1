@@ -266,13 +266,21 @@ export async function getTodayUsage(shop) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [rows] = await db.execute(
-    'SELECT billable_order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
+    'SELECT billable_order_count, fbt_order_count, combo_order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
     [shop, today]
   );
   const totalOrders = rows[0]?.billable_order_count || 0;
   const freeOrders = plan.orderCap;
   const overageOrders = freeOrders === null ? 0 : Math.max(0, totalOrders - freeOrders);
   const pendingCharge = overageOrders * plan.overageRate;
+
+  // Reporting-only breakdown — an order can be tagged under more than one
+  // source, so these can sum to more than total_orders. They don't feed
+  // into overage_orders/pending_charge, which stay driven by total_orders
+  // alone (see webhooks.orders.paid.jsx for why sources aren't billed
+  // separately).
+  const fbtOrders = rows[0]?.fbt_order_count || 0;
+  const comboOrders = rows[0]?.combo_order_count || 0;
 
   return {
     planKey,
@@ -281,6 +289,9 @@ export async function getTodayUsage(shop) {
     overage_orders: overageOrders,
     pending_charge: pendingCharge,
     unlimited: freeOrders === null,
+    fbt_orders: fbtOrders,
+    combo_orders: comboOrders,
+    other_orders: Math.max(0, totalOrders - fbtOrders - comboOrders),
   };
 }
 
