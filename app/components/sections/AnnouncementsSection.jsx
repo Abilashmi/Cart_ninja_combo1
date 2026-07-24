@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Card, FormLayout, TextField, BlockStack, Text, InlineStack } from '@shopify/polaris';
+import { Card, FormLayout, TextField, BlockStack, Text, InlineStack, Checkbox, Select } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { SliderField } from '../shared/SliderField';
@@ -62,6 +62,32 @@ export function AnnouncementsSection() {
               suffix="px"
               onChange={(v) => updateAnnouncements({ fontSize: v })}
             />
+            <InlineStack gap="400" blockAlign="end">
+              <div style={{ flex: 1 }}>
+                <Select
+                  label="Text alignment"
+                  options={[
+                    { label: 'Left', value: 'left' },
+                    { label: 'Center', value: 'center' },
+                    { label: 'Right', value: 'right' },
+                  ]}
+                  value={announcements.textAlign}
+                  onChange={(v) => updateAnnouncements({ textAlign: v })}
+                />
+              </div>
+              <InlineStack gap="400" blockAlign="center">
+                <Checkbox
+                  label="Bold"
+                  checked={announcements.bold}
+                  onChange={(v) => updateAnnouncements({ bold: v })}
+                />
+                <Checkbox
+                  label="Italic"
+                  checked={announcements.italic}
+                  onChange={(v) => updateAnnouncements({ italic: v })}
+                />
+              </InlineStack>
+            </InlineStack>
           </FormLayout>
         </Card>
       )}

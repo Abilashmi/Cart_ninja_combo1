@@ -12,7 +12,7 @@ export const defaultTier = {
 
 export const defaultCartEditorState = {
   status: 'active',
-  activeSection: 'general',
+  activeSection: 'design',
   previewMode: 'items',
   previewDevice: 'desktop',
   isDirty: false,
@@ -44,6 +44,9 @@ export const defaultCartEditorState = {
       bgColor: '#4f46e5',
       textColor: '#ffffff',
       fontSize: 14,
+      bold: false,
+      italic: false,
+      textAlign: 'center',
     },
     progressBar: {
       enabled: false,
@@ -131,7 +134,6 @@ export const SECTION_GROUPS = [
     title: 'Settings',
     items: [
       { id: 'design', label: 'Design', icon: 'color' },
-      { id: 'general', label: 'General', icon: 'settings' },
     ],
   },
   {

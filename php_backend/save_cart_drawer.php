@@ -15,6 +15,25 @@ function ensureWatermarkColumn($pdo) {
     $ensured = true;
 }
 
+function ensureAnnouncementStyleColumns($pdo) {
+    static $ensured = false;
+    if ($ensured) return;
+    $existingCols = array_column(
+        $pdo->query("SHOW COLUMNS FROM cart_drawer_config")->fetchAll(PDO::FETCH_ASSOC),
+        'Field'
+    );
+    if (!in_array('announcement_bold', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN `announcement_bold` TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!in_array('announcement_italic', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN `announcement_italic` TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!in_array('announcement_text_align', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN `announcement_text_align` VARCHAR(10) NOT NULL DEFAULT 'center'");
+    }
+    $ensured = true;
+}
+
 /**
  * Resolves whether the "Powered by BRIX" watermark should render on the
  * storefront. Free plans always show it regardless of the merchant's saved
@@ -158,10 +177,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
         ensureWatermarkColumn($pdo);
+        ensureAnnouncementStyleColumns($pdo);
         $stmt = $pdo->prepare("
             SELECT cd.*,
               cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
               cdc.announcement_text_color, cdc.announcement_font_size,
+              cdc.announcement_bold, cdc.announcement_italic, cdc.announcement_text_align,
               cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
               cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width,
               cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations

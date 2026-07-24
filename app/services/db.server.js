@@ -18,7 +18,19 @@ function isReadStatement(sql) {
 // of them indefinitely rather than failing fast.
 const DB_PROXY_TIMEOUT_MS = 15_000;
 
-async function proxyExecute(sql, params = []) {
+// The remote (Hostinger) MySQL host is connection-limited, and db_proxy.php
+// opens a fresh connection per request — a burst of parallel saves (this
+// app's Cart Editor fires several at once) can transiently exceed that
+// ceiling. That failure is recoverable a moment later, so it's worth one
+// quick retry rather than surfacing a hard "Save failed" to the merchant.
+const TRANSIENT_DB_ERROR = /DB Connection Failed/i;
+const RETRY_DELAY_MS = 400;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function proxyExecuteOnce(sql, params) {
   const res = await fetch(`${BASE_PHP_URL}/db_proxy.php`, {
     method: 'POST',
     headers: {
@@ -39,13 +51,24 @@ async function proxyExecute(sql, params = []) {
 
   if (!res.ok || !json.success) {
     console.error('[db_proxy] raw response body:', text.substring(0, 1000));
-    throw new Error(json.error || `DB proxy error (HTTP ${res.status})`);
+    throw new Error(json.error || json.message || `DB proxy error (HTTP ${res.status})`);
   }
 
   if (isReadStatement(sql)) {
     return [json.rows];
   }
   return [{ insertId: json.insertId, affectedRows: json.affectedRows }];
+}
+
+async function proxyExecute(sql, params = []) {
+  try {
+    return await proxyExecuteOnce(sql, params);
+  } catch (error) {
+    if (!TRANSIENT_DB_ERROR.test(error.message)) throw error;
+    console.warn('[db_proxy] transient DB connection failure, retrying once:', error.message);
+    await sleep(RETRY_DELAY_MS);
+    return proxyExecuteOnce(sql, params);
+  }
 }
 
 let db = null;

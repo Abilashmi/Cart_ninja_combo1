@@ -3,6 +3,13 @@
 
   {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>
+
+  <!-- Combo pages: auto-detects /pages/* URLs that match a published combo
+       template and injects the product picker into the page's main content,
+       since Shopify Pages don't render Liquid in their own body content and
+       writing a dedicated theme template requires a Shopify exemption we
+       don't have yet (see app/services/combo-page.server.js). -->
+  <script src="https://cartdrawer.fly.dev/combo-page.js" defer></script>
 {% endif %}
 {% schema %}
 {

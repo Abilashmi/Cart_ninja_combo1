@@ -509,8 +509,8 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
               {/* Cart Drawer */}
               <div key={animKey} className={animClass} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
 
-                {/* Design/General/CSS global overlay */}
-                {['design', 'general', 'customCSS'].includes(activeSection) && (
+                {/* Design/CSS global overlay */}
+                {['design', 'customCSS'].includes(activeSection) && (
                   <div style={{ position: 'absolute', inset: 0, border: `2px solid ${BRAND}`, background: `rgba(26,157,224,0.08)`, pointerEvents: 'none', zIndex: 100 }}>
                     <span style={{ position: 'absolute', top: 0, left: 0, background: BRAND, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{activeSectionLabel}</span>
                   </div>
@@ -534,7 +534,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                     <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <div
                         className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
-                        style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: 'center' }}
+                        style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
                       >
                         {body.announcements.text || 'Your announcement text here…'}
                       </div>

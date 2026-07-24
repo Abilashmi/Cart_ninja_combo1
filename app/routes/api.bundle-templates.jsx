@@ -1,15 +1,39 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { checkComboPlanGate, createComboTemplate } from '../services/combo-templates.server';
+import { ensureComboForgeTemplate } from '../services/combo-page.server';
 
-const PAGE_BODY = `<!-- Combo Bundle Template -->
-<div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"></div>
-{{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>`;
+// Shopify Pages don't process Liquid tags in their body content (confirmed
+// live — {{ ... }} shows up as literal text to shoppers), so shop/templateId
+// must be baked in as plain strings at creation time, and the renderer must
+// be served from this app rather than referenced via the asset_url Liquid
+// filter. See app/routes/combo-page[.]js.jsx for the actual renderer.
+// Used as a fallback body even when the guaranteed template (below) is
+// active, so a page still shows something sane if the merchant later
+// switches it back to the Default Page template.
+function buildPageBody(shop, templateId) {
+  const scriptOrigin = process.env.SHOPIFY_APP_URL || 'https://cartdrawer.fly.dev';
+  return `<!-- Combo Bundle Template -->
+<div data-brix-combo-root data-shop="${shop}" data-template-id="${templateId}"></div>
+<script src="${scriptOrigin}/combo-page.js" defer></script>`;
+}
 
 // ── Shopify page helpers ───────────────────────────────────────────────────────
 
-async function createShopifyPage(admin, title, handle) {
+// namespace/key here must match what the provisioned section reads via
+// `page.metafields.combo_forge.template_id` (see combo-page.server.js's
+// ensureComboForgeTemplate / comboForgeSectionLiquid).
+function comboForgePageFields(shop, templateId, hasGuaranteedTemplate) {
+  const fields = { body: buildPageBody(shop, templateId) };
+  if (hasGuaranteedTemplate) {
+    fields.templateSuffix = 'combo-forge';
+    fields.metafields = [{ namespace: 'combo_forge', key: 'template_id', type: 'number_integer', value: String(templateId) }];
+  }
+  return fields;
+}
+
+async function createShopifyPage(admin, title, handle, shop, templateId) {
+  const hasGuaranteedTemplate = await ensureComboForgeTemplate(admin);
   const res = await admin.graphql(`#graphql
     mutation pageCreate($page: PageCreateInput!) {
       pageCreate(page: $page) {
@@ -17,7 +41,7 @@ async function createShopifyPage(admin, title, handle) {
         userErrors { field message }
       }
     }
-  `, { variables: { page: { title, handle, body: PAGE_BODY } } });
+  `, { variables: { page: { title, handle, ...comboForgePageFields(shop, templateId, hasGuaranteedTemplate) } } });
   const json = await res.json();
   if (json.data?.pageCreate?.userErrors?.length > 0) {
     throw new Error(json.data.pageCreate.userErrors.map(e => e.message).join('; '));
@@ -101,16 +125,17 @@ export async function action({ request }) {
         if (existingPage) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [existingPage.handle, existingPage.id, Number(id)]);
           try {
+            const hasGuaranteedTemplate = await ensureComboForgeTemplate(admin);
             await admin.graphql(`#graphql
               mutation pageUpdate($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }
-            `, { variables: { id: existingPage.id, page: { body: PAGE_BODY } } });
+            `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id, hasGuaranteedTemplate) } });
           } catch {}
           return Response.json({ success: true, previewUrl: `https://${shop}/pages/${existingPage.handle}?preview`, handle: existingPage.handle });
         }
       } catch {}
 
       try {
-        const pageResult = await createShopifyPage(admin, name || 'Combo Page', handle);
+        const pageResult = await createShopifyPage(admin, name || 'Combo Page', handle, shop, id);
         if (pageResult) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, Number(id)]);
           return Response.json({ success: true, previewUrl: `https://${shop}/pages/${pageResult.handle}?preview`, handle: pageResult.handle });
@@ -142,7 +167,7 @@ export async function action({ request }) {
 
       if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
         try {
-          pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle);
+          pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle, shop, id);
           if (pageResult) {
             await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, Number(id)]);
           }
@@ -171,7 +196,7 @@ export async function action({ request }) {
 
     if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
       try {
-        pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle);
+        pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle, shop, newId);
         if (pageResult) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, newId]);
         }

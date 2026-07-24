@@ -11,7 +11,6 @@ import {
 } from '@shopify/polaris-icons';
 import { Icon, Modal, Text } from '@shopify/polaris';
 import { DesignSection } from './sections/DesignSection';
-import { GeneralSection } from './sections/GeneralSection';
 import { HeaderSection } from './sections/HeaderSection';
 import { AnnouncementsSection } from './sections/AnnouncementsSection';
 import { ProgressBarSection } from './sections/ProgressBarSection';
@@ -28,7 +27,7 @@ const ICON_MAP = {
 };
 
 const SECTION_COMPONENT_MAP = {
-  design: DesignSection, general: GeneralSection, header: HeaderSection,
+  design: DesignSection, header: HeaderSection,
   announcements: AnnouncementsSection, progressBar: ProgressBarSection,
   couponSlider: CouponSliderSection, upsellProducts: UpsellSection,
   emptyCart: EmptyCartSection, checkoutButton: CheckoutSection, customCSS: CustomCSSSection,

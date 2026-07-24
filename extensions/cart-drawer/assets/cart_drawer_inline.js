@@ -185,6 +185,9 @@
             bgColor: d.announcement_bg_color || '#4f46e5',
             textColor: d.announcement_text_color || '#ffffff',
             fontSize: parseInt(d.announcement_font_size || 14, 10),
+            bold: isEnabled(d.announcement_bold),
+            italic: isEnabled(d.announcement_italic),
+            textAlign: d.announcement_text_align || 'center',
           },
           header: {
             title: d.header_title || 'Your Cart',
@@ -1310,7 +1313,7 @@
     /* -------- ANNOUNCEMENT BAR (below header) -------- */
     const ann = CONFIG.announcement || {};
     if (ann.enabled && ann.text) {
-      drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:center;font-weight:500;flex-shrink:0;">${escapeHtml(ann.text)}</div>`;
+      drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:${ann.textAlign || 'center'};font-weight:${ann.bold ? 700 : 500};font-style:${ann.italic ? 'italic' : 'normal'};flex-shrink:0;">${escapeHtml(ann.text)}</div>`;
     }
 
     /* -------- BODY -------- */
@@ -1603,6 +1606,12 @@
       const drawerAnim = (CONFIG.design && CONFIG.design.animation) || 'slide';
       overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" data-animation="${drawerAnim}">${drawerHtml}</div>`;
       root.appendChild(overlay);
+      // Force a synchronous layout flush so the browser paints the closed
+      // (translateX/opacity) state before we flip to .active — otherwise
+      // the two rAFs can collapse into a single paint and the CSS
+      // transition never has a "before" state to animate from, so the
+      // drawer just snaps open instead of sliding/fading/etc in.
+      void overlay.offsetHeight;
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           overlay.classList.add('active');

@@ -164,7 +164,7 @@ export default function BillingDashboard() {
               {totalOrders > 0 && (
                 <InlineStack gap="200" wrap>
                   <Badge tone="info">{`Frequently Bought Together: ${fbtOrders}`}</Badge>
-                  <Badge tone="info">{`Combo Forge: ${comboOrders}`}</Badge>
+                  <Badge tone="info">{`Combo pages: ${comboOrders}`}</Badge>
                   <Badge>{`Other: ${otherOrders}`}</Badge>
                 </InlineStack>
               )}

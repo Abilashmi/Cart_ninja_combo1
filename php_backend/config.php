@@ -28,6 +28,12 @@ $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     PDO::ATTR_EMULATE_PREPARES   => false,
+    // Reuses one MySQL connection per PHP-FPM worker instead of opening a
+    // fresh one on every request — the remote (Hostinger) MySQL host has a
+    // low max_connections ceiling, and this app's save flow fires several
+    // parallel requests per action (see CLAUDE.md's Cart Editor save flow),
+    // which was tripping that ceiling and surfacing as "DB Connection Failed".
+    PDO::ATTR_PERSISTENT         => true,
 ];
 
 try {

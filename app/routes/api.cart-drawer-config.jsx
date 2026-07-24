@@ -8,6 +8,21 @@ function flag(v, d = 1) {
   return (v === true || v === 1 || v === '1') ? 1 : 0;
 }
 
+// Mirrors ensureAnnouncementStyleColumns() in php_backend/save_cart_drawer.php —
+// self-heals the schema on first write so this save path doesn't depend on
+// someone having run migrations/add_announcement_font_style_fields.sql by hand.
+let announcementStyleColumnsEnsured = false;
+async function ensureAnnouncementStyleColumns(db) {
+  if (announcementStyleColumnsEnsured) return;
+  await db.execute(`
+    ALTER TABLE cart_drawer_config
+      ADD COLUMN IF NOT EXISTS announcement_bold       TINYINT(1)  NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS announcement_italic     TINYINT(1)  NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS announcement_text_align VARCHAR(10) NOT NULL DEFAULT 'center'
+  `);
+  announcementStyleColumnsEnsured = true;
+}
+
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const db = getDb();
@@ -41,6 +56,8 @@ export async function action({ request }) {
   const planKey = await getShopPlan(shop);
   const customCssAllowed = canPublishFeature(planKey, 'custom_css');
 
+  await ensureAnnouncementStyleColumns(db);
+
   await db.execute(`
     INSERT INTO cart_drawer_config (
       shop_domain, is_enabled,
@@ -48,12 +65,12 @@ export async function action({ request }) {
       checkout_button_bg_color, checkout_button_text_color, checkout_button_border_radius,
       custom_css,
       announcement_enabled, announcement_text, announcement_bg_color,
-      announcement_text_color, announcement_font_size,
+      announcement_text_color, announcement_font_size, announcement_bold, announcement_italic, announcement_text_align,
       open_on_add, open_on_icon_click, position,
       header_title, header_close_style, header_bg_color, header_text_color, header_border_bottom,
       design_width, design_border_radius, design_shadow, design_animation,
       empty_cart_message, empty_cart_show_continue_shopping, empty_cart_show_recommendations
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
       is_enabled                        = VALUES(is_enabled),
       checkout_button_text              = VALUES(checkout_button_text),
@@ -67,6 +84,9 @@ export async function action({ request }) {
       announcement_bg_color             = VALUES(announcement_bg_color),
       announcement_text_color           = VALUES(announcement_text_color),
       announcement_font_size            = VALUES(announcement_font_size),
+      announcement_bold                 = VALUES(announcement_bold),
+      announcement_italic               = VALUES(announcement_italic),
+      announcement_text_align           = VALUES(announcement_text_align),
       open_on_add                       = VALUES(open_on_add),
       open_on_icon_click                = VALUES(open_on_icon_click),
       position                          = VALUES(position),
@@ -97,6 +117,9 @@ export async function action({ request }) {
     body.announcement_bg_color             ?? '#111827',
     body.announcement_text_color           ?? '#ffffff',
     body.announcement_font_size            ?? 13,
+    flag(body.announcement_bold            ?? 0, 0),
+    flag(body.announcement_italic          ?? 0, 0),
+    body.announcement_text_align           ?? 'center',
     flag(body.open_on_add                  ?? 1),
     flag(body.open_on_icon_click           ?? 1),
     body.position                          ?? 'right',

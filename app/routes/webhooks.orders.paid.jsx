@@ -58,10 +58,15 @@ export const action = async ({ request }) => {
   // which stays write-only for one release cycle as a rollback safety net.
   try {
     const [existing] = await db.execute(
-      `SELECT financial_status FROM store_orders WHERE shop_domain = ? AND order_id = ?`,
+      `SELECT revenue_counted FROM store_orders WHERE shop_domain = ? AND order_id = ?`,
       [shop, String(payload.id)]
     );
-    const alreadyCountedAsPaid = existing.length > 0 && existing[0].financial_status === "paid";
+    // Checked against revenue_counted (set only when applyOrderDelta actually
+    // runs below), not financial_status — orders/create can legitimately write
+    // financial_status='paid' straight from its own payload (fast gateways)
+    // without ever applying a rollup delta, which would otherwise fool this
+    // guard into skipping the delta on the one webhook that's supposed to apply it.
+    const alreadyCountedAsPaid = existing.length > 0 && Number(existing[0].revenue_counted) === 1;
 
     const { dateStr, revenue: orderRevenue } = await upsertOrderFromPayload(db, shop, payload, {
       financialStatusOverride: "paid",
@@ -95,6 +100,10 @@ export const action = async ({ request }) => {
 
     if (!alreadyCountedAsPaid) {
       await applyOrderDelta(shop, dateStr, orderRevenue, 1, isBillable ? 1 : 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0);
+      await db.execute(
+        `UPDATE store_orders SET revenue_counted = 1 WHERE shop_domain = ? AND order_id = ?`,
+        [shop, String(payload.id)]
+      );
     }
   } catch (error) {
     console.error("[Webhook orders/paid] Failed to record store_orders/rollup:", error.message);

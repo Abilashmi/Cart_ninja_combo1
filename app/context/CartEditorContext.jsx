@@ -79,6 +79,9 @@ function hydrateFromConfig(cfg, base) {
         ...(cfg.announcement_bg_color   != null ? { bgColor:   cfg.announcement_bg_color }           : {}),
         ...(cfg.announcement_text_color != null ? { textColor: cfg.announcement_text_color }         : {}),
         ...(cfg.announcement_font_size  != null ? { fontSize:  Number(cfg.announcement_font_size) }  : {}),
+        ...(cfg.announcement_bold       != null ? { bold:      dbFlag(cfg.announcement_bold) }       : {}),
+        ...(cfg.announcement_italic     != null ? { italic:    dbFlag(cfg.announcement_italic) }     : {}),
+        ...(cfg.announcement_text_align != null ? { textAlign: cfg.announcement_text_align }         : {}),
       },
       emptyCart: {
         ...base.body.emptyCart,

@@ -225,6 +225,12 @@ async function ensureOrderSourceColumns(db) {
   const orderSourceCols = [
     ['is_fbt_order', "ADD COLUMN is_fbt_order TINYINT(1) NOT NULL DEFAULT 0 AFTER is_billable"],
     ['is_combo_order', "ADD COLUMN is_combo_order TINYINT(1) NOT NULL DEFAULT 0 AFTER is_fbt_order"],
+    // Tracks whether applyOrderDelta has actually run for this order, decoupled
+    // from financial_status — orders/create can legitimately write
+    // financial_status='paid' straight from its payload (fast gateways) without
+    // ever applying a rollup delta, which previously fooled orders/paid's
+    // "already counted" guard into skipping the delta entirely.
+    ['revenue_counted', "ADD COLUMN revenue_counted TINYINT(1) NOT NULL DEFAULT 0 AFTER is_combo_order"],
   ];
   for (const [column, ddl] of orderSourceCols) {
     const [rows] = await db.execute(
