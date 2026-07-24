@@ -332,11 +332,7 @@ const PLACEMENT_OPTIONS = [
   { value: 'different',label: 'Show different FBT for different product pages',helpText: 'Create multiple rules with different FBT products per page'            },
 ];
 
-const MOCK_PRODUCTS = [
-  { id: 1, name: 'Product A', price: 29 },
-  { id: 2, name: 'Product B', price: 34 },
-  { id: 3, name: 'Product C', price: 24 },
-];
+const PREVIEW_SLOT_COUNT = 3;
 
 const SECTION_TIPS = {
   interaction: 'Offering "Add All to Cart" in a single click increases bundle conversion by up to 37% — lower friction means more customers complete the bundle.',
@@ -344,7 +340,28 @@ const SECTION_TIPS = {
   styling:     'Larger product images in FBT widgets increase click-through by 23% — shoppers are 60% more likely to add a product they can clearly see.',
 };
 
-const defaultProductStates = () => MOCK_PRODUCTS.map(() => ({ added: true, qty: 1, checked: true }));
+const defaultProductStates = () => Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: true, qty: 1, checked: true }));
+
+// Style/layout preview must show the merchant's real store products, never
+// generic placeholder names — prefers the first rule's actual FBT picks
+// (already full product objects, not just IDs) and fills any remaining
+// slots from the real catalog so a merchant with no rules yet still sees
+// their own products instead of fake ones.
+function buildPreviewProducts(rules, catalog) {
+  const ruleProducts = (rules || []).find(r => (r.fbtProducts || []).length > 0)?.fbtProducts || [];
+  const seen = new Set();
+  const unique = [...ruleProducts, ...(catalog || [])].filter((p) => {
+    if (!p?.id || seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+  return Array.from({ length: PREVIEW_SLOT_COUNT }, (_, i) => {
+    const p = unique[i];
+    return p
+      ? { id: p.id, name: p.title || p.name || `Product ${i + 1}`, price: Number(p.price || 0), image: p.image || '' }
+      : { id: `placeholder-${i}`, name: 'Add a product', price: 0, image: '' };
+  });
+}
 
 function apiKeyToTemplateId(apiKey) {
   return TEMPLATES.find(t => t.apiKey === apiKey)?.id ?? 'classic-grid';
@@ -425,18 +442,24 @@ function usePrevious(value) {
 }
 
 /* ─── IMAGE PLACEHOLDER ───────────────────────────────────────────────────── */
-function ImagePlaceholder({ size = 64 }) {
+function ImagePlaceholder({ size = 64, image = '' }) {
   return (
     <div style={{
-      width: size, height: size, background: '#f3f4f6', borderRadius: '10px',
+      width: size, height: size, borderRadius: '10px',
       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       border: '1px solid #e5e7eb',
+      backgroundColor: '#f3f4f6',
+      backgroundImage: image ? `url(${image})` : undefined,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
     }}>
-      <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <polyline points="21 15 16 10 5 21" />
-      </svg>
+      {!image && (
+        <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      )}
     </div>
   );
 }
@@ -575,6 +598,7 @@ export default function FBTPage() {
 
   const isSaving = fetcher.state !== 'idle';
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
+  const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
 
   // toast on save (success or error) — only clear the dirty flag once the
   // server actually confirms the save, so a failed save leaves Save enabled
@@ -613,8 +637,8 @@ export default function FBTPage() {
     return interactionStyle === 'bundle' ? s.checked : s.added;
   };
 
-  const total = MOCK_PRODUCTS.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
-  const activeCount = MOCK_PRODUCTS.filter((_, i) => isActive(i)).length;
+  const total = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
+  const activeCount = fbtPreviewProducts.filter((_, i) => isActive(i)).length;
 
   const handleSave = () => {
     const curSettings = {
@@ -726,7 +750,7 @@ export default function FBTPage() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
       boxSizing: 'border-box',
     }}>
-      <ImagePlaceholder size={56} />
+      <ImagePlaceholder size={56} image={p.image} />
       <div style={{
         color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
         textAlign: 'center', width: '100%',
@@ -751,12 +775,12 @@ export default function FBTPage() {
      all 3 templates, so switching templates looked like nothing changed. */
   const previewProducts = selectedTemplate === 'vertical-list' ? (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {MOCK_PRODUCTS.map((p, i) => (
+      {fbtPreviewProducts.map((p, i) => (
         <div key={p.id} style={{
           display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px',
-          borderBottom: i < MOCK_PRODUCTS.length - 1 ? `1px solid ${borderColor}` : 'none',
+          borderBottom: i < fbtPreviewProducts.length - 1 ? `1px solid ${borderColor}` : 'none',
         }}>
-          <ImagePlaceholder size={44} />
+          <ImagePlaceholder size={44} image={p.image} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               color: textColor, fontSize: '12px', fontWeight: 600,
@@ -772,13 +796,13 @@ export default function FBTPage() {
     </div>
   ) : selectedTemplate === 'classic-grid' ? (
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: '10px' }}>
-      {MOCK_PRODUCTS.flatMap((p, i) => {
+      {fbtPreviewProducts.flatMap((p, i) => {
         const nodes = [
           <div key={p.id} style={{ flex: '1 1 90px', minWidth: '90px' }}>
             <PreviewCard p={p} i={i} />
           </div>,
         ];
-        if (i < MOCK_PRODUCTS.length - 1) {
+        if (i < fbtPreviewProducts.length - 1) {
           nodes.push(
             <span key={`plus-${i}`} aria-hidden="true" style={{
               display: 'flex', alignItems: 'center', flexShrink: 0,
@@ -791,7 +815,7 @@ export default function FBTPage() {
     </div>
   ) : layout === 'carousel' ? (
     <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
-      {MOCK_PRODUCTS.map((p, i) => (
+      {fbtPreviewProducts.map((p, i) => (
         <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
           <PreviewCard p={p} i={i} />
         </div>
@@ -799,7 +823,7 @@ export default function FBTPage() {
     </div>
   ) : (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-      {MOCK_PRODUCTS.map((p, i) => (
+      {fbtPreviewProducts.map((p, i) => (
         <PreviewCard key={p.id} p={p} i={i} />
       ))}
     </div>
@@ -1164,7 +1188,7 @@ export default function FBTPage() {
                         fontSize: '14px', fontWeight: 600, cursor: 'pointer',
                         letterSpacing: '0.02em', transition: 'opacity 0.15s',
                       }}>
-                        {interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || MOCK_PRODUCTS.length} to Cart`}
+                        {interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
                       </button>
                     )}
                   </div>

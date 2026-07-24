@@ -49,9 +49,10 @@ function CartEditorContent() {
       customCSS:           footer.customCSS,
       watermark_enabled:   footer.watermarkEnabled !== false ? 1 : 0,
       checkout_button_style: JSON.stringify({
-        backgroundColor: cb.bgColor,
-        textColor:       cb.textColor,
-        borderRadius:    cb.borderRadius,
+        backgroundColor:  cb.bgColor,
+        textColor:        cb.textColor,
+        borderRadius:     cb.borderRadius,
+        mobileButtonType: cb.mobileButtonType,
       }),
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });
 

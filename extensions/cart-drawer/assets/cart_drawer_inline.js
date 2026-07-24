@@ -2,6 +2,7 @@
   console.log('[CartDrawer] Script loaded ✓');
 
   const container = document.getElementById('cc-root');
+  if (!container) return;
   const SHOP = container.getAttribute('data-shop');
   const CURRENCY_CODE = container.getAttribute('data-currency') || 'USD';
   const API_BASE = '/apps/cart-app';
@@ -357,12 +358,13 @@
 
   function parseCheckoutButtonStyle(d) {
     const raw = d.checkout_button_style;
-    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12 };
+    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, mobileButtonType: 'standard' };
     const data = typeof raw === 'string' ? parseJSON(raw) : raw;
     return {
       backgroundColor: data.backgroundColor || '#111827',
       textColor: data.textColor || '#ffffff',
       borderRadius: data.borderRadius !== undefined ? parseInt(data.borderRadius, 10) : 12,
+      mobileButtonType: data.mobileButtonType === 'swipe' ? 'swipe' : 'standard',
     };
   }
 
@@ -1248,6 +1250,99 @@
     return svg;
   }
 
+  /* =================== CHECKOUT BUTTON (standard / swipe) =================== */
+
+  function renderCheckoutButton(appliedCouponCodes) {
+    const cbStyle = CONFIG.checkoutButtonStyle || {};
+    const bg = cbStyle.backgroundColor || '#111827';
+    const fg = cbStyle.textColor || '#ffffff';
+    const radius = cbStyle.borderRadius !== undefined ? cbStyle.borderRadius : 12;
+    const href = appliedCouponCodes && appliedCouponCodes.length > 0
+      ? '/checkout?discount=' + encodeURIComponent(appliedCouponCodes[0])
+      : '/checkout';
+
+    const isSwipe = cbStyle.mobileButtonType === 'swipe' && window.innerWidth <= 480;
+
+    if (!isSwipe) {
+      return `
+  <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
+    <button style="width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
+      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
+    </button>
+  </a>`;
+    }
+
+    const thumbRadius = Math.max(radius - 2, 4);
+    return `
+  <div id="cc-swipe-track" data-href="${href}" style="position:relative;width:100%;height:52px;background:${bg};border-radius:${radius}px;overflow:hidden;touch-action:pan-y;user-select:none;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
+    <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:13px;font-weight:700;letter-spacing:0.3px;pointer-events:none;">${escapeHtml(CONFIG.checkoutName || 'Swipe to checkout')} →</span>
+    <div id="cc-swipe-thumb" style="position:absolute;top:3px;left:3px;width:46px;height:46px;border-radius:${thumbRadius}px;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:grab;touch-action:none;">
+      <span style="color:${bg};font-size:20px;line-height:1;">›</span>
+    </div>
+  </div>`;
+  }
+
+  // Drag-to-confirm gesture for the swipe checkout button — re-run after
+  // every drawer render since the thumb element is recreated each time
+  // (innerHTML replace), so any previously-bound listeners are gone with it.
+  function initSwipeCheckout() {
+    const track = document.getElementById('cc-swipe-track');
+    const thumb = document.getElementById('cc-swipe-thumb');
+    if (!track || !thumb) return;
+    const label = document.getElementById('cc-swipe-label');
+    const href = track.getAttribute('data-href');
+    const maxX = Math.max(track.clientWidth - thumb.offsetWidth - 6, 1);
+    let startX = 0;
+    let currentX = 0;
+    let dragging = false;
+    let committed = false;
+
+    function setX(x) {
+      currentX = Math.max(0, Math.min(x, maxX));
+      thumb.style.transform = 'translateX(' + currentX + 'px)';
+      if (label) label.style.opacity = String(Math.max(0, 1 - currentX / maxX));
+    }
+
+    function onStart(clientX) {
+      if (committed) return;
+      dragging = true;
+      startX = clientX - currentX;
+      thumb.style.transition = 'none';
+    }
+
+    function onMove(clientX) {
+      if (!dragging || committed) return;
+      setX(clientX - startX);
+    }
+
+    function onEnd() {
+      if (!dragging || committed) return;
+      dragging = false;
+      thumb.style.transition = 'transform 0.25s ease';
+      if (currentX >= maxX * 0.8) {
+        committed = true;
+        setX(maxX);
+        track.style.opacity = '0.7';
+        try { window.ccSendClickEvent('checkout_click'); } catch (e) {}
+        window.location.href = href;
+      } else {
+        setX(0);
+      }
+    }
+
+    thumb.addEventListener('touchstart', function (e) { onStart(e.touches[0].clientX); }, { passive: true });
+    thumb.addEventListener('touchmove', function (e) { onMove(e.touches[0].clientX); }, { passive: true });
+    thumb.addEventListener('touchend', onEnd);
+    thumb.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'touch') return; // handled by touch* listeners above
+      try { thumb.setPointerCapture(e.pointerId); } catch (err) {}
+      onStart(e.clientX);
+    });
+    thumb.addEventListener('pointermove', function (e) { if (e.pointerType !== 'touch') onMove(e.clientX); });
+    thumb.addEventListener('pointerup', function (e) { if (e.pointerType !== 'touch') onEnd(); });
+    thumb.addEventListener('pointercancel', function (e) { if (e.pointerType !== 'touch') onEnd(); });
+  }
+
   /* =================== RENDER =================== */
 
   async function renderDrawer() {
@@ -1585,11 +1680,7 @@
       <span style="font-size:18px;color:#0f172a;font-weight:900;">${CURRENCY_SYMBOL}${finalTotal.toFixed(0)}</span>
     </div>
   </div>
-  <a href="${appliedCouponCodes.length > 0 ? '/checkout?discount=' + encodeURIComponent(appliedCouponCodes[0]) : '/checkout'}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
-    <button style="width:100%;padding:16px;background:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.backgroundColor) || '#111827'};color:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.textColor) || '#fff'};border:none;border-radius:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.borderRadius !== undefined) ? CONFIG.checkoutButtonStyle.borderRadius : 12}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
-    </button>
-  </a>
+  ${renderCheckoutButton(appliedCouponCodes)}
   <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
@@ -1618,6 +1709,7 @@
         });
       });
       document.getElementById('cc-backdrop').addEventListener('click', closeDrawer);
+      initSwipeCheckout();
     } else {
       // Subsequent updates: only replace drawer inner content (no flash)
       const drawer = document.getElementById('cc-drawer');
@@ -1635,6 +1727,7 @@
       // Re-attach backdrop listener
       const backdrop = document.getElementById('cc-backdrop');
       if (backdrop) backdrop.addEventListener('click', closeDrawer);
+      initSwipeCheckout();
     }
   }
 

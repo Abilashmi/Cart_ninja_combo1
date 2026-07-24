@@ -35,6 +35,7 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.backgroundColor ? { bgColor: cbStyle.backgroundColor } : {}),
         ...(cbStyle.textColor ? { textColor: cbStyle.textColor } : {}),
         ...(cbStyle.borderRadius != null ? { borderRadius: cbStyle.borderRadius } : {}),
+        ...(cbStyle.mobileButtonType ? { mobileButtonType: cbStyle.mobileButtonType } : {}),
       },
       customCSS: record.customCSS || base.footer.customCSS,
       watermarkEnabled: record.watermark_enabled != null ? dbFlag(record.watermark_enabled) : base.footer.watermarkEnabled,

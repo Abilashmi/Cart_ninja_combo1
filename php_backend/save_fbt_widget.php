@@ -170,6 +170,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } catch (PDOException $ignored) {}
         }
 
+        // Pull the merchant's on/off toggle from fbt_widget_settings (the
+        // legacy fbt_widget table selected above has no enable/disable column,
+        // so without this the storefront never learns the widget was disabled).
+        $widgetEnabled = true;
+        try {
+            $es = $pdo->prepare("SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1");
+            $es->execute([$shopDomain]);
+            $eRow = $es->fetch();
+            if ($eRow && array_key_exists('is_enabled', $eRow) && $eRow['is_enabled'] !== null) {
+                $widgetEnabled = (bool)$eRow['is_enabled'];
+            }
+        } catch (PDOException $ignored) {}
+
         // Enforce plan gating: FBT is 'preview' on Free — merchant can design/save it,
         // but it must not render on the storefront until they upgrade. This only
         // mutates the response payload; the stored row is left untouched so the
@@ -177,9 +190,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $planKey = resolve_plan_key($pdo, $shopDomain);
         $publishable = plan_can_publish_feature($planKey, 'fbt');
         $result['publishable'] = $publishable;
+        $result['isEnabled'] = $publishable && $widgetEnabled;
 
-        if (!$publishable) {
-            $result['isEnabled'] = false;
+        if (!$result['isEnabled']) {
             if (isset($result['temp1']) && is_array($result['temp1'])) {
                 $result['temp1']['isEnabled'] = false;
             }

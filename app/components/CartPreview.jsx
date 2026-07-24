@@ -6,7 +6,6 @@ import {
   GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon,
   DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon,
 } from '@shopify/polaris-icons';
-import { upsellProducts } from '../data/mockData';
 import { PreviewLockBadge } from './plan/PlanGate';
 import { useCurrency } from './CurrencyContext';
 
@@ -332,16 +331,27 @@ function CouponSliderPreview({ cs }) {
   );
 }
 
-function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
+// Resolves the merchant's actual saved product IDs against the real store
+// catalog fetched by the loader — the preview must show real products
+// (or fall back to the real catalog itself), never generic placeholder items.
+function findProductsByIds(allProducts, ids) {
+  if (!ids || !ids.length) return [];
+  return ids.map((id) => allProducts.find((p) => p.id === id)).filter(Boolean);
+}
+
+function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol }) {
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
-  const manualCount = (upsell.manualRules || []).reduce(
-    (sum, r) => sum + ((r.upsellProductIds || r.upsellProducts || []).length), 0
-  );
-  const count = upsell.useAI ? (upsell.limit || 3) : (manualCount || upsell.limit || 3);
-  const products = upsellProducts.slice(0, Math.max(1, count));
+  const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
+  const count = upsell.useAI ? (upsell.limit || 3) : (manualIds.length || upsell.limit || 3);
+  const resolved = findProductsByIds(allProducts, manualIds);
+  // No specific selection yet (e.g. AI mode, or rule not configured) — show
+  // real catalog products instead of the merchant's actual pick, still real
+  // store data rather than a fake placeholder.
+  const products = (resolved.length ? resolved : allProducts).slice(0, Math.max(1, count));
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
+  const formatPrice = (p) => `${currencySymbol}${Number(p || 0).toFixed(0)}`;
 
   return (
     <div className="cart-preview-upsell-section">
@@ -350,11 +360,10 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
         <div style={isGrid ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' } : { display: 'flex', gap: '7px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {products.map((product) => (
             <div key={product.id} style={{ flexShrink: isGrid ? undefined : 0, width: isGrid ? undefined : '100px', border: '1px solid #e1e3e5', borderRadius: '7px', overflow: 'hidden', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: '70px', background: '#f1f2f3', flexShrink: 0 }} />
+              <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0 }} />
               <div style={{ padding: '5px 6px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
-                <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{product.price}</div>
-                {product.compareAtPrice && <div style={{ fontSize: '9px', color: '#6d7175', textDecoration: 'line-through' }}>{product.compareAtPrice}</div>}
+                <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(product.price)}</div>
                 <button style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
                   {upsell.buttonText}
                 </button>
@@ -365,10 +374,10 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
       ) : (
         products.map((product) => (
           <div key={product.id} className="cart-preview-upsell-item">
-            <div className="cart-preview-upsell-image" />
+            <div className="cart-preview-upsell-image" style={product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
             <div className="cart-preview-upsell-info">
               <div className="cart-preview-upsell-name">{product.title}</div>
-              <div className="cart-preview-upsell-price">{product.price}</div>
+              <div className="cart-preview-upsell-price">{formatPrice(product.price)}</div>
             </div>
             <button className="cart-preview-upsell-add" style={{ backgroundColor: checkoutBg, color: checkoutText }}>
               {upsell.buttonText}
@@ -381,7 +390,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText }) {
 }
 
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
-  const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings } = useCartEditor();
+  const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
 
   const designTheme = settings.design?.theme;
@@ -559,7 +568,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} />
                       <PreviewLockBadge featureKey="ai_cart_upsell" />
                     </HighlightZone>
                   )}
@@ -605,7 +614,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} />
                       <PreviewLockBadge featureKey="ai_cart_upsell" />
                     </HighlightZone>
                   )}
@@ -614,16 +623,18 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {isEmpty && body.emptyCart.showRecommendations && !up.showWhenEmpty && (
                     <div style={{ padding: '12px 18px', borderTop: '1px solid #e1e3e5' }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Recommended For You</div>
-                      {upsellProducts.slice(0, 2).map((product) => (
+                      {allProducts.slice(0, 2).map((product) => (
                         <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
-                          <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg,#f1f2f3,#e8e9eb)', borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b0b3b8" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
-                            </svg>
+                          <div style={{ width: 40, height: 40, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : 'linear-gradient(135deg,#f1f2f3,#e8e9eb)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                            {!product.image && (
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b0b3b8" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                              </svg>
+                            )}
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 12, fontWeight: 500 }}>{product.title}</div>
-                            <div style={{ fontSize: 11, color: '#6d7175' }}>{product.price}</div>
+                            <div style={{ fontSize: 11, color: '#6d7175' }}>{currencySymbol}{Number(product.price || 0).toFixed(0)}</div>
                           </div>
                           <button style={{ padding: '5px 12px', borderRadius: 5, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>Add</button>
                         </div>
