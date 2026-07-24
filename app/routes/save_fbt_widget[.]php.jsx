@@ -1,4 +1,5 @@
 import { getDb } from '../services/db.server';
+import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 
 function parseJson(val, fallback) {
   if (!val) return fallback;
@@ -85,7 +86,21 @@ export async function loader({ request }) {
     const activeTpl = sel === 'fbt1' ? temp1 : sel === 'fbt2' ? temp2 : temp3;
     if (activeTpl && !activeTpl.widgetPlacement) activeTpl.widgetPlacement = widgetPlacement;
 
-    const data = { selectedTemp, temp1, temp2, temp3, condition, widgetPlacement };
+    // Merchant's on/off toggle lives on fbt_widget_settings.is_enabled — the
+    // legacy `fbt_widget` table (the primary source above) has no such column,
+    // so without this the storefront never learns the widget was turned off.
+    const widgetEnabled = settings ? Boolean(Number(settings.is_enabled ?? 1)) : true;
+
+    // Plan gating: FBT is preview-only on Free — merchant can design/save it,
+    // but it must not render on the storefront until they upgrade.
+    const planKey = await getShopPlan(shopDomain);
+    const publishable = canPublishFeature(planKey, 'fbt');
+
+    const data = {
+      selectedTemp, temp1, temp2, temp3, condition, widgetPlacement,
+      publishable,
+      isEnabled: publishable && widgetEnabled,
+    };
     return new Response(JSON.stringify({ status: 'success', data }), { headers });
 
   } catch (e) {

@@ -5,7 +5,13 @@ import styles from "./styles.module.css";
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
-  if (url.searchParams.get("shop")) {
+  // This app is embedded-only — there's no standalone marketing site to show
+  // at "/". Shopify Admin's nav header (the app icon/name row) does a
+  // top-level navigation straight to this route, carrying "shop" and/or
+  // "host" depending on the navigation path, so check both rather than only
+  // "shop" — otherwise that click can dead-end on the unbuilt placeholder
+  // below instead of reaching the dashboard.
+  if (url.searchParams.get("shop") || url.searchParams.get("host")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
