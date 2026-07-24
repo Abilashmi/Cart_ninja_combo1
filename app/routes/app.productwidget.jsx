@@ -623,7 +623,12 @@ export default function ProductWidgetPage() {
 
     const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);
 
-    const handleSave = () => {
+    // Shared by the Save button and the instant enable/disable toggle below —
+    // the toggle used to only flip local state and wait for a manual Save
+    // click, so a merchant flipping it off and navigating away without
+    // hitting Save would still see the widget rendering on the storefront.
+    // It now submits through this same path immediately.
+    const submitCouponConfig = (overrides = {}) => {
         const tplKeyMap = { "classic-banner": "template1", "minimal-card": "template2", "bold-vibrant": "template3" };
         // Build per-coupon style + condition overrides for the selected coupons
         const couponStyles = {};
@@ -657,10 +662,13 @@ export default function ProductWidgetPage() {
                 layout: couponLayout,
                 timerEnabled, timerHours, timerMins, timerLabel, timerExpired, timerBg, timerText, timerAccent,
                 widgetPlacement,
+                ...overrides,
             },
             { method: "POST", encType: "application/json" }
         );
     };
+
+    const handleSave = () => submitCouponConfig();
 
     /* live preview */
     // Effective values for the coupon currently being customized (override → global default)
@@ -761,7 +769,12 @@ export default function ProductWidgetPage() {
                         {fetcher.data?.success === false && <Text as="span" variant="bodySm" tone="critical">Save failed. Please try again.</Text>}
                         <Badge tone={effectiveEnabled ? "success" : undefined}>{effectiveEnabled ? "Active" : "Inactive"}</Badge>
                         <button
-                            onClick={() => { if (!couponPublishable) return; setIsEnabled(p => !p); mark(); }}
+                            onClick={() => {
+                                if (!couponPublishable) return;
+                                const next = !isEnabled;
+                                setIsEnabled(next);
+                                submitCouponConfig({ isEnabled: next });
+                            }}
                             aria-label="Toggle Coupon Banner"
                             disabled={!couponPublishable}
                             title={!couponPublishable ? "Upgrade to Starter to enable this on your storefront" : undefined}

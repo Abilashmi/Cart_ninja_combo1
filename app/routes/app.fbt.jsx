@@ -640,7 +640,13 @@ export default function FBTPage() {
   const total = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
   const activeCount = fbtPreviewProducts.filter((_, i) => isActive(i)).length;
 
-  const handleSave = () => {
+  // Shared by the Save button and the instant enable/disable toggle below —
+  // the toggle used to only flip local state and wait for a manual Save
+  // click, which looked identical to the Cart Editor's master on/off switch
+  // (which *does* save instantly). Merchants toggling FBT off and navigating
+  // away without hitting Save would see it keep rendering on the storefront,
+  // so the toggle now submits through this same path immediately.
+  const submitFbtConfig = (overrides = {}) => {
     const curSettings = {
       layout,
       interactionType: interactionStyle === 'quick-add' ? 'quickAdd' : interactionStyle,
@@ -669,10 +675,13 @@ export default function FBTPage() {
         widgetPlacement,
         ...curSettings,
         shop,
+        ...overrides,
       },
       { method: 'POST', encType: 'application/json' }
     );
   };
+
+  const handleSave = () => submitFbtConfig();
 
   /* ── renderAction: per-product button based on interaction style ── */
   const renderAction = (i) => {
@@ -859,7 +868,12 @@ export default function FBTPage() {
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Badge tone={fbtEffectiveEnabled ? 'success' : undefined}>{fbtEffectiveEnabled ? 'Active' : 'Inactive'}</Badge>
             <button
-              onClick={() => { if (!fbtPublishable) return; setIsEnabled(p => !p); mark(); }}
+              onClick={() => {
+                if (!fbtPublishable) return;
+                const next = !isEnabled;
+                setIsEnabled(next);
+                submitFbtConfig({ isEnabled: next });
+              }}
               disabled={!fbtPublishable}
               title={!fbtPublishable ? 'Upgrade to Starter to enable this on your storefront' : undefined}
               style={{ width: '48px', height: '26px', borderRadius: '13px', border: 'none', background: fbtEffectiveEnabled ? '#008060' : '#babec3', position: 'relative', cursor: fbtPublishable ? 'pointer' : 'not-allowed', opacity: fbtPublishable ? 1 : 0.5, transition: 'background 0.2s ease', flexShrink: 0, padding: 0 }}
