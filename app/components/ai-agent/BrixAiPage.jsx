@@ -44,16 +44,22 @@ function MessageRow({ msg, onChoice, loading }) {
   // debugging via devtools, but are never rendered.
   const raw = j?.message || msg.text || "";
   const bodyText = raw.replace(/^\s*[✓✅]\s*/, "");
-  const card = (
-    <div className="bai-card">
-      <MarkdownMessage text={bodyText} variant="bai-md" />
-    </div>
-  );
+  // Split on blank-line boundaries into separate bubbles, staggered in like
+  // a real assistant sending several short messages in a row, instead of
+  // one dense report packed into a single box. A short single-paragraph
+  // reply (the common case — confirmations, plain Q&A) is unaffected: it
+  // still renders as exactly one bubble.
+  const paragraphs = bodyText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const bubbles = paragraphs.length > 0 ? paragraphs : [bodyText];
 
   return (
     <div className="bai-row bai-row-agent">
       <div className="bai-agent-stack">
-        {card}
+        {bubbles.map((p, i) => (
+          <div className="bai-card" key={i} style={{ animationDelay: `${i * 0.12}s`, animationFillMode: "backwards" }}>
+            <MarkdownMessage text={p} variant="bai-md" />
+          </div>
+        ))}
         {choices?.length > 0 && (
           <div className="bai-choices">
             {choices.map((c, i) => (
