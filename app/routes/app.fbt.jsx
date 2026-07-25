@@ -712,28 +712,17 @@ export default function FBTPage() {
     }
 
     if (interactionStyle === 'checkbox-qty') {
-      const isLastChecked = s.checked && activeCount <= 1;
+      // Checkbox itself is rendered directly in the row layout (left of the
+      // image) below — this only supplies the quantity stepper that shows
+      // once that checkbox is checked.
+      if (!s.checked) return null;
       return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}>
-          <input
-            type="checkbox"
-            checked={s.checked}
-            disabled={isLastChecked}
-            onChange={(e) => {
-              if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
-              updateProduct(i, { checked: e.target.checked });
-            }}
-            style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
-          />
-          {s.checked && (
-            <>
-              <button onClick={() => updateProduct(i, { qty: Math.max(1, s.qty - 1) })}
-                style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: textColor, flexShrink: 0 }}>−</button>
-              <span style={{ color: textColor, fontSize: '12px', minWidth: '16px', textAlign: 'center', fontWeight: 600 }}>{s.qty}</span>
-              <button onClick={() => updateProduct(i, { qty: s.qty + 1 })}
-                style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, cursor: 'pointer', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>+</button>
-            </>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <button onClick={() => updateProduct(i, { qty: Math.max(1, s.qty - 1) })}
+            style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: textColor, flexShrink: 0 }}>−</button>
+          <span style={{ color: textColor, fontSize: '12px', minWidth: '16px', textAlign: 'center', fontWeight: 600 }}>{s.qty}</span>
+          <button onClick={() => updateProduct(i, { qty: s.qty + 1 })}
+            style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, cursor: 'pointer', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>+</button>
         </div>
       );
     }
@@ -816,13 +805,29 @@ export default function FBTPage() {
      borderless/shadowed cardStyle already applied above). Previously this
      preview only ever rendered PreviewCard in a carousel-or-grid shell for
      all 3 templates, so switching templates looked like nothing changed. */
-  const previewProducts = selectedTemplate === 'vertical-list' ? (
+  // Checkbox + Quantity always renders as the same stacked row list as the
+  // Vertical List template — the natural fit for a left-side checkbox
+  // column — regardless of which visual template is otherwise selected.
+  const useRowLayout = selectedTemplate === 'vertical-list' || interactionStyle === 'checkbox-qty';
+  const previewProducts = useRowLayout ? (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {fbtPreviewProducts.map((p, i) => (
         <div key={p.id} style={{
           display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px',
           borderBottom: i < fbtPreviewProducts.length - 1 ? `1px solid ${borderColor}` : 'none',
         }}>
+          {interactionStyle === 'checkbox-qty' && (
+            <input
+              type="checkbox"
+              checked={productStates[i].checked}
+              disabled={productStates[i].checked && activeCount <= 1}
+              onChange={(e) => {
+                if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
+                updateProduct(i, { checked: e.target.checked });
+              }}
+              style={{ width: '18px', height: '18px', accentColor: buttonColor, flexShrink: 0, cursor: 'pointer' }}
+            />
+          )}
           <ImagePlaceholder size={44} image={p.image} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
