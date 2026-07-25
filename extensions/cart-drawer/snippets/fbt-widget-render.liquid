@@ -461,11 +461,12 @@
     var productQuantities=new Map();
     var cardEntries=new Map();
 
-    if(config.interactionType==='quickAdd'){products.forEach(function(p){productQuantities.set(String(p.id),0);});}
+    var usesQuantityMap=config.interactionType==='quickAdd'||config.interactionType==='checkboxQty';
+    if(usesQuantityMap){products.forEach(function(p){productQuantities.set(String(p.id),0);});}
     else{products.forEach(function(p){selectedProductIds.add(String(p.id));});}
 
-    function getProductQuantity(pid){var id=String(pid);if(config.interactionType==='quickAdd')return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
-    function getSelectedCount(){if(config.interactionType==='quickAdd')return products.reduce(function(c,p){return c+(getProductQuantity(p.id)>0?1:0);},0);return selectedProductIds.size;}
+    function getProductQuantity(pid){var id=String(pid);if(usesQuantityMap)return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
+    function getSelectedCount(){if(usesQuantityMap)return products.reduce(function(c,p){return c+(getProductQuantity(p.id)>0?1:0);},0);return selectedProductIds.size;}
 
     function updateCardStyle(entry){
       var pid=String(entry.product.id);var qty=getProductQuantity(pid);var isActive=qty>0;
@@ -510,6 +511,26 @@
         check.onclick=function(){if(isRequired)return;if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
         if(isRequired){var badge=document.createElement('div');badge.className='ps-required';badge.textContent='REQUIRED';badge.style.cssText='position:absolute;top:-8px;right:-4px;padding:2px 6px;border-radius:4px;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:9px;font-weight:700;letter-spacing:0.5px;';entry.card.appendChild(badge);entry.requiredBadge=badge;}
         actionSlot.appendChild(check);return;
+      }
+
+      if(config.interactionType==='checkboxQty'){
+        var wrap=document.createElement('div');wrap.style.cssText='display:flex;align-items:center;gap:8px;';
+        var qCheck=document.createElement('div');qCheck.className='ps-bundle-check';
+        qCheck.style.cssText='width:20px;height:20px;border-radius:4px;border:2px solid '+config.buttonColor+';background:'+(isSelected?config.buttonColor:'transparent')+';display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;color:'+(isSelected?config.buttonTextColor:config.buttonColor)+';flex-shrink:0;';
+        qCheck.textContent=isSelected?'✓':'';
+        qCheck.onclick=function(){productQuantities.set(pid,isSelected?0:1);updateUI();};
+        wrap.appendChild(qCheck);
+        if(isSelected){
+          var qStepper=document.createElement('div');qStepper.style.cssText='display:flex;align-items:center;gap:0;border-radius:6px;overflow:hidden;border:1px solid '+config.buttonColor+';';
+          var qMinus=document.createElement('button');qMinus.textContent='−';qMinus.style.cssText='width:22px;height:22px;border:none;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:12px;font-weight:700;cursor:pointer;';
+          qMinus.onclick=function(){productQuantities.set(pid,Math.max(0,(productQuantities.get(pid)||0)-1));updateUI();};
+          var qText=document.createElement('span');qText.textContent=String(qty);qText.style.cssText='width:22px;text-align:center;font-size:11px;font-weight:700;color:'+config.textColor+';';
+          var qPlus=document.createElement('button');qPlus.textContent='+';qPlus.style.cssText='width:22px;height:22px;border:none;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:12px;font-weight:700;cursor:pointer;';
+          qPlus.onclick=function(){productQuantities.set(pid,(productQuantities.get(pid)||0)+1);updateUI();};
+          qStepper.appendChild(qMinus);qStepper.appendChild(qText);qStepper.appendChild(qPlus);
+          wrap.appendChild(qStepper);
+        }
+        actionSlot.appendChild(wrap);return;
       }
 
       var currentQty=productQuantities.get(pid)||0;

@@ -316,9 +316,10 @@ const TEMPLATES = [
 ];
 
 const INTERACTION_OPTIONS = [
-  { label: 'Classic — Individual Add / Remove', value: 'classic'   },
-  { label: 'Quick Add — Quantity Stepper',      value: 'quick-add' },
-  { label: 'Bundle — Minimum 1 Required',       value: 'bundle'    },
+  { label: 'Classic — Individual Add / Remove',     value: 'classic'      },
+  { label: 'Quick Add — Quantity Stepper',          value: 'quick-add'    },
+  { label: 'Bundle — Minimum 1 Required',           value: 'bundle'       },
+  { label: 'Checkbox + Quantity — Select & adjust', value: 'checkbox-qty' },
 ];
 
 const LAYOUT_OPTIONS = [
@@ -564,7 +565,11 @@ export default function FBTPage() {
   const [openSection,       setOpenSection]       = useState(null);
 
   const [selectedTemplate,  setSelectedTemplate]  = useState(apiKeyToTemplateId(fbtConfig.activeTemplate));
-  const [interactionStyle,  setInteractionStyle]  = useState(fbtConfig.interactionType === 'quickAdd' ? 'quick-add' : fbtConfig.interactionType || 'classic');
+  const [interactionStyle,  setInteractionStyle]  = useState(
+    fbtConfig.interactionType === 'quickAdd' ? 'quick-add'
+      : fbtConfig.interactionType === 'checkboxQty' ? 'checkbox-qty'
+      : fbtConfig.interactionType || 'classic'
+  );
   const [layout,            setLayout]            = useState(() => {
     const l = fbtConfig.layout || 'carousel';
     if (l === 'horizontal') return 'carousel';
@@ -634,7 +639,7 @@ export default function FBTPage() {
 
   const isActive = (i) => {
     const s = productStates[i];
-    return interactionStyle === 'bundle' ? s.checked : s.added;
+    return (interactionStyle === 'bundle' || interactionStyle === 'checkbox-qty') ? s.checked : s.added;
   };
 
   const total = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
@@ -649,7 +654,9 @@ export default function FBTPage() {
   const submitFbtConfig = (overrides = {}) => {
     const curSettings = {
       layout,
-      interactionType: interactionStyle === 'quick-add' ? 'quickAdd' : interactionStyle,
+      interactionType: interactionStyle === 'quick-add' ? 'quickAdd'
+        : interactionStyle === 'checkbox-qty' ? 'checkboxQty'
+        : interactionStyle,
       showPrices, showAddAllButton: showAddAll,
       bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
     };
@@ -701,6 +708,33 @@ export default function FBTPage() {
           }}
           style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
         />
+      );
+    }
+
+    if (interactionStyle === 'checkbox-qty') {
+      const isLastChecked = s.checked && activeCount <= 1;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', width: '100%' }}>
+          <input
+            type="checkbox"
+            checked={s.checked}
+            disabled={isLastChecked}
+            onChange={(e) => {
+              if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
+              updateProduct(i, { checked: e.target.checked });
+            }}
+            style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
+          />
+          {s.checked && (
+            <>
+              <button onClick={() => updateProduct(i, { qty: Math.max(1, s.qty - 1) })}
+                style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: textColor, flexShrink: 0 }}>−</button>
+              <span style={{ color: textColor, fontSize: '12px', minWidth: '16px', textAlign: 'center', fontWeight: 600 }}>{s.qty}</span>
+              <button onClick={() => updateProduct(i, { qty: s.qty + 1 })}
+                style={{ width: '24px', height: '24px', borderRadius: `${borderRadius}px`, border: 'none', background: buttonColor, color: buttonTextColor, cursor: 'pointer', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>+</button>
+            </>
+          )}
+        </div>
       );
     }
 
