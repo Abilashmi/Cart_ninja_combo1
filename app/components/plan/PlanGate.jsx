@@ -265,7 +265,7 @@ export function ProBadge({ featureKey }) {
         onClick={(e) => { e.stopPropagation(); navigate('/app/subscribe'); }}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
-          background: 'linear-gradient(135deg, #f6d976 0%, #b8860b 100%)',
+          background: 'linear-gradient(135deg, #1a9de0 0%, #2ecc71 100%)',
           color: '#ffffff', border: 'none', borderRadius: 999,
           padding: '3px 10px 3px 8px', fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
           lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
