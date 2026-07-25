@@ -292,7 +292,11 @@
 /* ========== MOBILE ========== */
 @media (max-width: 480px) {
   #cc-drawer {
-    width: 100vw;
+    /* Leave a visible strip of backdrop instead of going edge-to-edge —
+       matches the conventional mobile cart-drawer width other cart apps
+       use, and keeps a clear tap-outside-to-close target. */
+    width: 88vw;
+    max-width: 420px;
   }
 
   .cc-upsell-card.cc-layout-carousel {
