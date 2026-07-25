@@ -18,6 +18,9 @@ database.sqlite
 .env
 .env.*
 
+# Contains live DB credentials — must not be committed
+php_backend/config.php
+
 
 
 

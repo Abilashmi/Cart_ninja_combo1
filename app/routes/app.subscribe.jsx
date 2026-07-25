@@ -312,6 +312,9 @@ function featureRowLabel(featureKey, planKey, state) {
     if (featureKey === 'full_analytics' && planKey === 'starter') {
         return 'Full Analytics — Overview & Build a Combo only';
     }
+    if (featureKey === 'build_a_combo' && state === 'enabled') {
+        return planKey === 'starter' ? 'Build a Combo — up to 3 templates' : 'Build a Combo — unlimited templates';
+    }
     return FEATURES[featureKey].label + featureLabelSuffix(state);
 }
 
@@ -435,16 +438,6 @@ export default function SubscribePage() {
                                                 </div>
                                             );
                                         })}
-                                        {planKey !== 'free' && (
-                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
-                                                    <Icon source={CheckCircleIcon} tone="success" />
-                                                </span>
-                                                <Text as="p" variant="bodyXs">
-                                                    {planKey === 'starter' ? 'Build a Combo — up to 3 templates' : 'Build a Combo — unlimited templates'}
-                                                </Text>
-                                            </div>
-                                        )}
                                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
                                             <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
                                                 <Icon source={CheckCircleIcon} tone="success" />
