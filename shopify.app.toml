@@ -1,15 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-#
-# PRODUCTION DEPLOY CHECKLIST: application_url and auth.redirect_urls below
-# are currently a local ngrok tunnel for active dev testing. Before running
-# `npm run deploy` against production, swap both to the real prod domain
-# (https://cartdrawer.fly.dev per fly.toml) — deploying with a dead tunnel
-# URL breaks every merchant install (embedded app iframe + OAuth callback
-# both resolve to a URL that no longer exists).
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Brix"
-application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
+application_url = "https://cartdrawer.fly.dev"
 embedded = true
 
 [build]
