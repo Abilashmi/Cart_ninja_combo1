@@ -4137,6 +4137,7 @@ function ComboPreview({
   onUpdateConfig = () => { },
   onRequestSection = () => { },
 }) {
+  const { symbol: currencySymbol } = useCurrency();
   const isMobile = device === 'mobile';
   const sliderRef = useRef(null);
   const tabScrollRef = useRef(null);
