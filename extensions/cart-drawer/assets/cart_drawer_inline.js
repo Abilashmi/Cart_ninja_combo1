@@ -307,19 +307,25 @@
   function parseProgressData(d) {
     const data = parseJSON(d.progress_data || d.progressData);
     const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
-    // Use the explicitly saved mode field first (matches what admin saves via handleSaveAll)
-    const mode = data.mode || (data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount');
+    // Use the explicitly saved mode field first (matches what admin saves via handleSaveAll).
+    // The admin's "By item count" option saves the string 'count', but every
+    // check below (and in getProgressInfo) tests for 'quantity' — normalize
+    // here so item-count tiers are compared against cart quantity instead of
+    // silently falling back to cart total price.
+    const rawMode = data.mode || (data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount');
+    const mode = rawMode === 'count' ? 'quantity' : rawMode;
 
     const rawTiers = Array.isArray(data.tiers) ? data.tiers : [];
     const parsedTiers = rawTiers
       .map((t) => {
-        // Robustly parse target: try multiple fields, coerce to number
-        let target;
-        if (mode === 'quantity') {
-          target = parseFloat(t.minQuantity) || parseFloat(t.target) || 1;
-        } else {
-          target = parseFloat(t.minValue) || parseFloat(t.target) || parseFloat(t.minQuantity) || 0;
-        }
+        // Robustly parse target: try multiple fields, coerce to number.
+        // The admin editor always writes the merchant's entered threshold
+        // into minValue/minimumSpend (kept in sync on save/load) whether the
+        // tier is an amount or an item-count target — minQuantity is a
+        // legacy field that's never actually populated by the UI. Read
+        // minValue/minimumSpend first regardless of mode so item-count tiers
+        // don't fall through to a bogus default of 1.
+        const target = parseFloat(t.minValue) || parseFloat(t.minimumSpend) || parseFloat(t.minQuantity) || parseFloat(t.target) || (mode === 'quantity' ? 1 : 0);
         return {
           id: t.id,
           target: target,

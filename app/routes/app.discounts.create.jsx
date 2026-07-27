@@ -792,7 +792,7 @@ export default function CreateDiscount() {
         if (actionData?.success) {
             setToastMessage(isEditMode ? "Discount updated successfully!" : "Discount created successfully!");
             setShowToast(true);
-            setTimeout(() => navigate("/app/discount"), 2000);
+            setTimeout(() => navigate("/app/coupons"), 2000);
         }
     }, [actionData, navigate, isEditMode]);
 
@@ -946,7 +946,7 @@ export default function CreateDiscount() {
         <Frame>
             <Page
                 title={isEditMode ? "Edit discount" : "Create discount"}
-                backAction={{ content: "Discounts", onAction: () => navigate("/app/discount") }}
+                backAction={{ content: "Discounts", onAction: () => navigate("/app/coupons") }}
                 titleMetadata={isEditMode ? <Badge tone="info">Editing</Badge> : null}
                 primaryAction={{
                     content:  isEditMode ? "Save changes" : "Save discount",
@@ -1592,7 +1592,7 @@ export default function CreateDiscount() {
                             </Banner>
                         </BlockStack>
                     </Layout.Section>
-                </Layout>10
+                </Layout>
 
                 {showToast && (
                     <Toast content={toastMessage} onDismiss={() => setShowToast(false)} />

@@ -38,6 +38,27 @@ function formatLocalDate(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function csvCell(value) {
+  const s = value === null || value === undefined ? '' : String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function toCsv(rows) {
+  return rows.map(row => row.map(csvCell).join(',')).join('\r\n');
+}
+
+function downloadCsv(filename, csv) {
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 /* ─── loader (real Shopify auth only — all analytics data is fetched
    client-side from the new /api/analytics/* endpoints) ─────────────── */
 
@@ -364,6 +385,59 @@ export default function AnalyticsPage() {
 
   const dateLabel = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} – ${selectedDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
+  const handleExportReport = useCallback(() => {
+    const start = formatLocalDate(selectedDates.start);
+    const end = formatLocalDate(selectedDates.end);
+    const A = summary.current || ZERO_TOTALS;
+    const P = summary.previous || ZERO_TOTALS;
+    const rows = [];
+
+    rows.push([`Analytics report`, `${start} to ${end}`]);
+    rows.push([]);
+
+    rows.push(['Summary', `Current (${start} – ${end})`, 'Previous period', 'Change %']);
+    rows.push(['Total Revenue', A.revenue, P.revenue, summary.change_pct?.revenue ?? '']);
+    rows.push(['Upsell Revenue', A.upsell_revenue, P.upsell_revenue, summary.change_pct?.upsell_revenue ?? '']);
+    rows.push(['Avg. Order Value', A.aov, P.aov, summary.change_pct?.aov ?? '']);
+    rows.push(['Conversion Rate (%)', A.conversion_rate, P.conversion_rate, summary.change_pct?.conversion_rate ?? '']);
+    rows.push(['Checkout Rate (%)', A.checkout_rate, P.checkout_rate, summary.change_pct?.checkout_rate ?? '']);
+    rows.push(['Order Count', A.order_count, P.order_count, '']);
+    rows.push(['Visitor Count', A.visitor_count, P.visitor_count, '']);
+    rows.push([]);
+
+    rows.push(['Daily breakdown']);
+    rows.push(['Date', 'Revenue', 'Upsell Revenue', 'Bundle Revenue', 'Orders', 'Visitors', 'AOV', 'Conversion Rate (%)', 'Checkout Rate (%)']);
+    chartData.forEach(d => {
+      rows.push([d.date, d.revenue, d.upsell, d.bundleRevenue, d.orders, d.visitors, d.aov, d.convRate, d.checkoutRate]);
+    });
+    rows.push([]);
+
+    rows.push(['Top products']);
+    rows.push(['Product', 'Revenue', 'Units Sold', 'Order Count']);
+    topProducts.items.forEach(p => {
+      rows.push([p.name, p.revenue, p.units_sold, p.order_count]);
+    });
+    rows.push([]);
+
+    if (bundleAnalytics.data) {
+      const b = bundleAnalytics.data;
+      rows.push(['Bundle (Combo Forge) summary']);
+      rows.push(['Total Revenue', 'Total Orders', 'Total Views', 'Total Clicks', 'Total Conversions']);
+      rows.push([b.total_revenue, b.total_orders, b.total_views, b.total_clicks, b.total_conversions]);
+      rows.push([]);
+
+      if (b.top_templates?.length) {
+        rows.push(['Top bundle templates']);
+        rows.push(['Template', 'Views', 'Clicks', 'Conversions', 'Revenue']);
+        b.top_templates.forEach(t => {
+          rows.push([t.name, t.views, t.clicks, t.conversions, t.revenue]);
+        });
+      }
+    }
+
+    downloadCsv(`analytics-report_${start}_${end}.csv`, toCsv(rows));
+  }, [selectedDates, summary, chartData, topProducts, bundleAnalytics]);
+
   const overviewKpis = [
     { label: 'Total Revenue',    value: formatAmount(A.revenue, currencySymbol, currencyCode),          change: changePct.revenue ?? null,          icon: CashDollarIcon,    accent: '#008060', spark: chartData,    sparkKey: 'revenue' },
     { label: 'Upsell Revenue',   value: formatAmount(A.upsell_revenue, currencySymbol, currencyCode),    change: changePct.upsell_revenue ?? null,   icon: RewardIcon,        accent: '#2ecc71', spark: chartData,    sparkKey: 'upsell' },
@@ -382,7 +456,11 @@ export default function AnalyticsPage() {
   return (
     <Page
       fullWidth
-      secondaryActions={[{ content: 'Export Report', disabled: true }]}
+      secondaryActions={[{
+        content: 'Export Report',
+        onAction: handleExportReport,
+        disabled: !hasFullAnalyticsAccess || summary.loading || !summary.current,
+      }]}
       primaryAction={
         <Popover active={popoverActive} activator={<Button icon={CalendarIcon} onClick={togglePopover}>{dateLabel}</Button>} onClose={togglePopover} fluidContent>
           <div style={{ display: 'flex', width: '720px', maxHeight: '520px' }}>

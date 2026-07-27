@@ -14,12 +14,18 @@ import { PLANS } from "../config/plans";
 // state here and reconcile the DB immediately if the webhook hasn't landed
 // yet. confirmPlanFromWebhook is idempotent, so this is safe to run even
 // when the webhook already did it.
-export async function loader({ request }) {
-  const { admin, session } = await authenticate.admin(request);
-  if (!session) return { redirect: "/auth" };
-  const shop = session.shop;
-
-  try {
+//
+// Shopify's Billing API is eventually consistent (see the polling comment
+// on cancelActiveSubscription in app.subscribe.jsx) — a single read here can
+// still catch the just-approved subscription as not-yet-ACTIVE, in which
+// case reconciliation was silently skipped and the merchant landed back in
+// the app still gated as their old plan (e.g. "upgrade to Pro" banners
+// while already on Pro) with nothing to automatically recheck it until the
+// webhook eventually lands. Retry the same read briefly before giving up,
+// mirroring that existing pattern instead of racing it once.
+async function findActiveSubscription(admin) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
     const res = await admin.graphql(`
       query {
         currentAppInstallation {
@@ -30,6 +36,18 @@ export async function loader({ request }) {
     const data = await res.json();
     const activeSub = (data.data?.currentAppInstallation?.activeSubscriptions || [])
       .find((s) => s.status === "ACTIVE");
+    if (activeSub) return activeSub;
+  }
+  return null;
+}
+
+export async function loader({ request }) {
+  const { admin, session } = await authenticate.admin(request);
+  if (!session) return { redirect: "/auth" };
+  const shop = session.shop;
+
+  try {
+    const activeSub = await findActiveSubscription(admin);
     if (activeSub) {
       await confirmPlanFromWebhook(shop, "active");
     }

@@ -150,7 +150,7 @@ export function ProgressBarSection() {
   const addTier = () => {
     const newTier = {
       id: `tier-${Date.now()}`,
-      minimumSpend: (progressBar.tiers.length + 1) * 500,
+      minimumSpend: progressBar.mode === 'count' ? progressBar.tiers.length + 1 : (progressBar.tiers.length + 1) * 500,
       title: '',
       description: 'Reward',
       icon: 'gift',
@@ -226,12 +226,17 @@ export function ProgressBarSection() {
 
       <Divider />
 
+      {progressBar.tiers.length === 0 && (
+        <Button onClick={addTier}>Add tier</Button>
+      )}
+
       {progressBar.tiers.length > 0 && (
         <>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <Text as="h3" variant="headingSm">Tier {activeTierIndex + 1} of {progressBar.tiers.length}</Text>
               <InlineStack gap="200">
+                <Button size="slim" onClick={addTier}>Add tier</Button>
                 {activeTierIndex > 0 && (
                   <Button size="slim" onClick={() => setActiveTierIndex(activeTierIndex - 1)}>← Prev</Button>
                 )}
@@ -250,7 +255,7 @@ export function ProgressBarSection() {
                   )}
                 </InlineStack>
                 <TextField
-                  label={`Minimum spend (${currencySymbol})`}
+                  label={progressBar.mode === 'count' ? 'Minimum item count' : `Minimum spend (${currencySymbol})`}
                   type="number"
                   value={String(activeTier.minimumSpend)}
                   onChange={(v) => updateTier(activeTierIndex, { minimumSpend: Number(v) || 0 })}
@@ -316,8 +321,6 @@ export function ProgressBarSection() {
           </Card>
         </>
       )}
-
-      <Button onClick={addTier}>Add tier</Button>
 
       <ProductPickerModal
         open={pickerTierIndex !== null}

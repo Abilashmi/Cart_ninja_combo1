@@ -7,6 +7,7 @@ export const CdoPreviewBar = ({
   finalPrice,
   isMobile,
   loading,
+  currencySymbol = '$',
 }) => {
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   if (!config.show_preview_bar) return null;
@@ -330,7 +331,7 @@ export const CdoPreviewBar = ({
                       lineHeight: 1,
                     }}
                   >
-                    Total: Rs.{totalPrice.toFixed(2)}
+                    Total: {currencySymbol}{totalPrice.toFixed(2)}
                   </span>
                 )}
                 <span
@@ -345,7 +346,7 @@ export const CdoPreviewBar = ({
                     lineHeight: 1,
                   }}
                 >
-                  Final: Rs.{finalPrice.toFixed(2)}
+                  Final: {currencySymbol}{finalPrice.toFixed(2)}
                 </span>
               </div>
 
@@ -540,7 +541,7 @@ export const CdoPreviewBar = ({
                       <div
                         style={{ fontSize: 12, color: '#222', marginTop: 3 }}
                       >
-                        Rs.
+                        {currencySymbol}
                         {(
                           (Number(item.price) || 0) *
                           (Number(item.quantity) || 0)
@@ -563,7 +564,7 @@ export const CdoPreviewBar = ({
               }}
             >
               <span>Total</span>
-              <span>Rs.{finalPrice.toFixed(2)}</span>
+              <span>{currencySymbol}{finalPrice.toFixed(2)}</span>
             </div>
           </div>
         </>

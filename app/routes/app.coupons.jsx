@@ -9,9 +9,10 @@ import {
     TextField,
     useIndexResourceState,
     EmptyState,
+    Banner,
 } from "@shopify/polaris";
-import { useLoaderData, useNavigate, useSubmit } from "react-router";
-import { useState, useMemo } from "react";
+import { useLoaderData, useNavigate, useSubmit, useActionData } from "react-router";
+import { useState, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { PlusIcon } from "@shopify/polaris-icons";
 import { FeatureHeaderBar } from "../components/feature/FeatureHeaderBar";
@@ -19,31 +20,57 @@ import { BrowserTabStrip } from "../components/feature/BrowserTabStrip";
 import BrixBar from "../components/ai-agent/BrixBar";
 
 /* ─── ACTION ──────────────────────────────────────────────────────────────── */
+// A single generic mutation per operation handles every discount code type
+// (basic, bxgy, free shipping) — there's no per-type discountCode*Delete /
+// *Activate / *Deactivate mutation in the Admin API (a per-type name was a
+// hallucinated guess in an earlier fix and didn't exist on the schema;
+// these three were confirmed against the live Admin GraphQL schema).
+const BULK_OPS = {
+    bulkDelete: {
+        query: `mutation discountCodeDelete($id: ID!) { discountCodeDelete(id: $id) { deletedCodeDiscountId userErrors { field message } } }`,
+        field: "discountCodeDelete",
+    },
+    bulkActivate: {
+        query: `mutation discountCodeActivate($id: ID!) { discountCodeActivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`,
+        field: "discountCodeActivate",
+    },
+    bulkDeactivate: {
+        query: `mutation discountCodeDeactivate($id: ID!) { discountCodeDeactivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`,
+        field: "discountCodeDeactivate",
+    },
+};
+
 export const action = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
     const actionType = formData.get("actionType");
-    const id = formData.get("id");
+    const op = BULK_OPS[actionType];
+    if (!op) return null;
 
-    if (actionType === "delete" && id) {
-        const type = formData.get("type");
-        let mutation = "";
-
-        if (type === "DiscountCodeBasic") {
-            mutation = `mutation discountCodeBasicDelete($id: ID!) { discountCodeBasicDelete(id: $id) { deletedDiscountCodeId userErrors { field message } } }`;
-        } else if (type === "DiscountCodeBxgy") {
-            mutation = `mutation discountCodeBxgyDelete($id: ID!) { discountCodeBxgyDelete(id: $id) { deletedDiscountCodeId userErrors { field message } } }`;
-        } else if (type === "DiscountCodeFreeShipping") {
-            mutation = `mutation discountCodeFreeShippingDelete($id: ID!) { discountCodeFreeShippingDelete(id: $id) { deletedDiscountCodeId userErrors { field message } } }`;
-        }
-
-        if (mutation) {
-            await admin.graphql(mutation, { variables: { id } });
-        }
-
-        return { status: "deleted" };
+    let ids = [];
+    try {
+        ids = JSON.parse(formData.get("ids") || "[]");
+    } catch {
+        return { status: "error", error: "Invalid request." };
     }
-    return null;
+    if (!ids.length) return null;
+
+    // Sequential rather than Promise.all — Shopify's Billing/Admin API rate
+    // limits bulk mutation bursts from a single app per shop; this mirrors
+    // the sequential pattern already used for subscription mutations
+    // elsewhere in this app rather than risking throttling on a large
+    // selection.
+    const errors = [];
+    for (const itemId of ids) {
+        const response = await admin.graphql(op.query, { variables: { id: itemId } });
+        const json = await response.json();
+        const userErrors = json.data?.[op.field]?.userErrors;
+        if (userErrors?.length > 0) errors.push(userErrors[0].message);
+    }
+
+    return errors.length > 0
+        ? { status: "error", error: errors.join("; ") }
+        : { status: "done" };
 };
 
 /* ─── LOADER ──────────────────────────────────────────────────────────────── */
@@ -57,6 +84,7 @@ export const loader = async ({ request }) => {
           node {
             id
             discount {
+              __typename
               ... on DiscountCodeBasic {
                 title
                 codes(first: 1) { edges { node { code } } }
@@ -147,9 +175,16 @@ export default function CouponsPage() {
     const { discounts } = useLoaderData();
     const navigate = useNavigate();
     const submit = useSubmit();
+    const actionData = useActionData();
 
     const [selectedTab, setSelectedTab] = useState(0);
     const [searchValue, setSearchValue] = useState("");
+    const [actionError, setActionError] = useState(null);
+
+    useEffect(() => {
+        if (actionData?.status === "error") setActionError(actionData.error);
+        else if (actionData?.status === "done") setActionError(null);
+    }, [actionData]);
 
     const counts = useMemo(() => ({
         all: discounts.length,
@@ -184,15 +219,11 @@ export default function CouponsPage() {
     const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
         useIndexResourceState(filteredDiscounts);
 
-    const handleDelete = () => {
-        for (const id of selectedResources) {
-            const discount = discounts.find((d) => d.id === id);
-            const formData = new FormData();
-            formData.append("actionType", "delete");
-            formData.append("id", id);
-            formData.append("type", discount?.type || "");
-            submit(formData, { method: "post" });
-        }
+    const runBulkAction = (actionType) => {
+        const formData = new FormData();
+        formData.append("actionType", actionType);
+        formData.append("ids", JSON.stringify(selectedResources));
+        submit(formData, { method: "post" });
         clearSelection();
     };
 
@@ -257,6 +288,11 @@ export default function CouponsPage() {
                     title="Discount Creator"
                     subtitle="Create and manage discount codes for your store"
                 />
+                {actionError && (
+                    <Banner tone="critical" title="Couldn't update discounts" onDismiss={() => setActionError(null)}>
+                        {actionError}
+                    </Banner>
+                )}
                 <BrixBar size="md" floating />
                 <BrowserTabStrip tabs={TABS} selected={selectedTab} onSelect={setSelectedTab} accent="#e11d48" />
                 <Card padding="0">
@@ -295,7 +331,11 @@ export default function CouponsPage() {
                                 itemCount={filteredDiscounts.length}
                                 selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
                                 onSelectionChange={handleSelectionChange}
-                                promotedBulkActions={[{ content: "Delete", onAction: handleDelete }]}
+                                promotedBulkActions={[
+                                    { content: "Activate discounts", onAction: () => runBulkAction("bulkActivate") },
+                                    { content: "Deactivate discounts", onAction: () => runBulkAction("bulkDeactivate") },
+                                    { content: "Delete discounts", destructive: true, onAction: () => runBulkAction("bulkDelete") },
+                                ]}
                                 headings={[
                                     { title: "Title" },
                                     { title: "Code" },

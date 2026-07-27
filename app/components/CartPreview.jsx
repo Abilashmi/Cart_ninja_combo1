@@ -54,12 +54,24 @@ const COUPON_ICON_MAP = {
   cash: CashDollarIcon,
 };
 
+// Polaris' icon set has no actual gem/diamond icon, so the storefront widget
+// (extensions/cart-drawer/assets/cart_drawer.js, CC_ICON_PRESETS.diamond)
+// ships its own diamond-shaped path. Mirror that exact path here so the
+// admin preview matches what customers actually see.
+function DiamondIcon({ width = '13', height = '13', fill = 'currentColor' }) {
+  return (
+    <svg viewBox="0 0 24 24" width={width} height={height} fill={fill}>
+      <path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zM19.26 8h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z" />
+    </svg>
+  );
+}
+
 const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
   shipping: DeliveryFilledIcon,
   star: StarFilledIcon,
   trophy: RewardIcon,
-  diamond: DiscountFilledIcon,
+  diamond: DiamondIcon,
 };
 
 const MOCK_PREVIEW_COUPONS = [
@@ -169,15 +181,39 @@ function CouponTimerDisplay({ coupon }) {
 
 function ProgressBarPreview({ pb }) {
   const { symbol: currencySymbol } = useCurrency();
-  const tiers = pb.tiers;
-  if (!tiers.length) return null;
+  const isCount = pb.mode === 'count';
+  // A tier with no (or zero/negative) minimum spend can't be placed on the
+  // track — it would divide-by-zero the fill % and stack every marker at
+  // the same position, producing an overlapping, garbled render. Treat
+  // those as "not configured yet" rather than rendering a broken bar.
+  // Sorted ascending: positioning below assumes the last tier holds the
+  // highest threshold (maxThreshold), and caps every tier's % at 100 — if
+  // tiers aren't already in ascending order (e.g. an earlier tier was
+  // edited to a value at/above the "last" one), multiple markers clamp to
+  // the same 100% spot and their labels overlap. The storefront widget
+  // already sorts tiers before rendering; mirror that here.
+  const tiers = (pb.tiers || [])
+    .filter((t) => Number(t.minimumSpend) > 0)
+    .slice()
+    .sort((a, b) => a.minimumSpend - b.minimumSpend);
+  if (!tiers.length) {
+    return (
+      <div className="cart-preview-progress">
+        <div style={{ textAlign: 'center', padding: '16px 12px', border: '1.5px dashed #d1d5db', borderRadius: '8px', background: '#f9fafb' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#6b7280' }}>Progress bar needs setup</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+            Add a {isCount ? 'minimum item count' : `minimum spend (${currencySymbol})`} greater than {isCount ? '0' : `${currencySymbol}0`} to at least one reward tier to preview it here.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const colors = pb.colors || {};
   const bgColor = colors.background || '#e5e7eb';
   const fillColor = colors.fill || '#10b981';
   const iconColor = colors.icon || '#2563eb';
   const msgColor = colors.message || '#10b981';
-  const isCount = pb.mode === 'count';
   const currentValue = isCount ? MOCK_CART_COUNT : CART_TOTAL;
   const maxThreshold = tiers[tiers.length - 1].minimumSpend;
   const fillPct = Math.min(100, (currentValue / maxThreshold) * 100);
@@ -185,6 +221,13 @@ function ProgressBarPreview({ pb }) {
   const diff = nextTier ? nextTier.minimumSpend - currentValue : 0;
   const amountStr = isCount ? `${diff} item${diff !== 1 ? 's' : ''}` : `${currencySymbol}${diff}`;
   const radius = pb.borderRadius;
+  // The tier labels below the track need two lines only when a tier is both
+  // unlocked and has a title/description; otherwise it's a single line
+  // (either "REACHED" alone or the locked-state amount pill). Sizing the
+  // track's bottom padding to whichever is actually needed avoids reserving
+  // dead space for a second line that isn't there.
+  const hasTwoLineLabel = tiers.some((t) => currentValue >= t.minimumSpend && (t.title || t.description));
+  const trackBottomPadding = hasTwoLineLabel ? 54 : 38;
 
   const buildMessageLine = () => {
     const template = pb.messageTemplate || "You're {amount} away";
@@ -208,7 +251,7 @@ function ProgressBarPreview({ pb }) {
         )}
       </div>
 
-      <div style={{ position: 'relative', paddingBottom: '56px', margin: '0 36px' }}>
+      <div style={{ position: 'relative', paddingBottom: `${trackBottomPadding}px`, margin: '0 36px' }}>
         <div style={{ height: '8px', borderRadius: `${radius}px`, backgroundColor: bgColor, position: 'relative', overflow: 'visible' }}>
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, backgroundColor: fillColor, borderRadius: `${radius}px`, transition: 'width 0.3s ease' }} />
         </div>

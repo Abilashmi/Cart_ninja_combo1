@@ -59,19 +59,38 @@ export default function TemplateManager() {
   const deletedIds = useRef(new Set());
   const previewFetcher = useFetcher();
   const previewHandledRef = useRef(null);
+  const previewWindowRef = useRef(null);
 
   useEffect(() => {
     if (previewFetcher.data?.success && previewFetcher.data?.previewUrl) {
-      window.open(previewFetcher.data.previewUrl, '_blank');
+      if (previewWindowRef.current) {
+        previewWindowRef.current.location.href = previewFetcher.data.previewUrl;
+      } else {
+        window.open(previewFetcher.data.previewUrl, '_blank');
+      }
+      previewWindowRef.current = null;
       previewHandledRef.current = null;
     } else if (previewFetcher.data?.error) {
+      previewWindowRef.current?.close();
+      previewWindowRef.current = null;
       shopify.toast.show(previewFetcher.data.error, { isError: true });
       previewHandledRef.current = null;
     }
   }, [previewFetcher.data, shopify]);
 
   const handlePreview = (t) => {
-    window.open(`/preview/${t.id}?shop=${encodeURIComponent(shop)}`, '_blank');
+    // Open the tab synchronously (on the click gesture) so the browser
+    // doesn't treat the post-fetch redirect as a popup and block it.
+    previewWindowRef.current = window.open('', '_blank');
+
+    const formData = new FormData();
+    formData.append('body', JSON.stringify({
+      shop_domain: shop,
+      id: t.id,
+      name: t.title,
+      action: 'preview',
+    }));
+    previewFetcher.submit(formData, { method: 'POST', action: '/api/bundle-templates' });
   };
 
   useEffect(() => {

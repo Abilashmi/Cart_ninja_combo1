@@ -1742,14 +1742,40 @@ export default function Customize() {
     navigate('/app/bundles/templates', { replace: true });
   }, [navigate]);
 
-  const handlePreview = useCallback(() => {
-    if (initialTemplate?.id) {
-      window.open(
-        `/preview/${initialTemplate.id}?shop=${encodeURIComponent(shop)}`,
-        '_blank'
-      );
+  const handlePreview = useCallback(async () => {
+    if (!initialTemplate?.id) return;
+
+    // Open the tab synchronously (on the click gesture) so the browser
+    // doesn't treat the post-fetch redirect as a popup and block it.
+    const previewWindow = window.open('', '_blank');
+
+    try {
+      const formData = new FormData();
+      formData.append('body', JSON.stringify({
+        shop_domain: shop,
+        id: initialTemplate.id,
+        name: saveTitle,
+        action: 'preview',
+      }));
+
+      const res = await fetch('/api/bundle-templates', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (data.success && data.previewUrl) {
+        if (previewWindow) previewWindow.location.href = data.previewUrl;
+        else window.open(data.previewUrl, '_blank');
+      } else {
+        previewWindow?.close();
+        shopify.toast.show(data.error || 'Failed to open preview.', { isError: true });
+      }
+    } catch (e) {
+      previewWindow?.close();
+      shopify.toast.show('Failed to open preview.', { isError: true });
     }
-  }, [initialTemplate?.id, shop]);
+  }, [initialTemplate?.id, saveTitle, shop, shopify]);
 
   const handleDuplicate = useCallback(() => {
     shopify.toast.show('Duplicate template is available after the first save.');
@@ -5112,6 +5138,7 @@ function ComboPreview({
         totalPrice={totalPrice}
         finalPrice={finalPrice}
         isMobile={isMobile}
+        currencySymbol={currencySymbol}
       />
     </div>
   );
@@ -5557,7 +5584,7 @@ function ComboPreview({
                 <div
                   style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}
                 >
-                  Rs.{selectedVariant?.price || 0}
+                  {currencySymbol}{selectedVariant?.price || 0}
                 </div>
                 <div
                   style={{ fontSize: 13, lineHeight: 1.6, color: '#3d3d3d' }}
@@ -5607,7 +5634,7 @@ function ComboPreview({
               fontSize: `${productPriceSize}px`,
             }}
           >
-            Rs.{selectedVariant?.price || 0}
+            {currencySymbol}{selectedVariant?.price || 0}
           </div>
 
           <div
@@ -6589,7 +6616,7 @@ function ComboPreview({
                     >
                       <div>
                         <span style={{ fontSize: '14px', fontWeight: '800' }}>
-                          Rs.{price}
+                          {currencySymbol}{price}
                         </span>
                       </div>
                     </div>

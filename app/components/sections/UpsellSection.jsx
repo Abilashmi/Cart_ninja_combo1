@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Card, Modal } from '@shopify/polaris';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useFetcher } from 'react-router';
+import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Modal, Banner } from '@shopify/polaris';
 import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -10,12 +11,6 @@ import { useCurrency } from '../CurrencyContext';
 const CONFIG_OPTIONS = [
   { value: 'ai', label: 'AI Recommendations', desc: 'Let AI automatically suggest relevant products based on cart contents', icon: MagicIcon },
   { value: 'manual', label: 'Manual Selection', desc: 'Hand-pick exactly which products to show as upsells', icon: SettingsIcon },
-];
-
-const MOCK_AI_SUGGESTIONS = [
-  { id: 'ai-1', name: 'Organic Turmeric Face Pack', reason: 'Combines well with the White Kasturi Manjal to create a complete skincare routine.', description: 'A natural face pack that enhances the benefits of White Kasturi Manjal for a radiant glow.', priceRange: '₹150–₹300' },
-  { id: 'ai-2', name: 'Ayurvedic Skincare Oil', reason: 'Perfectly pairs with White Kasturi Manjal to enhance hydration and overall skin health.', description: 'A nourishing oil that complements your skincare ritual, promoting healthy skin.', priceRange: '₹250–₹500' },
-  { id: 'ai-3', name: 'Herbal Cleansing Brush', reason: 'Enhances the application and effectiveness of White Kasturi Manjal for deeper cleansing.', description: 'A gentle cleansing brush designed to effectively use with herbal products.', priceRange: '₹100–₹200' },
 ];
 
 const PRODUCT_CACHE_KEY = 'cached_products';
@@ -159,10 +154,40 @@ function LimitPicker({ value, onChange }) {
 }
 
 export function UpsellSection() {
-  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule } = useCartEditor();
+  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, allProducts } = useCartEditor();
   const { upsellProducts } = body;
   const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
   const [pickerConfig, setPickerConfig] = useState(null);
+  const aiFetcher = useFetcher();
+  const [aiStatus, setAiStatus] = useState(null); // { type: 'success' | 'error', message }
+  const appliedAiDataRef = useRef(null);
+
+  const aiLoading = aiFetcher.state !== 'idle';
+
+  useEffect(() => {
+    if (!aiFetcher.data || aiFetcher.data === appliedAiDataRef.current) return;
+    appliedAiDataRef.current = aiFetcher.data;
+
+    if (aiFetcher.data.success) {
+      const suggestions = aiFetcher.data.suggestions || [];
+      suggestions.forEach((s) => {
+        addUpsellRule({
+          id: `rule-${Date.now()}-${s.id}`,
+          triggerProductCount: 1,
+          triggerProductIds: [],
+          upsellProductCount: 1,
+          upsellProductIds: [s.id],
+        });
+      });
+      setAiStatus({
+        type: 'success',
+        message: `Added ${suggestions.length} AI-suggested upsell rule${suggestions.length === 1 ? '' : 's'}. Switch to Manual Selection to review or edit them.`,
+      });
+    } else {
+      setAiStatus({ type: 'error', message: aiFetcher.data.error || 'Failed to generate suggestions.' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiFetcher.data]);
 
   const handleModeChange = (mode) => {
     setConfigMode(mode);
@@ -181,6 +206,17 @@ export function UpsellSection() {
   };
 
   const closePicker = () => setPickerConfig(null);
+
+  const handleGenerateAiSuggestions = () => {
+    setAiStatus(null);
+    aiFetcher.submit(
+      {
+        products: (allProducts || []).map((p) => ({ id: p.id, title: p.title, price: p.price, image: p.image })),
+        count: upsellProducts.limit || 3,
+      },
+      { method: 'POST', action: '/api/upsell-ai-suggestions', encType: 'application/json' }
+    );
+  };
 
   return (
     <CustomizableLockedSection featureKey="ai_cart_upsell">
@@ -230,34 +266,21 @@ export function UpsellSection() {
               <BlockStack gap="100">
                 <Text as="h3" variant="headingSm">AI Settings</Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  AI analyses cart contents in real-time and picks the most relevant upsell products automatically.
+                  AI reviews your store&rsquo;s product catalog and creates upsell rules for you automatically.
                 </Text>
               </BlockStack>
               <LimitPicker value={upsellProducts.limit} onChange={(v) => updateUpsellProducts({ limit: v })} />
               <InlineStack gap="200">
-                <Button variant="primary">Configure AI</Button>
+                <Button variant="primary" onClick={handleGenerateAiSuggestions} loading={aiLoading} disabled={!allProducts?.length}>
+                  Regenerate Suggestions
+                </Button>
               </InlineStack>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="050">
-                      <Text as="h3" variant="headingMd">Upsell Suggestions</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">AI-generated recommendations (server-side).</Text>
-                    </BlockStack>
-                    <Button>Regenerate Suggestions</Button>
-                  </InlineStack>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    {MOCK_AI_SUGGESTIONS.map((product) => (
-                      <div key={product.id} style={{ padding: '12px 14px', border: '1px solid #e1e3e5', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">{product.name}</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">{product.reason}</Text>
-                        <Text as="p" variant="bodySm">{product.description}</Text>
-                        <Text as="p" variant="bodySm" fontWeight="semibold">{product.priceRange}</Text>
-                      </div>
-                    ))}
-                  </div>
-                </BlockStack>
-              </Card>
+              {!allProducts?.length && (
+                <Banner tone="warning">No products loaded yet — open the product picker once or reload the page.</Banner>
+              )}
+              {aiStatus && (
+                <Banner tone={aiStatus.type === 'success' ? 'success' : 'critical'}>{aiStatus.message}</Banner>
+              )}
             </BlockStack>
           )}
 
