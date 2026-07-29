@@ -16,6 +16,77 @@ export const loader = async ({ params, request }) => {
   return { ...data, embed };
 };
 
+// Mirrors the builder's device-toggle preview (app.bundles.customize.jsx
+// ComboPreview) but for a real responsive page there's no toggle — this
+// tracks the same breakpoint the builder's own CSS uses (768px).
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isMobile;
+}
+
+// container_padding_{side}_desktop/mobile — the outer content wrapper's
+// padding in the builder's generic (layout2/layout4) render path.
+function getContainerPadding(config, isMobile) {
+  const side = (s) => (isMobile
+    ? config[`container_padding_${s}_mobile`]
+    : config[`container_padding_${s}_desktop`]);
+  return {
+    paddingTop: side('top'), paddingRight: side('right'),
+    paddingBottom: side('bottom'), paddingLeft: side('left'),
+  };
+}
+
+// title_container_*/description_container_* padding+margin, each with a
+// `_mobile` variant that falls back to the desktop value when unset —
+// matches app.bundles.customize.jsx ComboPreview's titlePadding/descriptionPadding.
+function getBoxSpacing(config, prefix, isMobile) {
+  const get = (part) => {
+    const desktop = config[`${prefix}_${part}`];
+    if (!isMobile) return desktop;
+    const mobile = config[`${prefix}_${part}_mobile`];
+    return mobile ?? desktop;
+  };
+  return {
+    paddingTop: get('padding_top'), paddingRight: get('padding_right'),
+    paddingBottom: get('padding_bottom'), paddingLeft: get('padding_left'),
+    marginTop: get('margin_top'), marginRight: get('margin_right'),
+    marginBottom: get('margin_bottom'), marginLeft: get('margin_left'),
+  };
+}
+
+function getBannerSizing(config, isMobile) {
+  const bannerWidth = isMobile
+    ? (config.banner_width_mobile || config.banner_width_desktop || 100)
+    : (config.banner_width_desktop || 100);
+  const bannerHeight = isMobile
+    ? (config.banner_height_mobile || config.banner_height_desktop || 120)
+    : (config.banner_height_desktop || 180);
+  const finalBannerHeight = config.banner_fit_mode === 'adapt' ? 'auto' : `${bannerHeight}px`;
+  const bannerObjectFit = config.banner_fit_mode === 'cover' || config.banner_fit_mode === 'contain'
+    ? config.banner_fit_mode
+    : 'initial';
+  const bannerUrl = (isMobile && config.banner_image_mobile_url)
+    ? config.banner_image_mobile_url
+    : config.banner_image_url;
+  return { bannerWidth, finalBannerHeight, bannerObjectFit, bannerUrl };
+}
+
+function getProductSizing(config, isMobile) {
+  const productTitleSize = isMobile ? (config.product_title_size_mobile || 14) : (config.product_title_size_desktop || 16);
+  const productPriceSize = isMobile ? (config.product_price_size_mobile || 14) : (config.product_price_size_desktop || 15);
+  const ratio = config.product_image_ratio || 'square';
+  const productImageAspectRatio = ratio === 'portrait' ? '3 / 4' : ratio === 'rectangle' ? '4 / 3' : '1 / 1';
+  return { productTitleSize, productPriceSize, productImageAspectRatio };
+}
+
 function Lightbox({ images, onClose, onPrev, onNext, goTo }) {
   const [idx, setIdx] = useState(0);
   const img = images[idx];
@@ -166,16 +237,27 @@ function ProgressBar({ selectedCount, maxProducts, config }) {
   );
 }
 
-function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemove, onImageClick }) {
+function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemove, onImageClick, isMobile = false }) {
   const btnBg = config.add_btn_bg || config.product_add_btn_color || '#000';
   const btnTextColor = config.add_btn_text_color || config.product_add_btn_text_color || '#fff';
   const btnRadius = config.add_btn_border_radius ?? 8;
-  const btnFontSize = config.add_btn_font_size || config.product_add_btn_font_size || 14;
   const btnFontWeight = config.add_btn_font_weight || config.product_add_btn_font_weight || 600;
+  const btnFontSize = isMobile
+    ? (config.add_btn_font_size_mobile ?? config.add_btn_font_size ?? config.product_add_btn_font_size ?? 14)
+    : (config.add_btn_font_size ?? config.product_add_btn_font_size ?? 14);
   const addBtnText = config.add_btn_text || config.product_add_btn_text || 'Add';
   const cardRadius = config.card_border_radius || 12;
   const textColor = config.text_color || '#1a1a1a';
   const primaryColor = config.primary_color || '#000000';
+  const highlightColor = config.selection_highlight_color || '#22c55e';
+  const showAddBtn = config.show_add_to_cart_btn !== false;
+  const showQtySelector = config.show_quantity_selector !== false;
+  const showSelectionTick = config.show_selection_tick !== false;
+  const variantsDisplay = config.product_card_variants_display || 'static';
+  const enableHover = !!config.enable_product_hover;
+  const hoverMode = config.product_hover_mode || 'second_image';
+  const { productTitleSize, productPriceSize, productImageAspectRatio } = getProductSizing(config, isMobile);
+  const cardPadding = config.product_card_padding ?? 10;
 
   const variants = product.variants || [];
   const hasVariants = variants.length > 1;
@@ -184,6 +266,8 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
     variants[0]?.id || product.variantId || ''
   );
   const [imgIndex, setImgIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [showVariantPopup, setShowVariantPopup] = useState(false);
 
   const activeVariantId = pendingVariantId;
   const activeVariant = variants.find((v) => String(v.id) === String(activeVariantId));
@@ -209,6 +293,14 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
   };
 
   const handleAddClick = () => {
+    if (!isAdded && hasVariants && variantsDisplay === 'popup') {
+      setShowVariantPopup(true);
+      return;
+    }
+    if (isAdded && !showQtySelector) {
+      onRemove(activeVariantId);
+      return;
+    }
     onAdd(product, activeVariantId, 1);
   };
 
@@ -226,23 +318,80 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
     else onQtyChange(activeVariantId, qty - 1);
   };
 
+  const showVariantSelect = hasVariants
+    && variantsDisplay !== 'popup'
+    && (variantsDisplay !== 'hover' || isHovered || isMobile);
+
   return (
-    <div style={{
-      border: `2px solid ${isAdded ? '#22c55e' : '#eee'}`,
-      borderRadius: `${cardRadius}px`,
-      overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column',
-      transition: 'border-color 0.2s',
-    }}>
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={!showAddBtn && !isAdded ? handleAddClick : undefined}
+      style={{
+        border: `2px solid ${isAdded ? highlightColor : '#eee'}`,
+        borderRadius: `${cardRadius}px`,
+        overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column',
+        position: 'relative', transition: 'border-color 0.2s',
+        cursor: !showAddBtn && !isAdded ? 'pointer' : 'default',
+      }}>
+      {isAdded && showSelectionTick && (
+        <div style={{
+          position: 'absolute', top: 8, right: 8, zIndex: 4,
+          background: highlightColor, color: '#fff',
+          width: 22, height: 22, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}>✓</div>
+      )}
+
+      {showVariantPopup && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 5,
+            background: 'rgba(255,255,255,0.98)',
+            display: 'flex', flexDirection: 'column', padding: 10,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', color: '#666' }}>Pick Options</span>
+            <button type="button" onClick={() => setShowVariantPopup(false)}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>&times;</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {variants.map((v) => (
+              <div key={v.id}
+                onClick={() => { setPendingVariantId(v.id); onAdd(product, v.id, 1); setShowVariantPopup(false); }}
+                style={{
+                  padding: 8, border: '1px solid #eee', borderRadius: 8, textAlign: 'center',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                  background: pendingVariantId === v.id ? highlightColor : '#f9f9f9',
+                  color: pendingVariantId === v.id ? '#fff' : '#333',
+                }}
+              >
+                {v.title}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
-          height: '180px', background: '#f5f5f5',
+          width: '100%', aspectRatio: productImageAspectRatio,
+          background: '#f5f5f5',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden', cursor: 'pointer', position: 'relative',
         }}>
         <div onClick={() => onImageClick(product)} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {displayImage ? (
             <img src={displayImage.url} alt={displayImage.altText || product.title}
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                transition: 'transform 0.3s ease, opacity 0.3s ease',
+                transform: isHovered && enableHover ? 'scale(1.05)' : 'scale(1)',
+                opacity: isHovered && enableHover ? 0 : 1,
+              }}
             />
           ) : (
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
@@ -253,7 +402,48 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           )}
         </div>
 
-        {!activeVariant?.image && images.length > 1 && (
+        {enableHover && isHovered && (
+          <div style={{
+            position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.95)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 12, boxSizing: 'border-box', textAlign: 'center',
+          }}>
+            {hoverMode === 'second_image' && product.secondImageSrc ? (
+              <img src={product.secondImageSrc} alt="Hover view" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : hoverMode === 'description' && product.descriptionHtml ? (
+              <div style={{
+                fontSize: 13, color: '#333', lineHeight: 1.5, fontWeight: 500,
+                display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}
+                dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+              />
+            ) : null}
+          </div>
+        )}
+
+        {hasVariants && variantsDisplay === 'hover' && isHovered && (
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            background: 'rgba(255,255,255,0.95)', padding: 10, borderTop: '1px solid #eee',
+            zIndex: 3, display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 80, overflowY: 'auto',
+          }}>
+            {variants.map((v) => (
+              <div key={v.id}
+                onClick={(e) => { e.stopPropagation(); handleVariantSelect(v.id); }}
+                style={{
+                  fontSize: 10, padding: '2px 6px', borderRadius: 4, cursor: 'pointer',
+                  border: pendingVariantId === v.id ? `1px solid ${highlightColor}` : '1px solid #ddd',
+                  background: pendingVariantId === v.id ? highlightColor : 'white',
+                  color: pendingVariantId === v.id ? 'white' : 'black',
+                }}
+              >
+                {v.title}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!enableHover && !activeVariant?.image && images.length > 1 && (
           <>
             <button type="button"
               onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i <= 0 ? images.length - 1 : i - 1)); }}
@@ -285,16 +475,16 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           </>
         )}
       </div>
-      <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <div style={{ padding: `${cardPadding}px`, display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{
-          fontSize: '13px', fontWeight: 500, lineHeight: 1.3, marginBottom: '4px',
+          fontSize: `${productTitleSize}px`, fontWeight: 500, lineHeight: 1.3, marginBottom: '4px',
           display: '-webkit-box', WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical', overflow: 'hidden', color: textColor,
         }}>
           {product.title}
         </div>
 
-        {hasVariants && (
+        {showVariantSelect && (
           <select
             value={activeVariantId || ''}
             onChange={(e) => handleVariantSelect(e.target.value)}
@@ -310,12 +500,12 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
         )}
 
         {otherAdded.length > 0 && (
-          <div style={{ fontSize: '11px', color: '#22c55e', marginBottom: '6px' }}>
+          <div style={{ fontSize: '11px', color: highlightColor, marginBottom: '6px' }}>
             Also in combo: {otherAdded.map((v) => `${v.title} ×${selectedMap[v.id].qty}`).join(', ')}
           </div>
         )}
 
-        <div style={{ fontSize: '14px', fontWeight: 700, color: primaryColor, marginBottom: '8px' }}>
+        <div style={{ fontSize: `${productPriceSize}px`, fontWeight: 600, color: primaryColor, marginBottom: '8px' }}>
           {getCurrencySymbol(product.currency)}{displayPrice.toFixed(2)}
         </div>
         <div style={{
@@ -323,7 +513,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           padding: '6px 0 0', borderTop: '1px solid #eee',
           justifyContent: 'space-between',
         }}>
-          {isAdded ? (
+          {isAdded && showQtySelector ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
               <button type="button" onClick={handleDec}
                 style={{
@@ -342,7 +532,16 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
                   display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
                 }}>+</button>
             </div>
-          ) : (
+          ) : isAdded ? (
+            <button type="button" onClick={() => onRemove(activeVariantId)}
+              style={{
+                flex: 1, background: '#ff4d4d', color: '#fff', border: 'none', padding: '8px 12px',
+                borderRadius: `${btnRadius}px`, cursor: 'pointer', fontWeight: btnFontWeight, fontSize: `${btnFontSize}px`,
+              }}>
+              Remove
+            </button>
+          ) : null}
+          {showAddBtn && !isAdded && (
             <button type="button" onClick={handleAddClick}
               style={{
                 flex: 1, background: btnBg, color: btnTextColor,
@@ -360,10 +559,69 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
   );
 }
 
+// Generic product grid used by Layout2/Layout4 — mirrors
+// app.bundles.customize.jsx ComboPreview's renderProductsGrid(): a plain
+// (non-configurable) arrow style whenever grid_layout_type is 'slider',
+// otherwise a responsive grid using desktop/mobile column counts.
+function GenericProductGrid({ products, config, isMobile, selectedMap, onAdd, onQtyChange, onRemove, onImageClick }) {
+  const sliderRef = useRef(null);
+  const gridColumns = isMobile ? (config.mobile_columns || 2) : (config.desktop_columns || 3);
+  const gridGap = Number(config.products_gap ?? 12);
+  const isSlider = config.grid_layout_type === 'slider';
+
+  return (
+    <div style={{ width: `${config.grid_width || 100}%`, margin: '0 auto' }}>
+      <div style={{ position: 'relative', width: '100%' }}>
+        {isSlider && (
+          <>
+            <button type="button" onClick={() => sliderRef.current?.scrollBy({ left: -300, behavior: 'smooth' })}
+              style={{
+                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #ddd',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+              }}>←</button>
+            <button type="button" onClick={() => sliderRef.current?.scrollBy({ left: 300, behavior: 'smooth' })}
+              style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #ddd',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+              }}>→</button>
+          </>
+        )}
+        <div ref={sliderRef} style={{
+          display: isSlider ? 'flex' : 'grid',
+          gridTemplateColumns: isSlider ? 'none' : `repeat(${gridColumns}, minmax(0, 1fr))`,
+          flexDirection: isSlider ? 'row' : 'column', flexWrap: 'nowrap', gap: gridGap,
+          width: '100%', boxSizing: 'border-box', alignItems: 'stretch',
+          overflowX: isSlider ? 'auto' : 'visible', overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch', scrollSnapType: isSlider ? 'x mandatory' : 'none',
+          paddingLeft: isSlider ? 20 : 0, paddingRight: isSlider ? 20 : 0,
+          scrollbarWidth: 'none',
+        }}>
+          {products.map((product) => (
+            <div key={product.id} style={{
+              minWidth: isSlider ? (isMobile ? 220 : 280) : 'auto',
+              width: isSlider ? (isMobile ? 220 : 280) : 'auto',
+              flexShrink: 0, scrollSnapAlign: 'start',
+            }}>
+              <ProductCard product={product} config={config} isMobile={isMobile}
+                selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
+                onRemove={onRemove} onImageClick={onImageClick}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Layout2Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
   const tabs = [];
   if (config.show_tab_all !== false) {
     tabs.push({ label: config.tab_all_label || 'Collections', value: 'all' });
@@ -393,20 +651,19 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
   const tabMarginTop = config.tab_margin_top ?? 0;
   const tabMarginBottom = config.tab_margin_bottom ?? 24;
 
-  const gridColumns = config.desktop_columns || 3;
-  const productsGap = config.products_gap || 16;
   const textColor = config.text_color || '#1a1a1a';
   const headingColor = config.heading_color || '#333';
   const descriptionColor = config.description_color || '#666';
-  const headingSize = config.heading_size || 28;
-  const descriptionSize = config.description_size || 15;
-  const headingAlign = config.heading_align || 'left';
-  const descriptionAlign = config.description_align || 'left';
+  const headingSize = isMobile ? (config.heading_size_mobile ?? config.heading_size ?? 22) : (config.heading_size ?? 32);
+  const descriptionSize = isMobile ? (config.description_size_mobile ?? config.description_size ?? 13) : (config.description_size ?? 16);
+  const headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
+  const descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
   const headingFontWeight = config.heading_font_weight || '700';
   const descriptionFontWeight = config.description_font_weight || '400';
-  const bannerUrl = config.banner_image_url || '';
-  const bannerHeight = config.banner_height_desktop || 180;
-  const bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
+  const titleBox = getBoxSpacing(config, 'title_container', isMobile);
+  const descBox = getBoxSpacing(config, 'description_container', isMobile);
+  const containerPad = getContainerPadding(config, isMobile);
+  const { bannerWidth, finalBannerHeight, bannerObjectFit, bannerUrl } = getBannerSizing(config, isMobile);
 
   let activeProducts = [];
   if (activeTab === 'all') {
@@ -423,35 +680,51 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
   }
 
   return (
-    <div style={{ maxWidth: '900px', margin: '24px auto', padding: '0 16px' }}>
+    <div style={{ background: '#eef1f5', padding: 16 }}>
       <div style={{
-        background: config.bg_color || '#ffffff',
-        borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-        overflow: 'hidden', fontFamily: 'inherit', color: textColor,
+        fontFamily: 'inherit', color: textColor,
+        paddingTop: containerPad.paddingTop, paddingRight: containerPad.paddingRight,
+        paddingBottom: containerPad.paddingBottom, paddingLeft: containerPad.paddingLeft,
+        background: '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+        border: '1px solid #e5e5e5', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+        position: 'relative', overflow: 'hidden',
       }}>
         {config.show_banner !== false && bannerUrl && (
-          <div style={{ width: '100%', height: `${bannerHeight}px`, overflow: 'hidden' }}>
+          <div style={{
+            position: 'relative', width: `${bannerWidth}%`, margin: '0 auto',
+            height: finalBannerHeight, overflow: 'hidden',
+          }}>
             <img src={bannerUrl} alt="Banner"
-              style={{ width: '100%', height: '100%', objectFit: bannerObjectFit, display: 'block' }}
+              style={{ width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%', objectFit: bannerObjectFit }}
             />
           </div>
         )}
 
         {config.show_title_description !== false && (
-          <div style={{ padding: '24px 20px 0' }}>
-            <h1 style={{
-              margin: 0, fontSize: `${headingSize}px`, color: headingColor,
-              fontWeight: headingFontWeight, textAlign: headingAlign, lineHeight: 1.2,
+          <div style={{ width: `${config.title_width || 100}%`, margin: '0 auto' }}>
+            <div style={{
+              textAlign: headingAlign,
+              paddingTop: titleBox.paddingTop, paddingRight: titleBox.paddingRight,
+              paddingBottom: titleBox.paddingBottom, paddingLeft: titleBox.paddingLeft,
+              marginTop: titleBox.marginTop, marginRight: titleBox.marginRight,
+              marginBottom: titleBox.marginBottom, marginLeft: titleBox.marginLeft,
             }}>
-              {config.collection_title || 'Create Your Combo'}
-            </h1>
+              <h1 style={{ fontSize: `${headingSize}px`, margin: 0, marginBottom: 4, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign }}>
+                {config.collection_title || 'Create Your Combo'}
+              </h1>
+            </div>
             {config.collection_description && (
-              <p style={{
-                margin: '8px 0 0', fontSize: `${descriptionSize}px`, color: descriptionColor,
-                fontWeight: descriptionFontWeight, textAlign: descriptionAlign, lineHeight: 1.5,
+              <div style={{
+                textAlign: descriptionAlign,
+                paddingTop: descBox.paddingTop, paddingRight: descBox.paddingRight,
+                paddingBottom: descBox.paddingBottom, paddingLeft: descBox.paddingLeft,
+                marginTop: descBox.marginTop, marginRight: descBox.marginRight,
+                marginBottom: descBox.marginBottom, marginLeft: descBox.marginLeft,
               }}>
-                {config.collection_description}
-              </p>
+                <p style={{ fontSize: `${descriptionSize}px`, color: descriptionColor, fontWeight: descriptionFontWeight, textAlign: descriptionAlign }}>
+                  {config.collection_description}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -503,22 +776,10 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
               <div style={{ fontWeight: '600', marginBottom: '4px' }}>No products in this tab</div>
             </div>
           ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`,
-              gap: `${productsGap}px`,
-            }}>
-              {activeProducts.map((p) => (
-                <ProductCard key={p.id}
-                  product={p} config={config}
-                  selectedMap={selectedMap}
-                  onAdd={onAdd}
-                  onQtyChange={onQtyChange}
-                  onRemove={onRemove}
-                  onImageClick={onImageClick}
-                />
-              ))}
-            </div>
+            <GenericProductGrid products={activeProducts} config={config} isMobile={isMobile}
+              selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
+              onRemove={onRemove} onImageClick={onImageClick}
+            />
           )}
         </div>
 
@@ -570,7 +831,7 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout3Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
   const primaryColor = config.primary_color || '#20D060';
   const textColor = config.text_color || '#111';
   const bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
@@ -761,7 +1022,7 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', padding: '0 20px' }}>
               {activeProducts.map((p) => (
-                <ProductCard key={p.id} product={p} config={config}
+                <ProductCard key={p.id} product={p} config={config} isMobile={isMobile}
                   selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
                   onRemove={onRemove} onImageClick={onImageClick}
                 />
@@ -816,24 +1077,25 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout4Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
   // Editorial Split — same banner/progress/title/grid pieces as Layout2, just
   // reordered (banner first, no collection tabs) per ComboPreview's layout4
-  // sectionOrder (app.bundles.customize.jsx ~5984-5993).
-  const gridColumns = config.desktop_columns || 3;
-  const productsGap = config.products_gap || 16;
+  // sectionOrder (app.bundles.customize.jsx ~5999-6008), which falls through
+  // to the same generic renderBanner/renderTitleDescription/renderProductsGrid
+  // path and outer container_padding-driven wrapper as Layout2.
   const textColor = config.text_color || '#1a1a1a';
   const headingColor = config.heading_color || '#333';
   const descriptionColor = config.description_color || '#666';
-  const headingSize = config.heading_size || 28;
-  const descriptionSize = config.description_size || 15;
-  const headingAlign = config.heading_align || 'left';
-  const descriptionAlign = config.description_align || 'left';
+  const headingSize = isMobile ? (config.heading_size_mobile ?? config.heading_size ?? 22) : (config.heading_size ?? 32);
+  const descriptionSize = isMobile ? (config.description_size_mobile ?? config.description_size ?? 13) : (config.description_size ?? 16);
+  const headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
+  const descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
   const headingFontWeight = config.heading_font_weight || '700';
   const descriptionFontWeight = config.description_font_weight || '400';
-  const bannerUrl = config.banner_image_url || '';
-  const bannerHeight = config.banner_height_desktop || 180;
-  const bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
+  const titleBox = getBoxSpacing(config, 'title_container', isMobile);
+  const descBox = getBoxSpacing(config, 'description_container', isMobile);
+  const containerPad = getContainerPadding(config, isMobile);
+  const { bannerWidth, finalBannerHeight, bannerObjectFit, bannerUrl } = getBannerSizing(config, isMobile);
 
   const seen = new Set();
   const allProducts = [];
@@ -842,15 +1104,24 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
   });
 
   return (
-    <div style={{ maxWidth: '900px', margin: '24px auto', padding: '0 16px' }}>
+    <div style={{ background: '#eef1f5', padding: 16 }}>
       <div style={{
-        background: config.bg_color || '#ffffff',
-        borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-        overflow: 'hidden', fontFamily: 'inherit', color: textColor,
+        fontFamily: 'inherit', color: textColor,
+        paddingTop: containerPad.paddingTop, paddingRight: containerPad.paddingRight,
+        paddingBottom: containerPad.paddingBottom, paddingLeft: containerPad.paddingLeft,
+        background: '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+        border: '1px solid #e5e5e5', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+        position: 'relative', overflow: 'hidden',
       }}>
         {config.show_banner !== false && bannerUrl && (
-          <div style={{ width: '100%', height: `${bannerHeight}px`, overflow: 'hidden' }}>
-            <img src={bannerUrl} alt="Banner" style={{ width: '100%', height: '100%', objectFit: bannerObjectFit, display: 'block' }} />
+          <div style={{
+            width: config.banner_full_width ? `calc(100% + ${(containerPad.paddingLeft || 0) + (containerPad.paddingRight || 0)}px)` : `${bannerWidth}%`,
+            height: finalBannerHeight,
+            paddingTop: config.banner_padding_top, paddingBottom: config.banner_padding_bottom,
+            margin: config.banner_full_width ? `0 -${containerPad.paddingLeft || 0}px` : '0 auto',
+            overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <img src={bannerUrl} alt="Banner" style={{ width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%', objectFit: bannerObjectFit, display: 'block' }} />
           </div>
         )}
 
@@ -860,14 +1131,30 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
         </div>
 
         {config.show_title_description !== false && (
-          <div style={{ padding: '0 20px 20px' }}>
-            <h1 style={{ margin: 0, fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign, lineHeight: 1.2 }}>
-              {config.collection_title || 'Create Your Combo'}
-            </h1>
+          <div style={{ width: `${config.title_width || 100}%`, margin: '0 auto', padding: '0 20px 20px' }}>
+            <div style={{
+              textAlign: headingAlign,
+              paddingTop: titleBox.paddingTop, paddingRight: titleBox.paddingRight,
+              paddingBottom: titleBox.paddingBottom, paddingLeft: titleBox.paddingLeft,
+              marginTop: titleBox.marginTop, marginRight: titleBox.marginRight,
+              marginBottom: titleBox.marginBottom, marginLeft: titleBox.marginLeft,
+            }}>
+              <h1 style={{ margin: 0, fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign, lineHeight: 1.2 }}>
+                {config.collection_title || 'Create Your Combo'}
+              </h1>
+            </div>
             {config.collection_description && (
-              <p style={{ margin: '8px 0 0', fontSize: `${descriptionSize}px`, color: descriptionColor, fontWeight: descriptionFontWeight, textAlign: descriptionAlign, lineHeight: 1.5 }}>
-                {config.collection_description}
-              </p>
+              <div style={{
+                textAlign: descriptionAlign,
+                paddingTop: descBox.paddingTop, paddingRight: descBox.paddingRight,
+                paddingBottom: descBox.paddingBottom, paddingLeft: descBox.paddingLeft,
+                marginTop: descBox.marginTop, marginRight: descBox.marginRight,
+                marginBottom: descBox.marginBottom, marginLeft: descBox.marginLeft,
+              }}>
+                <p style={{ margin: 0, fontSize: `${descriptionSize}px`, color: descriptionColor, fontWeight: descriptionFontWeight, textAlign: descriptionAlign, lineHeight: 1.5 }}>
+                  {config.collection_description}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -878,14 +1165,10 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
               No products in this combo yet.
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`, gap: `${productsGap}px` }}>
-              {allProducts.map((p) => (
-                <ProductCard key={p.id} product={p} config={config}
-                  selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
-                  onRemove={onRemove} onImageClick={onImageClick}
-                />
-              ))}
-            </div>
+            <GenericProductGrid products={allProducts} config={config} isMobile={isMobile}
+              selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
+              onRemove={onRemove} onImageClick={onImageClick}
+            />
           )}
         </div>
 
@@ -935,7 +1218,7 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout1Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
   const allSteps = [1, 2, 3, 4, 5];
   const activeSteps = allSteps.filter((step) => {
     if (step === 1) return true;
@@ -948,53 +1231,122 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
   const descriptionSize = config.description_size || 15;
   const headingAlign = config.heading_align || 'left';
   const descriptionAlign = config.description_align || 'left';
-  const bgColor = config.bg_color || '#ffffff';
   const textColor = config.text_color || '#1a1a1a';
-  const gridColumns = config.desktop_columns || 3;
+  const gridColumns = isMobile ? (config.mobile_columns || 2) : (config.desktop_columns || 3);
   const productsGap = config.products_gap || 16;
-  const bannerUrl = config.banner_image_url || '';
-  const bannerHeight = config.banner_height_desktop || 180;
-  const bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
   const headingFontWeight = config.heading_font_weight || '700';
   const descriptionFontWeight = config.description_font_weight || '400';
+  const titleBox = getBoxSpacing(config, 'title_container', isMobile);
+  const descBox = getBoxSpacing(config, 'description_container', isMobile);
+  const { bannerWidth, finalBannerHeight, bannerObjectFit, bannerUrl } = getBannerSizing(config, isMobile);
+
+  const progressTextColor = config.progress_text_color || '#5c5f62';
+  const discountThreshold = maxProducts;
+  const percent = discountThreshold > 0 ? Math.min(100, Math.floor((totalSelected / discountThreshold) * 100)) : 0;
+  const topProgressFillColor = totalSelected >= discountThreshold
+    ? (config.progress_success_color || '#28a745')
+    : (config.progress_bar_color || '#1a6644');
+
+  const isSlider = config.grid_layout_type === 'slider';
+  const showNavArrows = config.show_nav_arrows !== false;
+  const showScrollbar = !!config.show_scrollbar;
 
   return (
     <div style={{ maxWidth: '900px', margin: '24px auto', padding: '0 16px' }}>
       <div style={{
-        background: bgColor, borderRadius: '12px',
+        background: '#fff', borderRadius: '12px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.1)', overflow: 'hidden',
-        fontFamily: 'inherit', color: textColor,
+        fontFamily: 'inherit', color: textColor, position: 'relative',
       }}>
+        {config.show_progress_bar && (
+          <div style={{
+            background: '#fff', padding: '20px', position: 'sticky', top: 0, zIndex: 10,
+            borderBottom: '1px solid #eee', boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '15px', fontWeight: 800, marginBottom: '12px' }}>
+              <span style={{ color: progressTextColor, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                {config.progress_text || 'Bundle Progress'}
+              </span>
+              <span style={{ color: progressTextColor }}>{percent}%</span>
+            </div>
+            <div style={{ background: '#e0e0e0', height: '8px', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
+              <div style={{
+                backgroundColor: topProgressFillColor, height: '100%', width: `${percent}%`,
+                transition: 'width 1.2s cubic-bezier(0.16, 1, 0.3, 1)', borderRadius: '10px',
+                position: 'relative', overflow: 'hidden', minWidth: percent > 0 ? '4px' : '0',
+              }}>
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                  transform: 'translateX(-100%)', animation: 'combo-shimmer 2s infinite',
+                }} />
+              </div>
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '13px', color: '#6d7175', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {totalSelected < discountThreshold ? (
+                <span>
+                  Add <strong>{Math.max(0, discountThreshold - totalSelected)}</strong> more for{' '}
+                  <strong>{config.discount_text || config.progress_text || 'Bundle Discount'}</strong>
+                </span>
+              ) : (
+                <span style={{ color: progressTextColor, fontWeight: 700 }}>
+                  🎉 Discount Unlocked!
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {config.show_banner !== false && bannerUrl && (
-          <div style={{ width: '100%', height: `${bannerHeight}px`, overflow: 'hidden' }}>
+          <div style={{
+            width: config.banner_full_width ? 'calc(100% + 40px)' : `${bannerWidth}%`,
+            height: finalBannerHeight,
+            margin: config.banner_full_width ? '0 -20px' : '0 auto',
+            overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
             <img src={bannerUrl} alt="Banner"
-              style={{ width: '100%', height: '100%', objectFit: bannerObjectFit, display: 'block' }}
+              style={{ width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%', objectFit: bannerObjectFit, display: 'block' }}
             />
           </div>
         )}
 
         {config.show_title_description !== false && (
-          <div style={{ padding: '24px 20px 0' }}>
-            <h1 style={{
-              margin: 0, fontSize: `${headingSize}px`, color: headingColor,
-              fontWeight: headingFontWeight, textAlign: headingAlign, lineHeight: 1.2,
+          <div style={{ padding: '24px 20px' }}>
+            <div style={{
+              width: isMobile ? '100%' : `${config.title_width || 100}%`, textAlign: headingAlign,
+              paddingTop: titleBox.paddingTop || 0, paddingRight: titleBox.paddingRight || 0,
+              paddingBottom: titleBox.paddingBottom || 0, paddingLeft: titleBox.paddingLeft || 0,
+              marginTop: titleBox.marginTop || 0, marginRight: titleBox.marginRight || 0,
+              marginBottom: titleBox.marginBottom || 0, marginLeft: titleBox.marginLeft || 0,
             }}>
-              {config.collection_title || 'Create Your Combo'}
-            </h1>
-            {config.collection_description && (
-              <p style={{
-                margin: '8px 0 0', fontSize: `${descriptionSize}px`, color: descriptionColor,
-                fontWeight: descriptionFontWeight, textAlign: descriptionAlign, lineHeight: 1.5,
+              <h1 style={{
+                margin: 0, fontSize: `${headingSize}px`, color: headingColor,
+                fontWeight: headingFontWeight, lineHeight: 1.2,
               }}>
-                {config.collection_description}
-              </p>
+                {config.collection_title || 'Create Your Combo'}
+              </h1>
+            </div>
+            {config.collection_description && (
+              <div style={{
+                width: isMobile ? '100%' : `${config.title_width || 100}%`, textAlign: descriptionAlign,
+                paddingTop: descBox.paddingTop || 0, paddingRight: descBox.paddingRight || 0,
+                paddingBottom: descBox.paddingBottom || 0, paddingLeft: descBox.paddingLeft || 0,
+                marginTop: descBox.marginTop || 0, marginRight: descBox.marginRight || 0,
+                marginBottom: descBox.marginBottom || 0, marginLeft: descBox.marginLeft || 0,
+              }}>
+                <p style={{
+                  margin: 0, fontSize: `${descriptionSize}px`, color: descriptionColor,
+                  fontWeight: descriptionFontWeight, lineHeight: 1.5,
+                }}>
+                  {config.collection_description}
+                </p>
+              </div>
             )}
           </div>
         )}
 
         <div style={{ padding: '20px' }}>
           <PriceSummary totalSelected={totalSelected} totalPrice={totalPrice} finalPrice={finalPrice} discountApplicable={discountApplicable} />
-          <ProgressBar selectedCount={totalSelected} maxProducts={maxProducts} config={config} />
           {activeSteps.map((step) => {
             const stepTitle = config[`step_${step}_title`] || `Category ${step}`;
             const stepSubtitle = config[`step_${step}_subtitle`] || 'Select your items';
@@ -1038,6 +1390,51 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                     <div style={{ fontWeight: '600', marginBottom: '4px' }}>No products found</div>
                     <div>The selected collection has no products.</div>
                   </div>
+                ) : isSlider ? (
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      display: 'flex', gap: '12px', overflowX: 'auto',
+                      paddingBottom: showScrollbar ? '10px' : '0',
+                      scrollBehavior: 'smooth',
+                    }} className={`combo-step-slider-${step}`}>
+                      <style>{`
+                        .combo-step-slider-${step} { scrollbar-width: ${showScrollbar ? 'auto' : 'none'}; -ms-overflow-style: ${showScrollbar ? 'auto' : 'none'}; }
+                        .combo-step-slider-${step}::-webkit-scrollbar { display: ${showScrollbar ? 'block' : 'none'}; height: ${config.scrollbar_thickness || 4}px; }
+                        .combo-step-slider-${step}::-webkit-scrollbar-thumb { background: ${config.scrollbar_color || '#dddddd'}; border-radius: 10px; }
+                      `}</style>
+                      {stepProducts.map((p) => (
+                        <div key={p.id} style={{ minWidth: '160px', width: '160px' }}>
+                          <ProductCard product={p} config={config} isMobile={isMobile}
+                            selectedMap={selectedMap} onAdd={onAdd} onQtyChange={onQtyChange}
+                            onRemove={onRemove} onImageClick={onImageClick}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {showNavArrows && ['left', 'right'].map((side) => (
+                      <div key={side}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const track = e.currentTarget.parentElement.querySelector(`.combo-step-slider-${step}`);
+                          track?.scrollBy({ left: side === 'left' ? -250 : 250, behavior: 'smooth' });
+                        }}
+                        style={{
+                          position: 'absolute', [side]: config.arrow_position === 'outside' ? '-22px' : '8px',
+                          top: '50%', transform: 'translateY(-50%)',
+                          width: `${config.arrow_size || 36}px`, height: `${config.arrow_size || 36}px`,
+                          background: config.arrow_bg_color || '#000', color: config.arrow_color || '#fff',
+                          borderRadius: `${config.arrow_border_radius || 50}${config.arrow_border_radius === 50 ? '%' : 'px'}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.2)', zIndex: 10, cursor: 'pointer',
+                          opacity: config.arrow_opacity ?? 0.9, transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d={side === 'left' ? 'M15 18l-6-6 6-6' : 'M9 18l6-6-6-6'} />
+                        </svg>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div style={{
                     display: 'grid',
@@ -1046,7 +1443,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                   }}>
                     {stepProducts.map((p) => (
                       <ProductCard key={p.id}
-                        product={p} config={config}
+                        product={p} config={config} isMobile={isMobile}
                         selectedMap={selectedMap}
                         onAdd={onAdd}
                         onQtyChange={onQtyChange}
@@ -1111,6 +1508,7 @@ export default function ComboPreviewPage() {
   const { templateId } = useParams();
   const layout = config.layout || 'layout1';
   const rootRef = useRef(null);
+  const isMobile = useIsMobile();
 
   // Embedded inside the live storefront's iframe (see combo-page[.]js.jsx) —
   // report height so the parent can size the frame, since cross-origin means
@@ -1286,6 +1684,7 @@ export default function ComboPreviewPage() {
           to { opacity: 1; transform: translate(-50%, 0); }
         }
       `}</style>
+      {config.custom_css && <style>{config.custom_css}</style>}
 
       {toast && (
         <div
@@ -1357,6 +1756,7 @@ export default function ComboPreviewPage() {
           totalPrice={totalPrice}
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
+          isMobile={isMobile}
         />
       ) : layout === 'layout4' ? (
         <Layout4Preview
@@ -1375,6 +1775,7 @@ export default function ComboPreviewPage() {
           totalPrice={totalPrice}
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
+          isMobile={isMobile}
         />
       ) : layout === 'layout2' ? (
         <Layout2Preview
@@ -1393,6 +1794,7 @@ export default function ComboPreviewPage() {
           totalPrice={totalPrice}
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
+          isMobile={isMobile}
         />
       ) : (
         <Layout1Preview
@@ -1411,6 +1813,7 @@ export default function ComboPreviewPage() {
           totalPrice={totalPrice}
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
+          isMobile={isMobile}
         />
       )}
 

@@ -41,10 +41,19 @@ const SCRIPT_BODY = String.raw`
   // Explicit mount point — used when a page's own body/template already
   // knows which combo template it is (the guaranteed-template path, pending
   // Shopify's themeFilesUpsert exemption; see api.bundle-templates.jsx).
+  //
+  // The cart-drawer app embed (extensions/cart-drawer/blocks/cart_drawer.liquid)
+  // also loads a copy of this same script globally on every page, from a
+  // separately-deployed origin — so this exact div can get init()'d twice,
+  // once by each copy. Whichever runs second would otherwise clobber the
+  // first's iframe via mountIframe's root.innerHTML reset. Mark the root as
+  // claimed so only the first script to reach it actually mounts.
   function init(root) {
+    if (root.dataset.brixComboMounted) return;
     var shop = root.dataset.shop;
     var templateId = root.dataset.templateId;
     if (!shop || !templateId) return;
+    root.dataset.brixComboMounted = '1';
     mountIframe(root, shop, templateId);
   }
 

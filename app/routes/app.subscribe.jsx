@@ -382,9 +382,10 @@ export default function SubscribePage() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'stretch' }}>
                     {PLAN_KEYS.map((planKey) => {
                         const p = PLANS[planKey];
+                        const prevPlanKey = PLAN_KEYS[PLAN_KEYS.indexOf(planKey) - 1];
                         const isCurrent = planKey === currentPlanKey;
                         const isHighlightPlan = planKey === 'starter';
                         const btn = getBtn(planKey);
@@ -423,7 +424,21 @@ export default function SubscribePage() {
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 20 }}>
-                                        {FEATURE_ROWS.map((featureKey) => {
+                                        {planKey !== 'free' && (
+                                            <Text as="p" variant="bodyXs" fontWeight="bold" tone="subdued">
+                                                Everything in {PLANS[prevPlanKey].label}, plus:
+                                            </Text>
+                                        )}
+                                        {FEATURE_ROWS.filter((featureKey) => {
+                                            // Every card used to render every feature row regardless of plan,
+                                            // so Starter/Pro repeated the exact same checkmarks Free already
+                                            // showed. Now that each non-Free card is headed "Everything in X,
+                                            // plus:", only show rows whose state actually changed from the
+                                            // previous tier — a row with an identical state was already implied
+                                            // by that heading.
+                                            if (!prevPlanKey) return true;
+                                            return FEATURES[featureKey].states[planKey] !== FEATURES[featureKey].states[prevPlanKey];
+                                        }).map((featureKey) => {
                                             const state = FEATURES[featureKey].states[planKey];
                                             const icon = featureIcon(state);
                                             const isHighlighted = highlight === featureKey;
@@ -446,14 +461,16 @@ export default function SubscribePage() {
                                                 AI BRIX — {p.aiBrixCredits} credits / month, then ${p.aiBrixOverageRate.toFixed(2)}/credit
                                             </Text>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
-                                                <Icon source={p.watermarkRemovable ? CheckCircleIcon : XCircleIcon} tone={p.watermarkRemovable ? 'success' : 'critical'} />
-                                            </span>
-                                            <Text as="p" variant="bodyXs" tone={p.watermarkRemovable ? undefined : 'subdued'}>
-                                                {p.watermarkRemovable ? 'Remove "Powered by BRIX" watermark' : '"Powered by BRIX" watermark (always on)'}
-                                            </Text>
-                                        </div>
+                                        {(!prevPlanKey || PLANS[prevPlanKey].watermarkRemovable !== p.watermarkRemovable) && (
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
+                                                    <Icon source={p.watermarkRemovable ? CheckCircleIcon : XCircleIcon} tone={p.watermarkRemovable ? 'success' : 'critical'} />
+                                                </span>
+                                                <Text as="p" variant="bodyXs" tone={p.watermarkRemovable ? undefined : 'subdued'}>
+                                                    {p.watermarkRemovable ? 'Remove "Powered by BRIX" watermark' : '"Powered by BRIX" watermark (always on)'}
+                                                </Text>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

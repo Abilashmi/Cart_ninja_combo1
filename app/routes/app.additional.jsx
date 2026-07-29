@@ -1,7 +1,7 @@
 import { useLoaderData, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 import {
-  Page, Card, BlockStack, InlineStack, Text, Badge, Button, ProgressBar, Divider, Banner, Icon,
+  Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon,
 } from '@shopify/polaris';
 import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
 import BrixBar from '../components/ai-agent/BrixBar';
@@ -41,7 +41,6 @@ export const loader = async ({ request }) => {
             shop {
               name
               myshopifyDomain
-              plan { displayName }
               createdAt
             }
           }
@@ -71,22 +70,6 @@ function InfoRow({ label, value }) {
   );
 }
 
-function UsageRow({ label, used, limit }) {
-  const percentage = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
-  const isNearLimit = percentage >= 80;
-  return (
-    <BlockStack gap="200">
-      <InlineStack align="space-between" blockAlign="center">
-        <Text as="span" variant="bodyMd">{label}</Text>
-        <Text as="span" variant="bodyMd" fontWeight="semibold">
-          {limit === Infinity ? `${used} / Unlimited` : `${used} / ${limit}`}
-        </Text>
-      </InlineStack>
-      <ProgressBar progress={percentage} tone={isNearLimit ? 'critical' : 'primary'} size="small" />
-    </BlockStack>
-  );
-}
-
 export default function AccountPage() {
   const { shop, shopInfo, planKey, subscriptionId } = useLoaderData();
   const navigate = useNavigate();
@@ -96,13 +79,6 @@ export default function AccountPage() {
   const isPro = planKey === 'pro';
   const planName = plan.label;
   const planPrice = plan.price.monthly > 0 ? `$${plan.price.monthly}/mo` : 'Free';
-
-  // Usage limits based on plan
-  const limits = {
-    coupons: { used: 0, limit: isPro ? Infinity : 3 },
-    upsellProducts: { used: 0, limit: isPro ? Infinity : 3 },
-    progressBarTiers: { used: 1, limit: isPro ? 3 : 1 },
-  };
 
   const installedDate = shopInfo?.createdAt
     ? new Date(shopInfo.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -124,7 +100,6 @@ export default function AccountPage() {
             <Divider />
             <InfoRow label="Store Name" value={shopInfo?.name || shop} />
             <InfoRow label="Store URL" value={shopInfo?.myshopifyDomain || shop} />
-            <InfoRow label="Shopify Plan" value={shopInfo?.plan?.displayName || 'N/A'} />
             <InfoRow label="App Installed" value={installedDate} />
           </BlockStack>
         </Card>
@@ -154,17 +129,6 @@ export default function AccountPage() {
                 <p>Upgrade to Pro to unlock unlimited coupons, upsell products, and AI recommendations.</p>
               </Banner>
             )}
-          </BlockStack>
-        </Card>
-
-        {/* Usage This Period */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Usage This Period</Text>
-            <Divider />
-            <UsageRow label="Active Coupons" used={limits.coupons.used} limit={isPro ? 999 : 3} />
-            <UsageRow label="Upsell Products" used={limits.upsellProducts.used} limit={isPro ? 999 : 3} />
-            <UsageRow label="Progress Bar Tiers" used={limits.progressBarTiers.used} limit={isPro ? 3 : 1} />
           </BlockStack>
         </Card>
 

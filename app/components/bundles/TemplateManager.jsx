@@ -3,6 +3,7 @@ import {
   useFetcher,
   useNavigate,
   useNavigation,
+  useSearchParams,
 } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
 import { Text, Popover, ActionList, Modal, BlockStack } from '@shopify/polaris';
@@ -18,6 +19,20 @@ export default function TemplateManager() {
   const { plan, canAccessFeature } = usePlan();
   const comboTemplateLimit = PLANS[plan]?.comboTemplateLimit;
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The builder's own loader (app.bundles.customize.jsx) redirects back here
+  // with ?comboLimit=1 when a Free/at-cap shop reaches it directly (bypassing
+  // this component's own "Create Template" gate below) — surface the same
+  // upgrade modal instead of leaving them wondering why they got bounced.
+  useEffect(() => {
+    if (searchParams.get('comboLimit') === '1') {
+      setUpgradeModalOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('comboLimit');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const isMainNavigating =
     navigation.state !== 'idle' &&

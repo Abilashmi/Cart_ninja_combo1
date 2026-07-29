@@ -12,7 +12,7 @@ import {
 import BrixBar from "../components/ai-agent/BrixBar";
 import { SliderField } from "../components/shared/SliderField";
 import {
-    DiscountIcon, SettingsIcon, ColorIcon, MagicIcon, ClockIcon,
+    DiscountIcon, ColorIcon, MagicIcon, ClockIcon,
     ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
 } from "@shopify/polaris-icons";
 import { ProBadge } from "../components/plan/PlanGate";
@@ -225,16 +225,8 @@ const TEMPLATES = [
     { id: "bold-vibrant",   name: "Bold & Vibrant", tplKey: "template3" },
 ];
 
-const SHOW_ON_OPTIONS = [
-    { label: "All pages",                  value: "all"         },
-    { label: "Specific product pages",     value: "products"    },
-    { label: "Specific collection pages",  value: "collections" },
-    { label: "Products with specific tags",value: "tags"        },
-];
-
 const SECTION_TIPS = {
     coupon:  "Displaying a coupon directly on the product page increases add-to-cart rates by up to 28% — shoppers act sooner when the deal is visible before checkout.",
-    display: "Targeting coupon banners to high-intent products channels your discount budget where it converts most — driving 2–3× more revenue per coupon displayed.",
     text:    "Clear, benefit-led headings outperform vague ones — \"Save 10% today\" converts up to 2× better than just showing the coupon code.",
     design:  "High-contrast coupon widget designs see 15–25% more coupon code copies — make your offer impossible to miss.",
     timer:   "Countdown timers on product pages boost purchase intent by up to 65% — the visible deadline gives shoppers the nudge they need to act right now.",
@@ -515,7 +507,6 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
 export default function ProductWidgetPage() {
     const { couponConfig, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
-    const shopify = useAppBridge();
     const { canPublishFeature } = usePlan();
     const couponPublishable = canPublishFeature('coupon_lock_pro');
 
@@ -546,11 +537,6 @@ export default function ProductWidgetPage() {
     const [borderRadius,setBorderRadius]= useState(activeTpl.borderRadius ?? 12);
     const [fontSize,    setFontSize]    = useState(activeTpl.fontSize    ?? 16);
     const [padding,     setPadding]     = useState(activeTpl.padding     ?? 16);
-    const [showOn,           setShowOn]           = useState(couponConfig?.display_condition || couponConfig?.displayCondition || "all");
-    const [productHandles,   setProductHandles]   = useState(() => { try { return JSON.parse(couponConfig?.product_handles || '[]'); } catch { return []; } });
-    const [collectionHandles,setCollectionHandles]= useState(() => { try { return JSON.parse(couponConfig?.collection_handles || '[]'); } catch { return []; } });
-    const [tagInput,         setTagInput]         = useState("");
-    const [tagHandles,       setTagHandles]        = useState(() => { try { return JSON.parse(couponConfig?.tag_handles || '[]'); } catch { return []; } });
     const [timerEnabled,setTimerEnabled]= useState(false);
     const [timerHours,  setTimerHours]  = useState(0);
     const [timerMins,   setTimerMins]   = useState(15);
@@ -651,10 +637,6 @@ export default function ProductWidgetPage() {
             {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
-                displayCondition: showOn,
-                productHandles,
-                collectionHandles,
-                tagHandles,
                 selectedActiveCoupons: selectedCouponIds,
                 template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
                 couponStyles,
@@ -841,77 +823,6 @@ export default function ProductWidgetPage() {
                                             onToggle={toggleCoupon}
                                             onClear={() => { setSelectedCouponIds([]); setHasChanges(true); }}
                                         />
-                                    </AccordionSection>
-
-                                    <AccordionSection id="display" icon={SettingsIcon} title="Display Condition" isOpen={openSection === "display"} onToggle={toggleSection} tip={SECTION_TIPS.display}>
-                                        <BlockStack gap="300">
-                                            <Select label="Show this coupon on" options={SHOW_ON_OPTIONS} value={showOn} onChange={(v) => { setShowOn(v); mark(); }} />
-                                            {showOn === "products" && (
-                                                <BlockStack gap="200">
-                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Select Products</Text>
-                                                    <Button size="slim" onClick={async () => {
-                                                        const result = await shopify.resourcePicker({ type: 'product', multiple: true });
-                                                        if (result) { setProductHandles(result.map(p => p.handle)); mark(); }
-                                                    }}>Browse Products</Button>
-                                                    {productHandles.length > 0 && (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {productHandles.map(h => (
-                                                                <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
-                                                                    {h}
-                                                                    <button onClick={() => { setProductHandles(prev => prev.filter(x => x !== h)); mark(); }}
-                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </BlockStack>
-                                            )}
-                                            {showOn === "collections" && (
-                                                <BlockStack gap="200">
-                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Select Collections</Text>
-                                                    <Button size="slim" onClick={async () => {
-                                                        const result = await shopify.resourcePicker({ type: 'collection', multiple: true });
-                                                        if (result) { setCollectionHandles(result.map(c => c.handle)); mark(); }
-                                                    }}>Browse Collections</Button>
-                                                    {collectionHandles.length > 0 && (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {collectionHandles.map(h => (
-                                                                <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
-                                                                    {h}
-                                                                    <button onClick={() => { setCollectionHandles(prev => prev.filter(x => x !== h)); mark(); }}
-                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </BlockStack>
-                                            )}
-                                            {showOn === "tags" && (
-                                                <BlockStack gap="200">
-                                                    <Text as="p" variant="bodySm" fontWeight="semibold">Target Product Tags</Text>
-                                                    <InlineStack gap="200" blockAlign="center">
-                                                        <div style={{ flex: 1 }}><TextField label="" labelHidden placeholder="e.g. VIP, summer" value={tagInput} onChange={setTagInput} autoComplete="off" /></div>
-                                                        <Button size="slim" disabled={!tagInput.trim()} onClick={() => {
-                                                            if (!tagInput.trim()) return;
-                                                            setTagHandles(prev => [...new Set([...prev, ...tagInput.split(',').map(t => t.trim()).filter(Boolean)])]);
-                                                            setTagInput('');
-                                                            mark();
-                                                        }}>Add</Button>
-                                                    </InlineStack>
-                                                    {tagHandles.length > 0 && (
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {tagHandles.map(t => (
-                                                                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
-                                                                    {t}
-                                                                    <button onClick={() => { setTagHandles(prev => prev.filter(x => x !== t)); mark(); }}
-                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </BlockStack>
-                                            )}
-                                        </BlockStack>
                                     </AccordionSection>
 
                                     <AccordionSection id="text" icon={MagicIcon} title="Customize Coupon" isOpen={openSection === "text"} onToggle={toggleSection} tip={SECTION_TIPS.text}>

@@ -110,6 +110,7 @@ const PRODUCT_FRAGMENT = `
     id
     title
     handle
+    descriptionHtml
     featuredImage { url altText width height }
     images(first: 10) { nodes { url altText width height } }
     variants(first: 25) { nodes { id title price image { url altText } } }
@@ -239,6 +240,8 @@ async function loadComboPageDataForRow(shop, row) {
       const edges = json.data?.collectionByHandle?.products?.edges || [];
       productsByHandle[handle] = edges.map((e) => ({
         id: e.node.id, title: e.node.title, handle: e.node.handle,
+        descriptionHtml: e.node.descriptionHtml || '',
+        secondImageSrc: e.node.images?.nodes?.length > 1 ? e.node.images.nodes[1].url : null,
         image: e.node.featuredImage ? { url: e.node.featuredImage.url, altText: e.node.featuredImage.altText } : null,
         images: (e.node.images?.nodes || []).map((img) => ({
           url: img.url, altText: img.altText,

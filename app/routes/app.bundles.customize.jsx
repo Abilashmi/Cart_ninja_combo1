@@ -4,6 +4,7 @@ import {
   useFetcher,
   useSearchParams,
   useNavigate,
+  redirect,
 } from 'react-router';
 import {
   Page,
@@ -39,6 +40,7 @@ import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { getDb, sendToPhp } from '../utils/api-helpers';
+import { checkComboPlanGate } from '../services/combo-templates.server';
 import prisma from '../db.server';
 import { useCurrency } from '../components/CurrencyContext';
 
@@ -610,6 +612,19 @@ export const loader = async ({ request }) => {
       `[Customize Loader] Returning ${collections.length} collections, ${products.length} products, ${shopPages.length} pages`
     );
     return Response.json({ collections, products, shopPages });
+  }
+
+  // No templateId means this is a brand-new template, not an edit of an
+  // existing one. Block Free shops / Starter shops at their cap here too —
+  // TemplateManager already hides the "Create Template" button for them, but
+  // that's only reachable if they navigate to this URL directly, so this
+  // mirrors the same checkComboPlanGate the save API enforces (see
+  // api.bundle-templates.jsx) before they sink time into the builder.
+  if (!templateId) {
+    const gateError = await checkComboPlanGate(shop);
+    if (gateError) {
+      throw redirect('/app/bundles?comboLimit=1');
+    }
   }
 
   // INITIAL LOAD MODE (Fast) — the PHP templates/discounts fetch, the SQLite

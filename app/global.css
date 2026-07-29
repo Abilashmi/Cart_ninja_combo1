@@ -889,6 +889,42 @@ p {
   z-index: 10000 !important;
 }
 
+/* Thin top progress bar shown during in-app route transitions (see
+   app.jsx's useNavigation hookup) — without it, a slow child-route loader
+   leaves the previous page frozen on screen with no feedback until it
+   snaps to the new page, which reads as a glitch. */
+.route-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  z-index: 10001;
+  overflow: hidden;
+  background: rgba(26, 157, 224, 0.15);
+}
+
+.route-progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  background: var(--brand-gradient);
+  animation: route-progress-slide 1s ease-in-out infinite;
+}
+
+@keyframes route-progress-slide {
+  0% {
+    left: -30%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
 .premium-customize-btn {
   padding: 10px 24px !important;
   border-radius: 8px !important;

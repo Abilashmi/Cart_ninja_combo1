@@ -124,11 +124,19 @@ export async function action({ request }) {
       const handle = row.page_handle || (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'combo-page';
 
       try {
+        // `pageByHandle` isn't a field on QueryRoot in this API version (was
+        // silently failing every call here, caught by the empty catch below,
+        // which meant an already-published page could never be found and
+        // every "preview" click fell through to pageCreate — which then
+        // failed on the duplicate handle, killing the whole preview flow).
+        // `pages(query: "handle:...")` is the correct lookup.
         const existingRes = await admin.graphql(`#graphql
-          query getPageByHandle($handle: String!) { pageByHandle(handle: $handle) { id title handle isPublished } }
-        `, { variables: { handle } });
+          query getPageByHandle($query: String!) {
+            pages(first: 1, query: $query) { nodes { id title handle isPublished } }
+          }
+        `, { variables: { query: `handle:${handle}` } });
         const existingJson = await existingRes.json();
-        const existingPage = existingJson.data?.pageByHandle;
+        const existingPage = existingJson.data?.pages?.nodes?.[0];
         if (existingPage) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [existingPage.handle, existingPage.id, Number(id)]);
           try {
