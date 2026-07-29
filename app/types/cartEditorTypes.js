@@ -85,6 +85,7 @@ export const defaultCartEditorState = {
       showWhenEmpty: false,
       title: 'Recommended For You',
       titleColor: '#1a1a1a',
+      titleAlign: 'left',
       buttonText: 'Add',
       position: 'bottom',
       direction: 'horizontal',

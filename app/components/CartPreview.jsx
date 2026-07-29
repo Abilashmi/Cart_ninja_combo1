@@ -120,23 +120,22 @@ function HighlightZone({ sectionId, activeSection, label, children, className, s
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {/* Section label: a normal-flow row above the content, not an absolute
+          overlay. An overlay either sits on top of the section's own text
+          (hides it, e.g. "Recommended For You") or — if pushed outside the
+          box to avoid that — gets clipped whenever the section is scrolled
+          to the very top of the drawer's scroll area (no room above it to
+          render into). A real in-flow row has neither problem: it always
+          pushes content down instead of covering it, and it can't be
+          clipped by a scroll boundary since it's part of the same
+          scrollable content, on every device and preview size. */}
+      {(isActive || hovered) && (
+        <div style={{ background: isActive ? BRAND : 'rgba(26,157,224,0.9)', color: '#fff', fontSize: 9, fontWeight: 700, padding: '3px 7px', lineHeight: '14px', letterSpacing: '0.5px', textTransform: 'uppercase', pointerEvents: 'none' }}>
+          {isActive ? highlightLabel : hoverLabel}
+        </div>
+      )}
+
       {children}
-
-      {/* Active: solid blue border + section name tag */}
-      {isActive && (
-        <div style={{ position: 'absolute', inset: 0, border: `2px solid ${BRAND}`, background: `rgba(26,157,224,0.08)`, pointerEvents: 'none', zIndex: 99 }}>
-          <span style={{ position: 'absolute', top: 0, left: 0, background: BRAND, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-            {highlightLabel}
-          </span>
-        </div>
-      )}
-
-      {/* Hover (not active): section label badge */}
-      {!isActive && hovered && (
-        <div style={{ position: 'absolute', top: 4, left: 4, background: `rgba(26,157,224,0.9)`, color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 7px', lineHeight: '15px', borderRadius: 3, letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 50 }}>
-          {hoverLabel}
-        </div>
-      )}
     </div>
   );
 }
@@ -179,7 +178,7 @@ function CouponTimerDisplay({ coupon }) {
   );
 }
 
-function ProgressBarPreview({ pb }) {
+function ProgressBarPreview({ pb, lockBadge }) {
   const { symbol: currencySymbol } = useCurrency();
   const isCount = pb.mode === 'count';
   // A tier with no (or zero/negative) minimum spend can't be placed on the
@@ -227,7 +226,7 @@ function ProgressBarPreview({ pb }) {
   // track's bottom padding to whichever is actually needed avoids reserving
   // dead space for a second line that isn't there.
   const hasTwoLineLabel = tiers.some((t) => currentValue >= t.minimumSpend && (t.title || t.description));
-  const trackBottomPadding = hasTwoLineLabel ? 54 : 38;
+  const trackBottomPadding = hasTwoLineLabel ? 38 : 26;
 
   const buildMessageLine = () => {
     const template = pb.messageTemplate || "You're {amount} away";
@@ -238,7 +237,13 @@ function ProgressBarPreview({ pb }) {
 
   return (
     <div className="cart-preview-progress">
-      <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+      {/* Badge sits in its own flex row above the message (a sibling in
+          normal flow, not an overlay) so it can never render on top of the
+          centered message text below it. */}
+      {lockBadge && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>{lockBadge}</div>
+      )}
+      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
         {nextTier ? (
           <>
             <div style={{ fontSize: '13px', fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>{buildMessageLine()}</div>
@@ -382,7 +387,33 @@ function findProductsByIds(allProducts, ids) {
   return ids.map((id) => allProducts.find((p) => p.id === id)).filter(Boolean);
 }
 
-function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol }) {
+// "Show product reviews on upsells" has no real review data source anywhere
+// in this app (no reviews-app integration, no rating metafield lookup) — the
+// toggle is a purely visual cue. Derive a stable-per-product placeholder
+// rating from the product id (not Math.random()) so it doesn't reshuffle on
+// every re-render.
+function mockRating(productId) {
+  const str = String(productId || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  const stars = 4 + (hash % 2); // 4 or 5 filled stars
+  const count = 8 + (hash % 240);
+  return { stars, count };
+}
+
+function UpsellReviewStars({ productId }) {
+  const { stars, count } = mockRating(productId);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+      <span style={{ color: '#f5a623', fontSize: '10px', letterSpacing: '1px', lineHeight: 1 }} aria-hidden="true">
+        {'★'.repeat(stars)}{'☆'.repeat(5 - stars)}
+      </span>
+      <span style={{ fontSize: '9px', color: '#6b7280' }}>({count})</span>
+    </div>
+  );
+}
+
+function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol, lockBadge }) {
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
   const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
@@ -398,15 +429,25 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
 
   return (
     <div className="cart-preview-upsell-section">
-      <div className="cart-preview-upsell-title" style={{ color: upsell.titleColor }}>{upsell.title}</div>
+      {/* Title always gets its own full-width row so its alignment (left/
+          center/right) isn't fighting for space with the badge — sharing a
+          row with the badge made the title's available width shrink
+          unpredictably and forced awkward wraps. The badge gets its own row
+          underneath instead, so both stay legible regardless of title
+          length or alignment. */}
+      <div className="cart-preview-upsell-title" style={{ color: upsell.titleColor, textAlign: upsell.titleAlign || 'left' }}>{upsell.title}</div>
+      {lockBadge && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>{lockBadge}</div>
+      )}
       {isHorizontal ? (
         <div style={isGrid ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' } : { display: 'flex', gap: '7px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {products.map((product) => (
             <div key={product.id} style={{ flexShrink: isGrid ? undefined : 0, width: isGrid ? undefined : '100px', border: '1px solid #e1e3e5', borderRadius: '7px', overflow: 'hidden', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0 }} />
+              <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', flexShrink: 0 }} />
               <div style={{ padding: '5px 6px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
                 <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(product.price)}</div>
+                {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
                 <button style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
                   {upsell.buttonText}
                 </button>
@@ -416,13 +457,17 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
         </div>
       ) : (
         products.map((product) => (
-          <div key={product.id} className="cart-preview-upsell-item">
-            <div className="cart-preview-upsell-image" style={product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined} />
-            <div className="cart-preview-upsell-info">
-              <div className="cart-preview-upsell-name">{product.title}</div>
-              <div className="cart-preview-upsell-price">{formatPrice(product.price)}</div>
+          <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0' }}>
+            <div style={{
+              width: '40px', height: '40px', background: '#f1f2f3', borderRadius: '7px', flexShrink: 0,
+              ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}),
+            }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '12px', fontWeight: 500 }}>{product.title}</div>
+              <div style={{ fontSize: '11px', color: '#6d7175' }}>{formatPrice(product.price)}</div>
+              {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
             </div>
-            <button className="cart-preview-upsell-add" style={{ backgroundColor: checkoutBg, color: checkoutText }}>
+            <button style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: checkoutBg, color: checkoutText }}>
               {upsell.buttonText}
             </button>
           </div>
@@ -533,7 +578,11 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
       </div>
 
       {/* ── Stage: centers the device frame ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '16px 12px', overflow: 'hidden', minHeight: 0 }}>
+      {/* Always fills whatever vertical room is actually available (no
+          forced min-height) — a fixed floor would make the stage scroll on
+          a short window, and the requirement here is the opposite: the
+          whole device frame must be visible without scrolling. */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: '8px 12px', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ── Device frame ── */}
         <div style={{ width: isDesktop ? 360 : 320, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: isDesktop ? 10 : 36, border: isDesktop ? '1px solid #d0d0d0' : '3px solid #1a1a1a', background: '#f9f9f9', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
@@ -596,8 +645,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} />
-                      <PreviewLockBadge featureKey="progress_bar" />
+                      <ProgressBarPreview pb={pb} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 
@@ -611,8 +659,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} />
-                      <PreviewLockBadge featureKey="ai_cart_upsell" />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 
@@ -657,8 +704,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} />
-                      <PreviewLockBadge featureKey="ai_cart_upsell" />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 
@@ -688,8 +734,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} />
-                      <PreviewLockBadge featureKey="progress_bar" />
+                      <ProgressBarPreview pb={pb} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 

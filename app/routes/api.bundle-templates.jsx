@@ -18,6 +18,13 @@ function buildPageBody(shop, templateId) {
 <script src="${scriptOrigin}/combo-page.js" defer></script>`;
 }
 
+// `?preview` is Shopify's own mechanism for staff to view an unpublished
+// page — appending it to an already-published page's URL is wrong (and is
+// what merchants were seeing before this fix). Only unpublished pages need it.
+function buildPreviewUrl(shop, handle, isPublished) {
+  return `https://${shop}/pages/${handle}${isPublished ? '' : '?preview'}`;
+}
+
 // ── Shopify page helpers ───────────────────────────────────────────────────────
 
 // namespace/key here must match what the provisioned section reads via
@@ -37,7 +44,7 @@ async function createShopifyPage(admin, title, handle, shop, templateId) {
   const res = await admin.graphql(`#graphql
     mutation pageCreate($page: PageCreateInput!) {
       pageCreate(page: $page) {
-        page { id title handle }
+        page { id title handle isPublished }
         userErrors { field message }
       }
     }
@@ -47,7 +54,7 @@ async function createShopifyPage(admin, title, handle, shop, templateId) {
     throw new Error(json.data.pageCreate.userErrors.map(e => e.message).join('; '));
   }
   const page = json.data?.pageCreate?.page;
-  return { id: page?.id, handle: page?.handle || handle };
+  return { id: page?.id, handle: page?.handle || handle, isPublished: !!page?.isPublished };
 }
 
 // ── Loader (GET) ──────────────────────────────────────────────────────────────
@@ -118,7 +125,7 @@ export async function action({ request }) {
 
       try {
         const existingRes = await admin.graphql(`#graphql
-          query getPageByHandle($handle: String!) { pageByHandle(handle: $handle) { id title handle } }
+          query getPageByHandle($handle: String!) { pageByHandle(handle: $handle) { id title handle isPublished } }
         `, { variables: { handle } });
         const existingJson = await existingRes.json();
         const existingPage = existingJson.data?.pageByHandle;
@@ -130,7 +137,7 @@ export async function action({ request }) {
               mutation pageUpdate($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }
             `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id, hasGuaranteedTemplate) } });
           } catch {}
-          return Response.json({ success: true, previewUrl: `https://${shop}/pages/${existingPage.handle}?preview`, handle: existingPage.handle });
+          return Response.json({ success: true, previewUrl: buildPreviewUrl(shop, existingPage.handle, existingPage.isPublished), handle: existingPage.handle });
         }
       } catch {}
 
@@ -138,7 +145,7 @@ export async function action({ request }) {
         const pageResult = await createShopifyPage(admin, name || 'Combo Page', handle, shop, id);
         if (pageResult) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, Number(id)]);
-          return Response.json({ success: true, previewUrl: `https://${shop}/pages/${pageResult.handle}?preview`, handle: pageResult.handle });
+          return Response.json({ success: true, previewUrl: buildPreviewUrl(shop, pageResult.handle, pageResult.isPublished), handle: pageResult.handle });
         }
       } catch (e) {
         return Response.json({ success: false, error: e.message });

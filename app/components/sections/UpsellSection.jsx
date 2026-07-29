@@ -344,7 +344,6 @@ export function UpsellSection() {
             <Text as="h3" variant="headingSm">Upsell Settings</Text>
             <FormLayout>
               <FeatureToggle label="Show when cart is empty" enabled={upsellProducts.showWhenEmpty} onToggle={(v) => updateUpsellProducts({ showWhenEmpty: v })} />
-              <FeatureToggle label="Show upsell offer if item already in cart" enabled={upsellProducts.showIfInCart} onToggle={(v) => updateUpsellProducts({ showIfInCart: v })} />
               <FeatureToggle label="Show product reviews on upsells" enabled={upsellProducts.showReviews} onToggle={(v) => updateUpsellProducts({ showReviews: v })} />
             </FormLayout>
           </BlockStack>
@@ -390,6 +389,16 @@ export function UpsellSection() {
             <Text as="h3" variant="headingSm">Content</Text>
             <FormLayout>
               <TextField label="Upsell title" value={upsellProducts.title} onChange={(v) => updateUpsellProducts({ title: v })} autoComplete="off" />
+              <Select
+                label="Title alignment"
+                options={[
+                  { label: 'Left', value: 'left' },
+                  { label: 'Center', value: 'center' },
+                  { label: 'Right', value: 'right' },
+                ]}
+                value={upsellProducts.titleAlign}
+                onChange={(v) => updateUpsellProducts({ titleAlign: v })}
+              />
               <ColorField label="Title color" value={upsellProducts.titleColor} onChange={(v) => updateUpsellProducts({ titleColor: v })} />
               <TextField label="Button text" value={upsellProducts.buttonText} onChange={(v) => updateUpsellProducts({ buttonText: v })} autoComplete="off" />
             </FormLayout>

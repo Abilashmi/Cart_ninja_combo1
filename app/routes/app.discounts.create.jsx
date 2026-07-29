@@ -101,7 +101,7 @@ export const action = async ({ request }) => {
     /* ── Shared minimum requirement builder ── */
     const buildMinimumRequirement = () => {
         if (minimumRequirementValue === "amount") {
-            return { subtotal: { greaterThanOrEqualToSubtotal: { amount: minimumPurchaseAmount, currencyCode: "INR" } } };
+            return { subtotal: { greaterThanOrEqualToSubtotal: minimumPurchaseAmount } };
         }
         if (minimumRequirementValue === "quantity") {
             return { quantity: { greaterThanOrEqualToQuantity: minimumQuantity } };
