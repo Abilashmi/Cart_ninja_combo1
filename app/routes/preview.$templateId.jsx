@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLoaderData, useParams } from 'react-router';
 import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
+import { CdoPreviewBar } from '../components/CdoPreviewBar';
 
 export const loader = async ({ params, request }) => {
   const url = new URL(request.url);
@@ -85,6 +86,37 @@ function getProductSizing(config, isMobile) {
   const ratio = config.product_image_ratio || 'square';
   const productImageAspectRatio = ratio === 'portrait' ? '3 / 4' : ratio === 'rectangle' ? '4 / 3' : '1 / 1';
   return { productTitleSize, productPriceSize, productImageAspectRatio };
+}
+
+// Matches app.bundles.customize.jsx ComboPreview's heading typography derivation
+// (headingFontFamily/Letter Spacing/Line Height/Text Transform/title width) so
+// the storefront heading can't drift from what the builder renders.
+function getHeadingStyle(config) {
+  const fontFamily = config.heading_font_family && config.heading_font_family !== 'inherit'
+    ? `'${config.heading_font_family}', sans-serif`
+    : 'inherit';
+  return {
+    fontFamily,
+    letterSpacing: `${config.heading_letter_spacing ?? 0}px`,
+    lineHeight: config.heading_line_height ?? 1.2,
+    textTransform: config.heading_text_transform || 'none',
+  };
+}
+
+function getTitleWidthStyle(config) {
+  const mode = config.title_max_width_mode || 'auto';
+  if (mode === 'full') return { width: '100%' };
+  if (mode === 'custom') return { width: '100%', maxWidth: `${config.title_max_width_custom ?? 400}px` };
+  return { width: `${config.title_width || 100}%` };
+}
+
+// Poppins/Montserrat/Roboto aren't loaded on the storefront by default (Inter
+// is, via the <link> in the root document head) — this fetches only the
+// chosen font's stylesheet, matching ComboPreview's on-demand Google Fonts load.
+function GoogleFontLink({ family }) {
+  if (!family || family === 'inherit' || family === 'Inter') return null;
+  const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700;800&display=swap`;
+  return <link rel="stylesheet" href={href} />;
 }
 
 function Lightbox({ images, onClose, onPrev, onNext, goTo }) {
@@ -293,12 +325,13 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
   };
 
   const handleAddClick = () => {
-    if (!isAdded && hasVariants && variantsDisplay === 'popup') {
-      setShowVariantPopup(true);
+    if (isAdded) {
+      if (!showQtySelector) { onRemove(activeVariantId); return; }
+      handleInc();
       return;
     }
-    if (isAdded && !showQtySelector) {
-      onRemove(activeVariantId);
+    if (hasVariants && variantsDisplay === 'popup') {
+      setShowVariantPopup(true);
       return;
     }
     onAdd(product, activeVariantId, 1);
@@ -513,8 +546,8 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           padding: '6px 0 0', borderTop: '1px solid #eee',
           justifyContent: 'space-between',
         }}>
-          {isAdded && showQtySelector ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
+          {showQtySelector && (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <button type="button" onClick={handleDec}
                 style={{
                   width: 30, height: 30, border: '1px solid #ddd', background: '#f9f9f9',
@@ -522,7 +555,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
                   display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
                 }}>−</button>
               <span style={{
-                flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 14,
+                width: 35, textAlign: 'center', fontWeight: 700, fontSize: 14,
                 border: '1px solid #ddd', borderLeft: 'none', borderRight: 'none', padding: '6px 0',
               }}>{qty}</span>
               <button type="button" onClick={handleInc}
@@ -532,20 +565,12 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
                   display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
                 }}>+</button>
             </div>
-          ) : isAdded ? (
-            <button type="button" onClick={() => onRemove(activeVariantId)}
-              style={{
-                flex: 1, background: '#ff4d4d', color: '#fff', border: 'none', padding: '8px 12px',
-                borderRadius: `${btnRadius}px`, cursor: 'pointer', fontWeight: btnFontWeight, fontSize: `${btnFontSize}px`,
-              }}>
-              Remove
-            </button>
-          ) : null}
-          {showAddBtn && !isAdded && (
+          )}
+          {showAddBtn && (
             <button type="button" onClick={handleAddClick}
               style={{
-                flex: 1, background: btnBg, color: btnTextColor,
-                border: 'none', padding: '8px 12px',
+                flex: 1, background: isAdded ? '#ff4d4d' : btnBg, color: btnTextColor,
+                border: 'none', padding: '8px 12px', marginLeft: 4,
                 borderRadius: `${btnRadius}px`, cursor: 'pointer',
                 fontWeight: btnFontWeight, fontSize: `${btnFontSize}px`,
                 transition: 'all 0.2s',
@@ -621,7 +646,8 @@ function GenericProductGrid({ products, config, isMobile, selectedMap, onAdd, on
 function Layout2Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false,
+                          selectedProducts, onReset, barCurrencySymbol }) {
   const tabs = [];
   if (config.show_tab_all !== false) {
     tabs.push({ label: config.tab_all_label || 'Collections', value: 'all' });
@@ -685,7 +711,7 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
         fontFamily: 'inherit', color: textColor,
         paddingTop: containerPad.paddingTop, paddingRight: containerPad.paddingRight,
         paddingBottom: containerPad.paddingBottom, paddingLeft: containerPad.paddingLeft,
-        background: '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+        background: config.bg_color || '#f9f9f9', maxWidth: '100%', margin: '0 auto',
         border: '1px solid #e5e5e5', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
         position: 'relative', overflow: 'hidden',
       }}>
@@ -701,7 +727,7 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
         )}
 
         {config.show_title_description !== false && (
-          <div style={{ width: `${config.title_width || 100}%`, margin: '0 auto' }}>
+          <div style={{ ...getTitleWidthStyle(config), margin: '0 auto' }}>
             <div style={{
               textAlign: headingAlign,
               paddingTop: titleBox.paddingTop, paddingRight: titleBox.paddingRight,
@@ -709,7 +735,7 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
               marginTop: titleBox.marginTop, marginRight: titleBox.marginRight,
               marginBottom: titleBox.marginBottom, marginLeft: titleBox.marginLeft,
             }}>
-              <h1 style={{ fontSize: `${headingSize}px`, margin: 0, marginBottom: 4, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign }}>
+              <h1 style={{ fontSize: `${headingSize}px`, margin: 0, marginBottom: 4, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign, ...getHeadingStyle(config) }}>
                 {config.collection_title || 'Create Your Combo'}
               </h1>
             </div>
@@ -783,46 +809,16 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        {config.show_preview_bar !== false && (
-          <div style={{
-            borderTop: '1px solid #eee', padding: '16px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: config.preview_bar_bg || '#fff',
-          }}>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                {config.preview_bar_title || templateName}
-              </div>
-              {totalSelected > 0 && (
-                <div style={{ fontSize: '12px' }}>
-                  {totalSelected}/{maxProducts} selected
-                  {discountApplicable ? (
-                    <span style={{ marginLeft: '6px' }}>
-                      · <span style={{ textDecoration: 'line-through', color: '#999' }}>${totalPrice.toFixed(2)}</span>
-                      {' '}<span style={{ color: '#22c55e', fontWeight: 700 }}>${finalPrice.toFixed(2)}</span>
-                    </span>
-                  ) : (
-                    <span style={{ marginLeft: '6px' }}>
-                      · ${totalPrice.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={totalSelected > 0 ? onCheckout : undefined}
-              style={{
-                background: config.checkout_btn_bg || '#000',
-                color: config.checkout_btn_text_color || '#fff',
-                border: 'none', padding: '10px 24px', borderRadius: '6px',
-                fontWeight: 700, fontSize: '13px',
-                cursor: totalSelected > 0 ? 'pointer' : 'default',
-                opacity: totalSelected > 0 ? 1 : 0.5,
-                transition: 'opacity 0.2s',
-              }}>
-              {config.checkout_btn_text || 'Proceed to Checkout'} →
-            </button>
-          </div>
-        )}
+        <CdoPreviewBar
+          config={config}
+          selectedProducts={selectedProducts}
+          totalPrice={totalPrice}
+          finalPrice={finalPrice}
+          isMobile={isMobile}
+          currencySymbol={barCurrencySymbol}
+          onCheckoutClick={onCheckout}
+          onResetClick={onReset}
+        />
       </div>
     </div>
   );
@@ -831,7 +827,8 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout3Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false,
+                          selectedProducts, onReset, barCurrencySymbol }) {
   const primaryColor = config.primary_color || '#20D060';
   const textColor = config.text_color || '#111';
   const bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
@@ -910,7 +907,7 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
   return (
     <div style={{ maxWidth: '480px', margin: '24px auto', padding: '0 16px' }}>
       <div style={{
-        background: '#eef2f7', fontFamily: 'inherit', color: textColor,
+        background: config.bg_color || '#eef2f7', fontFamily: 'inherit', color: textColor,
         borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
       }}>
         <div style={{ paddingBottom: '24px' }}>
@@ -1031,44 +1028,16 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        {config.show_preview_bar !== false && (
-          <div style={{
-            borderTop: '1px solid #eee', padding: '16px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: config.preview_bar_bg || '#fff',
-          }}>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                {config.preview_bar_title || templateName}
-              </div>
-              {totalSelected > 0 && (
-                <div style={{ fontSize: '12px' }}>
-                  {totalSelected}/{maxProducts} selected
-                  {discountApplicable ? (
-                    <span style={{ marginLeft: '6px' }}>
-                      · <span style={{ textDecoration: 'line-through', color: '#999' }}>${totalPrice.toFixed(2)}</span>
-                      {' '}<span style={{ color: '#22c55e', fontWeight: 700 }}>${finalPrice.toFixed(2)}</span>
-                    </span>
-                  ) : (
-                    <span style={{ marginLeft: '6px' }}>· ${totalPrice.toFixed(2)}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={totalSelected > 0 ? onCheckout : undefined}
-              style={{
-                background: config.checkout_btn_bg || '#000',
-                color: config.checkout_btn_text_color || '#fff',
-                border: 'none', padding: '10px 24px', borderRadius: '6px',
-                fontWeight: 700, fontSize: '13px',
-                cursor: totalSelected > 0 ? 'pointer' : 'default',
-                opacity: totalSelected > 0 ? 1 : 0.5,
-                transition: 'opacity 0.2s',
-              }}>
-              {config.checkout_btn_text || 'Proceed to Checkout'} →
-            </button>
-          </div>
-        )}
+        <CdoPreviewBar
+          config={config}
+          selectedProducts={selectedProducts}
+          totalPrice={totalPrice}
+          finalPrice={finalPrice}
+          isMobile={isMobile}
+          currencySymbol={barCurrencySymbol}
+          onCheckoutClick={onCheckout}
+          onResetClick={onReset}
+        />
       </div>
     </div>
   );
@@ -1077,7 +1046,8 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout4Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false,
+                          selectedProducts, onReset, barCurrencySymbol }) {
   // Editorial Split — same banner/progress/title/grid pieces as Layout2, just
   // reordered (banner first, no collection tabs) per ComboPreview's layout4
   // sectionOrder (app.bundles.customize.jsx ~5999-6008), which falls through
@@ -1109,7 +1079,7 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
         fontFamily: 'inherit', color: textColor,
         paddingTop: containerPad.paddingTop, paddingRight: containerPad.paddingRight,
         paddingBottom: containerPad.paddingBottom, paddingLeft: containerPad.paddingLeft,
-        background: '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+        background: config.bg_color || '#f9f9f9', maxWidth: '100%', margin: '0 auto',
         border: '1px solid #e5e5e5', borderRadius: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
         position: 'relative', overflow: 'hidden',
       }}>
@@ -1131,7 +1101,7 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
         </div>
 
         {config.show_title_description !== false && (
-          <div style={{ width: `${config.title_width || 100}%`, margin: '0 auto', padding: '0 20px 20px' }}>
+          <div style={{ ...getTitleWidthStyle(config), margin: '0 auto', padding: '0 20px 20px' }}>
             <div style={{
               textAlign: headingAlign,
               paddingTop: titleBox.paddingTop, paddingRight: titleBox.paddingRight,
@@ -1139,7 +1109,7 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
               marginTop: titleBox.marginTop, marginRight: titleBox.marginRight,
               marginBottom: titleBox.marginBottom, marginLeft: titleBox.marginLeft,
             }}>
-              <h1 style={{ margin: 0, fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign, lineHeight: 1.2 }}>
+              <h1 style={{ margin: 0, fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight, textAlign: headingAlign, ...getHeadingStyle(config) }}>
                 {config.collection_title || 'Create Your Combo'}
               </h1>
             </div>
@@ -1172,44 +1142,16 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        {config.show_preview_bar !== false && (
-          <div style={{
-            borderTop: '1px solid #eee', padding: '16px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: config.preview_bar_bg || '#fff',
-          }}>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                {config.preview_bar_title || templateName}
-              </div>
-              {totalSelected > 0 && (
-                <div style={{ fontSize: '12px' }}>
-                  {totalSelected}/{maxProducts} selected
-                  {discountApplicable ? (
-                    <span style={{ marginLeft: '6px' }}>
-                      · <span style={{ textDecoration: 'line-through', color: '#999' }}>${totalPrice.toFixed(2)}</span>
-                      {' '}<span style={{ color: '#22c55e', fontWeight: 700 }}>${finalPrice.toFixed(2)}</span>
-                    </span>
-                  ) : (
-                    <span style={{ marginLeft: '6px' }}>· ${totalPrice.toFixed(2)}</span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={totalSelected > 0 ? onCheckout : undefined}
-              style={{
-                background: config.checkout_btn_bg || '#000',
-                color: config.checkout_btn_text_color || '#fff',
-                border: 'none', padding: '10px 24px', borderRadius: '6px',
-                fontWeight: 700, fontSize: '13px',
-                cursor: totalSelected > 0 ? 'pointer' : 'default',
-                opacity: totalSelected > 0 ? 1 : 0.5,
-                transition: 'opacity 0.2s',
-              }}>
-              {config.checkout_btn_text || 'Proceed to Checkout'} →
-            </button>
-          </div>
-        )}
+        <CdoPreviewBar
+          config={config}
+          selectedProducts={selectedProducts}
+          totalPrice={totalPrice}
+          finalPrice={finalPrice}
+          isMobile={isMobile}
+          currencySymbol={barCurrencySymbol}
+          onCheckoutClick={onCheckout}
+          onResetClick={onReset}
+        />
       </div>
     </div>
   );
@@ -1218,7 +1160,8 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
 function Layout1Preview({ config, productsByHandle, collectionNameMap, templateName,
                           selectedMap, onAdd, onQtyChange, onRemove, onImageClick,
                           totalSelected, maxProducts, onCheckout,
-                          totalPrice, finalPrice, discountApplicable, isMobile = false }) {
+                          totalPrice, finalPrice, discountApplicable, isMobile = false,
+                          selectedProducts, onReset, barCurrencySymbol }) {
   const allSteps = [1, 2, 3, 4, 5];
   const activeSteps = allSteps.filter((step) => {
     if (step === 1) return true;
@@ -1254,7 +1197,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
   return (
     <div style={{ maxWidth: '900px', margin: '24px auto', padding: '0 16px' }}>
       <div style={{
-        background: '#fff', borderRadius: '12px',
+        background: config.bg_color || '#fff', borderRadius: '12px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.1)', overflow: 'hidden',
         fontFamily: 'inherit', color: textColor, position: 'relative',
       }}>
@@ -1313,7 +1256,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
         {config.show_title_description !== false && (
           <div style={{ padding: '24px 20px' }}>
             <div style={{
-              width: isMobile ? '100%' : `${config.title_width || 100}%`, textAlign: headingAlign,
+              ...(isMobile ? { width: '100%' } : getTitleWidthStyle(config)), textAlign: headingAlign,
               paddingTop: titleBox.paddingTop || 0, paddingRight: titleBox.paddingRight || 0,
               paddingBottom: titleBox.paddingBottom || 0, paddingLeft: titleBox.paddingLeft || 0,
               marginTop: titleBox.marginTop || 0, marginRight: titleBox.marginRight || 0,
@@ -1321,7 +1264,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
             }}>
               <h1 style={{
                 margin: 0, fontSize: `${headingSize}px`, color: headingColor,
-                fontWeight: headingFontWeight, lineHeight: 1.2,
+                fontWeight: headingFontWeight, ...getHeadingStyle(config),
               }}>
                 {config.collection_title || 'Create Your Combo'}
               </h1>
@@ -1458,46 +1401,16 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
           })}
         </div>
 
-        {config.show_preview_bar !== false && (
-          <div style={{
-            borderTop: '1px solid #eee', padding: '16px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            background: config.preview_bar_bg || '#fff',
-          }}>
-            <div style={{ fontSize: '13px', color: '#666' }}>
-              <div style={{ fontWeight: 600, marginBottom: '2px' }}>
-                {config.preview_bar_title || templateName}
-              </div>
-              {totalSelected > 0 && (
-                <div style={{ fontSize: '12px' }}>
-                  {totalSelected}/{maxProducts} selected
-                  {discountApplicable ? (
-                    <span style={{ marginLeft: '6px' }}>
-                      · <span style={{ textDecoration: 'line-through', color: '#999' }}>${totalPrice.toFixed(2)}</span>
-                      {' '}<span style={{ color: '#22c55e', fontWeight: 700 }}>${finalPrice.toFixed(2)}</span>
-                    </span>
-                  ) : (
-                    <span style={{ marginLeft: '6px' }}>
-                      · ${totalPrice.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <button type="button" onClick={totalSelected > 0 ? onCheckout : undefined}
-              style={{
-                background: config.checkout_btn_bg || '#000',
-                color: config.checkout_btn_text_color || '#fff',
-                border: 'none', padding: '10px 24px', borderRadius: '6px',
-                fontWeight: 700, fontSize: '13px',
-                cursor: totalSelected > 0 ? 'pointer' : 'default',
-                opacity: totalSelected > 0 ? 1 : 0.5,
-                transition: 'opacity 0.2s',
-              }}>
-              {config.checkout_btn_text || 'Proceed to Checkout'} →
-            </button>
-          </div>
-        )}
+        <CdoPreviewBar
+          config={config}
+          selectedProducts={selectedProducts}
+          totalPrice={totalPrice}
+          finalPrice={finalPrice}
+          isMobile={isMobile}
+          currencySymbol={barCurrencySymbol}
+          onCheckoutClick={onCheckout}
+          onResetClick={onReset}
+        />
       </div>
     </div>
   );
@@ -1666,6 +1579,31 @@ export default function ComboPreviewPage() {
     (embed ? window.top : window).location.href = destination;
   };
 
+  const onReset = () => setSelectedMap({});
+
+  // CdoPreviewBar (app/components/CdoPreviewBar.jsx) is the same component
+  // the builder's own live preview uses for this bottom bar — reused here
+  // directly rather than reimplemented, so the thumbnail row/price/button
+  // styling can't drift from what the merchant designed. It expects a flat
+  // list of selected line items, not the {variantId: {productId, qty}} map
+  // this page tracks state with.
+  const selectedProducts = Object.entries(selectedMap).map(([variantId, sel]) => {
+    const product = productMap[sel.productId];
+    const variant = (product?.variants || []).find((v) => String(v.id) === String(variantId));
+    return {
+      id: sel.productId,
+      variantId,
+      quantity: sel.qty || 0,
+      price: variantPriceMap[variantId] || 0,
+      image: (variant?.image || product?.image)?.url,
+      title: product?.title,
+    };
+  });
+  const barCurrencySymbol = getCurrencySymbol(
+    productMap[Object.values(selectedMap)[0]?.productId]?.currency
+    || Object.values(productMap)[0]?.currency
+  );
+
   const lightboxImages = lightboxProduct
     ? (lightboxProduct.images && lightboxProduct.images.length > 0
         ? lightboxProduct.images
@@ -1685,6 +1623,7 @@ export default function ComboPreviewPage() {
         }
       `}</style>
       {config.custom_css && <style>{config.custom_css}</style>}
+      <GoogleFontLink family={config.heading_font_family} />
 
       {toast && (
         <div
@@ -1757,6 +1696,9 @@ export default function ComboPreviewPage() {
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
           isMobile={isMobile}
+          selectedProducts={selectedProducts}
+          onReset={onReset}
+          barCurrencySymbol={barCurrencySymbol}
         />
       ) : layout === 'layout4' ? (
         <Layout4Preview
@@ -1776,6 +1718,9 @@ export default function ComboPreviewPage() {
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
           isMobile={isMobile}
+          selectedProducts={selectedProducts}
+          onReset={onReset}
+          barCurrencySymbol={barCurrencySymbol}
         />
       ) : layout === 'layout2' ? (
         <Layout2Preview
@@ -1795,6 +1740,9 @@ export default function ComboPreviewPage() {
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
           isMobile={isMobile}
+          selectedProducts={selectedProducts}
+          onReset={onReset}
+          barCurrencySymbol={barCurrencySymbol}
         />
       ) : (
         <Layout1Preview
@@ -1814,6 +1762,9 @@ export default function ComboPreviewPage() {
           finalPrice={finalPrice}
           discountApplicable={discountApplicable}
           isMobile={isMobile}
+          selectedProducts={selectedProducts}
+          onReset={onReset}
+          barCurrencySymbol={barCurrencySymbol}
         />
       )}
 

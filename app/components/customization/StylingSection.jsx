@@ -86,6 +86,9 @@ function StylingSectionComponent({
             {PxField && <PxField label="Card Padding (px)" value={config.product_card_padding || 10} onChange={(v) => updateConfig('product_card_padding', v)} />}
             {PxField && <PxField label="Gap (px)" value={config.products_gap || 12} onChange={(v) => updateConfig('products_gap', v)} />}
           </div>
+          <div className="cst-grid-2">
+            {PxField && <PxField label="Card Border Radius" value={config.card_border_radius ?? 12} onChange={(v) => updateConfig('card_border_radius', v)} />}
+          </div>
           <Checkbox label="Enable product hover effect" checked={!!config.enable_product_hover} onChange={(v) => updateConfig('enable_product_hover', v)} />
           {config.enable_product_hover && (
             <Select
@@ -98,6 +101,30 @@ function StylingSectionComponent({
               onChange={(v) => updateConfig('product_hover_mode', v)}
             />
           )}
+        </FormLayout>
+      </SectionCard>
+
+      <SectionCard title="Background & Section Spacing" expanded={expandedSections.sectionSpacing} onToggle={() => toggleSection('sectionSpacing')}>
+        <FormLayout>
+          {ColorPickerField && <ColorPickerField label="Combo Background" value={config.bg_color || '#ffffff'} onChange={(v) => updateConfig('bg_color', v)} />}
+          <div className="cst-section-divider">
+            <Text variant="headingSm" as="h6">Section Padding — Desktop (px)</Text>
+            <div className="cst-grid-4">
+              {PxField && <PxField label="Top" value={config.container_padding_top_desktop ?? 0} onChange={(v) => updateConfig('container_padding_top_desktop', v)} />}
+              {PxField && <PxField label="Right" value={config.container_padding_right_desktop ?? 0} onChange={(v) => updateConfig('container_padding_right_desktop', v)} />}
+              {PxField && <PxField label="Bottom" value={config.container_padding_bottom_desktop ?? 0} onChange={(v) => updateConfig('container_padding_bottom_desktop', v)} />}
+              {PxField && <PxField label="Left" value={config.container_padding_left_desktop ?? 0} onChange={(v) => updateConfig('container_padding_left_desktop', v)} />}
+            </div>
+          </div>
+          <div className="cst-section-divider">
+            <Text variant="headingSm" as="h6">Section Padding — Mobile (px)</Text>
+            <div className="cst-grid-4">
+              {PxField && <PxField label="Top" value={config.container_padding_top_mobile ?? 0} onChange={(v) => updateConfig('container_padding_top_mobile', v)} />}
+              {PxField && <PxField label="Right" value={config.container_padding_right_mobile ?? 0} onChange={(v) => updateConfig('container_padding_right_mobile', v)} />}
+              {PxField && <PxField label="Bottom" value={config.container_padding_bottom_mobile ?? 0} onChange={(v) => updateConfig('container_padding_bottom_mobile', v)} />}
+              {PxField && <PxField label="Left" value={config.container_padding_left_mobile ?? 0} onChange={(v) => updateConfig('container_padding_left_mobile', v)} />}
+            </div>
+          </div>
         </FormLayout>
       </SectionCard>
     </>

@@ -8,6 +8,8 @@ export const CdoPreviewBar = ({
   isMobile,
   loading,
   currencySymbol = '$',
+  onCheckoutClick,
+  onResetClick,
 }) => {
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   if (!config.show_preview_bar) return null;
@@ -364,6 +366,7 @@ export const CdoPreviewBar = ({
                 {config.show_reset_btn !== false && (
                   <button
                     type="button"
+                    onClick={onResetClick}
                     style={{
                       flex: isMobile ? 1 : 'none',
                       width: isMobile ? '100%' : 'auto',
@@ -386,6 +389,7 @@ export const CdoPreviewBar = ({
                 {config.show_preview_checkout_btn !== false && (
                   <button
                     type="button"
+                    onClick={onCheckoutClick}
                     style={{
                       flex: isMobile ? 1 : 'none',
                       width: isMobile ? '100%' : 'auto',
@@ -401,12 +405,12 @@ export const CdoPreviewBar = ({
                       padding: '10px 20px',
                       borderRadius: config.preview_border_radius || 6,
                       fontWeight: 700,
-                      cursor: loading ? 'not-allowed' : 'pointer',
+                      cursor: (loading || !canOpenDrawer) ? 'not-allowed' : 'pointer',
                       minHeight: isMobile ? '48px' : 'auto',
                       fontSize: isMobile ? '13px' : 'inherit',
-                      opacity: loading ? 0.6 : 1,
+                      opacity: (loading || !canOpenDrawer) ? 0.6 : 1,
                     }}
-                    disabled={loading}
+                    disabled={loading || !canOpenDrawer}
                   >
                     {config.preview_checkout_btn_text || 'Checkout'}
                   </button>

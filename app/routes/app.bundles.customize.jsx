@@ -1376,6 +1376,12 @@ const DEFAULT_COMBO_CONFIG = {
   heading_size: 32,
   heading_color: '#333333',
   heading_font_weight: '700',
+  heading_font_family: 'inherit', // inherit, Inter, Poppins, Montserrat, Roboto
+  heading_letter_spacing: 0,
+  heading_line_height: 1.2,
+  heading_text_transform: 'none', // none, uppercase, lowercase, capitalize
+  title_max_width_mode: 'auto', // auto, full, custom
+  title_max_width_custom: 400,
   description_align: 'left',
   description_size: 16,
   description_color: '#666666',
@@ -1897,6 +1903,7 @@ export default function Customize() {
     customCss: false,
     stickyCheckoutBtn: false,
     buttons: false,
+    sectionSpacing: false,
   });
 
   const toggleSection = (sectionKey) => {
@@ -4157,6 +4164,21 @@ function ComboPreview({
   const sliderRef = useRef(null);
   const tabScrollRef = useRef(null);
 
+  // Loads the merchant's chosen heading font from Google Fonts on demand —
+  // "Inter"/"Theme Font" need no fetch (Inter already ships with Polaris;
+  // Theme Font just inherits), so this only fires for Poppins/Montserrat/Roboto.
+  useEffect(() => {
+    const family = config.heading_font_family;
+    if (!family || family === 'inherit' || family === 'Inter') return;
+    const linkId = `cdo-google-font-${family.replace(/\s+/g, '-')}`;
+    if (document.getElementById(linkId)) return;
+    const link = document.createElement('link');
+    link.id = linkId;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700;800&display=swap`;
+    document.head.appendChild(link);
+  }, [config.heading_font_family]);
+
   // ── Section inspect state (Shopify HighlightZone pattern) ──────────────
   const [inspectActive, setInspectActive] = useState(null);
   const [inspectHover, setInspectHover]   = useState(null);
@@ -4296,6 +4318,19 @@ function ComboPreview({
     ? config.description_align_mobile || config.description_align || 'left'
     : config.description_align || 'left';
 
+  const headingFontFamily = config.heading_font_family && config.heading_font_family !== 'inherit'
+    ? `'${config.heading_font_family}', sans-serif`
+    : 'inherit';
+  const headingLetterSpacing = `${config.heading_letter_spacing ?? 0}px`;
+  const headingLineHeight = config.heading_line_height ?? 1.2;
+  const headingTextTransform = config.heading_text_transform || 'none';
+  const titleMaxWidthMode = config.title_max_width_mode || 'auto';
+  const titleWidthStyle = titleMaxWidthMode === 'full'
+    ? { width: '100%' }
+    : titleMaxWidthMode === 'custom'
+      ? { width: '100%', maxWidth: `${config.title_max_width_custom ?? 400}px` }
+      : { width: `${config.title_width || 100}%` };
+
   // Padding & Margins
   const titlePadding = {
     top: isMobile
@@ -4397,7 +4432,7 @@ function ComboPreview({
 
   // Title & Description renderer
   const renderTitleDescription = () => (
-    <div style={{ width: `${config.title_width || 100}%`, margin: '0 auto' }}>
+    <div style={{ ...titleWidthStyle, margin: '0 auto' }}>
       <div
         style={{
           paddingTop: titlePadding.top,
@@ -4418,9 +4453,13 @@ function ComboPreview({
             color: headingColor,
             fontWeight: headingFontWeight,
             textAlign: headingAlign,
+            fontFamily: headingFontFamily,
+            letterSpacing: headingLetterSpacing,
+            lineHeight: headingLineHeight,
+            textTransform: headingTextTransform,
           }}
         >
-          <InlineEdit value={config.collection_title || ''} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight }} />
+          <InlineEdit value={config.collection_title || ''} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor, fontWeight: headingFontWeight, fontFamily: headingFontFamily, letterSpacing: headingLetterSpacing, lineHeight: headingLineHeight, textTransform: headingTextTransform }} />
         </h1>
       </div>
       {config.collection_description && (
@@ -6031,7 +6070,7 @@ function ComboPreview({
   // === Layout 3 (FMCG / App Style) Specific Rendering ===
   if (config.layout === 'layout3') {
     const primaryColor = config.primary_color || '#20D060';
-    const bgColor = '#eef2f7';
+    const bgColor = config.bg_color || '#eef2f7';
     const textColor = config.text_color || '#111';
     const progressTextColor = config.progress_text_color || textColor;
     const topProgressFillColor =
@@ -6743,7 +6782,7 @@ function ComboPreview({
     return (
       <div
         style={{
-          background: '#fff',
+          background: config.bg_color || '#fff',
           fontFamily: 'inherit',
           color: '#333',
           minHeight: '100%',
@@ -6937,7 +6976,7 @@ function ComboPreview({
           >
             <div
               style={{
-                width: isMobile ? '100%' : `${config.title_width || 100}%`,
+                ...(isMobile ? { width: '100%' } : titleWidthStyle),
                 textAlign: headingAlign,
                 paddingTop: config.title_container_padding_top || 0,
                 paddingRight: config.title_container_padding_right || 0,
@@ -6955,10 +6994,13 @@ function ComboPreview({
                   fontSize: `${headingSize}px`,
                   color: headingColor || '#333',
                   fontWeight: headingFontWeight || '700',
-                  lineHeight: 1.2,
+                  fontFamily: headingFontFamily,
+                  letterSpacing: headingLetterSpacing,
+                  lineHeight: headingLineHeight,
+                  textTransform: headingTextTransform,
                 }}
               >
-                <InlineEdit value={config.collection_title || 'Create Your Combo'} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor || '#333', fontWeight: headingFontWeight || '700' }} />
+                <InlineEdit value={config.collection_title || 'Create Your Combo'} configKey="collection_title" onUpdate={onUpdateConfig} style={{ fontSize: `${headingSize}px`, color: headingColor || '#333', fontWeight: headingFontWeight || '700', fontFamily: headingFontFamily, letterSpacing: headingLetterSpacing, lineHeight: headingLineHeight, textTransform: headingTextTransform }} />
               </h1>
             </div>
             <div
@@ -7288,7 +7330,7 @@ function ComboPreview({
           paddingRight: paddingRight,
           paddingBottom: paddingBottom,
           paddingLeft: paddingLeft,
-          background: '#f9f9f9',
+          background: config.bg_color || '#f9f9f9',
           maxWidth: viewportWidth,
           margin: '0 auto',
           border: '1px solid #e5e5e5',

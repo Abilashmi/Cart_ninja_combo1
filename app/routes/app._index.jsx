@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLoaderData, useRouteError, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Text, Icon } from '@shopify/polaris';
 import {
-  CheckCircleIcon, CartIcon, DiscountCodeIcon, RewardIcon,
+  CartIcon, DiscountCodeIcon, RewardIcon,
   CashDollarIcon, ChartCohortIcon, CollectionIcon,
   ArrowRightIcon, StarIcon, SettingsIcon,
 } from '@shopify/polaris-icons';
@@ -14,6 +14,7 @@ import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
 import { PLANS } from "../config/plans";
 import { formatAmount } from '../utils/currency.shared';
+import VideoTutorialCard, { VIDEO_CARD_STYLES } from '../components/VideoTutorialCard';
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
 
@@ -110,13 +111,15 @@ const ALL_LESSONS = COURSE_SECTIONS.flatMap(s => s.lessons);
 // TODO: paste the embed URL (YouTube/Vimeo/CDN) here once the intro video is published
 const WELCOME_VIDEO_URL = 'https://www.youtube.com/embed/Ap1wvi6FN9I';
 
+// TODO: paste each step's real embed URL (YouTube/Vimeo/CDN) once recorded —
+// placeholders reuse the intro video for now.
 const STEPS = [
-  { id: 1, title: 'Enable App Embed',       desc: 'Activate Brix in your Shopify theme editor.',               to: null,                  color: '#667eea', icon: SettingsIcon,     minPlan: 'starter' },
-  { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart.',  to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter' },
-  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Add frequently bought together products to boost AOV.',     to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter' },
-  { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner and target it to your audience.',   to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter' },
-  { id: 5, title: 'Build Your First Combo', desc: 'Design a bundle layout and publish it to your store.',      to: '/app/bundles',       color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter' },
-  { id: 6, title: 'Review Your Analytics',  desc: 'Check revenue, funnels, and conversion rates in real-time.',to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter' },
+  { id: 1, title: 'Enable App Embed',       desc: 'Activate Brix in your Shopify theme editor to bring the cart drawer, upsells, and banners to life on your storefront.', to: null,                  color: '#667eea', icon: SettingsIcon,     minPlan: 'starter', dur: '01:30', category: 'Getting Started', difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL },
+  { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart, then preview it live before publishing to your store.',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'Cart Drawer',      difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL },
+  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Add frequently bought together products to your cart drawer and product pages to boost average order value.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: WELCOME_VIDEO_URL },
+  { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner with targeting rules so the right shoppers see the right offer at the right time.',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'Coupon Banner',    difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL },
+  { id: 5, title: 'Build a Combo in Minutes', desc: 'Learn how to create high-converting product bundles using Combo Builder. Customize layouts, preview changes in real time, and publish your combo page with just a few clicks.', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'Combo Builder',    difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL },
+  { id: 6, title: 'Review Your Analytics',  desc: 'Understand revenue, funnels, and conversion rates in real-time so you know what to optimise next.',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'Analytics',        difficulty: 'Intermediate', videoUrl: WELCOME_VIDEO_URL },
 ];
 
 const MINI_TUTORIALS = [
@@ -138,7 +141,16 @@ const TIPS = [
 
 const STORAGE_KEY = 'cn_first_visit_date';
 const LESSON_PROGRESS_KEY = 'cn_lesson_watched_times';
+const VIDEO_PROGRESS_KEY = 'cn_video_progress_seconds';
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+/* "MM:SS" → total seconds */
+function parseDurationToSeconds(dur) {
+  if (!dur) return 0;
+  const parts = String(dur).split(':').map(Number);
+  if (parts.some(isNaN)) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
 
 /* ─── Lesson-lock helpers ─── */
 
@@ -360,36 +372,126 @@ function CoursePlayer({ selected, onSelect, watchedTimes, onWatch }) {
   );
 }
 
-/* ─── SetupChecklist (reusable in both modes) ─── */
+/* ─── StepVideoModal — the modal overlay used by the Setup Checklist thumbnails ─── */
 
-function SetupChecklist({ completedSteps, markStep, canUse, navigate, toggleMode }) {
-  const doneCount = completedSteps.length;
-  const progressPct = Math.round((doneCount / STEPS.length) * 100);
+function StepVideoModal({ step, onClose, onGoToStep }) {
+  if (!step) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(17, 24, 39, 0.65)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 720, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid #e5e7eb' }}>
+          <div>
+            <Text as="p" variant="bodySm" fontWeight="semibold">{step.title}</Text>
+            <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">{step.desc}</Text></div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: '#6b7280', padding: 4, flexShrink: 0 }}>×</button>
+        </div>
+
+        <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
+          {step.videoUrl ? (
+            <iframe
+              src={step.videoUrl}
+              title={step.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+            />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#9ca3af', fontSize: 12 }}>Video coming soon</span>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>Close</button>
+          {step.to && (
+            <button onClick={onGoToStep} style={{ padding: '8px 16px', background: step.color, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              Go to this step →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── VideoTutorials (reusable in both modes) ───
+ * Each card tracks its own watch progress (persisted in localStorage) so a
+ * partially-watched video shows a resume-style progress bar on its
+ * thumbnail — there is no overall "N of 6 done" checklist bar here.
+ */
+
+function VideoTutorials({ markStep, navigate }) {
+  const [activeStepId, setActiveStepId] = useState(null);
+  const activeStep = STEPS.find(s => s.id === activeStepId) || null;
+
+  // { [stepId]: secondsWatched }
+  const [videoProgress, setVideoProgress] = useState({});
+  const sessionStartRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VIDEO_PROGRESS_KEY);
+      if (stored) setVideoProgress(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  // While a video is open, approximate its watch position by elapsed time
+  // and persist the furthest point reached — so returning later resumes
+  // showing progress instead of starting the bar over from zero.
+  useEffect(() => {
+    if (!activeStepId) return;
+    sessionStartRef.current = Date.now();
+    const durationSec = parseDurationToSeconds(STEPS.find(s => s.id === activeStepId)?.dur);
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - sessionStartRef.current) / 1000;
+      setVideoProgress(prev => {
+        const next = { ...prev, [activeStepId]: Math.min(durationSec, Math.max(prev[activeStepId] || 0, elapsed)) };
+        try { localStorage.setItem(VIDEO_PROGRESS_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeStepId]);
+
+  const handleGoToStep = () => {
+    if (activeStep) {
+      markStep(activeStep.id);
+      if (activeStep.to) navigate(activeStep.to);
+    }
+    setActiveStepId(null);
+  };
+
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-        <div style={{ flex: 1, height: 6, background: '#d4f1fe', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #1a9de0, #2ecc71)', borderRadius: 3, transition: 'width .3s' }} />
-        </div>
-        <Text as="p" variant="bodySm" fontWeight="semibold">{doneCount}/{STEPS.length} steps done</Text>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+      <style>{VIDEO_CARD_STYLES}</style>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         {STEPS.map(step => {
-          const done = completedSteps.includes(step.id);
+          const durationSec = parseDurationToSeconds(step.dur);
+          const watchedSec = videoProgress[step.id] || 0;
+          const progressPct = durationSec > 0 ? Math.min(100, Math.round((watchedSec / durationSec) * 100)) : 0;
           return (
-            <button key={step.id} onClick={() => { markStep(step.id); if (step.to) navigate(step.to); }}
-              style={{ background: done ? '#f0fdf4' : '#fafafa', border: `1px solid ${done ? '#86efac' : '#e5e7eb'}`, borderRadius: 10, padding: '12px 8px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}
-              onMouseOver={e => { if (!done) { e.currentTarget.style.borderColor = step.color; e.currentTarget.style.background = `${step.color}08`; } }}
-              onMouseOut={e => { e.currentTarget.style.borderColor = done ? '#86efac' : '#e5e7eb'; e.currentTarget.style.background = done ? '#f0fdf4' : '#fafafa'; }}
-            >
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: done ? '#d1fae5' : `${step.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', width: 14, height: 14 }}><Icon source={done ? CheckCircleIcon : step.icon} tone={done ? 'success' : undefined} /></span>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: done ? 600 : 400, color: done ? '#059669' : '#374151', lineHeight: 1.3 }}>{step.title}</div>
-            </button>
+            <VideoTutorialCard
+              key={step.id}
+              title={step.title}
+              description={step.desc}
+              category={step.category}
+              difficulty={step.difficulty}
+              duration={step.dur}
+              accent={step.color}
+              watched={progressPct >= 90}
+              progressPct={progressPct}
+              onPlay={() => setActiveStepId(step.id)}
+            />
           );
         })}
       </div>
+
+      <StepVideoModal step={activeStep} onClose={() => setActiveStepId(null)} onGoToStep={handleGoToStep} />
     </div>
   );
 }
@@ -569,13 +671,16 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Setup Checklist */}
+          {/* Video Tutorials */}
           <div>
             <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text as="h2" variant="headingMd" fontWeight="semibold">Setup Checklist</Text>
+              <div>
+                <Text as="h2" variant="headingMd" fontWeight="semibold">Video Tutorials</Text>
+                <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Short walkthroughs for setting up each feature</Text></div>
+              </div>
               <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>View dashboard →</button>
             </div>
-            <SetupChecklist completedSteps={completedSteps} markStep={markStep} canUse={canUse} navigate={navigate} toggleMode={toggleMode} />
+            <VideoTutorials markStep={markStep} navigate={navigate} />
           </div>
 
           {/* Mini Tutorials — hidden for now (video section)
@@ -675,13 +780,16 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Setup Checklist */}
+        {/* Video Tutorials */}
         <div>
           <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text as="h2" variant="headingMd" fontWeight="semibold">Setup Checklist</Text>
+            <div>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">Video Tutorials</Text>
+              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Short walkthroughs for setting up each feature</Text></div>
+            </div>
             <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>View getting started →</button>
           </div>
-          <SetupChecklist completedSteps={completedSteps} markStep={markStep} canUse={canUse} navigate={navigate} toggleMode={toggleMode} />
+          <VideoTutorials markStep={markStep} navigate={navigate} />
         </div>
 
         {/* Feedback */}
