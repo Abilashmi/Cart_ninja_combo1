@@ -56,14 +56,9 @@ All AI routes use `process.env.OPENAI_API_KEY` to hold the **NVIDIA NIM key** (`
 
 This detection pattern must be applied in both Node.js routes and PHP files (`php_backend/ai_upsell.php` already patched).
 
-### Two Separate AI Systems
+### BrixBar — the one AI system
 
-There are **two distinct AI UIs** in this app — do not confuse them:
-
-| System | Component | Scope | Purpose |
-|---|---|---|---|
-| **BrixBar** | `app/components/ai-agent/BrixBar.jsx` | Combo builder pages only | Inline prompt bar mounted directly in page JSX. Used in `app.bundles.customize.jsx` and `app.bundles._index.jsx`. |
-| **CartNinja** | `app/components/ai-agent/CartNinjaAgentV2.jsx` | All `/app/*` pages | Full floating chat panel launched via `CartNinjaFloatingLauncher` in `app/routes/app.jsx`. |
+There is a **single** AI UI in this app: **BrixBar** (`app/components/ai-agent/BrixBar.jsx`), an inline prompt bar mounted directly in page JSX across most `/app/*` pages (`app.cartdrawer` via `CartEditorSidebar.jsx`, `app.bundles.customize.jsx`, `app.bundles._index.jsx`, `app.productwidget.jsx`, `app.additional.jsx`, `app.coupons.jsx`, `app.analytics.jsx`, `app.fbt.jsx`). A prior "CartNinja" floating-chat system has been fully removed — if you see it mentioned in old comments/memory, it's stale.
 
 `BrixBar` must be mounted **once per page** — `app.bundles.customize.jsx` has historically had duplicate `<BrixBar />` instances that cause double-UI bugs. Always check for this when editing that file.
 
@@ -71,12 +66,13 @@ There are **two distinct AI UIs** in this app — do not confuse them:
 
 The cart editor is a live-preview builder split into:
 
-- **`CartEditorContext`** (`app/context/CartEditorContext.jsx`) — single source of truth for all editor state. Exposes `updateGeneral`, `updateDesign`, `updateHeader`, `updateAnnouncements`, `updateEmptyCart`, etc.
-- **`CartEditorSidebar`** → renders section panels from `app/components/sections/`. Each section component pulls state from context. Sections: `design`, `general`, `header`, `announcements`, `progressBar`, `couponSlider`, `upsellProducts`, `emptyCart`, `checkoutButton`, `customCSS`.
+- **`CartEditorContext`** (`app/context/CartEditorContext.jsx`) — single source of truth for all editor state. Exposes `updateGeneral`, `updateDesign`, `updateHeader`, `updateAnnouncements`, `updateEmptyCart`, `updateCountdownTimer`, etc.
+- **`CartEditorSidebar`** → renders section panels from `app/components/sections/`. Each section component pulls state from context. Sections: `design`, `general`, `header`, `announcements`, `progressBar`, `couponSlider`, `upsellProducts`, `countdownTimer`, `emptyCart`, `checkoutButton`, `customCSS`.
 - **`CartPreview`** — right-side live preview, also reads from context.
-- **Save flow** (`CartEditorPage.handleSave`): fires two parallel saves — a legacy blob to `POST /app/cartdrawer` and normalized saves to `/api/cart-drawer-config`, `/api/progress-bar`, `/api/coupon-slider-settings`, `/api/upsell-settings`.
+- **Save flow** (`CartEditorPage.handleSave`): fires two parallel saves — a legacy blob to `POST /app/cartdrawer` and normalized saves to `/api/cart-drawer-config`, `/api/progress-bar`, `/api/coupon-slider-settings`, `/api/upsell-settings`, `/api/countdown-timer`.
+- **Save layer** (`app/services/cart-config-writes.server.js`): every normalized route above is a thin wrapper around a shared save function here (`saveCartDrawerConfig`, `saveProgressBarSettings`, `saveUpsellWidgetSettings`, `saveCouponSliderSettings`, `saveFbtWidgetSettings`, `saveCountdownTimerSettings`). Each fetches the existing row first and merges — a field omitted from the caller's patch falls back to the current DB value, never a hardcoded default — so the AI agent's tool calls (which often touch one field at a time) can never silently reset unrelated fields. The AI tool executors (`ai-agent-tools.server.js`) call these same functions directly, in-process.
 
-The `cart_drawer_config` MySQL table is the canonical store for announcement, general, header, design, and empty cart fields (the newer normalized path). The legacy `cart_drawer` table (on the PHP backend MySQL) holds JSON blobs and is still written for backward compatibility.
+The `cart_drawer_config` MySQL table is the canonical store for announcement, general, header, design, empty cart, and countdown timer fields (the newer normalized path) — and is what the storefront reads live via a `LEFT JOIN` in `save_cart_drawer.php`'s GET handler for header/announcement/design/empty-cart fields. The legacy `cart_drawer` table (on the PHP backend MySQL) still owns `cartStatus` (drawer on/off), `checkout_button_style` (JSON blob — the storefront's *only* source for checkout button styling; `cart_drawer_config`'s `checkout_button_*` columns are admin-preview-only), and `custom_css`/`countdown_data` blobs. Any code path that changes checkout-button appearance or drawer on/off state must write **both** tables, or the change won't reach the storefront — see `ai-agent-tools.server.js`'s `syncCheckoutButtonToLegacyRecord`/`syncDrawerStatusToLegacyRecord` helpers (the manual editor's own `CartEditorPage.handleSave` already does this via its parallel legacy-blob POST).
 
 Default state shape lives in `app/types/cartEditorTypes.js` (`defaultCartEditorState`).
 
@@ -101,14 +97,16 @@ A 7200+ line route that is the builder for combo/bundle pages. Key internals:
 
 Sidebar sections for the builder live in `app/components/customization/`. The coupon/discount panel is in `AdvancedSection.jsx`.
 
-### AI Agent (CartNinja)
+### AI Agent (BrixBar) — tool-calling architecture
 
-A floating AI assistant embedded in all `/app/*` pages via `CartNinjaFloatingLauncher` in `app/routes/app.jsx`.
+BrixBar is a real tool-calling agent, not a keyword matcher: any request in its coverage (cart drawer design/header/announcements/progress bar/coupon slider/upsell products/FBT/countdown timer/empty cart/checkout button/custom CSS, theme matching, discounts, Combo Forge templates) gets executed directly — it does not punt to "go do this yourself in the admin."
 
-- Chat UI: `app/components/ai-agent/CartNinjaAgentV2.jsx`
-- Action engine: `app/services/ai-agent-actions.server.js` — interprets structured `actions[]` from the LLM and applies them to the MySQL/JSON stores. Supported actions are listed in `SUPPORTED_ACTIONS`.
-- Conversation history persisted in MySQL via `app/services/ai-agent-history.server.js` (PHP backend tables: `ai_conversations`, `ai_messages`).
-- AI route: `app/routes/api.ai-agent.generate.jsx` → calls NVIDIA NIM.
+- Client: `app/components/ai-agent/useAiAgent.js` — thin: conversation CRUD, localStorage cache, and one `sendMessage` path that POSTs to `/api/ai/chat`. The only client-side state beyond messages is `pendingConfirmTool` (`{name, args} | null`), set when the server returns `needsConfirmation: true` for a destructive action (disabling the whole cart drawer, clearing custom CSS, removing an upsell/FBT rule, deleting a discount) — a bare "no" cancels locally, anything else re-POSTs to let the server execute or reconsider.
+- Server loop: `app/routes/api.ai.chat.jsx` — authenticates, consumes one AI credit per user message (`app/services/ai-credits.server.js`), then loops (capped at 6 iterations) calling `agentTurn()` and executing any tool calls the model returns via `TOOL_EXECUTORS`, feeding results back as `role: 'tool'` messages, until the model replies with plain text.
+- Tool registry: `app/config/ai-tool-schemas.js` (`TOOL_REGISTRY`, ~28 tools + `isDestructiveToolCall`) — plain JSON-schema data shared between the OpenAI native-tools path and the NVIDIA prompted-JSON fallback.
+- Tool executors: `app/services/ai-agent-tools.server.js` (`TOOL_EXECUTORS`) — one function per tool, calling into `app/services/cart-config-writes.server.js` (the safe merge-on-existing-row save layer shared with the manual Cart Editor's own API routes — never a hardcoded-default overwrite), `upsell-rules.server.js`, `collection-resolver.server.js`, `combo-templates.server.js`, `discounts.server.js`, `theme-detection.server.js`.
+- LLM call layer: `app/services/ai-llm.server.js`'s `agentTurn()` — real OpenAI function-calling (`tools`/`tool_choice`) when `OPENAI_API_KEY` is a real `sk-...` key; a single-tool-per-turn prompted-JSON protocol when it's an `nvapi-...` NVIDIA NIM key (an 8B model isn't trusted with native multi-tool reasoning over a ~28-tool registry).
+- Conversation history persisted in MySQL via `app/services/ai-agent-history.server.js` (PHP backend tables: `ai_conversations`, `ai_messages`) — unchanged by the tool-calling rework.
 
 ### Route Naming
 
@@ -120,7 +118,7 @@ React Router v7 file-based routing. Patterns:
 
 ### Shopify Extension
 
-`extensions/cart-drawer/` — a Theme App Extension with Liquid blocks. The cart drawer block (`cart_drawer.liquid`) renders on the storefront and POSTs config/click data back to `*.php.jsx` routes. Extension settings sync happens via the Shopify CLI (`npm run deploy`).
+`extensions/cart-drawer/` — a Theme App Extension with Liquid blocks. The cart drawer block (`cart_drawer.liquid`) just mounts a `#cc-root` div; the entire drawer (header, announcement bar, countdown timer, progress bar, body, footer) is rendered client-side by `assets/cart_drawer_inline.js` (`renderDrawer()`), which fetches config from `/apps/cart-app/save_cart_drawer.php` — not a separate Liquid snippet per section. FBT and the coupon slider are the exception: those render as their own web components (`<ps-fbt-widget>`, coupon slider snippets) placed elsewhere on the page (e.g. near the product page's Add-to-Cart button), fetching their own config independently. Extension settings sync happens via the Shopify CLI (`npm run deploy`).
 
 Storefront widgets (cart drawer, FBT, coupon slider) fetch their config via the **Shopify App Proxy** at `/apps/cart-app/save_*.php`. Shopify forwards these requests to the URL set in `[app_proxy].url` in `shopify.app.toml`. If widgets show nothing on the storefront, the proxy URL is the first thing to check.
 

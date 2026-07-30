@@ -69,6 +69,22 @@ export function pickFromCandidates(message, candidates) {
   return null;
 }
 
+// Full-list search (no single-resolution collapse) — backs the get_products
+// AI tool, which lets the model see and disambiguate all candidates itself
+// instead of going through the ambiguous/pickFromCandidates flow.
+export async function searchProducts(admin, query, limit = 10) {
+  const res = await admin.graphql(
+    `query FindProducts($query: String!, $limit: Int!) {
+      products(first: $limit, query: $query) {
+        edges { node { id title } }
+      }
+    }`,
+    { variables: { query: toTitleQuery(query), limit } }
+  );
+  const data = await res.json();
+  return (data.data?.products?.edges || []).map(e => ({ id: e.node.id, title: e.node.title }));
+}
+
 function parseManualRules(row) {
   if (!row) return [];
   try {

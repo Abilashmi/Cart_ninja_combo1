@@ -1,77 +1,176 @@
 import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
-import { callLlmWithMeta } from '../services/ai-llm.server';
+import { agentTurn } from '../services/ai-llm.server';
 import { guardChatReply } from '../services/ai-safety.server';
+import { TOOL_REGISTRY, isDestructiveToolCall } from '../config/ai-tool-schemas';
+import { TOOL_EXECUTORS } from '../services/ai-agent-tools.server';
+import { getStoreConfigSnapshot } from '../services/store-config-snapshot.server';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { getDb } from '../services/db.server';
 
-const SYSTEM_PROMPT = `You are Brix, an AI assistant built into the Brix cart drawer app for Shopify merchants. You talk like an experienced, friendly Shopify consultant — confident and helpful, never robotic, never a wall of rules recited back at the merchant.
+const SYSTEM_PROMPT_BASE = `You are Brix, an AI assistant built into the Brix cart drawer app for Shopify merchants. You talk like an experienced, friendly Shopify consultant — confident and helpful, never robotic, never a wall of rules recited back at the merchant.
 
-You help with questions about the cart drawer, upsells, progress bars, discounts, bundles, and analytics. But in this conversation you can only write a reply — you have no ability to change any setting or create anything here, and nothing you say is executed against the merchant's store. Keep that boundary honest no matter how the request is phrased:
+You can actually configure and change things in the merchant's store — the cart drawer's design, header, announcements, progress bar, coupon slider, upsell products, countdown timer, checkout button, custom CSS, Frequently Bought Together, discounts, and Combo Forge bundle pages — via the tools available to you. When a merchant asks for something in scope, DO IT using the tools rather than telling them to go do it themselves in the admin. Never say "I can't do that" for something a tool covers — figure out which tool(s) apply and use them. Only ask a clarifying question when you genuinely don't have enough information to act (e.g. which product, which color), and only decline outright when nothing in your toolset can do what's being asked.
 
-1. Never say or imply you enabled, created, configured, updated, applied, fixed, or turned on/off anything — you did not and cannot. If asked to do something, say plainly you can't perform actions here, and point to the exact next step (e.g. "try sending 'Enable Upsells' as its own message" or "open Cart Editor > Upsells").
-2. Never promise future action ("I'll set this up", "I'll notify you", "I'll keep monitoring", "I'll follow up"). Nothing happens after this reply on its own.
-3. Never state specific store data you were not given in this conversation — revenue, order counts, product/customer names, installed apps, or which features are currently on. You have no live access to the store. Say you don't have that information and suggest where to check (e.g. the Analytics page).
-4. Never state a specific date, version, or "as of" fact you're not certain of, including your own knowledge cutoff or today's date. If unsure, say you don't know.
-5. If a request is missing details needed to act on it (e.g. "create a campaign" — which collection, discount, schedule, audience?), ask a short clarifying question. Never guess and never claim it's done.
-6. Match your confidence to your wording: state things plainly only when sure; say "based on the available information" when partly sure; say you're not confident enough when you're not.
-7. Write like a person, not a report: short paragraphs, plain sentences, no filler, no repeating the question back. Reach for a bullet list only when the content is genuinely a list.
-8. Use markdown for real emphasis — **bold** a feature name or key number, use headings/lists when they aid scanning — but don't decorate every sentence.`;
+Guidelines:
+1. Never claim you did something you didn't — only report success after a tool call actually returns success. If a tool fails or is locked by plan, say so plainly and honestly.
+2. Never promise future/background action ("I'll notify you", "I'll keep monitoring") — nothing happens after your reply on its own.
+3. Never state specific store data you weren't given in this conversation or via a tool call (revenue, order counts, product names) — use get_store_insights/get_products/get_collections/get_current_config to actually check, rather than guessing.
+4. Never state a specific date, version, or fact you're not certain of.
+5. If a request spans multiple changes (e.g. "give my cart a modern dark theme"), feel free to call several tools in sequence to accomplish it fully before replying.
+6. Write like a person: short paragraphs, plain sentences, no filler. Use markdown for real emphasis (bold a feature name or number) — don't decorate every sentence.`;
 
-const MAX_TOKENS = 600;
-const MAX_CONTINUATIONS = 1; // one automatic follow-up call, not real token streaming
+const MAX_ITER = 6;
+const MAX_TOKENS = 700;
 
-// Handles the small model's output cap on a single user request: if the
-// reply is cut off mid-way (finish_reason "length"), automatically ask the
-// model to continue instead of handing back a truncated sentence. Bounded
-// to MAX_CONTINUATIONS so one user message can never trigger unbounded
-// LLM calls.
-async function getFullReply(chatMessages) {
-  const convo = [...chatMessages];
-  let { content, finishReason, errorStatus } = await callLlmWithMeta(convo, { maxTokens: MAX_TOKENS, temperature: 0.7 });
-  if (content == null) return { text: null, errorStatus };
+const CONFIRM_YES_RE = /^(__confirm__|y|yes|yeah|yep|confirm|ok|okay|sure|go ahead|do it|please do)\.?$/i;
+const CONFIRM_NO_RE = /^(__cancel__|n|no|nope|cancel|stop|nevermind|never mind)\.?$/i;
 
-  let fullText = content;
-  let continuations = 0;
-  while (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
-    continuations++;
-    convo.push({ role: 'assistant', content });
-    convo.push({ role: 'user', content: 'Continue exactly where you left off. Do not repeat anything already said.' });
-    const next = await callLlmWithMeta(convo, { maxTokens: MAX_TOKENS, temperature: 0.7 });
-    if (next.content == null) break;
-    content = next.content;
-    finishReason = next.finishReason;
-    fullText += `\n\n**(continued)**\n${content}`;
-  }
-  // Still truncated after the one allowed continuation — say so rather than
-  // silently handing back text that stops mid-word.
-  if (finishReason === 'length') fullText += '\n\n_(Reply was cut short — ask "continue" for more.)_';
+const READ_ONLY_TOOLS = new Set(['get_current_config', 'get_products', 'get_collections', 'get_store_insights']);
 
-  return { text: fullText, errorStatus: null };
+const CONFIRM_CHOICES = [
+  { label: '✅ Confirm', value: '__confirm__' },
+  { label: '✖ Cancel', value: '__cancel__' },
+];
+
+function describeDestructiveCall(name, args) {
+  if (name === 'set_cart_drawer_enabled') return 'turn OFF your entire Cart Drawer — customers will see Shopify\'s default cart instead';
+  if (name === 'update_custom_css') return 'clear your existing custom CSS';
+  if (name === 'remove_upsell_rule') return `remove upsell rule ${args?.ruleId}`;
+  if (name === 'remove_fbt_rule') return `remove Frequently Bought Together rule ${args?.ruleId}`;
+  if (name === 'delete_discount') return `delete discount ${args?.discountId}`;
+  return `run ${name}`;
+}
+
+// One cheap read-back after the loop (only if a write tool actually ran) so
+// the live cart editor (CartEditorContext's cartEditorConfigUpdated listener)
+// updates immediately instead of waiting for a reload — same event shape the
+// old ai_agent_apply.php/useAiAgent.js pairing already produced.
+async function buildAfterPayload(shop) {
+  const db = getDb();
+  const [cdcRows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]);
+  const cdc = cdcRows[0];
+  const [pbRows] = await db.execute('SELECT is_enabled FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const [upRows] = await db.execute('SELECT is_enabled FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const [csRows] = await db.execute('SELECT is_enabled FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const [fbtRows] = await db.execute('SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+
+  return {
+    drawerEnabled: cdc ? !!cdc.is_enabled : undefined,
+    header: cdc ? { bgColor: cdc.header_bg_color, textColor: cdc.header_text_color } : undefined,
+    checkoutButton: cdc ? { backgroundColor: cdc.checkout_button_bg_color, textColor: cdc.checkout_button_text_color } : undefined,
+    announcement: cdc ? { enabled: !!cdc.announcement_enabled, text: cdc.announcement_text, bgColor: cdc.announcement_bg_color, textColor: cdc.announcement_text_color } : undefined,
+    goalBar: pbRows[0] ? { enabled: !!pbRows[0].is_enabled } : undefined,
+    upsell: upRows[0] ? { enabled: !!upRows[0].is_enabled } : undefined,
+    couponSlider: csRows[0] ? { enabled: !!csRows[0].is_enabled } : undefined,
+    fbt: fbtRows[0] ? { widgetEnabled: !!fbtRows[0].is_enabled } : undefined,
+  };
 }
 
 export async function action({ request }) {
   try {
     const { admin, session } = await authenticate.admin(request);
-    const { message, messages: history = [] } = await request.json();
+    const shop = session.shop;
+    const { message, messages: history = [], pendingConfirmTool } = await request.json();
     if (!message) return Response.json({ success: false, error: 'No message provided' }, { status: 400 });
 
-    const credit = await checkAndConsumeCredit(session.shop, admin);
+    const credit = await checkAndConsumeCredit(shop, admin);
     const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
+    const planKey = await getShopPlan(shop, admin);
+    const ctx = { shop, admin, session, planKey, requestUrl: request.url };
 
-    const chatMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...history.slice(-6).map(m => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: m.text })),
+    // Deterministic confirm/cancel — bypasses the model entirely so a
+    // confirmation can never execute with different args than what the
+    // merchant was shown.
+    if (pendingConfirmTool) {
+      const trimmed = message.trim();
+      if (CONFIRM_YES_RE.test(trimmed)) {
+        const executor = TOOL_EXECUTORS[pendingConfirmTool.name];
+        const result = executor ? await executor(ctx, pendingConfirmTool.args || {}) : { success: false, message: 'Unknown action.' };
+        const after = await buildAfterPayload(shop).catch(() => null);
+        const text = result.success
+          ? `Done — that's been applied.`
+          : `I couldn't complete that: ${result.message || 'unknown error'}.`;
+        return Response.json({ success: true, message: text, credits, after });
+      }
+      if (CONFIRM_NO_RE.test(trimmed)) {
+        return Response.json({ success: true, message: 'Okay, cancelled.', credits });
+      }
+      // Anything else — fall through and treat as a normal new turn (lets
+      // the merchant correct/change their mind instead of being stuck).
+    }
+
+    const snapshot = await getStoreConfigSnapshot(shop).catch(() => null);
+    const stateLine = snapshot
+      ? `Current state — Cart Drawer: ${snapshot.cartDrawer ? 'on' : 'off'}, Progress Bar: ${snapshot.progressBar ? 'on' : 'off'}, Upsells: ${snapshot.upsells ? 'on' : 'off'}, FBT: ${snapshot.fbt ? 'on' : 'off'}, Coupon Slider: ${snapshot.couponSlider ? 'on' : 'off'}.`
+      : '';
+    const systemPrompt = stateLine ? `${SYSTEM_PROMPT_BASE}\n\n${stateLine}` : SYSTEM_PROMPT_BASE;
+
+    let messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-10).map(m => ({ role: m.role === 'agent' ? 'assistant' : 'user', content: m.text || '' })),
       { role: 'user', content: message },
     ];
 
-    const { text, errorStatus } = await getFullReply(chatMessages);
-    if (text == null) {
-      const message = errorStatus
-        ? `Brix's AI service returned an error (HTTP ${errorStatus}) — this is usually temporary, try again in a minute.`
-        : 'I couldn\'t reach the AI service just now — try again in a moment.';
-      return Response.json({ success: true, message, credits });
+    let anyWriteExecuted = false;
+
+    for (let iter = 0; iter < MAX_ITER; iter++) {
+      const { content, toolCalls, errorStatus, errorMessage } = await agentTurn(messages, TOOL_REGISTRY, { maxTokens: MAX_TOKENS });
+
+      if (errorStatus) {
+        // Surface the provider's actual reason (e.g. "You exceeded your
+        // current quota" for a billing issue, vs a generic rate limit) —
+        // a bare HTTP status number isn't actionable for whoever reads this.
+        const reason = errorMessage ? `: ${errorMessage}` : '';
+        const hint = errorStatus === 429
+          ? ' This is either a rate limit (too many requests too fast) or an OpenAI billing/quota issue — check platform.openai.com/usage if it keeps happening.'
+          : ' This is usually temporary, try again in a minute.';
+        return Response.json({ success: true, message: `Brix's AI service returned an error (HTTP ${errorStatus})${reason}.${hint}`, credits });
+      }
+
+      if (!toolCalls || toolCalls.length === 0) {
+        if (content == null) {
+          return Response.json({ success: true, message: "I couldn't reach the AI service just now — try again in a moment.", credits });
+        }
+        const after = anyWriteExecuted ? await buildAfterPayload(shop).catch(() => null) : null;
+        return Response.json({ success: true, message: guardChatReply(content), credits, after });
+      }
+
+      // Only ONE destructive tool call is ever allowed to trigger the
+      // confirm exception per turn — if the model bundled a destructive call
+      // with others, stop and confirm before any of them (including the
+      // non-destructive ones in the same batch) run, so nothing executes
+      // ahead of a pending confirmation.
+      const destructiveCall = toolCalls.find((tc) => isDestructiveToolCall(tc.name, tc.args));
+      if (destructiveCall) {
+        return Response.json({
+          success: true,
+          message: `Just to confirm — you want me to ${describeDestructiveCall(destructiveCall.name, destructiveCall.args)}. Shall I go ahead?`,
+          choices: CONFIRM_CHOICES,
+          credits,
+          needsConfirmation: true,
+          pendingConfirmTool: { name: destructiveCall.name, args: destructiveCall.args },
+        });
+      }
+
+      messages = [...messages, { role: 'assistant', content: content || null, tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.args) } })) }];
+
+      for (const call of toolCalls) {
+        const executor = TOOL_EXECUTORS[call.name];
+        let result;
+        try {
+          result = executor ? await executor(ctx, call.args || {}) : { success: false, message: `Unknown tool: ${call.name}` };
+        } catch (e) {
+          console.error(`[api.ai.chat] tool ${call.name} failed:`, e.message);
+          result = { success: false, message: e.message || 'Tool execution failed.' };
+        }
+        if (!READ_ONLY_TOOLS.has(call.name) && result?.success) anyWriteExecuted = true;
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+      }
     }
 
-    return Response.json({ success: true, message: guardChatReply(text), credits });
+    const after = anyWriteExecuted ? await buildAfterPayload(shop).catch(() => null) : null;
+    return Response.json({ success: true, message: "I made some changes but can't summarize further right now — check the Cart Editor to confirm everything looks right.", credits, after });
   } catch (e) {
     console.error('[api.ai.chat]', e);
     return Response.json({ success: true, message: `Something went wrong${e.message ? `: ${e.message}` : ''}. Please try again.` });

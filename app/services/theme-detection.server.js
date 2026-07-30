@@ -1,6 +1,6 @@
-import { authenticate } from '../shopify.server';
-import { sendToPhp } from '../utils/api-helpers';
-
+// Storefront theme color detection, extracted from the old
+// api.ai-agent.match-theme.jsx route so the match_store_theme AI tool
+// (ai-agent-tools.server.js) can call it directly instead of over HTTP.
 function normalizeHex(v) {
   if (/^#[0-9a-fA-F]{3}$/.test(v)) return '#' + [...v.slice(1)].map(c => c + c).join('');
   if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
@@ -135,50 +135,30 @@ async function detectFromLiveCss(storeUrl) {
   };
 }
 
-export async function action({ request }) {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+// Detects the live storefront theme's key colors: (1) reads the merchant's
+// own settings_data.json via the Admin REST Theme Assets API — exact hex
+// values they picked in the theme customizer — falling back to (2) scraping
+// the live storefront's CSS custom properties. Returns null if neither
+// method finds anything usable.
+export async function detectStoreTheme(admin, session) {
+  let theme = await detectFromThemeSettings(session.shop, session.accessToken).catch((e) => {
+    console.error('[theme-detection] settings_data.json detection failed:', e);
+    return null;
+  });
 
-  try {
-    // Primary method: read the live theme's own settings_data.json via the
-    // Admin REST Theme Assets API — this holds the exact hex values the
-    // merchant picked in the theme customizer, so it works even for themes
-    // whose compiled CSS doesn't expose custom properties.
-    let theme = await detectFromThemeSettings(shop, session.accessToken).catch((e) => {
-      console.error('[api.ai-agent.match-theme] settings_data.json detection failed:', e);
-      return null;
-    });
-
-    // Fallback: scrape the live storefront's CSS for color variables.
-    if (!theme) {
-      const shopRes = await admin.graphql(`#graphql
-        query { shop { primaryDomain { url } } }
-      `);
-      const shopJson = await shopRes.json();
-      const storeUrl = shopJson?.data?.shop?.primaryDomain?.url;
-      if (storeUrl) {
-        theme = await detectFromLiveCss(storeUrl).catch((e) => {
-          console.error('[api.ai-agent.match-theme] live CSS detection failed:', e);
-          return null;
-        });
-      }
-    }
-
-    if (!theme) {
-      return Response.json({
-        success: false,
-        error: 'Could not detect theme colors automatically from your theme settings or live site. Tell me the color codes and I\'ll apply them directly.',
+  if (!theme) {
+    const shopRes = await admin.graphql(`#graphql
+      query { shop { primaryDomain { url } } }
+    `);
+    const shopJson = await shopRes.json();
+    const storeUrl = shopJson?.data?.shop?.primaryDomain?.url;
+    if (storeUrl) {
+      theme = await detectFromLiveCss(storeUrl).catch((e) => {
+        console.error('[theme-detection] live CSS detection failed:', e);
+        return null;
       });
     }
-
-    const phpResult = await sendToPhp(
-      { shop, plan: { actions: ['applyTheme'], settings: { theme } } },
-      'ai_agent_apply.php'
-    );
-
-    return Response.json({ success: true, theme, after: phpResult?.after || null });
-  } catch (e) {
-    console.error('[api.ai-agent.match-theme]', e);
-    return Response.json({ success: false, error: e.message || 'Could not detect your theme colors.' });
   }
+
+  return theme;
 }

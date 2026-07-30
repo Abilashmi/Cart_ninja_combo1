@@ -70,6 +70,7 @@
   let _lastCopiedCode = null;
   let _ccConfigLoading = false;
   let _ccActive = false; // true only when drawer is fully configured and active
+  let _ccCountdownInterval = null;
 
 
   const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -206,6 +207,7 @@
             showContinueShopping: d.empty_cart_show_continue_shopping != null ? isEnabled(d.empty_cart_show_continue_shopping) : true,
             showRecommendations: d.empty_cart_show_recommendations != null ? isEnabled(d.empty_cart_show_recommendations) : true,
           },
+          countdown: parseCountdownData(d),
         };
         _ccActive = true;
 
@@ -359,6 +361,23 @@
       maxTarget: maxTarget,
       tiers: parsedTiers,
       placement: data.placement || 'top',
+    };
+  }
+
+  function parseCountdownData(d) {
+    const data = parseJSON(d.countdown_data || d.countdownData);
+    const enabled = isEnabled(d.countdown_status) || isEnabled(d.countdownStatus) || isEnabled(data.enabled);
+    return {
+      enabled,
+      mode: data.mode === 'fixed' ? 'fixed' : 'session',
+      hours: parseInt(data.hours || 0, 10),
+      minutes: parseInt(data.minutes || 15, 10),
+      label: data.label || 'Offer expires in',
+      expiredLabel: data.expiredLabel || 'Offer expired!',
+      bgColor: data.bgColor || '#fef2f2',
+      textColor: data.textColor || '#991b1b',
+      accentColor: data.accentColor || '#dc2626',
+      couponCode: data.couponMode === 'manual' ? (data.couponCode || null) : null,
     };
   }
 
@@ -1417,6 +1436,17 @@
       drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:${ann.textAlign || 'center'};font-weight:${ann.bold ? 700 : 500};font-style:${ann.italic ? 'italic' : 'normal'};flex-shrink:0;">${escapeHtml(ann.text)}</div>`;
     }
 
+    /* -------- COUNTDOWN TIMER BAR (below announcement) -------- */
+    const countdown = CONFIG.countdown || {};
+    if (countdown.enabled && !isEmpty) {
+      drawerHtml += `
+<div id="cc-countdown-bar" style="padding:8px 16px;background:${countdown.bgColor};color:${countdown.textColor};font-size:13px;text-align:center;font-weight:600;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
+  <span id="cc-countdown-label">${escapeHtml(countdown.label)}</span>
+  <span id="cc-countdown-text" style="color:${countdown.accentColor};font-weight:800;letter-spacing:0.5px;"></span>
+  ${countdown.couponCode ? `<span style="opacity:0.85;">· Use code <strong>${escapeHtml(countdown.couponCode)}</strong></span>` : ''}
+</div>`;
+    }
+
     /* -------- BODY -------- */
     drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
 
@@ -1735,6 +1765,63 @@
       if (backdrop) backdrop.addEventListener('click', closeDrawer);
       initSwipeCheckout();
     }
+
+    startCountdownTicker();
+  }
+
+  /* =================== COUNTDOWN TIMER TICKER =================== */
+  // 'session' mode: the deadline resets every browser session (sessionStorage).
+  // 'fixed' mode: the deadline is set once per device and persists across
+  // sessions until it actually expires (localStorage) — a true one-shot
+  // urgency countdown rather than one that quietly resets on every visit.
+  function getCountdownDeadline(countdown) {
+    const store = countdown.mode === 'fixed' ? window.localStorage : window.sessionStorage;
+    const key = 'cc_countdown_deadline_' + SHOP;
+    const durationMs = ((countdown.hours || 0) * 3600 + (countdown.minutes || 0) * 60) * 1000;
+    if (durationMs <= 0) return null;
+    try {
+      const stored = parseInt(store.getItem(key) || '0', 10);
+      if (stored && stored > Date.now()) return stored;
+      const deadline = Date.now() + durationMs;
+      store.setItem(key, String(deadline));
+      return deadline;
+    } catch (e) {
+      return Date.now() + durationMs;
+    }
+  }
+
+  function startCountdownTicker() {
+    if (_ccCountdownInterval) {
+      clearInterval(_ccCountdownInterval);
+      _ccCountdownInterval = null;
+    }
+    const countdown = CONFIG.countdown || {};
+    if (!countdown.enabled) return;
+    const deadline = getCountdownDeadline(countdown);
+    if (!deadline) return;
+
+    function tick() {
+      const textEl = document.getElementById('cc-countdown-text');
+      const labelEl = document.getElementById('cc-countdown-label');
+      if (!textEl) { clearInterval(_ccCountdownInterval); _ccCountdownInterval = null; return; }
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        if (labelEl) labelEl.textContent = countdown.expiredLabel;
+        textEl.textContent = '';
+        clearInterval(_ccCountdownInterval);
+        _ccCountdownInterval = null;
+        return;
+      }
+      const totalSeconds = Math.floor(remainingMs / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      const pad = (n) => String(n).padStart(2, '0');
+      textEl.textContent = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+    }
+
+    tick();
+    _ccCountdownInterval = setInterval(tick, 1000);
   }
 
   /* =================== COUPON SECTION RENDERER =================== */

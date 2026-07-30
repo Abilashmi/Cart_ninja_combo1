@@ -16,6 +16,7 @@ import { AnnouncementsSection } from './sections/AnnouncementsSection';
 import { ProgressBarSection } from './sections/ProgressBarSection';
 import { CouponSliderSection } from './sections/CouponSliderSection';
 import { UpsellSection } from './sections/UpsellSection';
+import { CountdownTimerSection } from './sections/CountdownTimerSection';
 import { EmptyCartSection } from './sections/EmptyCartSection';
 import { CheckoutSection } from './sections/CheckoutSection';
 import { CustomCSSSection } from './sections/CustomCSSSection';
@@ -30,6 +31,7 @@ const SECTION_COMPONENT_MAP = {
   design: DesignSection, header: HeaderSection,
   announcements: AnnouncementsSection, progressBar: ProgressBarSection,
   couponSlider: CouponSliderSection, upsellProducts: UpsellSection,
+  countdownTimer: CountdownTimerSection,
   emptyCart: EmptyCartSection, checkoutButton: CheckoutSection, customCSS: CustomCSSSection,
 };
 
@@ -93,6 +95,7 @@ export function CartEditorSidebar({ onDiscard }) {
     if (key === 'progressBar') return body.progressBar.enabled;
     if (key === 'couponSlider') return body.couponSlider.enabled;
     if (key === 'upsellProducts') return body.upsellProducts.enabled;
+    if (key === 'countdownTimer') return body.countdownTimer.enabled;
     return false;
   };
 

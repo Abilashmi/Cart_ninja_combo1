@@ -51,10 +51,10 @@ export const aiApi = {
     });
   },
 
-  async sendMessage(conversationId, message, messages = []) {
+  async sendMessage(conversationId, message, messages = [], pendingConfirmTool = null) {
     return request(`${BASE}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ conversationId, message, messages }),
+      body: JSON.stringify({ conversationId, message, messages, pendingConfirmTool }),
     });
   },
 

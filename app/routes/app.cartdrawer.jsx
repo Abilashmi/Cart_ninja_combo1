@@ -166,6 +166,8 @@ export const action = async ({ request }) => {
       coupon_data: body.coupon_data ?? existing.coupon_data ?? null,
       upsell_status: body.upsell_status ?? existing.upsell_status ?? 0,
       upsell_data: body.upsell_data ?? existing.upsell_data ?? null,
+      countdown_status: body.countdown_status ?? existing.countdown_status ?? 0,
+      countdown_data: body.countdown_data ?? existing.countdown_data ?? null,
       checkoutName: body.checkoutName ?? existing.checkoutName ?? null,
       checkoutFooterText: body.checkoutFooterText ?? existing.checkoutFooterText ?? null,
       customCSS: body.customCSS ?? existing.customCSS ?? null,

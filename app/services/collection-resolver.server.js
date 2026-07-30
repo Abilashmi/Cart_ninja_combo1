@@ -33,3 +33,18 @@ export async function resolveCollectionByName(admin, name) {
   if (matches.length === 1) return { status: 'found', id: matches[0].id, title: matches[0].title, handle: matches[0].handle };
   return { status: 'ambiguous', candidates: matches.slice(0, 5) };
 }
+
+// Full-list search (no single-resolution collapse) — backs the
+// get_collections AI tool. See searchProducts in upsell-rules.server.js.
+export async function searchCollections(admin, query, limit = 10) {
+  const res = await admin.graphql(
+    `query FindCollections($query: String!, $limit: Int!) {
+      collections(first: $limit, query: $query) {
+        edges { node { id title handle } }
+      }
+    }`,
+    { variables: { query: toTitleQuery(query), limit } }
+  );
+  const data = await res.json();
+  return (data.data?.collections?.edges || []).map(e => ({ id: e.node.id, title: e.node.title, handle: e.node.handle }));
+}

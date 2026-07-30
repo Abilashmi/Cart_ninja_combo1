@@ -33,6 +33,7 @@ function CartEditorContent() {
     const up  = body.upsellProducts;
     const cb  = footer.checkoutButton;
     const ann = body.announcements || {};
+    const ct  = body.countdownTimer || {};
 
     // ── 1. Legacy blob (fire-and-forget, backwards compat) ───────────────
     legacyFetcher.submit({
@@ -44,6 +45,8 @@ function CartEditorContent() {
       coupon_data:         JSON.stringify(cs),
       upsell_status:       up.enabled ? 1 : 0,
       upsell_data:         JSON.stringify(up),
+      countdown_status:    ct.enabled ? 1 : 0,
+      countdown_data:      JSON.stringify(ct),
       checkoutName:        cb.text,
       checkoutFooterText:  cb.footerText,
       customCSS:           footer.customCSS,
@@ -145,6 +148,22 @@ function CartEditorContent() {
           position:          cs.position          || 'top',
           layout:            cs.layout            || 'grid',
           selectedCoupons:   cs.selectedCoupons   || [],
+        }),
+
+        postJson('/api/countdown-timer', {
+          enabled:        ct.enabled ? 1 : 0,
+          mode:            ct.mode            || 'session',
+          hours:           ct.hours           ?? 0,
+          minutes:         ct.minutes         ?? 15,
+          label:           ct.label           || 'Offer expires in',
+          expiredLabel:    ct.expiredLabel    || 'Offer expired!',
+          bgColor:         ct.bgColor         || '#fef2f2',
+          textColor:       ct.textColor       || '#991b1b',
+          accentColor:     ct.accentColor     || '#dc2626',
+          showOnProducts:  ct.showOnProducts  !== false ? 1 : 0,
+          showOnCoupons:   ct.showOnCoupons   !== false ? 1 : 0,
+          couponCode:      ct.couponCode      || null,
+          couponMode:      ct.couponMode      || 'manual',
         }),
 
       ]);

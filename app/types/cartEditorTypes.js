@@ -150,6 +150,7 @@ export const SECTION_GROUPS = [
       { id: 'progressBar', label: 'Progress Bar', icon: 'chart', toggleable: true, enabledKey: 'progressBar' },
       { id: 'couponSlider', label: 'Coupon Slider', icon: 'discount', toggleable: true, enabledKey: 'couponSlider' },
       { id: 'upsellProducts', label: 'Upsell Products', icon: 'product', toggleable: true, enabledKey: 'upsellProducts' },
+      { id: 'countdownTimer', label: 'Countdown Timer', icon: 'chart', toggleable: true, enabledKey: 'countdownTimer' },
       { id: 'emptyCart', label: 'Empty Cart', icon: 'cart' },
     ],
   },

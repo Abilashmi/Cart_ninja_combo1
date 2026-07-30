@@ -15,6 +15,25 @@ function ensureWatermarkColumn($pdo) {
     $ensured = true;
 }
 
+function ensureCountdownColumns($pdo) {
+    static $ensured = false;
+    if ($ensured) return;
+    $existingCols = array_column(
+        $pdo->query("SHOW COLUMNS FROM cart_drawer")->fetchAll(PDO::FETCH_ASSOC),
+        'Field'
+    );
+    if (!in_array('countdown_status', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer ADD COLUMN `countdown_status` TINYINT(1) NOT NULL DEFAULT 0");
+    }
+    if (!in_array('countdown_data', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer ADD COLUMN `countdown_data` TEXT NULL");
+    }
+    if (!in_array('countdown_updated_at', $existingCols)) {
+        $pdo->exec("ALTER TABLE cart_drawer ADD COLUMN `countdown_updated_at` DATETIME(3) NULL");
+    }
+    $ensured = true;
+}
+
 function ensureAnnouncementStyleColumns($pdo) {
     static $ensured = false;
     if ($ensured) return;
@@ -178,6 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
         ensureWatermarkColumn($pdo);
         ensureAnnouncementStyleColumns($pdo);
+        ensureCountdownColumns($pdo);
         $stmt = $pdo->prepare("
             SELECT cd.*,
               cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
@@ -355,6 +375,7 @@ $cartStatus = normalizeFlag($payload['cartstatus'] ?? ($payload['cartStatus'] ??
 $progressData = normalizeJsonField($payload['progress_data'] ?? ($payload['progressData'] ?? null));
 $couponData = normalizeJsonField($payload['coupon_data'] ?? ($payload['couponData'] ?? null));
 $upsellData = normalizeJsonField($payload['upsell_data'] ?? ($payload['upsellData'] ?? null));
+$countdownData = normalizeJsonField($payload['countdown_data'] ?? ($payload['countdownData'] ?? null));
 
 $settingsRaw = $payload['settings_data'] ?? null;
 $settingsData = [];
@@ -377,6 +398,7 @@ $checkoutButtonStyle = normalizeJsonField($payload['checkout_button_style'] ?? (
 $progressStatus = normalizeFlag($payload['progress_status'] ?? ($payload['progressStatus'] ?? 0));
 $couponStatus = normalizeFlag($payload['coupon_status'] ?? ($payload['couponStatus'] ?? 0));
 $upsellStatus = normalizeFlag($payload['upsell_status'] ?? ($payload['upsellStatus'] ?? 0));
+$countdownStatus = normalizeFlag($payload['countdown_status'] ?? ($payload['countdownStatus'] ?? 0));
 $watermarkEnabled = normalizeFlag($payload['watermark_enabled'] ?? ($settingsData['watermarkEnabled'] ?? 1), 1);
 
 // ===== PLAN ENFORCEMENT (defense-in-depth) =====
@@ -391,6 +413,7 @@ $watermarkEnabled = normalizeFlag($payload['watermark_enabled'] ?? ($settingsDat
 // a downgrade.
 $planKey = resolve_plan_key($pdo, $shop);
 ensureWatermarkColumn($pdo);
+ensureCountdownColumns($pdo);
 
 // Free plan cannot disable the watermark — force it on regardless of what
 // the merchant's toggle submitted.
@@ -457,6 +480,7 @@ INSERT INTO cart_drawer (
     progress_data,
     coupon_data,
     upsell_data,
+    countdown_data,
     checkoutName,
     checkoutFooterText,
     customCSS,
@@ -464,10 +488,12 @@ INSERT INTO cart_drawer (
     progress_status,
     coupon_status,
     upsell_status,
+    countdown_status,
     watermark_enabled,
     progress_updated_at,
     coupon_updated_at,
     upsell_updated_at,
+    countdown_updated_at,
     updated_at
 ) VALUES (
     :shop,
@@ -475,6 +501,7 @@ INSERT INTO cart_drawer (
     :progress_data,
     :coupon_data,
     :upsell_data,
+    :countdown_data,
     :checkoutName,
     :checkoutFooterText,
     :customCSS,
@@ -482,7 +509,9 @@ INSERT INTO cart_drawer (
     :progress_status,
     :coupon_status,
     :upsell_status,
+    :countdown_status,
     :watermark_enabled,
+    CURRENT_TIMESTAMP(3),
     CURRENT_TIMESTAMP(3),
     CURRENT_TIMESTAMP(3),
     CURRENT_TIMESTAMP(3),
@@ -493,6 +522,7 @@ ON DUPLICATE KEY UPDATE
     progress_data = VALUES(progress_data),
     coupon_data = VALUES(coupon_data),
     upsell_data = VALUES(upsell_data),
+    countdown_data = VALUES(countdown_data),
     checkoutName = VALUES(checkoutName),
     checkoutFooterText = VALUES(checkoutFooterText),
     customCSS = VALUES(customCSS),
@@ -500,10 +530,12 @@ ON DUPLICATE KEY UPDATE
     progress_status = VALUES(progress_status),
     coupon_status = VALUES(coupon_status),
     upsell_status = VALUES(upsell_status),
+    countdown_status = VALUES(countdown_status),
     watermark_enabled = VALUES(watermark_enabled),
     progress_updated_at = IF(VALUES(progress_data) IS NOT NULL, CURRENT_TIMESTAMP(3), progress_updated_at),
     coupon_updated_at    = IF(VALUES(coupon_data)   IS NOT NULL, CURRENT_TIMESTAMP(3), coupon_updated_at),
     upsell_updated_at    = IF(VALUES(upsell_data)   IS NOT NULL, CURRENT_TIMESTAMP(3), upsell_updated_at),
+    countdown_updated_at = IF(VALUES(countdown_data) IS NOT NULL, CURRENT_TIMESTAMP(3), countdown_updated_at),
     updated_at = CURRENT_TIMESTAMP(3)
 ";
 
@@ -516,6 +548,7 @@ try {
         ':progress_data' => $progressData,
         ':coupon_data' => $couponData,
         ':upsell_data' => $upsellData,
+        ':countdown_data' => $countdownData,
         ':checkoutName' => $checkoutName,
         ':checkoutFooterText' => $checkoutFooterText,
         ':customCSS' => $customCSS,
@@ -523,6 +556,7 @@ try {
         ':progress_status' => $progressStatus,
         ':coupon_status' => $couponStatus,
         ':upsell_status' => $upsellStatus,
+        ':countdown_status' => $countdownStatus,
         ':watermark_enabled' => $watermarkEnabled
     ]);
 
