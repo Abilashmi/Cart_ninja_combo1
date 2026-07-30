@@ -7,6 +7,7 @@ import {
 } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
 import { Text, Popover, ActionList, Modal, BlockStack } from '@shopify/polaris';
+import { useAppBridge } from '@shopify/app-bridge-react';
 import { usePlan } from '../PlanContext';
 import { PLANS } from '../../config/plans';
 
@@ -14,7 +15,7 @@ export default function TemplateManager() {
   const fetcher = useFetcher();
   const { templates: initialTemplates, shop, discounts } = useLoaderData();
   const navigate = useNavigate();
-  const shopify = { toast: { show: (msg) => console.log('[Toast]', msg) } };
+  const shopify = useAppBridge();
   const navigation = useNavigation();
   const { plan, canAccessFeature } = usePlan();
   const comboTemplateLimit = PLANS[plan]?.comboTemplateLimit;
