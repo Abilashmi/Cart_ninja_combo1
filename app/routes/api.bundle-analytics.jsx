@@ -4,6 +4,16 @@ import { ensureAnalyticsTables } from '../services/analytics-schema.server';
 
 const TABLE = 'combo_analytics';
 
+// POST is called cross-origin from the storefront combo-page widget
+// (app/routes/combo-page[.]js.jsx), running on the merchant's own storefront
+// domain, not this app's origin — needs CORS + an OPTIONS preflight
+// response, unlike the admin-authenticated GET loader below.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 function buildDefaultAnalytics() {
   return {
     total_views: 0, total_clicks: 0, total_conversions: 0,
@@ -129,20 +139,23 @@ export async function loader({ request }) {
 }
 
 export async function action({ request }) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
   if (request.method !== 'POST') {
-    return Response.json({ success: false, error: 'Method not allowed' }, { status: 405 });
+    return Response.json({ success: false, error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
   }
 
   const body = await request.json().catch(() => ({}));
   const { shop_domain, template_id, event_type, revenue, discount_code } = body;
 
   if (!shop_domain || !event_type) {
-    return Response.json({ success: false, error: 'shop_domain and event_type required' }, { status: 400 });
+    return Response.json({ success: false, error: 'shop_domain and event_type required' }, { status: 400, headers: CORS_HEADERS });
   }
 
   const validEvents = ['view', 'click', 'add_to_cart', 'checkout', 'order', 'discount_applied'];
   if (!validEvents.includes(event_type)) {
-    return Response.json({ success: false, error: `event_type must be one of: ${validEvents.join(', ')}` }, { status: 400 });
+    return Response.json({ success: false, error: `event_type must be one of: ${validEvents.join(', ')}` }, { status: 400, headers: CORS_HEADERS });
   }
 
   try {
@@ -152,9 +165,9 @@ export async function action({ request }) {
       `INSERT INTO \`${TABLE}\` (shop_domain, template_id, event_type, revenue, discount_code) VALUES (?, ?, ?, ?, ?)`,
       [shop_domain, template_id ? Number(template_id) : null, event_type, revenue ? parseFloat(revenue) : 0, discount_code || null]
     );
-    return Response.json({ success: true, message: 'Event recorded' });
+    return Response.json({ success: true, message: 'Event recorded' }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error('[bundle-analytics action]', err.message);
-    return Response.json({ success: false, error: err.message }, { status: 500 });
+    return Response.json({ success: false, error: err.message }, { status: 500, headers: CORS_HEADERS });
   }
 }
