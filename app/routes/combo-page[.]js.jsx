@@ -19,6 +19,11 @@ const SCRIPT_BODY = String.raw`
   // Mounts the iframe and wires up the postMessage-based auto-resize
   // (preview.$templateId.jsx reports its content height since cross-origin
   // means we can't measure the iframe's DOM directly).
+  //
+  // Also reports OUR real window width into the iframe (brix-combo-viewport)
+  // so its mobile/desktop column breakpoint matches the shopper's actual
+  // browser, not the iframe's own (often narrower) nested width — see
+  // useIsMobile() in preview.$templateId.jsx.
   function mountIframe(root, shop, templateId) {
     root.innerHTML = '';
     var iframe = document.createElement('iframe');
@@ -29,11 +34,27 @@ const SCRIPT_BODY = String.raw`
     iframe.setAttribute('title', 'Combo');
     root.appendChild(iframe);
 
+    function postViewport() {
+      try {
+        iframe.contentWindow.postMessage({ type: 'brix-combo-viewport', width: window.innerWidth }, '*');
+      } catch (err) {}
+    }
+    iframe.addEventListener('load', postViewport);
+
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(postViewport, 150);
+    });
+
     window.addEventListener('message', function (e) {
-      if (!e.data || e.data.type !== 'brix-combo-resize') return;
-      if (e.source !== iframe.contentWindow) return;
-      if (typeof e.data.height === 'number' && e.data.height > 0) {
-        iframe.style.height = e.data.height + 'px';
+      if (!e.data || e.source !== iframe.contentWindow) return;
+      if (e.data.type === 'brix-combo-resize') {
+        if (typeof e.data.height === 'number' && e.data.height > 0) {
+          iframe.style.height = e.data.height + 'px';
+        }
+      } else if (e.data.type === 'brix-combo-ready') {
+        postViewport();
       }
     });
   }

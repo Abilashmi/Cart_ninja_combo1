@@ -20,7 +20,15 @@ export const loader = async ({ params, request }) => {
 // Mirrors the builder's device-toggle preview (app.bundles.customize.jsx
 // ComboPreview) but for a real responsive page there's no toggle — this
 // tracks the same breakpoint the builder's own CSS uses (768px).
-function useIsMobile() {
+//
+// When embedded (see combo-page[.]js.jsx), matchMedia here evaluates against
+// the IFRAME's own nested browsing context, not the shopper's actual browser
+// width — a Shopify Page's content column is often narrower than 767px even
+// on a wide desktop screen, so the grid would wrongly fall back to
+// mobile_columns. The parent page has the real width, so it posts it in
+// (brix-combo-viewport); we request it on mount (brix-combo-ready) since the
+// parent's iframe 'load' handler can otherwise race ahead of this listener.
+function useIsMobile(embed) {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
@@ -30,6 +38,18 @@ function useIsMobile() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (!embed || typeof window === 'undefined') return;
+    const handler = (e) => {
+      if (!e.data || e.data.type !== 'brix-combo-viewport') return;
+      if (typeof e.data.width === 'number') setIsMobile(e.data.width < 768);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: 'brix-combo-ready' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, [embed]);
+
   return isMobile;
 }
 
@@ -1421,7 +1441,7 @@ export default function ComboPreviewPage() {
   const { templateId } = useParams();
   const layout = config.layout || 'layout1';
   const rootRef = useRef(null);
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(embed);
 
   // Embedded inside the live storefront's iframe (see combo-page[.]js.jsx) —
   // report height so the parent can size the frame, since cross-origin means
