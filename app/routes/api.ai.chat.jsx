@@ -26,12 +26,18 @@ const MAX_TOKENS = 700;
 const CONFIRM_YES_RE = /^(__confirm__|y|yes|yeah|yep|confirm|ok|okay|sure|go ahead|do it|please do)\.?$/i;
 const CONFIRM_NO_RE = /^(__cancel__|n|no|nope|cancel|stop|nevermind|never mind)\.?$/i;
 
-const READ_ONLY_TOOLS = new Set(['get_current_config', 'get_products', 'get_collections', 'get_store_insights']);
+const READ_ONLY_TOOLS = new Set(['get_current_config', 'get_products', 'get_collections', 'get_store_insights', 'suggest_theme_colors']);
 
 const CONFIRM_CHOICES = [
   { label: '✅ Confirm', value: '__confirm__' },
   { label: '✖ Cancel', value: '__cancel__' },
 ];
+
+// Tools whose result should be handed to the client as structured widget
+// data instead of being fed back into another LLM turn — the point is for
+// the frontend to render an interactive card (e.g. editable color swatches)
+// with the exact values the tool produced, not a paraphrased summary of them.
+const WIDGET_TOOLS = { suggest_theme_colors: 'theme_colors' };
 
 function describeDestructiveCall(name, args) {
   if (name === 'set_cart_drawer_enabled') return 'turn OFF your entire Cart Drawer — customers will see Shopify\'s default cart instead';
@@ -50,7 +56,28 @@ async function buildAfterPayload(shop) {
   const db = getDb();
   const [cdcRows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]);
   const cdc = cdcRows[0];
-  const [pbRows] = await db.execute('SELECT is_enabled FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const [pbRows] = await db.execute('SELECT * FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const pb = pbRows[0];
+  let pbTiers;
+  if (pb) {
+    const [tierRows] = await db.execute('SELECT * FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order', [pb.id]);
+    // Converted to the shape CartEditorContext/CartPreview actually read
+    // (defaultTier: minimumSpend/title/description/icon/rewardProducts) —
+    // not the normalized table's own column names.
+    pbTiers = tierRows.map((t) => {
+      let rewardProducts = [];
+      try { rewardProducts = t.reward_products ? JSON.parse(t.reward_products) : []; } catch { /* ignore */ }
+      return {
+        id: `tier-${t.id}`,
+        minimumSpend: Number(t.min_value) || 0,
+        title: t.description || 'Milestone',
+        description: t.description || 'Milestone',
+        icon: t.icon_preset || 'gift',
+        rewardProducts,
+        rewardProductCount: rewardProducts.length,
+      };
+    });
+  }
   const [upRows] = await db.execute('SELECT is_enabled FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
   const [csRows] = await db.execute('SELECT is_enabled FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [shop]);
   const [fbtRows] = await db.execute('SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
@@ -60,7 +87,7 @@ async function buildAfterPayload(shop) {
     header: cdc ? { bgColor: cdc.header_bg_color, textColor: cdc.header_text_color } : undefined,
     checkoutButton: cdc ? { backgroundColor: cdc.checkout_button_bg_color, textColor: cdc.checkout_button_text_color } : undefined,
     announcement: cdc ? { enabled: !!cdc.announcement_enabled, text: cdc.announcement_text, bgColor: cdc.announcement_bg_color, textColor: cdc.announcement_text_color } : undefined,
-    goalBar: pbRows[0] ? { enabled: !!pbRows[0].is_enabled } : undefined,
+    goalBar: pb ? { enabled: !!pb.is_enabled, tiers: pbTiers } : undefined,
     upsell: upRows[0] ? { enabled: !!upRows[0].is_enabled } : undefined,
     couponSlider: csRows[0] ? { enabled: !!csRows[0].is_enabled } : undefined,
     fbt: fbtRows[0] ? { widgetEnabled: !!fbtRows[0].is_enabled } : undefined,
@@ -91,7 +118,12 @@ export async function action({ request }) {
         const text = result.success
           ? `Done — that's been applied.`
           : `I couldn't complete that: ${result.message || 'unknown error'}.`;
-        return Response.json({ success: true, message: text, credits, after });
+        // toolSuccess reflects the ACTUAL tool outcome (result.success), unlike
+        // the outer `success` field which just means "the request completed" —
+        // callers that need to know whether the action really happened (e.g.
+        // a widget card deciding whether to show an error state) should use
+        // this instead of string-matching `message`.
+        return Response.json({ success: true, message: text, credits, after, toolSuccess: result.success });
       }
       if (CONFIRM_NO_RE.test(trimmed)) {
         return Response.json({ success: true, message: 'Okay, cancelled.', credits });
@@ -164,6 +196,19 @@ export async function action({ request }) {
           console.error(`[api.ai.chat] tool ${call.name} failed:`, e.message);
           result = { success: false, message: e.message || 'Tool execution failed.' };
         }
+
+        // Widget tools short-circuit here — the frontend needs the exact
+        // values the tool produced to render an editable card, not the
+        // model's paraphrase of them after another turn.
+        if (WIDGET_TOOLS[call.name] && result?.success) {
+          return Response.json({
+            success: true,
+            message: "Here are a few color combos based on your store — click one to apply it.",
+            widget: { type: WIDGET_TOOLS[call.name], props: result.palettes },
+            credits,
+          });
+        }
+
         if (!READ_ONLY_TOOLS.has(call.name) && result?.success) anyWriteExecuted = true;
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
       }

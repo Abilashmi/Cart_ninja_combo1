@@ -173,6 +173,13 @@ export function UpsellSection() {
       suggestions.forEach((s) => {
         addUpsellRule({
           id: `rule-${Date.now()}-${s.id}`,
+          // No specific trigger product — these are general catalog
+          // recommendations, meant to show regardless of cart contents.
+          // The storefront (cart_drawer_inline.js renderUpsellSectionAsync)
+          // only treats a rule with empty triggerProductIds as a global
+          // match when triggerType is explicitly 'all' — without it, these
+          // rules silently never match once the cart has items.
+          triggerType: 'all',
           triggerProductCount: 1,
           triggerProductIds: [],
           upsellProductCount: 1,
@@ -197,6 +204,11 @@ export function UpsellSection() {
   const addRule = () => {
     const newRule = {
       id: `rule-${Date.now()}`,
+      // Same "no trigger selected → always show" default as the AI-suggested
+      // rules above — until the merchant picks specific trigger products via
+      // the picker (which sets triggerProductIds and makes this irrelevant),
+      // the rule should match regardless of cart contents.
+      triggerType: 'all',
       triggerProductCount: 1,
       triggerProductIds: [],
       upsellProductCount: 1,

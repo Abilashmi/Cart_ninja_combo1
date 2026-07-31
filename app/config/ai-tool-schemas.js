@@ -214,7 +214,7 @@ export const TOOL_REGISTRY = [
       type: 'object',
       properties: {
         goalAmount: { type: 'number', description: 'Spend amount required to unlock the reward' },
-        rewardType: { type: 'string', enum: ['free_shipping', 'free_gift', 'discount', 'custom'] },
+        rewardType: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward' },
         placement: { type: 'string', enum: ['top', 'bottom'] },
       },
       required: ['goalAmount'],
@@ -233,7 +233,7 @@ export const TOOL_REGISTRY = [
             properties: {
               min_value: { type: 'number' },
               description: { type: 'string' },
-              reward_type: { type: 'string', enum: ['free_shipping', 'free_gift', 'discount', 'custom'] },
+              reward_type: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward' },
               icon_preset: { type: 'string' },
             },
           },
@@ -412,8 +412,27 @@ export const TOOL_REGISTRY = [
   // ── Theme ────────────────────────────────────────────────────────────────
   {
     name: 'match_store_theme',
-    description: 'Detect the live storefront theme\'s colors and apply them to the cart drawer\'s header and checkout button, so the drawer visually matches the store. Use this when the merchant asks to "match my theme" or references their live site\'s look. For an original/creative theme suggestion (not copying the live site), instead just propose colors yourself and apply them via update_header/update_checkout_button/update_announcements/update_design.',
+    description: 'Detect the live storefront theme\'s colors and apply them immediately to the cart drawer\'s header and checkout button, so the drawer visually matches the store. Use this ONLY when the merchant explicitly asks to "match my theme" / "match my site" / references copying their live storefront\'s exact look. For any other color request — a creative suggestion, "suggest a palette", "make it look premium", "give me some color options" — use suggest_theme_colors instead so the merchant can review and edit before anything is saved.',
     parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'suggest_theme_colors',
+    description: 'Propose 4 complete color combinations for the cart drawer\'s header and checkout button WITHOUT saving anything yet — renders an interactive card with 4 clickable swatches, one per combo. Use this for any color-suggestion request that isn\'t an explicit "match my exact theme" request (see match_store_theme): "suggest colors", "give me a premium palette", "show me some options", "make my cart look modern" (when colors are the ask), etc. Do not follow this with update_header/update_checkout_button yourself — applying happens only when the merchant clicks one of the combos in the card.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'apply_theme_colors',
+    description: 'Apply specific header/checkout button colors. Internal — used when the merchant clicks Apply on a suggest_theme_colors card, not called directly from a chat message.',
+    parameters: {
+      type: 'object',
+      properties: {
+        headerBgColor: { type: 'string', description: 'Header background hex color' },
+        headerTextColor: { type: 'string', description: 'Header text hex color' },
+        checkoutBgColor: { type: 'string', description: 'Checkout button background hex color' },
+        checkoutTextColor: { type: 'string', description: 'Checkout button text hex color' },
+      },
+      required: [],
+    },
   },
 ];
 

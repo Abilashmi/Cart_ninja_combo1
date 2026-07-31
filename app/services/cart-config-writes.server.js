@@ -267,7 +267,7 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
           t.min_value ?? t.minValue ?? 0,
           t.min_quantity ?? t.minQuantity ?? 0,
           t.description ?? 'Milestone',
-          t.reward_type ?? t.rewardType ?? 'free_shipping',
+          t.reward_type || t.rewardType || 'free_shipping',
           t.icon_type ?? t.iconType ?? 'preset',
           t.icon_preset ?? t.iconPreset ?? 'gift',
           t.icon_custom_svg ?? t.iconCustomSvg ?? null,

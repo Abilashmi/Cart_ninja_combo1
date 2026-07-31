@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router';
 import useAiAgent from './useAiAgent';
 import MarkdownMessage from './MarkdownMessage';
+import ThemeColorsWidget from './widgets/ThemeColorsWidget';
 
 const SIZES = {
   lg: { maxWidth: '960px', inputFont: 17, padLeft: 28, btnText: true,  iconSize: 26, panelH: 380 },
@@ -54,7 +55,7 @@ export default function BrixBar({
 }) {
   const cfg = SIZES[size] || SIZES.md;
   const location = useLocation();
-  const { messages, loading, sendMessage, setMessages, setActiveConvId, conversations, selectConversation, credits } = useAiAgent(location);
+  const { messages, loading, sendMessage, applyWidget, setMessages, setActiveConvId, conversations, selectConversation, credits } = useAiAgent(location);
 
   const [input, setInput] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -160,10 +161,18 @@ export default function BrixBar({
       </div>
     );
 
+    const widget = j?.widget;
+
     return (
       <div key={msg.id} className="bxb-row bxb-row-agent">
         <div className="bxb-agent-stack">
           {card}
+          {widget?.type === 'theme_colors' && (
+            <ThemeColorsWidget
+              palette={widget.props}
+              onApply={(colors) => applyWidget('apply_theme_colors', colors)}
+            />
+          )}
           {choices?.length > 0 && (
             <div className="bxb-choices">
               {choices.map((c, i) => (
@@ -269,8 +278,8 @@ export default function BrixBar({
         .bxb-send-md{padding:10px 20px;font-size:14px}
         .bxb-send-sm{width:32px;height:32px}
         .bxb-panel,.bxb-hist-panel{background:${floating?'rgba(255,255,255,0.92)':'#fff'};${floating?'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);':''}border:1px solid ${floating?'rgba(210,210,210,0.65)':'#e1e3e5'};border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.09);animation:bxbIn .18s ease;display:flex;flex-direction:column;max-height:min(440px, calc(100vh - 120px))}
-        .bxb-panel,.bxb-hist-panel{margin-top:10px}
-        .bxb-panel-above{position:absolute;bottom:calc(100% + 10px);left:0;right:0;margin-top:0}
+        .bxb-panel,.bxb-hist-panel{margin-bottom:10px}
+        .bxb-panel-above{position:absolute;bottom:calc(100% + 10px);left:0;right:0;margin-top:0;margin-bottom:0}
         @keyframes bxbIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
         .bxb-panel-head{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
         .bxb-panel-icon{width:20px;height:20px;border-radius:5px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -336,6 +345,19 @@ export default function BrixBar({
         </div>
       )}
 
+      {hasThread && !floating && !showHistory && (
+        <div className="bxb-panel">
+          {panelHead}
+          {chatBody}
+        </div>
+      )}
+
+      {showHistory && !floating && (
+        <div className="bxb-hist-panel">
+          {historyPanelContent}
+        </div>
+      )}
+
       <div className="bxb-bar" ref={barRef}>
         <svg className="bxb-search-icon" width={cfg.iconSize} height={cfg.iconSize} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
@@ -369,19 +391,6 @@ export default function BrixBar({
           </svg>
         </button>
       </div>
-
-      {hasThread && !floating && !showHistory && (
-        <div className="bxb-panel">
-          {panelHead}
-          {chatBody}
-        </div>
-      )}
-
-      {showHistory && !floating && (
-        <div className="bxb-hist-panel">
-          {historyPanelContent}
-        </div>
-      )}
     </div>
   );
 

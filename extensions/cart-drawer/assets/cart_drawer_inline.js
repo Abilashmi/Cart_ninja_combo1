@@ -76,6 +76,7 @@
   const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
   let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
   let _ccStoreCatalogPromise = null;
+  let _ccRewardSyncInFlight = false;
 
   /* =================== CONFETTI POPUP =================== */
   function triggerConfetti() {
@@ -333,7 +334,11 @@
           target: target,
           title: t.title || '',
           rewardText: t.description || 'Reward',
-          products: t.products || [],
+          // The admin's ProductPickerModal saves this as `rewardProducts`;
+          // some write paths (the AI-tool legacy sync) also mirror it as
+          // `products` — accept either so a reward product picked in the
+          // manual editor is never silently dropped here.
+          products: t.products || t.rewardProducts || [],
           rewardType: t.rewardType || 'product',
           iconType: t.iconType || 'preset',
           iconPreset: t.iconPreset || 'gift',
@@ -651,6 +656,7 @@
             id,
             title,
             price: p?.variants?.[0]?.price || p?.price_min || '',
+            compareAtPrice: p?.variants?.[0]?.compare_at_price || null,
             image: p?.images?.[0]?.src || p?.featured_image || null,
             handle: p?.handle || '',
             variantId: p?.variants?.[0]?.id || null,
@@ -1242,6 +1248,74 @@
     return { currentVal, maxTarget, completed, upcoming, nextAmount, percentage, mode, tiers };
   }
 
+  // Auto-adds each completed tier's reward product(s) to the cart, and
+  // removes any previously auto-added reward product whose tier the cart has
+  // dropped back below. Line items we add carry a `_brixReward` property so
+  // they can be told apart from anything the shopper added themselves —
+  // removal only ever touches lines carrying that marker.
+  //
+  // First automatic (non-click-triggered) cart mutation in this codebase —
+  // guarded by _ccRewardSyncInFlight so overlapping renderDrawer() polls
+  // (this runs on every one) can't fire duplicate /cart calls, and by
+  // comparing against actual cart contents (not a flag) so it's idempotent
+  // across reloads/tabs rather than relying on remembered state.
+  async function syncRewardProducts(cart, pInfo) {
+    if (_ccRewardSyncInFlight) return;
+
+    const wantedProductIds = new Set();
+    (pInfo.completed || []).forEach((tier) => {
+      (tier.products || []).forEach((pid) => {
+        const numId = ccExtractNumericId(pid);
+        if (numId) wantedProductIds.add(numId);
+      });
+    });
+
+    const presentProductIds = new Set((cart.items || []).map((it) => String(it.product_id)));
+    const rewardLines = (cart.items || []).filter((it) => it.properties && it.properties._brixReward === 'true');
+
+    const toAdd = [...wantedProductIds].filter((pid) => !presentProductIds.has(pid));
+    const toRemove = rewardLines.filter((it) => !wantedProductIds.has(String(it.product_id)));
+
+    if (toAdd.length === 0 && toRemove.length === 0) return;
+
+    _ccRewardSyncInFlight = true;
+    try {
+      for (const line of toRemove) {
+        await originalFetch('/cart/change.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: line.key, quantity: 0 }),
+        }).catch((err) => console.error('[CartDrawer] reward product removal failed:', err));
+      }
+
+      if (toAdd.length > 0) {
+        const storeCatalog = await ccGetStoreCatalog();
+        const items = [];
+        toAdd.forEach((pid) => {
+          const detail = storeCatalog && storeCatalog.detailsById && storeCatalog.detailsById[pid];
+          const variantId = detail && detail.variantId;
+          if (variantId) {
+            items.push({ id: Number(variantId), quantity: 1, properties: { _brixReward: 'true' } });
+          }
+        });
+        if (items.length > 0) {
+          await originalFetch('/cart/add.js', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items }),
+          }).catch((err) => console.error('[CartDrawer] reward product add failed:', err));
+        }
+      }
+    } finally {
+      _ccRewardSyncInFlight = false;
+    }
+
+    // Cart state changed underneath the render already in progress — refresh
+    // once it settles, same delayed-re-render pattern the add-to-cart click
+    // handler already uses.
+    setTimeout(() => { renderDrawer(); }, 300);
+  }
+
   const CC_ICON_PRESETS = {
     gift: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>',
     shipping:
@@ -1426,7 +1500,7 @@
 <div style="padding:16px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
   <h3 style="margin:0;font-size:18px;font-weight:600;color:${hdrColor};">${escapeHtml(hdrTitle)}</h3>
   <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
-    style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
+    style="background:none;border:none;font-size:20px;cursor:pointer;color:${hdrColor};padding:4px;">✕</button>
 </div>
 `;
 
@@ -1454,6 +1528,7 @@
     const progress = CONFIG.progress;
     if (progress.enabled && (progress.showOnEmpty || !isEmpty)) {
       const pInfo = getProgressInfo(cartTotal, cartQty, progress);
+      await syncRewardProducts(cart, pInfo);
 
       const fgColor = progress.barForegroundColor || '#2563eb';
 
@@ -1506,6 +1581,20 @@
         const nodeSize = isCompleted || isNext ? 40 : 32;
         const iconSize = isCompleted || isNext ? 20 : 16;
 
+        // Size this tier's label to the gap toward its nearest neighbor so
+        // adjacent labels never overlap when tiers are close together in
+        // value (a fixed 120px width previously caused dense tier ladders —
+        // e.g. $2000/$2500/$3500 — to collide). Showing only the amount here
+        // (not the reward name, which already appears once above the track
+        // in the "You're $X away / <reward>" line) keeps each label short
+        // enough that this rarely needs to shrink much.
+        const prevPercent = idx > 0 ? Math.min(97, Math.max(3, (pInfo.tiers[idx - 1].target / pInfo.maxTarget) * 100)) : 0;
+        const nextPercent = idx < pInfo.tiers.length - 1 ? Math.min(97, Math.max(3, (pInfo.tiers[idx + 1].target / pInfo.maxTarget) * 100)) : 100;
+        const nearestGapPercent = Math.min(percent - prevPercent, nextPercent - percent);
+        const APPROX_TRACK_WIDTH_PX = 340; // rough estimate of the track's rendered width, good enough for sizing text
+        const labelWidthPx = Math.max(36, Math.min(80, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
+        const amountFontSize = labelWidthPx < 50 ? 10 : 12;
+
         pbHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;">`;
 
         // Node circle — No background or border as requested, just the icon
@@ -1513,18 +1602,13 @@
         pbHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;font-size:${isCompleted || isNext ? '28px' : '22px'};pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1));">${iconHtml}</span>`;
         pbHtml += `</div>`;
 
-        // Description label below node
+        // Amount label below node — just the threshold amount, no repeated
+        // reward name (that already shows once, above the track, for
+        // whichever tier is currently upcoming).
         const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
 
-        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
-
-        pbHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
-
-        // Match the editor preview: show a single label (title takes precedence, else reward text)
-        const msLabel = ms.title || ms.rewardText;
-        if (msLabel) {
-          pbHtml += `<span style="font-weight:600;opacity:0.9;">${escapeHtml(msLabel)}</span>`;
-        }
+        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:${labelWidthPx}px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};">`;
+        pbHtml += `<span style="font-weight:800;font-size:${amountFontSize}px;white-space:nowrap;">${amountDisplay}</span>`;
         pbHtml += `</div></div>`;
       });
 
@@ -2092,6 +2176,14 @@
 
     if (upsellProducts.length === 0) return '';
 
+    // The admin builder's live preview colors the upsell "Add" button using
+    // the checkout button's style (CartPreview.jsx's UpsellPreview), not a
+    // separate hardcoded color — match that here instead of the plain black
+    // .cc-add-btn default.
+    const addBtnCbStyle = CONFIG.checkoutButtonStyle || {};
+    const addBtnBg = addBtnCbStyle.backgroundColor || '#111827';
+    const addBtnFg = addBtnCbStyle.textColor || '#ffffff';
+
     const dir = upsellConfig.direction || 'vertical';
     const layout = upsellConfig.layout || 'carousel';
     const titleStyle = `
@@ -2108,13 +2200,13 @@
     const isGrid = layout === 'grid';
     const showUpsellNav = upsellProducts.length >= 2 && isCarousel;
 
-    const navPrevSymbol = isHorizontal ? '←' : '↑';
-    const navNextSymbol = isHorizontal ? '→' : '↓';
-    const navPrevTitle = isHorizontal ? 'Scroll left' : 'Scroll up';
-    const navNextTitle = isHorizontal ? 'Scroll right' : 'Scroll down';
+    const navPrevSymbol = '←';
+    const navNextSymbol = '→';
+    const navPrevTitle = 'Scroll left';
+    const navNextTitle = 'Scroll right';
 
     // --- Container Styles based on Layout AND Direction ---
-    let listStyle = `display: ${isGrid ? 'grid' : 'flex'}; gap: 12px; scroll-behavior: smooth;`;
+    let listStyle = `display: ${isGrid ? 'grid' : 'flex'}; gap: ${isCarousel && isVertical ? '14px' : '12px'}; scroll-behavior: smooth;`;
 
     if (isGrid) {
       // GRID: Uses CSS Grid for strict 1 or 2 column distribution
@@ -2123,13 +2215,11 @@
         listStyle += `justify-items: start;`;
       }
     } else {
-      // CAROUSEL: Uses Flexbox for sliding flow
-      listStyle += `flex-direction: ${isHorizontal ? 'row' : 'column'};`;
-      listStyle += `overflow-x: ${isHorizontal ? 'auto' : 'hidden'};`;
-      listStyle += `overflow-y: ${isVertical ? 'auto' : 'hidden'};`;
-      if (isVertical) {
-        listStyle += `max-height: 280px;`;
-      }
+      // CAROUSEL: always scrolls horizontally as a row of fixed-size cards —
+      // a vertically-stacked full-width list doesn't read as a carousel.
+      // "direction" now only changes card width/density (see card markup
+      // below), not the scroll axis.
+      listStyle += `flex-direction: row; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; cursor: grab;`;
     }
 
     let html = `
@@ -2172,6 +2262,7 @@
             // Always take live title/price when saved value is missing
             title: (detail?.title && detail.title !== 'Product') ? detail.title : storeDetail.title,
             price: detail?.price || storeDetail.price,
+            compareAtPrice: detail?.compareAtPrice || storeDetail.compareAtPrice,
             variantId: detail?.variantId || storeDetail.variantId,
           };
         }
@@ -2187,10 +2278,14 @@
 
       const title = detail.title || 'Product';
       const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
+      const compareAtText =
+        detail.compareAtPrice && parseFloat(detail.compareAtPrice) > parseFloat(detail.price || 0)
+          ? CURRENCY_SYMBOL + parseFloat(detail.compareAtPrice).toFixed(0)
+          : '';
       const imageHtml =
         detail.image && detail.image !== '📦' && detail.image !== null
-          ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:contain;" loading="lazy">`
-          : `<span style="font-size:20px;color:#94a3b8;">📦</span>`;
+          ? `<img src="${detail.image}" alt="${escapeHtml(title)}" style="width:100%;height:100%;object-fit:contain;" loading="lazy">`
+          : `<span style="font-size:20px;color:#94a3b8;" aria-hidden="true">📦</span>`;
 
       const hasVariantId = detail.variantId !== undefined && detail.variantId !== null && String(detail.variantId).trim() !== '';
       const addToCartId = hasVariantId ? detail.variantId : productId;
@@ -2211,26 +2306,42 @@
                 line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
               <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
                 <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-                <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="padding:4px 10px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
+                <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="padding:4px 10px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
               </div>
             </div>
           </div>
         `;
-      } else {
-        // CAROUSEL CARD: narrow vertical card (image top, content below) in a horizontal
-        // scroll — matches the editor preview so multiple products are visible.
-        const cardSpecialStyle = isHorizontal
-          ? 'min-width:150px;max-width:150px;'
-          : 'width:100%;';
+      } else if (isVertical) {
+        // PREMIUM VERTICAL CARD: fixed-size portrait product card (image,
+        // centered title/price, spacer, pill button pinned to the bottom)
+        // in a horizontally-scrolling, snap-aligned carousel row.
         html += `
-          <div class="cc-upsell-card" style="${cardSpecialStyle}flex-shrink:0;scroll-snap-align:start;display:flex;flex-direction:column;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;background:#fff;">
-            <div style="width:100%;height:90px;background:#f1f2f3;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+          <div class="cc-upsell-card cc-upsell-card--v">
+            <div class="cc-upsell-v-image">
+              ${imageHtml}
+            </div>
+            <p class="cc-upsell-v-title">${escapeHtml(title)}</p>
+            <div class="cc-upsell-v-price">
+              <span class="cc-upsell-v-price-now">${priceText}</span>
+              ${compareAtText ? `<span class="cc-upsell-v-price-compare">${compareAtText}</span>` : ''}
+            </div>
+            <div class="cc-upsell-v-spacer"></div>
+            <button type="button" class="cc-add-btn cc-add-btn--v" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add to cart')}</button>
+          </div>
+        `;
+      } else {
+        // COMPACT HORIZONTAL-DIRECTION CARD: narrow card (image top, content
+        // below) in a horizontal scroll — matches the editor preview so more
+        // products are visible at once.
+        html += `
+          <div class="cc-upsell-card" style="min-width:150px;max-width:150px;flex-shrink:0;scroll-snap-align:start;display:flex;flex-direction:column;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;background:#fff;">
+            <div style="width:90px;height:90px;margin:12px auto 0;background:#f1f2f3;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
               ${imageHtml}
             </div>
             <div style="padding:8px;display:flex;flex-direction:column;gap:4px;flex:1;">
               <p style="margin:0;font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
               <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-              <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="margin-top:auto;width:100%;padding:5px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
+              <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="margin-top:auto;width:100%;padding:5px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
             </div>
           </div>
         `;
@@ -2239,15 +2350,46 @@
 
     html += `</div></div>`;
 
-    if (showUpsellNav) {
+    if (isCarousel) {
       setTimeout(() => {
         const list = document.getElementById('cc-upsell-list');
-        const leftBtn = document.getElementById('upsell-nav-left');
-        const rightBtn = document.getElementById('upsell-nav-right');
-        if (!list || !leftBtn || !rightBtn) return;
+        if (!list) return;
 
-        const updateArrows = () => {
-          if (isHorizontal) {
+        // Keyboard navigation — the list itself is the focusable, scrollable region.
+        list.setAttribute('tabindex', '0');
+        list.setAttribute('role', 'region');
+        list.setAttribute('aria-label', (upsellConfig.upsellTitle.text || 'Recommended products') + ', scroll for more');
+        list.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'right'); }
+          else if (e.key === 'ArrowLeft') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'left'); }
+        });
+
+        // Mouse drag-to-scroll (touch swipe already works natively via overflow-x).
+        let isDown = false;
+        let startX = 0;
+        let startScroll = 0;
+        list.addEventListener('pointerdown', (e) => {
+          if (e.pointerType === 'touch') return;
+          isDown = true;
+          startX = e.clientX;
+          startScroll = list.scrollLeft;
+          list.setPointerCapture(e.pointerId);
+          list.classList.add('cc-dragging');
+        });
+        list.addEventListener('pointermove', (e) => {
+          if (!isDown) return;
+          list.scrollLeft = startScroll - (e.clientX - startX);
+        });
+        const endDrag = () => { isDown = false; list.classList.remove('cc-dragging'); };
+        list.addEventListener('pointerup', endDrag);
+        list.addEventListener('pointercancel', endDrag);
+
+        if (showUpsellNav) {
+          const leftBtn = document.getElementById('upsell-nav-left');
+          const rightBtn = document.getElementById('upsell-nav-right');
+          if (!leftBtn || !rightBtn) return;
+
+          const updateArrows = () => {
             const maxLeft = list.scrollWidth - list.clientWidth;
             if (maxLeft <= 5) {
               leftBtn.style.display = 'none';
@@ -2256,22 +2398,12 @@
             }
             leftBtn.style.display = list.scrollLeft > 5 ? 'flex' : 'none';
             rightBtn.style.display = list.scrollLeft < maxLeft - 5 ? 'flex' : 'none';
-            return;
-          }
+          };
 
-          const maxTop = list.scrollHeight - list.clientHeight;
-          if (maxTop <= 5) {
-            leftBtn.style.display = 'none';
-            rightBtn.style.display = 'none';
-            return;
-          }
-          leftBtn.style.display = list.scrollTop > 5 ? 'flex' : 'none';
-          rightBtn.style.display = list.scrollTop < maxTop - 5 ? 'flex' : 'none';
-        };
-
-        list.addEventListener('scroll', updateArrows);
-        window.addEventListener('resize', updateArrows);
-        updateArrows();
+          list.addEventListener('scroll', updateArrows);
+          window.addEventListener('resize', updateArrows);
+          updateArrows();
+        }
       }, 100);
     }
 

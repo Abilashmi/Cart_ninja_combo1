@@ -217,7 +217,7 @@ export default function useAiAgent(location) {
       const msgText = res.message || "I couldn't process that. Please try again.";
       const reply = {
         id: 'a-' + uid(), role: 'agent', text: msgText,
-        json: res.choices?.length ? { message: msgText, choices: res.choices } : { message: msgText },
+        json: { message: msgText, ...(res.choices?.length ? { choices: res.choices } : {}), ...(res.widget ? { widget: res.widget } : {}) },
       };
       setMessages(prev => [...prev, reply]);
       persist(reply);
@@ -235,6 +235,34 @@ export default function useAiAgent(location) {
     }
   }, [activeConvId, messages, createConversation, pendingConfirmTool]);
 
+  // Runs a specific tool with specific args immediately, bypassing the LLM —
+  // reuses api.ai.chat.jsx's pendingConfirmTool bypass (normally reserved for
+  // "yes"/"no" after a destructive-action confirmation) as a generic "execute
+  // this exact tool" path. Used by chat widgets (e.g. ThemeColorsWidget's
+  // Apply buttons) where the merchant's click IS the confirmation — no typed
+  // "yes" needed. Returns {success, message} so the calling widget can show
+  // its own inline loading/error state rather than only relying on the chat
+  // transcript.
+  const applyWidget = useCallback(async (name, args) => {
+    if (!activeConvId) return { success: false, message: 'No active conversation.' };
+    try {
+      const history = messages.map(m => ({ role: m.role, text: m.text }));
+      const res = await aiApi.sendMessage(activeConvId, '__confirm__', history, { name, args });
+
+      if (res.credits) setCredits(prev => mergeCredits(prev, res.credits));
+      if (res.after) syncAfterToFeatureStore(res.after);
+
+      const msgText = res.message || "I couldn't process that. Please try again.";
+      const reply = { id: 'a-' + uid(), role: 'agent', text: msgText, json: { message: msgText } };
+      setMessages(prev => [...prev, reply]);
+      aiApi.saveMessage(activeConvId, 'assistant', msgText).catch(() => {});
+
+      return { success: !!res.toolSuccess, message: msgText };
+    } catch (e) {
+      return { success: false, message: e.message || 'Something went wrong. Please try again.' };
+    }
+  }, [activeConvId, messages]);
+
   const deleteConversation = useCallback(async (convId) => {
     setConversations(prev => prev.filter(c => c.id !== convId));
     if (activeConvId === convId) { setActiveConvId(null); setMessages([]); }
@@ -246,7 +274,7 @@ export default function useAiAgent(location) {
 
   return {
     conversations, activeConvId, messages, loading, typing, suggestions, tools, error, initialized, currentPage, credits,
-    createConversation, selectConversation, sendMessage, deleteConversation, renameConversation,
+    createConversation, selectConversation, sendMessage, applyWidget, deleteConversation, renameConversation,
     setActiveConvId, setMessages, setConversations,
   };
 }

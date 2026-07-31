@@ -116,7 +116,7 @@ function CartEditorContent() {
             icon_type:      t.iconType      || 'preset',
             icon_preset:    t.iconPreset    || 'gift',
             icon_custom_svg: t.iconCustomSvg || null,
-            products:       t.products      || [],
+            products:       t.rewardProducts || t.products || [],
             sort_order:     i,
           })),
         }),

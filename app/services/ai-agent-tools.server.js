@@ -62,6 +62,138 @@ async function syncDrawerStatusToLegacyRecord(shop, enabled) {
   await persistCartDrawerRecord(shop, record);
 }
 
+// The storefront (cart_drawer_inline.js's parseProgressData) reads milestones
+// from the legacy cart_drawer.progress_data JSON blob — NOT from the
+// normalized progress_bar_settings/progress_bar_tiers tables saveProgressBarSettings
+// writes to. The manual Cart Editor already dual-writes this (CartEditorPage.jsx's
+// handleSave sends progress_data: JSON.stringify(pb)); every progress-bar AI
+// tool must do the same read-back-and-sync, or changes made via chat never
+// reach the actual storefront even though they look saved in the admin.
+async function syncProgressBarToLegacyRecord(shop) {
+  const db = getDb();
+  const [settingsRows] = await db.execute('SELECT * FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  const settings = settingsRows[0];
+  if (!settings) return;
+
+  const [tierRows] = await db.execute('SELECT * FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order', [settings.id]);
+
+  const progressData = {
+    enabled: !!settings.is_enabled,
+    mode: settings.mode,
+    position: settings.placement,
+    showWhenEmpty: !!settings.show_on_empty,
+    colors: {
+      background: settings.bar_background_color,
+      fill: settings.bar_foreground_color,
+      icon: settings.icon_color,
+      message: settings.completion_text_color,
+    },
+    borderRadius: settings.border_radius,
+    completionMessage: settings.completion_text,
+    confetti: !!settings.enable_confetti,
+    tiers: tierRows.map((t) => {
+      const products = parseJsonSafe(t.reward_products, []);
+      return {
+        id: `tier-${t.id}`,
+        minValue: Number(t.min_value) || 0,
+        minimumSpend: Number(t.min_value) || 0,
+        minQuantity: t.min_quantity || 0,
+        title: t.description || 'Milestone',
+        description: t.description || 'Milestone',
+        rewardType: t.reward_type || 'product',
+        icon: t.icon_preset || 'gift',
+        iconType: t.icon_type || 'preset',
+        iconPreset: t.icon_preset || 'gift',
+        iconCustomSvg: t.icon_custom_svg || '',
+        products,
+        rewardProducts: products,
+      };
+    }),
+  };
+
+  const existing = (await fetchCartDrawerRecord(shop)) || {};
+  const record = {
+    ...existing,
+    progress_status: settings.is_enabled ? 1 : 0,
+    progress_data: JSON.stringify(progressData),
+  };
+  await persistCartDrawerRecord(shop, record);
+}
+
+// ── Color helpers for suggest_theme_colors ──────────────────────────────────
+// Turns one base theme (detected or currently-saved) into several distinct,
+// always-readable combos by rotating hue — rather than inventing arbitrary
+// palettes, each option stays tied to the shop's real base color.
+function hexToRgb(hex) {
+  const clean = String(hex || '').replace('#', '').trim();
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6);
+  const num = parseInt(full, 16) || 0;
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360; s /= 100; l /= 100;
+  if (s === 0) { const v = l * 255; return { r: v, g: v, b: v }; }
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return { r: hue2rgb(p, q, h + 1 / 3) * 255, g: hue2rgb(p, q, h) * 255, b: hue2rgb(p, q, h - 1 / 3) * 255 };
+}
+// Rotates a hex color's hue by `degrees`, boosting saturation to at least 35%
+// so the rotation stays visible even when the base color is near-gray.
+function rotateHue(hex, degrees) {
+  if (!degrees) return hex;
+  const { r, g, b } = hexToRgb(hex);
+  const { h, s, l } = rgbToHsl(r, g, b);
+  const rgb = hslToRgb(h + degrees, Math.max(s, 35), Math.min(Math.max(l, 25), 75));
+  return rgbToHex(rgb.r, rgb.g, rgb.b);
+}
+// Simple luminance check — light backgrounds get dark text, dark get white.
+function contrastTextColor(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#111827' : '#ffffff';
+}
+// Base (0° — the real detected/current theme, unchanged) plus 3 hue-rotated
+// variants, each with auto-computed contrasting text — always 4 distinct,
+// readable combos derived from one real starting point.
+function buildPaletteOptions(base) {
+  return [0, 90, 180, 270].map((deg) => {
+    const headerBgColor = deg === 0 ? base.headerBgColor : rotateHue(base.headerBgColor, deg);
+    const checkoutBgColor = deg === 0 ? base.checkoutBgColor : rotateHue(base.checkoutBgColor, deg);
+    return {
+      headerBgColor,
+      headerTextColor: deg === 0 ? base.headerTextColor : contrastTextColor(headerBgColor),
+      checkoutBgColor,
+      checkoutTextColor: deg === 0 ? base.checkoutTextColor : contrastTextColor(checkoutBgColor),
+    };
+  });
+}
+
 function productNotFoundResult(name) {
   return { success: false, reason: 'not_found', message: `No product found matching "${name}". Try a different name, or use get_products to search.` };
 }
@@ -188,20 +320,23 @@ export const TOOL_EXECUTORS = {
   // ── Progress bar ─────────────────────────────────────────────────────────
   async update_progress_bar(ctx, args) {
     const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, args);
+    await syncProgressBarToLegacyRecord(ctx.shop);
     return { success: true, progressBar: { enabled: !!data.is_enabled, placement: data.placement } };
   },
 
   async set_progress_bar_goal(ctx, { goalAmount, rewardType, placement }) {
-    const iconPresetMap = { free_shipping: 'shipping', free_gift: 'gift', discount: 'diamond', custom: 'trophy' };
+    const iconPresetMap = { free_shipping: 'shipping', product: 'gift', discount: 'diamond', gift: 'trophy' };
     const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, {
       is_enabled: 1, goalAmount, rewardType: rewardType || 'free_shipping',
       iconPreset: iconPresetMap[rewardType] || 'shipping', placement,
     });
+    await syncProgressBarToLegacyRecord(ctx.shop);
     return { success: true, progressBar: { enabled: !!data.is_enabled, goalAmount, rewardType: rewardType || 'free_shipping' } };
   },
 
   async update_progress_bar_tiers(ctx, { tiers }) {
     const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, { tiers });
+    await syncProgressBarToLegacyRecord(ctx.shop);
     return { success: true, tierCount: data.tiers?.length || 0 };
   },
 
@@ -335,5 +470,47 @@ export const TOOL_EXECUTORS = {
     });
     await syncCheckoutButtonToLegacyRecord(ctx.shop, { bgColor: theme.checkoutBgColor, textColor: theme.checkoutTextColor });
     return { success: true, theme };
+  },
+
+  // Read-only — proposes 4 complete color combos for api.ai.chat.jsx's widget
+  // short-circuit to render as clickable swatches (one full combo applied per
+  // click). Writes nothing; see apply_theme_colors for the counterpart that
+  // actually saves whichever combo the merchant picks.
+  async suggest_theme_colors(ctx) {
+    const detected = await detectStoreTheme(ctx.admin, ctx.session);
+    let base = detected;
+
+    if (!base) {
+      // Detection failed — fall back to the shop's currently-saved colors so
+      // suggestions still start from something real, not a hardcoded default.
+      const db = getDb();
+      const [rows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+      const cdc = rows[0];
+      base = {
+        headerBgColor: cdc?.header_bg_color || '#f9fafb',
+        headerTextColor: cdc?.header_text_color || '#000000',
+        checkoutBgColor: cdc?.checkout_button_bg_color || '#111827',
+        checkoutTextColor: cdc?.checkout_button_text_color || '#ffffff',
+      };
+    }
+
+    return { success: true, palettes: buildPaletteOptions(base) };
+  },
+
+  async apply_theme_colors(ctx, args) {
+    const data = await saveCartDrawerConfig(ctx.shop, ctx.planKey, {
+      header_bg_color: args.headerBgColor, header_text_color: args.headerTextColor,
+      checkout_button_bg_color: args.checkoutBgColor, checkout_button_text_color: args.checkoutTextColor,
+    });
+    if (args.checkoutBgColor !== undefined || args.checkoutTextColor !== undefined) {
+      await syncCheckoutButtonToLegacyRecord(ctx.shop, { bgColor: args.checkoutBgColor, textColor: args.checkoutTextColor });
+    }
+    return {
+      success: true,
+      theme: {
+        headerBgColor: data.header_bg_color, headerTextColor: data.header_text_color,
+        checkoutBgColor: data.checkout_button_bg_color, checkoutTextColor: data.checkout_button_text_color,
+      },
+    };
   },
 };

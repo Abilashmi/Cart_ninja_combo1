@@ -289,6 +289,23 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
   // Shared accordion open state — lets CartPreview drive sidebar navigation
   const [openSection, setOpenSectionState] = useState('');
 
+  // Non-persisted preview overlay — e.g. BrixBar's theme-color widget
+  // dispatches this while the merchant is just looking at a combo, before
+  // they click its own Apply. Deliberately kept OUTSIDE `state` (which the
+  // Cart Editor's Save button persists) so a preview that's never applied
+  // can never leak into a real save — this only affects what's rendered.
+  const [previewOverride, setPreviewOverride] = useState(null);
+  useEffect(() => {
+    const setHandler = (e) => setPreviewOverride(e?.detail || null);
+    const clearHandler = () => setPreviewOverride(null);
+    window.addEventListener('brixThemePreview', setHandler);
+    window.addEventListener('brixThemePreviewClear', clearHandler);
+    return () => {
+      window.removeEventListener('brixThemePreview', setHandler);
+      window.removeEventListener('brixThemePreviewClear', clearHandler);
+    };
+  }, []);
+
   useEffect(() => {
     // Only apply localStorage AI config if no fresh DB records exist
     // (DB records are authoritative — localStorage is only for real-time AI agent updates)
@@ -307,6 +324,10 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     const handler = (e) => {
       const cart = e?.detail;
       if (!cart) return;
+      // A confirmed (actually saved) update always wins over an in-progress
+      // preview — drop the overlay so this real data shows through instead
+      // of a stale preview color masking it.
+      setPreviewOverride(null);
       setState((prev) => ({
         ...prev,
         ...(cart.drawerEnabled != null ? { status: cart.drawerEnabled ? 'active' : 'inactive' } : {}),
@@ -320,6 +341,11 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
               fill_color: cart.goalBar.barColor,
               colors: { ...prev.body.progressBar.colors, fill: cart.goalBar.barColor },
             } : {}),
+            // Full tier ladder from a BrixBar progress-bar tool call — the
+            // AI tools replace the whole ladder per call, so the merchant's
+            // Customization panel and live preview need to show the same
+            // full list back, not just merge one tier in.
+            ...(Array.isArray(cart.goalBar?.tiers) ? { tiers: cart.goalBar.tiers } : {}),
           },
           upsellProducts: {
             ...prev.body.upsellProducts,
@@ -575,8 +601,19 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     setState(defaultCartEditorState);
   }, []);
 
+  // Preview-aware header/footer for rendering only — `state.header`/
+  // `state.footer` (what Save actually persists) are never mutated by this.
+  const effectiveHeader = previewOverride?.header
+    ? { ...state.header, ...previewOverride.header }
+    : state.header;
+  const effectiveFooter = previewOverride?.checkoutButton
+    ? { ...state.footer, checkoutButton: { ...state.footer.checkoutButton, ...previewOverride.checkoutButton } }
+    : state.footer;
+
   const value = {
     ...state,
+    header: effectiveHeader,
+    footer: effectiveFooter,
     availableCoupons,
     allProducts,
     openSection,

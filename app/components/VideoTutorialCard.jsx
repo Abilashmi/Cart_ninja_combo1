@@ -43,6 +43,12 @@ export const VIDEO_CARD_STYLES = `
   inset: 0;
   transition: transform 250ms ease;
 }
+.brix-vt-thumb-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .brix-vt-card:hover .brix-vt-thumb-img,
 .brix-vt-card:focus-visible .brix-vt-thumb-img {
   transform: scale(1.03);
@@ -195,6 +201,7 @@ export default function VideoTutorialCard({
   accent = '#1a9de0',
   watched = false,
   progressPct = 0,
+  thumbnailUrl,
   onPlay,
 }) {
   const diff = DIFFICULTY_STYLES[difficulty] || DIFFICULTY_STYLES.Beginner;
@@ -217,7 +224,9 @@ export default function VideoTutorialCard({
       aria-label={`Watch tutorial: ${title}`}
     >
       <div className="brix-vt-thumb-wrap">
-        <div className="brix-vt-thumb-img" style={{ background: `linear-gradient(135deg, ${accent}38, ${accent}0d)` }} />
+        <div className="brix-vt-thumb-img" style={thumbnailUrl ? undefined : { background: `linear-gradient(135deg, ${accent}38, ${accent}0d)` }}>
+          {thumbnailUrl && <img src={thumbnailUrl} alt="" loading="lazy" />}
+        </div>
         <div className="brix-vt-overlay" />
         {watched && (
           <div className="brix-vt-watched">
