@@ -186,7 +186,7 @@ export default function AccountPage() {
                 Contact Support
               </Button>
               <Button
-                onClick={() => window.open('https://docs.thecartninja.com', '_blank')}
+                onClick={() => window.open('https://thebrix.io/how-to.html', '_blank')}
               >
                 Documentation
               </Button>

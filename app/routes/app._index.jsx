@@ -5,7 +5,7 @@ import { Page, Text, Icon } from '@shopify/polaris';
 import {
   CartIcon, DiscountCodeIcon, RewardIcon,
   CashDollarIcon, ChartCohortIcon, CollectionIcon,
-  ArrowRightIcon, StarIcon, SettingsIcon,
+  ArrowRightIcon, StarIcon, SettingsIcon, MagicIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
@@ -111,15 +111,22 @@ const ALL_LESSONS = COURSE_SECTIONS.flatMap(s => s.lessons);
 // TODO: paste the embed URL (YouTube/Vimeo/CDN) here once the intro video is published
 const WELCOME_VIDEO_URL = 'https://www.youtube.com/embed/Ap1wvi6FN9I';
 
-// TODO: paste each step's real embed URL (YouTube/Vimeo/CDN) once recorded —
-// placeholders reuse the intro video for now.
+// Each step's real tutorial video (previously all six reused WELCOME_VIDEO_URL
+// as a placeholder).
+const ENABLE_APP_EMBED_VIDEO_URL = 'https://www.youtube.com/embed/xIogTy1RM-0';
+const CART_DRAWER_VIDEO_URL = 'https://www.youtube.com/embed/QmiqbSUgDrw';
+const FBT_VIDEO_URL = 'https://www.youtube.com/embed/o70b1FMW4v4';
+const COUPON_BANNER_VIDEO_URL = 'https://www.youtube.com/embed/l6_m_kGPx9M';
+const COMBO_BUILDER_VIDEO_URL = 'https://www.youtube.com/embed/f7RGtknTVO4';
+const ANALYTICS_VIDEO_URL = 'https://www.youtube.com/embed/FfVLZMmE1PM';
+
 const STEPS = [
-  { id: 1, title: 'Enable App Embed',       desc: 'Activate Brix in your Shopify theme editor to bring the cart drawer, upsells, and banners to life on your storefront.', to: null,                  color: '#667eea', icon: SettingsIcon,     minPlan: 'starter', dur: '01:30', category: 'Getting Started', difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL, thumbnail: '/brixai.png' },
-  { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart, then preview it live before publishing to your store.',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'Cart Drawer',      difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL, thumbnail: '/carteditor.png' },
-  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Add frequently bought together products to your cart drawer and product pages to boost average order value.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: WELCOME_VIDEO_URL, thumbnail: '/Fbt.png' },
-  { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner with targeting rules so the right shoppers see the right offer at the right time.',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'Coupon Banner',    difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL, thumbnail: '/coupon_banner.png' },
-  { id: 5, title: 'Build a Combo in Minutes', desc: 'Create high-converting product bundles with Combo Builder — customise layouts, preview live, and publish in just a few clicks.', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'Combo Builder',    difficulty: 'Beginner',     videoUrl: WELCOME_VIDEO_URL, thumbnail: '/bundle.png' },
-  { id: 6, title: 'Review Your Analytics',  desc: 'Understand revenue, funnels, and conversion rates in real-time so you know what to optimise next.',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'Analytics',        difficulty: 'Intermediate', videoUrl: WELCOME_VIDEO_URL, thumbnail: '/Analytics.png' },
+  { id: 1, title: 'Use Brix AI',             desc: 'Write and work smarter with Brix AI — describe what you want changed and let it configure your cart drawer, upsells, and banners for you.', to: '/app/brix-ai',       color: '#667eea', icon: MagicIcon,        minPlan: 'starter', dur: '01:30', category: 'Brix AI',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
+  { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart, then preview it live before publishing to your store.',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'Cart Drawer',      difficulty: 'Beginner',     videoUrl: CART_DRAWER_VIDEO_URL, thumbnail: '/carteditor.png' },
+  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Add frequently bought together products to your cart drawer and product pages to boost average order value.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: FBT_VIDEO_URL, thumbnail: '/Fbt.png' },
+  { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner with targeting rules so the right shoppers see the right offer at the right time.',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'Coupon Banner',    difficulty: 'Beginner',     videoUrl: COUPON_BANNER_VIDEO_URL, thumbnail: '/coupon_banner.png' },
+  { id: 5, title: 'Build a Combo in Minutes', desc: 'Create high-converting product bundles with Combo Builder — customise layouts, preview live, and publish in just a few clicks.', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'Combo Builder',    difficulty: 'Beginner',     videoUrl: COMBO_BUILDER_VIDEO_URL, thumbnail: '/bundle.png' },
+  { id: 6, title: 'Review Your Analytics',  desc: 'Understand revenue, funnels, and conversion rates in real-time so you know what to optimise next.',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'Analytics',        difficulty: 'Intermediate', videoUrl: ANALYTICS_VIDEO_URL, thumbnail: '/Analytics.png' },
 ];
 
 const MINI_TUTORIALS = [
