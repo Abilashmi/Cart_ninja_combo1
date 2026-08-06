@@ -114,7 +114,12 @@ function CartEditorContent() {
             description:    t.description   || 'Milestone',
             reward_type:    t.rewardType    || 'free_shipping',
             icon_type:      t.iconType      || 'preset',
-            icon_preset:    t.iconPreset    || 'gift',
+            // ProgressBarSection's tier editor writes the selected icon key
+            // under `icon` (see defaultTier.icon / updateTier(...{icon: v}))
+            // — `iconPreset` is only ever populated by older normalized/AI
+            // write paths, so it must be read first or every tier silently
+            // saves as the 'gift' default regardless of what was picked.
+            icon_preset:    t.icon || t.iconPreset || 'gift',
             icon_custom_svg: t.iconCustomSvg || null,
             products:       t.rewardProducts || t.products || [],
             sort_order:     i,

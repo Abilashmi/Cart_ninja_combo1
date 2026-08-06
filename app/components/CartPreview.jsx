@@ -18,6 +18,7 @@ const SECTION_LABELS = {
   progressBar: 'Progress Bar',
   couponSlider: 'Coupon Slider',
   upsellProducts: 'Upsell Products',
+  countdownTimer: 'Countdown Timer',
   emptyCart: 'Empty Cart',
   checkoutButton: 'Checkout Button',
   customCSS: 'Custom CSS',
@@ -173,6 +174,42 @@ function CouponTimerDisplay({ coupon }) {
         <span style={{ fontSize: '9px', color: accentColor, fontWeight: 700, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
           {h > 0 && `${pad(h)}:`}{pad(m)}:{pad(s)}
         </span>
+      )}
+    </div>
+  );
+}
+
+// Mirrors extensions/cart-drawer/assets/cart_drawer_inline.js's
+// #cc-countdown-bar + startCountdownTicker(): a fixed bar below the
+// announcement, showing hours only once nonzero, ticking down every second.
+function CountdownTimerPreview({ countdown }) {
+  const totalSeconds = (countdown.hours ?? 0) * 3600 + (countdown.minutes ?? 15) * 60;
+  const [remaining, setRemaining] = useState(totalSeconds);
+
+  useEffect(() => { setRemaining(totalSeconds); }, [totalSeconds]);
+
+  useEffect(() => {
+    if (remaining <= 0) return;
+    const interval = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1000);
+    return () => clearInterval(interval);
+  }, [remaining]);
+
+  const h = Math.floor(remaining / 3600);
+  const m = Math.floor((remaining % 3600) / 60);
+  const s = remaining % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  const expired = remaining <= 0;
+
+  return (
+    <div style={{ padding: '8px 16px', backgroundColor: countdown.bgColor, color: countdown.textColor, fontSize: '13px', textAlign: 'center', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+      <span>{expired ? countdown.expiredLabel : countdown.label}</span>
+      {!expired && (
+        <span style={{ color: countdown.accentColor, fontWeight: 800, letterSpacing: '0.5px', fontVariantNumeric: 'tabular-nums' }}>
+          {h > 0 && `${pad(h)}:`}{pad(m)}:{pad(s)}
+        </span>
+      )}
+      {countdown.couponMode === 'manual' && countdown.couponCode && (
+        <span style={{ opacity: 0.85 }}>· Use code <strong>{countdown.couponCode}</strong></span>
       )}
     </div>
   );
@@ -639,6 +676,15 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       >
                         {body.announcements.text || 'Your announcement text here…'}
                       </div>
+                    </HighlightZone>
+                  )}
+
+                  {/* Countdown Timer — shown below announcement, hidden on the
+                      empty-cart state to match extensions/cart-drawer/assets/
+                      cart_drawer_inline.js (`countdown.enabled && !isEmpty`) */}
+                  {(body.countdownTimer.enabled || activeSection === 'countdownTimer') && !isEmpty && (
+                    <HighlightZone sectionId="countdownTimer" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                      <CountdownTimerPreview countdown={body.countdownTimer} />
                     </HighlightZone>
                   )}
 

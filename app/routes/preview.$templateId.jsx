@@ -829,17 +829,17 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        <CdoPreviewBar
-          config={config}
-          selectedProducts={selectedProducts}
-          totalPrice={totalPrice}
-          finalPrice={finalPrice}
-          isMobile={isMobile}
-          currencySymbol={barCurrencySymbol}
-          onCheckoutClick={onCheckout}
-          onResetClick={onReset}
-        />
       </div>
+      <CdoPreviewBar
+        config={config}
+        selectedProducts={selectedProducts}
+        totalPrice={totalPrice}
+        finalPrice={finalPrice}
+        isMobile={isMobile}
+        currencySymbol={barCurrencySymbol}
+        onCheckoutClick={onCheckout}
+        onResetClick={onReset}
+      />
     </div>
   );
 }
@@ -1048,17 +1048,17 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        <CdoPreviewBar
-          config={config}
-          selectedProducts={selectedProducts}
-          totalPrice={totalPrice}
-          finalPrice={finalPrice}
-          isMobile={isMobile}
-          currencySymbol={barCurrencySymbol}
-          onCheckoutClick={onCheckout}
-          onResetClick={onReset}
-        />
       </div>
+      <CdoPreviewBar
+        config={config}
+        selectedProducts={selectedProducts}
+        totalPrice={totalPrice}
+        finalPrice={finalPrice}
+        isMobile={isMobile}
+        currencySymbol={barCurrencySymbol}
+        onCheckoutClick={onCheckout}
+        onResetClick={onReset}
+      />
     </div>
   );
 }
@@ -1162,17 +1162,17 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
           )}
         </div>
 
-        <CdoPreviewBar
-          config={config}
-          selectedProducts={selectedProducts}
-          totalPrice={totalPrice}
-          finalPrice={finalPrice}
-          isMobile={isMobile}
-          currencySymbol={barCurrencySymbol}
-          onCheckoutClick={onCheckout}
-          onResetClick={onReset}
-        />
       </div>
+      <CdoPreviewBar
+        config={config}
+        selectedProducts={selectedProducts}
+        totalPrice={totalPrice}
+        finalPrice={finalPrice}
+        isMobile={isMobile}
+        currencySymbol={barCurrencySymbol}
+        onCheckoutClick={onCheckout}
+        onResetClick={onReset}
+      />
     </div>
   );
 }
@@ -1421,17 +1421,17 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
           })}
         </div>
 
-        <CdoPreviewBar
-          config={config}
-          selectedProducts={selectedProducts}
-          totalPrice={totalPrice}
-          finalPrice={finalPrice}
-          isMobile={isMobile}
-          currencySymbol={barCurrencySymbol}
-          onCheckoutClick={onCheckout}
-          onResetClick={onReset}
-        />
       </div>
+      <CdoPreviewBar
+        config={config}
+        selectedProducts={selectedProducts}
+        totalPrice={totalPrice}
+        finalPrice={finalPrice}
+        isMobile={isMobile}
+        currencySymbol={barCurrencySymbol}
+        onCheckoutClick={onCheckout}
+        onResetClick={onReset}
+      />
     </div>
   );
 }

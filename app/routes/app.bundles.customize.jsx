@@ -1246,7 +1246,7 @@ const DEFAULT_COMBO_CONFIG = {
   variant_select_placeholder: '— Select a variant —',
   show_quantity_selector: true,
   show_sold_out_products: false,
-  show_sticky_preview_bar: false,
+  inline_preview_sticky: false, // false = static summary bar, true = sticky summary bar
   grid_layout_type: 'grid', // grid, slider
   // Progress bar defaults
   desktop_columns: '3', // 3 columns by default for desktop
@@ -3359,7 +3359,7 @@ export default function Customize() {
 .preview-browser-chrome span:nth-child(3){background:#3ddc84}
 .preview-viewport{width:100%;overflow-y:auto;overflow-x:hidden;background:#fff;margin:0 auto;transition:all .25s ease;position:relative}
 .preview-viewport>*{max-width:100%}
-.preview-stage--desktop .preview-viewport{width:1200px;min-height:400px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
+.preview-stage--desktop .preview-viewport{width:1200px;min-height:400px;overflow:visible;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
 .preview-stage--mobile{display:flex;justify-content:center;padding:4px;background:linear-gradient(180deg,#f6f7f9 0%,#eef1f5 100%)}
 .preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
       `}</style>

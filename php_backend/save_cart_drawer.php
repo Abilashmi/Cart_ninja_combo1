@@ -55,18 +55,13 @@ function ensureAnnouncementStyleColumns($pdo) {
 
 /**
  * Resolves whether the "Powered by BRIX" watermark should render on the
- * storefront. Free plans always show it regardless of the merchant's saved
- * toggle; Starter/Pro respect the toggle (default on).
+ * storefront. Purely plan-based, automatic, no merchant control: Free always
+ * shows it, Starter/Pro never does. $watermarkEnabledRaw (the legacy
+ * per-shop toggle value) is intentionally ignored here.
  */
-function resolveShowWatermark($planKey, $watermarkEnabledRaw) {
+function resolveShowWatermark($planKey) {
     $plan = plan_get_config($planKey);
-    if (empty($plan['watermarkRemovable'])) {
-        return true;
-    }
-    if ($watermarkEnabledRaw === null || $watermarkEnabledRaw === '') {
-        return true;
-    }
-    return (bool)((int)$watermarkEnabledRaw);
+    return empty($plan['watermarkRemovable']);
 }
 
 /**
@@ -76,7 +71,7 @@ function resolveShowWatermark($planKey, $watermarkEnabledRaw) {
  * if they later upgrade.
  */
 function applyPlanGatingToCartDrawerResult(array $result, string $planKey): array {
-    $result['showWatermark'] = resolveShowWatermark($planKey, $result['watermark_enabled'] ?? null);
+    $result['showWatermark'] = resolveShowWatermark($planKey);
 
     // ---- Progress Bar (+ bundled confetti-on-completion) ----
     if (!plan_can_publish_feature($planKey, 'progress_bar')) {

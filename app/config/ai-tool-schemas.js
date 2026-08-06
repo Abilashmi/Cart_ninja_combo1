@@ -154,15 +154,6 @@ export const TOOL_REGISTRY = [
     },
   },
   {
-    name: 'update_watermark',
-    description: 'Show or hide the "Powered by BRIX" watermark in the cart drawer footer. Only takes effect on plans where the watermark is removable — Free plans always show it regardless.',
-    parameters: {
-      type: 'object',
-      properties: { enabled: { type: 'boolean' } },
-      required: ['enabled'],
-    },
-  },
-  {
     name: 'update_countdown_timer',
     description: 'Update the cart drawer\'s urgency countdown timer: enable/disable, duration (hours/minutes), session vs fixed mode, label text, colors, and an optional linked coupon code.',
     parameters: {

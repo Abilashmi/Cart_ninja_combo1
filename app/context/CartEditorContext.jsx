@@ -132,8 +132,13 @@ function hydrateFromProgressBar(pb, base) {
     minQuantity: Number(t.min_quantity ?? t.minQuantity ?? 0),
     description: t.description ?? 'Milestone',
     rewardType:  t.reward_type  ?? t.rewardType  ?? 'free_shipping',
+    // ProgressBarSection/CartPreview read+write this tier's icon under the
+    // key `icon` (defaultTier.icon, updateTier(...{icon: v})) — the DB
+    // column is `icon_preset`, so it must be re-mapped back onto `icon` here
+    // or the merchant's saved icon silently reverts to the 'gift' default
+    // the next time the editor reloads.
+    icon:        t.icon_preset  ?? t.iconPreset  ?? t.icon ?? 'gift',
     iconType:    t.icon_type    ?? t.iconType    ?? 'preset',
-    iconPreset:  t.icon_preset  ?? t.iconPreset  ?? 'gift',
     iconCustomSvg: t.icon_custom_svg ?? t.iconCustomSvg ?? null,
     products:    Array.isArray(t.reward_products) ? t.reward_products : [],
   })) : base.body.progressBar.tiers;

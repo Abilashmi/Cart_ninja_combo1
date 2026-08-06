@@ -20,7 +20,6 @@ import { getCatalogSnapshot } from './catalog-snapshot.server';
 import { canAccessFeature } from './plan-permissions.server';
 import { fetchCartDrawerRecord, persistCartDrawerRecord } from './cart-drawer-record.server';
 import { getDb } from './db.server';
-import { PLANS } from '../config/plans';
 
 function parseJsonSafe(v, fb) {
   if (!v) return fb;
@@ -300,16 +299,6 @@ export const TOOL_EXECUTORS = {
     }
     await saveCartDrawerConfig(ctx.shop, ctx.planKey, { custom_css });
     return { success: true };
-  },
-
-  async update_watermark(ctx, { enabled }) {
-    const plan = PLANS[ctx.planKey];
-    if (!plan?.watermarkRemovable) {
-      return { success: false, reason: 'locked', message: 'The watermark can\'t be removed on your current plan.' };
-    }
-    const existing = (await fetchCartDrawerRecord(ctx.shop)) || {};
-    await persistCartDrawerRecord(ctx.shop, { ...existing, watermark_enabled: enabled ? 1 : 0 });
-    return { success: true, enabled };
   },
 
   async update_countdown_timer(ctx, args) {

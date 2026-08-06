@@ -341,7 +341,13 @@
           products: t.products || t.rewardProducts || [],
           rewardType: t.rewardType || 'product',
           iconType: t.iconType || 'preset',
-          iconPreset: t.iconPreset || 'gift',
+          // The admin's ProgressBarSection tier editor saves the icon key
+          // under `icon` (defaultTier.icon, updateTier(...{icon: v})) — not
+          // `iconPreset`, which only ever gets populated by the older
+          // normalized/AI-tool write paths. Read `icon` first so a tier icon
+          // picked in the current UI actually reaches the storefront instead
+          // of silently falling back to 'gift' every time.
+          iconPreset: t.icon || t.iconPreset || 'gift',
           iconCustomSvg: t.iconCustomSvg || '',
         };
       })
@@ -365,7 +371,12 @@
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
-      placement: data.placement || 'top',
+      // The admin's ProgressBarSection saves this field as `position`
+      // (defaultCartEditorState.body.progressBar.position) — `placement` is
+      // never actually written, so without the `data.position` fallback the
+      // storefront always rendered the bar at the top regardless of what the
+      // merchant picked.
+      placement: data.placement || data.position || 'top',
     };
   }
 
@@ -1316,15 +1327,20 @@
     setTimeout(() => { renderDrawer(); }, 300);
   }
 
+  // gift/shipping/star/trophy are the exact @shopify/polaris-icons paths
+  // (GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon) used
+  // by the admin's ProgressBarPreview TIER_ICON_MAP — kept in lockstep so a
+  // tier's icon looks identical between the editor's live preview and the
+  // storefront, not just a same-category stand-in.
   const CC_ICON_PRESETS = {
-    gift: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>',
+    gift: '<svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M7.835 9.5h-.96c-.343 0-.625-.28-.625-.628 0-.344.28-.622.619-.622.242 0 .463.142.563.363l.403.887Z"/><path d="M10.665 9.5h.96c.343 0 .625-.28.625-.628 0-.344-.28-.622-.619-.622-.242 0-.463.142-.563.363l-.403.887Z"/><path fill-rule="evenodd" d="M8.5 4h-3.25c-1.519 0-2.75 1.231-2.75 2.75v2.25h1.25c.414 0 .75.336.75.75s-.336.75-.75.75h-1.25v2.75c0 1.519 1.231 2.75 2.75 2.75h3.441c-.119-.133-.191-.308-.191-.5v-2c0-.414.336-.75.75-.75s.75.336.75.75v2c0 .192-.072.367-.191.5h4.941c1.519 0 2.75-1.231 2.75-2.75v-2.75h-2.75c-.414 0-.75-.336-.75-.75s.336-.75.75-.75h2.75v-2.25c0-1.519-1.231-2.75-2.75-2.75h-4.75v2.25c0 .414-.336.75-.75.75s-.75-.336-.75-.75v-2.25Zm.297 3.992c-.343-.756-1.097-1.242-1.928-1.242-1.173 0-2.119.954-2.119 2.122 0 1.171.95 2.128 2.125 2.128h.858c-.595.51-1.256.924-1.84 1.008-.41.058-.694.438-.635.848.058.41.438.695.848.636 1.11-.158 2.128-.919 2.803-1.53.121-.11.235-.217.341-.322.106.105.22.213.34.322.676.611 1.693 1.372 2.804 1.53.41.059.79-.226.848-.636.059-.41-.226-.79-.636-.848-.583-.084-1.244-.498-1.839-1.008h.858c1.176 0 2.125-.957 2.125-2.128 0-1.168-.946-2.122-2.119-2.122-.83 0-1.585.486-1.928 1.242l-.453.996-.453-.996Z"/></svg>',
     shipping:
-      '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 18.5a1.5 1.5 0 0 1-1.5-1.5 1.5 1.5 0 0 1 1.5-1.5 1.5 1.5 0 0 1 1.5 1.5 1.5 1.5 0 0 1-1.5 1.5m1.5-9 1.96 2.5H17V9.5m-11 9A1.5 1.5 0 0 1 4.5 17 1.5 1.5 0 0 1 6 15.5 1.5 1.5 0 0 1 7.5 17 1.5 1.5 0 0 1 6 18.5M20 8h-3V4H3c-1.11 0-2 .89-2 2v11h2a3 3 0 0 0 3 3 3 3 0 0 0 3-3h6a3 3 0 0 0 3 3 3 3 0 0 0 3-3h2v-5l-3-4Z"/></svg>',
+      '<svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M4.75 4.5a.75.75 0 0 0 0 1.5h3.25a1 1 0 0 1 0 2h-4.75a.75.75 0 0 0 0 1.5h3a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 0 0 1.5h.458a2.5 2.5 0 1 0 4.78.75h3.024a2.5 2.5 0 1 0 4.955-.153 1.75 1.75 0 0 0 1.033-1.597v-1.22a1.75 1.75 0 0 0-1.326-1.697l-1.682-.42a.25.25 0 0 1-.18-.174l-.426-1.494a2.75 2.75 0 0 0-2.645-1.995h-6.991Zm2.75 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>',
     discount:
       '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
-    star: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>',
+    star: '<svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/></svg>',
     trophy:
-      '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 5h2v3H4V5zm7 10.93c-3.95-.49-7-3.85-7-7.93h14c0 4.08-3.05 7.44-7 7.93z"/><path d="M16 19H8v2h8z"/></svg>',
+      '<svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M9.716 14.806c.035.005.07.008.106.011l1.4 2.44c.378.66 1.324.673 1.72.024l.479-.781h1.226c.772 0 1.253-.837.864-1.504l-1.167-2c.446-.476.67-1.16.504-1.88-.056-.237.046-.482.252-.61 1.3-.81 1.3-2.702 0-3.511-.206-.128-.308-.374-.252-.61.346-1.491-.992-2.83-2.483-2.482-.236.055-.482-.047-.61-.253-.81-1.3-2.7-1.3-3.51 0-.128.206-.374.308-.61.253-1.492-.347-2.83.99-2.482 2.482.055.236-.047.482-.253.61-1.3.81-1.3 2.7 0 3.51.206.128.308.374.253.61-.135.577-.017 1.131.265 1.573l-1.346 2.308c-.39.667.092 1.504.863 1.504h1.164l.55.825c.415.623 1.342.585 1.706-.07l1.361-2.45Zm-1.31-.73c-.058-.07-.111-.146-.161-.226-.128-.206-.374-.307-.61-.252-.35.08-.69.07-1.003-.014l-.826 1.416h.56c.335 0 .647.167.832.445l.244.365.964-1.735Zm4.582-.428.789 1.352h-.637c-.348 0-.671.181-.853.478l-.184.301-.807-1.407c.174-.141.33-.315.46-.522.127-.206.373-.307.61-.252.211.049.42.064.622.05Zm-3.47-.59c.222.356.742.356.964 0 .468-.752 1.361-1.122 2.223-.921.41.095.777-.273.681-.682-.2-.862.17-1.756.921-2.223.357-.222.357-.742 0-.964-.75-.467-1.121-1.361-.92-2.223.095-.41-.273-.777-.682-.681-.862.2-1.755-.17-2.223-.921-.222-.357-.742-.357-.964 0-.467.75-1.361 1.121-2.223.92-.41-.095-.777.273-.681.682.2.862-.17 1.756-.921 2.223-.357.222-.357.742 0 .964.75.467 1.121 1.361.92 2.223-.095.41.273.777.682.681.862-.2 1.756.17 2.223.921Z"/></svg>',
     heart:
       '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
     diamond:
@@ -1555,12 +1571,17 @@
       }
       pbHtml += `</div>`;
 
-      // ---- PROGRESS TRACK with outline ----
-      pbHtml += `<div style="position:relative;width:calc(100% - 20px);height:10px;margin:8px 10px 48px 10px;background:${progress.barBackgroundColor || '#e2e8f0'
-        };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
+      // ---- PROGRESS TRACK ---- (radius now respects the merchant's
+      // configured progress.borderRadius, like CartPreview.jsx's
+      // ProgressBarPreview does — it was parsed above but never actually
+      // applied here, so the storefront always rendered a fixed pill shape
+      // regardless of what was saved.)
+      const trackRadius = progress.borderRadius ?? 8;
+      pbHtml += `<div style="position:relative;width:calc(100% - 20px);height:8px;margin:8px 10px 48px 10px;background:${progress.barBackgroundColor || '#e2e8f0'
+        };border-radius:${trackRadius}px;">`;
 
       // 1. The progress bar filler
-      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
+      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:${fgColor};border-radius:${trackRadius}px;transition:width 0.3s ease;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
 
       // 2. Tier segment markers — thin lines on the track showing where each level is
       pInfo.tiers.forEach((ms) => {
@@ -1570,45 +1591,59 @@
           };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
       });
 
-      // 3. The milestone nodes
+      // 3. The milestone nodes — mirrors CartPreview.jsx's ProgressBarPreview
+      // tier marker exactly: a fixed 24px circle that's outlined in the
+      // fill color and turns solid once reached, with a green "REACHED"
+      // pill + tier title underneath once unlocked, or a plain amount pill
+      // while still locked. Admin has no separate "upcoming" visual state,
+      // so isNext only drives the pulse-ring cue (an outward glow animation
+      // that doesn't change the node's resting look).
       pInfo.tiers.forEach((ms, idx) => {
         const isCompleted = pInfo.currentVal >= ms.target;
         const prevTarget = idx > 0 ? pInfo.tiers[idx - 1].target : 0;
         const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
         const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
         const iconFill = progress.iconColor || progress.icon_color || fgColor;
-        const iconHtml = getMilestoneIconHtml(ms, iconFill);
-        const nodeSize = isCompleted || isNext ? 40 : 32;
-        const iconSize = isCompleted || isNext ? 20 : 16;
+        const iconHtml = getMilestoneIconHtml(ms, isCompleted ? '#ffffff' : iconFill);
+        const nodeSize = 24;
+        const iconSize = 13;
 
         // Size this tier's label to the gap toward its nearest neighbor so
         // adjacent labels never overlap when tiers are close together in
-        // value (a fixed 120px width previously caused dense tier ladders —
-        // e.g. $2000/$2500/$3500 — to collide). Showing only the amount here
-        // (not the reward name, which already appears once above the track
-        // in the "You're $X away / <reward>" line) keeps each label short
-        // enough that this rarely needs to shrink much.
+        // value (a fixed width previously caused dense tier ladders —
+        // e.g. $2000/$2500/$3500 — to collide).
         const prevPercent = idx > 0 ? Math.min(97, Math.max(3, (pInfo.tiers[idx - 1].target / pInfo.maxTarget) * 100)) : 0;
         const nextPercent = idx < pInfo.tiers.length - 1 ? Math.min(97, Math.max(3, (pInfo.tiers[idx + 1].target / pInfo.maxTarget) * 100)) : 100;
         const nearestGapPercent = Math.min(percent - prevPercent, nextPercent - percent);
         const APPROX_TRACK_WIDTH_PX = 340; // rough estimate of the track's rendered width, good enough for sizing text
-        const labelWidthPx = Math.max(36, Math.min(80, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
-        const amountFontSize = labelWidthPx < 50 ? 10 : 12;
+        const labelWidthPx = Math.max(48, Math.min(90, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
 
         pbHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;">`;
 
-        // Node circle — No background or border as requested, just the icon
-        pbHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;display:flex;align-items:center;justify-content:center;transition:all .3s ease;${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''}position:relative;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.15));color:${iconFill};">`;
-        pbHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;font-size:${isCompleted || isNext ? '28px' : '22px'};pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1));">${iconHtml}</span>`;
+        // Node circle — bordered, fills solid on unlock, exactly like the
+        // admin preview's tier marker.
+        pbHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:50%;background:${isCompleted ? fgColor : '#ffffff'};border:2px solid ${fgColor};display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.15);flex-shrink:0;${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''}">`;
+        pbHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;line-height:0;">${iconHtml}</span>`;
         pbHtml += `</div>`;
 
-        // Amount label below node — just the threshold amount, no repeated
-        // reward name (that already shows once, above the track, for
-        // whichever tier is currently upcoming).
         const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
+        const tierLabel = ms.title || ms.rewardText;
 
-        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:${labelWidthPx}px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};">`;
-        pbHtml += `<span style="font-weight:800;font-size:${amountFontSize}px;white-space:nowrap;">${amountDisplay}</span>`;
+        // Must be position:absolute (top:100%, relative to the node-sized
+        // wrapper above) — not stacked in normal flow. The wrapper itself is
+        // vertically centered on the track (top:50%/translateY(-50%)); if the
+        // label joined the flex column it would count toward the wrapper's
+        // height, which pulls that centering point up and drags the label
+        // back over the track/badge instead of sitting cleanly below the node.
+        pbHtml += `<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;width:${labelWidthPx}px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">`;
+        if (isCompleted) {
+          pbHtml += `<div style="font-size:7px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0.3px;">REACHED</div>`;
+          if (tierLabel) {
+            pbHtml += `<div style="font-size:8px;color:${iconFill};font-weight:600;white-space:normal;word-break:break-word;line-height:1.25;text-align:center;">${escapeHtml(tierLabel)}</div>`;
+          }
+        } else {
+          pbHtml += `<div style="font-size:9px;color:#374151;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:2px 6px;font-weight:500;white-space:nowrap;">${amountDisplay}</div>`;
+        }
         pbHtml += `</div></div>`;
       });
 

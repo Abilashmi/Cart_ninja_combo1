@@ -19,7 +19,16 @@ function BehaviorSectionComponent({
           <Checkbox label="Show Preview Bar" checked={config.show_preview_bar !== false} onChange={(v) => updateConfig('show_preview_bar', v)} />
           {config.show_preview_bar && (
             <>
-              <Checkbox label="Show sticky preview bar" checked={!!config.show_sticky_preview_bar} onChange={(v) => updateConfig('show_sticky_preview_bar', v)} />
+              <Select
+                label="Summary Bar Position"
+                helpText="Sticky keeps the summary bar pinned to the bottom of the screen as the customer scrolls. Static keeps it in the normal page flow."
+                options={[
+                  { label: 'Static', value: 'static' },
+                  { label: 'Sticky', value: 'sticky' },
+                ]}
+                value={config.inline_preview_sticky ? 'sticky' : 'static'}
+                onChange={(v) => updateConfig('inline_preview_sticky', v === 'sticky')}
+              />
               {PxField && <PxField label="Preview Bar Width (%)" value={config.preview_bar_width} onChange={(v) => updateConfig('preview_bar_width', v)} min={10} max={100} suffix="%" />}
               <div className="cst-grid-2">
                 {ColorPickerField && <ColorPickerField label="Background" value={config.preview_bar_bg || '#fff'} onChange={(v) => updateConfig('preview_bar_bg', v)} />}
