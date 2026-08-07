@@ -127,7 +127,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -136,11 +136,51 @@ export const action = async ({ request }) => {
   try {
     const db = getDb();
     if (intent === 'delete' && id) {
+      // Deleting the template row alone leaves the published Shopify Page
+      // (created via pageCreate when the merchant published this template —
+      // see api.bundle-templates.jsx's createShopifyPage) live on the
+      // storefront with no template behind it — the combo page keeps
+      // showing stale data indefinitely. page_id stores the full page GID
+      // returned by pageCreate/pageUpdate, so it can be passed straight to
+      // pageDelete. Drafts never published have no page_id and are skipped.
+      const [rows] = await db.execute(
+        'SELECT page_id FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        [Number(id), shop]
+      );
+      const pageId = rows?.[0]?.page_id;
+      let pageDeleteWarning = null;
+      if (pageId) {
+        try {
+          const pageDeleteRes = await admin.graphql(`#graphql
+            mutation pageDelete($id: ID!) {
+              pageDelete(id: $id) {
+                deletedPageId
+                userErrors { field message }
+              }
+            }
+          `, { variables: { id: pageId } });
+          const pageDeleteJson = await pageDeleteRes.json();
+          const userErrors = pageDeleteJson.data?.pageDelete?.userErrors;
+          if (userErrors?.length > 0) {
+            pageDeleteWarning = userErrors.map((e) => e.message).join('; ');
+            console.error('[bundles index action] pageDelete userErrors:', userErrors);
+          }
+        } catch (e) {
+          // Don't block the template deletion on a Shopify API hiccup — the
+          // merchant asked to delete the template, that must still succeed.
+          // Surface it so they know the live page needs manual cleanup.
+          pageDeleteWarning = e.message;
+          console.error('[bundles index action] pageDelete failed:', e.message);
+        }
+      }
+
       await db.execute(
         'DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?',
         [Number(id), shop]
       );
-      return { success: true, message: 'Template deleted.' };
+      return pageDeleteWarning
+        ? { success: true, message: `Template deleted, but the live Shopify page could not be removed automatically (${pageDeleteWarning}) — please delete it from Online Store > Pages.` }
+        : { success: true, message: 'Template deleted.' };
     }
     if (intent === 'toggle_active' && id) {
       const active = formData.get('active') === 'true' ? 1 : 0;

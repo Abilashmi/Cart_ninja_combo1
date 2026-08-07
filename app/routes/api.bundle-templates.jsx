@@ -225,10 +225,11 @@ export async function action({ request }) {
   }
 
   if (request.method === 'DELETE') {
-    let session;
+    let session, admin;
     try {
       const auth = await authenticate.admin(request);
       session = auth.session;
+      admin = auth.admin;
     } catch (e) {
       return Response.json({ success: false, error: 'Authentication failed' }, { status: 401 });
     }
@@ -236,8 +237,44 @@ export async function action({ request }) {
     const { id } = data;
     if (!id) return Response.json({ success: false, error: 'id required' }, { status: 400 });
     const db = getDb();
+
+    // Same page_id -> pageDelete cleanup as app.bundles._index.jsx's
+    // intent:delete action — without it, the published Shopify Page
+    // (created by createShopifyPage above) stays live with no template
+    // behind it. Kept in sync since this is a second, independently
+    // reachable delete path for the same table.
+    const [rows] = await db.execute('SELECT page_id FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
+    const pageId = rows?.[0]?.page_id;
+    let pageDeleteWarning = null;
+    if (pageId) {
+      try {
+        const pageDeleteRes = await admin.graphql(`#graphql
+          mutation pageDelete($id: ID!) {
+            pageDelete(id: $id) {
+              deletedPageId
+              userErrors { field message }
+            }
+          }
+        `, { variables: { id: pageId } });
+        const pageDeleteJson = await pageDeleteRes.json();
+        const userErrors = pageDeleteJson.data?.pageDelete?.userErrors;
+        if (userErrors?.length > 0) {
+          pageDeleteWarning = userErrors.map((e) => e.message).join('; ');
+          console.error('[bundle-templates DELETE] pageDelete userErrors:', userErrors);
+        }
+      } catch (e) {
+        pageDeleteWarning = e.message;
+        console.error('[bundle-templates DELETE] pageDelete failed:', e.message);
+      }
+    }
+
     await db.execute('DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
-    return Response.json({ success: true, message: 'Template deleted' });
+    return Response.json({
+      success: true,
+      message: pageDeleteWarning
+        ? `Template deleted, but the live Shopify page could not be removed automatically (${pageDeleteWarning}) — please delete it from Online Store > Pages.`
+        : 'Template deleted',
+    });
   }
 
   return Response.json({ success: false, error: 'Method not allowed' }, { status: 405 });

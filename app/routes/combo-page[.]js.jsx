@@ -1231,6 +1231,32 @@ const SCRIPT_BODY = String.raw`
     hideOtherChildren(root.parentElement);
   }
 
+  // Hiding sibling content (above) makes the combo page read as a clean
+  // takeover, but does nothing about the WIDTH of the column the widget
+  // itself sits in — most themes wrap page-template content in a narrow
+  // page-width/container-style column (e.g. Dawn: max-width 1200px,
+  // margin 0 auto), which squeezes the widget into that column and makes
+  // an otherwise-full-width layout (like layout1) look boxed/embedded, even
+  // though nothing about our own markup is actually iframed or bordered.
+  // Walks the ancestor chain from the mount point up to (not including)
+  // <body> and strips any max-width constraint found via computed style —
+  // safe because every sibling in this chain was already hidden above, so
+  // this ancestor chain exists purely to host our widget at this point.
+  function widenAncestorContainers(root) {
+    var el = root.parentElement;
+    var guard = 0;
+    while (el && el !== document.body && guard < 20) {
+      guard++;
+      try {
+        var cs = window.getComputedStyle(el);
+        if (cs.maxWidth && cs.maxWidth !== 'none') {
+          el.style.setProperty('max-width', 'none', 'important');
+        }
+      } catch (e) { }
+      el = el.parentElement;
+    }
+  }
+
   function mountDirect(root, shop, templateId, prefetchedData) {
     var dataPromise = prefetchedData
       ? Promise.resolve({ success: true, data: prefetchedData })
@@ -1240,6 +1266,7 @@ const SCRIPT_BODY = String.raw`
       if (!json.success || !json.data) { root.innerHTML = ''; return; }
 
       hidePageChrome(root);
+      widenAncestorContainers(root);
 
       var layout = json.data.config && json.data.config.layout;
       if (layout && layout !== 'layout1') {
