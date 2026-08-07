@@ -1,8 +1,47 @@
 (function () {
   console.log('[CartDrawer] Script loaded ✓');
 
+  // Debug logging behind an explicit flag — enable via
+  // window.__CC_DEBUG__ = true in devtools, or ?cc_debug=1 in the URL.
+  // Silent by default so this never spams merchant/customer consoles.
+  var CC_DEBUG = window.__CC_DEBUG__ === true || /(?:^|[?&])cc_debug=1(?:&|$)/.test(location.search);
+  function ccDebug() {
+    if (!CC_DEBUG) return;
+    console.log.apply(console, ['[CartDrawer debug]'].concat(Array.prototype.slice.call(arguments)));
+  }
+
   const container = document.getElementById('cc-root');
   if (!container) return;
+
+  // Idempotent boot guard — the theme editor / dynamic section rendering can
+  // re-insert this <script> tag (which re-executes it) without a full page
+  // reload. Without this guard, every delegated listener below (submit,
+  // click, fetch/XHR patches, MutationObservers) would be registered a
+  // second time, and since browsers only fully suppress SAME-node listeners
+  // via stopImmediatePropagation, a duplicate submit listener would double
+  // the /cart/add.js POST on every Add to Cart click.
+  //
+  // Placed AFTER the #cc-root check so a genuinely-first init that happens
+  // to run before the container exists doesn't permanently latch the guard
+  // and block a real later init.
+  //
+  // This only skips *registration* of the delegated listeners — it does not
+  // need to "rebind" anything for content, because everything below is
+  // delegated on document/window, so newly-rendered DOM (new product forms,
+  // new buttons) is automatically covered by the listeners already
+  // registered on the first boot. The one exception is
+  // ccWatchCartCount(), which attaches a MutationObserver per matched
+  // element at call time — that's re-invoked separately on
+  // shopify:section:load (see below), independent of this guard, and is
+  // safe to call repeatedly since it self-guards via el._ccWatching.
+  if (window.__CC_BOOTED__) {
+    ccDebug('boot guard: already booted, skipping re-init (script re-executed)');
+    if (typeof window.__CC_REBIND__ === 'function') window.__CC_REBIND__();
+    return;
+  }
+  window.__CC_BOOTED__ = true;
+  ccDebug('boot guard: first boot, initializing');
+
   const SHOP = container.getAttribute('data-shop');
   const CURRENCY_CODE = container.getAttribute('data-currency') || 'USD';
   const API_BASE = '/apps/cart-app';
@@ -731,16 +770,46 @@
   // always gets feedback even when the drawer config is missing/unavailable.
   document.addEventListener('submit', function (e) {
     const form = e.target;
+    // Positive-check gate: only a real Shopify add-to-cart form (action
+    // contains /cart/add) with our drawer actually active gets touched.
+    // Every other form (newsletter, contact, login, search, currency
+    // selector) falls straight through untouched.
     if (!form || !form.action || !form.action.includes('/cart/add')) return;
     if (!_ccActive) return; // drawer not active — let theme handle it
+
+    ccDebug('submit intercept: matched /cart/add form, taking ownership', form);
+    // stopImmediatePropagation only fires once we've confirmed (above) that
+    // this is genuinely a cart/add submission we are about to handle
+    // ourselves end-to-end — never for unrelated forms/events. This still
+    // lets analytics/pixel/loyalty apps react normally: they observe the
+    // resulting /cart/add.js network call (via their own fetch/XHR patch or
+    // Shopify.onItemAdded), not the DOM submit event itself.
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     const formData = new FormData(form);
     originalFetch('/cart/add.js', { method: 'POST', body: formData })
       .then(function (res) {
-        if (res.ok) scheduleOpenDrawer(300);
+        if (res.ok) {
+          ccDebug('submit intercept: /cart/add.js succeeded, opening drawer');
+          scheduleOpenDrawer(300);
+        } else {
+          // A real Shopify error (e.g. 422 sold out / invalid variant) —
+          // this is a legitimate answer, not an interception failure, so we
+          // don't fall back to a native re-submit (it would just fail the
+          // same way with no visible feedback at all).
+          ccDebug('submit intercept: /cart/add.js responded not-ok', res.status);
+        }
       })
-      .catch(function () { });
+      .catch(function (err) {
+        // Our AJAX path itself failed (network error, blocked request,
+        // etc.) — gracefully fall back to the native form submission
+        // instead of silently leaving the customer stuck with no cart
+        // feedback at all. form.submit() bypasses the 'submit' event (per
+        // spec it does not re-dispatch it), so this can't loop back into
+        // this same listener.
+        ccDebug('submit intercept: fetch failed, falling back to native form.submit()', err);
+        try { form.submit(); } catch (fallbackErr) { ccDebug('submit intercept: native fallback also failed', fallbackErr); }
+      });
   }, true); // capture phase — fires before theme JS
 
   // 3b. Universal cart polling — checks /cart.js every 1.5s and opens drawer
@@ -856,6 +925,40 @@
     true
   );
 
+  // Shared "is this a known native cart drawer?" identification — used both
+  // by the generic click fallback right below and by the body
+  // MutationObserver further down, so there's exactly one place that
+  // defines what counts as a positively-identified native drawer.
+  const CC_DRAWER_TAGS = [
+    'cart-notification', 'cart-drawer',   // Dawn family
+    'mini-cart',                           // Focal / Impact
+    'drawer-component', 'sidebar-cart', 'ajax-cart', // other modern themes
+  ];
+  const CC_DRAWER_IDS = [
+    'CartDrawer', 'cart-sidebar', 'MiniCart', 'mini-cart',
+    'ajax-cart', 'CartContainer', 'slideout-cart', 'slide-cart', 'flyout-cart',
+    'sidebar-cart',                        // Prestige / Warehouse
+  ];
+  const CC_OPEN_CLASSES = [
+    'open', 'is-open', 'is-visible', 'active', 'is-active', 'show', 'cart--open',
+    'drawer--is-open',                     // Debut / Brooklyn / Impulse
+    'drawer--open',                        // Prestige / Focal / Impact
+    'drawer--visible',                     // Pipeline / Broadcast
+    'js-drawer-open',                      // Archetype themes (applied to body)
+  ];
+  function ccLooksLikeNativeDrawer(el) {
+    if (!el || !el.tagName) return false;
+    return (
+      CC_DRAWER_TAGS.includes(el.tagName.toLowerCase()) ||
+      CC_DRAWER_IDS.includes(el.id) ||
+      (el.className && typeof el.className === 'string' &&
+        (el.className.includes('cart-drawer') || el.className.includes('mini-cart') ||
+          el.className.includes('ajax-cart') || el.className.includes('cart-sidebar') ||
+          el.className.includes('drawer--cart') || el.className.includes('drawer--right') ||
+          el.className.includes('mini_cart') || el.className.includes('cart_container')))
+    );
+  }
+
   // 5b. Cart icon intercept — opens our drawer when the theme's cart icon is clicked
   // Covers Dawn, Debut, Brooklyn, Impulse, Focal, Impact, Prestige, Turbo, Flex,
   // Broadcast, Symmetry, Pipeline, Warehouse, and generic catch-alls
@@ -901,6 +1004,27 @@
     );
     if (cartTrigger) {
       if (!_ccActive) return; // drawer not configured — let theme handle cart navigation
+      ccDebug('cart trigger intercept: matched known selector', cartTrigger);
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      openDrawer();
+      return;
+    }
+
+    // Fallback for themes outside the selector list above: a toggle button
+    // that references a target via aria-controls (a standard accessibility
+    // pattern for disclosure/toggle widgets) is only treated as a cart
+    // trigger if the referenced element positively matches our known
+    // native-drawer identification (ccLooksLikeNativeDrawer) — never a
+    // blanket "any aria-controls button", which would risk intercepting
+    // unrelated toggles (mobile nav, filters, newsletter modals, etc.).
+    if (!_ccActive) return;
+    const ariaBtn = e.target.closest('[aria-controls]');
+    if (!ariaBtn) return;
+    const targetId = ariaBtn.getAttribute('aria-controls');
+    const targetEl = targetId && document.getElementById(targetId);
+    if (targetEl && ccLooksLikeNativeDrawer(targetEl)) {
+      ccDebug('cart trigger intercept: generic aria-controls fallback matched', ariaBtn, targetEl);
       e.preventDefault();
       e.stopImmediatePropagation();
       openDrawer();
@@ -910,6 +1034,12 @@
   // 6. Shopify section rendering events (used when themes reload sections via AJAX)
   document.addEventListener('shopify:section:load', function () {
     if (new URL(location.href).searchParams.get('added')) scheduleOpenDrawer(100);
+    // Re-scan for cart-count badges — a section reload can swap in a NEW
+    // element (e.g. header re-render), which the one-time querySelectorAll
+    // at boot would never see. Safe to call repeatedly: each element
+    // self-guards via el._ccWatching, so already-watched badges are skipped.
+    ccDebug('shopify:section:load — re-scanning cart-count badges');
+    ccWatchCartCount();
   });
 
   // 7. MutationObserver — watches ALL cart count badges as a last-resort fallback.
@@ -938,48 +1068,67 @@
 
   // 8. Body MutationObserver — detects when themes dynamically show their
   // cart drawer/panel by adding an 'open', 'active', or 'is-visible' class.
-  // This is the universal fallback for themes not covered above.
+  // This is the universal fallback for themes not covered by the selector
+  // lists above (uses the shared ccLooksLikeNativeDrawer identification).
+  //
+  // Beyond just opening ours, this also actively neutralizes the native
+  // drawer — otherwise both end up visible at once (Bug: double drawer).
+  // Neutralization only happens once the element has been POSITIVELY
+  // identified as a known native drawer (never a blanket hide), and is
+  // restored automatically if our own drawer fails to actually appear
+  // within a short window, so a Cart Ninja failure can never leave the
+  // customer with no cart access at all.
   (function () {
-    const CC_DRAWER_TAGS = [
-      'cart-notification', 'cart-drawer',   // Dawn family
-      'mini-cart',                           // Focal / Impact
-      'drawer-component', 'sidebar-cart', 'ajax-cart', // other modern themes
-    ];
-    const CC_DRAWER_IDS = [
-      'CartDrawer', 'cart-sidebar', 'MiniCart', 'mini-cart',
-      'ajax-cart', 'CartContainer', 'slideout-cart', 'slide-cart', 'flyout-cart',
-      'sidebar-cart',                        // Prestige / Warehouse
-    ];
-    const CC_OPEN_CLASSES = [
-      'open', 'is-open', 'is-visible', 'active', 'is-active', 'show', 'cart--open',
-      'drawer--is-open',                     // Debut / Brooklyn / Impulse
-      'drawer--open',                        // Prestige / Focal / Impact
-      'drawer--visible',                     // Pipeline / Broadcast
-      'js-drawer-open',                      // Archetype themes (applied to body)
-    ];
-
     new MutationObserver(function (mutations) {
       for (const m of mutations) {
         const el = m.target;
-        if (!el || !el.tagName) continue;
-        // Only watch elements that look like cart panels
-        const isCartEl =
-          CC_DRAWER_TAGS.includes(el.tagName.toLowerCase()) ||
-          CC_DRAWER_IDS.includes(el.id) ||
-          (el.className && typeof el.className === 'string' &&
-            (el.className.includes('cart-drawer') || el.className.includes('mini-cart') ||
-              el.className.includes('ajax-cart') || el.className.includes('cart-sidebar') ||
-              el.className.includes('drawer--cart') || el.className.includes('drawer--right') ||
-              el.className.includes('mini_cart') || el.className.includes('cart_container')));
-        if (!isCartEl) continue;
+        if (!ccLooksLikeNativeDrawer(el)) continue;
         // Check if a visible/open class was just added
         if (m.type === 'attributes' && m.attributeName === 'class') {
           const added = CC_OPEN_CLASSES.some((c) => el.classList.contains(c));
-          if (added) scheduleOpenDrawer(200);
+          if (!added) continue;
+          scheduleOpenDrawer(200);
+          if (!_ccActive) continue; // drawer not configured — leave native panel alone
+          ccNeutralizeNativeDrawer(el);
         }
       }
     }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
   })();
+
+  // Hides a positively-identified native drawer element while our own
+  // drawer takes over, and restores it automatically if our drawer doesn't
+  // actually render within the window below (config load failure, render
+  // exception, etc.) — the customer must always end up with a usable cart.
+  function ccNeutralizeNativeDrawer(el) {
+    try {
+      if (el._ccNeutralized) return; // already handled for this open cycle
+      const prevDisplay = el.style.display;
+      const prevPriority = el.style.getPropertyPriority('display');
+      el._ccNeutralized = true;
+      el.style.setProperty('display', 'none', 'important');
+      ccDebug('native drawer neutralize: hid element', el);
+
+      setTimeout(function () {
+        try {
+          const ourOverlay = document.getElementById('cc-overlay');
+          const ourDrawerOpen = ourOverlay && ourOverlay.classList.contains('active');
+          if (!ourDrawerOpen) {
+            // Our drawer never actually opened — restore native access
+            // rather than leave the customer stranded.
+            ccDebug('native drawer neutralize: our drawer did not open in time, restoring native element', el);
+            if (prevDisplay) el.style.setProperty('display', prevDisplay, prevPriority);
+            else el.style.removeProperty('display');
+          }
+        } catch (restoreErr) {
+          ccDebug('native drawer neutralize: restore check failed', restoreErr);
+        } finally {
+          el._ccNeutralized = false;
+        }
+      }, 1200);
+    } catch (err) {
+      ccDebug('native drawer neutralize: failed, leaving native element untouched', err);
+    }
+  }
 
   // 9. history.pushState intercept — some themes navigate to /cart instead of opening a drawer.
   // We intercept that and open our drawer instead.
@@ -1004,6 +1153,10 @@
 
   ccWatchCartCount();
   document.addEventListener('DOMContentLoaded', ccWatchCartCount);
+  // Exposed so the boot guard above can trigger a re-scan if this script
+  // tag itself gets re-executed (e.g. full section HTML replacement),
+  // without re-registering any delegated listener.
+  window.__CC_REBIND__ = ccWatchCartCount;
   window.addEventListener('load', ccWatchCartCount);
   sendSessionPing();
 
@@ -2594,17 +2747,42 @@
   };
 
   // 2. Patch cart-notification and cart-drawer custom elements (Dawn + others).
-  //    We replace open/show so they open our drawer instead of theirs.
+  //    We replace open/show so they open our drawer instead of theirs — but
+  //    only when our drawer is actually configured/active (otherwise we'd
+  //    permanently disable the native drawer with nothing to replace it),
+  //    and we fall back to calling the ORIGINAL native method if our own
+  //    drawer doesn't actually render in time, so a Cart Ninja failure can
+  //    never leave the customer with no working cart drawer at all.
   ['cart-notification', 'cart-drawer', 'mini-cart', 'drawer-component', 'sidebar-cart', 'ajax-cart'].forEach(function (tag) {
     customElements.whenDefined(tag).then(function () {
       const Proto = customElements.get(tag) && customElements.get(tag).prototype;
       if (!Proto) return;
       ['open', 'show', 'reveal'].forEach(function (method) {
-        if (typeof Proto[method] === 'function') {
-          Proto[method] = function () {
-            scheduleOpenDrawer(300);
-          };
-        }
+        if (typeof Proto[method] !== 'function') return;
+        const originalMethod = Proto[method];
+        Proto[method] = function () {
+          if (!_ccActive) {
+            ccDebug('customElement patch: drawer not active, passthrough to native', tag, method);
+            return originalMethod.apply(this, arguments);
+          }
+          ccDebug('customElement patch: intercepted native open, trying ours first', tag, method);
+          const nativeArgs = arguments;
+          const nativeThis = this;
+          scheduleOpenDrawer(300);
+          setTimeout(function () {
+            try {
+              const ourOverlay = document.getElementById('cc-overlay');
+              const ourDrawerOpen = ourOverlay && ourOverlay.classList.contains('active');
+              if (!ourDrawerOpen) {
+                ccDebug('customElement patch: our drawer did not open in time, falling back to native', tag, method);
+                originalMethod.apply(nativeThis, nativeArgs);
+              }
+            } catch (err) {
+              ccDebug('customElement patch: fallback check failed, calling native as last resort', err);
+              try { originalMethod.apply(nativeThis, nativeArgs); } catch (e2) { ccDebug('customElement patch: native fallback also failed', e2); }
+            }
+          }, 1200);
+        };
       });
     });
   });

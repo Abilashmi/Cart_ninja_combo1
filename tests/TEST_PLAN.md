@@ -6,7 +6,7 @@ Status: **Built and passing.** This document now reflects what actually exists, 
 
 ## 0. Current state (read this first)
 
-**37 tests, all passing**, across two categories:
+**40 tests, all passing**, across two categories:
 
 ### API tests (`tests/specs/api/`) — hit the PHP backend directly with the shared `X-Forge-Secret`, bypassing Shopify auth entirely
 - `cart-drawer-config.spec.ts` (5) — `cart_drawer_config.php` persistence, upsert, secret-check reality-check
@@ -20,6 +20,7 @@ Status: **Built and passing.** This document now reflects what actually exists, 
 
 ### Storefront tests (`tests/specs/storefront/`) — real live store, zero auth needed
 - `cart-drawer-widget.spec.ts` (3) — add-to-cart opens the real drawer, quantity controls, checkout link
+- `cart-drawer-regressions.spec.ts` (3) — regression coverage for 3 fixed bugs: duplicate `/cart/add.js` POSTs, native theme drawer opening alongside ours, and the boot guard surviving a simulated section-reload script re-execution. **Only exercises whatever is currently deployed to Shopify's CDN, not local working-tree edits** — re-run after `npm run deploy` to validate new changes to `cart_drawer_inline.js`. Also only proves no regression on `cartstoreviewer.myshopify.com`'s own theme — cross-theme coverage is NOT achievable from this single-store suite and requires the manual QA matrix (`tests/MANUAL_QA_MATRIX.md`).
 - `coupon-slider-widget.spec.ts` (2) — renders with coupons, Copy Code works
 - `fbt-widget.spec.ts` (1) — renders with recommended products
 

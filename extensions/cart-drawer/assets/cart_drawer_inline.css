@@ -1,3 +1,41 @@
+/* ========== ISOLATION RESET ==========
+   Property-specific only — never `all: unset`/`all: initial`, and never
+   applied outside #cc-root. Protects against the common theme resets that
+   otherwise cascade into our real <button>/<input>/<a> tags (Tailwind
+   preflight-style `button,input{appearance:none}`, `a{color:inherit}`,
+   global `line-height:1`, box-sizing left as content-box, etc.) and cause
+   spacing/appearance to silently break only on specific themes. Does NOT
+   touch font-family — we intentionally inherit the theme's type so our
+   drawer still looks native to the storefront.
+
+   box-sizing only here, deliberately NOT line-height: #cc-root * has
+   ID-level specificity, which would silently outrank this file's own
+   existing class-based line-height rules (e.g. .cc-nav-btn, further down)
+   regardless of source order — a self-inflicted regression, not a
+   theme-leak fix. Every existing box-sizing declaration in this file
+   already uses border-box, so this is purely consistency, not an override. */
+#cc-root,
+#cc-root *,
+#cc-root *::before,
+#cc-root *::after {
+  box-sizing: border-box;
+}
+/* Excludes checkbox/radio inputs — appearance:none on those blanks out the
+   native checkmark/dot with no custom checked-state styling to replace it.
+   Cart Ninja doesn't currently render any native checkbox/radio inputs
+   inside #cc-root (verified against cart_drawer_inline.js), but excluding
+   them here is a zero-cost guard against that regressing silently later. */
+#cc-root button,
+#cc-root input:not([type="checkbox"]):not([type="radio"]),
+#cc-root select,
+#cc-root textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+#cc-root a {
+  text-decoration: none;
+}
+
 /* ========== OVERLAY & DRAWER ========== */
 #cc-root {
   position: fixed;
