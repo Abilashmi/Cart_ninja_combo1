@@ -519,11 +519,20 @@
   /* =================== UPSELL PRODUCT ENRICHMENT =================== */
 
   async function enrichUpsellProducts(upsell) {
-    // Check if any upsell product is missing details (only has id)
-    const needsEnrichment = (upsell.manualRules || []).some((rule) =>
-      (rule.upsellProductDetails || []).some((d) => !d.title || !d.price || !d.variantId)
+    // The admin editor only ever saves plain product IDs under
+    // `rule.upsellProductIds` (see app/components/sections/UpsellSection.jsx)
+    // — it never writes a `upsellProductDetails` field. The old check here
+    // read `rule.upsellProductDetails` for "is there anything to enrich?",
+    // which is always empty/undefined, so this whole function — including
+    // the individual per-product fallback below — silently never ran.
+    // renderUpsellSectionAsync() falls back to the bulk store-catalog lookup
+    // for products that ARE within its first 250 results, but shops with
+    // more products than that (or a catalog fetch hiccup) had no recovery
+    // path for the rest until this actually builds upsellProductDetails.
+    const hasAnyManualProducts = (upsell.manualRules || []).some(
+      (rule) => (rule.upsellProductIds || []).length > 0
     );
-    if (!needsEnrichment) return;
+    if (!hasAnyManualProducts) return;
 
     try {
       const res = await originalFetch('/products.json?limit=250');
@@ -535,20 +544,20 @@
       }
 
       for (const rule of upsell.manualRules || []) {
-        rule.upsellProductDetails = (rule.upsellProductDetails || []).map((detail) => {
-          const numId = ccExtractNumericId(detail.id) || String(detail.id || '').replace('gid://shopify/Product/', '');
+        rule.upsellProductDetails = (rule.upsellProductIds || []).map((rawId) => {
+          const numId = ccExtractNumericId(rawId) || String(rawId || '').replace('gid://shopify/Product/', '');
           const sp = productMap[numId];
           if (sp) {
             return {
-              ...detail,
-              title: detail.title || sp.title,
-              price: detail.price || sp.variants?.[0]?.price || sp.price_min || '',
-              image: detail.image || sp.images?.[0]?.src || sp.featured_image || null,
+              id: numId,
+              title: sp.title,
+              price: sp.variants?.[0]?.price || sp.price_min || '',
+              image: sp.images?.[0]?.src || sp.featured_image || null,
               handle: sp.handle,
-              variantId: ccExtractNumericId(detail.variantId) || detail.variantId || sp.variants?.[0]?.id,
+              variantId: sp.variants?.[0]?.id || null,
             };
           }
-          return detail;
+          return { id: numId };
         });
 
         // Individual fallback: try to resolve any products still missing variantId

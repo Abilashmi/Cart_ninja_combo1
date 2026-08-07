@@ -58,7 +58,7 @@ export const FAKE_FBT_CONFIG = {
     templates: {
         fbt1: {
             name: "Classic Grid",
-            layout: "horizontal",
+            layout: "carousel",
             interactionType: "classic",
             bgColor: "#ffffff",
             textColor: "#111827",
@@ -72,7 +72,7 @@ export const FAKE_FBT_CONFIG = {
         },
         fbt2: {
             name: "Modern Cards",
-            layout: "horizontal",
+            layout: "carousel",
             interactionType: "bundle",
             bgColor: "#f9fafb",
             textColor: "#374151",
@@ -86,7 +86,7 @@ export const FAKE_FBT_CONFIG = {
         },
         fbt3: {
             name: "Vertical List",
-            layout: "vertical",
+            layout: "carousel",
             interactionType: "quickAdd",
             bgColor: "#ffffff",
             textColor: "#1f2937",

@@ -324,7 +324,7 @@ export const TOOL_REGISTRY = [
         button_text: { type: 'string' },
         border_color: { type: 'string' },
         border_radius: { type: 'number' },
-        layout: { type: 'string', enum: ['horizontal', 'vertical'] },
+        layout: { type: 'string', enum: ['carousel', 'grid'], description: 'Only affects the "modern-cards" template (fbt2); carousel scrolls horizontally, grid is a 2-column grid.' },
         interaction_type: { type: 'string', enum: ['classic', 'bundle', 'quickAdd', 'checkboxQty'] },
         show_prices: { type: 'boolean' },
         show_add_all_button: { type: 'boolean' },

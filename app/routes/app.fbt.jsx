@@ -1154,7 +1154,16 @@ export default function FBTPage() {
                   <AccordionSection id="interaction" icon={SettingsIcon} title="Interaction & Layout" isOpen={openSection === 'interaction'} onToggle={toggleSection} tip={SECTION_TIPS.interaction}>
                     <BlockStack gap="300">
                       <Select label="Interaction Style" options={INTERACTION_OPTIONS} value={interactionStyle} onChange={(v) => { setInteractionStyle(v); mark(); }} />
-                      <Select label="Layout Alignment" options={LAYOUT_OPTIONS} value={layout} onChange={(v) => { setLayout(v); mark(); }} />
+                      <Select
+                        label="Layout Alignment"
+                        options={LAYOUT_OPTIONS}
+                        value={layout}
+                        disabled={selectedTemplate !== 'modern-cards'}
+                        onChange={(v) => { setLayout(v); mark(); }}
+                        helpText={selectedTemplate === 'modern-cards'
+                          ? 'Choose how Modern Cards products are arranged.'
+                          : `${templateName} uses a fixed layout — switch to Modern Cards to choose Carousel or Grid.`}
+                      />
                     </BlockStack>
                   </AccordionSection>
 

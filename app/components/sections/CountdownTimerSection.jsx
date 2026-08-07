@@ -83,21 +83,6 @@ export function CountdownTimerSection() {
       </Card>
       <Card>
         <FormLayout>
-          <Text as="h3" variant="headingMd">Visibility</Text>
-          <FeatureToggle
-            label="Show on Product pages"
-            enabled={countdownTimer.showOnProducts}
-            onToggle={(v) => updateCountdownTimer({ showOnProducts: v })}
-          />
-          <FeatureToggle
-            label="Show alongside Coupons"
-            enabled={countdownTimer.showOnCoupons}
-            onToggle={(v) => updateCountdownTimer({ showOnCoupons: v })}
-          />
-        </FormLayout>
-      </Card>
-      <Card>
-        <FormLayout>
           <Text as="h3" variant="headingMd">Linked Coupon (optional)</Text>
           <Select
             label="Coupon Mode"

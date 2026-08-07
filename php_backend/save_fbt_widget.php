@@ -381,7 +381,7 @@ try {
             $activeTpl['buttonTextColor'] ?? '#ffffff',
             $activeTpl['borderColor'] ?? '#e5e7eb',
             $activeTpl['borderRadius'] ?? 8,
-            $activeTpl['layout'] ?? 'horizontal',
+            $activeTpl['layout'] ?? 'carousel',
             $activeTpl['interactionType'] ?? 'classic',
             (isset($activeTpl['showPrices']) && $activeTpl['showPrices'] === false) ? 0 : 1,
             (isset($activeTpl['showAddAllButton']) && $activeTpl['showAddAllButton'] === false) ? 0 : 1,

@@ -483,6 +483,67 @@ function parseJsonSafe(v, fb) {
   try { return JSON.parse(v); } catch { return fb; }
 }
 
+// The storefront reads FBT config exclusively from the legacy fbt_widget
+// table's temp1/temp2/temp3 blobs (via save_fbt_widget.php's GET) — never
+// from fbt_widget_settings, which is this function's only write target.
+// Without this sync, any FBT change made through the AI agent (this function
+// is its sole write path) is saved but never reaches the storefront — the
+// same bug class already fixed for checkout button/drawer status/progress
+// bar (see ai-agent-tools.server.js's other sync* helpers). Only the temp
+// slot matching the currently selected template is touched; the other two
+// are passed through untouched so an AI edit to one template can't clobber
+// another template's saved design.
+const FBT_TEMPLATE_NAMES = { fbt1: 'Classic Grid', fbt2: 'Modern Cards', fbt3: 'Vertical List' };
+function passthroughFbtJson(v) {
+  if (v == null) return null;
+  return typeof v === 'string' ? v : JSON.stringify(v);
+}
+async function syncFbtWidgetToLegacyRecord(shop, settings) {
+  const db = getDb();
+  const [rows] = await db.execute('SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
+  const existing = rows[0] || {};
+  const selectedTemplate = settings.selected_template && FBT_TEMPLATE_NAMES[settings.selected_template]
+    ? settings.selected_template
+    : 'fbt1';
+  const slotKey = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[selectedTemplate];
+
+  const mergedSlot = {
+    ...parseJsonSafe(existing[slotKey], {}),
+    name: FBT_TEMPLATE_NAMES[selectedTemplate],
+    layout: settings.layout,
+    interactionType: settings.interaction_type,
+    bgColor: settings.bg_color,
+    textColor: settings.text_color,
+    priceColor: settings.price_color,
+    buttonColor: settings.button_color,
+    buttonTextColor: settings.button_text_color,
+    borderColor: settings.border_color,
+    borderRadius: settings.border_radius,
+    showPrices: !!settings.show_prices,
+    showAddAllButton: !!settings.show_add_all_button,
+  };
+
+  await db.execute(`
+    INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3))
+    ON DUPLICATE KEY UPDATE
+      temp1=VALUES(temp1),temp2=VALUES(temp2),temp3=VALUES(temp3),
+      selectedTemp=VALUES(selectedTemp),selectedMode=VALUES(selectedMode),
+      \`condition\`=VALUES(\`condition\`),ai_enabled=VALUES(ai_enabled),
+      ai_product_count=VALUES(ai_product_count),updated_at=CURRENT_TIMESTAMP(3)
+  `, [
+    shop,
+    slotKey === 'temp1' ? JSON.stringify(mergedSlot) : passthroughFbtJson(existing.temp1),
+    slotKey === 'temp2' ? JSON.stringify(mergedSlot) : passthroughFbtJson(existing.temp2),
+    slotKey === 'temp3' ? JSON.stringify(mergedSlot) : passthroughFbtJson(existing.temp3),
+    selectedTemplate,
+    existing.selectedMode ?? settings.mode ?? 'manual',
+    passthroughFbtJson(existing.condition),
+    settings.mode === 'ai' ? 1 : (existing.ai_enabled ?? 0),
+    settings.ai_product_count ?? existing.ai_product_count ?? 3,
+  ]);
+}
+
 // `patch.rules` must be OMITTED (not an empty array) to preserve existing
 // rules — already the case in the original route (guarded by
 // Array.isArray(body.rules)), kept as-is here.
@@ -536,7 +597,7 @@ export async function saveFbtWidgetSettings(shop, planKey, patch) {
     pick(patch.button_text ?? patch.buttonText, ex.button_text, 'Add All to Cart'),
     pick(patch.border_color ?? patch.borderColor, ex.border_color, '#e5e7eb'),
     pick(patch.border_radius ?? patch.borderRadius, ex.border_radius, 8),
-    pick(patch.layout, ex.layout, 'horizontal'),
+    pick(patch.layout, ex.layout, 'carousel'),
     pick(patch.interaction_type ?? patch.interactionType, ex.interaction_type, 'classic'),
     pickFlag(patch.show_prices, ex.show_prices, 1),
     pickFlag(patch.show_add_all_button, ex.show_add_all_button, 1),
@@ -560,6 +621,7 @@ export async function saveFbtWidgetSettings(shop, planKey, patch) {
   }
 
   const [settings] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ?', [shop]);
+  if (settings[0]) await syncFbtWidgetToLegacyRecord(shop, settings[0]);
   const [rules] = await db.execute('SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]);
   return { ...settings[0], rules: rules.map(parseFbtRule) };
 }

@@ -200,92 +200,12 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Device-accurate preview shell styles */
-.preview-stage {
-  background: linear-gradient(180deg, #f8f9fb 0%, #f2f4f7 100%);
-  border: 1px solid #e3e6eb;
-  border-radius: 12px;
-  padding: 12px;
-}
-
-.preview-scale-panel {
-  width: 100%;
-  overflow: hidden;
-}
-
-.preview-scale-canvas {
-  transform-origin: top left;
-  will-change: transform;
-}
-
-.preview-stage--desktop {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.preview-browser-chrome {
-  width: 100%;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid #d7dce4;
-  background: linear-gradient(180deg, #ffffff 0%, #f4f6fa 100%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-}
-
-.preview-browser-chrome span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #d5dae3;
-}
-
-.preview-browser-chrome span:first-child {
-  background: #ff6f61;
-}
-
-.preview-browser-chrome span:nth-child(2) {
-  background: #ffca55;
-}
-
-.preview-browser-chrome span:nth-child(3) {
-  background: #3ddc84;
-}
-
-.preview-viewport {
-  width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: #fff;
-  margin: 0 auto;
-  transition: all 0.25s ease;
-}
-
-.preview-stage--desktop .preview-viewport {
-  width: 1280px;
-  height: 820px;
-  border: 1px solid #d7dce4;
-  border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.07);
-}
-
-.preview-stage--mobile {
-  display: flex;
-  justify-content: center;
-  padding: 4px;
-  background: linear-gradient(180deg, #f6f7f9 0%, #eef1f5 100%);
-}
-
-.preview-viewport--mobile-classic {
-  width: 375px;
-  height: 667px;
-  border: 1px solid #d7dce4;
-  border-radius: 12px;
-  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.1);
-}
+/* Device-accurate preview shell styles for the Combo Forge builder
+   (app.bundles.customize.jsx) live entirely in that route's own <style>
+   block, scoped and kept in sync with its JS-computed scale values —
+   do not redefine .preview-stage/.preview-viewport/.preview-scale-*/
+   .customize-layout-grid here, a stale duplicate previously fought the
+   route's rules for cascade priority and caused inconsistent clipping. */
 
 .template-status-meta {
   display: flex;
@@ -307,13 +227,6 @@ p {
 
 .customize-top-gap {
   margin-bottom: 10px;
-}
-
-.customize-layout-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
-  gap: 12px;
-  align-items: start;
 }
 
 .customize-left-sticky {
@@ -360,16 +273,8 @@ p {
 }
 
 @media (max-width: 1280px) {
-  .customize-layout-grid {
-    grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr);
-  }
-
   .plans-horizontal-container {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .preview-stage {
-    padding: 10px;
   }
 }
 
@@ -379,11 +284,6 @@ p {
     padding-right: 8px;
   }
 
-  .customize-layout-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
   .customize-left-sticky {
     position: static;
     top: auto;
@@ -391,11 +291,6 @@ p {
 
   .plans-horizontal-container {
     grid-template-columns: 1fr;
-  }
-
-  .preview-stage {
-    padding: 10px;
-    border-radius: 12px;
   }
 }
 

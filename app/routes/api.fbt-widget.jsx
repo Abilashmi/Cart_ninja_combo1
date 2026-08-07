@@ -16,7 +16,7 @@ const DEFAULT_FBT_DATA = {
     templates: {
         fbt1: {
             name: "Classic Grid",
-            layout: "horizontal",
+            layout: "carousel",
             interactionType: "classic",
             bgColor: "#ffffff",
             textColor: "#111827",
@@ -30,7 +30,7 @@ const DEFAULT_FBT_DATA = {
         },
         fbt2: {
             name: "Modern Cards",
-            layout: "horizontal",
+            layout: "carousel",
             interactionType: "bundle",
             bgColor: "#f9fafb",
             textColor: "#374151",
@@ -44,7 +44,7 @@ const DEFAULT_FBT_DATA = {
         },
         fbt3: {
             name: "Vertical List",
-            layout: "vertical",
+            layout: "carousel",
             interactionType: "quickAdd",
             bgColor: "#ffffff",
             textColor: "#1f2937",

@@ -204,7 +204,9 @@
   function normalizeConfig(config,currencySymbol){
     if(!config||typeof config!=='object')return null;
     var br=Number(config.borderRadius);
-    return{layout:config.layout||'carousel',interactionType:config.interactionType||'classic',bgColor:config.bgColor||'#ffffff',textColor:config.textColor||'#111827',priceColor:config.priceColor||'#059669',buttonColor:config.buttonColor||'#111827',buttonTextColor:config.buttonTextColor||config.buttonText||'#ffffff',borderColor:config.borderColor||'#e5e7eb',borderRadius:Number.isFinite(br)?br:8,showPrices:config.showPrices!==false,showAddAllButton:config.showAddAllButton!==false,currencySymbol:currencySymbol};
+    var rawLayout=config.layout;
+    var normalizedLayout=rawLayout==='horizontal'?'carousel':rawLayout==='vertical'?'grid':(rawLayout||'carousel');
+    return{layout:normalizedLayout,interactionType:config.interactionType||'classic',bgColor:config.bgColor||'#ffffff',textColor:config.textColor||'#111827',priceColor:config.priceColor||'#059669',buttonColor:config.buttonColor||'#111827',buttonTextColor:config.buttonTextColor||config.buttonText||'#ffffff',borderColor:config.borderColor||'#e5e7eb',borderRadius:Number.isFinite(br)?br:8,showPrices:config.showPrices!==false,showAddAllButton:config.showAddAllButton!==false,currencySymbol:currencySymbol};
   }
 
   function toPriceNumber(v){var p=parseFloat(v);return isNaN(p)?0:p;}
@@ -410,7 +412,13 @@
     var isListStyle=templateStyle==='vertical-list'||useCheckboxLeft;
     var isModernStyle=templateStyle==='modern-cards'&&!useCheckboxLeft;
     var isClassicStyle=!isListStyle&&!isModernStyle;
-    var isCarouselLayout=!isListStyle&&products.length>3;
+    // Layout Alignment (config.layout) only applies to Modern Cards — Classic
+    // Grid and Vertical List are fixed structural layouts, matching the admin
+    // preview's own scoping (app.fbt.jsx). It must be the sole source of
+    // truth here, never product count — a merchant's chosen layout must not
+    // silently flip to carousel just because a rule happens to have >3 items.
+    var isCarouselLayout=isModernStyle&&config.layout==='carousel';
+    var isGridLayout=isModernStyle&&!isCarouselLayout;
     container.innerHTML=
       '<div class="ps-fbt-wrapper" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;'+(isModernStyle?'border:none;box-shadow:0 4px 20px rgba(0,0,0,0.08);':'border:1px solid '+config.borderColor+';')+'">'
         +'<div class="ps-fbt-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">'
@@ -440,12 +448,16 @@
       wrapper.style.cssText='display:flex;flex-direction:column;gap:0;';
     }else if(isCarouselLayout){
       wrapper.style.cssText='display:flex;flex-direction:row;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch;';
+    }else if(isGridLayout){
+      wrapper.style.cssText='display:grid;grid-template-columns:repeat(2,1fr);gap:10px;';
     }else{
+      // Classic Grid only — always a wrapped row joined by "+" separators,
+      // never a carousel, regardless of product count.
       wrapper.style.cssText='display:flex;flex-direction:row;flex-wrap:wrap;gap:10px;';
     }
     wrapper.dataset.interaction=config.interactionType;
     wrapper.dataset.layout=config.layout;
-    wrapper.classList.add(isListStyle?'list':(isCarouselLayout?'carousel':'grid'));
+    wrapper.classList.add(isListStyle?'list':(isCarouselLayout?'carousel':(isGridLayout?'grid':'classic')));
 
     if(isCarouselLayout&&navPrev&&navNext){
       var scrollByAmount=function(){return Math.max(wrapper.clientWidth*0.8,150);};

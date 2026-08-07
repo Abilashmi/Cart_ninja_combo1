@@ -2064,8 +2064,7 @@ export default function Customize() {
     previewDevice === 'mobile'
       ? MOBILE_PREVIEW_BASE_HEIGHT
       : DESKTOP_PREVIEW_BASE_HEIGHT;
-  // Use zoom (not transform:scale) so layout dimensions follow the visual size —
-  // this means the panel auto-sizes to content height with nothing clipped.
+  // Use zoom (not transform:scale) so layout dimensions follow the visual size.
   const previewScale = Math.max(containerWidth, 1) / previewBaseWidth;
   const clampedScale = Math.min(Math.max(previewScale, 0.1), 1);
   const scaledCanvasStyle = {
@@ -2073,7 +2072,9 @@ export default function Customize() {
     zoom: clampedScale,
     transformOrigin: 'top left',
   };
-  // No fixed height — let the zoomed content determine panel height naturally.
+  // .preview-viewport is a fixed-height device frame with its own internal
+  // scrollbar (see inline <style> below), so the panel itself never needs
+  // to grow — it just wraps the frame at whatever size the frame renders at.
   const scaledPanelStyle = {
     width: '100%',
     overflow: 'visible',
@@ -3359,9 +3360,9 @@ export default function Customize() {
 .preview-browser-chrome span:nth-child(3){background:#3ddc84}
 .preview-viewport{width:100%;overflow-y:auto;overflow-x:hidden;background:#fff;margin:0 auto;transition:all .25s ease;position:relative}
 .preview-viewport>*{max-width:100%}
-.preview-stage--desktop .preview-viewport{width:1200px;min-height:400px;overflow:visible;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
+.preview-stage--desktop .preview-viewport{width:1200px;height:820px;overflow-y:auto;overflow-x:hidden;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 20px rgba(16,24,40,.07)}
 .preview-stage--mobile{display:flex;justify-content:center;padding:4px;background:linear-gradient(180deg,#f6f7f9 0%,#eef1f5 100%)}
-.preview-viewport--mobile-classic{width:375px;height:667px;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
+.preview-viewport--mobile-classic{width:375px;height:667px;overflow-y:auto;overflow-x:hidden;border:1px solid #d7dce4;border-radius:12px;box-shadow:0 8px 18px rgba(16,24,40,.1)}
       `}</style>
 
       <div key={formKey} className="customize-layout-grid">
