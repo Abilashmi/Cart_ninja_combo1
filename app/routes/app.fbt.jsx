@@ -325,6 +325,7 @@ const INTERACTION_OPTIONS = [
 const LAYOUT_OPTIONS = [
   { label: 'Carousel — Horizontal scroll', value: 'carousel' },
   { label: 'Grid — 2-column grid',         value: 'grid'     },
+  { label: 'Vertical — Stacked list',      value: 'vertical' },
 ];
 
 const PLACEMENT_OPTIONS = [
@@ -573,7 +574,6 @@ export default function FBTPage() {
   const [layout,            setLayout]            = useState(() => {
     const l = fbtConfig.layout || 'carousel';
     if (l === 'horizontal') return 'carousel';
-    if (l === 'vertical')   return 'grid';
     return l;
   });
   const [bgColor,           setBgColor]           = useState(fbtConfig.bgColor        || '#ffffff');
@@ -631,6 +631,13 @@ export default function FBTPage() {
     setButtonColor(t.colors.button); setButtonTextColor(t.colors.buttonText);
     setBorderColor(t.colors.border); setBorderRadius(t.borderRadius);
     setProductStates(defaultProductStates());
+    // Templates are now purely a color/border "skin" — Layout Alignment is
+    // the one universal arrangement control (carousel/grid/vertical) across
+    // all 3 templates. Vertical List's whole identity used to BE the list
+    // arrangement, so clicking it still defaults Layout Alignment to
+    // "vertical" for a sensible first impression — merchants can still
+    // freely change it afterward like any other template.
+    if (id === 'vertical-list') setLayout('vertical');
     mark();
   };
 
@@ -798,17 +805,17 @@ export default function FBTPage() {
     </div>
   );
 
-  /* The 3 templates are meant to be genuinely different structural layouts,
-     not just recolored cards — Classic Grid is a connected row joined by "+"
-     separators, Vertical List is stacked full-width rows, and Modern Cards
-     keeps the existing carousel/grid card arrangement (with its own
-     borderless/shadowed cardStyle already applied above). Previously this
-     preview only ever rendered PreviewCard in a carousel-or-grid shell for
-     all 3 templates, so switching templates looked like nothing changed. */
-  // Checkbox + Quantity always renders as the same stacked row list as the
-  // Vertical List template — the natural fit for a left-side checkbox
-  // column — regardless of which visual template is otherwise selected.
-  const useRowLayout = selectedTemplate === 'vertical-list' || interactionStyle === 'checkbox-qty';
+  /* Templates are a color/border "skin" only (see cardStyle above) — Layout
+     Alignment is the single universal arrangement control (carousel/grid/
+     vertical) across all 3 templates, so the same value always means the
+     same physical arrangement no matter which template is selected.
+     Checkbox + Quantity still always forces the stacked list, since that
+     interaction needs the left-side checkbox column regardless of Layout
+     Alignment. Classic Grid keeps its signature "+" connector as a skin
+     flourish, shown only in the carousel arrangement (a true 2-col grid has
+     no natural slot for an inline connector between cells). */
+  const useRowLayout = interactionStyle === 'checkbox-qty' || layout === 'vertical';
+  const showPlusSeparators = selectedTemplate === 'classic-grid' && !useRowLayout && layout !== 'grid';
   const previewProducts = useRowLayout ? (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {fbtPreviewProducts.map((p, i) => (
@@ -842,15 +849,21 @@ export default function FBTPage() {
         </div>
       ))}
     </div>
-  ) : selectedTemplate === 'classic-grid' ? (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'stretch', gap: '10px' }}>
+  ) : layout === 'grid' ? (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+      {fbtPreviewProducts.map((p, i) => (
+        <PreviewCard key={p.id} p={p} i={i} />
+      ))}
+    </div>
+  ) : (
+    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
       {fbtPreviewProducts.flatMap((p, i) => {
         const nodes = [
-          <div key={p.id} style={{ flex: '1 1 90px', minWidth: '90px' }}>
+          <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
             <PreviewCard p={p} i={i} />
           </div>,
         ];
-        if (i < fbtPreviewProducts.length - 1) {
+        if (showPlusSeparators && i < fbtPreviewProducts.length - 1) {
           nodes.push(
             <span key={`plus-${i}`} aria-hidden="true" style={{
               display: 'flex', alignItems: 'center', flexShrink: 0,
@@ -860,20 +873,6 @@ export default function FBTPage() {
         }
         return nodes;
       })}
-    </div>
-  ) : layout === 'carousel' ? (
-    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
-      {fbtPreviewProducts.map((p, i) => (
-        <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
-          <PreviewCard p={p} i={i} />
-        </div>
-      ))}
-    </div>
-  ) : (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-      {fbtPreviewProducts.map((p, i) => (
-        <PreviewCard key={p.id} p={p} i={i} />
-      ))}
     </div>
   );
 
@@ -1158,11 +1157,8 @@ export default function FBTPage() {
                         label="Layout Alignment"
                         options={LAYOUT_OPTIONS}
                         value={layout}
-                        disabled={selectedTemplate !== 'modern-cards'}
                         onChange={(v) => { setLayout(v); mark(); }}
-                        helpText={selectedTemplate === 'modern-cards'
-                          ? 'Choose how Modern Cards products are arranged.'
-                          : `${templateName} uses a fixed layout — switch to Modern Cards to choose Carousel or Grid.`}
+                        helpText="Choose how products are arranged — applies to every template."
                       />
                     </BlockStack>
                   </AccordionSection>

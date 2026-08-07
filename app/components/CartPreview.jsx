@@ -681,8 +681,11 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
                   {/* Countdown Timer — shown below announcement, hidden on the
                       empty-cart state to match extensions/cart-drawer/assets/
-                      cart_drawer_inline.js (`countdown.enabled && !isEmpty`) */}
-                  {(body.countdownTimer.enabled || activeSection === 'countdownTimer') && !isEmpty && (
+                      cart_drawer_inline.js (`countdown.enabled && !isEmpty`).
+                      Unlike other sections, this one does NOT preview while
+                      merely opened in the sidebar — it must only appear once
+                      the merchant has actually enabled the toggle. */}
+                  {body.countdownTimer.enabled && !isEmpty && (
                     <HighlightZone sectionId="countdownTimer" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CountdownTimerPreview countdown={body.countdownTimer} />
                     </HighlightZone>
