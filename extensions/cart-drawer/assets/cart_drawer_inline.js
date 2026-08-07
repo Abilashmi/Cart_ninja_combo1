@@ -2562,22 +2562,50 @@
         });
 
         // Mouse drag-to-scroll (touch swipe already works natively via overflow-x).
+        // Capture the pointer only once real drag movement is detected, not
+        // on every pointerdown — calling setPointerCapture immediately (the
+        // previous behavior) retargets the eventual click event to `list`
+        // instead of whatever was actually pressed, which silently ate every
+        // "Add" button click made with a mouse (desktop) while leaving touch
+        // untouched (it bails out above), matching "works on mobile, not
+        // desktop". A small movement threshold before engaging drag mode is
+        // the standard fix used by carousel/slider libraries for exactly
+        // this click-vs-drag conflict.
+        const DRAG_THRESHOLD_PX = 5;
         let isDown = false;
+        let hasDragged = false;
         let startX = 0;
         let startScroll = 0;
+        let dragPointerId = null;
         list.addEventListener('pointerdown', (e) => {
           if (e.pointerType === 'touch') return;
           isDown = true;
+          hasDragged = false;
           startX = e.clientX;
           startScroll = list.scrollLeft;
-          list.setPointerCapture(e.pointerId);
-          list.classList.add('cc-dragging');
+          dragPointerId = e.pointerId;
         });
         list.addEventListener('pointermove', (e) => {
           if (!isDown) return;
-          list.scrollLeft = startScroll - (e.clientX - startX);
+          const delta = e.clientX - startX;
+          if (!hasDragged) {
+            if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
+            hasDragged = true;
+            list.setPointerCapture(dragPointerId);
+            list.classList.add('cc-dragging');
+          }
+          list.scrollLeft = startScroll - delta;
         });
-        const endDrag = () => { isDown = false; list.classList.remove('cc-dragging'); };
+        const endDrag = () => {
+          isDown = false;
+          if (hasDragged && dragPointerId != null) {
+            // Intentionally ignored: the pointer may already be released
+            // (e.g. pointercancel fired first), which throws harmlessly.
+            try { list.releasePointerCapture(dragPointerId); } catch (e) { /* noop */ }
+          }
+          hasDragged = false;
+          list.classList.remove('cc-dragging');
+        };
         list.addEventListener('pointerup', endDrag);
         list.addEventListener('pointercancel', endDrag);
 
