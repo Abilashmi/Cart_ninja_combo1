@@ -84,6 +84,11 @@ module.exports = {
         ".graphqlrc.{js,ts}",
         "shopify.server.{js,ts}",
         "**/*.server.{js,ts}",
+        // Pure server-side route (loader/action only, no default export /
+        // JSX component — see CLAUDE.md's "api.*.jsx" route-naming
+        // convention), so it legitimately runs in a Node context and
+        // references process.env like any other server file.
+        "app/routes/api.bundle-templates.jsx",
       ],
       env: {
         node: true,

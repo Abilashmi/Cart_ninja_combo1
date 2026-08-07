@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useLoaderData, useNavigate } from 'react-router';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Icon,
@@ -198,7 +197,7 @@ export const action = async ({ request }) => {
 };
 
 export default function AppBundlesIndex() {
-  const { templateCount, publishedCount, templates, shop, totalConversions, totalRevenue } = useLoaderData();
+  const { templateCount, publishedCount, totalConversions, totalRevenue } = useLoaderData();
   const navigate = useNavigate();
 
   const stats = [
@@ -232,11 +231,11 @@ export default function AppBundlesIndex() {
 .bac-stat{display:flex;align-items:center;gap:14px}
 .bac-stat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .bac-stat-icon svg{width:22px;height:22px}
-.bac-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:#fafbfb;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease,border-color .12s ease}
+.bac-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:#fafbfb;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease,border-color .12s ease;width:100%;font:inherit;text-align:left;color:inherit;margin:0}
 .bac-row:hover{background:#f1f3f9;border-color:#d6d9ef}
 .bac-row-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#eef0ff}
 .bac-row-icon svg{width:18px;height:18px}
-.bac-step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease}
+.bac-step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease;width:100%;font:inherit;text-align:left;color:inherit;margin:0;background:none}
 .bac-step:hover{background:#fafbfb}
 .bac-step-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px}
 .bac-step-dot svg{width:22px;height:22px}
@@ -302,7 +301,7 @@ export default function AppBundlesIndex() {
               </div>
               <BlockStack gap="150">
                 {steps.map((step, i) => (
-                  <div key={step.label} className="bac-step" onClick={() => navigate(step.href)}>
+                  <button key={step.label} className="bac-step" onClick={() => navigate(step.href)}>
                     {step.done ? (
                       <div className="bac-step-dot" style={{ color: '#059669' }}><Icon source={CheckCircleIcon} /></div>
                     ) : (
@@ -312,7 +311,7 @@ export default function AppBundlesIndex() {
                       <Text as="p" variant="bodySm" fontWeight="semibold">{step.label}</Text>
                       <Text as="p" variant="bodyXs" tone="subdued">{step.sub}</Text>
                     </BlockStack>
-                  </div>
+                  </button>
                 ))}
               </BlockStack>
             </BlockStack>
@@ -327,7 +326,7 @@ export default function AppBundlesIndex() {
                   { label: 'Customize Builder', sub: 'Design your bundle page',    href: '/app/bundles/customize', icon: WandIcon,          tint: '#edfaf4', accent: '#2ecc71' },
                   { label: 'Analytics',         sub: 'View impressions & revenue', href: '/app/analytics',         icon: ChartVerticalIcon, tint: '#d4f1fe', accent: '#1a9de0' },
                 ].map(item => (
-                  <div key={item.label} className="bac-row" onClick={() => navigate(item.href)}>
+                  <button key={item.label} className="bac-row" onClick={() => navigate(item.href)}>
                     <InlineStack gap="300" blockAlign="center">
                       <div className="bac-row-icon" style={{ background: item.tint, color: item.accent }}>
                         <Icon source={item.icon} />
@@ -338,7 +337,7 @@ export default function AppBundlesIndex() {
                       </div>
                     </InlineStack>
                     <Text as="span" variant="bodySm" tone="subdued">›</Text>
-                  </div>
+                  </button>
                 ))}
               </BlockStack>
             </BlockStack>

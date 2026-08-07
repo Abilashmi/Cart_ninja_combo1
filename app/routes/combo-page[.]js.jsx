@@ -420,6 +420,19 @@ const SCRIPT_BODY = String.raw`
     var variantsDisplay = config.product_card_variants_display || 'static';
     var enableHover = !!config.enable_product_hover;
     var hoverMode = config.product_hover_mode || 'second_image';
+    // Whether THIS product actually has content to reveal on hover — used
+    // below to scope the CSS opacity-fade rule (.brix-combo-card-media--
+    // hoverable) so the main image only fades out when there's something to
+    // replace it with. Previously the fade rule applied unconditionally to
+    // every card, so hovering (or lingering on, e.g. right after clicking
+    // the image nav arrows, which are children of this same container)
+    // a product with hover disabled — or enabled but missing a second image/
+    // description for that specific product — faded the image to nothing,
+    // leaving a blank/grey box until the mouse actually left and re-entered.
+    var hasHoverContent = enableHover && (
+      (hoverMode === 'second_image' && !!product.secondImageSrc) ||
+      (hoverMode === 'description' && !!product.descriptionHtml)
+    );
     var sizing = getProductSizing(config, isMobile);
     var cardPadding = config.product_card_padding == null ? 10 : config.product_card_padding;
 
@@ -489,7 +502,7 @@ const SCRIPT_BODY = String.raw`
     }
 
     // Media
-    html += '<div class="brix-combo-card-media" style="' + styleStr({
+    html += '<div class="brix-combo-card-media' + (hasHoverContent ? ' brix-combo-card-media--hoverable' : '') + '" style="' + styleStr({
       width: '100%', aspectRatio: sizing.productImageAspectRatio, background: '#f5f5f5',
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative',
     }) + '">';
@@ -503,7 +516,7 @@ const SCRIPT_BODY = String.raw`
     }
     html += '</div>';
 
-    if (enableHover) {
+    if (hasHoverContent) {
       html += '<div class="brix-combo-media-hover" style="' + styleStr({
         position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
         background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -815,7 +828,13 @@ const SCRIPT_BODY = String.raw`
     var baseSize = config.preview_item_size || (isMobile ? 40 : 48);
     var hasDiscount = state.finalPrice < state.totalPrice;
     var selectedProducts = buildSelectedProducts(state);
-    var canOpenDrawer = selectedProducts.length > 0;
+    // Checkout/Add to Cart must stay disabled until the merchant's
+    // configured combo condition (max_products / discount_threshold, the
+    // same "maxSel" this function already uses for the progress bar and
+    // "Add N more" messaging below) is actually reached — previously this
+    // only checked "at least one item selected", so checkout enabled itself
+    // long before the configured condition (e.g. 4 or 5 items) was met.
+    var canOpenDrawer = state.totalSelected >= maxSel;
 
     var html = '<div style="' + styleStr({
       width: (config.preview_bar_width || 100) + '%', margin: '40px auto 10px',
@@ -1021,8 +1040,15 @@ const SCRIPT_BODY = String.raw`
     var style = document.createElement('style');
     style.textContent =
       '@keyframes combo-shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }' +
-      '.brix-combo-card-media:hover .brix-combo-media-main { opacity: 0; }' +
-      '.brix-combo-card-media:hover .brix-combo-media-hover { opacity: 1 !important; }' +
+      // Scoped to --hoverable (only present when this specific product
+      // actually has hover-replacement content — see hasHoverContent in
+      // renderProductCard) so hovering a card with no second image/
+      // description doesn't fade the main product photo to nothing.
+      '.brix-combo-card-media--hoverable:hover .brix-combo-media-main { opacity: 0; }' +
+      '.brix-combo-card-media--hoverable:hover .brix-combo-media-hover { opacity: 1 !important; }' +
+      // Not scoped to --hoverable: .brix-combo-hover-variants is a separate,
+      // independently-gated feature (showHoverVariants) and is simply absent
+      // from the DOM on cards that don't use it, so this rule is inert there.
       '.brix-combo-card-media:hover .brix-combo-hover-variants { display: flex !important; }' +
       '.brix-combo-shimmer { animation: combo-shimmer 2s infinite; }' +
       '.brix-combo-slider-track { scrollbar-width: none; -ms-overflow-style: none; }' +

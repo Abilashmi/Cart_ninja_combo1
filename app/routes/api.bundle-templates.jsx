@@ -144,10 +144,21 @@ export async function action({ request }) {
             await admin.graphql(`#graphql
               mutation pageUpdate($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }
             `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id, hasGuaranteedTemplate) } });
-          } catch {}
+          } catch (e) {
+            // Intentionally non-fatal: the existing page is already usable at
+            // its current handle/body even if this best-effort sync of the
+            // guaranteed-template/metafield settings onto it fails, so the
+            // success response below still returns either way.
+            console.error('[bundle-templates preview] pageUpdate sync failed:', e.message);
+          }
           return Response.json({ success: true, previewUrl: buildPreviewUrl(shop, existingPage.handle, existingPage.isPublished), handle: existingPage.handle });
         }
-      } catch {}
+      } catch (e) {
+        // Intentionally non-fatal: if looking up an existing page by handle
+        // fails for any reason, fall through to the createShopifyPage
+        // attempt below instead of erroring out the whole preview action.
+        console.error('[bundle-templates preview] existing-page lookup failed:', e.message);
+      }
 
       try {
         const pageResult = await createShopifyPage(admin, name || 'Combo Page', handle, shop, id);
