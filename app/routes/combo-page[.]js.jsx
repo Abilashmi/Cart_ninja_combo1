@@ -674,7 +674,7 @@ const SCRIPT_BODY = String.raw`
     if (state.totalSelected < threshold) {
       html += '<span>Add <strong>' + Math.max(0, threshold - state.totalSelected) + '</strong> more for <strong>' + esc(config.discount_text || config.progress_text || 'Bundle Discount') + '</strong></span>';
     } else {
-      html += '<span style="' + styleStr({ color: progressTextColor, fontWeight: '700' }) + '">🎉 Discount Unlocked!</span>';
+      html += '<span style="' + styleStr({ color: progressTextColor, fontWeight: '700' }) + '">Discount Unlocked!</span>';
     }
     html += '</div></div>';
     return html;
@@ -865,7 +865,7 @@ const SCRIPT_BODY = String.raw`
       var remaining = Math.max(0, maxSel - state.totalSelected);
       var isUnlocked = state.totalSelected >= maxSel;
       var motivationText = isUnlocked
-        ? (config.preview_motivation_unlocked_text || 'Discount Unlocked! 🎉')
+        ? (config.preview_motivation_unlocked_text || 'Discount Unlocked!')
         : (config.preview_motivation_text || 'Add {{remaining}} more for discount!').replace('{{remaining}}', remaining);
       html += '<div style="' + styleStr({ fontSize: (config.preview_motivation_size || 13) + 'px', color: config.preview_motivation_color || (isUnlocked ? '#28a745' : '#666'), fontWeight: '600', textAlign: isMobile ? 'center' : 'right' }) + '">' + esc(motivationText) + '</div>';
       html += '</div>';

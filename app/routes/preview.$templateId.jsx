@@ -1253,7 +1253,7 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                 </span>
               ) : (
                 <span style={{ color: progressTextColor, fontWeight: 700 }}>
-                  🎉 Discount Unlocked!
+                  Discount Unlocked!
                 </span>
               )}
             </div>

@@ -4813,7 +4813,7 @@ function ComboPreview({
       const nextTotal = currentTotalQty + 1;
       if (nextTotal >= discountThreshold) {
         shopify.toast.show(
-          config.discount_unlocked_text || 'Discount Unlocked! 🎉'
+          config.discount_unlocked_text || 'Discount Unlocked!'
         );
       } else {
         const remaining = discountThreshold - nextTotal;
@@ -4917,7 +4917,7 @@ function ComboPreview({
     const nextTotal = currentTotalQty + Number(qty);
     if (nextTotal >= discountThreshold) {
       shopify.toast.show(
-        config.discount_unlocked_text || 'Discount Unlocked! 🎉'
+        config.discount_unlocked_text || 'Discount Unlocked!'
       );
     } else {
       const remaining = discountThreshold - nextTotal;
@@ -6921,8 +6921,7 @@ function ComboPreview({
                     gap: '4px',
                   }}
                 >
-                  <span style={{ fontSize: '14px' }}>🎉</span> Discount
-                  Unlocked!
+                  Discount Unlocked!
                 </span>
               )}
             </div>
