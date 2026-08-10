@@ -4,7 +4,7 @@ import { AppProvider as ShopifyAppProvider } from "@shopify/shopify-app-react-ro
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
-import { getShopCurrencySymbol } from "../utils/currency.server";
+import { getShopCurrency } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
 import { getShopPlan, hasApprovedSubscription } from "../services/plan-permissions.server";
@@ -13,9 +13,9 @@ import { getFeatureState } from "../config/plans";
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
 
-    const [planKey, currencySymbol, approved] = await Promise.all([
+    const [planKey, currency, approved] = await Promise.all([
         getShopPlan(session.shop, admin),
-        getShopCurrencySymbol(admin, session.shop),
+        getShopCurrency(admin, session.shop),
         hasApprovedSubscription(session.shop, admin),
     ]);
 
@@ -37,8 +37,15 @@ export const loader = async ({ request }) => {
         throw redirect("/app/subscribe" + url.search);
     }
 
-    // eslint-disable-next-line no-undef
-    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, planKey, shop: session.shop };
+    return {
+        // eslint-disable-next-line no-undef
+        apiKey: process.env.SHOPIFY_API_KEY || "",
+        currencySymbol: currency.symbol,
+        currencyCode: currency.code,
+        currencyLocale: currency.locale,
+        planKey,
+        shop: session.shop,
+    };
 };
 
 // s-app-nav / s-link are Shopify App Bridge native web components. Plain
@@ -69,14 +76,14 @@ function navBadge(featureKey, planKey) {
 }
 
 export default function App() {
-    const { apiKey, currencySymbol, planKey, shop } = useLoaderData();
+    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop } = useLoaderData();
     const navigation = useNavigation();
     const isNavigating = navigation.state !== "idle";
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>
             <PolarisAppProvider i18n={enTranslations}>
-                <CurrencyProvider symbol={currencySymbol}>
+                <CurrencyProvider symbol={currencySymbol} code={currencyCode} locale={currencyLocale}>
                     <PlanProvider plan={planKey}>
                         {isNavigating && <div className="route-progress-bar" />}
                         <s-app-nav>
@@ -92,7 +99,7 @@ export default function App() {
                             <s-link href="/app/analytics">Analytics</s-link>
                             <s-link href="/app/additional">Account</s-link>
                         </s-app-nav>
-                        <Outlet context={{ currencySymbol, shop }} />
+                        <Outlet context={{ currencySymbol, currencyCode, shop }} />
                     </PlanProvider>
                 </CurrencyProvider>
             </PolarisAppProvider>

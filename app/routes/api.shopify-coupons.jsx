@@ -2,6 +2,7 @@
 // This is the correct route location for Remix - at app/routes/ level with api. prefix
 
 import { authenticate } from "../shopify.server";
+import { listActiveDiscounts } from "../services/discounts.server";
 
 export async function loader({ request }) {
   try {
@@ -64,153 +65,30 @@ export async function loader({ request }) {
       });
     }
 
-    // Try to fetch from Shopify API
-    const query = `
-      query DiscountDashboardList {
-        discountNodes(first: 50, reverse: true) {
-          edges {
-            node {
-              id
-              discount {
-                __typename
-                ... on DiscountCodeBasic {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  codes(first: 1) { edges { node { code } } }
-                  summary
-                  asyncUsageCount
-                  usageLimit
-                  customerGets {
-                    value {
-                      ... on DiscountPercentage { percentage }
-                      ... on DiscountAmount { amount { amount currencyCode } }
-                    }
-                  }
-                }
-                ... on DiscountAutomaticBasic {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  summary
-                  asyncUsageCount
-                  customerGets {
-                    value {
-                      ... on DiscountPercentage { percentage }
-                      ... on DiscountAmount { amount { amount currencyCode } }
-                    }
-                  }
-                }
-                ... on DiscountCodeBxgy {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  codes(first: 1) { edges { node { code } } }
-                  summary
-                  asyncUsageCount
-                  usageLimit
-                }
-                ... on DiscountAutomaticBxgy {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  summary
-                  asyncUsageCount
-                }
-                ... on DiscountCodeFreeShipping {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  codes(first: 1) { edges { node { code } } }
-                  summary
-                  asyncUsageCount
-                  usageLimit
-                }
-                ... on DiscountAutomaticFreeShipping {
-                  title
-                  status
-                  startsAt
-                  endsAt
-                  summary
-                  asyncUsageCount
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
+    // Try to fetch from Shopify API — shared with the BRIX AI agent's
+    // duplicate-promotion check (ai-agent-tools.server.js) so this list and
+    // that check can never drift apart on what "an active discount" means.
+    const discounts = await listActiveDiscounts(admin);
 
-    const gqlRes = await admin.graphql(query);
-    const data = await gqlRes.json();
-
-    if (data.errors) {
-      // Fallback: return sample coupons if Shopify API access denied
-      return new Response(JSON.stringify({
-        coupons: [],
-        error: data.errors[0]?.message || "Shopify API error",
-        success: false
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const coupons = (data.data?.discountNodes?.edges || [])
-      .map(({ node }) => {
-        const d = node.discount;
-        let code = '';
-        if (d.codes && d.codes.edges.length > 0) {
-          code = d.codes.edges[0].node.code;
-        }
-
-        // Extract discount type and value
-        let discountType = 'fixed';
-        let discountValue = 0;
-        if (d.customerGets?.value) {
-          const val = d.customerGets.value;
-          if (val.percentage !== undefined) {
-            discountType = 'percentage';
-            discountValue = Math.round(val.percentage * 100);
-          } else if (val.amount) {
-            discountType = 'fixed';
-            discountValue = parseFloat(val.amount.amount);
-          }
-        }
-        if (d.__typename === 'DiscountCodeFreeShipping' || d.__typename === 'DiscountAutomaticFreeShipping') {
-          discountType = 'free_shipping';
-          discountValue = 0;
-        }
-        if (d.__typename === 'DiscountCodeBxgy' || d.__typename === 'DiscountAutomaticBxgy') {
-          discountType = 'bxgy';
-          discountValue = 0;
-        }
-
-        return {
-          id: node.id,
-          heading: d.title,
-          subtext: d.summary || '',
-          code: code || d.title,
-          type: d.__typename,
-          status: d.status || '',
-          starts_at: d.startsAt || '',
-          ends_at: d.endsAt || '',
-          used: d.asyncUsageCount || 0,
-          limit: d.usageLimit || null,
-          discountType,
-          discountValue,
-          sectionBg: "#f6f6f7",
-          headingColor: "#000000",
-          subtextColor: "#6d7175",
-          couponBg: "#000000",
-          codeColor: "#ffffff",
-        };
-      });
+    const coupons = discounts.map((d) => ({
+      id: d.id,
+      heading: d.title,
+      subtext: d.summary,
+      code: d.code || d.title,
+      type: d.typename,
+      status: d.status,
+      starts_at: d.startsAt,
+      ends_at: d.endsAt,
+      used: d.used,
+      limit: d.limit,
+      discountType: d.discountType,
+      discountValue: d.discountValue,
+      sectionBg: "#f6f6f7",
+      headingColor: "#000000",
+      subtextColor: "#6d7175",
+      couponBg: "#000000",
+      codeColor: "#ffffff",
+    }));
 
     return new Response(JSON.stringify({ coupons, success: true }), {
       headers: { "Content-Type": "application/json" },

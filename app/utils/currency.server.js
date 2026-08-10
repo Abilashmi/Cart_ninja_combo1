@@ -2,6 +2,7 @@
  * Server-side currency utilities
  * Fetches currency symbol and settings from Shopify API
  */
+import { getLocaleForCurrency as getLocaleFromCode } from './currency.shared';
 
 // This loader runs on every /app/* navigation (it lives on the shared
 // layout route), so an uncached Admin GraphQL round trip here directly adds
@@ -9,23 +10,28 @@
 // currency essentially never changes, so cache it in-process for a while —
 // mirrors the plan_key cache in plan-permissions.server.js.
 const CURRENCY_CACHE_TTL_MS = 5 * 60_000;
-const currencyCache = new Map(); // shop -> { symbol, expiresAt }
+const currencyCache = new Map(); // shop -> { code, symbol, locale, expiresAt }
+
+const DEFAULT_CURRENCY = { code: "USD", symbol: "$", locale: "en-US" };
 
 /**
- * Fetch shop currency symbol from Shopify
+ * Fetch the shop's full currency context — code, symbol, and locale — the
+ * single source of truth every caller (BRIX's AI context, the admin's
+ * CurrencyProvider, any future server route) should use instead of
+ * independently guessing/defaulting to USD.
  * @param {Object} admin - Shopify admin API client
  * @param {string} [shop] - Shop domain, used as the cache key
- * @returns {Promise<string>} Currency symbol (e.g., "$", "₹", "€")
+ * @returns {Promise<{code: string, symbol: string, locale: string}>}
  */
-export async function getShopCurrencySymbol(admin, shop) {
+export async function getShopCurrency(admin, shop) {
   if (!admin) {
-    console.warn("[Currency] No admin client provided, defaulting to $");
-    return "$";
+    console.warn("[Currency] No admin client provided, defaulting to USD");
+    return DEFAULT_CURRENCY;
   }
 
   if (shop) {
     const cached = currencyCache.get(shop);
-    if (cached && cached.expiresAt > Date.now()) return cached.symbol;
+    if (cached && cached.expiresAt > Date.now()) return cached;
   }
 
   try {
@@ -41,17 +47,33 @@ export async function getShopCurrencySymbol(admin, shop) {
     const currencyCode = data?.data?.shop?.currencyCode;
 
     if (!currencyCode) {
-      console.warn("[Currency] Could not fetch currency code, defaulting to $");
-      return "$";
+      console.warn("[Currency] Could not fetch currency code, defaulting to USD");
+      return DEFAULT_CURRENCY;
     }
 
-    const symbol = getCurrencySymbolFromCode(currencyCode);
-    if (shop) currencyCache.set(shop, { symbol, expiresAt: Date.now() + CURRENCY_CACHE_TTL_MS });
-    return symbol;
+    const result = {
+      code: currencyCode,
+      symbol: getCurrencySymbolFromCode(currencyCode),
+      locale: getLocaleFromCode(currencyCode),
+    };
+    if (shop) currencyCache.set(shop, { ...result, expiresAt: Date.now() + CURRENCY_CACHE_TTL_MS });
+    return result;
   } catch (error) {
     console.error("[Currency] Error fetching currency:", error);
-    return "$";
+    return DEFAULT_CURRENCY;
   }
+}
+
+/**
+ * Fetch shop currency symbol from Shopify. Thin wrapper around
+ * getShopCurrency for existing callers that only need the symbol.
+ * @param {Object} admin - Shopify admin API client
+ * @param {string} [shop] - Shop domain, used as the cache key
+ * @returns {Promise<string>} Currency symbol (e.g., "$", "₹", "€")
+ */
+export async function getShopCurrencySymbol(admin, shop) {
+  const { symbol } = await getShopCurrency(admin, shop);
+  return symbol;
 }
 
 /**

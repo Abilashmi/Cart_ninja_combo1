@@ -1,4 +1,7 @@
+import { useCurrency } from '../CurrencyContext';
+
 export function BundleStackMock() {
+  const { formatMoney } = useCurrency();
   return (
     <div className="cn-bundle" aria-hidden="true">
       <style>{`
@@ -35,8 +38,8 @@ export function BundleStackMock() {
       <span className="cn-bundle-op">=</span>
       <div className="cn-bundle-price">
         <small>Bundle</small>
-        <b>$64</b>
-        <s>$96</s>
+        <b>{formatMoney(64)}</b>
+        <s>{formatMoney(96)}</s>
       </div>
     </div>
   );

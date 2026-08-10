@@ -91,6 +91,45 @@ export function formatAmount(value, currencySymbol = "$", currencyCode = "USD", 
 }
 
 /**
+ * Format an amount using the store's actual currency + locale via
+ * Intl.NumberFormat — the central money formatter. Prefer this over
+ * formatAmount for new call sites: it handles symbol placement/spacing
+ * correctly per currency (e.g. "AED 2,000" vs "$2,000") instead of always
+ * concatenating symbol+number, which only happens to look right for a few
+ * Western currencies. Falls back to formatAmount's manual concatenation if
+ * Intl.NumberFormat rejects the currency code (e.g. an unrecognized/custom
+ * code), so a bad code degrades gracefully instead of throwing.
+ * @param {number} value - Amount to format
+ * @param {Object} opts
+ * @param {string} [opts.currencyCode] - ISO 4217 currency code
+ * @param {string} [opts.locale] - Locale for formatting; derived from currencyCode if omitted
+ * @returns {string} Formatted amount, e.g. "₹2,000.00", "AED 2,000.00"
+ */
+// Currencies whose OWN "home" locale (en-AU for AUD, en-CA for CAD, ...)
+// makes Intl.NumberFormat collapse the symbol to a bare "$" — correct
+// in-country, but indistinguishable from USD/other dollar currencies
+// anywhere else, which is exactly the ambiguity this whole feature exists
+// to eliminate. A neutral locale ('en') makes Intl disambiguate to
+// "A$"/"CA$"/etc. instead, with no change to digit grouping for these
+// currencies (their thousands/decimal conventions match 'en' already).
+const AMBIGUOUS_DOLLAR_CURRENCIES = new Set(['AUD', 'CAD', 'NZD', 'SGD', 'HKD']);
+
+export function formatMoney(value, { currencyCode = 'USD', locale } = {}) {
+  const amount = parseFloat(value) || 0;
+  const effectiveLocale = locale || getLocaleForCurrency(currencyCode);
+  const formatLocale = AMBIGUOUS_DOLLAR_CURRENCIES.has(currencyCode) ? 'en' : effectiveLocale;
+  try {
+    return new Intl.NumberFormat(formatLocale, {
+      style: 'currency',
+      currency: currencyCode,
+    }).format(amount);
+  } catch (error) {
+    console.error('[Currency] formatMoney: Intl.NumberFormat failed, falling back:', error.message);
+    return formatAmount(amount, getCurrencySymbol(currencyCode), currencyCode, effectiveLocale);
+  }
+}
+
+/**
  * Parse currency-formatted string back to number
  * @param {string} formatted - Currency formatted string (e.g., "₹1,000.00", "$99.99")
  * @returns {number} Numeric value

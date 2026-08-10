@@ -100,7 +100,7 @@ export const TOOL_REGISTRY = [
   },
   {
     name: 'update_announcements',
-    description: 'Update the announcement bar shown below the header (e.g. "Free shipping over $50"): enable/disable, text, colors, font size, bold/italic, alignment.',
+    description: 'Update the announcement bar shown below the header (e.g. a free-shipping or spending-threshold message): enable/disable, text, colors, font size, bold/italic, alignment. Any amount mentioned must use the store\'s actual currency (see the Store currency fact in context) — never $/USD unless the store currency really is USD.',
     parameters: {
       type: 'object',
       properties: {
@@ -200,7 +200,7 @@ export const TOOL_REGISTRY = [
   },
   {
     name: 'set_progress_bar_goal',
-    description: 'Turn on the progress bar with a simple single-goal setup — e.g. "free shipping at $75". Sets the goal amount and reward type on the primary tier and enables the progress bar. For multi-tier setups, use update_progress_bar_tiers instead.',
+    description: 'Turn on the progress bar with a simple single-goal setup — e.g. "free shipping at a spending threshold". Sets the goal amount and reward type on the primary tier and enables the progress bar. The goalAmount is a plain number in the store\'s own currency (see the Store currency fact in context) — never assume USD. For multi-tier setups, use update_progress_bar_tiers instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -359,7 +359,7 @@ export const TOOL_REGISTRY = [
   // ── Discounts ────────────────────────────────────────────────────────────
   {
     name: 'create_discount',
-    description: 'Create a real Shopify percentage-off discount code.',
+    description: 'Create a real Shopify percentage-off discount CODE that the customer must enter at checkout (e.g. "give me a discount code SAVE20"). For a storewide promotion that applies automatically with no code to enter (e.g. "10% off orders above ₹1,500", "₹200 off above ₹2,000"), use create_amount_off_promotion instead — do not use this tool for those.',
     parameters: {
       type: 'object',
       properties: {
@@ -381,6 +381,38 @@ export const TOOL_REGISTRY = [
       type: 'object',
       properties: { discountId: { type: 'string' } },
       required: ['discountId'],
+    },
+  },
+  {
+    name: 'list_active_promotions',
+    description: 'Read-only list of the store\'s existing active/scheduled Shopify discounts (code and automatic, all types). ALWAYS check this before creating a new promotion (create_free_shipping / create_amount_off_promotion / create_discount) so an equivalent existing discount is reused instead of duplicated.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'create_free_shipping',
+    description: 'Create a REAL, active, automatic Shopify free-shipping discount (no code — applies itself at checkout once the order subtotal meets the threshold). This is a commerce action, not just text: use this whenever a merchant asks to "create"/"add"/"set up" free shipping, BEFORE writing any announcement text about it — never write an announcement claiming free shipping exists without first calling this and getting success. Note: this creates a discount, not a change to carrier shipping rates/zones (a separate Shopify settings area this tool does not touch).',
+    parameters: {
+      type: 'object',
+      properties: {
+        minimumAmount: { type: 'number', description: 'Order subtotal required to unlock free shipping' },
+        title: { type: 'string', description: 'Internal display name; if omitted, a sensible default is generated' },
+        countries: { type: 'array', items: { type: 'string' }, description: 'ISO country codes to restrict to; omit for all countries' },
+      },
+      required: ['minimumAmount'],
+    },
+  },
+  {
+    name: 'create_amount_off_promotion',
+    description: 'Create a REAL, active, automatic Shopify storewide discount — percentage off OR a fixed amount off — with no code to enter (applies itself at checkout once any minimum is met). Use for phrasing like "10% off orders above ₹1,500" or "₹200 off above ₹2,000". This is a commerce action, not just text: call it BEFORE writing any announcement text about the sale — never claim a discount is live without first calling this and getting success. For a discount CODE the customer must type in, use create_discount instead.',
+    parameters: {
+      type: 'object',
+      properties: {
+        percentage: { type: 'number', description: 'Percent off, 0-100. Provide exactly one of percentage/amountOff.' },
+        amountOff: { type: 'number', description: 'Fixed currency amount off. Provide exactly one of percentage/amountOff.' },
+        minimumAmount: { type: 'number', description: 'Order subtotal required to unlock the discount; omit for no minimum' },
+        title: { type: 'string', description: 'Internal display name; if omitted, a sensible default is generated' },
+      },
+      required: [],
     },
   },
 

@@ -6,6 +6,7 @@ import { TOOL_REGISTRY, isDestructiveToolCall } from '../config/ai-tool-schemas'
 import { TOOL_EXECUTORS } from '../services/ai-agent-tools.server';
 import { getStoreConfigSnapshot } from '../services/store-config-snapshot.server';
 import { getShopPlan } from '../services/plan-permissions.server';
+import { getShopCurrency } from '../utils/currency.server';
 import { getDb } from '../services/db.server';
 
 const SYSTEM_PROMPT_BASE = `You are Brix, an AI assistant built into the Brix cart drawer app for Shopify merchants. You talk like an experienced, friendly Shopify consultant — confident and helpful, never robotic, never a wall of rules recited back at the merchant.
@@ -13,12 +14,13 @@ const SYSTEM_PROMPT_BASE = `You are Brix, an AI assistant built into the Brix ca
 You can actually configure and change things in the merchant's store — the cart drawer's design, header, announcements, progress bar, coupon slider, upsell products, countdown timer, checkout button, custom CSS, Frequently Bought Together, discounts, and Combo Forge bundle pages — via the tools available to you. When a merchant asks for something in scope, DO IT using the tools rather than telling them to go do it themselves in the admin. Never say "I can't do that" for something a tool covers — figure out which tool(s) apply and use them. Only ask a clarifying question when you genuinely don't have enough information to act (e.g. which product, which color), and only decline outright when nothing in your toolset can do what's being asked.
 
 Guidelines:
-1. Never claim you did something you didn't — only report success after a tool call actually returns success. If a tool fails or is locked by plan, say so plainly and honestly.
+1. Never claim you did something you didn't — only report success after a tool call actually returns success. If a tool fails or is locked by plan, say so plainly and honestly. If only part of a multi-step request succeeded, say exactly what succeeded and what didn't — never describe a partially-completed request as fully done.
 2. Never promise future/background action ("I'll notify you", "I'll keep monitoring") — nothing happens after your reply on its own.
 3. Never state specific store data you weren't given in this conversation or via a tool call (revenue, order counts, product names) — use get_store_insights/get_products/get_collections/get_current_config to actually check, rather than guessing.
 4. Never state a specific date, version, or fact you're not certain of.
 5. If a request spans multiple changes (e.g. "give my cart a modern dark theme"), feel free to call several tools in sequence to accomplish it fully before replying.
-6. Write like a person: short paragraphs, plain sentences, no filler. Use markdown for real emphasis (bold a feature name or number) — don't decorate every sentence.`;
+6. A request describing a PROMOTION (free shipping, a % or currency amount off a threshold, a sale) is two separate actions, not one: (a) create/verify the real discount using create_free_shipping or create_amount_off_promotion — call list_active_promotions first, or trust those tools' own duplicate check, so an already-active equivalent rule is reused rather than duplicated — and only (b) once that succeeds, write the announcement with update_announcements describing it. Never create the announcement first, and never describe a promotion as active in the announcement unless the discount tool call actually returned success. If the discount tool fails, say so plainly and either skip the announcement or clearly mark it as pending — never present the request as fully done. Apply the same "commerce action → verify → dependent presentation action" ordering to any compound request, e.g. "create a 10% off sale and announce it", "add free shipping and show a progress bar", "create ₹500 off above ₹3,000 and display it in the cart".
+7. Write like a person: short paragraphs, plain sentences, no filler. Use markdown for real emphasis (bold a feature name or number) — don't decorate every sentence.`;
 
 const MAX_ITER = 6;
 const MAX_TOKENS = 700;
@@ -26,7 +28,7 @@ const MAX_TOKENS = 700;
 const CONFIRM_YES_RE = /^(__confirm__|y|yes|yeah|yep|confirm|ok|okay|sure|go ahead|do it|please do)\.?$/i;
 const CONFIRM_NO_RE = /^(__cancel__|n|no|nope|cancel|stop|nevermind|never mind)\.?$/i;
 
-const READ_ONLY_TOOLS = new Set(['get_current_config', 'get_products', 'get_collections', 'get_store_insights', 'suggest_theme_colors']);
+const READ_ONLY_TOOLS = new Set(['get_current_config', 'get_products', 'get_collections', 'get_store_insights', 'suggest_theme_colors', 'list_active_promotions']);
 
 const CONFIRM_CHOICES = [
   { label: '✅ Confirm', value: '__confirm__' },
@@ -104,7 +106,14 @@ export async function action({ request }) {
     const credit = await checkAndConsumeCredit(shop, admin);
     const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
     const planKey = await getShopPlan(shop, admin);
-    const ctx = { shop, admin, session, planKey, requestUrl: request.url };
+    // Fetched once per request and threaded through ctx so every tool
+    // executor (and the system prompt below) shares the same real store
+    // currency — never a hardcoded USD/$ assumption. See currency.server.js.
+    const currency = await getShopCurrency(admin, shop);
+    const ctx = {
+      shop, admin, session, planKey, requestUrl: request.url,
+      currencyCode: currency.code, currencySymbol: currency.symbol, currencyLocale: currency.locale,
+    };
 
     // Deterministic confirm/cancel — bypasses the model entirely so a
     // confirmation can never execute with different args than what the
@@ -136,7 +145,11 @@ export async function action({ request }) {
     const stateLine = snapshot
       ? `Current state — Cart Drawer: ${snapshot.cartDrawer ? 'on' : 'off'}, Progress Bar: ${snapshot.progressBar ? 'on' : 'off'}, Upsells: ${snapshot.upsells ? 'on' : 'off'}, FBT: ${snapshot.fbt ? 'on' : 'off'}, Coupon Slider: ${snapshot.couponSlider ? 'on' : 'off'}.`
       : '';
-    const systemPrompt = stateLine ? `${SYSTEM_PROMPT_BASE}\n\n${stateLine}` : SYSTEM_PROMPT_BASE;
+    // The merchant's plain numbers (thresholds, prices) are always in the
+    // store's own currency — this is the fact that stops the model from
+    // defaulting to $/USD out of its own training data.
+    const currencyLine = `Store currency: ${currency.code} (${currency.symbol}), locale ${currency.locale}. When the merchant gives a plain number for a price or spending threshold, it is in this currency — write it back using the ${currency.symbol} symbol (or the currency's normal formatting), never $ or USD, unless the store currency is actually USD.`;
+    const systemPrompt = [SYSTEM_PROMPT_BASE, currencyLine, stateLine].filter(Boolean).join('\n\n');
 
     let messages = [
       { role: 'system', content: systemPrompt },

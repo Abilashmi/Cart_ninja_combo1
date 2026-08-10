@@ -12,7 +12,11 @@ import {
 import { resolveProductByName, appendUpsellRule, searchProducts } from './upsell-rules.server';
 import { resolveCollectionByName, searchCollections } from './collection-resolver.server';
 import { checkComboPlanGate, createComboTemplate } from './combo-templates.server';
-import { createDiscount, deleteDiscount, getShopCurrencyCode, persistLocalCopy } from './discounts.server';
+import {
+  createDiscount, deleteDiscount, persistLocalCopy,
+  createAutomaticFreeShipping, createAutomaticAmountOff, listActiveDiscounts,
+} from './discounts.server';
+import { formatMoney } from '../utils/currency.shared';
 import { detectStoreTheme } from './theme-detection.server';
 import { getStoreConfigSnapshot } from './store-config-snapshot.server';
 import { getPeriodTotals } from './analytics-query.server';
@@ -191,6 +195,25 @@ function buildPaletteOptions(base) {
       checkoutTextColor: deg === 0 ? base.checkoutTextColor : contrastTextColor(checkoutBgColor),
     };
   });
+}
+
+// Real duplicate protection for the promotion-creation tools — runs
+// regardless of whether the model remembered to call list_active_promotions
+// itself first. Matches on type + threshold (+ value, for amount-off) among
+// ACTIVE/SCHEDULED discounts only; a small tolerance absorbs float rounding.
+const AMOUNT_TOLERANCE = 0.01;
+function amountsMatch(a, b) {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Math.abs(Number(a) - Number(b)) < AMOUNT_TOLERANCE;
+}
+function findMatchingPromotion(discounts, { discountType, discountValue, minimumAmount }) {
+  return discounts.find((d) => (
+    (d.status === 'ACTIVE' || d.status === 'SCHEDULED') &&
+    d.discountType === discountType &&
+    (discountType === 'free_shipping' || amountsMatch(d.discountValue, discountValue)) &&
+    amountsMatch(d.minimumSubtotal, minimumAmount || null)
+  ));
 }
 
 function productNotFoundResult(name) {
@@ -410,19 +433,78 @@ export const TOOL_EXECUTORS = {
 
   // ── Discounts ────────────────────────────────────────────────────────────
   async create_discount(ctx, { code, title, percentage, minimumAmount, endDate, usageLimit, onePerCustomer }) {
-    const currencyCode = await getShopCurrencyCode(ctx.admin);
     const finalTitle = title || `${percentage}% Off Storewide`;
     const finalCode = (code || `SAVE${Math.round(percentage)}`).toUpperCase();
-    const result = await createDiscount(ctx.admin, { code: finalCode, title: finalTitle, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, currencyCode });
+    const result = await createDiscount(ctx.admin, { code: finalCode, title: finalTitle, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, currencyCode: ctx.currencyCode });
     if (!result.success) return { success: false, message: `Couldn't create discount: ${result.error}` };
     await persistLocalCopy(ctx.requestUrl, ctx.shop, { code: finalCode, title: finalTitle, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, discountId: result.discountId });
-    return { success: true, code: finalCode, title: finalTitle, percentage };
+    return {
+      success: true, code: finalCode, title: finalTitle, percentage,
+      displayMinimumAmount: minimumAmount ? formatMoney(minimumAmount, { currencyCode: ctx.currencyCode, locale: ctx.currencyLocale }) : null,
+    };
   },
 
   async delete_discount(ctx, { discountId }) {
     const result = await deleteDiscount(ctx.admin, discountId);
     if (!result.success) return { success: false, message: `Couldn't delete discount: ${result.error}` };
     return { success: true };
+  },
+
+  async list_active_promotions(ctx) {
+    const discounts = await listActiveDiscounts(ctx.admin);
+    return { discounts };
+  },
+
+  async create_free_shipping(ctx, { minimumAmount, title, countries }) {
+    // displayAmount is presentation-only (real store currency, via the
+    // central formatter) — the model should copy this into announcement
+    // text rather than composing its own $-guess. The numeric minimumAmount
+    // sent to Shopify's API is unaffected either way.
+    const displayAmount = minimumAmount != null ? formatMoney(minimumAmount, { currencyCode: ctx.currencyCode, locale: ctx.currencyLocale }) : null;
+
+    const discounts = await listActiveDiscounts(ctx.admin);
+    const existing = findMatchingPromotion(discounts, { discountType: 'free_shipping', minimumAmount });
+    if (existing) {
+      return { success: true, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, minimumAmount: existing.minimumSubtotal, displayAmount };
+    }
+
+    const finalTitle = title || (minimumAmount ? `Free Shipping Over ${displayAmount || minimumAmount}` : 'Free Shipping');
+    const result = await createAutomaticFreeShipping(ctx.admin, { title: finalTitle, minimumAmount, currencyCode: ctx.currencyCode, countries });
+    if (!result.success) return { success: false, promotionCreated: false, message: `Couldn't create the free-shipping promotion: ${result.error}` };
+
+    return {
+      success: true, promotionCreated: true, alreadyExisted: false,
+      verified: result.status === 'ACTIVE', status: result.status,
+      discountId: result.discountId, minimumAmount, displayAmount, title: finalTitle,
+      currencyCode: ctx.currencyCode,
+    };
+  },
+
+  async create_amount_off_promotion(ctx, { percentage, amountOff, minimumAmount, title }) {
+    if (percentage == null && amountOff == null) {
+      return { success: false, promotionCreated: false, message: 'Need either a percentage or a fixed amount off to create this promotion.' };
+    }
+    const discountType = amountOff != null ? 'fixed' : 'percentage';
+    const discountValue = amountOff != null ? Number(amountOff) : Number(percentage);
+    const displayValue = amountOff != null ? formatMoney(amountOff, { currencyCode: ctx.currencyCode, locale: ctx.currencyLocale }) : `${percentage}%`;
+    const displayMinimumAmount = minimumAmount != null ? formatMoney(minimumAmount, { currencyCode: ctx.currencyCode, locale: ctx.currencyLocale }) : null;
+
+    const discounts = await listActiveDiscounts(ctx.admin);
+    const existing = findMatchingPromotion(discounts, { discountType, discountValue, minimumAmount });
+    if (existing) {
+      return { success: true, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, discountType, discountValue, minimumAmount: existing.minimumSubtotal, displayValue, displayMinimumAmount };
+    }
+
+    const finalTitle = title || (amountOff != null ? `${displayValue} Off Storewide` : `${percentage}% Off Storewide`);
+    const result = await createAutomaticAmountOff(ctx.admin, { title: finalTitle, percentage, amountOff, minimumAmount, currencyCode: ctx.currencyCode });
+    if (!result.success) return { success: false, promotionCreated: false, message: `Couldn't create the discount: ${result.error}` };
+
+    return {
+      success: true, promotionCreated: true, alreadyExisted: false,
+      verified: result.status === 'ACTIVE', status: result.status,
+      discountId: result.discountId, discountType, discountValue, minimumAmount, displayValue, displayMinimumAmount, title: finalTitle,
+      currencyCode: ctx.currencyCode,
+    };
   },
 
   // ── Combo Forge ──────────────────────────────────────────────────────────

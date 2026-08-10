@@ -41,9 +41,13 @@ export async function action({ request }) {
 
     return Response.json({ success: true, data: result });
   } catch (err) {
+    // err.message can contain the raw provider response (e.g. "OpenAI API
+    // error: 429 {...insufficient_quota...}") — that describes this app's
+    // own backend key, not anything the merchant can act on, so it's logged
+    // here only and never sent to the client.
     console.error('[api.suggestions] Error:', err);
     return Response.json(
-      { success: false, error: err.message || 'Unable to generate AI suggestion right now.' },
+      { success: false, error: 'Sorry, something went wrong. Please try again in a moment.' },
       { status: 500 }
     );
   }

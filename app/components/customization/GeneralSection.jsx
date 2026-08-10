@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button } from '@shopify/polaris';
 import { MagicIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
+import { useCurrency } from '../CurrencyContext';
 
 // 1em/currentColor so it inherits each button's own font-size/color inline
 // styles below with no extra props needed — used in place of a plain "✕"
@@ -26,6 +27,7 @@ function GeneralSectionComponent({
   stepFieldAiLoading,
   generateStepFieldSuggestion,
 }) {
+  const { formatMoney } = useCurrency();
   const layout = config.layout;
 
   if (layout === 'layout1') {
@@ -266,8 +268,8 @@ function GeneralSectionComponent({
                 <TextField label="Hero Title" value={config.hero_title || 'Mega Breakfast Bundle'} onChange={(v) => updateConfig('hero_title', v)} autoComplete="off" />
                 <TextField label="Hero Subtitle" value={config.hero_subtitle || 'Milk, Bread, Eggs, Cereal & Juice'} onChange={(v) => updateConfig('hero_subtitle', v)} autoComplete="off" />
                 <div className="cst-grid-2">
-                  <TextField label="Hero Price" value={config.hero_price || '$14.99'} onChange={(v) => updateConfig('hero_price', v)} autoComplete="off" />
-                  <TextField label="Compare Price" value={config.hero_compare_price || '$24.50'} onChange={(v) => updateConfig('hero_compare_price', v)} autoComplete="off" />
+                  <TextField label="Hero Price" value={config.hero_price || formatMoney(14.99)} onChange={(v) => updateConfig('hero_price', v)} autoComplete="off" />
+                  <TextField label="Compare Price" value={config.hero_compare_price || formatMoney(24.50)} onChange={(v) => updateConfig('hero_compare_price', v)} autoComplete="off" />
                 </div>
                 <TextField label="Button Text" value={config.hero_btn_text || 'Add to Cart - Save 38%'} onChange={(v) => updateConfig('hero_btn_text', v)} autoComplete="off" />
               </>
