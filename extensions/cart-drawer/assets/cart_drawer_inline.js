@@ -17,7 +17,23 @@
   // separately from the more granular play-by-play ccDebug lines.
   function ccMilestone() {
     if (!CC_DEBUG) return;
-    console.log.apply(console, ['[CART NINJA]'].concat(Array.prototype.slice.call(arguments)));
+    console.log.apply(console, ['[CART-NINJA]'].concat(Array.prototype.slice.call(arguments)));
+  }
+  // Counts every /cart/add(.js) request seen within a short window of a
+  // single user action (ours or anyone else's, via the fetch/XHR patches
+  // and our own explicit calls) so we can log exactly how many requests one
+  // click produced — the clearest possible signal for "is this doubling."
+  let _ccAddRequestCount = 0;
+  let _ccAddRequestLogTimer = null;
+  function ccCountAddRequest(source) {
+    _ccAddRequestCount++;
+    ccDebug('add-request counter: +1 from', source, '— running total for this action:', _ccAddRequestCount);
+    if (_ccAddRequestLogTimer) clearTimeout(_ccAddRequestLogTimer);
+    _ccAddRequestLogTimer = setTimeout(function () {
+      ccMilestone('Total /cart/add.js requests for this action:', _ccAddRequestCount);
+      _ccAddRequestCount = 0;
+      _ccAddRequestLogTimer = null;
+    }, 1500);
   }
 
   const container = document.getElementById('cc-root');
@@ -134,6 +150,26 @@
   // timestamp it's already been set, letting us skip our own duplicate
   // POST instead of adding the item a second time.
   let _ccExternalAddInFlightAt = 0;
+  // Add-to-cart transaction guard — a rapid double-click can fire two
+  // separate, individually-legitimate 'submit' events before the theme has
+  // a chance to disable the button, each of which would otherwise pass our
+  // per-event checks (defaultPrevented/_ccExternalAddInFlightAt) cleanly
+  // and produce two real POSTs. This flag makes the second submission, if
+  // it arrives while the first is still in flight, a no-op instead —
+  // prevented from navigating, but not re-added. Auto-resets on success,
+  // failure, AND a hard timeout safety net, so a hung request can never
+  // permanently block later, legitimate Add to Cart clicks.
+  let _ccAddToCartInFlight = false;
+  let _ccAddToCartInFlightSafetyTimer = null;
+  function ccBeginAddToCartTransaction() {
+    _ccAddToCartInFlight = true;
+    if (_ccAddToCartInFlightSafetyTimer) clearTimeout(_ccAddToCartInFlightSafetyTimer);
+    _ccAddToCartInFlightSafetyTimer = setTimeout(ccEndAddToCartTransaction, 8000);
+  }
+  function ccEndAddToCartTransaction() {
+    _ccAddToCartInFlight = false;
+    if (_ccAddToCartInFlightSafetyTimer) { clearTimeout(_ccAddToCartInFlightSafetyTimer); _ccAddToCartInFlightSafetyTimer = null; }
+  }
 
 
   const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -772,7 +808,10 @@
     // always see it too late.
     try {
       const dispatchUrl = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : '';
-      if (dispatchUrl.includes('/cart/add')) _ccExternalAddInFlightAt = Date.now();
+      if (dispatchUrl.includes('/cart/add')) {
+        _ccExternalAddInFlightAt = Date.now();
+        ccCountAddRequest('window.fetch (external)');
+      }
     } catch (e) { /* noop — args[0] shape unexpected, safe to ignore */ }
 
     const response = await originalFetch.apply(this, args);
@@ -793,6 +832,7 @@
       // the fetch patch above — needs to be visible to our submit
       // interceptor's duplicate-check as early as possible.
       _ccExternalAddInFlightAt = Date.now();
+      ccCountAddRequest('XMLHttpRequest (external)');
       this.addEventListener('load', function () {
         if (this.status >= 200 && this.status < 300) {
           scheduleOpenDrawer(350);
@@ -835,7 +875,7 @@
       return;
     }
 
-    ccMilestone('Add-to-cart detected (form submit)', form.action);
+    ccMilestone('Add-to-cart intercepted');
     ccDebug('submit intercept: matched /cart/add form, taking ownership', form);
     // stopImmediatePropagation only fires once we've confirmed (above) that
     // this is genuinely a cart/add submission we are about to handle
@@ -847,7 +887,23 @@
     // duplicate-add check right below) — it only stops listeners
     // registered after this one.
     e.preventDefault();
+    ccMilestone('Native submit prevented');
     e.stopImmediatePropagation();
+
+    // Transaction guard: a rapid double-click can fire a second, separately
+    // valid 'submit' event before the theme disables the button — this
+    // would sail through the checks below (they're per-submission, not
+    // cross-submission) and produce a second real POST. If one is already
+    // in flight, prevent navigation (above) but do nothing further; the
+    // in-flight request will update the cart and open the drawer once it
+    // resolves. Resets automatically on success/failure/timeout (see
+    // ccEndAddToCartTransaction), so this can never permanently block a
+    // later, legitimate Add to Cart click.
+    if (_ccAddToCartInFlight) {
+      ccDebug('submit intercept: a transaction is already in flight, ignoring this duplicate submission (double-click guard)');
+      return;
+    }
+
     const submitStartedAt = Date.now();
     (async function () {
       // Some themes (component-framework based, e.g. a single global
@@ -871,9 +927,16 @@
       }
 
       const formData = new FormData(form);
+      ccMilestone('Product/variant:', formData.get('id'));
+      ccMilestone('Quantity:', formData.get('quantity') || '1');
+      ccBeginAddToCartTransaction();
+      ccMilestone('Cart request started');
+      ccCountAddRequest('submit interceptor (ours)');
       originalFetch('/cart/add.js', { method: 'POST', body: formData })
       .then(function (res) {
+        ccEndAddToCartTransaction();
         if (res.ok) {
+          ccMilestone('Cart request completed');
           ccDebug('submit intercept: /cart/add.js succeeded, opening drawer');
           scheduleOpenDrawer(300);
         } else {
@@ -885,6 +948,7 @@
         }
       })
       .catch(function (err) {
+        ccEndAddToCartTransaction();
         // Our AJAX path itself failed (network error, blocked request,
         // etc.) — gracefully fall back to the native form submission
         // instead of silently leaving the customer stuck with no cart
@@ -1306,6 +1370,7 @@
 
       targets.forEach(function (t) { t._ccNeutralized = true; });
       const restoreFns = targets.map(ccHideSingleElement);
+      ccMilestone('Native drawer blocked');
       ccMilestone('Native drawer suppressed', targets.map(function (t) {
         return t.tagName + (t.id ? '#' + t.id : '') + (t.className && typeof t.className === 'string' ? '.' + t.className.trim().split(/\s+/).join('.') : '');
       }).join(' <- '));
