@@ -390,20 +390,20 @@ export const TOOL_REGISTRY = [
   },
   {
     name: 'create_free_shipping',
-    description: 'Create a REAL, active, automatic Shopify free-shipping discount (no code — applies itself at checkout once the order subtotal meets the threshold). This is a commerce action, not just text: use this whenever a merchant asks to "create"/"add"/"set up" free shipping, BEFORE writing any announcement text about it — never write an announcement claiming free shipping exists without first calling this and getting success. Note: this creates a discount, not a change to carrier shipping rates/zones (a separate Shopify settings area this tool does not touch).',
+    description: 'Create a REAL, active, automatic Shopify free-shipping discount (no code — applies itself at checkout once the order subtotal meets the threshold, or on every order if no threshold is given). This is a commerce action, not just text: use this whenever a merchant asks to "create"/"add"/"set up" free shipping, BEFORE writing any announcement text about it — never write an announcement claiming free shipping exists without first calling this and getting success. IMPORTANT: minimumAmount is optional (omitting it means free shipping on every order), but if the merchant\'s message doesn\'t make clear whether there should be a spending threshold, ASK before calling this tool — never invent/guess a threshold number. Note: this creates a discount, not a change to carrier shipping rates/zones (a separate Shopify settings area this tool does not touch).',
     parameters: {
       type: 'object',
       properties: {
-        minimumAmount: { type: 'number', description: 'Order subtotal required to unlock free shipping' },
+        minimumAmount: { type: 'number', description: 'Order subtotal required to unlock free shipping; omit for free shipping on every order with no minimum' },
         title: { type: 'string', description: 'Internal display name; if omitted, a sensible default is generated' },
         countries: { type: 'array', items: { type: 'string' }, description: 'ISO country codes to restrict to; omit for all countries' },
       },
-      required: ['minimumAmount'],
+      required: [],
     },
   },
   {
     name: 'create_amount_off_promotion',
-    description: 'Create a REAL, active, automatic Shopify storewide discount — percentage off OR a fixed amount off — with no code to enter (applies itself at checkout once any minimum is met). Use for phrasing like "10% off orders above ₹1,500" or "₹200 off above ₹2,000". This is a commerce action, not just text: call it BEFORE writing any announcement text about the sale — never claim a discount is live without first calling this and getting success. For a discount CODE the customer must type in, use create_discount instead.',
+    description: 'Create a REAL, active, automatic Shopify storewide discount — percentage off OR a fixed amount off — with no code to enter (applies itself at checkout once any minimum is met). Use for phrasing like "10% off orders above ₹1,500" or "₹200 off above ₹2,000". This is a commerce action, not just text: call it BEFORE writing any announcement text about the sale — never claim a discount is live without first calling this and getting success. IMPORTANT: a percentage or amountOff value is required — if the merchant asked for "a discount"/"a sale" without saying how much, ASK for the specific percentage or amount before calling this tool, never guess a number. For a discount CODE the customer must type in, use create_discount instead.',
     parameters: {
       type: 'object',
       properties: {

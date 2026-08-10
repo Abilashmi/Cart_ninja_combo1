@@ -25,18 +25,22 @@ import BrixBar from "../components/ai-agent/BrixBar";
 // *Activate / *Deactivate mutation in the Admin API (a per-type name was a
 // hallucinated guess in an earlier fix and didn't exist on the schema;
 // these three were confirmed against the live Admin GraphQL schema).
+// Automatic discounts (BRIX-created free-shipping/amount-off promotions,
+// discountAutomatic*Create) are a different ID type (DiscountAutomaticNode,
+// not DiscountCodeNode) and need the *Automatic* variant of each mutation —
+// same distinction app.discount.jsx's action already makes.
 const BULK_OPS = {
     bulkDelete: {
-        query: `mutation discountCodeDelete($id: ID!) { discountCodeDelete(id: $id) { deletedCodeDiscountId userErrors { field message } } }`,
-        field: "discountCodeDelete",
+        code: { query: `mutation discountCodeDelete($id: ID!) { discountCodeDelete(id: $id) { deletedCodeDiscountId userErrors { field message } } }`, field: "discountCodeDelete" },
+        automatic: { query: `mutation discountAutomaticDelete($id: ID!) { discountAutomaticDelete(id: $id) { deletedAutomaticDiscountId userErrors { field message } } }`, field: "discountAutomaticDelete" },
     },
     bulkActivate: {
-        query: `mutation discountCodeActivate($id: ID!) { discountCodeActivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`,
-        field: "discountCodeActivate",
+        code: { query: `mutation discountCodeActivate($id: ID!) { discountCodeActivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`, field: "discountCodeActivate" },
+        automatic: { query: `mutation discountAutomaticActivate($id: ID!) { discountAutomaticActivate(id: $id) { userErrors { field message } } }`, field: "discountAutomaticActivate" },
     },
     bulkDeactivate: {
-        query: `mutation discountCodeDeactivate($id: ID!) { discountCodeDeactivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`,
-        field: "discountCodeDeactivate",
+        code: { query: `mutation discountCodeDeactivate($id: ID!) { discountCodeDeactivate(id: $id) { codeDiscountNode { id } userErrors { field message } } }`, field: "discountCodeDeactivate" },
+        automatic: { query: `mutation discountAutomaticDeactivate($id: ID!) { discountAutomaticDeactivate(id: $id) { userErrors { field message } } }`, field: "discountAutomaticDeactivate" },
     },
 };
 
@@ -62,9 +66,10 @@ export const action = async ({ request }) => {
     // selection.
     const errors = [];
     for (const itemId of ids) {
-        const response = await admin.graphql(op.query, { variables: { id: itemId } });
+        const variant = itemId.includes("DiscountCodeNode") ? op.code : op.automatic;
+        const response = await admin.graphql(variant.query, { variables: { id: itemId } });
         const json = await response.json();
-        const userErrors = json.data?.[op.field]?.userErrors;
+        const userErrors = json.data?.[variant.field]?.userErrors;
         if (userErrors?.length > 0) errors.push(userErrors[0].message);
     }
 
@@ -103,6 +108,21 @@ export const loader = async ({ request }) => {
                 startsAt endsAt status
                 usageLimit appliesOncePerCustomer asyncUsageCount summary
               }
+              ... on DiscountAutomaticBasic {
+                title
+                startsAt endsAt status
+                asyncUsageCount summary
+              }
+              ... on DiscountAutomaticBxgy {
+                title
+                startsAt endsAt status
+                asyncUsageCount summary
+              }
+              ... on DiscountAutomaticFreeShipping {
+                title
+                startsAt endsAt status
+                asyncUsageCount summary
+              }
             }
             metafield(namespace: "cart_app", key: "source") { value }
           }
@@ -118,7 +138,8 @@ export const loader = async ({ request }) => {
             const node = edge.node;
             const discount = node.discount;
             const isAppCreated = node.metafield?.value === "app";
-            const code = discount?.codes?.edges?.[0]?.node?.code || "No Code";
+            const isAutomatic = discount?.__typename?.startsWith("DiscountAutomatic");
+            const code = isAutomatic ? "Automatic" : (discount?.codes?.edges?.[0]?.node?.code || "No Code");
 
             const now = new Date();
             const start = new Date(discount.startsAt);
@@ -167,7 +188,11 @@ function statusLabel(status) {
 }
 
 function typeLabel(type) {
-    return (type || "").replace("DiscountCode", "").replace(/([A-Z])/g, " $1").trim() || "—";
+    if (!type) return "—";
+    const isAutomatic = type.startsWith("DiscountAutomatic");
+    const base = type.replace("DiscountAutomatic", "").replace("DiscountCode", "");
+    const spaced = base.replace(/([A-Z])/g, " $1").trim();
+    return (isAutomatic ? `Automatic ${spaced}` : spaced) || "—";
 }
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
