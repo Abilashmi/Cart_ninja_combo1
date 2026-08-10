@@ -44,6 +44,39 @@ import { checkComboPlanGate } from '../services/combo-templates.server';
 import prisma from '../db.server';
 import { useCurrency } from '../components/CurrencyContext';
 
+// Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
+// — 1em/currentColor so each inherits the calling element's own font-size/
+// color inline styles with no other props needed.
+function IconCheck() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="4 12 10 18 20 6" />
+    </svg>
+  );
+}
+function IconClose() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ display: 'block' }}>
+      <line x1="5" y1="5" x2="19" y2="19" />
+      <line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  );
+}
+function IconChevronLeft() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="15 5 8 12 15 19" />
+    </svg>
+  );
+}
+function IconChevronRight() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="9 5 16 12 9 19" />
+    </svg>
+  );
+}
+
 export const action = async ({ request }) => {
   if (request.method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 });
@@ -2997,7 +3030,7 @@ export default function Customize() {
                   <ul className="tpl-pick-features">
                     {tpl.features.map((feature, i) => (
                       <li key={i} className="tpl-pick-feature">
-                        <span className="tpl-pick-check">✓</span>
+                        <span className="tpl-pick-check"><IconCheck /></span>
                         <span>{feature}</span>
                       </li>
                     ))}
@@ -3157,7 +3190,7 @@ export default function Customize() {
         <Modal
           open={aiBundleOpen}
           onClose={() => { if (!aiBundleLoading) { setAiBundleOpen(false); setAiError(''); } }}
-          title="✨ Generate a bundle with AI"
+          title="Generate a bundle with AI"
           primaryAction={{
             content: aiBundleLoading ? 'Generating…' : 'Generate',
             onAction: handleAiGenerate,
@@ -3543,10 +3576,10 @@ export default function Customize() {
                     </div>
                   </div>
                   <div
-                    style={{ fontSize: 16, color: '#8C9196', marginLeft: 8 }}
+                    style={{ fontSize: 16, color: '#8C9196', marginLeft: 8, display: 'flex' }}
                     aria-hidden="true"
                   >
-                    ›
+                    <IconChevronRight />
                   </div>
                 </div>
               </button>
@@ -5024,7 +5057,7 @@ function ComboPreview({
             onClick={() => scrollTabsBy(-220)}
             style={{ left: 6 }}
           >
-            ←
+            <IconChevronLeft />
           </button>
         )}
         <div
@@ -5072,7 +5105,7 @@ function ComboPreview({
             onClick={() => scrollTabsBy(220)}
             style={{ right: 6 }}
           >
-            →
+            <IconChevronRight />
           </button>
         )}
       </div>
@@ -5337,7 +5370,7 @@ function ComboPreview({
                   lineHeight: 1,
                 }}
               >
-                &times;
+                <IconClose />
               </button>
             </div>
             <div
@@ -5400,7 +5433,7 @@ function ComboPreview({
               boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
             }}
           >
-            ✓
+            <IconCheck />
           </div>
         )}
 
@@ -5923,7 +5956,7 @@ function ComboPreview({
                 }
                 style={{ left: '10px' }}
               >
-                ←
+                <IconChevronLeft />
               </button>
               <button
                 className="cdo-arrow-btn"
@@ -5932,7 +5965,7 @@ function ComboPreview({
                 }
                 style={{ right: '10px' }}
               >
-                →
+                <IconChevronRight />
               </button>
             </>
           )}
@@ -6454,7 +6487,7 @@ function ComboPreview({
                     }}
                   >
                     {totalItems >= discountThreshold
-                      ? '🎉 Fantastic! You have unlocked the best discount!'
+                      ? 'Fantastic! You have unlocked the best discount!'
                       : (
                         config.discount_motivation_text ||
                         'Keep going! Add {{remaining}} more for a special deal!'
@@ -7082,8 +7115,8 @@ function ComboPreview({
                       <InlineEdit value={stepTitle} configKey={`step_${step}_title`} onUpdate={onUpdateConfig} style={{ fontSize: '18px', fontWeight: '700' }} />
                     </h3>
                     {isCompleted && (
-                      <span style={{ color: '#28a745', fontWeight: 'bold' }}>
-                        ✓
+                      <span style={{ color: '#28a745', fontWeight: 'bold', display: 'inline-flex' }}>
+                        <IconCheck />
                       </span>
                     )}
                   </div>

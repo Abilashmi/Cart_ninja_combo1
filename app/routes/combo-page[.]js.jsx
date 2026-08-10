@@ -56,6 +56,18 @@ const SCRIPT_BODY = String.raw`
     return out;
   }
 
+  // Small inline SVG icons — replaces plain-text Unicode glyphs (✓ ✕ ‹ › ⚠)
+  // that render as platform-default emoji/dingbat fonts (inconsistent look,
+  // and read as "emoji" even though they're functional UI indicators, not
+  // decoration). 1em sizing + currentColor means each inherits the calling
+  // element's existing font-size/color inline styles with no other changes
+  // needed at the call site.
+  var ICON_CHECK = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polyline points="4 12 10 18 20 6"></polyline></svg>';
+  var ICON_CLOSE = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:block;"><line x1="5" y1="5" x2="19" y2="19"></line><line x1="19" y1="5" x2="5" y2="19"></line></svg>';
+  var ICON_CHEVRON_LEFT = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polyline points="15 5 8 12 15 19"></polyline></svg>';
+  var ICON_CHEVRON_RIGHT = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polyline points="9 5 16 12 9 19"></polyline></svg>';
+  var ICON_WARNING = '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M12 3 L22 20 L2 20 Z"></path><line x1="12" y1="10" x2="12" y2="15"></line><circle cx="12" cy="17.5" r="0.75" fill="currentColor" stroke="none"></circle></svg>';
+
   function getCurrencySymbol(code) {
     var map = {
       USD: '$', EUR: '€', GBP: '£', JPY: '¥', INR: '₹',
@@ -476,7 +488,7 @@ const SCRIPT_BODY = String.raw`
         background: highlightColor, color: '#fff', width: '22px', height: '22px',
         borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      }) + '">✓</div>';
+      }) + '">' + ICON_CHECK + '</div>';
     }
 
     if (hasVariants && variantsDisplay === 'popup' && state.popupOpenProductId === product.id) {
@@ -486,7 +498,7 @@ const SCRIPT_BODY = String.raw`
       }) + '">';
       html += '<div style="' + styleStr({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }) + '">';
       html += '<span style="' + styleStr({ fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', color: '#666' }) + '">Pick Options</span>';
-      html += '<button type="button" data-combo-action="popup-close" style="' + styleStr({ border: 'none', background: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }) + '">&times;</button>';
+      html += '<button type="button" data-combo-action="popup-close" style="' + styleStr({ border: 'none', background: 'none', cursor: 'pointer', fontSize: '18px', lineHeight: '1' }) + '">' + ICON_CLOSE + '</button>';
       html += '</div>';
       html += '<div style="' + styleStr({ flex: '1', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }) + '">';
       for (i = 0; i < variants.length; i++) {
@@ -556,12 +568,12 @@ const SCRIPT_BODY = String.raw`
         position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', width: '26px', height: '26px',
         borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }) + '">‹</button>';
+      }) + '">' + ICON_CHEVRON_LEFT + '</button>';
       html += '<button type="button" data-combo-action="img-next" data-product-id="' + esc(product.id) + '" style="' + styleStr({
         position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', width: '26px', height: '26px',
         borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }) + '">›</button>';
+      }) + '">' + ICON_CHEVRON_RIGHT + '</button>';
       html += '<div style="' + styleStr({ position: 'absolute', bottom: '6px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '4px' }) + '">';
       for (i = 0; i < images.length; i++) {
         html += '<span data-combo-action="img-dot" data-product-id="' + esc(product.id) + '" data-idx="' + i + '" style="' + styleStr({
@@ -773,7 +785,7 @@ const SCRIPT_BODY = String.raw`
 
       if (!stepColl) {
         html += '<div style="padding:32px 16px;text-align:center;background:#f9fafb;border-radius:8px;border:2px dashed #e1e3e5;color:#8c9196;font-size:13px;">';
-        html += '<div style="font-size:24px;margin-bottom:8px;">📦</div><div style="font-weight:600;margin-bottom:4px;">No collection selected</div><div>Choose a collection for this step.</div></div>';
+        html += '<div style="font-weight:600;margin-bottom:4px;">No collection selected</div><div>Choose a collection for this step.</div></div>';
       } else if (stepProducts.length === 0) {
         html += '<div style="padding:32px 16px;text-align:center;background:#f9fafb;border-radius:8px;border:2px dashed #e1e3e5;color:#8c9196;font-size:13px;">';
         html += '<div style="font-weight:600;margin-bottom:4px;">No products found</div><div>The selected collection has no products.</div></div>';
@@ -978,7 +990,7 @@ const SCRIPT_BODY = String.raw`
       background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c',
       fontSize: '13px', fontWeight: '600', padding: '12px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
       display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '90vw',
-    }) + '"><span>⚠</span><span>' + esc(state.toast) + '</span></div>';
+    }) + '"><span style="display:flex;">' + ICON_WARNING + '</span><span>' + esc(state.toast) + '</span></div>';
   }
 
   function renderLightbox(state) {
@@ -993,10 +1005,10 @@ const SCRIPT_BODY = String.raw`
 
     var html = '<div data-combo-action="lightbox-close" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;cursor:pointer;">';
     if (images.length > 1) {
-      html += '<button data-combo-action="lightbox-prev" style="position:absolute;left:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>';
-      html += '<button data-combo-action="lightbox-next" style="position:absolute;right:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>';
+      html += '<button data-combo-action="lightbox-prev" style="position:absolute;left:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">' + ICON_CHEVRON_LEFT + '</button>';
+      html += '<button data-combo-action="lightbox-next" style="position:absolute;right:20px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.15);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">' + ICON_CHEVRON_RIGHT + '</button>';
     }
-    html += '<button data-combo-action="lightbox-close" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.15);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>';
+    html += '<button data-combo-action="lightbox-close" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.15);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">' + ICON_CLOSE + '</button>';
     html += '<img src="' + esc(img.url) + '" alt="' + esc(img.altText || '') + '" style="max-width:85vw;max-height:75vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.5);" />';
     html += '</div>';
     return html;

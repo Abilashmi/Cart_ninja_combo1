@@ -3,6 +3,18 @@ import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button } from '
 import { MagicIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
 
+// 1em/currentColor so it inherits each button's own font-size/color inline
+// styles below with no extra props needed — used in place of a plain "✕"
+// character glyph.
+function CloseGlyph() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ display: 'inline-block', verticalAlign: '-0.125em' }}>
+      <line x1="5" y1="5" x2="19" y2="19" />
+      <line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  );
+}
+
 function GeneralSectionComponent({
   config,
   collections,
@@ -58,7 +70,7 @@ function GeneralSectionComponent({
                       onClick={() => removeStep(step)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d72c0d', fontSize: 13, fontWeight: 600, padding: '2px 6px' }}
                     >
-                      ✕ Remove
+                      <CloseGlyph /> Remove
                     </button>
                   )}
                 </div>
@@ -210,7 +222,7 @@ function GeneralSectionComponent({
                       onClick={() => removeTab(i)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d72c0d', fontSize: 13, fontWeight: 600, padding: '8px 4px', marginBottom: 4 }}
                     >
-                      ✕
+                      <CloseGlyph />
                     </button>
                   )}
                 </div>

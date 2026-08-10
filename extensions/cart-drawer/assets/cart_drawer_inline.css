@@ -62,8 +62,10 @@
 #cc-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
+  /* No dimming/blur — the page behind the drawer stays fully visible.
+     Element is kept (not removed) since it's still the click-outside-to-
+     close target; transparent backgrounds still receive click events. */
+  background: transparent;
 }
 
 #cc-drawer {

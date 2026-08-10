@@ -208,7 +208,7 @@ export const CdoPreviewBar = ({
 
                 const motivationText = isUnlocked
                   ? config.preview_motivation_unlocked_text ||
-                    'Discount Unlocked! 🎉'
+                    'Discount Unlocked!'
                   : (
                       config.preview_motivation_text ||
                       'Add {{remaining}} more for discount!'

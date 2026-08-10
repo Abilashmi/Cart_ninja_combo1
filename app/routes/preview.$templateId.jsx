@@ -4,6 +4,48 @@ import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
 import { CdoPreviewBar } from '../components/CdoPreviewBar';
 
+// Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
+// ⚠) — 1em/currentColor so each inherits the calling element's own
+// font-size/color inline styles with no other props needed.
+function IconCheck() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="4 12 10 18 20 6" />
+    </svg>
+  );
+}
+function IconClose() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ display: 'block' }}>
+      <line x1="5" y1="5" x2="19" y2="19" />
+      <line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  );
+}
+function IconChevronLeft() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="15 5 8 12 15 19" />
+    </svg>
+  );
+}
+function IconChevronRight() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <polyline points="9 5 16 12 9 19" />
+    </svg>
+  );
+}
+function IconWarning() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <path d="M12 3 L22 20 L2 20 Z" />
+      <line x1="12" y1="10" x2="12" y2="15" />
+      <circle cx="12" cy="17.5" r="0.75" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export const loader = async ({ params, request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get('shop');
@@ -162,14 +204,14 @@ function Lightbox({ images, onClose, onPrev, onNext, goTo }) {
             width: '48px', height: '48px', borderRadius: '50%',
             fontSize: '24px', cursor: 'pointer', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
-          }}>‹</button>
+          }}><IconChevronLeft /></button>
           <button onClick={(e) => { e.stopPropagation(); next(); }} style={{
             position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)',
             background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
             width: '48px', height: '48px', borderRadius: '50%',
             fontSize: '24px', cursor: 'pointer', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
-          }}>›</button>
+          }}><IconChevronRight /></button>
         </>
       )}
       <button onClick={onClose} style={{
@@ -178,7 +220,7 @@ function Lightbox({ images, onClose, onPrev, onNext, goTo }) {
         width: '40px', height: '40px', borderRadius: '50%',
         fontSize: '20px', cursor: 'pointer', display: 'flex',
         alignItems: 'center', justifyContent: 'center',
-      }}>✕</button>
+      }}><IconClose /></button>
 
       <img
         src={img.url} alt={img.altText || ''}
@@ -394,7 +436,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           width: 22, height: 22, borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 12, boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-        }}>✓</div>
+        }}><IconCheck /></div>
       )}
 
       {showVariantPopup && (
@@ -409,7 +451,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', color: '#666' }}>Pick Options</span>
             <button type="button" onClick={() => setShowVariantPopup(false)}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>&times;</button>
+              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}><IconClose /></button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {variants.map((v) => (
@@ -505,7 +547,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
                 width: '26px', height: '26px', borderRadius: '50%', border: 'none',
                 background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>‹</button>
+              }}><IconChevronLeft /></button>
             <button type="button"
               onClick={(e) => { e.stopPropagation(); setImgIndex((i) => (i >= images.length - 1 ? 0 : i + 1)); }}
               style={{
@@ -513,7 +555,7 @@ function ProductCard({ product, config, selectedMap, onAdd, onQtyChange, onRemov
                 width: '26px', height: '26px', borderRadius: '50%', border: 'none',
                 background: 'rgba(255,255,255,0.85)', cursor: 'pointer', fontSize: '14px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>›</button>
+              }}><IconChevronRight /></button>
             <div style={{
               position: 'absolute', bottom: '6px', left: '50%', transform: 'translateX(-50%)',
               display: 'flex', gap: '4px',
@@ -625,14 +667,14 @@ function GenericProductGrid({ products, config, isMobile, selectedMap, onAdd, on
                 width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #ddd',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                 zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-              }}>←</button>
+              }}><IconChevronLeft /></button>
             <button type="button" onClick={() => sliderRef.current?.scrollBy({ left: 300, behavior: 'smooth' })}
               style={{
                 position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                 width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #ddd',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                 zIndex: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-              }}>→</button>
+              }}><IconChevronRight /></button>
           </>
         )}
         <div ref={sliderRef} style={{
@@ -1335,7 +1377,6 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
                     background: '#f9fafb', borderRadius: '8px',
                     border: '2px dashed #e1e3e5', color: '#8c9196', fontSize: '13px',
                   }}>
-                    <div style={{ fontSize: '24px', marginBottom: '8px' }}>📦</div>
                     <div style={{ fontWeight: '600', marginBottom: '4px' }}>No collection selected</div>
                     <div>Choose a collection for this step.</div>
                   </div>
@@ -1658,7 +1699,7 @@ export default function ComboPreviewPage() {
             maxWidth: '90vw', animation: 'combo-toast-in 0.25s ease-out',
           }}
         >
-          <span>⚠</span>
+          <span style={{ display: 'flex' }}><IconWarning /></span>
           <span>{toast}</span>
         </div>
       )}
