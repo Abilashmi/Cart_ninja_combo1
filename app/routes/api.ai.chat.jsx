@@ -150,14 +150,14 @@ export async function action({ request }) {
       const { content, toolCalls, errorStatus, errorMessage } = await agentTurn(messages, TOOL_REGISTRY, { maxTokens: MAX_TOKENS });
 
       if (errorStatus) {
-        // Surface the provider's actual reason (e.g. "You exceeded your
-        // current quota" for a billing issue, vs a generic rate limit) —
-        // a bare HTTP status number isn't actionable for whoever reads this.
-        const reason = errorMessage ? `: ${errorMessage}` : '';
-        const hint = errorStatus === 429
-          ? ' This is either a rate limit (too many requests too fast) or an OpenAI billing/quota issue — check platform.openai.com/usage if it keeps happening.'
-          : ' This is usually temporary, try again in a minute.';
-        return Response.json({ success: true, message: `Brix's AI service returned an error (HTTP ${errorStatus})${reason}.${hint}`, credits });
+        // The raw reason/hint (e.g. HTTP status, "OpenAI billing/quota")
+        // describes THIS APP'S OWN backend provider key — the merchant has
+        // no access to platform.openai.com for our key and can't act on
+        // that detail at all, so surfacing it to them is actively
+        // misleading, not just unfriendly. Logged server-side for our own
+        // debugging; the merchant gets a generic, non-alarming message.
+        console.error('[api.ai.chat] agentTurn provider error', { errorStatus, errorMessage });
+        return Response.json({ success: true, message: 'Sorry, something went wrong. Please try again in a moment.', credits });
       }
 
       if (!toolCalls || toolCalls.length === 0) {

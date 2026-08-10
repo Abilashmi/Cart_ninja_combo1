@@ -1096,6 +1096,13 @@
     'drawer--visible',                     // Pipeline / Broadcast
     'js-drawer-open',                      // Archetype themes (applied to body)
   ];
+  // Distinct from CC_OPEN_CLASSES above — these are STATE classes themes
+  // apply to <html>/<body> (not to the drawer element itself) that their
+  // own stylesheet keys push-layout rules off, independent of whether the
+  // drawer panel is visible. Shared here (not just inside
+  // ccNeutralizeNativeDrawer) so the diagnostic instrumentation below can
+  // recognize and log the same set.
+  const CC_DRAWER_STATE_CLASSES = ['cart-drawer-open', 'drawer-open', 'js-drawer-open', 'cart-open', 'is-open', 'open-drawer'];
   function ccLooksLikeNativeDrawer(el) {
     if (!el || !el.tagName) return false;
     // Explicit exclusion, checked first: never treat anything inside Cart
@@ -1362,11 +1369,32 @@
       // showing up as an unexplained blank gutter on the page edge. Our
       // own drawer never relies on this (confirmed: nothing in this file
       // sets body/html overflow), so it's safe to clear.
+      //
+      // Beyond simple scrollbar compensation, some themes go further and
+      // add a dedicated STATE CLASS to <html>/<body> (independent of
+      // whichever drawer element itself we matched above) that their own
+      // stylesheet keys a "push"-style layout off — e.g.
+      // `body.drawer-open .page-width { width: calc(100% - 420px) }`.
+      // Neither hiding the drawer panel nor clearing overflow/padding
+      // touches that class at all, so the page stays visually compressed
+      // even with the drawer itself fully suppressed. Removing the class
+      // is the correct fix here (not guessing at the theme's specific
+      // width/transform/margin CSS) — it undoes whatever the theme's own
+      // stylesheet is keyed to, without us needing to know those rules.
+      const prevHtmlClasses = CC_DRAWER_STATE_CLASSES.filter(function (c) { return document.documentElement.classList.contains(c); });
+      const prevBodyClasses = CC_DRAWER_STATE_CLASSES.filter(function (c) { return document.body.classList.contains(c); });
+
       const prevBodyOverflow = ccSnapshotStyle(document.body, 'overflow');
       const prevBodyPaddingRight = ccSnapshotStyle(document.body, 'paddingRight');
       const prevBodyMarginRight = ccSnapshotStyle(document.body, 'marginRight');
+      const prevBodyTransform = ccSnapshotStyle(document.body, 'transform');
+      const prevBodyWidth = ccSnapshotStyle(document.body, 'width');
+      const prevBodyMaxWidth = ccSnapshotStyle(document.body, 'maxWidth');
       const prevHtmlOverflow = ccSnapshotStyle(document.documentElement, 'overflow');
       const prevHtmlPaddingRight = ccSnapshotStyle(document.documentElement, 'paddingRight');
+      const prevHtmlTransform = ccSnapshotStyle(document.documentElement, 'transform');
+      const prevHtmlWidth = ccSnapshotStyle(document.documentElement, 'width');
+      const prevHtmlMaxWidth = ccSnapshotStyle(document.documentElement, 'maxWidth');
 
       targets.forEach(function (t) { t._ccNeutralized = true; });
       const restoreFns = targets.map(ccHideSingleElement);
@@ -1374,13 +1402,53 @@
       ccMilestone('Native drawer suppressed', targets.map(function (t) {
         return t.tagName + (t.id ? '#' + t.id : '') + (t.className && typeof t.className === 'string' ? '.' + t.className.trim().split(/\s+/).join('.') : '');
       }).join(' <- '));
+      if (prevHtmlClasses.length) document.documentElement.classList.remove.apply(document.documentElement.classList, prevHtmlClasses);
+      if (prevBodyClasses.length) document.body.classList.remove.apply(document.body.classList, prevBodyClasses);
       document.body.style.removeProperty('overflow');
       document.body.style.removeProperty('padding-right');
       document.body.style.removeProperty('margin-right');
+      document.body.style.removeProperty('transform');
+      document.body.style.removeProperty('width');
+      document.body.style.removeProperty('max-width');
       document.documentElement.style.removeProperty('overflow');
       document.documentElement.style.removeProperty('padding-right');
-      ccMilestone('Body state changed (cleared theme scroll-lock overflow/padding)');
-      ccDebug('native drawer neutralize: hid element(s) + cleared body/html scroll-lock', targets);
+      document.documentElement.style.removeProperty('transform');
+      document.documentElement.style.removeProperty('width');
+      document.documentElement.style.removeProperty('max-width');
+      ccMilestone('Body state changed (cleared theme scroll-lock overflow/padding/transform/width + drawer-state classes)');
+      ccDebug('native drawer neutralize: hid element(s) + cleared body/html scroll-lock', targets, { removedHtmlClasses: prevHtmlClasses, removedBodyClasses: prevBodyClasses });
+
+      // Diagnostic-only, not a fix by itself: shortly after neutralizing,
+      // check whether the page is actually back to full width. If it
+      // isn't, walk document.body's direct children and log each one's
+      // rendered width/transform/margin — pinpointing the exact wrapper
+      // still compressing the page instead of guessing at theme-specific
+      // selectors blind.
+      setTimeout(function () {
+        try {
+          const viewportWidth = document.documentElement.clientWidth;
+          const bodyWidth = document.body.getBoundingClientRect().width;
+          if (bodyWidth >= viewportWidth - 4) {
+            ccMilestone('Storefront layout unchanged');
+            ccMilestone('No push-drawer layout detected');
+          } else {
+            ccMilestone('STOREFRONT WIDTH REDUCED — expected ~' + viewportWidth + 'px, body renders at ' + Math.round(bodyWidth) + 'px. Scanning body children for the culprit:');
+            Array.prototype.forEach.call(document.body.children, function (child) {
+              if (child.id === 'cc-root' || (child.closest && child.closest('[data-cart-ninja-drawer]'))) return;
+              const rect = child.getBoundingClientRect();
+              const cs = window.getComputedStyle(child);
+              if (rect.width < viewportWidth - 4) {
+                ccMilestone('  suspect:', child.tagName + (child.id ? '#' + child.id : '') + (child.className && typeof child.className === 'string' ? '.' + child.className.trim().split(/\s+/).join('.') : ''), {
+                  renderedWidth: rect.width, computedWidth: cs.width, computedMaxWidth: cs.maxWidth,
+                  computedTransform: cs.transform, computedMarginRight: cs.marginRight,
+                });
+              }
+            });
+          }
+        } catch (diagErr) {
+          ccDebug('native drawer neutralize: width-verification diagnostic failed', diagErr);
+        }
+      }, 400);
 
       setTimeout(function () {
         try {
@@ -1388,15 +1456,23 @@
           const ourDrawerOpen = ourOverlay && ourOverlay.classList.contains('active');
           if (!ourDrawerOpen) {
             // Our drawer never actually opened — restore native access
-            // (and whatever scroll-lock it expects) rather than leave the
-            // customer stranded.
+            // (and whatever scroll-lock/state it expects) rather than
+            // leave the customer stranded.
             ccDebug('native drawer neutralize: our drawer did not open in time, restoring native element(s)', targets);
             restoreFns.forEach(function (restore) { restore(); });
+            if (prevHtmlClasses.length) document.documentElement.classList.add.apply(document.documentElement.classList, prevHtmlClasses);
+            if (prevBodyClasses.length) document.body.classList.add.apply(document.body.classList, prevBodyClasses);
             ccRestoreStyle(document.body, 'overflow', prevBodyOverflow);
             ccRestoreStyle(document.body, 'paddingRight', prevBodyPaddingRight);
             ccRestoreStyle(document.body, 'marginRight', prevBodyMarginRight);
+            ccRestoreStyle(document.body, 'transform', prevBodyTransform);
+            ccRestoreStyle(document.body, 'width', prevBodyWidth);
+            ccRestoreStyle(document.body, 'maxWidth', prevBodyMaxWidth);
             ccRestoreStyle(document.documentElement, 'overflow', prevHtmlOverflow);
             ccRestoreStyle(document.documentElement, 'paddingRight', prevHtmlPaddingRight);
+            ccRestoreStyle(document.documentElement, 'transform', prevHtmlTransform);
+            ccRestoreStyle(document.documentElement, 'width', prevHtmlWidth);
+            ccRestoreStyle(document.documentElement, 'maxWidth', prevHtmlMaxWidth);
             if (wasOpenDialog) {
               try { dialogAncestor.showModal(); } catch (reopenErr) { ccDebug('native drawer neutralize: dialog.showModal() restore failed', reopenErr); }
             }
@@ -3179,5 +3255,89 @@
         }, 1200);
       };
     });
+  }
+
+  // ---- DIAGNOSTIC INSTRUMENTATION (debug-flag gated, log-only) ----
+  // Purely observational — never blocks, changes, or delays anything.
+  // Everything above this point (the customElement patch, the <dialog>
+  // patch, the body MutationObserver + ccNeutralizeNativeDrawer) is what
+  // actually intercepts/suppresses the native drawer. This section exists
+  // only so that when CC_DEBUG is on, we can see the ACTUAL calling code
+  // path (via a captured stack trace) for whatever ends up flipping a
+  // drawer-related attribute or class — the single most direct way to
+  // confirm which mechanism opened a still-visible native drawer, instead
+  // of continuing to guess at theme internals blind.
+  if (CC_DEBUG) {
+    const ccIsDrawerRelevant = function (el, name, value) {
+      if (!el || el.nodeType !== 1) return false;
+      if (typeof el.closest === 'function' && el.closest('[data-cart-ninja-drawer]')) return false; // never log our own drawer
+      if (ccLooksLikeNativeDrawer(el)) return true;
+      if (name === 'open' && el.tagName && el.tagName.toLowerCase() === 'dialog') return true;
+      if (name === 'aria-expanded' || name === 'aria-hidden') return true;
+      if (typeof value === 'string' && (CC_OPEN_CLASSES.indexOf(value) !== -1 || CC_DRAWER_STATE_CLASSES.indexOf(value) !== -1)) return true;
+      return false;
+    };
+    const ccElementLabel = function (el) {
+      return el.tagName + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : '');
+    };
+    const ccCaptureStack = function () {
+      try { return new Error().stack; } catch (e) { return '(stack unavailable)'; }
+    };
+
+    const _ccOrigSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (name, value) {
+      if (ccIsDrawerRelevant(this, name, value)) {
+        ccDebug('[CART-NINJA DEBUG] Native drawer mutation via setAttribute', {
+          element: ccElementLabel(this), attribute: name, value: value,
+          parent: this.parentElement ? ccElementLabel(this.parentElement) : null,
+          stack: ccCaptureStack(),
+        });
+        if (name === 'open') ccDebug('[CART-NINJA DEBUG] Native drawer open attribute changed', ccElementLabel(this));
+        if (name === 'aria-expanded' || name === 'aria-hidden') ccDebug('[CART-NINJA DEBUG] Native drawer aria state changed', ccElementLabel(this), name, value);
+      }
+      return _ccOrigSetAttribute.call(this, name, value);
+    };
+
+    const _ccOrigClassListAdd = DOMTokenList.prototype.add;
+    DOMTokenList.prototype.add = function () {
+      const el = (this && 'ownerElement' in this) ? this.ownerElement : null;
+      const args = Array.prototype.slice.call(arguments);
+      if (el && ccIsDrawerRelevant(el, 'class', args.join(' '))) {
+        ccDebug('[CART-NINJA DEBUG] Native drawer class changed (classList.add)', {
+          element: ccElementLabel(el), addedClasses: args,
+          parent: el.parentElement ? ccElementLabel(el.parentElement) : null,
+          stack: ccCaptureStack(),
+        });
+      }
+      return _ccOrigClassListAdd.apply(this, arguments);
+    };
+
+    const _ccOrigClassListToggle = DOMTokenList.prototype.toggle;
+    DOMTokenList.prototype.toggle = function (token) {
+      const el = (this && 'ownerElement' in this) ? this.ownerElement : null;
+      if (el && ccIsDrawerRelevant(el, 'class', token)) {
+        ccDebug('[CART-NINJA DEBUG] Native drawer class changed (classList.toggle)', {
+          element: ccElementLabel(el), toggledClass: token,
+          parent: el.parentElement ? ccElementLabel(el.parentElement) : null,
+          stack: ccCaptureStack(),
+        });
+      }
+      return _ccOrigClassListToggle.apply(this, arguments);
+    };
+
+    // Extra fallback observer purely for logging every attribute mutation
+    // on any drawer-relevant element, independent of whether it went
+    // through setAttribute/classList (some frameworks mutate via the IDL
+    // property, e.g. el.className = '...' or el.open = true, which
+    // bypasses both patches above but still shows up here).
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        if (!ccIsDrawerRelevant(m.target, m.attributeName, m.target.getAttribute ? m.target.getAttribute(m.attributeName) : null)) return;
+        ccDebug('[CART-NINJA DEBUG] Native drawer mutation (observed)', {
+          element: ccElementLabel(m.target), attribute: m.attributeName,
+          newValue: m.target.getAttribute ? m.target.getAttribute(m.attributeName) : null,
+        });
+      });
+    }).observe(document.documentElement, { subtree: true, attributes: true });
   }
 })();
