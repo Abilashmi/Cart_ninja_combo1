@@ -1929,7 +1929,9 @@
 
     const isMobile = window.innerWidth <= 480;
     const isSwipe = cbStyle.mobileButtonType === 'swipe' && isMobile;
-    const isAnimated = cbStyle.mobileButtonType === 'animated' && isMobile;
+    // Unlike swipe (a mobile-only drag gesture), the animated tap effect
+    // also applies on desktop — the button is still a normal tap/click there.
+    const isAnimated = cbStyle.mobileButtonType === 'animated';
 
     if (isSwipe) {
       const thumbRadius = Math.max(radius - 2, 4);
@@ -2019,7 +2021,7 @@
     thumb.addEventListener('pointercancel', function (e) { if (e.pointerType !== 'touch') onEnd(); });
   }
 
-  // Tap-triggered press/ripple -> "Processing..." -> "✓ <label>" -> navigate
+  // Tap-triggered press/ripple -> "Processing..." -> "<label>" -> navigate
   // sequence for the animated checkout button — same re-bind-every-render
   // rationale as initSwipeCheckout above (the button is destroyed/recreated
   // via innerHTML each render, so a fresh bind is correct and old listeners
@@ -2081,7 +2083,7 @@
 
         setTimeout(function () {
           btn.classList.remove('cc-anim-pressed');
-          if (label) label.textContent = '✓ ' + defaultLabel;
+          if (label) label.textContent = defaultLabel;
           if (spinner) spinner.style.display = 'none';
           setTimeout(go, successMs);
         }, pressMs);

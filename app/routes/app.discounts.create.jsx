@@ -74,6 +74,12 @@ export const action = async ({ request }) => {
     const title    = formData.get("title");
     const code     = formData.get("code");
     const type     = formData.get("type");
+    // Automatic discounts apply themselves at checkout with nothing for the
+    // customer to enter — no code/customerSelection/appliesOncePerCustomer/
+    // usageLimit fields exist on their Shopify input types. Bxgy ignores
+    // this (stays code-only, enforced again below as defense in depth
+    // alongside the UI's own reset-to-code-on-Bxgy behavior).
+    const method   = formData.get("method") === "automatic" && type !== "bxgy" ? "automatic" : "code";
     const valueType = formData.get("valueType");
     const value    = parseFloat(formData.get("value") || "0");
     const startDate = formData.get("startDate");
@@ -130,47 +136,82 @@ export const action = async ({ request }) => {
        AMOUNT OFF PRODUCTS / ORDER
     ════════════════════════════════════════════════════════════ */
     if (type === "amount_off_products" || type === "amount_off_order") {
-        const discountInput = {
-            title: title || code,
-            code,
-            startsAt,
-            ...(endsAt && { endsAt }),
-            customerSelection: { all: true },
-            customerGets: {
-                value: {
-                    [valueType === "percentage" ? "percentage" : "discountAmount"]:
-                        valueType === "percentage"
-                            ? value / 100
-                            : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder },
-                },
-                items: buildCustomerGetsItems(),
+        const customerGets = {
+            value: {
+                [valueType === "percentage" ? "percentage" : "discountAmount"]:
+                    valueType === "percentage"
+                        ? value / 100
+                        : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder },
             },
-            appliesOncePerCustomer: limitOnePerCustomer,
-            ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
-            combinesWith,
-            ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+            items: buildCustomerGetsItems(),
         };
 
-        if (isUpdate) {
-            mutation = `#graphql
-                mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
-                    discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
-                        codeDiscountNode { id }
-                        userErrors { field message }
+        if (method === "automatic") {
+            const automaticInput = {
+                title: title || "Automatic Discount",
+                startsAt,
+                ...(endsAt && { endsAt }),
+                customerGets,
+                combinesWith,
+                ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+            };
+
+            if (isUpdate) {
+                mutation = `#graphql
+                    mutation discountAutomaticBasicUpdate($id: ID!, $automaticBasicDiscount: DiscountAutomaticBasicInput!) {
+                        discountAutomaticBasicUpdate(id: $id, automaticBasicDiscount: $automaticBasicDiscount) {
+                            automaticDiscountNode { id }
+                            userErrors { field message }
+                        }
                     }
-                }
-            `;
-            variables = { id: shopifyId, basicCodeDiscount: discountInput };
+                `;
+                variables = { id: shopifyId, automaticBasicDiscount: automaticInput };
+            } else {
+                mutation = `#graphql
+                    mutation discountAutomaticBasicCreate($automaticBasicDiscount: DiscountAutomaticBasicInput!) {
+                        discountAutomaticBasicCreate(automaticBasicDiscount: $automaticBasicDiscount) {
+                            automaticDiscountNode { id }
+                            userErrors { field message }
+                        }
+                    }
+                `;
+                variables = { automaticBasicDiscount: automaticInput };
+            }
         } else {
-            mutation = `#graphql
-                mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-                    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-                        codeDiscountNode { id }
-                        userErrors { field message }
+            const discountInput = {
+                title: title || code,
+                code,
+                startsAt,
+                ...(endsAt && { endsAt }),
+                customerSelection: { all: true },
+                customerGets,
+                appliesOncePerCustomer: limitOnePerCustomer,
+                ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
+                combinesWith,
+                ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+            };
+
+            if (isUpdate) {
+                mutation = `#graphql
+                    mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
+                        discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
+                            codeDiscountNode { id }
+                            userErrors { field message }
+                        }
                     }
-                }
-            `;
-            variables = { basicCodeDiscount: discountInput };
+                `;
+                variables = { id: shopifyId, basicCodeDiscount: discountInput };
+            } else {
+                mutation = `#graphql
+                    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+                        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+                            codeDiscountNode { id }
+                            userErrors { field message }
+                        }
+                    }
+                `;
+                variables = { basicCodeDiscount: discountInput };
+            }
         }
     }
 
@@ -180,41 +221,75 @@ export const action = async ({ request }) => {
     else if (type === "free_shipping") {
         const countriesType      = formData.get("countriesType");
         const selectedCountries  = JSON.parse(formData.get("selectedCountries") || "[]");
+        const destinationSelection =
+            countriesType === "all" ? { all: true } : { countries: { add: selectedCountries } };
 
-        const shippingInput = {
-            title: title || code,
-            code,
-            startsAt,
-            ...(endsAt && { endsAt }),
-            customerSelection: { all: true },
-            destinationSelection:
-                countriesType === "all" ? { all: true } : { countries: { add: selectedCountries } },
-            appliesOncePerCustomer: limitOnePerCustomer,
-            ...(limitTotalUses && { usageLimit: totalUsesLimit }),
-            combinesWith,
-            ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
-        };
+        if (method === "automatic") {
+            const automaticInput = {
+                title: title || "Automatic Free Shipping",
+                startsAt,
+                ...(endsAt && { endsAt }),
+                destinationSelection,
+                combinesWith,
+                ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+            };
 
-        if (isUpdate) {
-            mutation = `#graphql
-                mutation discountCodeFreeShippingUpdate($id: ID!, $freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
-                    discountCodeFreeShippingUpdate(id: $id, freeShippingCodeDiscount: $freeShippingCodeDiscount) {
-                        codeDiscountNode { id }
-                        userErrors { field message }
+            if (isUpdate) {
+                mutation = `#graphql
+                    mutation discountAutomaticFreeShippingUpdate($id: ID!, $freeShippingAutomaticDiscount: DiscountAutomaticFreeShippingInput!) {
+                        discountAutomaticFreeShippingUpdate(id: $id, freeShippingAutomaticDiscount: $freeShippingAutomaticDiscount) {
+                            automaticDiscountNode { id }
+                            userErrors { field message }
+                        }
                     }
-                }
-            `;
-            variables = { id: shopifyId, freeShippingCodeDiscount: shippingInput };
+                `;
+                variables = { id: shopifyId, freeShippingAutomaticDiscount: automaticInput };
+            } else {
+                mutation = `#graphql
+                    mutation discountAutomaticFreeShippingCreate($freeShippingAutomaticDiscount: DiscountAutomaticFreeShippingInput!) {
+                        discountAutomaticFreeShippingCreate(freeShippingAutomaticDiscount: $freeShippingAutomaticDiscount) {
+                            automaticDiscountNode { id }
+                            userErrors { field message }
+                        }
+                    }
+                `;
+                variables = { freeShippingAutomaticDiscount: automaticInput };
+            }
         } else {
-            mutation = `#graphql
-                mutation discountCodeFreeShippingCreate($freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
-                    discountCodeFreeShippingCreate(freeShippingCodeDiscount: $freeShippingCodeDiscount) {
-                        codeDiscountNode { id }
-                        userErrors { field message }
+            const shippingInput = {
+                title: title || code,
+                code,
+                startsAt,
+                ...(endsAt && { endsAt }),
+                customerSelection: { all: true },
+                destinationSelection,
+                appliesOncePerCustomer: limitOnePerCustomer,
+                ...(limitTotalUses && { usageLimit: totalUsesLimit }),
+                combinesWith,
+                ...(buildMinimumRequirement() && { minimumRequirement: buildMinimumRequirement() }),
+            };
+
+            if (isUpdate) {
+                mutation = `#graphql
+                    mutation discountCodeFreeShippingUpdate($id: ID!, $freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
+                        discountCodeFreeShippingUpdate(id: $id, freeShippingCodeDiscount: $freeShippingCodeDiscount) {
+                            codeDiscountNode { id }
+                            userErrors { field message }
+                        }
                     }
-                }
-            `;
-            variables = { freeShippingCodeDiscount: shippingInput };
+                `;
+                variables = { id: shopifyId, freeShippingCodeDiscount: shippingInput };
+            } else {
+                mutation = `#graphql
+                    mutation discountCodeFreeShippingCreate($freeShippingCodeDiscount: DiscountCodeFreeShippingInput!) {
+                        discountCodeFreeShippingCreate(freeShippingCodeDiscount: $freeShippingCodeDiscount) {
+                            codeDiscountNode { id }
+                            userErrors { field message }
+                        }
+                    }
+                `;
+                variables = { freeShippingCodeDiscount: shippingInput };
+            }
         }
     }
 
@@ -309,14 +384,15 @@ export const action = async ({ request }) => {
         if (!result)                            return { errors: [{ message: "Mutation result not found" }] };
         if (result.userErrors?.length > 0)      return { errors: result.userErrors };
 
-        const discountId = result.codeDiscountNode?.id || shopifyId;
+        // Automatic mutations return automaticDiscountNode, not codeDiscountNode.
+        const discountId = result.codeDiscountNode?.id || result.automaticDiscountNode?.id || shopifyId;
 
         /* ── Persist locally ── */
         if (!isUpdate) {
             try {
                 const samplePayload = {
                     shopDomain: session.shop,
-                    title, code, type, valueType, value, startDate, endDate,
+                    title, code, type, method, valueType, value, startDate, endDate,
                     selectionType, selectedResources,
                     minimumRequirementValue, minimumPurchaseAmount, minimumQuantity,
                     limitTotalUses, totalUsesLimit, limitOnePerCustomer,
@@ -441,6 +517,39 @@ export const loader = async ({ request }) => {
                                     ... on DiscountMinimumQuantity { greaterThanOrEqualToQuantity }
                                 }
                             }
+                            ... on DiscountAutomaticBasic {
+                                title
+                                startsAt endsAt
+                                combinesWith { productDiscounts orderDiscounts shippingDiscounts }
+                                customerGets {
+                                    value {
+                                        ... on DiscountPercentage { percentage }
+                                        ... on DiscountAmount { amount { amount } appliesOnEachItem }
+                                    }
+                                    items {
+                                        ... on AllDiscountItems { allItems }
+                                        ... on DiscountProducts { products(first: 20) { edges { node { id title } } } }
+                                        ... on DiscountCollections { collections(first: 20) { edges { node { id title } } } }
+                                    }
+                                }
+                                minimumRequirement {
+                                    ... on DiscountMinimumSubtotal { greaterThanOrEqualToSubtotal { amount } }
+                                    ... on DiscountMinimumQuantity { greaterThanOrEqualToQuantity }
+                                }
+                            }
+                            ... on DiscountAutomaticFreeShipping {
+                                title
+                                startsAt endsAt
+                                combinesWith { productDiscounts orderDiscounts shippingDiscounts }
+                                destinationSelection {
+                                    ... on DiscountCountryAll { allCountries }
+                                    ... on DiscountCountries { countries { code } }
+                                }
+                                minimumRequirement {
+                                    ... on DiscountMinimumSubtotal { greaterThanOrEqualToSubtotal { amount } }
+                                    ... on DiscountMinimumQuantity { greaterThanOrEqualToQuantity }
+                                }
+                            }
                         }
                     }
                 }`,
@@ -490,10 +599,16 @@ function normalizeShopifyDiscount(sd, discountId) {
     let bxgyRepeatOncePerOrder = false;
     let countriesType = "all";
     let selectedCountries = [];
+    // Automatic discounts have no code/customerSelection — the value/items/
+    // minimumRequirement/destinationSelection shapes are otherwise identical
+    // to their Code counterparts, so the extraction below is shared; only
+    // `method` distinguishes which mutation an eventual save should use.
+    let method = "code";
 
     const mapProducts = (edges) => (edges || []).map(e => ({ id: e.node.id, title: e.node.title }));
 
-    if (typename === "DiscountCodeBasic") {
+    if (typename === "DiscountCodeBasic" || typename === "DiscountAutomaticBasic") {
+        method = typename === "DiscountAutomaticBasic" ? "automatic" : "code";
         const gv = sd.customerGets?.value;
         const gi = sd.customerGets?.items;
 
@@ -562,7 +677,8 @@ function normalizeShopifyDiscount(sd, discountId) {
         }
         bxgyRepeatOncePerOrder = !!(sd.usesPerOrderLimit && Number(sd.usesPerOrderLimit) <= 1);
 
-    } else if (typename === "DiscountCodeFreeShipping") {
+    } else if (typename === "DiscountCodeFreeShipping" || typename === "DiscountAutomaticFreeShipping") {
+        method = typename === "DiscountAutomaticFreeShipping" ? "automatic" : "code";
         type = "free_shipping";
 
         const dest = sd.destinationSelection;
@@ -588,6 +704,7 @@ function normalizeShopifyDiscount(sd, discountId) {
         title: sd.title || "",
         code,
         type,
+        method,
         valueType,
         value,
         selectionType,
@@ -678,6 +795,7 @@ export default function CreateDiscount() {
         return {
             ...c,
             type:                    c.type || c.discount_type || "amount_off_products",
+            method:                  c.method || "code",
             valueType:               c.valueType || c.value_type || "percentage",
             value:                   c.value ?? c.discount_value ?? "",
             selectionType:           c.selectionType || c.selection_type || "all",
@@ -715,6 +833,7 @@ export default function CreateDiscount() {
     const [title, setTitle] = useState(existingCoupon?.title || existingCoupon?.heading || "");
     const [code,  setCode]  = useState(existingCoupon?.code  || "");
     const [type,  setType]  = useState([existingCoupon?.type || "amount_off_products"]);
+    const [method, setMethod] = useState([existingCoupon?.method || "code"]);
     const [value, setValue] = useState(existingCoupon?.value !== undefined ? String(existingCoupon.value) : "");
     const [discountValueType, setDiscountValueType] = useState(existingCoupon?.valueType || "percentage");
 
@@ -866,12 +985,12 @@ export default function CreateDiscount() {
             }
         }
 
-        items.push(`Code: ${code || "Not set"}`);
+        items.push(method[0] === "automatic" ? "Method: Automatic (no code)" : `Code: ${code || "Not set"}`);
         items.push(`Starts ${formatDate(startDate)} at ${startTime}`);
         if (hasEndDate && endDate) items.push(`Ends ${formatDate(endDate)} at ${endTime}`);
 
         return items;
-    }, [type, value, discountValueType, appliesTo, selectedResources, code, startDate, startTime, endDate, endTime, hasEndDate, formatDate, bxgyBuysQuantity, bxgyGetsQuantity, bxgyGetsValueType, bxgyGetsValue, currencySymbol]);
+    }, [type, method, value, discountValueType, appliesTo, selectedResources, code, startDate, startTime, endDate, endTime, hasEndDate, formatDate, bxgyBuysQuantity, bxgyGetsQuantity, bxgyGetsValueType, bxgyGetsValue, currencySymbol]);
 
     /* ── Submit handler ── */
     const handleSave = () => {
@@ -885,6 +1004,7 @@ export default function CreateDiscount() {
         formData.append("title",     title || code);
         formData.append("code",      code);
         formData.append("type",      type[0]);
+        formData.append("method",    type[0] === "bxgy" ? "code" : method[0]);
         formData.append("startDate", combineDateAndTime(startDate, startTime));
         if (hasEndDate) formData.append("endDate", combineDateAndTime(endDate, endTime));
 
@@ -934,7 +1054,7 @@ export default function CreateDiscount() {
 
     /* ── Save button disabled logic ── */
     const isSaveDisabled =
-        !code ||
+        (method[0] === "code" && !code) ||
         (type[0] !== "bxgy" && type[0] !== "free_shipping" && !value) ||
         (type[0] === "amount_off_products" && appliesTo !== "all_products" && selectedResources.length === 0);
 
@@ -1000,6 +1120,9 @@ export default function CreateDiscount() {
                                                     onClick={() => {
                                                         setType([opt.t]);
                                                         if (opt.vt) setDiscountValueType(opt.vt);
+                                                        // Automatic method isn't supported for Buy X Get Y —
+                                                        // reset so a stale selection can't reach the server.
+                                                        if (opt.t === "bxgy") setMethod(["code"]);
                                                     }}
                                                     style={{
                                                         padding: '16px', borderRadius: '8px', cursor: 'pointer',
@@ -1026,31 +1149,50 @@ export default function CreateDiscount() {
 
                                     <Divider />
 
-                                    <InlineStack gap="200" blockAlign="end">
-                                        <div style={{ flex: 1 }}>
-                                            <TextField
-                                                label="Discount code"
-                                                value={code}
-                                                onChange={setCode}
-                                                autoComplete="off"
-                                                placeholder="e.g. SUMMER2024"
-                                                helpText="Customers will enter this code at checkout"
-                                            />
-                                        </div>
-                                        <Button
-                                            icon={RefreshIcon}
-                                            onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
-                                        >
-                                            Generate
-                                        </Button>
-                                    </InlineStack>
+                                    {type[0] !== "bxgy" && (
+                                        <BlockStack gap="200">
+                                            <Text as="p" variant="bodyMd" fontWeight="medium">Method</Text>
+                                            <ButtonGroup segmented>
+                                                <Button pressed={method[0] === "automatic"} onClick={() => setMethod(["automatic"])}>Automatic discount</Button>
+                                                <Button pressed={method[0] === "code"}      onClick={() => setMethod(["code"])}>Discount code</Button>
+                                            </ButtonGroup>
+                                            <Text as="p" variant="bodySm" tone="subdued">
+                                                {method[0] === "automatic"
+                                                    ? "Applies itself at checkout once eligible — nothing for the customer to enter."
+                                                    : "Customers enter a code at checkout to unlock this discount."}
+                                            </Text>
+                                        </BlockStack>
+                                    )}
+
+                                    {method[0] === "code" && (
+                                        <InlineStack gap="200" blockAlign="end">
+                                            <div style={{ flex: 1 }}>
+                                                <TextField
+                                                    label="Discount code"
+                                                    value={code}
+                                                    onChange={setCode}
+                                                    autoComplete="off"
+                                                    placeholder="e.g. SUMMER2024"
+                                                    helpText="Customers will enter this code at checkout"
+                                                />
+                                            </div>
+                                            <Button
+                                                icon={RefreshIcon}
+                                                onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
+                                            >
+                                                Generate
+                                            </Button>
+                                        </InlineStack>
+                                    )}
 
                                     <TextField
                                         label="Internal title (optional)"
                                         value={title}
                                         onChange={setTitle}
                                         autoComplete="off"
-                                        helpText="For internal tracking only. Shown in the Title column on the Coupons page. Customers see the code, not this title."
+                                        helpText={method[0] === "automatic"
+                                            ? "Shown in the Title column on the Coupons page and in Shopify Admin — this discount has no code, so a clear title helps identify it."
+                                            : "For internal tracking only. Shown in the Title column on the Coupons page. Customers see the code, not this title."}
                                     />
                                 </BlockStack>
                             </Card>
@@ -1423,35 +1565,39 @@ export default function CreateDiscount() {
 
                             {/* ══════════════════════════════
                                 MAXIMUM DISCOUNT USES
+                                (usage limit / once-per-customer don't exist
+                                on Automatic discount types in Shopify's schema)
                             ══════════════════════════════ */}
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Maximum discount uses</Text>
-                                    <BlockStack gap="200">
+                            {method[0] !== "automatic" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Maximum discount uses</Text>
+                                        <BlockStack gap="200">
+                                            <Checkbox
+                                                label="Limit number of times this discount can be used in total"
+                                                checked={limitTotalUses}
+                                                onChange={setLimitTotalUses}
+                                            />
+                                            {limitTotalUses && (
+                                                <Box paddingInlineStart="800">
+                                                    <TextField
+                                                        label="Total usage limit"
+                                                        type="number"
+                                                        value={totalUsesLimit}
+                                                        onChange={setTotalUsesLimit}
+                                                        autoComplete="off"
+                                                    />
+                                                </Box>
+                                            )}
+                                        </BlockStack>
                                         <Checkbox
-                                            label="Limit number of times this discount can be used in total"
-                                            checked={limitTotalUses}
-                                            onChange={setLimitTotalUses}
+                                            label="Limit to one use per customer"
+                                            checked={limitOnePerCustomer}
+                                            onChange={setLimitOnePerCustomer}
                                         />
-                                        {limitTotalUses && (
-                                            <Box paddingInlineStart="800">
-                                                <TextField
-                                                    label="Total usage limit"
-                                                    type="number"
-                                                    value={totalUsesLimit}
-                                                    onChange={setTotalUsesLimit}
-                                                    autoComplete="off"
-                                                />
-                                            </Box>
-                                        )}
                                     </BlockStack>
-                                    <Checkbox
-                                        label="Limit to one use per customer"
-                                        checked={limitOnePerCustomer}
-                                        onChange={setLimitOnePerCustomer}
-                                    />
-                                </BlockStack>
-                            </Card>
+                                </Card>
+                            )}
 
                             {/* ══════════════════════════════
                                 COMBINATIONS
@@ -1587,7 +1733,9 @@ export default function CreateDiscount() {
                                 <p>
                                     {isEditMode
                                         ? "You are modifying an existing discount. Shopify will reflect the changes immediately after saving."
-                                        : "Code-based discounts allow you to track specific marketing campaigns."}
+                                        : method[0] === "automatic"
+                                            ? "Automatic discounts apply instantly at checkout once eligible — nothing for the customer to enter."
+                                            : "Code-based discounts allow you to track specific marketing campaigns."}
                                 </p>
                             </Banner>
                         </BlockStack>

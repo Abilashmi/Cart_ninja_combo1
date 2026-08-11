@@ -81,7 +81,7 @@ export function CheckoutSection() {
           )}
           {checkoutButton.mobileButtonType === 'animated' && (
             <Text as="p" variant="bodySm" tone="subdued">
-              View your storefront on a mobile device to see the tap animation.
+              View your live storefront to see the tap animation — it applies on both mobile and desktop.
             </Text>
           )}
         </FormLayout>
