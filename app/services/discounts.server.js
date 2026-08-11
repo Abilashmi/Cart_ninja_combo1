@@ -3,6 +3,23 @@
 // tools (ai-agent-tools.server.js) and any future caller share one
 // implementation instead of drifting.
 
+// Top-level GraphQL `errors` (bad field/argument, permission/scope denial,
+// currency mismatch, etc.) are a DIFFERENT failure mode from a mutation's own
+// `userErrors` (a business-rule rejection Shopify still executed the query to
+// tell you about) — `data.data` is null/undefined when this happens, so
+// blindly reading `data.data?.mutationName` silently produces `undefined`
+// instead of a real error. Every mutation below must check this first, or a
+// genuine failure (e.g. a bad request) gets swallowed into a confusing
+// half-success with no discountId — logged here so it's diagnosable from
+// server logs rather than a guess.
+function checkGraphQLErrors(data, label) {
+  if (data.errors?.length > 0) {
+    console.error(`[discounts.server] ${label} GraphQL error:`, JSON.stringify(data.errors));
+    return data.errors[0].message || 'Shopify rejected the request.';
+  }
+  return null;
+}
+
 export async function getShopCurrencyCode(admin) {
   const res = await admin.graphql(`query { shop { currencyCode } }`);
   const data = await res.json();
@@ -52,6 +69,8 @@ export async function createDiscount(admin, { code, title, percentage, minimumAm
     { variables: { basicCodeDiscount: discountInput } }
   );
   const data = await res.json();
+  const gqlError = checkGraphQLErrors(data, 'createDiscount');
+  if (gqlError) return { success: false, error: gqlError };
   const result = data.data?.discountCodeBasicCreate;
   if (result?.userErrors?.length > 0) {
     return { success: false, error: result.userErrors[0].message };
@@ -96,8 +115,11 @@ export async function createAutomaticFreeShipping(admin, { title, minimumAmount,
     { variables: { freeShippingAutomaticDiscount: shippingInput } }
   );
   const data = await res.json();
+  const gqlError = checkGraphQLErrors(data, 'createAutomaticFreeShipping');
+  if (gqlError) return { success: false, error: gqlError };
   const result = data.data?.discountAutomaticFreeShippingCreate;
   if (result?.userErrors?.length > 0) {
+    console.error('[discounts.server] createAutomaticFreeShipping userErrors:', JSON.stringify(result.userErrors));
     return { success: false, error: result.userErrors[0].message };
   }
   const node = result?.automaticDiscountNode;
@@ -147,8 +169,11 @@ export async function createAutomaticAmountOff(admin, { title, percentage, amoun
     { variables: { automaticBasicDiscount: discountInput } }
   );
   const data = await res.json();
+  const gqlError = checkGraphQLErrors(data, 'createAutomaticAmountOff');
+  if (gqlError) return { success: false, error: gqlError };
   const result = data.data?.discountAutomaticBasicCreate;
   if (result?.userErrors?.length > 0) {
+    console.error('[discounts.server] createAutomaticAmountOff userErrors:', JSON.stringify(result.userErrors));
     return { success: false, error: result.userErrors[0].message };
   }
   const node = result?.automaticDiscountNode;
@@ -260,6 +285,8 @@ export async function deleteDiscount(admin, discountId) {
     { variables: { id: discountId } }
   );
   const data = await res.json();
+  const gqlError = checkGraphQLErrors(data, 'deleteDiscount');
+  if (gqlError) return { success: false, error: gqlError };
   const result = data.data?.discountCodeDelete;
   if (result?.userErrors?.length > 0) {
     return { success: false, error: result.userErrors[0].message };
