@@ -69,6 +69,7 @@ export function CheckoutSection() {
             options={[
               { label: 'Standard — Tap to checkout', value: 'standard' },
               { label: 'Swipe Slider — Swipe to checkout', value: 'swipe' },
+              { label: 'Animated — Tap with animation', value: 'animated' },
             ]}
             value={checkoutButton.mobileButtonType}
             onChange={(v) => updateCheckoutButton({ mobileButtonType: v })}
@@ -76,6 +77,11 @@ export function CheckoutSection() {
           {checkoutButton.mobileButtonType === 'swipe' && (
             <Text as="p" variant="bodySm" tone="subdued">
               Switch the live preview to mobile view to see the swipe button.
+            </Text>
+          )}
+          {checkoutButton.mobileButtonType === 'animated' && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              View your storefront on a mobile device to see the tap animation.
             </Text>
           )}
         </FormLayout>

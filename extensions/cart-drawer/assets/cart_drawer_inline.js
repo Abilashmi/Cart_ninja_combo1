@@ -504,7 +504,7 @@
       backgroundColor: data.backgroundColor || '#111827',
       textColor: data.textColor || '#ffffff',
       borderRadius: data.borderRadius !== undefined ? parseInt(data.borderRadius, 10) : 12,
-      mobileButtonType: data.mobileButtonType === 'swipe' ? 'swipe' : 'standard',
+      mobileButtonType: (data.mobileButtonType === 'swipe' || data.mobileButtonType === 'animated') ? data.mobileButtonType : 'standard',
     };
   }
 
@@ -1914,36 +1914,48 @@
     return svg;
   }
 
-  /* =================== CHECKOUT BUTTON (standard / swipe) =================== */
+  /* =================== CHECKOUT BUTTON (standard / swipe / animated) =================== */
 
   function renderCheckoutButton(appliedCouponCodes) {
     const cbStyle = CONFIG.checkoutButtonStyle || {};
     const bg = cbStyle.backgroundColor || '#111827';
     const fg = cbStyle.textColor || '#ffffff';
     const radius = cbStyle.borderRadius !== undefined ? cbStyle.borderRadius : 12;
+    // Shared by every mode below — guarantees the animated/swipe buttons can
+    // never diverge from standard's checkout URL/discount-param behavior.
     const href = appliedCouponCodes && appliedCouponCodes.length > 0
       ? '/checkout?discount=' + encodeURIComponent(appliedCouponCodes[0])
       : '/checkout';
 
-    const isSwipe = cbStyle.mobileButtonType === 'swipe' && window.innerWidth <= 480;
+    const isMobile = window.innerWidth <= 480;
+    const isSwipe = cbStyle.mobileButtonType === 'swipe' && isMobile;
+    const isAnimated = cbStyle.mobileButtonType === 'animated' && isMobile;
 
-    if (!isSwipe) {
+    if (isSwipe) {
+      const thumbRadius = Math.max(radius - 2, 4);
       return `
-  <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
-    <button style="width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
-    </button>
-  </a>`;
-    }
-
-    const thumbRadius = Math.max(radius - 2, 4);
-    return `
   <div id="cc-swipe-track" data-href="${href}" style="position:relative;width:100%;height:52px;background:${bg};border-radius:${radius}px;overflow:hidden;touch-action:pan-y;user-select:none;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
     <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:13px;font-weight:700;letter-spacing:0.3px;pointer-events:none;">${escapeHtml(CONFIG.checkoutName || 'Swipe to checkout')} →</span>
     <div id="cc-swipe-thumb" style="position:absolute;top:3px;left:3px;width:46px;height:46px;border-radius:${thumbRadius}px;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:grab;touch-action:none;">
       <span style="color:${bg};font-size:20px;line-height:1;">›</span>
     </div>
   </div>`;
+    }
+
+    if (isAnimated) {
+      return `
+  <button type="button" id="cc-animated-checkout-btn" class="cc-anim-btn" data-href="${href}" style="position:relative;overflow:hidden;width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
+    <span id="cc-animated-checkout-spinner" style="display:none;width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);border-top-color:${fg};animation:cc-anim-spin 0.6s linear infinite;flex-shrink:0;"></span>
+    <span id="cc-animated-checkout-label" aria-live="polite">${escapeHtml(CONFIG.checkoutName || 'Checkout')}</span>
+  </button>`;
+    }
+
+    return `
+  <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
+    <button style="width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
+      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
+    </button>
+  </a>`;
   }
 
   // Drag-to-confirm gesture for the swipe checkout button — re-run after
@@ -2007,6 +2019,85 @@
     thumb.addEventListener('pointercancel', function (e) { if (e.pointerType !== 'touch') onEnd(); });
   }
 
+  // Tap-triggered press/ripple -> "Processing..." -> "✓ <label>" -> navigate
+  // sequence for the animated checkout button — same re-bind-every-render
+  // rationale as initSwipeCheckout above (the button is destroyed/recreated
+  // via innerHTML each render, so a fresh bind is correct and old listeners
+  // are already gone with the old element). No-op if the element isn't in
+  // this render's DOM (mode isn't 'animated', or desktop width).
+  function initAnimatedCheckout() {
+    const btn = document.getElementById('cc-animated-checkout-btn');
+    if (!btn) return;
+    const label = document.getElementById('cc-animated-checkout-label');
+    const spinner = document.getElementById('cc-animated-checkout-spinner');
+    const href = btn.getAttribute('data-href');
+    const defaultLabel = label ? label.textContent : '';
+    let reducedMotion = false;
+    try { reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* matchMedia unsupported — treat as no reduced-motion preference */ }
+
+    function reset() {
+      btn.dataset.processing = '';
+      btn.style.pointerEvents = '';
+      btn.classList.remove('cc-anim-pressed');
+      if (label) label.textContent = defaultLabel;
+      if (spinner) spinner.style.display = 'none';
+    }
+
+    function go() {
+      try { window.ccSendClickEvent('checkout_click'); } catch (e) { /* analytics beacon failure must never block checkout navigation */ }
+      window.location.href = href;
+    }
+
+    btn.addEventListener('click', function (e) {
+      // Guards against a rapid double-tap/double-activation firing a second
+      // checkout navigation — combined with pointer-events:none below, this
+      // is what guarantees exactly one checkout action per interaction.
+      if (btn.dataset.processing === '1') return;
+      btn.dataset.processing = '1';
+      btn.style.pointerEvents = 'none';
+
+      try {
+        if (!reducedMotion) {
+          const rect = btn.getBoundingClientRect();
+          const x = (typeof e.clientX === 'number' && e.clientX ? e.clientX : rect.left + rect.width / 2) - rect.left;
+          const y = (typeof e.clientY === 'number' && e.clientY ? e.clientY : rect.top + rect.height / 2) - rect.top;
+          const ripple = document.createElement('span');
+          ripple.className = 'cc-anim-ripple';
+          ripple.style.left = x + 'px';
+          ripple.style.top = y + 'px';
+          btn.appendChild(ripple);
+          setTimeout(function () { ripple.remove(); }, 500);
+          btn.classList.add('cc-anim-pressed');
+        }
+
+        // Processing state starts immediately alongside the press animation
+        // — there's no real async call to wait for (standard/swipe also
+        // navigate with zero network round-trip before /checkout).
+        if (label) label.textContent = 'Processing...';
+        if (spinner) spinner.style.display = 'inline-block';
+
+        const pressMs = reducedMotion ? 60 : 280;
+        const successMs = reducedMotion ? 60 : 260;
+
+        setTimeout(function () {
+          btn.classList.remove('cc-anim-pressed');
+          if (label) label.textContent = '✓ ' + defaultLabel;
+          if (spinner) spinner.style.display = 'none';
+          setTimeout(go, successMs);
+        }, pressMs);
+
+        // Safety net — never leave the customer stuck on "Processing…" if
+        // we're somehow still on this page well after navigation should
+        // have already happened.
+        setTimeout(function () { if (btn.dataset.processing === '1') reset(); }, 4000);
+      } catch (err) {
+        // The animation must never block checkout — reset and still go.
+        reset();
+        go();
+      }
+    });
+  }
+
   /* =================== RENDER =================== */
 
   async function renderDrawer() {
@@ -2027,6 +2118,15 @@
         #cc-drawer[data-animation="push"] { transition:transform 0.4s cubic-bezier(0.77,0,0.175,1) !important; }
         #cc-drawer[data-animation="none"] { transform:none !important; transition:none !important; }
         #cc-announcement-bar { display:block; }
+        .cc-anim-btn { transition: transform 0.2s ease; }
+        .cc-anim-btn.cc-anim-pressed { transform: scale(0.96); }
+        .cc-anim-ripple { position:absolute; width:10px; height:10px; margin-left:-5px; margin-top:-5px; border-radius:50%; background:rgba(255,255,255,0.55); transform:scale(0); animation: cc-anim-ripple-expand 0.5s ease-out forwards; pointer-events:none; }
+        @keyframes cc-anim-ripple-expand { to { transform:scale(14); opacity:0; } }
+        @keyframes cc-anim-spin { to { transform:rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) {
+          .cc-anim-btn, .cc-anim-btn.cc-anim-pressed { transition:none !important; transform:none !important; }
+          .cc-anim-ripple { display:none !important; }
+        }
       `;
       document.head.appendChild(style);
     }
@@ -2422,6 +2522,7 @@
       });
       document.getElementById('cc-backdrop').addEventListener('click', closeDrawer);
       initSwipeCheckout();
+      initAnimatedCheckout();
     } else {
       // Subsequent updates: only replace drawer inner content (no flash)
       const drawer = document.getElementById('cc-drawer');
@@ -2441,6 +2542,7 @@
       const backdrop = document.getElementById('cc-backdrop');
       if (backdrop) backdrop.addEventListener('click', closeDrawer);
       initSwipeCheckout();
+      initAnimatedCheckout();
     }
 
     startCountdownTicker();

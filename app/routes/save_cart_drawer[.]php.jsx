@@ -85,9 +85,12 @@ function applyPlanGatingToCartDrawerResult(result, planKey) {
     gated.customCSS = null;
   }
 
+  // Both premium button types ('swipe' and 'animated') are gated behind the
+  // same 'mobile_swipe_checkout' feature — the "Mobile Button Type" card is
+  // one gated section, not per-option — mirrors save_cart_drawer.php.
   if (!canPublishFeature(planKey, 'mobile_swipe_checkout')) {
     const checkoutStyle = parseJsonField(gated.checkout_button_style);
-    if (checkoutStyle && checkoutStyle.mobileButtonType === 'swipe') {
+    if (checkoutStyle && (checkoutStyle.mobileButtonType === 'swipe' || checkoutStyle.mobileButtonType === 'animated')) {
       checkoutStyle.mobileButtonType = 'standard';
       gated.checkout_button_style = JSON.stringify(checkoutStyle);
     }

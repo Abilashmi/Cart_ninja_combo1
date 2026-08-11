@@ -114,10 +114,12 @@ function applyPlanGatingToCartDrawerResult(array $result, string $planKey): arra
         $result['customCSS'] = null;
     }
 
-    // ---- Mobile Swipe Checkout ----
+    // ---- Mobile Swipe / Animated Checkout (both gated behind the same
+    // 'mobile_swipe_checkout' plan feature — the "Mobile Button Type" card
+    // is one gated section, not per-option) ----
     if (!plan_can_publish_feature($planKey, 'mobile_swipe_checkout')) {
         $checkoutStyle = json_decode($result['checkout_button_style'] ?? '', true);
-        if (is_array($checkoutStyle) && isset($checkoutStyle['mobileButtonType']) && $checkoutStyle['mobileButtonType'] === 'swipe') {
+        if (is_array($checkoutStyle) && in_array($checkoutStyle['mobileButtonType'] ?? null, ['swipe', 'animated'], true)) {
             $checkoutStyle['mobileButtonType'] = 'standard';
             $result['checkout_button_style'] = json_encode($checkoutStyle, JSON_UNESCAPED_UNICODE);
         }
@@ -448,7 +450,7 @@ if (!plan_can_publish_feature($planKey, 'custom_css')) {
 
 if (!plan_can_publish_feature($planKey, 'mobile_swipe_checkout')) {
     $checkoutStyleArr = json_decode($checkoutButtonStyle ?? '', true);
-    if (is_array($checkoutStyleArr) && ($checkoutStyleArr['mobileButtonType'] ?? null) === 'swipe') {
+    if (is_array($checkoutStyleArr) && in_array($checkoutStyleArr['mobileButtonType'] ?? null, ['swipe', 'animated'], true)) {
         $checkoutStyleArr['mobileButtonType'] = 'standard';
         $checkoutButtonStyle = json_encode($checkoutStyleArr, JSON_UNESCAPED_UNICODE);
     }
