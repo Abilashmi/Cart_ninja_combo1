@@ -31,6 +31,7 @@ export default function App() {
             `,
           }}
         />
+        <script src="https://app.zingbot.io/webchat/plugin.js?v=6"></script>
       </head>
       <body>
         <Outlet />
