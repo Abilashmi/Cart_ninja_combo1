@@ -31,21 +31,6 @@ export default function App() {
             `,
           }}
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-function initFreshdesk() {
-  window.fdWidget.init({
-    token: "01KYY1QE1SVFQ6CTBW9JJSJ9DT",
-    host: "https://thebrix.freshdesk.com",
-    widgetId: "01KYY1QGRB5X7JMXP0N329FG4G"
-  });
-}
-
-function initialize(i,t){var e;i.getElementById(t)?initFreshdesk():((e=i.createElement("script")).id=t,e.async=!0,e.src="https://thebrix.freshdesk.com/webchat/js/widget.js",e.onload=initFreshdesk,i.head.appendChild(e))}function initiateCall(){initialize(document,"Freshdesk-js-sdk")}window.addEventListener?window.addEventListener("load",initiateCall,!1):window.attachEvent("load",initiateCall,!1);
-            `,
-          }}
-        />
       </head>
       <body>
         <Outlet />
