@@ -32,6 +32,11 @@ export default function App() {
           }}
         />
         <script src="https://app.zingbot.io/webchat/plugin.js?v=6"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `ktt10.setup({id:"XrCozq0rELnonn",accountId:"1164913",color:"#006dff"})`,
+          }}
+        />
       </head>
       <body>
         <Outlet />
