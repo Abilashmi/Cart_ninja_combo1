@@ -347,20 +347,36 @@ export default function SubscribePage() {
     const [downgradeConfirm, setDowngradeConfirm] = useState(false);
 
     const promoFetcher = useFetcher();
-    const [showPromoInput, setShowPromoInput] = useState(false);
     const [promoCode, setPromoCode] = useState('');
+    const [promoErrorMsg, setPromoErrorMsg] = useState(null);
     const [isPromoEligible, setIsPromoEligible] = useState(initialPromoEligible);
+    const [planModalPlanKey, setPlanModalPlanKey] = useState(null);
+    const [pendingContinuePlanKey, setPendingContinuePlanKey] = useState(null);
     const promoResult = promoFetcher.data?.promoResult;
     const isPromoSubmitting = promoFetcher.state === "submitting";
 
+    // Fires once the promo redemption fetcher settles — whether from the
+    // plan-picker modal's "Apply Code & Continue" or a stray earlier
+    // submission. Only auto-proceeds to plan submission when a continue was
+    // actually pending (i.e. the modal's primary action triggered this,
+    // not some other redemption path) and the code was valid.
     useEffect(() => {
-        if (promoResult?.success) setIsPromoEligible(true);
-    }, [promoResult]);
-
-    const applyPromoCode = () => {
-        if (!promoCode.trim()) return;
-        promoFetcher.submit({ intent: "redeem_promo", code: promoCode }, { method: "POST" });
-    };
+        if (promoFetcher.state !== 'idle' || !promoResult) return;
+        if (promoResult.success) {
+            setIsPromoEligible(true);
+            setPromoErrorMsg(null);
+            if (pendingContinuePlanKey) {
+                const planKey = pendingContinuePlanKey;
+                setPendingContinuePlanKey(null);
+                setPlanModalPlanKey(null);
+                submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+            }
+        } else {
+            setPromoErrorMsg(promoResult.error || 'Invalid or expired promo code.');
+            setPendingContinuePlanKey(null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [promoFetcher.state]);
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
@@ -379,11 +395,35 @@ export default function SubscribePage() {
             setDowngradeConfirm(true);
             return;
         }
-        submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+        if (planKey === 'free' || isPromoEligible) {
+            // Free never carries a trial, and a shop that's already promo-
+            // eligible has nothing to gain from the code prompt — skip
+            // straight to plan submission in both cases.
+            submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+            return;
+        }
+        setPromoCode('');
+        setPromoErrorMsg(null);
+        setPlanModalPlanKey(planKey);
     };
 
     const confirmDowngrade = () => {
         submit({ planKey: "free" }, { method: "POST" });
+    };
+
+    // Primary action for the plan-picker modal: a typed code redeems first
+    // (submitting the plan is deferred to the effect above once redemption
+    // settles); an empty field just submits the plan immediately.
+    const handleModalContinue = () => {
+        const planKey = planModalPlanKey;
+        if (!planKey) return;
+        if (promoCode.trim()) {
+            setPendingContinuePlanKey(planKey);
+            promoFetcher.submit({ intent: "redeem_promo", code: promoCode }, { method: "POST" });
+        } else {
+            setPlanModalPlanKey(null);
+            submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+        }
     };
 
     const getBtn = (planKey) => {
@@ -416,46 +456,13 @@ export default function SubscribePage() {
                         <Text as="p" variant="bodyMd" tone="subdued">Start free — upgrade as your store grows. No hidden fees.</Text>
                     </div>
 
-                    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                        {isPromoEligible ? (
+                    {isPromoEligible && (
+                        <div style={{ marginTop: 16 }}>
                             <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
-                                🎉 Promo applied — your first month is free on any paid plan.
+                                Promo applied — your first month is free on any paid plan.
                             </Text>
-                        ) : !showPromoInput ? (
-                            <button
-                                onClick={() => setShowPromoInput(true)}
-                                style={{ background: 'none', border: 'none', color: '#1a9de0', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
-                            >
-                                Have a promo code?
-                            </button>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                    <div style={{ width: 200 }}>
-                                        <TextField
-                                            label="Promo code"
-                                            labelHidden
-                                            value={promoCode}
-                                            onChange={setPromoCode}
-                                            placeholder="Enter promo code"
-                                            autoComplete="off"
-                                            disabled={isPromoSubmitting}
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={applyPromoCode}
-                                        disabled={isPromoSubmitting || !promoCode.trim()}
-                                        style={{ padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#1a1a1a', color: '#fff', border: 'none', cursor: isPromoSubmitting ? 'default' : 'pointer', opacity: isPromoSubmitting || !promoCode.trim() ? 0.6 : 1 }}
-                                    >
-                                        {isPromoSubmitting ? 'Applying…' : 'Apply'}
-                                    </button>
-                                </div>
-                                {promoResult?.success === false && (
-                                    <Text as="p" variant="bodySm" tone="critical">{promoResult.error}</Text>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'stretch' }}>
@@ -570,12 +577,46 @@ export default function SubscribePage() {
                     <Text as="p" variant="bodyXs" tone="subdued">
                         {isPromoEligible
                             ? 'All paid plans include a 14-day free trial. Cancel anytime. No charge until trial ends.'
-                            : 'Paid plans are billed from day 1. Cancel anytime. Enter a promo code above for a free first month.'}
+                            : 'Paid plans are billed from day 1. Cancel anytime. You\'ll be asked for a promo code when you pick a plan.'}
                     </Text>
                 </div>
 
                 <div style={{ height: 72 }} />
             </div>
+
+            {planModalPlanKey && (
+                <Modal
+                    open
+                    onClose={() => setPlanModalPlanKey(null)}
+                    title="Great choice!"
+                    primaryAction={{
+                        content: isPromoSubmitting ? 'Applying…' : (promoCode.trim() ? 'Apply Code & Continue' : 'Continue'),
+                        onAction: handleModalContinue,
+                        loading: isPromoSubmitting,
+                    }}
+                    secondaryActions={[{ content: 'Cancel', onAction: () => setPlanModalPlanKey(null) }]}
+                >
+                    <Modal.Section>
+                        <BlockStack gap="300">
+                            <Text as="p">
+                                You are getting {PLANS[planModalPlanKey].label}. Have a promo code? Enter it below for your first month free.
+                            </Text>
+                            <TextField
+                                label="Promo code"
+                                labelHidden
+                                value={promoCode}
+                                onChange={(value) => { setPromoCode(value); setPromoErrorMsg(null); }}
+                                placeholder="Enter promo code (optional)"
+                                autoComplete="off"
+                                disabled={isPromoSubmitting}
+                            />
+                            {promoErrorMsg && (
+                                <Text as="p" tone="critical">{promoErrorMsg}</Text>
+                            )}
+                        </BlockStack>
+                    </Modal.Section>
+                </Modal>
+            )}
 
             {downgradeConfirm && (
                 <Modal
