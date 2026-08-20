@@ -1,11 +1,12 @@
-import { useActionData, useLoaderData, useNavigation, useSubmit, useSearchParams } from "react-router";
+import { useActionData, useLoaderData, useNavigation, useSubmit, useSearchParams, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import {
-    Page, BlockStack, Text, Icon, Divider, Banner, Box, Modal,
+    Page, BlockStack, Text, Icon, Divider, Banner, Box, Modal, TextField,
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getShopPlan, setPendingPlanKey, hasApprovedSubscription } from "../services/plan-permissions.server";
+import { isPromoEligible, redeemPromoCode } from "../services/promo.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
@@ -51,9 +52,10 @@ async function isPartnerDevelopmentStore(admin) {
 
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
-    const [planKey, approved] = await Promise.all([
+    const [planKey, approved, eligible] = await Promise.all([
         getShopPlan(session.shop, admin),
         hasApprovedSubscription(session.shop, admin),
+        isPromoEligible(session.shop),
     ]);
     // planKey defaults to 'free' locally for any shop with no DB row yet —
     // that's a storage default, not a real "current plan." Treating it as
@@ -62,13 +64,23 @@ export async function loader({ request }) {
     // page exists to collect. Only report a currentPlanKey once there's a
     // real approved subscription behind it.
     const currentPlanKey = approved ? planKey : null;
-    return { currentPlanKey };
+    return { currentPlanKey, isPromoEligible: eligible };
 }
 
 export async function action({ request }) {
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
     const formData = await request.formData();
+
+    // Promo-code redemption is a separate concern from plan selection below —
+    // handled first and returns early so it never touches the
+    // appSubscriptionCreate logic.
+    if (formData.get("intent") === "redeem_promo") {
+        const code = formData.get("code");
+        const result = await redeemPromoCode(shop, code);
+        return { promoResult: result };
+    }
+
     const planKey = formData.get("planKey");
     const interval = formData.get("interval") === "ANNUAL" ? "ANNUAL" : "EVERY_30_DAYS";
 
@@ -237,6 +249,12 @@ export async function action({ request }) {
 
     lineItems.push(usageLineItem);
 
+    // Only shops that redeemed a valid promo code get the free trial —
+    // everyone else is billed starting day 1 (trialDays: 0). See
+    // app/services/promo.server.js.
+    const eligibleForTrial = await isPromoEligible(shop);
+    const trialDays = eligibleForTrial ? 14 : 0;
+
     const mutation = `
         mutation AppSubscriptionCreate(
             $name: String!
@@ -263,7 +281,7 @@ export async function action({ request }) {
         name: `Cart Ninja ${plan.label}`,
         lineItems,
         returnUrl: adminAppUrl(shop, "/app/billing"),
-        trialDays: 14,
+        trialDays,
         test: isTestCharge,
     };
 
@@ -319,7 +337,7 @@ function featureRowLabel(featureKey, planKey, state) {
 }
 
 export default function SubscribePage() {
-    const { currentPlanKey } = useLoaderData();
+    const { currentPlanKey, isPromoEligible: initialPromoEligible } = useLoaderData();
     const actionData = useActionData();
     const navigation = useNavigation();
     const submit = useSubmit();
@@ -327,6 +345,22 @@ export default function SubscribePage() {
     const highlight = searchParams.get('highlight');
     const isSubmitting = navigation.state === "submitting";
     const [downgradeConfirm, setDowngradeConfirm] = useState(false);
+
+    const promoFetcher = useFetcher();
+    const [showPromoInput, setShowPromoInput] = useState(false);
+    const [promoCode, setPromoCode] = useState('');
+    const [isPromoEligible, setIsPromoEligible] = useState(initialPromoEligible);
+    const promoResult = promoFetcher.data?.promoResult;
+    const isPromoSubmitting = promoFetcher.state === "submitting";
+
+    useEffect(() => {
+        if (promoResult?.success) setIsPromoEligible(true);
+    }, [promoResult]);
+
+    const applyPromoCode = () => {
+        if (!promoCode.trim()) return;
+        promoFetcher.submit({ intent: "redeem_promo", code: promoCode }, { method: "POST" });
+    };
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
@@ -353,12 +387,13 @@ export default function SubscribePage() {
     };
 
     const getBtn = (planKey) => {
+        const trialSuffix = isPromoEligible ? ' — 14-day trial' : '';
         if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
-        if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label} — 14-day trial`, variant: 'upgrade' };
+        if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label}${trialSuffix}`, variant: 'upgrade' };
         const rank = PLAN_KEYS.indexOf(planKey);
         const currentRank = PLAN_KEYS.indexOf(currentPlanKey);
         if (planKey === 'free') return { label: 'Downgrade to Free', variant: 'downgrade' };
-        return { label: rank > currentRank ? `Upgrade to ${PLANS[planKey].label} — 14-day trial` : `Switch to ${PLANS[planKey].label}`, variant: 'upgrade' };
+        return { label: rank > currentRank ? `Upgrade to ${PLANS[planKey].label}${trialSuffix}` : `Switch to ${PLANS[planKey].label}`, variant: 'upgrade' };
     };
 
     const btnStyle = (variant) => {
@@ -379,6 +414,47 @@ export default function SubscribePage() {
                     <Text as="h1" variant="headingXl" fontWeight="bold">Simple, transparent pricing</Text>
                     <div style={{ marginTop: 8 }}>
                         <Text as="p" variant="bodyMd" tone="subdued">Start free — upgrade as your store grows. No hidden fees.</Text>
+                    </div>
+
+                    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        {isPromoEligible ? (
+                            <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
+                                🎉 Promo applied — your first month is free on any paid plan.
+                            </Text>
+                        ) : !showPromoInput ? (
+                            <button
+                                onClick={() => setShowPromoInput(true)}
+                                style={{ background: 'none', border: 'none', color: '#1a9de0', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                                Have a promo code?
+                            </button>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                    <div style={{ width: 200 }}>
+                                        <TextField
+                                            label="Promo code"
+                                            labelHidden
+                                            value={promoCode}
+                                            onChange={setPromoCode}
+                                            placeholder="Enter promo code"
+                                            autoComplete="off"
+                                            disabled={isPromoSubmitting}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={applyPromoCode}
+                                        disabled={isPromoSubmitting || !promoCode.trim()}
+                                        style={{ padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#1a1a1a', color: '#fff', border: 'none', cursor: isPromoSubmitting ? 'default' : 'pointer', opacity: isPromoSubmitting || !promoCode.trim() ? 0.6 : 1 }}
+                                    >
+                                        {isPromoSubmitting ? 'Applying…' : 'Apply'}
+                                    </button>
+                                </div>
+                                {promoResult?.success === false && (
+                                    <Text as="p" variant="bodySm" tone="critical">{promoResult.error}</Text>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -491,7 +567,11 @@ export default function SubscribePage() {
                 </div>
 
                 <div style={{ textAlign: 'center', paddingBottom: 8 }}>
-                    <Text as="p" variant="bodyXs" tone="subdued">All paid plans include a 14-day free trial. Cancel anytime. No charge until trial ends.</Text>
+                    <Text as="p" variant="bodyXs" tone="subdued">
+                        {isPromoEligible
+                            ? 'All paid plans include a 14-day free trial. Cancel anytime. No charge until trial ends.'
+                            : 'Paid plans are billed from day 1. Cancel anytime. Enter a promo code above for a free first month.'}
+                    </Text>
                 </div>
 
                 <div style={{ height: 72 }} />
