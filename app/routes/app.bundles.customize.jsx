@@ -1773,6 +1773,7 @@ export default function Customize() {
         setTargetPageTitle(initialTemplate.title || 'Untitled Template');
         setTargetPageHandle(initialTemplate.page_handle || slugifyTitle(initialTemplate.title));
         setTargetPageTitleTouched(false);
+        setFormKey((prev) => prev + 1);
         // Reset any context-specific state if needed
         fetchedHandlesRef.current.clear();
       }
@@ -1984,44 +1985,6 @@ export default function Customize() {
       [sectionKey]: !prev[sectionKey],
     }));
   };
-
-  // Sync state if initialTemplate changes (e.g. when navigating between templates)
-  useEffect(() => {
-    if (initialTemplate) {
-      console.log('Loading template:', initialTemplate.title);
-      setConfig({
-        ...DEFAULT_COMBO_CONFIG,
-        ...(initialTemplate.config || {}),
-      });
-      setSaveTitle(initialTemplate.title || 'Untitled Template');
-      setIsActive(initialTemplate.active || false);
-      setFormKey((prev) => prev + 1);
-      // Restore page link settings so re-saving doesn't overwrite with wrong handle
-      if (initialTemplate.page_url) {
-        setTargetPageHandle(initialTemplate.page_url);
-        setTargetPageTitle(initialTemplate.page_url);
-        setPublishType('existing');
-        setSelectedPageId(initialTemplate.page_id || '');
-      } else {
-        setTargetPageHandle('about-us');
-        setTargetPageTitle('About Us');
-        setPublishType('new');
-        setSelectedPageId('');
-      }
-    } else {
-      const templateId = searchParams.get('templateId');
-      if (!templateId) {
-        // Only reset to defaults if we aren't trying to load a template
-        setConfig({ ...DEFAULT_COMBO_CONFIG });
-        setSaveTitle('Untitled Template');
-        setFormKey((prev) => prev + 1);
-        setTargetPageHandle('about-us');
-        setTargetPageTitle('About Us');
-        setPublishType('new');
-        setSelectedPageId('');
-      }
-    }
-  }, [initialTemplate, searchParams]);
 
   const [selectedVariants, setSelectedVariants] = useState({});
 
