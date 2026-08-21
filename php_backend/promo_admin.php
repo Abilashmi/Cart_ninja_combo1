@@ -66,7 +66,13 @@ if ($isAuthed && ($_POST['action'] ?? null) === 'create') {
             $stmt->execute([
                 $code,
                 $maxUses === '' ? null : (int) $maxUses,
-                $expiresAt === '' ? null : $expiresAt,
+                // The date input submits a bare YYYY-MM-DD with no time,
+                // which MySQL stores as midnight — meaning a code expiring
+                // "today" would already be dead on arrival the moment it's
+                // created. Appending end-of-day makes the picked date mean
+                // "valid through the end of that day," matching what an
+                // admin actually intends when picking an expiry date.
+                $expiresAt === '' ? null : $expiresAt . ' 23:59:59',
             ]);
             $flash = ['type' => 'success', 'text' => "Promo code \"$code\" created."];
         } catch (PDOException $e) {

@@ -32,6 +32,9 @@ import {
     ProductIcon,
     CollectionIcon,
     CalendarIcon,
+    CashDollarIcon,
+    SettingsIcon,
+    CheckIcon,
 } from "@shopify/polaris-icons";
 import {
     useNavigate,
@@ -48,16 +51,16 @@ import { getStoredCoupons } from "../services/coupon-sample.server";
 import { useCurrency } from "../components/CurrencyContext";
 
 const COUNTRIES = [
-    { label: "India", value: "IN", flag: "🇮🇳" },
-    { label: "United States", value: "US", flag: "🇺🇸" },
-    { label: "United Kingdom", value: "GB", flag: "🇬🇧" },
-    { label: "Canada", value: "CA", flag: "🇨🇦" },
-    { label: "Australia", value: "AU", flag: "🇦🇺" },
-    { label: "Germany", value: "DE", flag: "🇩🇪" },
-    { label: "France", value: "FR", flag: "🇫🇷" },
-    { label: "Japan", value: "JP", flag: "🇯🇵" },
-    { label: "China", value: "CN", flag: "🇨🇳" },
-    { label: "Brazil", value: "BR", flag: "🇧🇷" },
+    { label: "India", value: "IN" },
+    { label: "United States", value: "US" },
+    { label: "United Kingdom", value: "GB" },
+    { label: "Canada", value: "CA" },
+    { label: "Australia", value: "AU" },
+    { label: "Germany", value: "DE" },
+    { label: "France", value: "FR" },
+    { label: "Japan", value: "JP" },
+    { label: "China", value: "CN" },
+    { label: "Brazil", value: "BR" },
 ];
 
 /* ─────────────────────────────────────────────────────────── */
@@ -906,6 +909,37 @@ export default function CreateDiscount() {
     const [showToast,    setShowToast]    = useState(false);
     const [toastMessage, setToastMessage] = useState("");
 
+    /* ── Step wizard ── */
+    // Each discount type shows a different subset of the existing Cards
+    // below — this just groups them into steps, it doesn't change what's
+    // inside any of them.
+    const STEP_LABELS = {
+        type: "Discount type", value: "Discount value", appliesTo: "Applies to",
+        buys: "Customer buys", gets: "Customer gets", shipping: "Countries",
+        limits: "Limits", dates: "Active dates",
+    };
+    const stepKeysForType = (t) => {
+        if (t === "bxgy") return ["type", "buys", "gets", "limits", "dates"];
+        if (t === "free_shipping") return ["type", "shipping", "limits", "dates"];
+        return ["type", "value", "appliesTo", "limits", "dates"];
+    };
+    const steps = useMemo(() => stepKeysForType(type[0]), [type]);
+    const [currentStep, setCurrentStep] = useState(0);
+    const currentStepKey = steps[currentStep] || steps[0];
+
+    // Step count/keys differ per discount type — a stale index from a
+    // longer step list could otherwise point past the end of a shorter one.
+    useEffect(() => {
+        setCurrentStep(0);
+    }, [type]);
+
+    const isCurrentStepValid = useMemo(() => {
+        if (currentStepKey === "type") return method[0] !== "code" || !!code;
+        if (currentStepKey === "value") return !!value;
+        if (currentStepKey === "appliesTo") return appliesTo === "all_products" || selectedResources.length > 0;
+        return true;
+    }, [currentStepKey, method, code, value, appliesTo, selectedResources]);
+
     /* ── Redirect after success ── */
     useEffect(() => {
         if (actionData?.success) {
@@ -1068,13 +1102,51 @@ export default function CreateDiscount() {
                 title={isEditMode ? "Edit discount" : "Create discount"}
                 backAction={{ content: "Discounts", onAction: () => navigate("/app/coupons") }}
                 titleMetadata={isEditMode ? <Badge tone="info">Editing</Badge> : null}
-                primaryAction={{
-                    content:  isEditMode ? "Save changes" : "Save discount",
-                    onAction: handleSave,
-                    loading:  isSubmitting,
-                    disabled: isSaveDisabled,
-                }}
             >
+                <Box paddingBlockEnd="400">
+                    <Card>
+                        <InlineStack gap="0" blockAlign="center">
+                            {steps.map((key, i) => {
+                                const isDone = i < currentStep;
+                                const isCurrent = i === currentStep;
+                                return (
+                                    <div key={key} style={{ display: "flex", alignItems: "center", flex: i === steps.length - 1 ? "0 0 auto" : "1 1 0" }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => { if (isDone) setCurrentStep(i); }}
+                                            disabled={!isDone}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "8px",
+                                                background: "none", border: "none", padding: 0,
+                                                cursor: isDone ? "pointer" : "default",
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: "26px", height: "26px", borderRadius: "50%", flexShrink: 0,
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                background: isDone || isCurrent ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)",
+                                                border: isCurrent ? "2px solid var(--p-color-border-emphasis)" : "none",
+                                            }}>
+                                                {isDone ? (
+                                                    <Icon source={CheckIcon} tone="base" />
+                                                ) : (
+                                                    <Text as="span" variant="bodySm" fontWeight="bold" tone={isCurrent ? "text-inverse" : "subdued"}>{i + 1}</Text>
+                                                )}
+                                            </div>
+                                            <Text as="span" variant="bodySm" fontWeight={isCurrent ? "bold" : "regular"} tone={isCurrent || isDone ? undefined : "subdued"}>
+                                                {STEP_LABELS[key]}
+                                            </Text>
+                                        </button>
+                                        {i < steps.length - 1 && (
+                                            <div style={{ flex: 1, height: "1px", background: "var(--p-color-border)", margin: "0 12px" }} />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </InlineStack>
+                    </Card>
+                </Box>
+
                 <Layout>
                     <Layout.Section>
                         <BlockStack gap="400">
@@ -1098,9 +1170,13 @@ export default function CreateDiscount() {
                             )}
 
                             {/* ── Discount type + code ── */}
+                            {currentStepKey === "type" && (
                             <Card>
                                 <BlockStack gap="400">
-                                    <Text as="h2" variant="headingMd">Discount type</Text>
+                                    <InlineStack gap="200" blockAlign="center">
+                                        <Icon source={DiscountIcon} tone="subdued" />
+                                        <Text as="h2" variant="headingMd">Discount type</Text>
+                                    </InlineStack>
 
                                     {/* Solaris 2×2 type selector */}
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1126,21 +1202,21 @@ export default function CreateDiscount() {
                                                     }}
                                                     style={{
                                                         padding: '16px', borderRadius: '8px', cursor: 'pointer',
-                                                        border: `2px solid ${active ? '#008060' : '#c9cccf'}`,
-                                                        background: active ? '#f1f8f5' : '#ffffff',
+                                                        border: `2px solid ${active ? 'var(--p-color-border-emphasis)' : 'var(--p-color-border)'}`,
+                                                        background: active ? 'var(--p-color-bg-surface-selected)' : 'var(--p-color-bg-surface)',
                                                         textAlign: 'left', display: 'flex', gap: '12px', alignItems: 'flex-start',
                                                     }}
                                                 >
                                                     <div style={{
                                                         width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
-                                                        background: active ? '#008060' : '#f3f4f6',
+                                                        background: active ? 'var(--p-color-bg-fill-emphasis)' : 'var(--p-color-bg-surface-secondary)',
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     }}>
                                                         <Icon source={opt.icon} tone={active ? 'base' : 'subdued'} />
                                                     </div>
                                                     <div>
-                                                        <div style={{ fontSize: '14px', fontWeight: 600, color: active ? '#008060' : '#111827', marginBottom: '2px' }}>{opt.label}</div>
-                                                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{opt.desc}</div>
+                                                        <div style={{ fontSize: '14px', fontWeight: 600, color: active ? 'var(--p-color-text-emphasis)' : 'var(--p-color-text)', marginBottom: '2px' }}>{opt.label}</div>
+                                                        <div style={{ fontSize: '12px', color: 'var(--p-color-text-secondary)' }}>{opt.desc}</div>
                                                     </div>
                                                 </button>
                                             );
@@ -1196,14 +1272,18 @@ export default function CreateDiscount() {
                                     />
                                 </BlockStack>
                             </Card>
+                            )}
 
                             {/* ══════════════════════════════
                                 DISCOUNT VALUE
                             ══════════════════════════════ */}
-                            {type[0] !== "bxgy" && type[0] !== "free_shipping" && (
+                            {currentStepKey === "value" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Discount value</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={CashDollarIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Discount value</Text>
+                                        </InlineStack>
                                         <Select
                                             label="Discount type"
                                             options={[
@@ -1261,10 +1341,13 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 BXGY: CUSTOMER BUYS
                             ══════════════════════════════ */}
-                            {type[0] === "bxgy" && (
+                            {currentStepKey === "buys" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Customer buys</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={GiftCardIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Customer buys</Text>
+                                        </InlineStack>
                                         <ButtonGroup segmented>
                                             <Button pressed={bxgyBuysType[0] === "products"}    onClick={() => setBxgyBuysType(["products"])}>Specific products</Button>
                                             <Button pressed={bxgyBuysType[0] === "collections"} onClick={() => setBxgyBuysType(["collections"])}>Specific collections</Button>
@@ -1302,10 +1385,13 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 BXGY: CUSTOMER GETS
                             ══════════════════════════════ */}
-                            {type[0] === "bxgy" && (
+                            {currentStepKey === "gets" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Customer gets</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={GiftCardIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Customer gets</Text>
+                                        </InlineStack>
                                         <ButtonGroup segmented>
                                             <Button pressed={bxgyGetsType[0] === "same"}        onClick={() => setBxgyGetsType(["same"])}>Same products as X</Button>
                                             <Button pressed={bxgyGetsType[0] === "products"}    onClick={() => setBxgyGetsType(["products"])}>Specific products</Button>
@@ -1376,10 +1462,13 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 FREE SHIPPING: COUNTRIES
                             ══════════════════════════════ */}
-                            {type[0] === "free_shipping" && (
+                            {currentStepKey === "shipping" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Countries</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={DeliveryIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Countries</Text>
+                                        </InlineStack>
                                         <ButtonGroup segmented>
                                             <Button pressed={countriesType[0] === "all"}      onClick={() => setCountriesType(["all"])}>All countries</Button>
                                             <Button pressed={countriesType[0] === "specific"} onClick={() => setCountriesType(["specific"])}>Specific countries</Button>
@@ -1406,11 +1495,8 @@ export default function CreateDiscount() {
                                                                 {selectedCountries.map(c => {
                                                                     const country = COUNTRIES.find(x => x.value === c);
                                                                     return (
-                                                                        <div key={c} style={{ padding: "8px 12px", borderBottom: "1px solid #f1f1f1", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                                                            <InlineStack gap="200" blockAlign="center">
-                                                                                <Text variant="bodyMd">{country?.flag || "🏳️"}</Text>
-                                                                                <Text variant="bodyMd">{country?.label || c}</Text>
-                                                                            </InlineStack>
+                                                                        <div key={c} style={{ padding: "8px 12px", borderBottom: "1px solid var(--p-color-border-secondary)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                                                            <Text variant="bodyMd">{country?.label || c}</Text>
                                                                             <Button variant="tertiary" onClick={() => setSelectedCountries(prev => prev.filter(x => x !== c))}>Remove</Button>
                                                                         </div>
                                                                     );
@@ -1444,11 +1530,8 @@ export default function CreateDiscount() {
                                                                     {COUNTRIES.filter(c => c.label.toLowerCase().includes(countrySearch.toLowerCase())).map(country => {
                                                                         const isSelected = tempSelectedCountries.includes(country.value);
                                                                         return (
-                                                                            <div key={country.value} style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #f1f1f1" }}>
-                                                                                <InlineStack gap="200" blockAlign="center">
-                                                                                    <Text variant="bodyMd">{country.flag}</Text>
-                                                                                    <Text variant="bodyMd">{country.label}</Text>
-                                                                                </InlineStack>
+                                                                            <div key={country.value} style={{ padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                                                                <Text variant="bodyMd">{country.label}</Text>
                                                                                 <Button
                                                                                     variant={isSelected ? "primary" : "secondary"}
                                                                                     onClick={() => {
@@ -1475,10 +1558,13 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 APPLIES TO
                             ══════════════════════════════ */}
-                            {(type[0] === "amount_off_products" || type[0] === "amount_off_order") && (
+                            {currentStepKey === "appliesTo" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Applies to</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={ProductIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Applies to</Text>
+                                        </InlineStack>
                                         <Select
                                             label="Applies to"
                                             options={[
@@ -1528,10 +1614,13 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 MINIMUM PURCHASE REQUIREMENTS
                             ══════════════════════════════ */}
-                            {type[0] !== "bxgy" && (
+                            {currentStepKey === "limits" && type[0] !== "bxgy" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={SettingsIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
+                                        </InlineStack>
                                         <ButtonGroup segmented>
                                             <Button pressed={minimumRequirement[0] === "none"}     onClick={() => setMinimumRequirement(["none"])}>No minimum</Button>
                                             <Button pressed={minimumRequirement[0] === "amount"}   onClick={() => setMinimumRequirement(["amount"])}>Purchase amount ({currencySymbol})</Button>
@@ -1568,10 +1657,13 @@ export default function CreateDiscount() {
                                 (usage limit / once-per-customer don't exist
                                 on Automatic discount types in Shopify's schema)
                             ══════════════════════════════ */}
-                            {method[0] !== "automatic" && (
+                            {currentStepKey === "limits" && method[0] !== "automatic" && (
                                 <Card>
                                     <BlockStack gap="400">
-                                        <Text variant="headingMd" as="h2">Maximum discount uses</Text>
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <Icon source={SettingsIcon} tone="subdued" />
+                                            <Text variant="headingMd" as="h2">Maximum discount uses</Text>
+                                        </InlineStack>
                                         <BlockStack gap="200">
                                             <Checkbox
                                                 label="Limit number of times this discount can be used in total"
@@ -1602,22 +1694,31 @@ export default function CreateDiscount() {
                             {/* ══════════════════════════════
                                 COMBINATIONS
                             ══════════════════════════════ */}
+                            {currentStepKey === "limits" && (
                             <Card>
                                 <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Combinations</Text>
+                                    <InlineStack gap="200" blockAlign="center">
+                                        <Icon source={SettingsIcon} tone="subdued" />
+                                        <Text variant="headingMd" as="h2">Combinations</Text>
+                                    </InlineStack>
                                     <Text variant="bodySm" tone="subdued">This discount can be combined with:</Text>
                                     <Checkbox label="Product discounts"  checked={combineProduct}  onChange={setCombineProduct} />
                                     <Checkbox label="Order discounts"    checked={combineOrder}    onChange={setCombineOrder} />
                                     <Checkbox label="Shipping discounts" checked={combineShipping} onChange={setCombineShipping} />
                                 </BlockStack>
                             </Card>
+                            )}
 
                             {/* ══════════════════════════════
                                 ACTIVE DATES
                             ══════════════════════════════ */}
+                            {currentStepKey === "dates" && (
                             <Card>
                                 <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Active dates</Text>
+                                    <InlineStack gap="200" blockAlign="center">
+                                        <Icon source={CalendarIcon} tone="subdued" />
+                                        <Text variant="headingMd" as="h2">Active dates</Text>
+                                    </InlineStack>
 
                                     {/* Start Date */}
                                     <InlineStack gap="300" blockAlign="end">
@@ -1690,6 +1791,26 @@ export default function CreateDiscount() {
                                     )}
                                 </BlockStack>
                             </Card>
+                            )}
+
+                            {/* ── Step navigation ── */}
+                            <InlineStack align="space-between">
+                                {currentStep > 0 ? (
+                                    <Button onClick={() => setCurrentStep((s) => s - 1)}>Back</Button>
+                                ) : <span />}
+                                {currentStep < steps.length - 1 ? (
+                                    <Button variant="primary" disabled={!isCurrentStepValid} onClick={() => setCurrentStep((s) => s + 1)}>Next</Button>
+                                ) : (
+                                    <Button
+                                        variant="primary"
+                                        loading={isSubmitting}
+                                        disabled={isSaveDisabled}
+                                        onClick={handleSave}
+                                    >
+                                        {isEditMode ? "Save changes" : "Save discount"}
+                                    </Button>
+                                )}
+                            </InlineStack>
 
                             {/* Bottom error repeat */}
                             {actionData?.errors && (
