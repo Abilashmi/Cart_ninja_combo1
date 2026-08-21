@@ -6,7 +6,7 @@ import {
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getShopPlan, setPendingPlanKey, hasApprovedSubscription } from "../services/plan-permissions.server";
-import { isPromoEligible, redeemPromoCode } from "../services/promo.server";
+import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
@@ -52,10 +52,10 @@ async function isPartnerDevelopmentStore(admin) {
 
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
-    const [planKey, approved, eligible] = await Promise.all([
+    const [planKey, approved, promoTrialDays] = await Promise.all([
         getShopPlan(session.shop, admin),
         hasApprovedSubscription(session.shop, admin),
-        isPromoEligible(session.shop),
+        getPromoTrialDays(session.shop),
     ]);
     // planKey defaults to 'free' locally for any shop with no DB row yet —
     // that's a storage default, not a real "current plan." Treating it as
@@ -64,7 +64,7 @@ export async function loader({ request }) {
     // page exists to collect. Only report a currentPlanKey once there's a
     // real approved subscription behind it.
     const currentPlanKey = approved ? planKey : null;
-    return { currentPlanKey, isPromoEligible: eligible };
+    return { currentPlanKey, promoTrialDays };
 }
 
 export async function action({ request }) {
@@ -249,11 +249,10 @@ export async function action({ request }) {
 
     lineItems.push(usageLineItem);
 
-    // Only shops that redeemed a valid promo code get the free trial —
-    // everyone else is billed starting day 1 (trialDays: 0). See
-    // app/services/promo.server.js.
-    const eligibleForTrial = await isPromoEligible(shop);
-    const trialDays = eligibleForTrial ? 14 : 0;
+    // Only shops that redeemed a valid promo code get a free trial, and its
+    // length is whatever that code was configured with (0 = not eligible,
+    // billed starting day 1). See app/services/promo.server.js.
+    const trialDays = await getPromoTrialDays(shop);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -337,7 +336,7 @@ function featureRowLabel(featureKey, planKey, state) {
 }
 
 export default function SubscribePage() {
-    const { currentPlanKey, isPromoEligible: initialPromoEligible } = useLoaderData();
+    const { currentPlanKey, promoTrialDays: initialPromoTrialDays } = useLoaderData();
     const actionData = useActionData();
     const navigation = useNavigation();
     const submit = useSubmit();
@@ -349,34 +348,28 @@ export default function SubscribePage() {
     const promoFetcher = useFetcher();
     const [promoCode, setPromoCode] = useState('');
     const [promoErrorMsg, setPromoErrorMsg] = useState(null);
-    const [isPromoEligible, setIsPromoEligible] = useState(initialPromoEligible);
+    // 0 = not eligible; any positive number is the trial length a redeemed
+    // code granted (see app/services/promo.server.js).
+    const [promoTrialDays, setPromoTrialDays] = useState(initialPromoTrialDays);
     const [planModalPlanKey, setPlanModalPlanKey] = useState(null);
-    const [pendingContinuePlanKey, setPendingContinuePlanKey] = useState(null);
     const promoResult = promoFetcher.data?.promoResult;
     const isPromoSubmitting = promoFetcher.state === "submitting";
+    const isPromoEligible = promoTrialDays > 0;
 
-    // Fires once the promo redemption fetcher settles — whether from the
-    // plan-picker modal's "Apply Code & Continue" or a stray earlier
-    // submission. Only auto-proceeds to plan submission when a continue was
-    // actually pending (i.e. the modal's primary action triggered this,
-    // not some other redemption path) and the code was valid.
+    // Fires once the promo redemption fetcher settles. On success the modal
+    // stays open showing the acknowledgment (how many days were just
+    // granted) — the merchant clicks "Continue" themselves to proceed,
+    // rather than being redirected to Shopify's billing page the instant
+    // the code validates.
     useEffect(() => {
         if (promoFetcher.state !== 'idle' || !promoResult) return;
         if (promoResult.success) {
-            setIsPromoEligible(true);
+            setPromoTrialDays(promoResult.trialDays || 0);
             setPromoErrorMsg(null);
-            if (pendingContinuePlanKey) {
-                const planKey = pendingContinuePlanKey;
-                setPendingContinuePlanKey(null);
-                setPlanModalPlanKey(null);
-                submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
-            }
         } else {
             setPromoErrorMsg(promoResult.error || 'Invalid or expired promo code.');
-            setPendingContinuePlanKey(null);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [promoFetcher.state]);
+    }, [promoFetcher.state, promoResult]);
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
@@ -411,14 +404,15 @@ export default function SubscribePage() {
         submit({ planKey: "free" }, { method: "POST" });
     };
 
-    // Primary action for the plan-picker modal: a typed code redeems first
-    // (submitting the plan is deferred to the effect above once redemption
-    // settles); an empty field just submits the plan immediately.
+    // Primary action for the plan-picker modal. Three states: a code was
+    // just successfully applied (isPromoEligible) → proceed to plan
+    // submission; a code is typed but not yet applied → redeem it and stay
+    // open for the acknowledgment; field left blank → proceed without a
+    // trial.
     const handleModalContinue = () => {
         const planKey = planModalPlanKey;
         if (!planKey) return;
-        if (promoCode.trim()) {
-            setPendingContinuePlanKey(planKey);
+        if (!isPromoEligible && promoCode.trim()) {
             promoFetcher.submit({ intent: "redeem_promo", code: promoCode }, { method: "POST" });
         } else {
             setPlanModalPlanKey(null);
@@ -427,7 +421,7 @@ export default function SubscribePage() {
     };
 
     const getBtn = (planKey) => {
-        const trialSuffix = isPromoEligible ? ' — 14-day trial' : '';
+        const trialSuffix = isPromoEligible ? ` — ${promoTrialDays}-day trial` : '';
         if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
         if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label}${trialSuffix}`, variant: 'upgrade' };
         const rank = PLAN_KEYS.indexOf(planKey);
@@ -459,7 +453,7 @@ export default function SubscribePage() {
                     {isPromoEligible && (
                         <div style={{ marginTop: 16 }}>
                             <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
-                                Promo applied — your first month is free on any paid plan.
+                                Promo applied — you get {promoTrialDays} days free on any paid plan.
                             </Text>
                         </div>
                     )}
@@ -576,8 +570,8 @@ export default function SubscribePage() {
                 <div style={{ textAlign: 'center', paddingBottom: 8 }}>
                     <Text as="p" variant="bodyXs" tone="subdued">
                         {isPromoEligible
-                            ? 'All paid plans include a 14-day free trial. Cancel anytime. No charge until trial ends.'
-                            : 'Paid plans are billed from day 1. Cancel anytime. You\'ll be asked for a promo code when you pick a plan.'}
+                            ? `All paid plans include a ${promoTrialDays}-day free trial. Cancel anytime. No charge until trial ends.`
+                            : 'Paid plans are billed from day 1. Cancel anytime. You will be asked for a promo code when you pick a plan.'}
                     </Text>
                 </div>
 
@@ -590,7 +584,7 @@ export default function SubscribePage() {
                     onClose={() => setPlanModalPlanKey(null)}
                     title="Great choice!"
                     primaryAction={{
-                        content: isPromoSubmitting ? 'Applying…' : (promoCode.trim() ? 'Apply Code & Continue' : 'Continue'),
+                        content: isPromoSubmitting ? 'Applying…' : (isPromoEligible || !promoCode.trim() ? 'Continue' : 'Apply Code & Continue'),
                         onAction: handleModalContinue,
                         loading: isPromoSubmitting,
                     }}
@@ -598,20 +592,28 @@ export default function SubscribePage() {
                 >
                     <Modal.Section>
                         <BlockStack gap="300">
-                            <Text as="p">
-                                You are getting {PLANS[planModalPlanKey].label}. Have a promo code? Enter it below for your first month free.
-                            </Text>
-                            <TextField
-                                label="Promo code"
-                                labelHidden
-                                value={promoCode}
-                                onChange={(value) => { setPromoCode(value); setPromoErrorMsg(null); }}
-                                placeholder="Enter promo code (optional)"
-                                autoComplete="off"
-                                disabled={isPromoSubmitting}
-                            />
-                            {promoErrorMsg && (
-                                <Text as="p" tone="critical">{promoErrorMsg}</Text>
+                            {isPromoEligible ? (
+                                <Text as="p" fontWeight="semibold" tone="success">
+                                    You get {promoTrialDays} days free on {PLANS[planModalPlanKey].label}.
+                                </Text>
+                            ) : (
+                                <>
+                                    <Text as="p">
+                                        You are getting {PLANS[planModalPlanKey].label}. Have a promo code? Enter it below for a free trial.
+                                    </Text>
+                                    <TextField
+                                        label="Promo code"
+                                        labelHidden
+                                        value={promoCode}
+                                        onChange={(value) => { setPromoCode(value); setPromoErrorMsg(null); }}
+                                        placeholder="Enter promo code (optional)"
+                                        autoComplete="off"
+                                        disabled={isPromoSubmitting}
+                                    />
+                                    {promoErrorMsg && (
+                                        <Text as="p" tone="critical">{promoErrorMsg}</Text>
+                                    )}
+                                </>
                             )}
                         </BlockStack>
                     </Modal.Section>

@@ -20,6 +20,7 @@ $pdo->exec("
         code        VARCHAR(64) NOT NULL,
         max_uses    INT NULL DEFAULT NULL,
         uses_count  INT NOT NULL DEFAULT 0,
+        trial_days  INT NOT NULL DEFAULT 14,
         expires_at  DATETIME NULL DEFAULT NULL,
         is_active   TINYINT(1) NOT NULL DEFAULT 1,
         created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -27,6 +28,13 @@ $pdo->exec("
         UNIQUE KEY uniq_code (code)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
+// CREATE TABLE IF NOT EXISTS above is a no-op on a table that already
+// existed before trial_days was added — mirrors promo-schema.server.js's
+// same defensive column check on the Node side.
+$existingCols = $pdo->query("SHOW COLUMNS FROM promo_codes")->fetchAll(PDO::FETCH_COLUMN);
+if (!in_array('trial_days', $existingCols, true)) {
+    $pdo->exec('ALTER TABLE promo_codes ADD COLUMN trial_days INT NOT NULL DEFAULT 14');
+}
 
 $adminPassword = getenv('PROMO_ADMIN_PASSWORD') ?: '';
 $loginError = null;
@@ -56,16 +64,18 @@ $flash = null;
 if ($isAuthed && ($_POST['action'] ?? null) === 'create') {
     $code = trim($_POST['code'] ?? '');
     $maxUses = trim($_POST['max_uses'] ?? '');
+    $trialDays = trim($_POST['trial_days'] ?? '');
     $expiresAt = trim($_POST['expires_at'] ?? '');
 
     if ($code === '') {
         $flash = ['type' => 'error', 'text' => 'Code is required.'];
     } else {
         try {
-            $stmt = $pdo->prepare('INSERT INTO promo_codes (code, max_uses, expires_at) VALUES (?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO promo_codes (code, max_uses, trial_days, expires_at) VALUES (?, ?, ?, ?)');
             $stmt->execute([
                 $code,
                 $maxUses === '' ? null : (int) $maxUses,
+                $trialDays === '' ? 14 : (int) $trialDays,
                 // The date input submits a bare YYYY-MM-DD with no time,
                 // which MySQL stores as midnight — meaning a code expiring
                 // "today" would already be dead on arrival the moment it's
@@ -141,6 +151,8 @@ $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at 
             <input type="text" name="code" placeholder="e.g. WELCOME1" required>
             <label>Max uses (blank = unlimited)</label>
             <input type="number" name="max_uses" min="1" placeholder="e.g. 1">
+            <label>Trial days</label>
+            <input type="number" name="trial_days" min="1" value="14" required>
             <label>Expires at (blank = never)</label>
             <input type="date" name="expires_at">
             <button type="submit">Create code</button>
@@ -150,13 +162,14 @@ $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at 
     <div class="card">
         <table>
             <thead>
-                <tr><th>Code</th><th>Uses</th><th>Expires</th><th>Status</th><th></th></tr>
+                <tr><th>Code</th><th>Uses</th><th>Trial</th><th>Expires</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
             <?php foreach ($codes as $c): ?>
                 <tr>
                     <td><?= htmlspecialchars($c['code']) ?></td>
                     <td><?= (int) $c['uses_count'] ?> / <?= $c['max_uses'] !== null ? (int) $c['max_uses'] : 'Unlimited' ?></td>
+                    <td><?= (int) $c['trial_days'] ?> days</td>
                     <td><?= $c['expires_at'] ? htmlspecialchars($c['expires_at']) : 'Never' ?></td>
                     <td><span class="badge <?= $c['is_active'] ? 'active' : 'inactive' ?>"><?= $c['is_active'] ? 'Active' : 'Inactive' ?></span></td>
                     <td class="row-actions">
@@ -169,7 +182,7 @@ $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at 
                 </tr>
             <?php endforeach; ?>
             <?php if (!$codes): ?>
-                <tr><td colspan="5">No promo codes yet.</td></tr>
+                <tr><td colspan="6">No promo codes yet.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>
