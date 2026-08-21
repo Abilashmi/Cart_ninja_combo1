@@ -1721,12 +1721,24 @@ export default function Customize() {
     if (skipDirtyEffectRef.current) { skipDirtyEffectRef.current = false; return; }
     setSaveStatus((prev) => (prev === 'saved' ? 'unsaved' : prev));
   }, [config, saveTitle]);
+  const slugifyTitle = (title) =>
+    (title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
   const [publishToPage, setPublishToPage] = useState(true);
+  // Whether the merchant has manually typed into the "Target Page Title"
+  // field themselves — once true, the auto-sync-from-template-title effect
+  // below stops overwriting it. `page_url` was never a real column on
+  // combo_templates (only page_handle/page_id are), so the old initializer
+  // here always evaluated to the 'About Us' fallback regardless of whether
+  // an existing page was attached — this now seeds from the template's own
+  // title instead, and gets corrected further once shopPages loads (see the
+  // sync effect below) for templates that already have a real page.
+  const [targetPageTitleTouched, setTargetPageTitleTouched] = useState(false);
   const [targetPageTitle, setTargetPageTitle] = useState(
-    initialTemplate?.page_url || 'About Us'
+    initialTemplate?.title || saveTitle
   );
   const [targetPageHandle, setTargetPageHandle] = useState(
-    initialTemplate?.page_url || 'about-us'
+    initialTemplate?.page_handle || slugifyTitle(saveTitle)
   );
   const [publishType, setPublishType] = useState(
     initialTemplate?.page_id ? 'existing' : 'new'
@@ -1750,6 +1762,17 @@ export default function Customize() {
         setSaveTitle(initialTemplate.title || 'Untitled Template');
         setIsActive(initialTemplate.active || false);
         setPickedLayout(initialTemplate.config?.layout || 'layout1');
+        // Re-seed the publish-target state from the newly-loaded template
+        // instead of leaving it stale from whatever was previously open —
+        // without this, switching between templates in the same session
+        // (no full remount) could save this template's page pointed at
+        // the *previous* template's page, or fall through to creating a
+        // brand new page when one already existed.
+        setPublishType(initialTemplate.page_id ? 'existing' : 'new');
+        setSelectedPageId(initialTemplate.page_id || '');
+        setTargetPageTitle(initialTemplate.title || 'Untitled Template');
+        setTargetPageHandle(initialTemplate.page_handle || slugifyTitle(initialTemplate.title));
+        setTargetPageTitleTouched(false);
         // Reset any context-specific state if needed
         fetchedHandlesRef.current.clear();
       }
@@ -1761,23 +1784,39 @@ export default function Customize() {
         setSaveTitle('Untitled Template');
         setIsActive(false);
         setPickedLayout(null);
+        setPublishType('new');
+        setSelectedPageId('');
+        setTargetPageTitle('Untitled Template');
+        setTargetPageHandle('untitled-template');
+        setTargetPageTitleTouched(false);
       }
     }
   }, [initialTemplate, initTemplateId]);
 
+  // Auto-generate the page title/handle from the template's own title as
+  // the merchant renames it — only while creating a new page, and only
+  // until they've manually edited the page title field themselves.
   useEffect(() => {
-    // Auto-generate handle from template title only for NEW templates
-    if (
-      !initialTemplate &&
-      saveTitle &&
-      saveTitle !== 'Untitled Template' &&
-      targetPageTitle === 'About Us'
-    ) {
-      const slug = saveTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    if (publishType !== 'new' || targetPageTitleTouched) return;
+    if (saveTitle && saveTitle !== 'Untitled Template') {
       setTargetPageTitle(saveTitle);
-      setTargetPageHandle(slug);
+      setTargetPageHandle(slugifyTitle(saveTitle));
     }
-  }, [initialTemplate, saveTitle, targetPageTitle]);
+  }, [saveTitle, publishType, targetPageTitleTouched]);
+
+  // Once the shop's pages load, correct the target title/handle to the
+  // *actual* Shopify page's title/handle for a template that's already
+  // attached to an existing page — matches what picking a page from the
+  // dropdown does manually, so saving without ever touching that dropdown
+  // still sends the real page's title/handle rather than a stale guess.
+  useEffect(() => {
+    if (publishType !== 'existing' || !selectedPageId || shopPages.length === 0) return;
+    const page = shopPages.find((p) => p.id === selectedPageId);
+    if (page) {
+      setTargetPageTitle(page.title);
+      setTargetPageHandle(page.handle);
+    }
+  }, [shopPages, publishType, selectedPageId]);
 
   const handleTitleChange = (value) => {
     setSaveTitle(value);
@@ -3281,6 +3320,7 @@ export default function Customize() {
                         label="Target Page Title"
                         value={targetPageTitle}
                         onChange={(v) => {
+                          setTargetPageTitleTouched(true);
                           setTargetPageTitle(v);
                           setTargetPageHandle(
                             v

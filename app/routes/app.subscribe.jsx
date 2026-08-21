@@ -14,6 +14,10 @@ import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 // automatically, no copy to maintain here.
 const FEATURE_ROWS = Object.keys(FEATURES);
 
+// Every merchant gets this trial length by default; a redeemed promo code
+// overrides it with whatever that code was configured with instead.
+const DEFAULT_TRIAL_DAYS = 14;
+
 // Shopify's own app handle in the admin (visible in URLs like
 // admin.shopify.com/store/{shop}/charges/{appHandle}/... or
 // admin.shopify.com/store/{shop}/apps/{appHandle}) — distinct from
@@ -249,10 +253,11 @@ export async function action({ request }) {
 
     lineItems.push(usageLineItem);
 
-    // Only shops that redeemed a valid promo code get a free trial, and its
-    // length is whatever that code was configured with (0 = not eligible,
-    // billed starting day 1). See app/services/promo.server.js.
-    const trialDays = await getPromoTrialDays(shop);
+    // Every merchant gets the standard 14-day trial by default. A redeemed
+    // promo code overrides this with whatever that code was configured with
+    // (e.g. 30 days) — see app/services/promo.server.js.
+    const promoTrialDays = await getPromoTrialDays(shop);
+    const trialDays = promoTrialDays > 0 ? promoTrialDays : DEFAULT_TRIAL_DAYS;
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -355,6 +360,9 @@ export default function SubscribePage() {
     const promoResult = promoFetcher.data?.promoResult;
     const isPromoSubmitting = promoFetcher.state === "submitting";
     const isPromoEligible = promoTrialDays > 0;
+    // Every merchant gets a trial by default — a redeemed code only matters
+    // when it changes the length from the standard one.
+    const effectiveTrialDays = isPromoEligible ? promoTrialDays : DEFAULT_TRIAL_DAYS;
 
     // Fires once the promo redemption fetcher settles. On success the modal
     // stays open showing the acknowledgment (how many days were just
@@ -421,7 +429,7 @@ export default function SubscribePage() {
     };
 
     const getBtn = (planKey) => {
-        const trialSuffix = isPromoEligible ? ` — ${promoTrialDays}-day trial` : '';
+        const trialSuffix = ` — ${effectiveTrialDays}-day trial`;
         if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
         if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label}${trialSuffix}`, variant: 'upgrade' };
         const rank = PLAN_KEYS.indexOf(planKey);
@@ -453,7 +461,7 @@ export default function SubscribePage() {
                     {isPromoEligible && (
                         <div style={{ marginTop: 16 }}>
                             <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
-                                Promo applied — you get {promoTrialDays} days free on any paid plan.
+                                Promo applied — you get {promoTrialDays} days free on any paid plan (instead of the standard {DEFAULT_TRIAL_DAYS}).
                             </Text>
                         </div>
                     )}
@@ -569,9 +577,7 @@ export default function SubscribePage() {
 
                 <div style={{ textAlign: 'center', paddingBottom: 8 }}>
                     <Text as="p" variant="bodyXs" tone="subdued">
-                        {isPromoEligible
-                            ? `All paid plans include a ${promoTrialDays}-day free trial. Cancel anytime. No charge until trial ends.`
-                            : 'Paid plans are billed from day 1. Cancel anytime. You will be asked for a promo code when you pick a plan.'}
+                        {`All paid plans include a ${effectiveTrialDays}-day free trial. Cancel anytime. No charge until trial ends.`}
                     </Text>
                 </div>
 
@@ -594,12 +600,12 @@ export default function SubscribePage() {
                         <BlockStack gap="300">
                             {isPromoEligible ? (
                                 <Text as="p" fontWeight="semibold" tone="success">
-                                    You get {promoTrialDays} days free on {PLANS[planModalPlanKey].label}.
+                                    You get {promoTrialDays} days free on {PLANS[planModalPlanKey].label} (instead of the standard {DEFAULT_TRIAL_DAYS}).
                                 </Text>
                             ) : (
                                 <>
                                     <Text as="p">
-                                        You are getting {PLANS[planModalPlanKey].label}. Have a promo code? Enter it below for a free trial.
+                                        You are getting {PLANS[planModalPlanKey].label}, which includes a {DEFAULT_TRIAL_DAYS}-day free trial. Have a promo code for an extended trial?
                                     </Text>
                                     <TextField
                                         label="Promo code"
