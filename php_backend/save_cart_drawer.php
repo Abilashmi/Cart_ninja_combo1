@@ -70,8 +70,16 @@ function resolveShowWatermark($planKey) {
  * stored database row — so a merchant's design/config is preserved as-is
  * if they later upgrade.
  */
-function applyPlanGatingToCartDrawerResult(array $result, string $planKey): array {
+function applyPlanGatingToCartDrawerResult(array $result, string $planKey, $pdo, $shopDomain): array {
     $result['showWatermark'] = resolveShowWatermark($planKey);
+
+    // ---- Free plan order-cap cutoff ----
+    // Once a capped, zero-overage-rate plan (Free) crosses its monthly order
+    // cap, the whole drawer pauses for the rest of the month instead of
+    // billing per order — see plan_order_cap_exceeded() in plan_helpers.php.
+    if (plan_order_cap_exceeded($pdo, $shopDomain, $planKey)) {
+        $result['cartStatus'] = 0;
+    }
 
     // ---- Progress Bar (+ bundled confetti-on-completion) ----
     if (!plan_can_publish_feature($planKey, 'progress_bar')) {
@@ -223,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $result = mergeUpsellWidgetSettings($pdo, $shopDomain, $result);
 
         $planKey = resolve_plan_key($pdo, $shopDomain);
-        $result = applyPlanGatingToCartDrawerResult($result, $planKey);
+        $result = applyPlanGatingToCartDrawerResult($result, $planKey, $pdo, $shopDomain);
 
         echo json_encode([
             "status" => "success",

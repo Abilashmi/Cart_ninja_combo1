@@ -190,7 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $planKey = resolve_plan_key($pdo, $shopDomain);
         $publishable = plan_can_publish_feature($planKey, 'fbt');
         $result['publishable'] = $publishable;
-        $result['isEnabled'] = $publishable && $widgetEnabled;
+        // Free plan order-cap cutoff: once a capped, zero-overage-rate plan
+        // crosses its monthly order cap, storefront widgets pause for the
+        // rest of the month — see plan_order_cap_exceeded() in plan_helpers.php.
+        $result['isEnabled'] = $publishable && $widgetEnabled && !plan_order_cap_exceeded($pdo, $shopDomain, $planKey);
 
         if (!$result['isEnabled']) {
             if (isset($result['temp1']) && is_array($result['temp1'])) {

@@ -504,7 +504,11 @@ export default function SubscribePage() {
                                     <div style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: 8, background: '#1a1a1a', borderRadius: 8, padding: '9px 14px' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}><Icon source={TargetIcon} tone="base" /></span>
                                         <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                                            {p.orderCap === null ? 'Unlimited orders' : `${p.orderCap} orders / month — then $${p.overageRate.toFixed(2)}/order`}
+                                            {p.orderCap === null
+                                                ? 'Unlimited orders'
+                                                : p.overageRate > 0
+                                                    ? `${p.orderCap} orders / month — then $${p.overageRate.toFixed(2)}/order`
+                                                    : `${p.orderCap} orders / month — storefront pauses after that`}
                                         </span>
                                     </div>
 

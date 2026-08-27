@@ -17,7 +17,10 @@ const PLANS = [
         'key' => 'free',
         'label' => 'Free',
         'orderCap' => 50,
-        'overageRate' => 0.30,
+        // No per-order commission on Free — crossing orderCap pauses
+        // storefront widgets for the rest of the month instead (see
+        // plan_order_cap_exceeded in plan_helpers.php).
+        'overageRate' => 0.0,
         'aiBrixCredits' => 10,
         'comboTemplateLimit' => 0,
         'watermarkRemovable' => false,

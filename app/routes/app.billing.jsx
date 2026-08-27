@@ -4,6 +4,7 @@ import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banne
 import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getShopPlan, confirmPlanFromWebhook } from "../services/plan-permissions.server";
+import { getMonthlyOrderCapStatus } from "../services/billing.server";
 import { PLANS } from "../config/plans";
 
 // Shopify redirects here (`returnUrl` in app.subscribe.jsx's
@@ -56,11 +57,12 @@ export async function loader({ request }) {
   }
 
   const planKey = await getShopPlan(shop, admin);
-  return { shop, planKey };
+  const monthlyCapStatus = await getMonthlyOrderCapStatus(shop);
+  return { shop, planKey, monthlyCapStatus };
 }
 
 export default function BillingDashboard() {
-  const { planKey } = useLoaderData();
+  const { planKey, monthlyCapStatus } = useLoaderData();
   const plan = PLANS[planKey] || PLANS.free;
   const [today, setToday] = useState(null);
   const [charges, setCharges] = useState([]);
@@ -148,6 +150,23 @@ export default function BillingDashboard() {
       <Layout>
         <Layout.Section>
           {error && <Banner tone="critical">{error}</Banner>}
+
+          {monthlyCapStatus?.applies && (
+            <Box paddingBlockEnd="400">
+              <Banner
+                tone={monthlyCapStatus.exceeded ? "critical" : "info"}
+                title={monthlyCapStatus.exceeded
+                  ? `Storefront paused — ${monthlyCapStatus.totalOrders}/${monthlyCapStatus.orderCap} orders this month`
+                  : `${monthlyCapStatus.totalOrders}/${monthlyCapStatus.orderCap} orders this month`}
+              >
+                <Text as="p">
+                  {monthlyCapStatus.exceeded
+                    ? `Your ${plan.label} plan's monthly order limit has been reached, so your storefront widgets (cart drawer, FBT, coupon slider) are paused until next month or you upgrade.`
+                    : `Your ${plan.label} plan includes ${monthlyCapStatus.orderCap} orders per month. Storefront widgets pause for the rest of the month if you go over — no charge either way.`}
+                </Text>
+              </Banner>
+            </Box>
+          )}
 
           {/* Today's Usage Card */}
           <Card padding="600">

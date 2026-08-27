@@ -91,8 +91,11 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
   const planKey = await getShopPlan(shop);
   const plan = PLANS[planKey];
 
-  if (plan.orderCap === null || orderCount <= plan.orderCap) {
-    return { skipped: true, reason: 'within cap or unlimited plan' };
+  if (plan.orderCap === null || plan.overageRate === 0 || orderCount <= plan.orderCap) {
+    // overageRate === 0 (e.g. Free) means exceeding the cap pauses
+    // storefront widgets instead of billing — see plan_order_cap_exceeded
+    // in php_backend/plan_helpers.php, the actual enforcement point.
+    return { skipped: true, reason: 'within cap, unlimited plan, or plan has no per-order charge' };
   }
 
   // Free trials shouldn't incur usage charges before the merchant has even
@@ -292,6 +295,39 @@ export async function getTodayUsage(shop) {
     fbt_orders: fbtOrders,
     combo_orders: comboOrders,
     other_orders: Math.max(0, totalOrders - fbtOrders - comboOrders),
+  };
+}
+
+// Node-side mirror of plan_order_cap_exceeded() in
+// php_backend/plan_helpers.php — that PHP function is what actually
+// enforces the storefront cutoff (PHP serves the widget config endpoints
+// directly). This is purely for the admin Billing dashboard to show the
+// merchant why their storefront paused, computed the same way: current
+// calendar month to date, only relevant for a capped, zero-overage-rate
+// plan (e.g. Free).
+export async function getMonthlyOrderCapStatus(shop) {
+  const db = getDb();
+  await ensurePlanTables(db);
+  const planKey = await getShopPlan(shop);
+  const plan = PLANS[planKey];
+
+  if (plan.orderCap === null || plan.overageRate > 0) {
+    return { applies: false };
+  }
+
+  const monthStart = new Date().toISOString().slice(0, 7) + '-01';
+  const [rows] = await db.execute(
+    `SELECT COALESCE(SUM(billable_order_count), 0) AS total
+     FROM analytics_daily_rollup WHERE shop_domain = ? AND date >= ?`,
+    [shop, monthStart]
+  );
+  const totalOrders = Number(rows[0]?.total || 0);
+
+  return {
+    applies: true,
+    totalOrders,
+    orderCap: plan.orderCap,
+    exceeded: totalOrders >= plan.orderCap,
   };
 }
 

@@ -239,7 +239,10 @@ if ($requestMethod === 'GET') {
         // design/save it, but it must not render on the storefront until they
         // upgrade. Only the response is mutated; the stored row is left untouched.
         $planKey = resolve_plan_key($pdo, $shopDomain);
-        $result['is_enabled'] = ($result['is_enabled'] && plan_can_publish_feature($planKey, 'coupon_lock_pro')) ? 1 : 0;
+        // Free plan order-cap cutoff: once a capped, zero-overage-rate plan
+        // crosses its monthly order cap, storefront widgets pause for the
+        // rest of the month — see plan_order_cap_exceeded() in plan_helpers.php.
+        $result['is_enabled'] = ($result['is_enabled'] && plan_can_publish_feature($planKey, 'coupon_lock_pro') && !plan_order_cap_exceeded($pdo, $shopDomain, $planKey)) ? 1 : 0;
 
         echo json_encode([
             'status' => 'success',
