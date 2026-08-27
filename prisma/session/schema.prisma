@@ -29,4 +29,14 @@ model Session {
   emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+
+  // @shopify/shopify-app-session-storage-prisma's pollForTable() does a raw
+  // existence check for a table named exactly `session` (lowercase) — a
+  // case-sensitive check against SQLite's own sqlite_master catalog, which
+  // does NOT match the `Session` table Prisma creates by default from this
+  // model's name. Without this @@map, session storage silently breaks in
+  // production while looking completely fine in local dev (SQLite still
+  // lets Prisma's typed CRUD methods work against `Session` either way —
+  // only this one specific raw check cares about the exact physical name).
+  @@map("session")
 }

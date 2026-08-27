@@ -26,8 +26,14 @@ if (newDb && process.env.BUCKET_NAME) {
 }
 
 // ✅ SAFE prisma migrate
+// --schema is required: prisma/schema.prisma doesn't exist (only
+// prisma/session/schema.prisma does, the sole Prisma-managed database in
+// this app — see its own header comment). Without this flag, `prisma
+// migrate deploy` fails immediately with "Could not find Prisma Schema" on
+// every single boot, silently caught below, meaning the session table was
+// never actually created/migrated by this script on a fresh volume.
 try {
-  await exec('npx prisma migrate deploy')
+  await exec('npx prisma migrate deploy --schema=prisma/session/schema.prisma')
 } catch (e) {
   console.log("⚠️ Prisma migrate failed, continuing:", e.message)
 }
