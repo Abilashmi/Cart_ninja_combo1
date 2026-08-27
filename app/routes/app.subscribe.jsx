@@ -5,7 +5,7 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setPendingPlanKey, hasApprovedSubscription } from "../services/plan-permissions.server";
+import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
 import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
 import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 
@@ -56,19 +56,15 @@ async function isPartnerDevelopmentStore(admin) {
 
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
-    const [planKey, approved, promoTrialDays] = await Promise.all([
+    const [planKey, promoTrialDays] = await Promise.all([
         getShopPlan(session.shop, admin),
-        hasApprovedSubscription(session.shop, admin),
         getPromoTrialDays(session.shop),
     ]);
-    // planKey defaults to 'free' locally for any shop with no DB row yet —
-    // that's a storage default, not a real "current plan." Treating it as
-    // one here would mark Free as already-selected/disabled for a shop that
-    // has never actually approved anything, blocking the very approval this
-    // page exists to collect. Only report a currentPlanKey once there's a
-    // real approved subscription behind it.
-    const currentPlanKey = approved ? planKey : null;
-    return { currentPlanKey, promoTrialDays };
+    // getShopPlan already defaults an unapproved shop to 'free', which is
+    // exactly its real feature access now that /app.jsx no longer forces
+    // approval before using the app — so that's shown as the current plan
+    // here too, not treated as "no plan selected yet."
+    return { currentPlanKey: planKey, promoTrialDays };
 }
 
 export async function action({ request }) {
@@ -431,7 +427,6 @@ export default function SubscribePage() {
     const getBtn = (planKey) => {
         const trialSuffix = ` — ${effectiveTrialDays}-day trial`;
         if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
-        if (!currentPlanKey) return { label: planKey === 'free' ? 'Get Started Free' : `Get ${PLANS[planKey].label}${trialSuffix}`, variant: 'upgrade' };
         const rank = PLAN_KEYS.indexOf(planKey);
         const currentRank = PLAN_KEYS.indexOf(currentPlanKey);
         if (planKey === 'free') return { label: 'Downgrade to Free', variant: 'downgrade' };
