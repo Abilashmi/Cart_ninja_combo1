@@ -1,4 +1,4 @@
-import { Outlet, redirect, useLoaderData, useRouteError, useNavigation } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as ShopifyAppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
@@ -7,35 +7,21 @@ import { authenticate } from "../shopify.server";
 import { getShopCurrency } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
-import { getShopPlan, hasApprovedSubscription } from "../services/plan-permissions.server";
+import { getShopPlan } from "../services/plan-permissions.server";
 import { getFeatureState } from "../config/plans";
 
+// Merchants are no longer forced through /app/subscribe before using the
+// app — they land straight in after install and can pick/switch a plan
+// whenever they want. A shop with no approved subscription yet is treated
+// as Free by getShopPlan's own default, which already matches Free's real
+// feature set, so nothing else needs to special-case the unsubscribed state.
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
 
-    const [planKey, currency, approved] = await Promise.all([
+    const [planKey, currency] = await Promise.all([
         getShopPlan(session.shop, admin),
         getShopCurrency(admin, session.shop),
-        hasApprovedSubscription(session.shop, admin),
     ]);
-
-    // Every plan (including Free) requires an approved Shopify subscription
-    // before the app can be used — Free's is a $0 usage-only subscription
-    // that exists solely to carry the overage line item (see
-    // hasApprovedSubscription's own comment for why this is mandatory, not
-    // just a nicety). /app/subscribe itself is exempt so the redirect target
-    // is reachable at all.
-    const url = new URL(request.url);
-    if (!approved && !url.pathname.startsWith("/app/subscribe")) {
-        // Must carry the original query string (host, embedded, shop, etc.)
-        // forward — a bare `redirect("/app/subscribe")` drops the embedded
-        // context Shopify Admin's iframe needs, and authenticate.admin() on
-        // the redirected request then falls back to a bare /auth/login
-        // screen instead of actually reaching /app/subscribe (the exact
-        // failure mode app.subscribe.jsx's own adminAppUrl() comment
-        // documents for the billing returnUrl case — same root cause here).
-        throw redirect("/app/subscribe" + url.search);
-    }
 
     return {
         // eslint-disable-next-line no-undef
