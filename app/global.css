@@ -833,3 +833,63 @@ p {
   border: none !important;
 }
 
+/* ------------------------------------------------------------------ *
+ * Zingbot (ktt10) support widget — fit-and-finish overrides.
+ * Zingbot injects its own plugin.css at runtime with !important on
+ * every rule, and it loads *after* this file, so each override here
+ * needs both !important and an extra `body ` prefix (the widget is
+ * appended to <body>) to win the cascade. See root.jsx for the loader.
+ * ------------------------------------------------------------------ */
+
+/* Launcher button: match Brix surfaces (rounded-square, brand blue,
+   soft shadow) and stack above BrixBar, which sits at z-index 9998. */
+body .ktt10-btn {
+  width: 52px !important;
+  height: 52px !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  border-radius: 16px !important;
+  background-color: var(--kttPrimaryColor, var(--brand-blue)) !important;
+  box-shadow: 0 6px 20px rgba(26, 157, 224, 0.32),
+              0 2px 6px rgba(0, 0, 0, 0.12) !important;
+  z-index: 9999 !important;
+}
+
+body .ktt10-btn img {
+  width: 54% !important;
+  height: 54% !important;
+}
+
+body .ktt10-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 28px rgba(26, 157, 224, 0.4),
+              0 3px 8px rgba(0, 0, 0, 0.16) !important;
+}
+
+/* Chat panel: keep it anchored bottom-right but never taller than the
+   embedded-app iframe. Zingbot's default (80vh / 600px tall, bottom:90px)
+   overflowed the top of the iframe, so the panel opened clipped. */
+body .ktt10-flt {
+  right: 20px !important;
+  bottom: 84px !important;
+  width: min(380px, calc(100vw - 40px)) !important;
+  height: min(620px, calc(100vh - 108px)) !important;
+  max-height: calc(100vh - 108px) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18),
+              0 4px 12px rgba(0, 0, 0, 0.10) !important;
+  z-index: 10000 !important;
+}
+
+/* On a short/narrow viewport, shrink the margins instead of going
+   full-bleed — full-screen reads as broken inside the admin frame. */
+@media (max-width: 576px), (max-height: 520px) {
+  body .ktt10-flt {
+    right: 12px !important;
+    bottom: 76px !important;
+    width: calc(100vw - 24px) !important;
+    height: calc(100vh - 92px) !important;
+    max-height: calc(100vh - 92px) !important;
+  }
+}
+

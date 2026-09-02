@@ -48,7 +48,7 @@ export default function App() {
     (function () {
         function ktt10Init() {
             if (typeof ktt10 === "undefined" || !ktt10.setup) return;
-            ktt10.setup({ id: "XrCozq0rELnonn", accountId: "1164913", color: "#006dff" });
+            ktt10.setup({ id: "XrCozq0rELnonn", accountId: "1164913", color: "#1a9de0" });
         }
         var s = document.createElement("script");
         s.src = "https://app.zingbot.io/webchat/plugin.js?v=6";
