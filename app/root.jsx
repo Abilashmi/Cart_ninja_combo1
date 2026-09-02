@@ -31,10 +31,38 @@ export default function App() {
             `,
           }}
         />
-        <script src="https://app.zingbot.io/webchat/plugin.js?v=6"></script>
+        {/*
+          Zingbot (ktt10) help & support widget. Loaded via a self-injecting
+          loader rather than two bare <script> tags because:
+            1. ktt10.setup() calls document.body.appendChild — running it from a
+               plain inline <script> in <head> throws (body isn't parsed yet),
+               so the widget silently never mounts. We defer setup to
+               DOMContentLoaded.
+            2. It also guarantees plugin.js has finished loading before setup()
+               runs, instead of relying on script tag ordering surviving
+               React's SSR/hydration.
+        */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `ktt10.setup({id:"XrCozq0rELnonn",accountId:"1164913",color:"#006dff"})`,
+            __html: `
+    (function () {
+        function ktt10Init() {
+            if (typeof ktt10 === "undefined" || !ktt10.setup) return;
+            ktt10.setup({ id: "XrCozq0rELnonn", accountId: "1164913", color: "#006dff" });
+        }
+        var s = document.createElement("script");
+        s.src = "https://app.zingbot.io/webchat/plugin.js?v=6";
+        s.async = true;
+        s.onload = function () {
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", ktt10Init);
+            } else {
+                ktt10Init();
+            }
+        };
+        (document.head || document.documentElement).appendChild(s);
+    })();
+            `,
           }}
         />
       </head>
