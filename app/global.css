@@ -878,15 +878,18 @@ body .ktt10-btn:hover {
               0 3px 8px rgba(0, 0, 0, 0.16) !important;
 }
 
-/* Chat panel: 25% of the viewport width, anchored bottom-right, never
-   taller than the embedded-app iframe. Zingbot's default (80vh / 600px
+/* Chat panel: a compact 320px, anchored bottom-right, never taller than
+   the embedded-app iframe. Zingbot's default (370px wide, 80vh / 600px
    tall, bottom:90px) overflowed the top of the iframe so it opened
-   clipped. min-width keeps it usable on narrow laptops. */
+   clipped. A percentage width isn't used here because it resolves
+   against the full browser width, not the app panel, so 25% still read
+   as ~370px+ on wide monitors. */
 body .ktt10-flt {
   right: 20px !important;
   bottom: 76px !important;
-  width: 25% !important;
-  min-width: 320px !important;
+  width: 320px !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 32px) !important;
   height: min(620px, calc(100vh - 100px)) !important;
   max-height: calc(100vh - 100px) !important;
   border-radius: 16px !important;
