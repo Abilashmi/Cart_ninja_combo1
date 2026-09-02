@@ -898,16 +898,15 @@ body .ktt10-flt {
   z-index: 10000 !important;
 }
 
-/* On a short/narrow viewport, shrink the margins instead of going
-   full-bleed — full-screen reads as broken inside the admin frame. */
-@media (max-width: 576px), (max-height: 520px) {
+/* Only collapse to near-full-width on a genuinely narrow screen. Do NOT
+   key this off height — the embedded admin iframe is often <520px tall,
+   which was matching Zingbot's own `max-height: 520px` breakpoint and
+   blowing the panel back out to full width. */
+@media (max-width: 480px) {
   body .ktt10-flt {
     right: 12px !important;
-    bottom: 76px !important;
-    width: calc(100vw - 24px) !important;
-    min-width: 0 !important;
-    height: calc(100vh - 92px) !important;
-    max-height: calc(100vh - 92px) !important;
+    left: 12px !important;
+    width: auto !important;
   }
 }
 
