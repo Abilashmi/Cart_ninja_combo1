@@ -3,6 +3,7 @@ import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { agentTurn } from '../services/ai-llm.server';
 import { guardChatReply } from '../services/ai-safety.server';
 import { TOOL_REGISTRY, isDestructiveToolCall } from '../config/ai-tool-schemas';
+import { PRODUCT_KNOWLEDGE } from '../config/ai-product-knowledge';
 import { TOOL_EXECUTORS } from '../services/ai-agent-tools.server';
 import { getStoreConfigSnapshot } from '../services/store-config-snapshot.server';
 import { getShopPlan } from '../services/plan-permissions.server';
@@ -153,7 +154,7 @@ export async function action({ request }) {
     // store's own currency — this is the fact that stops the model from
     // defaulting to $/USD out of its own training data.
     const currencyLine = `Store currency: ${currency.code} (${currency.symbol}), locale ${currency.locale}. When the merchant gives a plain number for a price or spending threshold, it is in this currency — write it back using the ${currency.symbol} symbol (or the currency's normal formatting), never $ or USD, unless the store currency is actually USD.`;
-    const systemPrompt = [SYSTEM_PROMPT_BASE, currencyLine, stateLine].filter(Boolean).join('\n\n');
+    const systemPrompt = [SYSTEM_PROMPT_BASE, PRODUCT_KNOWLEDGE, currencyLine, stateLine].filter(Boolean).join('\n\n');
 
     let messages = [
       { role: 'system', content: systemPrompt },
