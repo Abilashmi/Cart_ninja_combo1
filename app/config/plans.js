@@ -12,10 +12,10 @@ export const PLANS = {
     tagline: 'Launch & learn',
     price: { monthly: 0, annual: 0 },
     rank: 0,
-    // No per-order commission on Free — crossing orderCap pauses storefront
-    // widgets for the rest of the month instead (see plan_order_cap_exceeded
-    // in php_backend/plan_helpers.php, the actual enforcement point).
-    orderCap: 50,
+    // Free has no order cap — unlimited orders, same as Pro (see
+    // plan_order_cap_exceeded in php_backend/plan_helpers.php, which
+    // already treats a null orderCap as never-exceeded).
+    orderCap: null,
     overageRate: 0,
     aiBrixCredits: 10,
     aiBrixOverageRate: 0.10,

@@ -16,10 +16,10 @@ const PLANS = [
     'free' => [
         'key' => 'free',
         'label' => 'Free',
-        'orderCap' => 50,
-        // No per-order commission on Free — crossing orderCap pauses
-        // storefront widgets for the rest of the month instead (see
-        // plan_order_cap_exceeded in plan_helpers.php).
+        // Free has no order cap — unlimited orders, same as Pro (see
+        // plan_order_cap_exceeded in plan_helpers.php, which already
+        // treats a null orderCap as never-exceeded).
+        'orderCap' => null,
         'overageRate' => 0.0,
         'aiBrixCredits' => 10,
         'comboTemplateLimit' => 0,

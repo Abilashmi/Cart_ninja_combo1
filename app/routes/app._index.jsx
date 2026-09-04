@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLoaderData, useRouteError, useNavigate } from "react-router";
+import { useLoaderData, useRouteError, useNavigate, redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Text, Icon } from '@shopify/polaris';
 import {
@@ -10,6 +10,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
+import { getAgencyStoreStatus } from "../utils/agency-dashboard.server";
 import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
 import { PLANS } from "../config/plans";
@@ -51,6 +52,17 @@ function normalizeAnalytics(p = {}) {
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+
+  // A merchant landing here right after installing BRIX (or reopening it
+  // with an agency authorization/activation still pending) should be sent
+  // straight into the agency-connect screen instead of ordinary Home.
+  // Fails open to Home for every other stage (COMPLETE, NOT_INSTALLED,
+  // ERROR, no relationship at all) — the vast majority of merchants have
+  // no agency relationship and must never be gated here.
+  const agencyStatus = await getAgencyStoreStatus(shop);
+  if (["AUTHORIZATION_REQUIRED", "ACTIVATION_REQUIRED"].includes(agencyStatus.stage)) {
+    return redirect("/app/agency-connect");
+  }
 
   try {
     fetch(`${BASE_PHP_URL}/install_shop.php`, {

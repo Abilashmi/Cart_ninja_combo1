@@ -3,48 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { Page, Text, Icon } from "@shopify/polaris";
 import { TeamIcon, StoreIcon, ShieldCheckMarkIcon, CheckCircleIcon, AlertCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-
-// Two separate hosts hold this shared secret + base URL: the PHP backend
-// at int.thebrix.io (php_backend/install_shop.php, uninstall_shop.php)
-// and this Node app's own environment (Fly.io secrets) — configured
-// independently since they're different runtimes/deployments, but must
-// carry the exact same values on both sides for the Agency Dashboard to
-// trust either caller.
-function agencyDashboardHeaders() {
-    return {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        // eslint-disable-next-line no-undef
-        "X-Internal-Secret": process.env.AGENCY_DASHBOARD_INTERNAL_SECRET || "",
-    };
-}
-
-function agencyDashboardUrl(path) {
-    // eslint-disable-next-line no-undef
-    const base = (process.env.AGENCY_DASHBOARD_URL || "").replace(/\/+$/, "");
-    return `${base}${path}`;
-}
+import { agencyDashboardHeaders, agencyDashboardUrl, getAgencyStoreStatus } from "../utils/agency-dashboard.server";
 
 export async function loader({ request }) {
     const { session } = await authenticate.admin(request);
     const shop = session.shop;
 
-    try {
-        const res = await fetch(
-            agencyDashboardUrl(`/internal/shopify/agency/store-status?shop_domain=${encodeURIComponent(shop)}`),
-            { headers: agencyDashboardHeaders() }
-        );
-        const body = await res.json();
-        if (!res.ok || !body?.success) {
-            return { stage: "ERROR", shop };
-        }
-        return { ...body.data, shop };
-    } catch {
-        // Agency Dashboard unreachable (not configured yet, network blip,
-        // etc.) — never break the embedded app over this; just show a
-        // friendly state the merchant can retry from.
-        return { stage: "ERROR", shop };
-    }
+    return getAgencyStoreStatus(shop);
 }
 
 export async function action({ request }) {
