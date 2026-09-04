@@ -60,7 +60,10 @@ export const loader = async ({ request }) => {
   // ERROR, no relationship at all) — the vast majority of merchants have
   // no agency relationship and must never be gated here.
   const agencyStatus = await getAgencyStoreStatus(shop);
-  if (["AUTHORIZATION_REQUIRED", "ACTIVATION_REQUIRED"].includes(agencyStatus.stage)) {
+  const needsAgencyConnect = ["AUTHORIZATION_REQUIRED", "ACTIVATION_REQUIRED"].includes(agencyStatus.stage);
+  // eslint-disable-next-line no-undef
+  console.log(`[BRIX AGENCY DEBUG] shop=${shop} stage=${agencyStatus.stage} redirect=${needsAgencyConnect ? "/app/agency-connect" : "none"}`);
+  if (needsAgencyConnect) {
     return redirect("/app/agency-connect");
   }
 
