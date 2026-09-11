@@ -215,6 +215,28 @@ function CountdownTimerPreview({ countdown }) {
   );
 }
 
+// How long a tier's own completion message stays on screen (replacing the
+// "You're X left..." progress message, plus that tier's confetti if
+// enabled) before auto-advancing to the next incomplete tier. Mirrors the
+// storefront widget's own celebration queue exactly (extensions/cart-drawer/
+// assets/cart_drawer_inline.js) — kept as one named constant in each file
+// since the two run in genuinely separate JS runtimes (this is a bundled
+// React admin page; that's a standalone script tag on the storefront) and
+// can't literally share a module.
+const TIER_CELEBRATION_DURATION_MS = 2500;
+
+// Fills a merchant-authored Progress Message template with the current
+// remaining amount/item count/target. Unrecognized placeholders (or none at
+// all) are left exactly as typed — never throws. Mirrors the identical
+// function in cart_drawer_inline.js (same reasoning as the constant above:
+// genuinely separate JS runtimes, so mirrored by hand rather than shared).
+function fillProgressMessageTemplate(template, { amountStr, itemsStr, targetStr }) {
+  return String(template)
+    .replace(/\{amount\}/g, amountStr)
+    .replace(/\{items\}/g, itemsStr)
+    .replace(/\{target\}/g, targetStr);
+}
+
 function ProgressBarPreview({ pb, lockBadge }) {
   const { symbol: currencySymbol } = useCurrency();
   const isCount = pb.mode === 'count';
@@ -232,6 +254,60 @@ function ProgressBarPreview({ pb, lockBadge }) {
     .filter((t) => Number(t.minimumSpend) > 0)
     .slice()
     .sort((a, b) => a.minimumSpend - b.minimumSpend);
+  const currentValue = isCount ? MOCK_CART_COUNT : CART_TOTAL;
+
+  // Per-tier completion celebration: the moment a tier is newly crossed, its
+  // own completion message (+ confetti, if enabled for that tier) briefly
+  // replaces the "You're X left..." progress message, then auto-advances to
+  // the next incomplete tier. Declared before the early return below since
+  // hooks must run unconditionally on every render. Keyed off a stable
+  // signature (not the `tiers` array reference, which is rebuilt fresh every
+  // render) so the effect only re-evaluates when a tier's id or threshold
+  // actually changes.
+  const tiersSignature = tiers.map((t) => `${t.id}:${t.minimumSpend}`).join('|');
+  const hasNextTier = tiers.some((t) => currentValue < t.minimumSpend);
+  const [celebratingTierId, setCelebratingTierId] = useState(null);
+  const celebratedRef = useRef(new Set());
+  const queueRef = useRef([]);
+
+  useEffect(() => {
+    const newlyCompleted = tiers.filter((t) => currentValue >= t.minimumSpend && !celebratedRef.current.has(t.id));
+    newlyCompleted.forEach((t) => {
+      celebratedRef.current.add(t.id);
+      if (celebratingTierId !== t.id && !queueRef.current.includes(t.id)) queueRef.current.push(t.id);
+    });
+    // A tier whose target the merchant just raised past the mock cart total
+    // drops out of "completed" — clear it (and its celebration, if it's the
+    // one currently showing) so crossing it again later re-celebrates
+    // instead of staying silently marked as already-shown.
+    Array.from(celebratedRef.current).forEach((id) => {
+      const t = tiers.find((x) => x.id === id);
+      if (t && currentValue < t.minimumSpend) {
+        celebratedRef.current.delete(id);
+        if (celebratingTierId === id) setCelebratingTierId(null);
+      }
+    });
+    if (!celebratingTierId && queueRef.current.length > 0) {
+      setCelebratingTierId(queueRef.current.shift());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiersSignature, currentValue]);
+
+  // Only auto-advances while there's a genuine next incomplete tier to move
+  // on to — if this is the last tier overall (nothing left to unlock), its
+  // completion message becomes the permanent resting state instead of a
+  // transient one (matches "Completion Message belongs to each individual
+  // Tier": there's no separate bar-level "all done" message to fall back
+  // to), so no timer is set here and only a cart-value change (the effect
+  // above) clears it.
+  useEffect(() => {
+    if (!celebratingTierId || !hasNextTier) return undefined;
+    const timer = setTimeout(() => {
+      setCelebratingTierId(queueRef.current.length > 0 ? queueRef.current.shift() : null);
+    }, TIER_CELEBRATION_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [celebratingTierId, hasNextTier]);
+
   if (!tiers.length) {
     return (
       <div className="cart-preview-progress">
@@ -250,27 +326,39 @@ function ProgressBarPreview({ pb, lockBadge }) {
   const fillColor = colors.fill || '#10b981';
   const iconColor = colors.icon || '#2563eb';
   const msgColor = colors.message || '#10b981';
-  const currentValue = isCount ? MOCK_CART_COUNT : CART_TOTAL;
   const maxThreshold = tiers[tiers.length - 1].minimumSpend;
   const fillPct = Math.min(100, (currentValue / maxThreshold) * 100);
   const nextTier = tiers.find((t) => currentValue < t.minimumSpend);
-  const diff = nextTier ? nextTier.minimumSpend - currentValue : 0;
-  const amountStr = isCount ? `${diff} item${diff !== 1 ? 's' : ''}` : `${currencySymbol}${diff}`;
+  // Math.ceil (not round) plus a floor of 1: a fractional remainder like
+  // 0.4 must never display as "0 left" while the tier genuinely isn't
+  // reached yet.
+  const remaining = nextTier ? Math.max(1, Math.ceil(nextTier.minimumSpend - currentValue)) : 0;
+  const nextTierLabel = nextTier ? (nextTier.title || nextTier.description || 'your next reward') : '';
+  // {amount}/{items}/{target} — {amount} and {items} both resolve to the
+  // same remaining value (currency-formatted vs. a bare number respectively;
+  // the merchant's own text supplies the unit word for {items}, e.g. "{items}
+  // items away"), so using the "wrong" one for the configured progress mode
+  // still shows a real number, never breaks. {target} is the tier's full
+  // configured threshold, not the remaining amount.
+  const progressMessageText = nextTier ? fillProgressMessageTemplate(
+    nextTier.progressMessage || `You're {amount} away from unlocking ${nextTierLabel}!`,
+    {
+      amountStr: isCount ? String(remaining) : `${currencySymbol}${remaining}`,
+      itemsStr: String(remaining),
+      targetStr: isCount ? String(nextTier.minimumSpend) : `${currencySymbol}${nextTier.minimumSpend}`,
+    }
+  ) : '';
   const radius = pb.borderRadius;
-  // The tier labels below the track need two lines only when a tier is both
-  // unlocked and has a title/description; otherwise it's a single line
-  // (either "REACHED" alone or the locked-state amount pill). Sizing the
-  // track's bottom padding to whichever is actually needed avoids reserving
-  // dead space for a second line that isn't there.
-  const hasTwoLineLabel = tiers.some((t) => currentValue >= t.minimumSpend && (t.title || t.description));
+  // The tier labels below the track need two lines whenever a tier has a
+  // title/description — shown both before and after that tier is reached
+  // (locked: amount pill + description; unlocked: REACHED pill +
+  // description) — otherwise it's a single line (just the pill). Sizing
+  // the track's bottom padding to whichever is actually needed avoids
+  // reserving dead space for a second line that isn't there.
+  const hasTwoLineLabel = tiers.some((t) => t.title || t.description);
   const trackBottomPadding = hasTwoLineLabel ? 38 : 26;
 
-  const buildMessageLine = () => {
-    const template = pb.messageTemplate || "You're {amount} away";
-    const parts = template.split('{amount}');
-    if (parts.length === 1) return <span>{parts[0]}</span>;
-    return <>{parts[0]}<strong style={{ fontWeight: 700 }}>{amountStr}</strong>{parts[1]}</>;
-  };
+  const celebratingTier = celebratingTierId ? tiers.find((t) => t.id === celebratingTierId) : null;
 
   return (
     <div className="cart-preview-progress">
@@ -281,13 +369,14 @@ function ProgressBarPreview({ pb, lockBadge }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>{lockBadge}</div>
       )}
       <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-        {nextTier ? (
-          <>
-            <div style={{ fontSize: '13px', fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>{buildMessageLine()}</div>
-            {nextTier.title && (
-              <div style={{ fontSize: '12px', fontWeight: 700, color: iconColor, lineHeight: 1.4 }}>Unlock: {nextTier.title}</div>
-            )}
-          </>
+        {celebratingTier ? (
+          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor, lineHeight: 1.5 }}>
+            {celebratingTier.completionMessage || `Congratulations! You've unlocked ${celebratingTier.title || celebratingTier.description || 'your reward'}!`}
+          </div>
+        ) : nextTier ? (
+          <div style={{ fontSize: '13px', fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>
+            {progressMessageText}
+          </div>
         ) : (
           <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor }}>{pb.completionMessage || "🎉 You've unlocked free shipping!"}</div>
         )}
@@ -312,15 +401,26 @@ function ProgressBarPreview({ pb, lockBadge }) {
               {/* left:50% + translateX(-50%) centres the label under the icon's midpoint, preventing edge-tier overflow */}
               <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                 {unlocked ? (
-                  <>
-                    <div style={{ fontSize: '7px', fontWeight: 700, color: '#059669', background: '#d1fae5', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>REACHED</div>
-                    {(tier.title || tier.description) && (
-                      <div style={{ fontSize: '8px', color: iconColor, fontWeight: 600, whiteSpace: 'nowrap' }}>{tier.title || tier.description}</div>
-                    )}
-                  </>
+                  <div style={{ fontSize: '7px', fontWeight: 700, color: '#059669', background: '#d1fae5', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>REACHED</div>
                 ) : (
-                  <div style={{ fontSize: '9px', color: '#374151', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '2px 6px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                    {isCount ? `${tier.minimumSpend}` : `${currencySymbol}${tier.minimumSpend}`}
+                  // "Hide milestone amount" only affects this locked-state
+                  // pill — the title/description label below is unaffected.
+                  !pb.hideMilestoneAmount && (
+                    <div style={{ fontSize: '9px', color: '#374151', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '2px 6px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      {isCount ? `${tier.minimumSpend}` : `${currencySymbol}${tier.minimumSpend}`}
+                    </div>
+                  )
+                )}
+                {/* Shown in both states now — a merchant's tier title/description is
+                    the point of the milestone, not just a post-unlock reward blurb.
+                    Full text, wrapped onto as many lines as it needs — never
+                    truncated. Needs its own explicit width: this wrapper is a flex
+                    column with align-items:center, which shrink-fits children to
+                    their content instead of stretching them, so without a width
+                    here the text has no real box to wrap against. */}
+                {(tier.title || tier.description) && (
+                  <div style={{ width: '90px', fontSize: '8px', color: iconColor, fontWeight: 600, whiteSpace: 'normal', overflowWrap: 'break-word', lineHeight: 1.3, textAlign: 'center' }}>
+                    {tier.title || tier.description}
                   </div>
                 )}
               </div>

@@ -156,6 +156,9 @@ export function ProgressBarSection() {
       icon: 'gift',
       rewardProducts: [],
       rewardProductCount: 0,
+      progressMessage: '',
+      completionMessage: '',
+      confetti: true,
     };
     const newTiers = [...progressBar.tiers, newTier];
     updateProgressBar({ tiers: newTiers });
@@ -215,6 +218,11 @@ export function ProgressBarSection() {
             label="Show progress bar when cart is empty"
             enabled={progressBar.showWhenEmpty}
             onToggle={(v) => updateProgressBar({ showWhenEmpty: v })}
+          />
+          <FeatureToggle
+            label="Hide milestone amount"
+            enabled={progressBar.hideMilestoneAmount}
+            onToggle={(v) => updateProgressBar({ hideMilestoneAmount: v })}
           />
         </FormLayout>
       </Card>
@@ -298,6 +306,19 @@ export function ProgressBarSection() {
                       : 'No products selected. Click to add reward products.'}
                   </div>
                 </BlockStack>
+                {/* Shown while this tier is NOT YET reached — distinct from
+                    Completion Message below, which is shown once it IS
+                    reached. {amount}/{items}/{target} are filled in
+                    dynamically at render time; free text with no
+                    placeholders is shown exactly as typed. */}
+                <TextField
+                  label="Progress Message"
+                  value={activeTier.progressMessage || ''}
+                  onChange={(v) => updateTier(activeTierIndex, { progressMessage: v })}
+                  placeholder={`You're {amount} away from unlocking ${activeTier.title || activeTier.description || 'your reward'}!`}
+                  helpText="Available variables: {amount} = remaining amount, {items} = remaining item count, {target} = milestone target"
+                  autoComplete="off"
+                />
               </FormLayout>
             </Card>
           </BlockStack>
@@ -305,16 +326,21 @@ export function ProgressBarSection() {
           <Card>
             <FormLayout>
               <Text as="h3" variant="headingMd">Completion</Text>
+              {/* Per-tier now — each milestone shows its own congratulations
+                  message the moment it's crossed, not one message shared
+                  across every tier. Bound to the tier currently selected
+                  above (activeTier), same as Title/Description/Icon. */}
               <TextField
                 label="Completion Message"
-                value={progressBar.completionMessage}
-                onChange={(v) => updateProgressBar({ completionMessage: v })}
+                value={activeTier.completionMessage || ''}
+                onChange={(v) => updateTier(activeTierIndex, { completionMessage: v })}
+                placeholder={`Congratulations! You've unlocked ${activeTier.title || activeTier.description || 'your reward'}!`}
                 autoComplete="off"
               />
               <FeatureToggle
                 label="Enable confetti popup on completion"
-                enabled={progressBar.confetti}
-                onToggle={(v) => updateProgressBar({ confetti: v })}
+                enabled={activeTier.confetti !== false}
+                onToggle={(v) => updateTier(activeTierIndex, { confetti: v })}
                 badge={<ProBadge featureKey="confetti" />}
               />
             </FormLayout>

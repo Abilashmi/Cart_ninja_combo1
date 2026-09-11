@@ -177,6 +177,46 @@
   let _ccStoreCatalogPromise = null;
   let _ccRewardSyncInFlight = false;
 
+  // Per-tier progress-bar completion celebration — the moment a tier is
+  // newly crossed, its own completion message (+ confetti, if enabled for
+  // that tier) briefly replaces the "You're X left..." progress message,
+  // then auto-advances to the next incomplete tier. Module-scoped (not
+  // React state — this file is a plain script, not a component) so it
+  // survives across the repeated renderDrawer() calls triggered by cart
+  // changes. Mirrors CartPreview.jsx's own React-state version of the same
+  // queue exactly.
+  const CC_TIER_CELEBRATION_DURATION_MS = 2500;
+  let _ccCelebratedTierIds = new Set();
+  let _ccCelebrationQueue = [];
+  let _ccCelebratingTierId = null;
+  let _ccCelebrationTimer = null;
+
+  // Clears the current celebration and forces a fresh render — the render
+  // block's own detection logic (below, inside renderDrawer's progress-bar
+  // section) is the ONLY place that picks the next queued tier back up and
+  // decides whether to reschedule this timer, using that render's actual
+  // pInfo.upcoming. Kept that way (rather than deciding here too) because
+  // this function runs outside any render's closure and has no access to
+  // pInfo — centralizing the decision in one place avoids the two ever
+  // disagreeing about whether another tier is still incomplete.
+  function ccAdvanceCelebrationQueue() {
+    _ccCelebratingTierId = null;
+    renderDrawer();
+  }
+
+  // Fills a merchant-authored Progress Message template with the current
+  // remaining amount/item count/target. Unrecognized placeholders (or none
+  // at all) are left exactly as typed — never throws. Mirrors the identical
+  // function in CartPreview.jsx (kept in each file by hand rather than
+  // shared: this is a standalone script tag on the storefront; that's a
+  // bundled React admin page — genuinely separate JS runtimes).
+  function fillProgressMessageTemplate(template, vars) {
+    return String(template)
+      .replace(/\{amount\}/g, vars.amountStr)
+      .replace(/\{items\}/g, vars.itemsStr)
+      .replace(/\{target\}/g, vars.targetStr);
+  }
+
   /* =================== CONFETTI POPUP =================== */
   function triggerConfetti() {
     setTimeout(() => {
@@ -433,6 +473,26 @@
           target: target,
           title: t.title || '',
           rewardText: t.description || 'Reward',
+          // Raw, undefaulted description — used for the persistent per-tier
+          // label (shown before AND after the tier is reached), so a tier
+          // with no title/description never permanently shows the generic
+          // "Reward" placeholder that rewardText falls back to above (that
+          // fallback is only meant for the "Unlock: ..." banner text).
+          description: t.description || '',
+          // Merchant-authored template shown while this tier is NOT YET
+          // reached — supports {amount}/{items}/{target} placeholders (see
+          // fillProgressMessageTemplate below). Blank (including every tier
+          // saved before this field existed) falls back to
+          // "You're {amount} away from unlocking {tier title}!" at render time.
+          progressMessage: t.progressMessage || '',
+          // Per-tier completion celebration — shown briefly in place of the
+          // progress message above the moment THIS tier is crossed, with
+          // its own confetti setting, before advancing to the next
+          // incomplete tier. Distinct from the bar-level completionText/
+          // enableConfetti above, which is the persistent message once every
+          // tier is done.
+          completionMessage: t.completionMessage || '',
+          confetti: t.confetti !== false,
           // The admin's ProductPickerModal saves this as `rewardProducts`;
           // some write paths (the AI-tool legacy sync) also mirror it as
           // `products` — accept either so a reward product picked in the
@@ -470,6 +530,10 @@
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
+      // Hides only the small locked-state amount pill (e.g. "₹500") under
+      // each not-yet-reached milestone icon — never the progress message or
+      // the REACHED/title label.
+      hideMilestoneAmount: data.hideMilestoneAmount === true,
       // The admin's ProgressBarSection saves this field as `position`
       // (defaultCartEditorState.body.progressBar.position) — `placement` is
       // never actually written, so without the `data.position` fallback the
@@ -2206,18 +2270,84 @@
 
       const fgColor = progress.barForegroundColor || '#2563eb';
 
+      // Detect tiers newly crossed since the last render and enqueue their
+      // celebration (ascending order, so each tier gets its own turn rather
+      // than jumping straight to the highest one when a single cart update
+      // crosses several at once). A tier that drops back below its own
+      // threshold (item removed) is un-marked so crossing it again later
+      // re-celebrates instead of staying silently suppressed — mirrors the
+      // existing window._ccConfettiShown reset pattern below.
+      _ccCelebratedTierIds.forEach((id) => {
+        const t = pInfo.tiers.find((x) => x.id === id);
+        if (t && pInfo.currentVal < t.target) {
+          _ccCelebratedTierIds.delete(id);
+          if (_ccCelebratingTierId === id) _ccCelebratingTierId = null;
+        }
+      });
+      pInfo.tiers.forEach((t) => {
+        if (pInfo.currentVal >= t.target && !_ccCelebratedTierIds.has(t.id)) {
+          _ccCelebratedTierIds.add(t.id);
+          if (_ccCelebratingTierId !== t.id && !_ccCelebrationQueue.includes(t.id)) _ccCelebrationQueue.push(t.id);
+        }
+      });
+      // Pick up the next queued celebration if nothing is currently
+      // showing. Only (re)schedule the auto-advance timer if there's a
+      // genuine next incomplete tier to move on to (pInfo.upcoming) — if
+      // this is the last tier overall, its completion message becomes the
+      // permanent resting state (no separate "all done" message needed;
+      // see the spec's "Completion Message belongs to each individual
+      // Tier"), so no timer is set and cart changes are what clears it
+      // (via the drop-below-threshold cleanup above), not a timeout.
+      if (!_ccCelebratingTierId && _ccCelebrationQueue.length > 0) {
+        _ccCelebratingTierId = _ccCelebrationQueue.shift();
+        clearTimeout(_ccCelebrationTimer);
+        if (pInfo.upcoming) {
+          _ccCelebrationTimer = setTimeout(ccAdvanceCelebrationQueue, CC_TIER_CELEBRATION_DURATION_MS);
+        }
+      }
+      const celebratingTier = _ccCelebratingTierId ? pInfo.tiers.find((t) => t.id === _ccCelebratingTierId) : null;
+
       let pbHtml = `<div style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -2 : 998};">`;
       // Header info
       pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
-      if (pInfo.upcoming) {
-        const amountLeft =
-          pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `${CURRENCY_SYMBOL}${Math.round(pInfo.nextAmount)}`;
+      if (celebratingTier) {
+        const msg = celebratingTier.completionMessage
+          || `Congratulations! You've unlocked ${celebratingTier.title || celebratingTier.description || 'your reward'}!`;
         pbHtml += `
-    <p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">
-      You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
-    </p>
-    <p style="margin:0;font-size:14px;font-weight:700;color:${fgColor};">
-      ${escapeHtml(pInfo.upcoming.rewardText || '')}
+    <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
+      <span style="font-size:15px;font-weight:700;">${escapeHtml(msg)}</span>
+    </div>
+  `;
+        if (celebratingTier.confetti) {
+          triggerConfetti();
+          // This tier's own celebration already fired confetti — if it's
+          // the last one, skip the old "all rewards unlocked" confetti
+          // trigger below so it doesn't fire a second time right after.
+          if (!pInfo.upcoming) window._ccConfettiShown = true;
+        }
+      } else if (pInfo.upcoming) {
+        // nextAmount is always strictly positive while a tier is upcoming
+        // (see getProgressInfo) — Math.ceil (not round) plus a floor of 1
+        // still guards a fractional remainder like 0.4 from ever displaying
+        // as "0 left"/"0 away".
+        const remaining = Math.max(1, Math.ceil(pInfo.nextAmount));
+        const nextLabel = pInfo.upcoming.title || pInfo.upcoming.description || 'your next reward';
+        // {amount} and {items} both resolve to the same remaining value
+        // (currency-formatted vs. a bare number respectively — the
+        // merchant's own text supplies the unit word for {items}, e.g.
+        // "{items} items away"), so using the "wrong" one for the
+        // configured progress mode still shows a real number, never breaks.
+        // {target} is the tier's full configured threshold, not the
+        // remaining amount.
+        const progressTemplate = pInfo.upcoming.progressMessage || `You're {amount} away from unlocking ${nextLabel}!`;
+        const progressMsg = fillProgressMessageTemplate(progressTemplate, {
+          amountStr: pInfo.mode === 'quantity' ? String(remaining) : `${CURRENCY_SYMBOL}${remaining}`,
+          itemsStr: String(remaining),
+          targetStr: pInfo.mode === 'quantity' ? String(pInfo.upcoming.target) : `${CURRENCY_SYMBOL}${pInfo.upcoming.target}`,
+        });
+        pbHtml += `
+    <p style="margin:0;font-size:15px;font-weight:500;color:#64748b;">
+      ${escapeHtml(progressMsg)}
     </p>
   `;
       } else {
@@ -2274,7 +2404,7 @@
         const nextPercent = idx < pInfo.tiers.length - 1 ? Math.min(97, Math.max(3, (pInfo.tiers[idx + 1].target / pInfo.maxTarget) * 100)) : 100;
         const nearestGapPercent = Math.min(percent - prevPercent, nextPercent - percent);
         const APPROX_TRACK_WIDTH_PX = 340; // rough estimate of the track's rendered width, good enough for sizing text
-        const labelWidthPx = Math.max(48, Math.min(90, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
+        const labelWidthPx = Math.max(60, Math.min(110, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
 
         pbHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;">`;
 
@@ -2285,7 +2415,7 @@
         pbHtml += `</div>`;
 
         const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
-        const tierLabel = ms.title || ms.rewardText;
+        const tierLabel = ms.title || ms.description;
 
         // Must be position:absolute (top:100%, relative to the node-sized
         // wrapper above) — not stacked in normal flow. The wrapper itself is
@@ -2296,11 +2426,25 @@
         pbHtml += `<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;width:${labelWidthPx}px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">`;
         if (isCompleted) {
           pbHtml += `<div style="font-size:7px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0.3px;">REACHED</div>`;
-          if (tierLabel) {
-            pbHtml += `<div style="font-size:8px;color:${iconFill};font-weight:600;white-space:normal;word-break:break-word;line-height:1.25;text-align:center;">${escapeHtml(tierLabel)}</div>`;
-          }
-        } else {
+        } else if (!progress.hideMilestoneAmount) {
+          // "Hide milestone amount" only affects this locked-state pill —
+          // the title/description label below is unaffected.
           pbHtml += `<div style="font-size:9px;color:#374151;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:2px 6px;font-weight:500;white-space:nowrap;">${amountDisplay}</div>`;
+        }
+        // Shown in both states now — a merchant's tier title/description is the
+        // point of the milestone, not just a post-unlock reward blurb. Full
+        // text, wrapped onto as many lines as it needs — never truncated.
+        // Needs its OWN explicit width (not just inherited from the parent):
+        // that parent is a flex column with align-items:center, which sizes
+        // children to their own content (shrink-to-fit) rather than
+        // stretching them to the parent's width, so without this the text
+        // had no real box to wrap against and rendered as a garbled,
+        // overlapping stack of near-single-character lines instead of a
+        // clean wrapped block. overflow-wrap (not word-break) only breaks
+        // inside a word when that word alone doesn't fit — normal text still
+        // wraps at spaces first.
+        if (tierLabel) {
+          pbHtml += `<div style="width:100%;font-size:8px;color:${iconFill};font-weight:600;white-space:normal;overflow-wrap:break-word;line-height:1.3;text-align:center;">${escapeHtml(tierLabel)}</div>`;
         }
         pbHtml += `</div></div>`;
       });

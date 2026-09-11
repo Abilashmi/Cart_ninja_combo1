@@ -8,6 +8,21 @@ export const defaultTier = {
   icon: 'gift',
   rewardProducts: [],
   rewardProductCount: 0,
+  // Merchant-authored template shown while this tier is NOT YET reached —
+  // supports {amount}/{items}/{target} placeholders, filled in dynamically
+  // from the current progress mode/cart value at render time (see
+  // fillProgressMessageTemplate in CartPreview.jsx and cart_drawer_inline.js).
+  // Left blank by default; a tier with no value here (including every tier
+  // saved before this field existed) falls back to
+  // "You're {amount} away from unlocking {tier title}!" at render time.
+  progressMessage: '',
+  // Shown once this specific tier IS reached, replacing the progress
+  // message above for a short celebration beat before advancing to the
+  // next incomplete tier. Each tier owns its own message/confetti setting —
+  // distinct from progressBar.completionMessage/confetti below, which is
+  // only a fallback for the edge case of a progress bar with zero tiers.
+  completionMessage: '',
+  confetti: true,
 };
 
 export const defaultCartEditorState = {
@@ -54,6 +69,10 @@ export const defaultCartEditorState = {
       position: 'top',
       showWhenEmpty: false,
       tiers: [defaultTier],
+      // Hides only the small locked-state amount pill (e.g. "₹500") under
+      // each not-yet-reached milestone icon. Never affects the "You're X
+      // left to reach..." progress message or the REACHED/title labels.
+      hideMilestoneAmount: false,
       colors: {
         background: '#e5e7eb',
         fill: '#10b981',
