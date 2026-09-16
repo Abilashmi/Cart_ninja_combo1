@@ -1237,7 +1237,7 @@ export default function FBTPage() {
                     <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
                       {interactionStyle === 'quick-add' ? 'Select items' : `Total (${activeCount} items)`}
                       <br />
-                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{total}</span>
+                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
                     {showAddAll && (
                       <button style={{

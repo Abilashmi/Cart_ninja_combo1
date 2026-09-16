@@ -352,7 +352,10 @@
           </div>
 
           ${
-            config.showAddAllButton
+            // Classic mode's per-product buttons now add to the real cart
+            // immediately on click (see below) — showing this batch button
+            // too would let a shopper double-add anything already sent.
+            config.showAddAllButton && config.interactionType !== 'classic'
               ? `
             <button class="ps-fbt-addall"
               style="background:${config.buttonColor};color:${config.buttonTextColor}">
@@ -414,6 +417,12 @@
         const actionSlot = card.querySelector('.ps-product-action');
 
         // -------- CLASSIC --------
+        // Unlike quickAdd/bundle (which stage a selection for the footer
+        // "Add to Cart" button to submit in one batch), classic's button
+        // says "Added" the instant it's clicked — so it must actually add
+        // to the real Shopify cart right then, or that label is a lie the
+        // shopper has no way to detect (previously this only toggled local
+        // `selected` state; nothing ever reached /cart/add.js).
         if (config.interactionType === 'classic') {
           const btn = document.createElement('button');
           btn.className = 'ps-classic-btn';
@@ -421,19 +430,60 @@
           btn.style.color = config.buttonColor;
           btn.textContent = 'Add';
 
-          btn.onclick = () => {
-            if (selected.has(p.id)) {
-              selected.delete(p.id);
-              btn.textContent = 'Add';
-              btn.style.background = 'transparent';
-              btn.style.color = config.buttonColor;
-            } else {
-              selected.set(p.id, 1);
-              btn.textContent = 'Added';
-              btn.style.background = config.buttonColor;
-              btn.style.color = config.buttonTextColor;
+          btn.onclick = async () => {
+            const prevText = btn.textContent;
+            btn.disabled = true;
+
+            try {
+              const variantLookup = await buildVariantLookup([p]);
+              const variantId = variantLookup.get(String(p.id));
+              if (!variantId) {
+                throw new Error('Unable to resolve variant ID for this product. Please re-save your FBT rule and try again.');
+              }
+
+              if (selected.has(p.id)) {
+                btn.textContent = 'Removing...';
+                await fetch('/cart/change.js', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: String(variantId), quantity: 0 }),
+                });
+
+                let cart = null;
+                try {
+                  const cartRes = await fetch('/cart.js');
+                  if (cartRes.ok) cart = await cartRes.json();
+                } catch {}
+                notifyCartUpdated({ source: 'fbt', items: [], cart });
+
+                selected.delete(p.id);
+                btn.textContent = 'Add';
+                btn.style.background = 'transparent';
+                btn.style.color = config.buttonColor;
+              } else {
+                btn.textContent = 'Adding...';
+                await postCartAdd([{ id: String(variantId), quantity: 1, properties: { _brix_source: 'fbt' } }]);
+
+                let cart = null;
+                try {
+                  const cartRes = await fetch('/cart.js');
+                  if (cartRes.ok) cart = await cartRes.json();
+                } catch {}
+                notifyCartUpdated({ source: 'fbt', items: [{ id: p.id, quantity: 1 }], cart });
+
+                selected.set(p.id, 1);
+                btn.textContent = 'Added';
+                btn.style.background = config.buttonColor;
+                btn.style.color = config.buttonTextColor;
+              }
+            } catch (error) {
+              console.error('[FBT] classic add/remove failed:', error);
+              alert(error?.message || 'Failed to update cart for this product.');
+              btn.textContent = prevText;
+            } finally {
+              btn.disabled = false;
+              updateTotal();
             }
-            updateTotal();
           };
 
           if (actionSlot) actionSlot.appendChild(btn);
@@ -543,7 +593,7 @@
           const qty = selected.get(p.id) || 0;
           total += qty * toPriceNumber(p.price);
         });
-        totalEl.textContent = currencySymbol + Number(total).toLocaleString();
+        totalEl.textContent = currencySymbol + Math.round(total).toLocaleString();
       }
 
       updateTotal();
