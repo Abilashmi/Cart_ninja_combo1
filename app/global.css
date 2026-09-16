@@ -784,6 +784,35 @@ p {
   z-index: 10000 !important;
 }
 
+/* Same conflict as the toast fix above, but for Polaris Modals: the
+   "Help and Support" launcher (.ktt10-btn, forced to z-index 9999 further
+   below) sits above Polaris's own modal stacking context
+   (--p-z-index-11, well under 9999), so a modal whose footer buttons land
+   near the widget's fixed bottom-right position gets its Save/primary
+   action covered by the widget (confirmed on the FBT Configuration modal
+   once it was widened enough to reach that corner). Raising the modal's
+   outer container — not just the dialog box — keeps the backdrop and
+   dialog in the same stacking context, above the widget, everywhere in
+   the app, not just this one modal.
+   NOTE: targets @shopify/polaris 13.9.5's compiled (hashed) class name —
+   may need updating after a Polaris upgrade. */
+.Polaris-Modal-Dialog__Container_13mbo {
+  z-index: 10002 !important;
+}
+
+/* Belt-and-braces version of the fix above: raising the modal's own
+   z-index didn't actually clear the widget in testing — Polaris's Frame
+   root (which the modal portals through) likely sits inside its own
+   ancestor stacking context, so no z-index on a descendant can ever climb
+   past a sibling appended straight to <body> like the widget is. Simplest
+   reliable fix: hide the widget outright while any Polaris modal is open,
+   keyed off role="dialog"/aria-modal="true" — Polaris always sets both on
+   every Modal (confirmed in Dialog.esnext), so unlike the hashed class
+   name above this doesn't depend on a specific Polaris build/version. */
+body:has([aria-modal="true"][role="dialog"]) .ktt10-btn {
+  display: none !important;
+}
+
 /* Thin top progress bar shown during in-app route transitions (see
    app.jsx's useNavigation hookup) — without it, a slow child-route loader
    leaves the previous page frozen on screen with no feedback until it

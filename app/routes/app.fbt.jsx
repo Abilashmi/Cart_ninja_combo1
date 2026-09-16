@@ -9,7 +9,8 @@ import {
 import BrixBar from '../components/ai-agent/BrixBar';
 import { SliderField } from '../components/shared/SliderField';
 import {
-  SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
+  SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon, LightbulbIcon,
+  CheckCircleIcon, TargetIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
@@ -600,10 +601,31 @@ export default function FBTPage() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [pickerTarget,      setPickerTarget]      = useState(null); /* 'trigger' | 'fbt' */
   const [draftRule,         setDraftRule]         = useState(null); /* rule being built */
+  const [justCreatedRule,   setJustCreatedRule]   = useState(null); /* transient success confirmation */
+
+  // Quick Setup Guide — shown once for merchants who have never configured a
+  // manual rule before. Gated on localStorage (client-only, no backend field)
+  // so it never reappears once dismissed, following the same cn_* localStorage
+  // convention as the existing first-visit/tutorial tracking in app._index.jsx.
+  const [showQuickGuide, setShowQuickGuide] = useState(false);
+  useEffect(() => {
+    if (manualRules.length > 0) return; // already configured — nothing to onboard
+    try {
+      if (localStorage.getItem('cn_fbt_quick_guide_dismissed') !== '1') setShowQuickGuide(true);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dismissQuickGuide = () => {
+    setShowQuickGuide(false);
+    try { localStorage.setItem('cn_fbt_quick_guide_dismissed', '1'); } catch {}
+  };
 
   const isSaving = fetcher.state !== 'idle';
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
   const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
+  const draftTriggerProducts = draftRule?.triggerIds?.length ? findProductsByIds(allProducts, draftRule.triggerIds) : [];
+  const draftFbtProducts     = draftRule?.fbtIds?.length     ? findProductsByIds(allProducts, draftRule.fbtIds)     : [];
+  const draftReady = draftTriggerProducts.length > 0 && draftFbtProducts.length > 0;
 
   // toast on save (success or error) — only clear the dirty flag once the
   // server actually confirms the save, so a failed save leaves Save enabled
@@ -932,6 +954,7 @@ export default function FBTPage() {
             open={isConfigModalOpen}
             onClose={() => setIsConfigModalOpen(false)}
             title="Frequently Bought Together — Configuration"
+            size="large"
             primaryAction={{
               content: 'Save',
               loading: isSaving,
@@ -940,146 +963,326 @@ export default function FBTPage() {
             }}
             secondaryActions={[{ content: 'Cancel', onAction: () => setIsConfigModalOpen(false) }]}
           >
-            <Modal.Section>
-              <BlockStack gap="400">
-                <Text as="h3" variant="headingSm">Configuration Mode</Text>
-                <BlockStack gap="200">
-                  {[
-                    { value: 'manual', label: 'Manual Configuration', desc: 'Manually set which products to upsell',     icon: SettingsIcon },
-                    { value: 'ai',     label: 'AI Configuration', desc: 'Let AI suggest products automatically', icon: MagicIcon    },
-                  ].map((opt) => (
-                    <div
-                      key={opt.value}
-                      onClick={() => setConfigMode(opt.value)}
-                      style={{ padding: '14px 16px', borderRadius: '8px', cursor: 'pointer', border: `1.5px solid ${configMode === opt.value ? '#008060' : '#e1e3e5'}`, background: configMode === opt.value ? '#f1f8f5' : '#ffffff', display: 'flex', alignItems: 'flex-start', gap: '12px' }}
-                    >
-                      <input type="radio" readOnly checked={configMode === opt.value} style={{ marginTop: '3px', accentColor: '#008060', cursor: 'pointer', flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ display: 'flex', flexShrink: 0 }}><Icon source={opt.icon} /></span>
-                          <span style={{ fontWeight: 600, fontSize: '14px', color: '#202223' }}>{opt.label}</span>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#6d7175', lineHeight: 1.5 }}>{opt.desc}</p>
-                      </div>
+            {/* Polaris only offers size="small" (23.75rem) or size="large"
+                (61.25rem) — both overshoot what this modal needs, so this
+                dials the "large" dialog down to a middle width instead.
+                Targets Polaris's own compiled class names for the installed
+                version (@shopify/polaris 13.9.5); if a future Polaris
+                upgrade changes those hashes this silently stops applying
+                and the modal just falls back to the full "large" width. */}
+            <style>{`
+              @media (min-width: 48em) {
+                .Polaris-Modal-Dialog__Modal_2v9yc.Polaris-Modal-Dialog--sizeLarge_61dxo {
+                  max-width: 46rem;
+                }
+              }
+            `}</style>
+
+            {showQuickGuide && (
+              <Modal.Section>
+                <div style={{ position: 'relative', border: '1px solid #b4e1fa', background: '#f0f9ff', borderRadius: '10px', padding: '14px 16px' }}>
+                  <style>{`
+                    .brix-fbt-guide-steps { display: flex; }
+                    .brix-fbt-guide-steps > div { flex: 1; padding: 0 16px; }
+                    .brix-fbt-guide-steps > div:first-child { padding-left: 0; }
+                    .brix-fbt-guide-steps > div:not(:first-child) { border-left: 1px solid #d3ecfb; }
+                    @media (max-width: 640px) {
+                      .brix-fbt-guide-steps { flex-direction: column; gap: 14px; }
+                      .brix-fbt-guide-steps > div { padding: 0; }
+                      .brix-fbt-guide-steps > div:not(:first-child) { border-left: none; border-top: 1px solid #d3ecfb; padding-top: 14px; }
+                    }
+                  `}</style>
+
+                  <button
+                    type="button"
+                    onClick={dismissQuickGuide}
+                    aria-label="Dismiss quick setup guide"
+                    style={{ position: 'absolute', top: '10px', right: '10px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#6d7175', fontSize: '18px', lineHeight: 1, padding: '4px' }}
+                  >×</button>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '12px', paddingRight: '24px' }}>
+                    <span style={{ display: 'flex', flexShrink: 0, color: '#1a73a8', marginTop: '2px' }}><Icon source={LightbulbIcon} /></span>
+                    <div>
+                      <Text as="h3" variant="headingSm">Quick Setup Guide</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">Just 3 simple steps to create your FBT rule.</Text>
                     </div>
-                  ))}
-                </BlockStack>
-              </BlockStack>
-            </Modal.Section>
+                  </div>
 
-            {configMode === 'ai' && (
-              <Modal.Section>
-                <BlockStack gap="400">
-                  <BlockStack gap="100">
-                    <Text as="h3" variant="headingSm">AI Coverage Run</Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">AI will generate recommendations for every store product and save them directly to backend.</Text>
-                  </BlockStack>
-                  {aiConfigured && (
-                    <Banner tone="success">AI Configured — suggestions are generating for every product.</Banner>
-                  )}
-                  <TextField
-                    label="FBT products per product"
-                    type="number"
-                    value={fbtCount}
-                    onChange={(v) => { setFbtCount(v); mark(); }}
-                    autoComplete="off"
-                    error={!aiCountValid ? 'Enter a whole number greater than 0.' : undefined}
-                    helpText={aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : undefined}
-                  />
-                  <InlineStack gap="200">
-                    <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>
-                      {aiConfigured ? 'Update Configuration' : 'Configure AI'}
-                    </Button>
-                    {aiConfigured && (
-                      <Button disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>Regenerate Suggestions</Button>
-                    )}
-                  </InlineStack>
-                </BlockStack>
+                  <div className="brix-fbt-guide-steps">
+                    {[
+                      { n: 1, title: 'Choose Trigger Product', desc: 'Select the product that starts the recommendation.' },
+                      { n: 2, title: 'Choose Upsell Products', desc: 'Select the products you want to recommend together.' },
+                      { n: 3, title: 'Click Create FBT Rule', desc: 'Save your configuration to make it active.' },
+                    ].map((step) => (
+                      <div key={step.n} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <span style={{ flexShrink: 0, width: '22px', height: '22px', borderRadius: '50%', background: '#1a73a8', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step.n}</span>
+                        <div>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{step.title}</Text>
+                          <Text as="p" variant="bodyXs" tone="subdued">{step.desc}</Text>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+                    <Button size="slim" onClick={dismissQuickGuide}>Start Now</Button>
+                  </div>
+                </div>
               </Modal.Section>
             )}
 
-            {configMode === 'manual' && (
+            {!showQuickGuide && (
               <Modal.Section>
-                <BlockStack gap="500">
-                  <BlockStack gap="100">
-                    <Text as="h3" variant="headingSm">Manual Upsell Rules</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Configure where to show FBT recommendations and which products to suggest.</Text>
-                  </BlockStack>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickGuide(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a73a8', fontSize: '13px', fontWeight: 500, padding: 0 }}
+                >
+                  <Icon source={LightbulbIcon} />
+                  Show Setup Guide
+                </button>
+              </Modal.Section>
+            )}
 
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">Step 1: Where to show FBT</Text>
-                    <BlockStack gap="100">
-                      {PLACEMENT_OPTIONS.map((opt) => (
-                        <RadioButton key={opt.value} label={opt.label} helpText={opt.helpText} checked={placement === opt.value} id={`placement-${opt.value}`} name="placement" onChange={() => setPlacement(opt.value)} />
-                      ))}
-                    </BlockStack>
-                  </BlockStack>
-
-                  <Divider />
-
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">Step 2: Create a rule</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">Pick trigger products (pages where FBT shows) and FBT products (what to recommend).</Text>
-
-                    {/* draft status badges */}
-                    <InlineStack gap="200">
-                      <div style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${draftRule?.triggerIds?.length ? '#008060' : '#e1e3e5'}`, background: draftRule?.triggerIds?.length ? '#f1f8f5' : '#fff', cursor: 'pointer' }} onClick={() => { setPickerTarget('trigger'); setShowProductPicker(true); }}>
-                        <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.triggerIds?.length || 0} trigger products</Text>
-                        <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
-                      </div>
-                      <div style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: `1.5px solid ${draftRule?.fbtIds?.length ? '#008060' : '#e1e3e5'}`, background: draftRule?.fbtIds?.length ? '#f1f8f5' : '#fff', cursor: 'pointer' }} onClick={() => { setPickerTarget('fbt'); setShowProductPicker(true); }}>
-                        <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.fbtIds?.length || 0} FBT products</Text>
-                        <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
-                      </div>
-                    </InlineStack>
-
-                    <InlineStack gap="200">
-                      <Button variant="primary" disabled={!draftRule?.triggerIds?.length || !draftRule?.fbtIds?.length}
-                        onClick={() => {
-                          const rule = {
-                            id: `rule-${Date.now()}`,
-                            displayScope: placement === 'different' ? 'per_product' : placement,
-                            triggerProducts: findProductsByIds(allProducts, draftRule.triggerIds),
-                            fbtProducts: findProductsByIds(allProducts, draftRule.fbtIds),
-                            aiGenerated: false,
-                          };
-                          setManualRules(prev => [...prev, rule]);
-                          setDraftRule(null);
-                          mark();
+            <Modal.Section>
+              <style>{`
+                .brix-fbt-shell { display: grid; grid-template-columns: 190px 1fr; gap: 28px; align-items: start; }
+                @media (max-width: 700px) {
+                  .brix-fbt-shell { grid-template-columns: 1fr; gap: 18px; }
+                  .brix-fbt-rail { flex-direction: row !important; overflow-x: auto; }
+                }
+              `}</style>
+              <div className="brix-fbt-shell">
+                {/* ── Left rail — mode switcher, mirrors the compact icon-rail
+                     nav pattern used elsewhere in BRIX instead of a full-width
+                     card picker ── */}
+                <div className="brix-fbt-rail" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {[
+                    { value: 'manual', label: 'Manual', icon: SettingsIcon },
+                    { value: 'ai',     label: 'AI-Powered', icon: MagicIcon },
+                  ].map((opt) => {
+                    const selected = configMode === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setConfigMode(opt.value)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                          padding: '10px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                          textAlign: 'left', background: selected ? '#202223' : 'transparent',
+                          color: selected ? '#ffffff' : '#4a4e50', transition: 'background 0.15s ease',
+                          flexShrink: 0,
                         }}
-                      >Add Rule</Button>
-                      {draftRule && (draftRule.triggerIds?.length || draftRule.fbtIds?.length) ? (
-                        <Button onClick={() => setDraftRule(null)}>Clear</Button>
-                      ) : null}
-                    </InlineStack>
-                  </BlockStack>
+                      >
+                        <span style={{ display: 'flex', flexShrink: 0 }}><Icon source={opt.icon} /></span>
+                        <span style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>{opt.label}</span>
+                        {selected && <span style={{ display: 'flex', marginLeft: 'auto' }}><Icon source={CheckCircleIcon} /></span>}
+                      </button>
+                    );
+                  })}
 
-                  <Divider />
+                  {configMode === 'manual' && (
+                    <>
+                      <div style={{ height: 1, background: '#e3e5e7', margin: '10px 0' }} />
+                      <Text as="p" variant="bodyXs" tone="subdued">{manualRules.length} rule{manualRules.length === 1 ? '' : 's'} saved</Text>
+                    </>
+                  )}
+                </div>
 
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">Saved Rules ({manualRules.length})</Text>
-                    {manualRules.length === 0 ? (
-                      <Text as="p" variant="bodySm" tone="subdued">No rules yet. Select trigger and FBT products above to create one.</Text>
-                    ) : (
-                      <div style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
-                        {manualRules.map((rule, i) => (
-                          <div key={rule.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: i > 0 ? '1px solid #e1e3e5' : 'none' }}>
-                            <BlockStack gap="100">
-                              <span style={{ fontSize: '12px', padding: '2px 10px', borderRadius: '4px', background: '#f1f8f5', color: '#008060', border: '1px solid #b5e3d8', display: 'inline-block' }}>{scopeLabel(rule.displayScope)}</span>
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                Trigger: {(rule.triggerProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.triggerProducts || []).length > 2 ? ` +${rule.triggerProducts.length - 2} more` : ''}
-                                {' | '}FBT: {(rule.fbtProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.fbtProducts || []).length > 2 ? ` +${rule.fbtProducts.length - 2} more` : ''}
-                              </Text>
-                            </BlockStack>
-                            <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
+                {/* ── Right pane — active mode's content ── */}
+                <div>
+                  {configMode === 'ai' && (
+                    <BlockStack gap="400">
+                      <BlockStack gap="100">
+                        <Text as="h3" variant="headingSm">AI Coverage Run</Text>
+                        <Text as="p" variant="bodyMd" tone="subdued">AI will generate recommendations for every store product and save them directly to backend.</Text>
+                      </BlockStack>
+                      {aiConfigured && (
+                        <Banner tone="success">AI Configured — suggestions are generating for every product.</Banner>
+                      )}
+                      <TextField
+                        label="FBT products per product"
+                        type="number"
+                        value={fbtCount}
+                        onChange={(v) => { setFbtCount(v); mark(); }}
+                        autoComplete="off"
+                        error={!aiCountValid ? 'Enter a whole number greater than 0.' : undefined}
+                        helpText={aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : undefined}
+                      />
+                      <InlineStack gap="200">
+                        <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>
+                          {aiConfigured ? 'Update Configuration' : 'Configure AI'}
+                        </Button>
+                        {aiConfigured && (
+                          <Button disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>Regenerate Suggestions</Button>
+                        )}
+                      </InlineStack>
+                    </BlockStack>
+                  )}
+
+                  {configMode === 'manual' && (
+                    <BlockStack gap="500">
+                      <BlockStack gap="300">
+                        <InlineStack gap="150" blockAlign="center">
+                          <span style={{ flexShrink: 0, width: '22px', height: '22px', borderRadius: '50%', background: '#202223', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
+                          <Text as="h3" variant="headingSm">Where to show FBT</Text>
+                        </InlineStack>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '30px' }}>
+                          {PLACEMENT_OPTIONS.map((opt) => (
+                            <div key={opt.value} style={{
+                              borderRadius: '10px', border: `1.5px solid ${placement === opt.value ? '#008060' : '#e3e5e7'}`,
+                              background: placement === opt.value ? '#f0faf6' : '#fff', padding: '2px 6px',
+                            }}>
+                              <RadioButton label={opt.label} helpText={opt.helpText} checked={placement === opt.value} id={`placement-${opt.value}`} name="placement" onChange={() => setPlacement(opt.value)} />
+                            </div>
+                          ))}
+                        </div>
+                      </BlockStack>
+
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <InlineStack gap="150" blockAlign="center">
+                          <span style={{ flexShrink: 0, width: '22px', height: '22px', borderRadius: '50%', background: '#202223', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>2</span>
+                          <Text as="h3" variant="headingSm">Create a rule</Text>
+                        </InlineStack>
+                        <div style={{ paddingLeft: '30px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <Text as="p" variant="bodySm" tone="subdued">Pick trigger products (pages where FBT shows) and FBT products (what to recommend).</Text>
+
+                          {/* draft status badges */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                            <div
+                              onClick={() => { setPickerTarget('trigger'); setShowProductPicker(true); }}
+                              style={{
+                                padding: '12px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                                border: `1.5px solid ${draftRule?.triggerIds?.length ? '#008060' : '#e3e5e7'}`,
+                                background: draftRule?.triggerIds?.length ? '#f0faf6' : '#fff',
+                                boxShadow: '0 1px 2px rgba(16,24,40,0.04)', transition: 'box-shadow 0.15s ease',
+                              }}
+                            >
+                              <span style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '9px', background: draftRule?.triggerIds?.length ? '#008060' : '#f1f2f3', color: draftRule?.triggerIds?.length ? '#fff' : '#6d7175', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={TargetIcon} /></span>
+                              <div>
+                                <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.triggerIds?.length || 0} trigger products</Text>
+                                <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
+                              </div>
+                            </div>
+                            <div
+                              onClick={() => { setPickerTarget('fbt'); setShowProductPicker(true); }}
+                              style={{
+                                padding: '12px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                                border: `1.5px solid ${draftRule?.fbtIds?.length ? '#008060' : '#e3e5e7'}`,
+                                background: draftRule?.fbtIds?.length ? '#f0faf6' : '#fff',
+                                boxShadow: '0 1px 2px rgba(16,24,40,0.04)', transition: 'box-shadow 0.15s ease',
+                              }}
+                            >
+                              <span style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '9px', background: draftRule?.fbtIds?.length ? '#008060' : '#f1f2f3', color: draftRule?.fbtIds?.length ? '#fff' : '#6d7175', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={ProductIcon} /></span>
+                              <div>
+                                <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.fbtIds?.length || 0} FBT products</Text>
+                                <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
+                              </div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </BlockStack>
-                </BlockStack>
-              </Modal.Section>
-            )}
+
+                          {/* live status — makes the next required action obvious instead
+                              of leaving the merchant to guess that a separate "create"
+                              click is still needed after picking products */}
+                          {(draftTriggerProducts.length > 0 || draftFbtProducts.length > 0) && (
+                            <div style={{ padding: '12px 14px', borderRadius: '12px', background: '#fafbfb', borderLeft: `3px solid ${draftReady ? '#008060' : '#e3e5e7'}`, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {draftTriggerProducts.length > 0 && (
+                                <Text as="p" variant="bodySm">
+                                  <span style={{ color: '#008060', fontWeight: 600 }}>✓ Trigger Product</span>
+                                  <span style={{ color: '#6d7175' }}> — {draftTriggerProducts.map(p => p.title).join(', ')}</span>
+                                </Text>
+                              )}
+                              {draftFbtProducts.length > 0 && (
+                                <Text as="p" variant="bodySm">
+                                  <span style={{ color: '#008060', fontWeight: 600 }}>✓ Upsell Products</span>
+                                  <span style={{ color: '#6d7175' }}> — {draftFbtProducts.map(p => p.title).join(', ')}</span>
+                                </Text>
+                              )}
+                              {draftReady && (
+                                <Text as="p" variant="bodySm">
+                                  <span style={{ color: '#8a6d00', fontWeight: 600 }}>→ Final step</span>
+                                  <span style={{ color: '#6d7175' }}> — Create this recommendation rule</span>
+                                </Text>
+                              )}
+                            </div>
+                          )}
+
+                          <BlockStack gap="150">
+                            <InlineStack gap="200">
+                              <Button variant="primary" disabled={!draftReady}
+                                onClick={() => {
+                                  const rule = {
+                                    id: `rule-${Date.now()}`,
+                                    displayScope: placement === 'different' ? 'per_product' : placement,
+                                    triggerProducts: draftTriggerProducts,
+                                    fbtProducts: draftFbtProducts,
+                                    aiGenerated: false,
+                                  };
+                                  setManualRules(prev => [...prev, rule]);
+                                  setJustCreatedRule(rule);
+                                  setDraftRule(null);
+                                  dismissQuickGuide();
+                                  mark();
+                                }}
+                              >Create FBT Rule</Button>
+                              {draftRule && (draftRule.triggerIds?.length || draftRule.fbtIds?.length) ? (
+                                <Button onClick={() => setDraftRule(null)}>Clear</Button>
+                              ) : null}
+                            </InlineStack>
+                            <Text as="p" variant="bodyXs">
+                              <span style={{ color: draftReady ? '#008060' : '#6d7175' }}>
+                                {draftReady ? 'Ready to create your FBT rule' : 'Select a trigger product and at least one upsell product.'}
+                              </span>
+                            </Text>
+                          </BlockStack>
+                        </div>
+                      </BlockStack>
+
+                      {justCreatedRule && (
+                        <Banner tone="success" onDismiss={() => setJustCreatedRule(null)}>
+                          <BlockStack gap="100">
+                            <Text as="p" variant="bodySm" fontWeight="semibold">✓ FBT rule created successfully</Text>
+                            <Text as="p" variant="bodyXs" tone="subdued">Trigger: {(justCreatedRule.triggerProducts || []).map(p => p.title).join(', ')}</Text>
+                            <Text as="p" variant="bodyXs" tone="subdued">Recommended: {(justCreatedRule.fbtProducts || []).map(p => p.title).join(', ')}</Text>
+                            <Text as="p" variant="bodyXs" tone="subdued">Status: Active</Text>
+                          </BlockStack>
+                        </Banner>
+                      )}
+
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <Text as="h3" variant="headingSm">Saved Rules ({manualRules.length})</Text>
+                        {manualRules.length === 0 ? (
+                          <Text as="p" variant="bodySm" tone="subdued">No rules yet. Select trigger and FBT products above to create one.</Text>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {manualRules.map((rule) => (
+                              <div key={rule.id} style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px',
+                                borderRadius: '12px', border: '1px solid #e3e5e7', boxShadow: '0 1px 2px rgba(16,24,40,0.04)', background: '#fff',
+                              }}>
+                                <BlockStack gap="100">
+                                  <span style={{ fontSize: '11px', padding: '2px 10px', borderRadius: '20px', background: '#f0faf6', color: '#008060', border: '1px solid #b5e3d8', display: 'inline-block', fontWeight: 600 }}>{scopeLabel(rule.displayScope)}</span>
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    Trigger: {(rule.triggerProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.triggerProducts || []).length > 2 ? ` +${rule.triggerProducts.length - 2} more` : ''}
+                                    {' | '}FBT: {(rule.fbtProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.fbtProducts || []).length > 2 ? ` +${rule.fbtProducts.length - 2} more` : ''}
+                                  </Text>
+                                </BlockStack>
+                                <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </BlockStack>
+                    </BlockStack>
+                  )}
+                </div>
+              </div>
+            </Modal.Section>
           </Modal>
 
           {/* ── Product Picker Modal ── */}
