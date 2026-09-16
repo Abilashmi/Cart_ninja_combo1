@@ -374,10 +374,13 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
       return;
     }
     var encodedShop=encodeURIComponent(shop);
-    var proxyAPI='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+encodedShop;
+    // Direct call to the PHP backend (not the Shopify App Proxy). Relies on
+    // config.php's Access-Control-Allow-Origin: * — no custom headers here,
+    // since those trigger a CORS preflight config.php doesn't allowlist.
+    var proxyAPI='https://int.thebrix.io/save_coupon_slider_widget.php?shopdomain='+encodedShop;
 
     function requestJson(url){
-      return fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
+      return fetch(url)
         .then(function(r){
           if(!r.ok)throw new Error('HTTP '+r.status);
           return r.text();

@@ -346,11 +346,11 @@
 
       if(!shop){el.style.display='none';return;}
 
-      /* Fetch via the Shopify app proxy — same as the (working) coupon slider.
-         Same-origin with the storefront, so no CORS. In `shopify app dev` the proxy
-         routes to the local tunnel → local Node route → local MySQL. */
-      var API_URL='/apps/cart-app/save_fbt_widget.php?shopdomain='+encodeURIComponent(shop);
-      fetch(API_URL,{headers:{'ngrok-skip-browser-warning':'true'}})
+      /* Direct call to the PHP backend (not the Shopify App Proxy). Relies on
+         config.php's Access-Control-Allow-Origin: * — no custom headers here,
+         since those trigger a CORS preflight config.php doesn't allowlist. */
+      var API_URL='https://int.thebrix.io/save_fbt_widget.php?shopdomain='+encodeURIComponent(shop);
+      fetch(API_URL)
         .then(function(r){return r.json();})
         .then(function(response){
           if(!response||response.status!=='success')return;

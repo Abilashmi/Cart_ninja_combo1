@@ -70,7 +70,11 @@
 
   const SHOP = container.getAttribute('data-shop');
   const CURRENCY_CODE = container.getAttribute('data-currency') || 'USD';
-  const API_BASE = '/apps/cart-app';
+  // Direct call to the PHP backend (not the Shopify App Proxy). Requires
+  // config.php's Access-Control-Allow-Origin: * — and no custom request
+  // headers, since those trigger a CORS preflight that config.php doesn't
+  // allowlist beyond Content-Type.
+  const API_BASE = 'https://int.thebrix.io';
   const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
   const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
   const CLICK_API = API_BASE + '/click.php';
@@ -280,7 +284,6 @@
         method: 'GET',
         headers: {
           Accept: 'application/json',
-          'ngrok-skip-browser-warning': 'true',
         },
       };
 
