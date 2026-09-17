@@ -189,6 +189,13 @@ export const loader = async ({ request }) => {
     allProducts,
     manualRules,
     fbtEmbedEnabled,
+    // Surfaces the null-check the query above already does — `fbtConfig` is
+    // only non-null once a real row was found in fbt_widget_settings/legacy
+    // fbt_widget. Needed because the object returned below always has a
+    // full set of fallback values either way, so the client can't otherwise
+    // tell "never saved anything" apart from "saved, happens to match
+    // defaults" — the setup tour needs exactly that distinction.
+    hasSavedFbtConfig: fbtConfig !== null,
     fbtConfig: fbtConfig ?? {
       is_enabled: 1,
       activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal',
@@ -531,6 +538,90 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
   );
 }
 
+/* ─── SETUP TOUR POINTER ──────────────────────────────────────────────────── */
+// A single pointer-tooltip step for the Intelligent Setup Tour: spotlights
+// `targetRef`'s element (dimmed backdrop with a cutout ring around it, via
+// an oversized box-shadow) and floats a small callout card near it with
+// Skip/Next. Deliberately non-blocking (the dim layer has pointerEvents:
+// none) — this is a pointer guide, not a modal wizard forcing the merchant
+// through steps.
+function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, onNext, onSkip, isLast }) {
+  const [rect, setRect] = useState(null);
+
+  useEffect(() => {
+    const el = targetRef.current;
+    if (!el) return undefined;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom });
+    };
+    update();
+    const settleTimer = setTimeout(update, 350); // re-measure once the smooth scroll above has likely settled
+    window.addEventListener('scroll', update, true); // capture: true also catches nested scroll containers
+    window.addEventListener('resize', update);
+    return () => {
+      clearTimeout(settleTimer);
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [targetRef]);
+
+  if (!rect) return null;
+
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  const cardWidth = 320;
+  // ~150px covers this card's real rendered height (header row + title +
+  // description + button row) — used only to pick a spot that keeps it
+  // fully on-screen, not to size the actual DOM node.
+  const cardHeight = 150;
+  const margin = 16;
+  const spaceBelow = viewportH - rect.bottom;
+  const spaceAbove = rect.top;
+  let cardTop;
+  if (spaceBelow >= cardHeight + margin) {
+    cardTop = rect.bottom + 12;
+  } else if (spaceAbove >= cardHeight + margin) {
+    cardTop = rect.top - cardHeight - 12;
+  } else {
+    // Target is taller than the viewport (e.g. the whole Customize card
+    // once scrolled into view) — neither side has room, so just pin the
+    // card near the bottom of the viewport instead of letting it render
+    // partly off-screen either way.
+    cardTop = viewportH - cardHeight - margin;
+  }
+  cardTop = Math.max(margin, Math.min(cardTop, viewportH - cardHeight - margin));
+  const cardLeft = Math.min(Math.max(rect.left, margin), viewportW - cardWidth - margin);
+
+  return (
+    <>
+      <div style={{
+        position: 'fixed', top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8,
+        borderRadius: '10px', border: '2px solid #008060', boxShadow: '0 0 0 4000px rgba(15,17,17,0.5)',
+        pointerEvents: 'none', zIndex: 10500,
+      }} />
+      <div style={{
+        position: 'fixed', top: cardTop,
+        left: cardLeft, width: `${cardWidth}px`, background: '#202223', color: '#fff',
+        borderRadius: '12px', padding: '16px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)', zIndex: 10501,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', color: '#9aa0a3', textTransform: 'uppercase' }}>Step {stepNumber} of {totalSteps}</span>
+          <button type="button" onClick={onSkip} aria-label="Skip setup tour" style={{ border: 'none', background: 'transparent', color: '#9aa0a3', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '2px' }}>×</button>
+        </div>
+        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>{title}</div>
+        <div style={{ fontSize: '13px', color: '#c9cccf', lineHeight: 1.5, marginBottom: '14px' }}>{desc}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button type="button" onClick={onSkip} style={{ border: 'none', background: 'transparent', color: '#9aa0a3', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>Skip tour</button>
+          <button type="button" onClick={onNext} style={{ border: 'none', background: '#008060', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '8px 16px', borderRadius: '8px' }}>{isLast ? 'Finish' : 'Next'}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* ─── COLOR FIELD (Solaris-style) ─────────────────────────────────────────── */
 function ColorField({ label, value, onChange }) {
   return (
@@ -550,7 +641,7 @@ function ColorField({ label, value, onChange }) {
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
-  const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled } = useLoaderData();
+  const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
   const { symbol: currencySymbol } = useCurrency();
   const fetcher = useFetcher();
   const { canPublishFeature } = usePlan();
@@ -601,7 +692,8 @@ export default function FBTPage() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [pickerTarget,      setPickerTarget]      = useState(null); /* 'trigger' | 'fbt' */
   const [draftRule,         setDraftRule]         = useState(null); /* rule being built */
-  const [justCreatedRule,   setJustCreatedRule]   = useState(null); /* transient success confirmation */
+  const [ruleCreatedToast,  setRuleCreatedToast]  = useState(false); /* one-off toast, nothing stays on screen — the rule itself shows up in Saved Rules below */
+  const [configureToast,    setConfigureToast]    = useState(false); /* shown when Save is blocked — nothing set up yet in the active mode */
 
   // Quick Setup Guide — shown once for merchants who have never configured a
   // manual rule before. Gated on localStorage (client-only, no backend field)
@@ -620,6 +712,105 @@ export default function FBTPage() {
     try { localStorage.setItem('cn_fbt_quick_guide_dismissed', '1'); } catch {}
   };
 
+  // ── Intelligent Setup Tour ────────────────────────────────────────────────
+  // 3 pointer-tooltip steps (Choose Template / Customize / Configure), each
+  // completion check reusing real existing state — no tour-only DB field.
+  //   Step 1 Template : hasSavedFbtConfig (a config row exists at all — see
+  //                      loader) OR the merchant already swapped templates
+  //                      this session, so it updates live as they click one.
+  //   Step 2 Customize: hasSavedFbtConfig, OR cn_fbt_setup_customized — set
+  //                      the moment a save actually succeeds (below), since
+  //                      the template/customize fields share one save and
+  //                      one DB row, there's no finer-grained existing signal
+  //                      to split them without inventing new tracking.
+  //   Step 3 Configure : manualRules.length > 0 (or AI mode already saved),
+  //                      exactly as instructed — reuses the same state the
+  //                      Quick Setup Guide above already reads.
+  const templateStepRef = useRef(null);
+  const customizeStepRef = useRef(null);
+  const configureStepRef = useRef(null);
+  const initialTemplateRef = useRef(selectedTemplate);
+
+  const [customizedFlag, setCustomizedFlag] = useState(false);
+  const [tourStepIndex, setTourStepIndex] = useState(null); // null = tour hidden
+
+  const templateStepDone = hasSavedFbtConfig || selectedTemplate !== initialTemplateRef.current;
+  const customizeStepDone = hasSavedFbtConfig || customizedFlag;
+  const configureStepDone = manualRules.length > 0 || Boolean(fbtConfig?.aiEnabled) || aiConfigured;
+  const tourStepsDone = [templateStepDone, customizeStepDone, configureStepDone];
+
+  // Decide the starting step once, on mount — first incomplete step, in
+  // order, exactly like the brand-new-merchant example in the spec. Reads
+  // localStorage directly here (rather than through customizedFlag state)
+  // so the decision isn't made against a stale value from a not-yet-applied
+  // state update in the same initial-render pass.
+  useEffect(() => {
+    let customizedFromStorage = false;
+    let tourDismissed = false;
+    try {
+      customizedFromStorage = localStorage.getItem('cn_fbt_setup_customized') === '1';
+      tourDismissed = localStorage.getItem('cn_fbt_setup_tour_dismissed') === '1';
+    } catch {}
+    setCustomizedFlag(customizedFromStorage);
+    if (tourDismissed) return;
+
+    const doneFlags = [
+      hasSavedFbtConfig,
+      hasSavedFbtConfig || customizedFromStorage,
+      manualRules.length > 0 || Boolean(fbtConfig?.aiEnabled),
+    ];
+    const firstIncomplete = doneFlags.findIndex((done) => !done);
+    if (firstIncomplete === -1) {
+      // Nothing to onboard — don't re-check on every future visit either.
+      try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+      return;
+    }
+    setTourStepIndex(firstIncomplete);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Manual "Replay setup tour" (added below, next to Configure) walks all 3
+  // steps regardless of completion state — the state-aware skip-ahead logic
+  // is for the automatic first-open case; a deliberate replay should show
+  // everything, otherwise a shop that already has everything configured
+  // (true for every test store touched so far this session) has no way to
+  // ever preview it again.
+  const [tourManualPreview, setTourManualPreview] = useState(false);
+
+  const finishTour = () => {
+    setTourStepIndex(null);
+    setTourManualPreview(false);
+    try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+  };
+
+  // Advances past any step that's already done instead of a fixed
+  // Next → Next → Next — e.g. a merchant who already has saved rules but
+  // never touched Customize starts the tour there, not at Step 1.
+  const advanceTour = (fromIndex) => {
+    let next = fromIndex + 1;
+    if (!tourManualPreview) {
+      while (next < 3 && tourStepsDone[next]) next++;
+    }
+    if (next >= 3) { finishTour(); return; }
+    setTourStepIndex(next);
+  };
+
+  const replayTour = () => {
+    setTourManualPreview(true);
+    setTourStepIndex(0);
+  };
+
+  // If the merchant completes the step the tour is currently pointing at
+  // (e.g. saves while on the Customize step) without using the tour's own
+  // Next button, move on automatically instead of pointing at something
+  // already done. Skipped during a manual replay, which is meant to show
+  // every step regardless of what's already done.
+  useEffect(() => {
+    if (tourStepIndex === null || tourManualPreview) return;
+    if (tourStepsDone[tourStepIndex]) advanceTour(tourStepIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateStepDone, customizeStepDone, configureStepDone]);
+
   const isSaving = fetcher.state !== 'idle';
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
   const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
@@ -634,11 +825,24 @@ export default function FBTPage() {
   // dismissing the toast (setToastActive(false)) re-triggers this effect,
   // which sees the same fetcher.data still set and immediately flips
   // toastActive back to true, making the Cancel/close button look broken.
+  // ALSO guarded against `fetcher.data` itself not having changed: this
+  // effect also depends on `configMode` (read below), and fetcher.data is a
+  // stable reference that persists across re-renders until the next actual
+  // save — so merely switching the Manual/AI mode toggle after a save was
+  // re-running this same effect and resurfacing the old "FBT settings
+  // saved!" toast as if a brand new save had just happened.
+  const lastToastedFetcherDataRef = useRef(null);
   useEffect(() => {
-    if (fetcher.data) setToastActive(true);
+    if (!fetcher.data || fetcher.data === lastToastedFetcherDataRef.current) return;
+    lastToastedFetcherDataRef.current = fetcher.data;
+    setToastActive(true);
     if (fetcher.data?.success) {
       setHasChanges(false);
       if (configMode === 'ai') setAiConfigured(true);
+      // Setup tour's "Customize" step: a successful save is the one clear,
+      // reliable signal that real customization work was done and kept —
+      // not just that the accordion was opened and closed again.
+      try { localStorage.setItem('cn_fbt_setup_customized', '1'); } catch {}
     }
   }, [fetcher.data, configMode]);
 
@@ -717,7 +921,18 @@ export default function FBTPage() {
     );
   };
 
-  const handleSave = () => submitFbtConfig();
+  // Guards the main Save button only — submitFbtConfig() itself is also
+  // called directly for the header's Active/Inactive toggle, which should
+  // still work even with no rules/AI set up yet, so the check lives here
+  // rather than inside submitFbtConfig.
+  const isFbtActuallyConfigured = configMode === 'ai' ? aiCountValid : manualRules.length > 0;
+  const handleSave = () => {
+    if (!isFbtActuallyConfigured) {
+      setConfigureToast(true);
+      return;
+    }
+    submitFbtConfig();
+  };
 
   /* ── renderAction: per-product button based on interaction style ── */
   const renderAction = (i) => {
@@ -910,6 +1125,16 @@ export default function FBTPage() {
           onDismiss={() => setToastActive(false)}
         />
       )}
+      {ruleCreatedToast && (
+        <Toast content="FBT rule created" onDismiss={() => setRuleCreatedToast(false)} />
+      )}
+      {configureToast && (
+        <Toast
+          content={configMode === 'ai' ? 'Enter a valid FBT product count before saving' : 'Configure at least one FBT rule before saving'}
+          error
+          onDismiss={() => setConfigureToast(false)}
+        />
+      )}
       {!isConfigModalOpen && <BrixBar size="md" floating />}
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
 
@@ -942,10 +1167,15 @@ export default function FBTPage() {
               <span style={{ position: 'absolute', top: '3px', left: fbtEffectiveEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
             </button>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
-            <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
+            <div ref={configureStepRef} style={{ display: 'inline-flex' }}>
+              <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
+            </div>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
             <Button onClick={() => { setHasChanges(false); }} disabled={!hasChanges} size="slim">Discard</Button>
             <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+            {tourStepIndex === null && (
+              <Button variant="plain" size="slim" onClick={replayTour}>Replay setup tour</Button>
+            )}
           </div>
         </div>
 
@@ -1098,9 +1328,6 @@ export default function FBTPage() {
                         <Text as="h3" variant="headingSm">AI Coverage Run</Text>
                         <Text as="p" variant="bodyMd" tone="subdued">AI will generate recommendations for every store product and save them directly to backend.</Text>
                       </BlockStack>
-                      {aiConfigured && (
-                        <Banner tone="success">AI Configured — suggestions are generating for every product.</Banner>
-                      )}
                       <TextField
                         label="FBT products per product"
                         type="number"
@@ -1222,7 +1449,7 @@ export default function FBTPage() {
                                     aiGenerated: false,
                                   };
                                   setManualRules(prev => [...prev, rule]);
-                                  setJustCreatedRule(rule);
+                                  setRuleCreatedToast(true);
                                   setDraftRule(null);
                                   dismissQuickGuide();
                                   mark();
@@ -1240,17 +1467,6 @@ export default function FBTPage() {
                           </BlockStack>
                         </div>
                       </BlockStack>
-
-                      {justCreatedRule && (
-                        <Banner tone="success" onDismiss={() => setJustCreatedRule(null)}>
-                          <BlockStack gap="100">
-                            <Text as="p" variant="bodySm" fontWeight="semibold">✓ FBT rule created successfully</Text>
-                            <Text as="p" variant="bodyXs" tone="subdued">Trigger: {(justCreatedRule.triggerProducts || []).map(p => p.title).join(', ')}</Text>
-                            <Text as="p" variant="bodyXs" tone="subdued">Recommended: {(justCreatedRule.fbtProducts || []).map(p => p.title).join(', ')}</Text>
-                            <Text as="p" variant="bodyXs" tone="subdued">Status: Active</Text>
-                          </BlockStack>
-                        </Banner>
-                      )}
 
                       <Divider />
 
@@ -1323,6 +1539,7 @@ export default function FBTPage() {
               )}
 
               {/* Template selector */}
+              <div ref={templateStepRef}>
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">Select Template</Text>
@@ -1347,8 +1564,10 @@ export default function FBTPage() {
                   </div>
                 </BlockStack>
               </Card>
+              </div>
 
               {/* Customize accordion */}
+              <div ref={customizeStepRef}>
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">Customize: {templateName}</Text>
@@ -1403,6 +1622,7 @@ export default function FBTPage() {
                   </AccordionSection>
                 </BlockStack>
               </Card>
+              </div>
             </div>
 
           {/* Right column — Preview. Extra bottom padding keeps the preview
@@ -1470,6 +1690,27 @@ export default function FBTPage() {
           </div>
         </div>
       </div>
+
+      {tourStepIndex !== null && (() => {
+        const steps = [
+          { ref: templateStepRef, title: 'Choose Template', desc: 'Choose how your Frequently Bought Together products should appear on your storefront.' },
+          { ref: customizeStepRef, title: `Customize: ${templateName}`, desc: 'Adjust the layout, colors, styling and display settings to match your store.' },
+          { ref: configureStepRef, title: 'Configure', desc: 'Choose which products should be recommended together and create your FBT rules.' },
+        ];
+        const step = steps[tourStepIndex];
+        return (
+          <SetupTourPointer
+            targetRef={step.ref}
+            stepNumber={tourStepIndex + 1}
+            totalSteps={steps.length}
+            title={step.title}
+            desc={step.desc}
+            isLast={tourStepIndex === steps.length - 1}
+            onNext={() => advanceTour(tourStepIndex)}
+            onSkip={finishTour}
+          />
+        );
+      })()}
     </Frame>
   );
 }
