@@ -7,7 +7,7 @@
 import {
   saveCartDrawerConfig, saveProgressBarSettings, saveUpsellWidgetSettings,
   saveCouponSliderSettings, saveFbtWidgetSettings, saveCountdownTimerSettings,
-  appendFbtRule, removeFbtRule,
+  appendFbtRule, removeFbtRule, fetchProgressBar,
 } from './cart-config-writes.server';
 import { resolveProductByName, appendUpsellRule, searchProducts } from './upsell-rules.server';
 import { resolveCollectionByName, searchCollections } from './collection-resolver.server';
@@ -228,13 +228,18 @@ export const TOOL_EXECUTORS = {
   async get_current_config(ctx) {
     const db = getDb();
     const [cdcRows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
-    const [pbRows] = await db.execute('SELECT * FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+    // progress_bar_settings alone has no goal/reward columns — those live in
+    // progress_bar_tiers, joined in by fetchProgressBar (already used by the
+    // write tools below) but previously never fetched here, so this tool
+    // could never actually answer a "what's my goal/reward" question from
+    // real data. Reuses the existing read helper rather than duplicating it.
+    const progressBar = await fetchProgressBar(db, ctx.shop);
     const [csRows] = await db.execute('SELECT * FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     const [upRows] = await db.execute('SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     const [fbtRows] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     return {
       cartDrawerConfig: cdcRows[0] || null,
-      progressBar: pbRows[0] || null,
+      progressBar,
       couponSlider: csRows[0] || null,
       upsellWidget: upRows[0] || null,
       fbtWidget: fbtRows[0] || null,
@@ -338,12 +343,62 @@ export const TOOL_EXECUTORS = {
 
   async set_progress_bar_goal(ctx, { goalAmount, rewardType, placement }) {
     const iconPresetMap = { free_shipping: 'shipping', product: 'gift', discount: 'diamond', gift: 'trophy' };
+
+    // goalAmount is now optional in the schema (true partial-update support)
+    // — fetched here BEFORE the write so an omitted goalAmount can be
+    // explicitly preserved by this executor itself. This is deliberate:
+    // saveProgressBarSettings's own goalAmount branch (cart-config-writes.
+    // server.js) only runs `if (patch.goalAmount != null ...)`, i.e. it has
+    // no merge-with-existing behavior for goalAmount the way it does for
+    // rewardType/iconPreset — so goalAmount must never be sent as
+    // undefined/guessed; it must be a real value, explicitly the prior one
+    // when the merchant didn't mention it. Never relies on the model to
+    // echo the current amount back.
+    const before = await fetchProgressBar(getDb(), ctx.shop);
+    const priorTier = before?.tiers?.[0];
+    const priorGoalAmount = priorTier ? Number(priorTier.min_value) : null;
+    const priorRewardType = priorTier?.reward_type ?? null;
+
+    const effectiveGoalAmount = goalAmount ?? priorGoalAmount;
+    if (effectiveGoalAmount === null || effectiveGoalAmount === undefined) {
+      return { success: false, message: 'No progress bar goal is set yet — please provide a spend amount to get started.' };
+    }
+
+    // rewardType/iconPreset are passed through as-is (undefined when the
+    // merchant only asked to change the goal amount) — saveProgressBarSettings
+    // falls back to the tier's existing value in that case, not a hardcoded
+    // default, so changing just the goal never resets an already-configured
+    // reward type back to free_shipping.
     const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, {
-      is_enabled: 1, goalAmount, rewardType: rewardType || 'free_shipping',
-      iconPreset: iconPresetMap[rewardType] || 'shipping', placement,
+      is_enabled: 1, goalAmount: effectiveGoalAmount, rewardType,
+      iconPreset: rewardType ? iconPresetMap[rewardType] : undefined, placement,
     });
     await syncProgressBarToLegacyRecord(ctx.shop);
-    return { success: true, progressBar: { enabled: !!data.is_enabled, goalAmount, rewardType: rewardType || 'free_shipping' } };
+
+    const savedTier = data.tiers?.[0];
+    // Reports the values actually saved (including a preserved existing
+    // one), not just an echo of what this call happened to pass in.
+    const savedGoalAmount = savedTier ? Number(savedTier.min_value) : effectiveGoalAmount;
+    const savedRewardType = savedTier?.reward_type || rewardType || 'free_shipping';
+
+    // changed/unchanged built from a real before/after comparison, not from
+    // which args this call happened to include — this is what actually
+    // fixes "reward changed" being mislabeled as "goal changed" (goalAmount
+    // was always present in args, so a presence-based split always got it
+    // wrong regardless of what the response formatter did with it).
+    const changed = {};
+    const unchanged = {};
+    if (priorGoalAmount === null || savedGoalAmount !== priorGoalAmount) changed.goalAmount = savedGoalAmount;
+    else unchanged.goalAmount = savedGoalAmount;
+    if (priorRewardType === null || savedRewardType !== priorRewardType) changed.rewardType = savedRewardType;
+    else unchanged.rewardType = savedRewardType;
+
+    return {
+      success: true,
+      changed,
+      unchanged,
+      progressBar: { enabled: !!data.is_enabled, goalAmount: savedGoalAmount, rewardType: savedRewardType },
+    };
   },
 
   async update_progress_bar_tiers(ctx, { tiers }) {

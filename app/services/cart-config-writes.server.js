@@ -177,7 +177,7 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
 
 // ── Progress Bar ──
 
-async function fetchProgressBar(db, shop) {
+export async function fetchProgressBar(db, shop) {
   const [rows] = await db.execute(
     'SELECT * FROM progress_bar_settings WHERE shop_domain = ? LIMIT 1', [shop]
   );
@@ -286,11 +286,16 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
     const settingsId = idRows[0]?.id;
     if (settingsId) {
       const [existingTierRows] = await db.execute(
-        'SELECT id FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order ASC LIMIT 1', [settingsId]
+        'SELECT id, reward_type, icon_preset FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order ASC LIMIT 1', [settingsId]
       );
-      const tierId = existingTierRows[0]?.id;
-      const rewardType = patch.rewardType ?? 'free_shipping';
-      const iconPreset = patch.iconPreset ?? 'shipping';
+      const existingTier = existingTierRows[0];
+      const tierId = existingTier?.id;
+      // A caller changing only the goal amount (e.g. set_progress_bar_goal
+      // with no rewardType) must not reset an already-configured reward —
+      // fall back to the existing tier's own value, same as every other
+      // field in this function, before falling back to a hardcoded default.
+      const rewardType = patch.rewardType ?? existingTier?.reward_type ?? 'free_shipping';
+      const iconPreset = patch.iconPreset ?? existingTier?.icon_preset ?? 'shipping';
       if (tierId) {
         await db.execute(`
           UPDATE progress_bar_tiers

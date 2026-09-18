@@ -200,15 +200,15 @@ export const TOOL_REGISTRY = [
   },
   {
     name: 'set_progress_bar_goal',
-    description: 'Turn on the progress bar with a simple single-goal setup — e.g. "free shipping at a spending threshold". Sets the goal amount and reward type on the primary tier and enables the progress bar. The goalAmount is a plain number in the store\'s own currency (see the Store currency fact in context) — never assume USD. For multi-tier setups, use update_progress_bar_tiers instead.',
+    description: 'Turn on (or partially update) the progress bar\'s simple single-goal setup — e.g. "free shipping at a spending threshold". Supports a true partial update: pass ONLY the field(s) the merchant actually asked to change (goalAmount and/or rewardType) — never invent or re-send a value for a field they didn\'t mention, even though both are optional here. Any field you omit keeps its current saved value untouched; you do not need to know or echo the existing value yourself. The goalAmount, when provided, is a plain number in the store\'s own currency (see the Store currency fact in context) — never assume USD. For multi-tier setups, use update_progress_bar_tiers instead.',
     parameters: {
       type: 'object',
       properties: {
-        goalAmount: { type: 'number', description: 'Spend amount required to unlock the reward' },
-        rewardType: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward' },
+        goalAmount: { type: 'number', description: 'Spend amount required to unlock the reward. Omit entirely if the merchant only asked to change the reward — do not re-send the current amount.' },
+        rewardType: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward. Omit entirely if the merchant only asked to change the goal amount.' },
         placement: { type: 'string', enum: ['top', 'bottom'] },
       },
-      required: ['goalAmount'],
+      required: [],
     },
   },
   {
