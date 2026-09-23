@@ -7,7 +7,8 @@
 import {
   saveCartDrawerConfig, saveProgressBarSettings, saveUpsellWidgetSettings,
   saveCouponSliderSettings, saveFbtWidgetSettings, saveCountdownTimerSettings,
-  appendFbtRule, removeFbtRule, fetchProgressBar,
+  appendFbtRule, removeFbtRule, fetchProgressBar, fetchFbtConfig,
+  fetchFbtRuleById, updateFbtRuleRecord, listActiveFbtRules,
 } from './cart-config-writes.server';
 import { resolveProductByName, appendUpsellRule, searchProducts } from './upsell-rules.server';
 import { resolveCollectionByName, searchCollections } from './collection-resolver.server';
@@ -223,6 +224,32 @@ function productAmbiguousResult(name, candidates) {
   return { success: false, reason: 'ambiguous', message: `Multiple products match "${name}" — ask the merchant which one they mean.`, candidates: candidates.map(c => c.title) };
 }
 
+// Dedicated structured-error shapes for update_fbt_rule/create_fbt_rule's
+// duplicate check — distinct from productNotFoundResult/productAmbiguousResult
+// above (used by create_upsell_rule/create_fbt_rule's own product resolution)
+// so those tools' existing result shape stays exactly as-is.
+function fbtProductNotFoundResult(name) {
+  return { success: false, error: 'PRODUCT_NOT_FOUND', productName: name, message: 'No matching Shopify product was found.' };
+}
+function fbtProductAmbiguousResult(name, candidates) {
+  return {
+    success: false, error: 'PRODUCT_AMBIGUOUS', productName: name,
+    matches: candidates.map((c) => ({ id: c.id, title: c.title, handle: c.handle })),
+    message: 'Multiple Shopify products matched this name.',
+  };
+}
+// Canonical Shopify product IDs only (never titles), deduped + sorted so
+// order never matters — shared by create_fbt_rule's duplicate check and
+// update_fbt_rule's changed/unchanged diffing.
+function normalizedProductIds(products) {
+  return Array.from(new Set((products || []).map((p) => p.id))).sort();
+}
+function sameProductIdSet(a, b) {
+  const na = normalizedProductIds(a);
+  const nb = normalizedProductIds(b);
+  return na.length === nb.length && na.every((id, i) => id === nb[i]);
+}
+
 export const TOOL_EXECUTORS = {
   // ── Reads ──────────────────────────────────────────────────────────────
   async get_current_config(ctx) {
@@ -236,13 +263,13 @@ export const TOOL_EXECUTORS = {
     const progressBar = await fetchProgressBar(db, ctx.shop);
     const [csRows] = await db.execute('SELECT * FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     const [upRows] = await db.execute('SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
-    const [fbtRows] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+    const fbt = await fetchFbtConfig(db, ctx.shop);
     return {
       cartDrawerConfig: cdcRows[0] || null,
       progressBar,
       couponSlider: csRows[0] || null,
       upsellWidget: upRows[0] || null,
-      fbtWidget: fbtRows[0] || null,
+      fbt,
     };
   },
 
@@ -460,29 +487,127 @@ export const TOOL_EXECUTORS = {
       return badOffer.status === 'ambiguous' ? productAmbiguousResult(offerProductNames[idx], badOffer.candidates) : productNotFoundResult(offerProductNames[idx]);
     }
 
-    let triggerIds = [];
+    let triggerResults = [];
     if (triggerProductNames?.length) {
-      const triggerResults = await Promise.all(triggerProductNames.map((n) => resolveProductByName(ctx.admin, n)));
+      triggerResults = await Promise.all(triggerProductNames.map((n) => resolveProductByName(ctx.admin, n)));
       const badTrigger = triggerResults.find((r) => r.status !== 'found');
       if (badTrigger) {
         const idx = triggerResults.indexOf(badTrigger);
         return badTrigger.status === 'ambiguous' ? productAmbiguousResult(triggerProductNames[idx], badTrigger.candidates) : productNotFoundResult(triggerProductNames[idx]);
       }
-      triggerIds = triggerResults.map((r) => r.id);
     }
 
-    await appendFbtRule(ctx.shop, {
+    // Full product records (id/title/handle/image/price), not bare ids — the
+    // storefront renderer needs these fields to show a real title/image/price
+    // instead of a blank card, and fbt_rules' real rows already store this
+    // shape for manually-created rules.
+    const toProductRecord = (r) => ({ id: r.id, title: r.title, handle: r.handle, image: r.image, price: r.price });
+
+    // Deterministic server-side duplicate protection — prompt instructions
+    // alone (guideline 15g) proved unreliable in live testing. A duplicate is
+    // the same trigger scope + the same normalized trigger product ID set +
+    // the same normalized offer product ID set; order never matters and
+    // titles are never compared, only canonical Shopify IDs. This only
+    // rejects an EXACT duplicate — a rule sharing the same trigger but a
+    // different offer set (or vice versa) is a legitimate separate rule.
+    const triggerScope = triggerResults.length ? 'specific_products' : 'all';
+    const existingRules = await listActiveFbtRules(ctx.shop);
+    const duplicate = existingRules.find((r) => (
+      (r.trigger_scope || 'all') === triggerScope &&
+      sameProductIdSet(r.trigger_products, triggerResults) &&
+      sameProductIdSet(r.fbt_products, offerResults)
+    ));
+    if (duplicate) {
+      return { success: false, error: 'DUPLICATE_RULE', existingRuleId: duplicate.id, message: 'An identical FBT rule already exists.' };
+    }
+
+    const { id: ruleId } = await appendFbtRule(ctx.shop, {
       name: `Rule ${Date.now()}`,
-      triggerProductIds: triggerIds,
-      offerProductIds: offerResults.map((r) => r.id),
+      triggerProducts: triggerResults.map(toProductRecord),
+      offerProducts: offerResults.map(toProductRecord),
       discountType: discountType || 'none',
       discountValue: discountValue || 0,
     });
-    return { success: true, offers: offerResults.map((r) => r.title) };
+    return { success: true, id: ruleId, offers: offerResults.map((r) => r.title) };
+  },
+
+  // Modifies an EXISTING FBT rule's trigger/offer products without deleting
+  // and recreating it — the flow is strictly fetch existing row -> resolve
+  // ALL supplied product names -> build the complete resulting product
+  // lists -> validate (non-empty offers) -> only then write, so a single bad
+  // product name (e.g. one typo in a multi-product add) can never result in
+  // a partial write. triggerProductNames/offerProductNames are each the
+  // COMPLETE desired final list for that role, not a delta — a role left out
+  // of args entirely is preserved exactly as it currently is.
+  async update_fbt_rule(ctx, { ruleId, triggerProductNames, offerProductNames }) {
+    const existing = await fetchFbtRuleById(ctx.shop, ruleId);
+    if (!existing) {
+      return { success: false, error: 'RULE_NOT_FOUND', ruleId, message: 'The requested FBT rule was not found.' };
+    }
+
+    const hasTrigger = triggerProductNames !== undefined;
+    const hasOffer = offerProductNames !== undefined;
+    if (!hasTrigger && !hasOffer) {
+      return { success: false, error: 'NO_FIELDS_TO_UPDATE', message: 'No FBT fields were provided for update.' };
+    }
+
+    const toProductRecord = (r) => ({ id: r.id, title: r.title, handle: r.handle, image: r.image, price: r.price });
+    async function resolveNames(names) {
+      const results = await Promise.all(names.map((n) => resolveProductByName(ctx.admin, n)));
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'not_found') return { failure: fbtProductNotFoundResult(names[i]) };
+        if (results[i].status === 'ambiguous') return { failure: fbtProductAmbiguousResult(names[i], results[i].candidates) };
+      }
+      return { products: results.map(toProductRecord) };
+    }
+
+    let newTriggerProducts = existing.trigger_products || [];
+    let newOfferProducts = existing.fbt_products || [];
+
+    if (hasTrigger) {
+      const resolved = await resolveNames(triggerProductNames);
+      if (resolved.failure) return resolved.failure;
+      newTriggerProducts = resolved.products;
+    }
+    if (hasOffer) {
+      const resolved = await resolveNames(offerProductNames);
+      if (resolved.failure) return resolved.failure;
+      newOfferProducts = resolved.products;
+    }
+
+    // An FBT rule must never end up with zero offer products — reject the
+    // update (no write) rather than silently deleting the rule; removing the
+    // whole rule stays remove_fbt_rule's job, with its own confirmation flow.
+    if (!newOfferProducts.length) {
+      return { success: false, error: 'EMPTY_OFFER_PRODUCTS', message: 'An FBT rule must contain at least one offer product.' };
+    }
+
+    const triggerChanged = hasTrigger && !sameProductIdSet(newTriggerProducts, existing.trigger_products || []);
+    const offerChanged = hasOffer && !sameProductIdSet(newOfferProducts, existing.fbt_products || []);
+
+    if (!triggerChanged && !offerChanged) {
+      return { success: true, changed: {}, unchanged: { ruleId } };
+    }
+
+    await updateFbtRuleRecord(ctx.shop, ruleId, {
+      name: existing.name,
+      triggerProducts: newTriggerProducts,
+      offerProducts: newOfferProducts,
+    });
+
+    const changed = {};
+    const unchanged = { ruleId };
+    if (triggerChanged) changed.triggerProducts = newTriggerProducts.map((p) => p.title);
+    else unchanged.triggerProducts = newTriggerProducts.map((p) => p.title);
+    if (offerChanged) changed.offerProducts = newOfferProducts.map((p) => p.title);
+    else unchanged.offerProducts = newOfferProducts.map((p) => p.title);
+
+    return { success: true, changed, unchanged };
   },
 
   async remove_fbt_rule(ctx, { ruleId }) {
-    await removeFbtRule(ctx.shop, ruleId);
+    const { removed } = await removeFbtRule(ctx.shop, ruleId);
+    if (!removed) return { success: false, reason: 'not_found', message: `No FBT rule found with id ${ruleId}.` };
     return { success: true };
   },
 

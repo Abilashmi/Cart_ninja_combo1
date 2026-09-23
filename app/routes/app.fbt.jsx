@@ -9,7 +9,7 @@ import {
 import BrixBar from '../components/ai-agent/BrixBar';
 import { SliderField } from '../components/shared/SliderField';
 import {
-  SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon, LightbulbIcon,
+  SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
   CheckCircleIcon, TargetIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
@@ -24,6 +24,19 @@ function parseJson(val, fallback) {
   if (!val) return fallback;
   if (typeof val === 'object') return val;
   try { return JSON.parse(val); } catch { return fallback; }
+}
+
+// fbt_rules.trigger_scope is a real enforced MySQL enum
+// ('all'|'specific_products'|'specific_collections') — the UI's own
+// displayScope value ('all'|'per_product') isn't a member, so writing it
+// directly was being silently coerced to '' by MySQL. This only maps the
+// trigger_scope COLUMN value; fbt_widget.condition still stores the raw
+// displayScope ('per_product') unchanged, since that's the format the
+// storefront renderer and this same loader already expect.
+function toTriggerScopeEnum(displayScope) {
+  if (displayScope === 'per_product') return 'specific_products';
+  if (displayScope === 'all') return 'all';
+  return displayScope || 'all';
 }
 
 /* ─── LOADER ──────────────────────────────────────────────────────────────── */
@@ -284,7 +297,7 @@ export const action = async ({ request }) => {
       `, [
         shop,
         r.name || `Rule ${i + 1}`,
-        r.displayScope || r.trigger_scope || 'all',
+        toTriggerScopeEnum(r.displayScope || r.trigger_scope),
         r.triggerProducts?.length ? JSON.stringify(r.triggerProducts) : null,
         r.triggerCollections?.length ? JSON.stringify(r.triggerCollections) : null,
         r.fbtProducts?.length ? JSON.stringify(r.fbtProducts) : null,
@@ -488,6 +501,21 @@ function scopeLabel(scope) {
   return 'Per-product rules';
 }
 
+// "Snowboard", "Snowboard, Gift Card", "Snowboard, Gift Card +3 more" — keeps
+// the selection readable in a fixed-width card instead of letting a long list
+// blow the layout out.
+function summarizeTitles(products, max = 2) {
+  const list = products || [];
+  if (list.length === 0) return '';
+  const shown = list.slice(0, max).map(p => p.title).join(', ');
+  return list.length > max ? `${shown} +${list.length - max} more` : shown;
+}
+
+// "1 product" / "3 products" — the old copy read "1 trigger products".
+function pluralize(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 /* ─── ACCORDION SECTION ───────────────────────────────────────────────────── */
 function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
   return (
@@ -545,8 +573,22 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
 // Skip/Next. Deliberately non-blocking (the dim layer has pointerEvents:
 // none) — this is a pointer guide, not a modal wizard forcing the merchant
 // through steps.
-function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, onNext, onSkip, isLast }) {
+function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, nextLabel, onNext, onBack, onSkip, onUnavailable, canGoBack }) {
   const [rect, setRect] = useState(null);
+
+  // A step whose target element isn't mounted used to be a dead end: the
+  // effect bailed, `rect` stayed null so this rendered nothing, and the
+  // caller still had a non-null tourStepIndex — which also hides the
+  // "Replay setup tour" button. Net effect was the whole tour silently
+  // disappearing with no way to get it back. Bail out loudly instead.
+  useEffect(() => {
+    if (!targetRef.current) onUnavailable?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetRef]);
+
+  // Measuring a new target must not keep painting the previous step's
+  // spotlight over the wrong element while the effect below catches up.
+  useEffect(() => { setRect(null); }, [targetRef]);
 
   useEffect(() => {
     const el = targetRef.current;
@@ -609,13 +651,18 @@ function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, onNe
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', color: '#9aa0a3', textTransform: 'uppercase' }}>Step {stepNumber} of {totalSteps}</span>
-          <button type="button" onClick={onSkip} aria-label="Skip setup tour" style={{ border: 'none', background: 'transparent', color: '#9aa0a3', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '2px' }}>×</button>
+          <button type="button" onClick={onSkip} aria-label="Skip setup tour" style={{ border: 'none', background: 'transparent', color: '#9aa0a3', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '2px' }}>&times;</button>
         </div>
         <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>{title}</div>
         <div style={{ fontSize: '13px', color: '#c9cccf', lineHeight: 1.5, marginBottom: '14px' }}>{desc}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
           <button type="button" onClick={onSkip} style={{ border: 'none', background: 'transparent', color: '#9aa0a3', cursor: 'pointer', fontSize: '12px', fontWeight: 600, padding: 0 }}>Skip tour</button>
-          <button type="button" onClick={onNext} style={{ border: 'none', background: '#008060', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '8px 16px', borderRadius: '8px' }}>{isLast ? 'Finish' : 'Next'}</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {canGoBack && (
+              <button type="button" onClick={onBack} style={{ border: '1px solid #45484a', background: 'transparent', color: '#e3e5e7', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '7px 14px', borderRadius: '8px' }}>Back</button>
+            )}
+            <button type="button" onClick={onNext} style={{ border: 'none', background: '#008060', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600, padding: '8px 16px', borderRadius: '8px' }}>{nextLabel}</button>
+          </div>
         </div>
       </div>
     </>
@@ -695,23 +742,6 @@ export default function FBTPage() {
   const [ruleCreatedToast,  setRuleCreatedToast]  = useState(false); /* one-off toast, nothing stays on screen — the rule itself shows up in Saved Rules below */
   const [configureToast,    setConfigureToast]    = useState(false); /* shown when Save is blocked — nothing set up yet in the active mode */
 
-  // Quick Setup Guide — shown once for merchants who have never configured a
-  // manual rule before. Gated on localStorage (client-only, no backend field)
-  // so it never reappears once dismissed, following the same cn_* localStorage
-  // convention as the existing first-visit/tutorial tracking in app._index.jsx.
-  const [showQuickGuide, setShowQuickGuide] = useState(false);
-  useEffect(() => {
-    if (manualRules.length > 0) return; // already configured — nothing to onboard
-    try {
-      if (localStorage.getItem('cn_fbt_quick_guide_dismissed') !== '1') setShowQuickGuide(true);
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const dismissQuickGuide = () => {
-    setShowQuickGuide(false);
-    try { localStorage.setItem('cn_fbt_quick_guide_dismissed', '1'); } catch {}
-  };
-
   // ── Intelligent Setup Tour ────────────────────────────────────────────────
   // 3 pointer-tooltip steps (Choose Template / Customize / Configure), each
   // completion check reusing real existing state — no tour-only DB field.
@@ -739,6 +769,37 @@ export default function FBTPage() {
   const configureStepDone = manualRules.length > 0 || Boolean(fbtConfig?.aiEnabled) || aiConfigured;
   const tourStepsDone = [templateStepDone, customizeStepDone, configureStepDone];
 
+  // Single source for the 3 setup tour steps. Completion reuses the real
+  // existing signals above, so the tour never points at something already
+  // done (see resolveTourStep).
+  const SETUP_STEPS = [
+    {
+      key: 'template',
+      ref: templateStepRef,
+      tourTitle: 'Choose your template',
+      tourDesc: 'Start with a layout that fits how you want your Frequently Bought Together offer to appear.',
+      nextLabel: 'Next',
+      done: templateStepDone,
+    },
+    {
+      key: 'customize',
+      ref: customizeStepRef,
+      tourTitle: 'Customize your offer',
+      tourDesc: 'Adjust the appearance and content so the FBT widget matches your storefront.',
+      nextLabel: 'Next',
+      done: customizeStepDone,
+    },
+    {
+      key: 'configure',
+      ref: configureStepRef,
+      tourTitle: 'Configure your products',
+      tourDesc: 'Choose the products that trigger the recommendation and the products you want to offer together.',
+      nextLabel: 'Configure',
+      done: configureStepDone,
+    },
+  ];
+  const TOUR_STEP_COUNT = SETUP_STEPS.length;
+
   // Decide the starting step once, on mount — first incomplete step, in
   // order, exactly like the brand-new-merchant example in the spec. Reads
   // localStorage directly here (rather than through customizedFlag state)
@@ -759,10 +820,19 @@ export default function FBTPage() {
       hasSavedFbtConfig || customizedFromStorage,
       manualRules.length > 0 || Boolean(fbtConfig?.aiEnabled),
     ];
-    const firstIncomplete = doneFlags.findIndex((done) => !done);
+    // First step that is both incomplete AND has a mounted target — a step
+    // whose target doesn't exist is skipped here rather than being opened
+    // and then immediately recovered from.
+    const refs = [templateStepRef, customizeStepRef, configureStepRef];
+    const firstIncomplete = doneFlags.findIndex((done, i) => !done && Boolean(refs[i]?.current));
     if (firstIncomplete === -1) {
-      // Nothing to onboard — don't re-check on every future visit either.
-      try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+      // Only burn the "never show again" flag when the setup is genuinely
+      // finished. Landing here because a target wasn't mounted yet must not
+      // permanently suppress the tour — leave the flag alone and let the
+      // next visit try again.
+      if (doneFlags.every(Boolean)) {
+        try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+      }
       return;
     }
     setTourStepIndex(firstIncomplete);
@@ -783,21 +853,68 @@ export default function FBTPage() {
     try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
   };
 
-  // Advances past any step that's already done instead of a fixed
-  // Next → Next → Next — e.g. a merchant who already has saved rules but
-  // never touched Customize starts the tour there, not at Step 1.
-  const advanceTour = (fromIndex) => {
-    let next = fromIndex + 1;
-    if (!tourManualPreview) {
-      while (next < 3 && tourStepsDone[next]) next++;
+  // Walks from `start` in `dir` (+1/-1) to the first step that is actually
+  // showable, and returns -1 if there is none left. Two things disqualify a
+  // step:
+  //   • its target element isn't mounted — pointing at it would render an
+  //     invisible tooltip over nothing, the dead end the recovery logic in
+  //     SetupTourPointer already guards against. Checking it up front means
+  //     we never even enter that state.
+  //   • it's already done (forward auto-advance only) — a merchant who
+  //     already has saved rules but never touched Customize starts the tour
+  //     there, not at Step 1. Back-navigation and a manual replay both
+  //     deliberately keep completed steps.
+  const resolveTourStep = (start, dir, { skipCompleted }) => {
+    const refs = [templateStepRef, customizeStepRef, configureStepRef];
+    for (let i = start; i >= 0 && i < TOUR_STEP_COUNT; i += dir) {
+      if (!refs[i]?.current) continue;
+      if (skipCompleted && tourStepsDone[i]) continue;
+      return i;
     }
-    if (next >= 3) { finishTour(); return; }
+    return -1;
+  };
+
+  const advanceTour = (fromIndex) => {
+    const next = resolveTourStep(fromIndex + 1, 1, { skipCompleted: !tourManualPreview });
+    if (next === -1) { finishTour(); return; }
     setTourStepIndex(next);
   };
 
+  // Back never skips completed steps (a deliberate step-back should land
+  // where the merchant expects) but still skips unmounted targets, and is a
+  // no-op when there's nothing showable behind the current step.
+  const backTour = (fromIndex) => {
+    const prev = resolveTourStep(fromIndex - 1, -1, { skipCompleted: false });
+    if (prev === -1) return;
+    setTourStepIndex(prev);
+  };
+
+  // Last step's primary action hands the merchant straight into the thing
+  // the step is about instead of just closing the tour.
+  const finishTourIntoConfigure = () => {
+    finishTour();
+    setIsConfigModalOpen(true);
+  };
+
+  // "Replay setup tour" — the only entry point back into onboarding now that
+  // the page-level guide card is gone. Clears the dismissal flag and walks
+  // all 3 steps regardless of completion (tourManualPreview), so a shop that
+  // already has everything configured can still preview the flow.
   const replayTour = () => {
     setTourManualPreview(true);
-    setTourStepIndex(0);
+    try {
+      localStorage.removeItem('cn_fbt_setup_tour_dismissed');
+      // Re-read (never clear) the one key that records real work: the
+      // Customize step's completion. Keeps the replayed guide's ticks
+      // honest if this state drifted from storage.
+      setCustomizedFlag(localStorage.getItem('cn_fbt_setup_customized') === '1');
+    } catch {}
+    // Start on the first step whose target actually exists, so a replay can
+    // never park tourStepIndex on a missing target. Completed steps are
+    // kept — a manual replay is meant to show the whole flow.
+    const first = resolveTourStep(0, 1, { skipCompleted: false });
+    if (first === -1) { setTourManualPreview(false); setTourStepIndex(null); return; }
+    setTourStepIndex(first);
   };
 
   // If the merchant completes the step the tour is currently pointing at
@@ -810,6 +927,30 @@ export default function FBTPage() {
     if (tourStepsDone[tourStepIndex]) advanceTour(tourStepIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateStepDone, customizeStepDone, configureStepDone]);
+
+  // TEMP-DIAG(fbt-setup): remove after verification.
+  useEffect(() => {
+    /* eslint-disable no-console */
+    console.log('[FBT SETUP DEBUG]', {
+      fbtPublishable,
+      isConfigModalOpen,
+      tourStepIndex,
+      tourManualPreview,
+      tourDismissedLS: (() => { try { return localStorage.getItem('cn_fbt_setup_tour_dismissed'); } catch { return 'ERR'; } })(),
+      customizedLS: (() => { try { return localStorage.getItem('cn_fbt_setup_customized'); } catch { return 'ERR'; } })(),
+      hasSavedFbtConfig,
+      manualRulesCount: manualRules.length,
+      selectedTemplate,
+      templateStepDone, customizeStepDone, configureStepDone,
+      refsMounted: {
+        template: !!templateStepRef.current,
+        customize: !!customizeStepRef.current,
+        configure: !!configureStepRef.current,
+      },
+      isSaving: fetcher.state !== 'idle',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfigModalOpen, tourStepIndex, manualRules.length]);
 
   const isSaving = fetcher.state !== 'idle';
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
@@ -1139,18 +1280,26 @@ export default function FBTPage() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f7' }}>
 
         {/* ── Top bar ── */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: '#fff', borderBottom: '1px solid #e1e3e5', borderLeft: '4px solid #008060' }}>
+        {/* The action cluster on the right is wide (badge + toggle + Configure
+            + Discard + Save + Replay tour). This row used to be a single
+            no-wrap flex line inside an `overflow: hidden` page shell, so once
+            the embedded-admin viewport got narrow the last items — the
+            "Replay setup tour" button first — were pushed past the edge and
+            clipped away with no scrollbar, i.e. silently missing. Wrapping
+            the row and letting the title block shrink keeps every control
+            reachable instead; the actions drop to a second line at worst. */}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, rowGap: 6, padding: '7px 14px', background: '#fff', borderBottom: '1px solid #e1e3e5', borderLeft: '4px solid #008060' }}>
           <div style={{ width: 30, height: 30, borderRadius: 7, background: fbtEffectiveEnabled ? '#008060' : '#babec3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <div style={{ filter: 'brightness(0) invert(1)', display: 'flex' }}><Icon source={ProductIcon} /></div>
           </div>
-          <div>
+          <div style={{ minWidth: 0, flex: '1 1 auto' }}>
             <InlineStack gap="200" blockAlign="center">
               <Text as="h1" variant="headingMd">Frequently Bought Together</Text>
               <ProBadge featureKey="fbt" />
             </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">Cross-sell widget on <span style={{ color: '#008060', fontWeight: 500 }}>product pages</span></Text>
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10, rowGap: 6, flexShrink: 0 }}>
             <Badge tone={fbtEffectiveEnabled ? 'success' : undefined}>{fbtEffectiveEnabled ? 'Active' : 'Inactive'}</Badge>
             <button
               onClick={() => {
@@ -1196,81 +1345,64 @@ export default function FBTPage() {
             {/* Polaris only offers size="small" (23.75rem) or size="large"
                 (61.25rem) — both overshoot what this modal needs, so this
                 dials the "large" dialog down to a middle width instead.
-                Targets Polaris's own compiled class names for the installed
-                version (@shopify/polaris 13.9.5); if a future Polaris
-                upgrade changes those hashes this silently stops applying
-                and the modal just falls back to the full "large" width. */}
+                Matched with [class*=...] prefix selectors rather than the
+                exact compiled class names: @shopify/polaris 13.9.5 emits
+                these unhashed (`Polaris-Modal-Dialog__Modal`), but the build
+                has emitted hash-suffixed variants before, and pinning the
+                hashes meant the rule silently stopped matching and the
+                modal snapped back to the full 61.25rem "large" width. The
+                prefix form matches both spellings. */}
             <style>{`
               @media (min-width: 48em) {
-                .Polaris-Modal-Dialog__Modal_2v9yc.Polaris-Modal-Dialog--sizeLarge_61dxo {
+                [class*="Polaris-Modal-Dialog__Modal"][class*="Polaris-Modal-Dialog--sizeLarge"] {
                   max-width: 46rem;
                 }
               }
             `}</style>
 
-            {showQuickGuide && (
+            {/* ── Setup steps ──────────────────────────────────────────────
+                 Three explained steps, deliberately unboxed: no card, no
+                 border, no background. Each one says what it is and what it
+                 does, so the flow reads on its own. Static guidance only —
+                 the real trigger/FBT pickers and the existing Create FBT
+                 Rule button below remain the only controls. */}
+            {configMode === 'manual' && (
               <Modal.Section>
-                <div style={{ position: 'relative', border: '1px solid #b4e1fa', background: '#f0f9ff', borderRadius: '10px', padding: '14px 16px' }}>
+                <div className="brix-qs-row">
                   <style>{`
-                    .brix-fbt-guide-steps { display: flex; }
-                    .brix-fbt-guide-steps > div { flex: 1; padding: 0 16px; }
-                    .brix-fbt-guide-steps > div:first-child { padding-left: 0; }
-                    .brix-fbt-guide-steps > div:not(:first-child) { border-left: 1px solid #d3ecfb; }
-                    @media (max-width: 640px) {
-                      .brix-fbt-guide-steps { flex-direction: column; gap: 14px; }
-                      .brix-fbt-guide-steps > div { padding: 0; }
-                      .brix-fbt-guide-steps > div:not(:first-child) { border-left: none; border-top: 1px solid #d3ecfb; padding-top: 14px; }
-                    }
+                    .brix-qs-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+                    .brix-qs-item { display: flex; gap: 9px; align-items: flex-start; min-width: 0; }
+                    .brix-qs-n { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #f1f2f3; color: #6d7175; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+                    .brix-qs-b { min-width: 0; }
+                    .brix-qs-t { font-size: 12.5px; font-weight: 600; color: #202223; line-height: 1.35; }
+                    .brix-qs-d { font-size: 11.5px; color: #6d7175; line-height: 1.45; margin-top: 2px; }
                   `}</style>
-
-                  <button
-                    type="button"
-                    onClick={dismissQuickGuide}
-                    aria-label="Dismiss quick setup guide"
-                    style={{ position: 'absolute', top: '10px', right: '10px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#6d7175', fontSize: '18px', lineHeight: 1, padding: '4px' }}
-                  >×</button>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '12px', paddingRight: '24px' }}>
-                    <span style={{ display: 'flex', flexShrink: 0, color: '#1a73a8', marginTop: '2px' }}><Icon source={LightbulbIcon} /></span>
-                    <div>
-                      <Text as="h3" variant="headingSm">Quick Setup Guide</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">Just 3 simple steps to create your FBT rule.</Text>
-                    </div>
-                  </div>
-
-                  <div className="brix-fbt-guide-steps">
-                    {[
-                      { n: 1, title: 'Choose Trigger Product', desc: 'Select the product that starts the recommendation.' },
-                      { n: 2, title: 'Choose Upsell Products', desc: 'Select the products you want to recommend together.' },
-                      { n: 3, title: 'Click Create FBT Rule', desc: 'Save your configuration to make it active.' },
-                    ].map((step) => (
-                      <div key={step.n} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <span style={{ flexShrink: 0, width: '22px', height: '22px', borderRadius: '50%', background: '#1a73a8', color: '#fff', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step.n}</span>
-                        <div>
-                          <Text as="p" variant="bodySm" fontWeight="semibold">{step.title}</Text>
-                          <Text as="p" variant="bodyXs" tone="subdued">{step.desc}</Text>
-                        </div>
+                  {[
+                    {
+                      n: 1,
+                      t: 'Choose the trigger product',
+                      d: 'The product whose page shows this recommendation.',
+                    },
+                    {
+                      n: 2,
+                      t: 'Add products to recommend',
+                      d: 'The items offered alongside the trigger product.',
+                    },
+                    {
+                      n: 3,
+                      t: 'Create the rule',
+                      d: 'Adds it below, then Save publishes it to your store.',
+                    },
+                  ].map((s) => (
+                    <div key={s.n} className="brix-qs-item">
+                      <span className="brix-qs-n">{s.n}</span>
+                      <div className="brix-qs-b">
+                        <div className="brix-qs-t">{s.t}</div>
+                        <div className="brix-qs-d">{s.d}</div>
                       </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
-                    <Button size="slim" onClick={dismissQuickGuide}>Start Now</Button>
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              </Modal.Section>
-            )}
-
-            {!showQuickGuide && (
-              <Modal.Section>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickGuide(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#1a73a8', fontSize: '13px', fontWeight: 500, padding: 0 }}
-                >
-                  <Icon source={LightbulbIcon} />
-                  Show Setup Guide
-                </button>
               </Modal.Section>
             )}
 
@@ -1377,65 +1509,67 @@ export default function FBTPage() {
                         <div style={{ paddingLeft: '30px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                           <Text as="p" variant="bodySm" tone="subdued">Pick trigger products (pages where FBT shows) and FBT products (what to recommend).</Text>
 
-                          {/* draft status badges */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-                            <div
-                              onClick={() => { setPickerTarget('trigger'); setShowProductPicker(true); }}
-                              style={{
-                                padding: '12px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
-                                border: `1.5px solid ${draftRule?.triggerIds?.length ? '#008060' : '#e3e5e7'}`,
-                                background: draftRule?.triggerIds?.length ? '#f0faf6' : '#fff',
-                                boxShadow: '0 1px 2px rgba(16,24,40,0.04)', transition: 'box-shadow 0.15s ease',
-                              }}
-                            >
-                              <span style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '9px', background: draftRule?.triggerIds?.length ? '#008060' : '#f1f2f3', color: draftRule?.triggerIds?.length ? '#fff' : '#6d7175', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={TargetIcon} /></span>
-                              <div>
-                                <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.triggerIds?.length || 0} trigger products</Text>
-                                <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
-                              </div>
-                            </div>
-                            <div
-                              onClick={() => { setPickerTarget('fbt'); setShowProductPicker(true); }}
-                              style={{
-                                padding: '12px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
-                                border: `1.5px solid ${draftRule?.fbtIds?.length ? '#008060' : '#e3e5e7'}`,
-                                background: draftRule?.fbtIds?.length ? '#f0faf6' : '#fff',
-                                boxShadow: '0 1px 2px rgba(16,24,40,0.04)', transition: 'box-shadow 0.15s ease',
-                              }}
-                            >
-                              <span style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '9px', background: draftRule?.fbtIds?.length ? '#008060' : '#f1f2f3', color: draftRule?.fbtIds?.length ? '#fff' : '#6d7175', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={ProductIcon} /></span>
-                              <div>
-                                <Text as="p" variant="bodySm" fontWeight="semibold">{draftRule?.fbtIds?.length || 0} FBT products</Text>
-                                <Text as="p" variant="bodyXs" tone="subdued">Click to browse & select</Text>
-                              </div>
-                            </div>
+                          {/* Two selectors. Each one shows what is actually
+                              selected, so the separate green "✓ Trigger / ✓
+                              Upsell / → Final step" status panel that used to
+                              sit under them is gone — it only restated this. */}
+                          <style>{`
+                            .brix-pick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+                            .brix-pick { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; text-align: left; font: inherit; cursor: pointer; padding: 11px 13px; border-radius: 10px; border: 1px solid #e3e5e7; background: #fff; transition: border-color .15s, background .15s; }
+                            .brix-pick:hover { border-color: #b5bcc2; background: #fafbfb; }
+                            .brix-pick:focus-visible { outline: 2px solid #008060; outline-offset: 1px; }
+                            .brix-pick[data-filled="true"] { border-color: #008060; }
+                            .brix-pick-ico { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f1f2f3; color: #6d7175; }
+                            .brix-pick[data-filled="true"] .brix-pick-ico { background: #008060; color: #fff; }
+                            .brix-pick-body { display: block; min-width: 0; flex: 1; }
+                            .brix-pick-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #6d7175; letter-spacing: .01em; }
+                            .brix-pick-count { font-variant-numeric: tabular-nums; color: #8c9196; }
+                            /* block + nowrap + hidden are all required together,
+                               otherwise the ellipsis never kicks in on a span. */
+                            .brix-pick-value { display: block; font-size: 12.5px; font-weight: 600; color: #202223; line-height: 1.35; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                            .brix-pick[data-filled="false"] .brix-pick-value { color: #8c9196; font-weight: 500; }
+                          `}</style>
+                          <div className="brix-pick-grid">
+                            {[
+                              {
+                                key: 'trigger',
+                                icon: TargetIcon,
+                                label: 'Trigger products',
+                                hint: 'Pages the widget appears on',
+                                products: draftTriggerProducts,
+                              },
+                              {
+                                key: 'fbt',
+                                icon: ProductIcon,
+                                label: 'Recommended products',
+                                hint: 'What gets offered alongside',
+                                products: draftFbtProducts,
+                              },
+                            ].map((f) => {
+                              const filled = f.products.length > 0;
+                              return (
+                                <button
+                                  key={f.key}
+                                  type="button"
+                                  className="brix-pick"
+                                  data-filled={filled}
+                                  onClick={() => { setPickerTarget(f.key); setShowProductPicker(true); }}
+                                  title={filled ? f.products.map(p => p.title).join(', ') : undefined}
+                                >
+                                  <span className="brix-pick-ico"><Icon source={f.icon} /></span>
+                                  <span className="brix-pick-body">
+                                    <span className="brix-pick-label">
+                                      {f.label}
+                                      {filled && <span className="brix-pick-count">· {pluralize(f.products.length, 'selected')}</span>}
+                                    </span>
+                                    <span className="brix-pick-value">
+                                      {filled ? summarizeTitles(f.products) : f.hint}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
-
-                          {/* live status — makes the next required action obvious instead
-                              of leaving the merchant to guess that a separate "create"
-                              click is still needed after picking products */}
-                          {(draftTriggerProducts.length > 0 || draftFbtProducts.length > 0) && (
-                            <div style={{ padding: '12px 14px', borderRadius: '12px', background: '#fafbfb', borderLeft: `3px solid ${draftReady ? '#008060' : '#e3e5e7'}`, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {draftTriggerProducts.length > 0 && (
-                                <Text as="p" variant="bodySm">
-                                  <span style={{ color: '#008060', fontWeight: 600 }}>✓ Trigger Product</span>
-                                  <span style={{ color: '#6d7175' }}> — {draftTriggerProducts.map(p => p.title).join(', ')}</span>
-                                </Text>
-                              )}
-                              {draftFbtProducts.length > 0 && (
-                                <Text as="p" variant="bodySm">
-                                  <span style={{ color: '#008060', fontWeight: 600 }}>✓ Upsell Products</span>
-                                  <span style={{ color: '#6d7175' }}> — {draftFbtProducts.map(p => p.title).join(', ')}</span>
-                                </Text>
-                              )}
-                              {draftReady && (
-                                <Text as="p" variant="bodySm">
-                                  <span style={{ color: '#8a6d00', fontWeight: 600 }}>→ Final step</span>
-                                  <span style={{ color: '#6d7175' }}> — Create this recommendation rule</span>
-                                </Text>
-                              )}
-                            </div>
-                          )}
 
                           <BlockStack gap="150">
                             <InlineStack gap="200">
@@ -1451,18 +1585,17 @@ export default function FBTPage() {
                                   setManualRules(prev => [...prev, rule]);
                                   setRuleCreatedToast(true);
                                   setDraftRule(null);
-                                  dismissQuickGuide();
                                   mark();
                                 }}
-                              >Create FBT Rule</Button>
+                              >Create FBT rule</Button>
                               {draftRule && (draftRule.triggerIds?.length || draftRule.fbtIds?.length) ? (
                                 <Button onClick={() => setDraftRule(null)}>Clear</Button>
                               ) : null}
                             </InlineStack>
-                            <Text as="p" variant="bodyXs">
-                              <span style={{ color: draftReady ? '#008060' : '#6d7175' }}>
-                                {draftReady ? 'Ready to create your FBT rule' : 'Select a trigger product and at least one upsell product.'}
-                              </span>
+                            <Text as="p" variant="bodyXs" tone="subdued">
+                              {draftReady
+                                ? 'Adds the rule below. Save publishes it to your storefront.'
+                                : 'Select a trigger product and at least one recommended product.'}
                             </Text>
                           </BlockStack>
                         </div>
@@ -1471,27 +1604,46 @@ export default function FBTPage() {
                       <Divider />
 
                       <BlockStack gap="300">
-                        <Text as="h3" variant="headingSm">Saved Rules ({manualRules.length})</Text>
+                        <Text as="h3" variant="headingSm">Saved rules ({manualRules.length})</Text>
                         {manualRules.length === 0 ? (
-                          <Text as="p" variant="bodySm" tone="subdued">No rules yet. Select trigger and FBT products above to create one.</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">No rules yet. Select trigger and recommended products above to create one.</Text>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {manualRules.map((rule) => (
-                              <div key={rule.id} style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px',
-                                borderRadius: '12px', border: '1px solid #e3e5e7', boxShadow: '0 1px 2px rgba(16,24,40,0.04)', background: '#fff',
-                              }}>
-                                <BlockStack gap="100">
-                                  <span style={{ fontSize: '11px', padding: '2px 10px', borderRadius: '20px', background: '#f0faf6', color: '#008060', border: '1px solid #b5e3d8', display: 'inline-block', fontWeight: 600 }}>{scopeLabel(rule.displayScope)}</span>
-                                  <Text as="p" variant="bodySm" tone="subdued">
-                                    Trigger: {(rule.triggerProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.triggerProducts || []).length > 2 ? ` +${rule.triggerProducts.length - 2} more` : ''}
-                                    {' | '}FBT: {(rule.fbtProducts || []).slice(0, 2).map(p => p.title).join(', ')}{(rule.fbtProducts || []).length > 2 ? ` +${rule.fbtProducts.length - 2} more` : ''}
-                                  </Text>
-                                </BlockStack>
-                                <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
-                              </div>
-                            ))}
-                          </div>
+                          <>
+                            {/* The scope pill used to sit inside a BlockStack,
+                                which stretches its children — so it rendered as
+                                a full-width stadium instead of a chip. It now
+                                lives in its own inline-flex row. */}
+                            <style>{`
+                              .brix-rules { display: flex; flex-direction: column; gap: 8px; }
+                              .brix-rule { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 13px; border-radius: 10px; border: 1px solid #e3e5e7; background: #fff; }
+                              .brix-rule-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+                              .brix-rule-scope { align-self: flex-start; display: inline-flex; font-size: 11px; font-weight: 600; padding: 1px 9px; border-radius: 20px; background: #f0faf6; color: #008060; border: 1px solid #b5e3d8; }
+                              .brix-rule-line { display: flex; gap: 7px; min-width: 0; font-size: 12px; line-height: 1.4; }
+                              .brix-rule-k { flex-shrink: 0; width: 76px; color: #8c9196; font-weight: 600; }
+                              .brix-rule-v { min-width: 0; color: #202223; overflow: hidden; text-overflow: ellipsis; }
+                              .brix-rule-act { flex-shrink: 0; }
+                            `}</style>
+                            <div className="brix-rules">
+                              {manualRules.map((rule) => (
+                                <div key={rule.id} className="brix-rule">
+                                  <div className="brix-rule-main">
+                                    <span className="brix-rule-scope">{scopeLabel(rule.displayScope)}</span>
+                                    <div className="brix-rule-line">
+                                      <span className="brix-rule-k">Trigger</span>
+                                      <span className="brix-rule-v">{summarizeTitles(rule.triggerProducts) || '—'}</span>
+                                    </div>
+                                    <div className="brix-rule-line">
+                                      <span className="brix-rule-k">Recommends</span>
+                                      <span className="brix-rule-v">{summarizeTitles(rule.fbtProducts) || '—'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="brix-rule-act">
+                                    <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </BlockStack>
                     </BlockStack>
@@ -1692,22 +1844,24 @@ export default function FBTPage() {
       </div>
 
       {tourStepIndex !== null && (() => {
-        const steps = [
-          { ref: templateStepRef, title: 'Choose Template', desc: 'Choose how your Frequently Bought Together products should appear on your storefront.' },
-          { ref: customizeStepRef, title: `Customize: ${templateName}`, desc: 'Adjust the layout, colors, styling and display settings to match your store.' },
-          { ref: configureStepRef, title: 'Configure', desc: 'Choose which products should be recommended together and create your FBT rules.' },
-        ];
-        const step = steps[tourStepIndex];
+        const step = SETUP_STEPS[tourStepIndex];
+        if (!step) return null;
+        const isLast = tourStepIndex === TOUR_STEP_COUNT - 1;
         return (
           <SetupTourPointer
             targetRef={step.ref}
             stepNumber={tourStepIndex + 1}
-            totalSteps={steps.length}
-            title={step.title}
-            desc={step.desc}
-            isLast={tourStepIndex === steps.length - 1}
-            onNext={() => advanceTour(tourStepIndex)}
+            totalSteps={TOUR_STEP_COUNT}
+            title={step.tourTitle}
+            desc={step.tourDesc}
+            nextLabel={step.nextLabel}
+            // Last step hands straight off to the Configure modal — the
+            // obvious next action once the tour has explained the flow.
+            onNext={() => (isLast ? finishTourIntoConfigure() : advanceTour(tourStepIndex))}
+            onBack={() => backTour(tourStepIndex)}
+            canGoBack={resolveTourStep(tourStepIndex - 1, -1, { skipCompleted: false }) !== -1}
             onSkip={finishTour}
+            onUnavailable={() => advanceTour(tourStepIndex)}
           />
         );
       })()}

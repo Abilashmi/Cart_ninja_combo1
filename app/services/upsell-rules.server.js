@@ -21,13 +21,27 @@ export async function resolveProductByName(admin, name) {
   const res = await admin.graphql(
     `query FindProduct($query: String!) {
       products(first: 10, query: $query) {
-        edges { node { id title } }
+        edges {
+          node {
+            id
+            title
+            handle
+            featuredImage { url }
+            variants(first: 1) { edges { node { price } } }
+          }
+        }
       }
     }`,
     { variables: { query: toTitleQuery(name) } }
   );
   const data = await res.json();
-  const matches = (data.data?.products?.edges || []).map(e => ({ id: e.node.id, title: e.node.title }));
+  const matches = (data.data?.products?.edges || []).map(e => ({
+    id: e.node.id,
+    title: e.node.title,
+    handle: e.node.handle,
+    image: e.node.featuredImage?.url || '',
+    price: e.node.variants?.edges?.[0]?.node?.price || '0',
+  }));
 
   if (matches.length === 0) return { status: 'not_found' };
 
@@ -35,9 +49,9 @@ export async function resolveProductByName(admin, name) {
   // Shopify's search can return loosely-related products (shared prefixes,
   // similar names) even when the merchant named one exactly.
   const exact = matches.find(m => m.title.toLowerCase() === String(name).trim().toLowerCase());
-  if (exact) return { status: 'found', id: exact.id, title: exact.title };
+  if (exact) return { status: 'found', ...exact };
 
-  if (matches.length === 1) return { status: 'found', id: matches[0].id, title: matches[0].title };
+  if (matches.length === 1) return { status: 'found', ...matches[0] };
   return { status: 'ambiguous', candidates: matches.slice(0, 5) };
 }
 

@@ -334,21 +334,34 @@ export const TOOL_REGISTRY = [
   },
   {
     name: 'create_fbt_rule',
-    description: 'Add a Frequently Bought Together rule: when a customer views/has one of the trigger products (or any product, if no trigger given) in their cart, the offer products are recommended together. Also enables the FBT widget if it isn\'t already on.',
+    description: 'Create a BRAND-NEW Frequently Bought Together rule: when a customer views/has one of the trigger products (or any product, if no trigger given) in their cart, the offer products are recommended together. Also enables the FBT widget if it isn\'t already on. Must NOT be used to modify an existing rule\'s products — for that, use update_fbt_rule instead. Rejected with no change if an identical rule (same trigger scope + same trigger products + same offer products, regardless of order) already exists.',
     parameters: {
       type: 'object',
       properties: {
-        triggerProductNames: { type: 'array', items: { type: 'string' }, description: 'Products that trigger this rule; omit/empty to apply to all products' },
-        offerProductNames: { type: 'array', items: { type: 'string' }, description: 'Products to recommend together' },
-        discountType: { type: 'string', enum: ['none', 'percentage', 'fixed'] },
-        discountValue: { type: 'number' },
+        triggerProductNames: { type: 'array', items: { type: 'string' }, description: 'Products that trigger this rule; omit/empty to apply to all products. Only include a product here if the request describes an explicit trigger relationship ("when X is viewed") — a plain list of products with no such relationship all belong in offerProductNames instead, with this left empty.' },
+        offerProductNames: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Products to recommend together — must have at least one. Never empty.' },
+        discountType: { type: 'string', enum: ['none', 'percentage', 'fixed'], description: 'Stored only — not currently applied by the storefront or admin. Never tell a merchant this discounts anything.' },
+        discountValue: { type: 'number', description: 'Stored only — not currently applied by the storefront or admin. Never tell a merchant this discounts anything.' },
       },
       required: ['offerProductNames'],
     },
   },
   {
+    name: 'update_fbt_rule',
+    description: 'Modify an EXISTING Frequently Bought Together rule\'s trigger and/or offer products in place — it does NOT create a new rule and it can NOT delete a rule (use remove_fbt_rule to remove one entirely). ruleId must be the real id of an existing rule from a fresh get_current_config call\'s fbt.rules — never invent or reuse one from earlier in the conversation; if it doesn\'t belong to this shop or doesn\'t exist, the call fails with no change. triggerProductNames/offerProductNames are each optional, and when supplied must be the COMPLETE desired final list for that role (existing products plus whatever is being added/removed/replaced, not just the delta) — every name in either list must resolve to exactly one real Shopify product or the whole update is rejected with nothing written. Omitting a role entirely leaves it exactly as it currently is. The offer list can never end up empty — if the change would remove the last offer product, the call is rejected instead of deleting the rule.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ruleId: { type: 'string', description: 'The real id of the existing rule to modify, from get_current_config\'s fbt.rules.' },
+        triggerProductNames: { type: 'array', items: { type: 'string' }, description: 'Complete desired list of trigger products for this rule; omit to leave the current trigger products unchanged. An empty array means the rule should apply to all products.' },
+        offerProductNames: { type: 'array', items: { type: 'string' }, description: 'Complete desired list of offer products for this rule; omit to leave the current offer products unchanged. Can never be an empty array.' },
+      },
+      required: ['ruleId'],
+    },
+  },
+  {
     name: 'remove_fbt_rule',
-    description: 'Delete an existing Frequently Bought Together rule by its ID. Destructive — requires confirmation.',
+    description: 'Delete an ENTIRE existing Frequently Bought Together rule by its ID (get the real id from get_current_config\'s fbt.rules — never guess or reuse one from earlier in the conversation), including all of its trigger and offer products. Must NOT be used to remove a single product from a rule that should otherwise keep existing — for that, use update_fbt_rule instead. Destructive — requires confirmation.',
     parameters: {
       type: 'object',
       properties: { ruleId: { type: 'string' } },
