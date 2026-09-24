@@ -50,3 +50,5 @@ ai-data/
 /blob-report/
 /playwright/.auth/
 .env.playwright
+# Local dev logs
+dev.log
