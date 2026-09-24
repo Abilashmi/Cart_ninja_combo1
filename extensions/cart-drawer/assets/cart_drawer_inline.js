@@ -670,7 +670,8 @@
       showReviews: coerceBoolean(data.showReviews, false),
       position: data.position || 'bottom',
       direction,
-      showOnEmptyCart: coerceBoolean(data.showOnEmptyCart, true),
+      // Admin saves this as `showWhenEmpty` (see progress bar note above).
+      showOnEmptyCart: coerceBoolean(data.showWhenEmpty ?? data.showOnEmptyCart ?? data.show_on_empty_cart, true),
       buttonText: data.buttonText || 'Add to cart',
       upsellTitle: {
         text: data.upsellTitle?.text || 'Recommended for you',
