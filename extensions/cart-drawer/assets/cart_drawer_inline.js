@@ -523,7 +523,10 @@
     return {
       enabled,
       mode,
-      showOnEmpty: data.showOnEmpty !== false,
+      // Admin (CartEditorPage) and the AI sync both save this as
+      // `showWhenEmpty`; `showOnEmpty` was never written, so reading only it
+      // made the "Show on empty cart" toggle a no-op (always shown).
+      showOnEmpty: coerceBoolean(data.showWhenEmpty ?? data.showOnEmpty ?? data.show_on_empty, true),
       barBackgroundColor: data.barBackgroundColor || data.colors?.background || '#e2e8f0',
       barForegroundColor: data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
       iconColor: data.iconColor || data.icon_color || data.colors?.icon || data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
