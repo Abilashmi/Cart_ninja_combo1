@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS brix_packs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  shop_domain VARCHAR(255) NOT NULL,
+  product_id VARCHAR(64) NOT NULL,
+  variant_id VARCHAR(64) NOT NULL,
+  product_title VARCHAR(255) NOT NULL,
+  variant_title VARCHAR(255) NOT NULL,
+  product_image TEXT NULL,
+  base_price DECIMAL(20,4) NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  template VARCHAR(32) NOT NULL DEFAULT 'same_variant',
+  version INT NOT NULL DEFAULT 1,
+  tiers_json LONGTEXT NOT NULL,
+  customization_json LONGTEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY brix_packs_shop_variant (shop_domain, product_id, variant_id),
+  KEY brix_packs_shop_status (shop_domain, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

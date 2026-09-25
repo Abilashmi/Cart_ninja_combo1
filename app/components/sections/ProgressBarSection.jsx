@@ -156,6 +156,7 @@ export function ProgressBarSection() {
       icon: 'gift',
       rewardProducts: [],
       rewardProductCount: 0,
+      rewardPricing: 'free',
       progressMessage: '',
       completionMessage: '',
       confetti: true,
@@ -305,6 +306,18 @@ export function ProgressBarSection() {
                       ? `${activeTier.rewardProductCount} product${activeTier.rewardProductCount !== 1 ? 's' : ''} selected. Click to modify.`
                       : 'No products selected. Click to add reward products.'}
                   </div>
+                  {activeTier.rewardProductCount > 0 && (
+                    <Select
+                      label="Reward price"
+                      options={[
+                        { label: 'Free (BRIX creates the discount automatically)', value: 'free' },
+                        { label: 'Regular price', value: 'regular' },
+                      ]}
+                      value={activeTier.rewardPricing === 'free' ? 'free' : 'regular'}
+                      onChange={(v) => updateTier(activeTierIndex, { rewardPricing: v })}
+                      helpText="Free: once the cart reaches this milestone the product is added with a FREE tag and costs nothing at checkout. Regular price: it is added at its normal price."
+                    />
+                  )}
                 </BlockStack>
                 {/* Shown while this tier is NOT YET reached — distinct from
                     Completion Message below, which is shown once it IS

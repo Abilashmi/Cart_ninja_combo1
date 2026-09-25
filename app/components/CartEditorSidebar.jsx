@@ -3,6 +3,8 @@ import { useFetcher } from 'react-router';
 import { useCartEditor } from '../context/CartEditorContext';
 import { featureStore } from './ai-agent/featureStore';
 import BrixBar from './ai-agent/BrixBar';
+import { HANDOFF_RECEIVED_EVENT } from '../utils/ai-handoff';
+import { CART_EDITOR_FEATURES } from '../config/ai-module-routes';
 import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
   ArrowLeftIcon, ChevronDownIcon, ColorIcon, SettingsIcon,
@@ -38,7 +40,7 @@ const SECTION_COMPONENT_MAP = {
 export function CartEditorSidebar({ onDiscard }) {
   const {
     status, setStatus, setActiveSection,
-    openSection: contextSection,
+    openSection: contextSection, navigateToSection,
     previewMode, setPreviewMode, body,
   } = useCartEditor();
 
@@ -54,6 +56,20 @@ export function CartEditorSidebar({ onDiscard }) {
     if (!contextSection || contextSection === openSection) return;
     setOpenSection(contextSection);
   }, [contextSection]);
+
+  // A request handed off from the global Brix AI page names the Cart Editor
+  // feature it's about — open that accordion section (the same call a click on
+  // the live preview makes). Purely a view focus; the chat does the actual change.
+  useEffect(() => {
+    const onHandoff = (e) => {
+      const { module, features } = e.detail || {};
+      if (module !== 'cart_editor') return;
+      const sectionId = (features || []).map((f) => CART_EDITOR_FEATURES[f]?.sectionId).find(Boolean);
+      if (sectionId) navigateToSection(sectionId);
+    };
+    window.addEventListener(HANDOFF_RECEIVED_EVENT, onHandoff);
+    return () => window.removeEventListener(HANDOFF_RECEIVED_EVENT, onHandoff);
+  }, [navigateToSection]);
 
   useEffect(() => {
     const data = statusFetcher.data;
@@ -200,7 +216,7 @@ export function CartEditorSidebar({ onDiscard }) {
 
       {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ── */}
       <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5' }}>
-        <BrixBar size="sm" floating={false} />
+        <BrixBar size="sm" floating={false} discoveryHint />
       </div>
     </div>
   );

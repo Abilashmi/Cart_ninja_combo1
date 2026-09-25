@@ -1,15 +1,55 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import useAiAgent from './useAiAgent';
 import MarkdownMessage from './MarkdownMessage';
 import ThemeColorsWidget from './widgets/ThemeColorsWidget';
+import SalesReportWidget from './widgets/SalesReportWidget';
+import DiscountFormWidget from './widgets/DiscountFormWidget';
+import TipCards from './TipCards';
+import { parseTips } from '../../utils/tip-parser';
+import { getModuleForPath } from '../../config/ai-module-routes';
+import { consumeHandoff, notifyHandoffReceived, prepareHandoff } from '../../utils/ai-handoff';
 
 const SIZES = {
-  lg: { maxWidth: '960px', inputFont: 17, padLeft: 28, btnText: true,  iconSize: 26, panelH: 380 },
-  md: { maxWidth: '720px', inputFont: 14, padLeft: 18, btnText: true,  iconSize: 20, panelH: 300 },
-  sm: { maxWidth: '100%',  inputFont: 13, padLeft: 14, btnText: false, iconSize: 17, panelH: 240 },
+  lg: { maxWidth: '960px', inputFont: 17, inputPadY: 12, padLeft: 28, btnText: true,  iconSize: 26, panelH: 380 },
+  md: { maxWidth: '720px', inputFont: 14, inputPadY: 10, padLeft: 18, btnText: true,  iconSize: 20, panelH: 300 },
+  sm: { maxWidth: '100%',  inputFont: 13, inputPadY: 6, padLeft: 14, btnText: false, iconSize: 17, panelH: 240 },
 };
+
+// The cue is shown on every page load/refresh: 3 seconds, then fades out.
+const INPUT_MAX_H = 140;
+const HINT_VISIBLE_MS = 3000;
+const HINT_FADE_MS = 800;
+
+// Sparkle glyph — same path as the panel-header icon, so it reads as "Brix AI".
+const HINT_ICON = (
+  <svg className="brix-ai-discovery-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M7 1.5l1.2 3.3 3.3 1.2-3.3 1.2L7 10.5 5.8 7.2 2.5 6l3.3-1.2L7 1.5z" />
+    <path d="M11.5 9.5v3M10 11h3" />
+  </svg>
+);
+
+// Every selector is prefixed `.brix-ai-discovery-` so nothing leaks into the editor.
+// Solid premium-black pill with a soft white glow that pulses for 3 seconds
+// (2 x 1.5s), fading in and out slowly; see the effect in BrixBar for the timing.
+const HINT_CSS = `
+.brix-ai-discovery-slot{position:relative;height:0;width:100%}
+.brix-ai-discovery-rail{position:absolute;left:0;right:0;bottom:7px;display:flex;justify-content:center;padding:0 8px;box-sizing:border-box;pointer-events:none;z-index:5}
+.brix-ai-discovery-fade{max-width:100%;opacity:0;transform:translateY(4px);animation:brix-ai-discovery-in .8s ease-out forwards}
+.brix-ai-discovery-fade.leaving{animation:brix-ai-discovery-out .8s ease-in-out forwards}
+.brix-ai-discovery-pill{position:relative;display:inline-flex;align-items:center;gap:6px;max-width:100%;box-sizing:border-box;margin:0;padding:5px 12px;border-radius:9999px;border:1px solid rgba(255,255,255,.14);background:#0b0b0d;color:#fff;font-family:inherit;font-size:12px;font-weight:600;line-height:1.3;letter-spacing:.02em;white-space:nowrap;cursor:pointer;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 0 0 rgba(255,255,255,0);animation:brix-ai-discovery-glow 1.5s ease-in-out 2}
+.brix-ai-discovery-pill:focus-visible{outline:2px solid #0b0b0d;outline-offset:2px}
+.brix-ai-discovery-icon{flex-shrink:0;color:currentColor}
+.brix-ai-discovery-label{overflow:hidden;text-overflow:ellipsis}
+.brix-ai-discovery-pointer{position:absolute;left:50%;bottom:-5px;width:8px;height:8px;margin-left:-4px;background:#0b0b0d;border-right:1px solid rgba(255,255,255,.14);border-bottom:1px solid rgba(255,255,255,.14);transform:rotate(45deg);pointer-events:none}
+@keyframes brix-ai-discovery-in{to{opacity:1;transform:translateY(0)}}
+@keyframes brix-ai-discovery-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(4px)}}
+@keyframes brix-ai-discovery-glow{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 0 0 rgba(255,255,255,0)}50%{box-shadow:0 4px 14px rgba(0,0,0,.35),0 0 0 4px rgba(255,255,255,.22),0 0 16px 2px rgba(255,255,255,.28)}}
+@media (prefers-reduced-motion: reduce){
+.brix-ai-discovery-pill{animation:none}
+}
+`;
 
 const HISTORY_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -52,10 +92,11 @@ export default function BrixBar({
   side = 'center',
   placeholder = 'Ask Brix anything about your cart, upsells, or analytics…',
   zIndex = 9998,
+  discoveryHint = false,
 }) {
   const cfg = SIZES[size] || SIZES.md;
   const location = useLocation();
-  const { messages, loading, sendMessage, applyWidget, setMessages, setActiveConvId, conversations, selectConversation, credits } = useAiAgent(location);
+  const { messages, loading, sendMessage, applyWidget, setMessages, setActiveConvId, conversations, selectConversation, credits, initialized } = useAiAgent(location);
 
   const [input, setInput] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -66,6 +107,41 @@ export default function BrixBar({
   const [aboveSpace, setAboveSpace] = useState(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Opt-in "Try Brix AI Agent" discovery cue. Starts hidden and is revealed in an
+  // effect (avoids SSR/hydration mismatch). It shows on every page load or
+  // refresh, blinks for HINT_VISIBLE_MS, then fades out.
+  const inputRef = useRef(null);
+  // The prompt box is a textarea: Enter sends, Shift+Enter inserts a new line.
+  // It grows with its content (up to INPUT_MAX_H, then scrolls) and the bar
+  // switches from a pill to rounded corners once it wraps onto a second line.
+  const [multiline, setMultiline] = useState(false);
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const singleLineH = Math.ceil(cfg.inputFont * 1.4) + 2 * cfg.inputPadY;
+    const h = Math.min(el.scrollHeight, INPUT_MAX_H);
+    el.style.height = h + 'px';
+    setMultiline(el.scrollHeight > singleLineH + 4);
+  }, [input, cfg.inputFont, cfg.inputPadY]);
+  const [hintVisible, setHintVisible] = useState(false);
+  const [hintLeaving, setHintLeaving] = useState(false);
+  useEffect(() => {
+    if (!discoveryHint) return undefined;
+    setHintLeaving(false);
+    setHintVisible(true);
+    const leave = setTimeout(() => setHintLeaving(true), HINT_VISIBLE_MS);
+    const gone = setTimeout(() => setHintVisible(false), HINT_VISIBLE_MS + HINT_FADE_MS);
+    return () => { clearTimeout(leave); clearTimeout(gone); };
+  }, [discoveryHint]);
+  const dismissHint = useCallback(() => {
+    setHintVisible(false);
+  }, []);
+  const handleHintClick = useCallback(() => {
+    inputRef.current?.focus();
+    dismissHint();
+  }, [dismissHint]);
 
   const inIframe = typeof window !== 'undefined' && window !== window.parent;
   const leftNavOffset = inIframe ? 20 : 260;
@@ -81,7 +157,15 @@ export default function BrixBar({
     const el = scrollRef.current;
     if (!el) return;
     const raf = requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      // A tall chart report is taller than the panel: land on its top so the
+      // merchant reads it from the start instead of from its last row.
+      const last = messages[messages.length - 1];
+      const rows = el.querySelectorAll('.bxb-row-agent');
+      if (!loading && last?.json?.widget?.type === 'sales_report' && rows.length) {
+        el.scrollTop = rows[rows.length - 1].getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8;
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     });
     return () => cancelAnimationFrame(raf);
   }, [messages, loading, aboveSpace]);
@@ -116,14 +200,70 @@ export default function BrixBar({
 
   const abovePanelStyle = floating && aboveSpace != null ? { maxHeight: Math.min(440, aboveSpace) } : undefined;
 
+  const navigate = useNavigate();
+  const handoffTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(handoffTimerRef.current), []);
+  const currentModule = getModuleForPath(location.pathname);
+
   const handleSend = useCallback((text) => {
     const t = (text ?? '').trim();
-    if (!t || loading) return;
+    if (!t || loading || handoffTimerRef.current) return;
     setExpanded(true);
     setShowHistory(false);
     setInput('');
+
+    // On a page that is not itself a module (Analytics, Discount Creator,
+    // Account, ...), a request that clearly belongs to Cart Editor / FBT /
+    // Build a Combo is handed to that page's chat, same as from the Brix AI
+    // page. Module pages never redirect (they may hold unsaved edits) and
+    // anything not confidently one module is handled right here.
+    const handoff = currentModule ? null : prepareHandoff(t, location.pathname);
+    if (handoff) {
+      const id = Date.now().toString(36);
+      setMessages(prev => [
+        ...prev,
+        { id: 'u-' + id, role: 'user', text: t },
+        { id: 'a-' + id, role: 'agent', text: handoff.ackText, json: { message: handoff.ackText } },
+      ]);
+      handoffTimerRef.current = setTimeout(() => {
+        handoffTimerRef.current = null;
+        navigate(handoff.target.route);
+      }, 700);
+      return;
+    }
     sendMessage(t);
-  }, [sendMessage, loading]);
+  }, [sendMessage, loading, currentModule, location.pathname, navigate, setMessages]);
+
+  // A request handed off from the global Brix AI page (see utils/ai-handoff.js):
+  // shown in this chat exactly as the merchant typed it, then sent through the
+  // same handleSend/sendMessage path as anything typed here. Waits for the
+  // conversation list to load first (sendMessage creates a conversation, and a
+  // late list response would otherwise overwrite it), but never blocks on that
+  // for more than a few seconds. consumeHandoff() hands out a given handoff at
+  // most once, so a refresh or back/forward can't re-run it.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  const [handoffReady, setHandoffReady] = useState(false);
+  useEffect(() => {
+    if (initialized) { setHandoffReady(true); return undefined; }
+    const timer = setTimeout(() => setHandoffReady(true), 3000);
+    return () => clearTimeout(timer);
+  }, [initialized]);
+  useEffect(() => {
+    if (!handoffReady || !currentModule) return;
+    const { handoff, error } = consumeHandoff(currentModule);
+    if (error) {
+      setExpanded(true);
+      setMessages(prev => [...prev, {
+        id: `e-handoff-${Date.now()}`, role: 'agent', error: true,
+        text: "I couldn't pass your request along from the previous page. Please type it again here.",
+      }]);
+      return;
+    }
+    if (!handoff) return;
+    notifyHandoffReceived(handoff);
+    handleSendRef.current(handoff.message);
+  }, [handoffReady, currentModule, setMessages]);
 
   const handleNewChat = useCallback(() => {
     setMessages([]);
@@ -155,11 +295,21 @@ export default function BrixBar({
     // debugging via devtools, but are never rendered.
     const raw = j?.message || msg.text || '';
     const bodyText = raw.replace(/^\s*[✓✅]\s*/, '');
-    const card = (
+    // A numbered list of tips renders as visual cards (intro / cards / closing
+    // line); everything else stays a single markdown bubble.
+    const tipReply = parseTips(bodyText);
+    const bubble = (text) => (
       <div className="bxb-card">
-        <MarkdownMessage text={bodyText} variant="bxb-md" />
+        <MarkdownMessage text={text} variant="bxb-md" />
       </div>
     );
+    const card = tipReply ? (
+      <>
+        {tipReply.intro && bubble(tipReply.intro)}
+        <TipCards tips={tipReply.tips} size="sm" disabled={!!loading} onPick={(tip) => handleSend(`Set up ${tip.title} for my store`)} />
+        {tipReply.outro && bubble(tipReply.outro)}
+      </>
+    ) : bubble(bodyText);
 
     const widget = j?.widget;
 
@@ -167,6 +317,8 @@ export default function BrixBar({
       <div key={msg.id} className="bxb-row bxb-row-agent">
         <div className="bxb-agent-stack">
           {card}
+          {widget?.type === 'sales_report' && <SalesReportWidget report={widget.props} />}
+          {widget?.type === 'discount_form' && <DiscountFormWidget prefill={widget.props} onCreate={applyWidget} />}
           {widget?.type === 'theme_colors' && (
             <ThemeColorsWidget
               palette={widget.props}
@@ -264,9 +416,9 @@ export default function BrixBar({
   const bxbNode = (
     <div className="bxb" style={{ ...outerStyle, position: floating ? outerStyle.position : 'relative' }}>
       <style>{`
-        .bxb-bar{display:flex;align-items:center;gap:${size==='sm'?8:10}px;background:${floating?'rgba(255,255,255,0.84)':'#fff'};${floating?'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);':''}border:1px solid ${floating?'rgba(220,220,220,0.7)':'#e1e3e5'};border-radius:9999px;padding:${size==='sm'?`6px 6px 6px ${cfg.padLeft}px`:size==='lg'?`10px 10px 10px ${cfg.padLeft}px`:`8px 8px 8px ${cfg.padLeft}px`};box-shadow:${floating?'0 4px 24px rgba(0,0,0,0.10),0 1px 4px rgba(0,0,0,0.06)':'0 2px 10px rgba(0,0,0,.06)'}}
+        .bxb-bar{display:flex;align-items:center;gap:${size==='sm'?8:10}px;background:${floating?'rgba(255,255,255,0.84)':'#fff'};${floating?'backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);':''}border:1px solid ${floating?'rgba(220,220,220,0.7)':'#e1e3e5'};border-radius:${multiline?'22px':'9999px'};padding:${size==='sm'?`6px 6px 6px ${cfg.padLeft}px`:size==='lg'?`10px 10px 10px ${cfg.padLeft}px`:`8px 8px 8px ${cfg.padLeft}px`};box-shadow:${floating?'0 4px 24px rgba(0,0,0,0.10),0 1px 4px rgba(0,0,0,0.06)':'0 2px 10px rgba(0,0,0,.06)'}}
         .bxb-search-icon{flex-shrink:0}
-        .bxb-input{flex:1;background:transparent;border:none;outline:none;color:#1a1a1a;font-size:${cfg.inputFont}px;padding:${size==='sm'?'6px 0':size==='lg'?'12px 0':'10px 0'};min-width:0}
+        .bxb-input{flex:1;background:transparent;border:none;outline:none;resize:none;color:#1a1a1a;font-family:inherit;font-size:${cfg.inputFont}px;line-height:1.4;padding:${cfg.inputPadY}px 0;min-width:0;display:block;overflow-y:auto}
         .bxb-input::placeholder{color:#9ca3af}
         .bxb-hist-btn{background:none;border:none;cursor:pointer;padding:4px 6px;color:#9ca3af;border-radius:6px;display:flex;align-items:center;flex-shrink:0;transition:color .15s,background .15s}
         .bxb-hist-btn:hover{color:#374151;background:rgba(0,0,0,0.05)}
@@ -293,7 +445,7 @@ export default function BrixBar({
         .bxb-row{display:flex}
         .bxb-row-user{justify-content:flex-end}
         .bxb-row-agent{justify-content:flex-start}
-        .bxb-bubble-user{max-width:80%;background:#1a1a1a;color:#fff;padding:7px 12px;border-radius:12px;border-bottom-right-radius:4px;font-size:13px;line-height:1.45;word-wrap:break-word}
+        .bxb-bubble-user{white-space:pre-wrap;max-width:80%;background:#1a1a1a;color:#fff;padding:7px 12px;border-radius:12px;border-bottom-right-radius:4px;font-size:13px;line-height:1.45;word-wrap:break-word}
         .bxb-agent-stack{display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:88%}
         .bxb-card{background:#f9fafb;border:1px solid #e8e8e8;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;color:#1a1a1a}
         .bxb-choices{display:flex;flex-wrap:wrap;gap:6px}
@@ -358,15 +510,34 @@ export default function BrixBar({
         </div>
       )}
 
+      {discoveryHint && hintVisible && (
+        <div className="brix-ai-discovery-slot">
+          <style>{HINT_CSS}</style>
+          <div className="brix-ai-discovery-rail">
+            <div className={`brix-ai-discovery-fade${hintLeaving ? ' leaving' : ''}`}>
+              <button type="button" className="brix-ai-discovery-pill" onClick={handleHintClick}>
+                {HINT_ICON}
+                <span className="brix-ai-discovery-label">Try Brix AI Agent</span>
+                <span className="brix-ai-discovery-pointer" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bxb-bar" ref={barRef}>
         <svg className="bxb-search-icon" width={cfg.iconSize} height={cfg.iconSize} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
         </svg>
-        <input
+        <textarea
           className="bxb-input"
+          rows={1}
+          ref={inputRef}
           value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend(input); } }}
+          onChange={e => { setInput(e.target.value); if (hintVisible && e.target.value) dismissHint(); }}
+          onFocus={hintVisible ? dismissHint : undefined}
+          onClick={hintVisible ? dismissHint : undefined}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(input); } }}
           placeholder={placeholder}
         />
         {hasHistory && (

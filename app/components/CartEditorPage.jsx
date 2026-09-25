@@ -6,6 +6,11 @@ import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
 import '../styles/cart-editor.css';
 
+// The Progress Bar save also reports whether the free reward products are really
+// free at checkout (see services/reward-gift-shopify.server.js). Remembered here
+// so handleSave can tell the merchant when they aren't yet.
+let lastGiftDiscount = null;
+
 async function postJson(url, payload) {
   const res = await fetch(url, {
     method: 'POST',
@@ -15,6 +20,7 @@ async function postJson(url, payload) {
   if (!res.ok) throw new Error(`${url} returned HTTP ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(`${url} returned success:false — ${JSON.stringify(json)}`);
+  if (url === '/api/progress-bar') lastGiftDiscount = json.giftDiscount ?? null;
   return json;
 }
 
@@ -23,11 +29,14 @@ function CartEditorContent() {
   const { isDirty, resetDirty, body, footer, status, settings, header } = useCartEditor();
   const legacyFetcher = useFetcher();
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
+  const [giftNotice, setGiftNotice] = useState('');
   const savedTimerRef = useRef(null);
 
   const handleSave = useCallback(async () => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
     setSaveStatus('saving');
+    lastGiftDiscount = null;
+    setGiftNotice('');
     const pb  = body.progressBar;
     const cs  = body.couponSlider;
     const up  = body.upsellProducts;
@@ -122,6 +131,7 @@ function CartEditorContent() {
             icon_preset:    t.icon || t.iconPreset || 'gift',
             icon_custom_svg: t.iconCustomSvg || null,
             products:       t.rewardProducts || t.products || [],
+            reward_pricing: t.rewardPricing === 'free' ? 'free' : 'regular',
             sort_order:     i,
           })),
         }),
@@ -177,6 +187,11 @@ function CartEditorContent() {
       try { localStorage.removeItem('cartninja_cart_config'); } catch {}
 
       resetDirty();
+      // A free reward product that Shopify isn't confirmed to discount would be
+      // charged at full price — say so instead of implying it is free.
+      if (lastGiftDiscount && lastGiftDiscount.state !== 'not_needed' && !lastGiftDiscount.verified) {
+        setGiftNotice(`Saved. Free reward products are not free at checkout yet: ${lastGiftDiscount.message}`);
+      }
       setSaveStatus('saved');
       savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
@@ -196,6 +211,9 @@ function CartEditorContent() {
     <Frame>
       {saveStatus === 'saved' && (
         <Toast content="Saved" onDismiss={() => setSaveStatus('idle')} />
+      )}
+      {giftNotice && (
+        <Toast content={giftNotice} duration={12000} onDismiss={() => setGiftNotice('')} />
       )}
       {saveStatus === 'error' && (
         <Toast content="Save failed" error onDismiss={() => setSaveStatus('idle')} />

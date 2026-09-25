@@ -17,17 +17,15 @@ import {
 } from "@shopify/polaris-icons";
 import { ProBadge } from "../components/plan/PlanGate";
 import { usePlan } from "../components/PlanContext";
+import { COUPON_BANNER_TEMPLATE_DEFAULTS } from "../config/coupon-banner";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
     activeTemplate: "template1",
     selectedActiveCoupons: [],
     displayCondition: "all",
-    templates: {
-        template1: { name: "Classic Banner", headingText: "GET 10% OFF!", subtextText: "Apply at checkout for savings", bgColor: "#ffffff", textColor: "#111827", accentColor: "#3b82f6", buttonColor: "#3b82f6", buttonTextColor: "#ffffff", borderRadius: 12, fontSize: 16, padding: 16 },
-        template2: { name: "Minimal Card",   headingText: "SPECIAL OFFER",   subtextText: "Free shipping on orders over ₹500", bgColor: "#f9fafb", textColor: "#374151", accentColor: "#10b981", buttonColor: "#10b981", buttonTextColor: "#ffffff", borderRadius: 8,  fontSize: 14, padding: 14 },
-        template3: { name: "Bold & Vibrant", headingText: "FLASH SALE!",     subtextText: "Use code: BOLD25 for extra 25% OFF",  bgColor: "#000000", textColor: "#ffffff", accentColor: "#f59e0b", buttonColor: "#f59e0b", buttonTextColor: "#111827", borderRadius: 16, fontSize: 18, padding: 20 },
-    },
+    // Shared with the BRIX AI Coupon Banner tool so the two can't drift.
+    templates: COUPON_BANNER_TEMPLATE_DEFAULTS,
 };
 
 const FAKE_FBT_CONFIG = {

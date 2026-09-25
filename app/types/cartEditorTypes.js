@@ -8,6 +8,9 @@ export const defaultTier = {
   icon: 'gift',
   rewardProducts: [],
   rewardProductCount: 0,
+  // 'free' = BRIX makes the reward product free at checkout (via its discount
+  // Function once the milestone is reached); 'regular' = added at its normal price.
+  rewardPricing: 'free',
   // Merchant-authored template shown while this tier is NOT YET reached —
   // supports {amount}/{items}/{target} placeholders, filled in dynamically
   // from the current progress mode/cart value at render time (see

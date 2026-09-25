@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from 'react-router';
+import { useLoaderData, useNavigate, useRevalidator } from 'react-router';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Icon,
 } from '@shopify/polaris';
@@ -11,6 +11,9 @@ import { getDb } from '../services/db.server';
 import { BundleStackMock } from '../components/feature/BundleStackMock';
 import BrixBar from '../components/ai-agent/BrixBar';
 import TemplateManager from '../components/bundles/TemplateManager';
+import CartDrawerEmbedBanner from '../components/bundles/CartDrawerEmbedBanner';
+import { getEmbedStatus } from '../services/theme-embed.server';
+import { CART_DRAWER_EMBED_HANDLE, cartDrawerEmbedEditorUrl } from '../config/theme-extension';
 
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -27,7 +30,7 @@ export const loader = async ({ request }) => {
   // fully independent of each other, so they run concurrently instead of one
   // after another. Each keeps its own try/catch so a failure in one doesn't
   // wipe out data already fetched by the others.
-  const [templatesResult, analyticsResult, discounts] = await Promise.all([
+  const [templatesResult, analyticsResult, discounts, cartDrawerEmbed] = await Promise.all([
     (async () => {
       try {
         const db = getDb();
@@ -113,6 +116,8 @@ export const loader = async ({ request }) => {
         return [];
       }
     })(),
+    // Combo pages are rendered by the Cart Drawer app embed — see CartDrawerEmbedBanner.
+    getEmbedStatus(shop, session.accessToken, CART_DRAWER_EMBED_HANDLE),
   ]);
 
   templates = templatesResult;
@@ -122,7 +127,12 @@ export const loader = async ({ request }) => {
   totalConversions = analyticsResult.totalConversions;
   totalRevenue = analyticsResult.totalRevenue;
 
-  return { templateCount, publishedCount, publishedPages, templates, shop, discounts, totalConversions, totalRevenue };
+  return {
+    templateCount, publishedCount, publishedPages, templates, shop, discounts, totalConversions, totalRevenue,
+    // Only ever true when the theme was read and the embed confirmed off (never on a read failure).
+    showEmbedWarning: cartDrawerEmbed.checked && !cartDrawerEmbed.enabled,
+    embedEditorUrl: cartDrawerEmbedEditorUrl(shop),
+  };
 };
 
 export const action = async ({ request }) => {
@@ -197,8 +207,9 @@ export const action = async ({ request }) => {
 };
 
 export default function AppBundlesIndex() {
-  const { templateCount, publishedCount, totalConversions, totalRevenue } = useLoaderData();
+  const { templateCount, publishedCount, totalConversions, totalRevenue, showEmbedWarning, embedEditorUrl } = useLoaderData();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
 
   const stats = [
     { label: 'Active Templates', value: String(templateCount),  icon: PageIcon,          accent: '#1a9de0', soft: '#eef0ff' },
@@ -245,6 +256,14 @@ export default function AppBundlesIndex() {
       `}</style>
 
       <BlockStack gap="500">
+
+        {showEmbedWarning && (
+          <CartDrawerEmbedBanner
+            editorUrl={embedEditorUrl}
+            onCheckAgain={() => revalidator.revalidate()}
+            checking={revalidator.state === 'loading'}
+          />
+        )}
 
         {/* Hero */}
         <div className="bac-hero">

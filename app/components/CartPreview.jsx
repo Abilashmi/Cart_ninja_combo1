@@ -7,6 +7,8 @@ import {
   DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon,
 } from '@shopify/polaris-icons';
 import { PreviewLockBadge } from './plan/PlanGate';
+import PreviewCartItems from './PreviewCartItems';
+import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
 
 
@@ -89,7 +91,6 @@ const MOCK_PREVIEW_COUPONS = [
 ];
 
 const CART_TOTAL = 489;
-const MOCK_CART_COUNT = 1;
 
 const BRAND = '#1a9de0';
 
@@ -237,7 +238,7 @@ function fillProgressMessageTemplate(template, { amountStr, itemsStr, targetStr 
     .replace(/\{target\}/g, targetStr);
 }
 
-function ProgressBarPreview({ pb, lockBadge }) {
+function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   const { symbol: currencySymbol } = useCurrency();
   const isCount = pb.mode === 'count';
   // A tier with no (or zero/negative) minimum spend can't be placed on the
@@ -254,7 +255,7 @@ function ProgressBarPreview({ pb, lockBadge }) {
     .filter((t) => Number(t.minimumSpend) > 0)
     .slice()
     .sort((a, b) => a.minimumSpend - b.minimumSpend);
-  const currentValue = isCount ? MOCK_CART_COUNT : CART_TOTAL;
+  const currentValue = isCount ? cartCount : cartTotal;
 
   // Per-tier completion celebration: the moment a tier is newly crossed, its
   // own completion message (+ confetti, if enabled for that tier) briefly
@@ -550,7 +551,8 @@ function UpsellReviewStars({ productId }) {
   );
 }
 
-function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol, lockBadge }) {
+function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol, lockBadge, onAdd }) {
+  const addProduct = (product) => (e) => { e.stopPropagation(); onAdd?.(product); };
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
   const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
@@ -585,7 +587,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
                 <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
                 <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(product.price)}</div>
                 {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
-                <button style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addProduct(product)} style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
                   {upsell.buttonText}
                 </button>
               </div>
@@ -604,7 +606,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
               <div style={{ fontSize: '11px', color: '#6d7175' }}>{formatPrice(product.price)}</div>
               {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
             </div>
-            <button style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: checkoutBg, color: checkoutText }}>
+            <button onClick={addProduct(product)} style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: checkoutBg, color: checkoutText }}>
               {upsell.buttonText}
             </button>
           </div>
@@ -649,6 +651,25 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const showProgressBar = pb.enabled && (!isEmpty || pb.showWhenEmpty);
   const showCouponSlider = cs.enabled && (!isEmpty || cs.showWhenEmpty);
   const showUpsell = up.enabled && (!isEmpty || up.showWhenEmpty);
+
+  // Live preview cart: the sample product plus whatever the merchant "adds"
+  // from the upsell / recommended lists. The progress bar reads THIS cart, and
+  // every milestone it reaches puts that milestone's reward products in it —
+  // FREE-tagged when the reward price is free — like the storefront drawer.
+  const [added, setAdded] = useState([]);
+  const addToPreviewCart = useCallback((product) => {
+    setAdded((prev) => [...prev, { uid: `${product.id}-${Date.now()}-${prev.length}`, product }]);
+    setPreviewMode('items');
+  }, [setPreviewMode]);
+  const removeFromPreviewCart = useCallback((uid) => setAdded((prev) => prev.filter((item) => item.uid !== uid)), []);
+  const resetPreviewCart = useCallback(() => setAdded([]), []);
+
+  const paidTotalNow = getPreviewTotals({ baseTotal: CART_TOTAL, added, rewards: [] });
+  const rewards = pb.enabled
+    ? getUnlockedRewards({ tiers: pb.tiers, mode: pb.mode === 'count' ? 'count' : 'amount', total: paidTotalNow.paidTotal, count: paidTotalNow.paidCount, allProducts })
+    : [];
+  const { paidTotal, paidCount, subtotal } = getPreviewTotals({ baseTotal: CART_TOTAL, added, rewards });
+  const itemCount = 1 + added.length + rewards.length;
 
   useEffect(() => {
     if (!activeSection || !previewRootRef.current) return;
@@ -757,7 +778,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                 {/* ── HEADER ── */}
                 <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? '(1)' : '(0)'}</h3>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? `(${itemCount})` : '(0)'}</h3>
                     <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: header.textColor, padding: 0, lineHeight: 1 }}>
                       {header.closeStyle === 'icon' ? '×' : 'Close'}
                     </button>
@@ -794,7 +815,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
+                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 
@@ -808,7 +829,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 
@@ -825,35 +846,20 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       </div>
                     </HighlightZone>
                   ) : (
-                    <div style={{ padding: '10px 18px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6d7175', marginBottom: 10 }}>
-                        <span>Items included</span>
-                        <span>1 ITEMS</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderTop: '1px solid #f1f2f3' }}>
-                        <div style={{ width: 56, height: 56, background: '#f1f2f3', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="#8c9196" strokeWidth="1.5" style={{ width: 20, height: 20 }}>
-                            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#202223' }}>Sample Product</div>
-                          <div style={{ fontSize: 12, color: '#6d7175' }}>{currencySymbol}{CART_TOTAL} (1 × {currencySymbol}{CART_TOTAL})</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
-                            <button style={{ width: 24, height: 24, border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                            <span style={{ fontSize: 13, fontWeight: 500 }}>1</span>
-                            <button style={{ width: 24, height: 24, border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-                          </div>
-                        </div>
-                        <button style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: '#8c9196', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
-                      </div>
-                    </div>
+                    <PreviewCartItems
+                      baseTotal={CART_TOTAL}
+                      added={added}
+                      rewards={rewards}
+                      currencySymbol={currencySymbol}
+                      onRemove={removeFromPreviewCart}
+                      onReset={resetPreviewCart}
+                    />
                   )}
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
+                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 
@@ -874,7 +880,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                             <div style={{ fontSize: 12, fontWeight: 500 }}>{product.title}</div>
                             <div style={{ fontSize: 11, color: '#6d7175' }}>{currencySymbol}{Number(product.price || 0).toFixed(0)}</div>
                           </div>
-                          <button style={{ padding: '5px 12px', borderRadius: 5, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>Add</button>
+                          <button onClick={(e) => { e.stopPropagation(); addToPreviewCart(product); }} style={{ padding: '5px 12px', borderRadius: 5, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>Add</button>
                         </div>
                       ))}
                     </div>
@@ -883,7 +889,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
+                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 
@@ -902,12 +908,18 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       {/* Subtotal */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                         <span style={{ fontSize: 12, color: '#6d7175' }}>Subtotal</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{currencySymbol}{CART_TOTAL}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{currencySymbol}{subtotal.toFixed(0)}</span>
                       </div>
+                      {rewards.some((r) => r.pricing === 'free' && r.product) && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 600 }}>Free gift savings</span>
+                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 700 }}>{currencySymbol}{rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0).toFixed(0)} saved</span>
+                        </div>
+                      )}
                       {/* Total */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
-                        <span style={{ fontSize: 14, fontWeight: 700 }}>{currencySymbol}{CART_TOTAL}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{currencySymbol}{subtotal.toFixed(0)}</span>
                       </div>
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (

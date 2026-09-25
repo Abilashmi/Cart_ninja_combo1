@@ -51,6 +51,20 @@ async function ensureAnnouncementStyleColumns(db) {
 // ensureAnnouncementStyleColumns does — the Cart Drawer's countdown timer had
 // no backend at all before this (see plan Phase 2); this is the first write
 // path for it, so the schema can't depend on a hand-run migration.
+// A milestone's reward product is either given away free (BRIX makes it free at
+// checkout via the free gift discount Function) or added at its regular price.
+// Self-heals the column like the ones above. Existing tiers default to 'regular' so
+// nothing that was already live silently becomes free; 'free' is always an explicit choice.
+let rewardPricingColumnEnsured = false;
+export async function ensureRewardPricingColumn(db) {
+  if (rewardPricingColumnEnsured) return;
+  await db.execute(`
+    ALTER TABLE progress_bar_tiers
+      ADD COLUMN IF NOT EXISTS reward_pricing VARCHAR(10) NOT NULL DEFAULT 'regular'
+  `);
+  rewardPricingColumnEnsured = true;
+}
+
 let countdownTimerColumnsEnsured = false;
 export async function ensureCountdownTimerColumns(db) {
   if (countdownTimerColumnsEnsured) return;
@@ -205,6 +219,7 @@ export async function fetchProgressBar(db, shop) {
 // must never pass `tiers` at all.
 export async function saveProgressBarSettings(shop, planKey, patch) {
   const db = getDb();
+  await ensureRewardPricingColumn(db);
   const ex = (await fetchProgressBar(db, shop)) || {};
 
   const progressBarAllowed = canPublishFeature(planKey, 'progress_bar');
@@ -260,8 +275,8 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
         await db.execute(`
           INSERT INTO progress_bar_tiers
             (shop_domain, settings_id, min_value, min_quantity, description,
-             reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, is_active, sort_order)
-          VALUES (?,?,?,?,?,?,?,?,?,?,1,?)
+             reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, is_active, sort_order)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)
         `, [
           shop, settingsId,
           t.min_value ?? t.minValue ?? 0,
@@ -272,6 +287,7 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
           t.icon_preset ?? t.iconPreset ?? 'gift',
           t.icon_custom_svg ?? t.iconCustomSvg ?? null,
           products,
+          (t.reward_pricing ?? t.rewardPricing) === 'free' ? 'free' : 'regular',
           i,
         ]);
       }
@@ -286,7 +302,7 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
     const settingsId = idRows[0]?.id;
     if (settingsId) {
       const [existingTierRows] = await db.execute(
-        'SELECT id, reward_type, icon_preset FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order ASC LIMIT 1', [settingsId]
+        'SELECT id, reward_type, icon_preset, reward_pricing FROM progress_bar_tiers WHERE settings_id = ? ORDER BY sort_order ASC LIMIT 1', [settingsId]
       );
       const existingTier = existingTierRows[0];
       const tierId = existingTier?.id;
@@ -296,18 +312,24 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
       // field in this function, before falling back to a hardcoded default.
       const rewardType = patch.rewardType ?? existingTier?.reward_type ?? 'free_shipping';
       const iconPreset = patch.iconPreset ?? existingTier?.icon_preset ?? 'shipping';
+      // `patch.rewardProducts` omitted = keep the tier's Reward Products as they
+      // are; an array (including an empty one) replaces them.
+      const setProducts = Array.isArray(patch.rewardProducts);
+      const productsJson = setProducts && patch.rewardProducts.length ? JSON.stringify(patch.rewardProducts) : null;
+      // `patch.rewardPricing` omitted = keep the tier's existing pricing choice.
+      const rewardPricing = patch.rewardPricing === 'regular' ? 'regular' : patch.rewardPricing === 'free' ? 'free' : (existingTier?.reward_pricing ?? 'regular');
       if (tierId) {
         await db.execute(`
           UPDATE progress_bar_tiers
-          SET min_value = ?, reward_type = ?, icon_preset = ?, updated_at = CURRENT_TIMESTAMP(3)
+          SET min_value = ?, reward_type = ?, icon_preset = ?, reward_pricing = ?, ${setProducts ? 'reward_products = ?, ' : ''}updated_at = CURRENT_TIMESTAMP(3)
           WHERE id = ?
-        `, [patch.goalAmount, rewardType, iconPreset, tierId]);
+        `, [patch.goalAmount, rewardType, iconPreset, rewardPricing, ...(setProducts ? [productsJson] : []), tierId]);
       } else {
         await db.execute(`
           INSERT INTO progress_bar_tiers
-            (shop_domain, settings_id, min_value, reward_type, icon_preset, is_active, sort_order)
-          VALUES (?, ?, ?, ?, ?, 1, 0)
-        `, [shop, settingsId, patch.goalAmount, rewardType, iconPreset]);
+            (shop_domain, settings_id, min_value, reward_type, icon_preset, reward_products, reward_pricing, is_active, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)
+        `, [shop, settingsId, patch.goalAmount, rewardType, iconPreset, productsJson, rewardPricing]);
       }
     }
   }

@@ -1,0 +1,17 @@
+api_version = "2025-10"
+uid = "9c59b3e4-1975-ace6-63b8-ae5e0f62e74e3df2f9d7"
+
+[[extensions]]
+name = "BRIX Packs discount"
+handle = "brix-packs-discount"
+type = "function"
+description = "Applies BRIX Pack quantity-tier discounts to marked cart lines at checkout."
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import useAiAgent from "./useAiAgent";
 import MarkdownMessage from "./MarkdownMessage";
+import SalesReportWidget from "./widgets/SalesReportWidget";
+import DiscountFormWidget from "./widgets/DiscountFormWidget";
+import TipCards from "./TipCards";
+import { parseTips } from "../../utils/tip-parser";
+import { prepareHandoff } from "../../utils/ai-handoff";
+
+// Long enough to read the one-line acknowledgement, short enough to not feel like a wait.
+const HANDOFF_NAV_DELAY_MS = 700;
 
 const HISTORY_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -26,7 +34,7 @@ function relativeDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function MessageRow({ msg, onChoice, loading }) {
+function MessageRow({ msg, onChoice, onApplyWidget, loading }) {
   const isUser = msg.role === "user";
   if (isUser) {
     return (
@@ -50,16 +58,34 @@ function MessageRow({ msg, onChoice, loading }) {
   // reply (the common case — confirmations, plain Q&A) is unaffected: it
   // still renders as exactly one bubble.
   const paragraphs = bodyText.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  // A numbered list of tips is drawn as visual cards instead (intro bubble,
+  // one card per tip, closing bubble).
+  const tipReply = parseTips(bodyText);
   const bubbles = paragraphs.length > 0 ? paragraphs : [bodyText];
+  const widget = j?.widget;
 
   return (
     <div className="bai-row bai-row-agent">
       <div className="bai-agent-stack">
-        {bubbles.map((p, i) => (
-          <div className="bai-card" key={i} style={{ animationDelay: `${i * 0.12}s`, animationFillMode: "backwards" }}>
-            <MarkdownMessage text={p} variant="bai-md" />
-          </div>
-        ))}
+        {tipReply ? (
+          <>
+            {tipReply.intro && (
+              <div className="bai-card"><MarkdownMessage text={tipReply.intro} variant="bai-md" /></div>
+            )}
+            <TipCards tips={tipReply.tips} size="lg" disabled={!!loading} onPick={(tip) => onChoice?.(`Set up ${tip.title} for my store`)} />
+            {tipReply.outro && (
+              <div className="bai-card"><MarkdownMessage text={tipReply.outro} variant="bai-md" /></div>
+            )}
+          </>
+        ) : (
+          bubbles.map((p, i) => (
+            <div className="bai-card" key={i} style={{ animationDelay: `${i * 0.12}s`, animationFillMode: "backwards" }}>
+              <MarkdownMessage text={p} variant="bai-md" />
+            </div>
+          ))
+        )}
+        {widget?.type === "sales_report" && <SalesReportWidget report={widget.props} />}
+        {widget?.type === "discount_form" && <DiscountFormWidget prefill={widget.props} onCreate={onApplyWidget} />}
         {choices?.length > 0 && (
           <div className="bai-choices">
             {choices.map((c, i) => (
@@ -94,7 +120,7 @@ const QUICK_CHIPS = [
 export default function BrixAiPage() {
   const location = useLocation();
   const {
-    messages, loading, sendMessage, setMessages, setActiveConvId,
+    messages, loading, sendMessage, applyWidget, setMessages, setActiveConvId,
     conversations, selectConversation, credits,
   } = useAiAgent(location);
 
@@ -109,7 +135,16 @@ export default function BrixAiPage() {
   const hasThread = messages.length > 0 || !!loading;
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    // A tall chart report starts at its top, not its last row.
+    const last = messages[messages.length - 1];
+    const rows = el.querySelectorAll('.bai-row-agent');
+    if (!loading && last?.json?.widget?.type === "sales_report" && rows.length) {
+      el.scrollTop = rows[rows.length - 1].getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 8;
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages, loading]);
 
   useEffect(() => {
@@ -146,13 +181,38 @@ export default function BrixAiPage() {
     };
   }, [showHistory]);
 
+  const navigate = useNavigate();
+  const handoffTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(handoffTimerRef.current), []);
+
   const handleSend = useCallback((text) => {
     const t = (text ?? input).trim();
-    if (!t || loading) return;
+    if (!t || loading || handoffTimerRef.current) return;
     setShowHistory(false);
     setInput("");
+
+    // A request that belongs to one specific module page is handed to that
+    // page's existing chat (Cart Editor, FBT, Build a Combo) instead of being
+    // run here. Anything not confidently one module falls through and is
+    // handled in this chat exactly as before. Nothing is sent to the AI here,
+    // so no credit is spent until the module chat runs it.
+    const handoff = prepareHandoff(t, location.pathname);
+    if (handoff) {
+      const { target, ackText } = handoff;
+      const id = Date.now().toString(36);
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${id}`, role: "user", text: t },
+        { id: `a-${id}`, role: "agent", text: ackText, json: { message: ackText } },
+      ]);
+      handoffTimerRef.current = setTimeout(() => {
+        handoffTimerRef.current = null;
+        navigate(target.route);
+      }, HANDOFF_NAV_DELAY_MS);
+      return;
+    }
     sendMessage(t);
-  }, [input, loading, sendMessage]);
+  }, [input, loading, sendMessage, location.pathname, navigate, setMessages]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -289,7 +349,7 @@ export default function BrixAiPage() {
         <div className="bai-body">
           <div className={`bai-msgs-wrap${hasThread ? " visible" : ""}`} ref={scrollRef}>
             <div className="bai-msgs-inner">
-              {messages.map((msg) => <MessageRow key={msg.id} msg={msg} onChoice={handleSend} loading={loading} />)}
+              {messages.map((msg) => <MessageRow key={msg.id} msg={msg} onChoice={handleSend} onApplyWidget={applyWidget} loading={loading} />)}
               {loading && (
                 <div className="bai-row bai-row-agent">
                   <div className="bai-typing"><span /><span /><span /></div>

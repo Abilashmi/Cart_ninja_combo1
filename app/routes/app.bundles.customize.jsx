@@ -39,6 +39,7 @@ import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
 import BrixBar from '../components/ai-agent/BrixBar';
+import CartDrawerEmbedModal from '../components/bundles/CartDrawerEmbedModal';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import { checkComboPlanGate } from '../services/combo-templates.server';
 import prisma from '../db.server';
@@ -1663,8 +1664,35 @@ export default function Customize() {
   const discountFetcher = useFetcher();
   const saveFetcher = useFetcher();
   const lastSaveActionRef = useRef('save');
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Combo pages are rendered by the "Custom Cart Drawer" app embed. The check
+  // starts when the merchant clicks Save (so it's usually done by the time the
+  // save returns); after a successful save we show the how-to modal unless the
+  // embed is confirmed ON, and only then continue to the templates list.
+  const embedFetcher = useFetcher();
+  const [awaitingEmbedCheck, setAwaitingEmbedCheck] = useState(false);
+  const [embedModal, setEmbedModal] = useState({ open: false, checked: true, editorUrl: '' });
+  useEffect(() => {
+    if (!awaitingEmbedCheck) return undefined;
+    const finish = (status) => {
+      setAwaitingEmbedCheck(false);
+      // Confirmed ON -> leave it. Confirmed OFF, or couldn't tell -> show the how-to.
+      if (status?.checked && status.enabled) {
+        navigate('/app/bundles/templates');
+      } else {
+        setEmbedModal({ open: true, checked: !!status?.checked, editorUrl: status?.editorUrl || '' });
+      }
+    };
+    if (embedFetcher.state === 'idle') {
+      finish(embedFetcher.data);
+      return undefined;
+    }
+    const timer = setTimeout(() => finish(null), 5000); // never leave the merchant stuck on a slow check
+    return () => clearTimeout(timer);
+  }, [awaitingEmbedCheck, embedFetcher.state, embedFetcher.data, navigate]);
 
   useEffect(() => {
     if (saveFetcher.data !== undefined) {
@@ -1684,7 +1712,8 @@ export default function Customize() {
         return;
       }
 
-      navigate('/app/bundles/templates');
+      // Saved. Decide where to go once the app-embed check (started on Save) is in.
+      setAwaitingEmbedCheck(true);
     } else if (saveFetcher.data?.error) {
       setSaveStatus('error');
       if (saveFetcher.data?.pageHandleConflict) {
@@ -2706,6 +2735,7 @@ export default function Customize() {
     formData.append('body', JSON.stringify(body));
 
     lastSaveActionRef.current = 'save';
+    embedFetcher.load('/api/theme-embed-status');
     saveFetcher.submit(formData, {
       method: 'POST',
       action: '/api/bundle-templates',
@@ -3228,6 +3258,15 @@ export default function Customize() {
             </FormLayout>
           </Modal.Section>
         </Modal>
+      <CartDrawerEmbedModal
+        open={embedModal.open}
+        checked={embedModal.checked}
+        editorUrl={embedModal.editorUrl}
+        onContinue={() => {
+          setEmbedModal((m) => ({ ...m, open: false }));
+          navigate('/app/bundles/templates');
+        }}
+      />
       <Modal
         open={saveModalOpen}
         onClose={() => setSaveModalOpen(false)}

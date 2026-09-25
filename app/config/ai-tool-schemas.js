@@ -45,6 +45,32 @@ export const TOOL_REGISTRY = [
     description: 'Read-only snapshot of which revenue modules are enabled/disabled, this month\'s AOV/order count (if unlocked and enough order history), and a catalog summary (product count, price range, out-of-stock items) as a fallback. Use this to answer questions like "how can I increase my AOV" or "what should I turn on".',
     parameters: { type: 'object', properties: {}, required: [] },
   },
+  {
+    name: 'show_discount_form',
+    description: 'Show the merchant an in-chat form to create a discount or free-shipping offer. Use this WHENEVER the merchant asks to create, add or set up a discount, discount code, coupon, sale, percentage or amount off, or free shipping OFFER (the real Shopify discount that applies at checkout). Pre-fill whatever they already said (kind, value, minimumAmount, code, title) and leave the rest out. It creates nothing itself: the merchant reviews the fields and clicks Create. Do NOT ask them questions in text first, do NOT call create_free_shipping / create_amount_off_promotion / create_discount directly, and do NOT use this for a Progress Bar milestone/goal (that is set_progress_bar_goal / update_progress_bar_tiers).',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['free_shipping', 'percentage_off', 'amount_off', 'discount_code'], description: 'free_shipping = automatic free shipping; percentage_off = automatic % off; amount_off = automatic fixed amount off; discount_code = a % off code the customer types in' },
+        value: { type: 'number', description: 'Percent (percentage_off / discount_code) or currency amount (amount_off). Omit for free_shipping or if not stated.' },
+        minimumAmount: { type: 'number', description: 'Minimum order subtotal, only if the merchant stated one' },
+        code: { type: 'string', description: 'Only for discount_code, only if the merchant stated one' },
+        title: { type: 'string', description: 'Only if the merchant named the discount' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_sales_report',
+    description: 'Show the merchant a visual sales / analytics report in the chat: revenue, orders, AOV, visitors and conversion with change vs the previous period, a daily trend chart, top products and the visitor-to-order funnel. Use this for ANY request to see, show, check or report on sales, revenue, orders, AOV trend, conversion, top products or store analytics/performance ("show my sales report", "how are my sales this month", "sales last 7 days"). The chart is rendered by the app itself, so do not restate the numbers in your reply. Defaults to the last 30 days.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', 'yesterday', 'last_7_days', 'last_30_days', 'this_month', 'last_month'], description: 'Reporting period (default last_30_days)' },
+      },
+      required: [],
+    },
+  },
 
   // ── Cart drawer config writes (all funnel through saveCartDrawerConfig) ──
   {
@@ -205,7 +231,9 @@ export const TOOL_REGISTRY = [
       type: 'object',
       properties: {
         goalAmount: { type: 'number', description: 'Spend amount required to unlock the reward. Omit entirely if the merchant only asked to change the reward — do not re-send the current amount.' },
-        rewardType: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward. Omit entirely if the merchant only asked to change the goal amount.' },
+        rewardType: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a free item from the store that is added to the cart automatically when the goal is reached (e.g. "free denim shirt", "free tote bag"); "gift" = an unspecified/surprise reward with no product attached. Omit entirely if the merchant only asked to change the goal amount.' },
+        rewardProductNames: { type: 'array', items: { type: 'string' }, description: 'REQUIRED whenever the reward is a free product: the name(s) of the store product(s) the merchant wants given free, exactly as they said them. These are placed in the milestone\'s Reward Products and added to the customer\'s cart automatically once the goal is reached. If the merchant asked for a free product/gift item but did not say which one, ask them which product — do not guess and do not use "gift".' },
+        rewardPricing: { type: 'string', enum: ['free', 'regular'], description: 'Only with reward products: "free" = BRIX creates the checkout discount so the product costs nothing once the goal is reached; "regular" = it is added at its normal price. If the merchant has not said which, do NOT guess: call this tool without it and the tool will return the question to ask.' },
         placement: { type: 'string', enum: ['top', 'bottom'] },
       },
       required: [],
@@ -224,7 +252,9 @@ export const TOOL_REGISTRY = [
             properties: {
               min_value: { type: 'number' },
               description: { type: 'string' },
-              reward_type: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a specific named free item (e.g. "free denim shirt"); "gift" = an unspecified/surprise reward' },
+              reward_type: { type: 'string', enum: ['free_shipping', 'product', 'discount', 'gift'], description: '"product" = a free item from the store that is added to the cart automatically when this milestone is reached; "gift" = an unspecified/surprise reward with no product attached' },
+              rewardProductNames: { type: 'array', items: { type: 'string' }, description: 'REQUIRED when reward_type is "product": the store product name(s) to give free at this milestone, exactly as the merchant said them. They are set as the milestone\'s Reward Products and auto-added to the cart when it is reached. Ask which product if the merchant did not say.' },
+              rewardPricing: { type: 'string', enum: ['free', 'regular'], description: 'Only with rewardProductNames: "free" (BRIX creates the checkout discount) or "regular" (normal price). Ask the merchant if they have not said; never guess.' },
               icon_preset: { type: 'string' },
             },
           },
@@ -237,7 +267,7 @@ export const TOOL_REGISTRY = [
   // ── Coupon slider ────────────────────────────────────────────────────────
   {
     name: 'update_coupon_slider',
-    description: 'Update the coupon slider widget: enable/disable, template, title text/color/alignment, card colors/borders, auto-slide, layout, position, and which coupons are selected to display.',
+    description: 'Update the CART DRAWER coupon slider (not the product-page Coupon Banner — use update_coupon_banner for that): enable/disable, template, title text/color/alignment, card colors/borders, auto-slide, layout, position. This tool CANNOT choose which coupons are shown — never claim a specific coupon (e.g. "the latest coupon") was added or selected by it.',
     parameters: {
       type: 'object',
       properties: {
@@ -256,6 +286,26 @@ export const TOOL_REGISTRY = [
         slide_interval: { type: 'number' },
         position: { type: 'string', enum: ['top', 'bottom'] },
         layout: { type: 'string', enum: ['grid', 'list'] },
+      },
+      required: [],
+    },
+  },
+
+  {
+    name: 'update_coupon_banner',
+    description: 'Set up or change the product-page COUPON BANNER (the coupon widget shown near the Add to Cart button on product pages — the "Coupon Banner" module). NOT the cart drawer Coupon Slider (use update_coupon_slider for that). For a NEW banner the merchant must have chosen: (1) the template, (2) which coupon(s), (3) where it shows (all product pages / specific products / specific collections). If any is missing the tool replies with reason "needs_info" and what to ask — ask exactly that one question, then call again. Never guess a template or scope. Layout and placement are optional and default sensibly.',
+    parameters: {
+      type: 'object',
+      properties: {
+        template: { type: 'string', enum: ['classic-banner', 'minimal-card', 'bold-vibrant'], description: 'Classic Banner, Minimal Card, or Bold & Vibrant.' },
+        couponCodes: { type: 'array', items: { type: 'string' }, description: 'Exact active discount code(s) to show.' },
+        latestCouponCount: { type: 'number', description: 'Show the N most recently created active coupons (1-5) instead of naming codes, e.g. "the latest coupon" = 1.' },
+        showOn: { type: 'string', enum: ['all', 'products', 'collections'], description: 'all = every product page; products = only the products in productNames; collections = only products in the collections in collectionNames.' },
+        productNames: { type: 'array', items: { type: 'string' }, description: 'Product names, when showOn is products.' },
+        collectionNames: { type: 'array', items: { type: 'string' }, description: 'Collection names, when showOn is collections.' },
+        layout: { type: 'string', enum: ['list', 'carousel', 'grid'] },
+        placement: { type: 'string', enum: ['above_cart', 'below_cart'], description: 'Above or below the Add to Cart button.' },
+        enabled: { type: 'boolean' },
       },
       required: [],
     },
@@ -340,6 +390,8 @@ export const TOOL_REGISTRY = [
       properties: {
         triggerProductNames: { type: 'array', items: { type: 'string' }, description: 'Products that trigger this rule; omit/empty to apply to all products. Only include a product here if the request describes an explicit trigger relationship ("when X is viewed") — a plain list of products with no such relationship all belong in offerProductNames instead, with this left empty.' },
         offerProductNames: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Products to recommend together — must have at least one. Never empty.' },
+        showOn: { type: 'string', enum: ['all', 'specific'], description: 'Where the FBT appears: "all" = every product page, "specific" = only the trigger products. Set "all" ONLY if the merchant said so (e.g. "for all products"); otherwise omit it and the tool will tell you to ask.' },
+        template: { type: 'string', enum: ['fbt1', 'fbt2', 'fbt3'], description: 'fbt1=Classic Grid, fbt2=Modern Cards, fbt3=Vertical List. Needed the first time FBT is set up; omit it if the merchant has not chosen (the tool will tell you to ask).' },
         discountType: { type: 'string', enum: ['none', 'percentage', 'fixed'], description: 'Stored only — not currently applied by the storefront or admin. Never tell a merchant this discounts anything.' },
         discountValue: { type: 'number', description: 'Stored only — not currently applied by the storefront or admin. Never tell a merchant this discounts anything.' },
       },
@@ -436,12 +488,12 @@ export const TOOL_REGISTRY = [
     parameters: {
       type: 'object',
       properties: {
-        layout: { type: 'string', enum: ['layout1', 'layout2', 'layout4'], description: 'layout1=Guided Architect (step-by-step), layout2=Velocity Stream (tab switcher), layout4=Editorial Split (single grid)' },
+        layout: { type: 'string', enum: ['layout1', 'layout2', 'layout4'], description: 'Omit if the merchant did not choose — the tool will tell you to ask. layout1=Guided Architect (step-by-step), layout2=Velocity Stream (tab switcher), layout4=Editorial Split (single grid)' },
         collectionName: { type: 'string', description: 'Name of the collection to pull products from' },
-        discountPercentage: { type: 'number', description: '0 for no discount' },
-        templateName: { type: 'string', description: 'Name for the bundle page' },
+        discountPercentage: { type: 'number', description: '0 for no discount. Omit if the merchant did not say — never assume 0; the tool will tell you to ask.' },
+        templateName: { type: 'string', description: 'Name for the bundle page. Optional — defaults from the collection name; do not ask for it.' },
       },
-      required: ['layout', 'collectionName', 'templateName'],
+      required: [],
     },
   },
 

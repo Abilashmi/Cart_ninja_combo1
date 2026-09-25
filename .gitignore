@@ -26,6 +26,7 @@ php_backend/config.php
 
 
 /extensions/*/dist
+/extensions/*/generated
 
 # Ignore shopify files created during app dev
 .shopify/*

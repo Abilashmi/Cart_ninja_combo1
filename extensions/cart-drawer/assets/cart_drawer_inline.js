@@ -180,6 +180,10 @@
   let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
   let _ccStoreCatalogPromise = null;
   let _ccRewardSyncInFlight = false;
+  // Set when a reward meant to be FREE turned out to be charged (the checkout
+  // discount isn't active on this store). From then on this page load stops
+  // adding free-priced rewards, so a shopper is never charged for a "free gift".
+  let _ccFreeGiftUnavailable = false;
 
   // Per-tier progress-bar completion celebration — the moment a tier is
   // newly crossed, its own completion message (+ confetti, if enabled for
@@ -501,6 +505,9 @@
           // `products` — accept either so a reward product picked in the
           // manual editor is never silently dropped here.
           products: t.products || t.rewardProducts || [],
+          // 'free' = the reward must really cost nothing at checkout, or it is not
+          // given at all (see syncRewardProducts). Anything else = regular price.
+          pricing: (t.rewardPricing || t.reward_pricing) === 'free' ? 'free' : 'regular',
           rewardType: t.rewardType || 'product',
           iconType: t.iconType || 'preset',
           // The admin's ProgressBarSection tier editor saves the icon key
@@ -1894,18 +1901,26 @@
     if (_ccRewardSyncInFlight) return;
 
     const wantedProductIds = new Set();
+    const freePricedIds = new Set();
     (pInfo.completed || []).forEach((tier) => {
       (tier.products || []).forEach((pid) => {
         const numId = ccExtractNumericId(pid);
-        if (numId) wantedProductIds.add(numId);
+        if (!numId) return;
+        wantedProductIds.add(numId);
+        if (tier.pricing === 'free') freePricedIds.add(numId);
       });
     });
 
     const presentProductIds = new Set((cart.items || []).map((it) => String(it.product_id)));
     const rewardLines = (cart.items || []).filter((it) => it.properties && it.properties._brixReward === 'true');
 
-    const toAdd = [...wantedProductIds].filter((pid) => !presentProductIds.has(pid));
-    const toRemove = rewardLines.filter((it) => !wantedProductIds.has(String(it.product_id)));
+    // A free-priced reward line that is still charged means the checkout
+    // discount is not active: take it back out and stop offering it.
+    const chargedFreeLines = rewardLines.filter((it) => freePricedIds.has(String(it.product_id)) && it.final_line_price > 0);
+    if (chargedFreeLines.length > 0) _ccFreeGiftUnavailable = true;
+
+    const toAdd = [...wantedProductIds].filter((pid) => !presentProductIds.has(pid) && !(_ccFreeGiftUnavailable && freePricedIds.has(pid)));
+    const toRemove = rewardLines.filter((it) => !wantedProductIds.has(String(it.product_id)) || chargedFreeLines.includes(it));
 
     if (toAdd.length === 0 && toRemove.length === 0) return;
 
@@ -2205,8 +2220,13 @@
     }
 
     const cart = await originalFetch('/cart.js').then((r) => r.json());
-    const cartTotal = cart.total_price / 100;
-    const cartQty = cart.item_count;
+    // Milestones are measured on what the shopper pays for: the reward
+    // product BRIX auto-added (marker below) never counts toward its own unlock.
+    const isGiftLine = (it) => !!(it.properties && it.properties._brixReward === 'true');
+    const giftValue = cart.items.filter(isGiftLine).reduce((sum, it) => sum + it.final_line_price, 0);
+    const giftQty = cart.items.filter(isGiftLine).reduce((sum, it) => sum + it.quantity, 0);
+    const cartTotal = (cart.total_price - giftValue) / 100;
+    const cartQty = cart.item_count - giftQty;
     const isEmpty = cart.items.length === 0;
 
     const root = document.getElementById('cc-root');
@@ -2528,13 +2548,31 @@
   </div>
 `;
 
+      // Reward products (any product picked as a progress-bar tier reward, or a
+      // line we auto-added with the _brixReward marker) are a fixed gift: no
+      // quantity controls, and they never link out to the product page.
+      const rewardProductIds = new Set();
+      ((CONFIG.progress && CONFIG.progress.tiers) || []).forEach((tier) => {
+        (tier.products || []).forEach((pid) => {
+          const numId = ccExtractNumericId(pid);
+          if (numId) rewardProductIds.add(numId);
+        });
+      });
+
       cart.items.forEach((item) => {
         const price = item.final_line_price / 100;
         const unitPrice = item.original_price / 100;
         const lineTotal = price;
+        const isGift = isGiftLine(item);
+        const isRewardItem = isGift || rewardProductIds.has(String(item.product_id));
+        // FREE only when the cart line really is at 0 (the checkout discount is
+        // applied) — never claimed from the property alone.
+        const isFreeGift = isGift && item.final_line_price === 0;
+        const originalLine = (item.original_line_price || item.original_price * item.quantity) / 100;
 
         drawerHtml += `
-    <div style="display:flex;gap:12px;padding:12px;background:#fff;border-radius:16px;border:1px solid #f1f5f9;transition:all .3s ease;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);position:relative;">
+    <div style="display:flex;gap:12px;padding:${isGift ? '16px 12px 12px' : '12px'};${isGift ? 'margin-top:8px;background:linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 60%,#ffffff 100%);border:1.5px dashed #34d399;box-shadow:0 6px 16px rgba(5,150,105,0.14);animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;' : 'background:#fff;border:1px solid #f1f5f9;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);'}border-radius:16px;transition:all .3s ease;position:relative;">
+      ${isGift ? `<span style="position:absolute;top:-9px;left:14px;display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;background:${isFreeGift ? '#059669' : '#4f46e5'};color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;"><svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 011-1h12a1 1 0 011 1v2H3V8zm0 3h6v6H5a2 2 0 01-2-2v-4zm8 0h6v4a2 2 0 01-2 2h-4v-6zM10 7V5.5A2.5 2.5 0 107.5 8H10zm0 0h2.5A2.5 2.5 0 1010 5.5V7z"/></svg>${isFreeGift ? 'FREE GIFT' : 'REWARD'}</span>` : ''}
       <div style="width:70px;height:70px;background:#fff;border-radius:12px;flex-shrink:0;border:1px solid #f1f5f9;overflow:hidden;display:flex;align-items:center;justify-content:center;">
         ${item.image
             ? `<img src="${item.image}" alt="${escapeHtml(
@@ -2554,21 +2592,23 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
           <div style="display:flex;flex-direction:column;">
             <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:14px;font-weight:700;color:#0f172a;">${CURRENCY_SYMBOL}${unitPrice.toFixed(0)}</span>
-              <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${CURRENCY_SYMBOL}${unitPrice.toFixed(
+              ${isFreeGift ? `<span style="font-size:12px;color:#047857;font-weight:600;">Added for reaching your milestone</span>` : `<span style="font-size:14px;font-weight:700;color:#0f172a;">${CURRENCY_SYMBOL}${unitPrice.toFixed(0)}</span>`}
+              ${isRewardItem ? '' : `<span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${CURRENCY_SYMBOL}${unitPrice.toFixed(
             0
-          )})</span>
+          )})</span>`}
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
-            <div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
+            ${isRewardItem ? '' : `<div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity - 1})">−</button>
               <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity
           }</span>
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
-            </div>
+            </div>`}
             <div style="text-align:right;min-width:60px;">
-              <span style="font-weight:800;font-size:15px;color:#0f172a;">${CURRENCY_SYMBOL}${lineTotal.toFixed(0)}</span>
+              ${isFreeGift
+                ? `<span style="display:inline-block;padding:2px 10px;border-radius:7px;background:#059669;color:#fff;font-weight:800;font-size:12px;letter-spacing:.06em;">FREE</span><div style="font-size:12px;color:#6b7280;text-decoration:line-through;margin-top:2px;">${CURRENCY_SYMBOL}${originalLine.toFixed(0)}</div>`
+                : `<span style="font-weight:800;font-size:15px;color:#0f172a;">${CURRENCY_SYMBOL}${lineTotal.toFixed(0)}</span>`}
             </div>
           </div>
         </div>
@@ -2588,7 +2628,7 @@
     drawerHtml += `</div>`; // end body
 
     /* -------- FOOTER -------- */
-    const subtotal = cartTotal;
+    const subtotal = cart.total_price / 100; // what the cart really totals (gifts included)
     let totalDiscount = 0;
 
     // Calculate coupon discounts — check both API data (COUPONS) and saved details (allCouponDetails)

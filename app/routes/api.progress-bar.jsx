@@ -2,6 +2,8 @@ import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { saveProgressBarSettings } from '../services/cart-config-writes.server';
+import { syncRewardGiftDiscount } from '../services/reward-gift-shopify.server';
+import { getShopCurrency } from '../utils/currency.server';
 
 async function fetchProgressBar(db, shop) {
   const [rows] = await db.execute(
@@ -32,7 +34,7 @@ export async function loader({ request }) {
 }
 
 export async function action({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const body = await request.json();
 
@@ -40,6 +42,19 @@ export async function action({ request }) {
   // (a delete-and-reinsert-all is the correct behavior here — it owns the
   // whole ladder), matching this route's historical behavior exactly.
   const planKey = await getShopPlan(shop);
+  const before = await fetchProgressBar(getDb(), shop).catch(() => null);
   const data = await saveProgressBarSettings(shop, planKey, { ...body, tiers: body.tiers ?? [] });
-  return Response.json({ success: true, data });
+
+  // Free reward products are made free at checkout by a Shopify discount
+  // Function whose config mirrors the saved bar — keep it in step (also when a
+  // product reward was just removed). Best-effort: the save itself never fails
+  // because of it, and the result says exactly what is (not) live.
+  const isProductTier = (t) => (t.reward_products || t.products || t.rewardProducts || []).length > 0;
+  const touchesGifts = (body.tiers ?? []).some(isProductTier) || (before?.tiers || []).some(isProductTier);
+  let giftDiscount = null;
+  if (touchesGifts && admin) {
+    const currency = await getShopCurrency(admin, shop).catch(() => null);
+    giftDiscount = await syncRewardGiftDiscount(admin, shop, { currencyCode: currency?.code ?? null });
+  }
+  return Response.json({ success: true, data, giftDiscount });
 }

@@ -1,0 +1,32 @@
+query Input {
+  cart {
+    lines {
+      id
+      quantity
+      reward: attribute(key: "_brixReward") { value }
+      cost {
+        subtotalAmount {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+  shop {
+    metafield(namespace: "$app", key: "reward_gift_config") {
+      jsonValue
+    }
+  }
+}

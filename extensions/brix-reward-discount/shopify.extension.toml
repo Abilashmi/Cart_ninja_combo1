@@ -1,0 +1,16 @@
+api_version = "2025-10"
+
+[[extensions]]
+name = "BRIX free gift discount"
+handle = "brix-reward-discount"
+type = "function"
+description = "Makes the reward product BRIX adds at a Progress Bar milestone free once the cart really reaches that milestone."
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

@@ -141,6 +141,14 @@ function hydrateFromProgressBar(pb, base) {
     iconType:    t.icon_type    ?? t.iconType    ?? 'preset',
     iconCustomSvg: t.icon_custom_svg ?? t.iconCustomSvg ?? null,
     products:    Array.isArray(t.reward_products) ? t.reward_products : [],
+    // ProgressBarSection's Reward Products picker and its "N selected" label
+    // read `rewardProducts`/`rewardProductCount`, not `products` — without
+    // these a reward product saved by the AI (or an earlier save) shows as
+    // "0 selected" in the editor even though the storefront has it.
+    rewardProducts:     Array.isArray(t.reward_products) ? t.reward_products : [],
+    rewardProductCount: Array.isArray(t.reward_products) ? t.reward_products.length : 0,
+    // 'free' = BRIX makes the reward product free at checkout; anything else = regular price.
+    rewardPricing: (t.reward_pricing ?? t.rewardPricing) === 'free' ? 'free' : 'regular',
   })) : base.body.progressBar.tiers;
 
   return {

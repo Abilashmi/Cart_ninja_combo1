@@ -1013,3 +1013,49 @@
   .cart-editor-row-label { font-size: 13px; }
   .cart-editor-row-badge { font-size: 10px; }
 }
+
+/* ── Reward (free gift) lines in the live cart preview ── */
+@keyframes cpGiftIn {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.96); }
+  60%  { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cp-gift {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 6px;
+  padding: 12px 10px 10px;
+  border-radius: 12px;
+  border: 1.5px dashed #34d399;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 60%, #ffffff 100%);
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.12);
+  animation: cpGiftIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.cp-gift-badge {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #059669;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.cp-gift-badge--reward { background: #4f46e5; }
+.cp-gift-free {
+  padding: 2px 9px;
+  border-radius: 6px;
+  background: #059669;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.cp-gift-old { color: #6b7280; font-size: 11px; text-decoration: line-through; }
+@media (prefers-reduced-motion: reduce) { .cp-gift { animation: none; } }

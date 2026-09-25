@@ -21,10 +21,14 @@ import { formatMoney } from '../utils/currency.shared';
 import { detectStoreTheme } from './theme-detection.server';
 import { getStoreConfigSnapshot } from './store-config-snapshot.server';
 import { getPeriodTotals } from './analytics-query.server';
+import { buildSalesReport, REPORT_PERIODS } from './sales-report.server';
+import { syncRewardGiftDiscount } from './reward-gift-shopify.server';
 import { getCatalogSnapshot } from './catalog-snapshot.server';
 import { canAccessFeature } from './plan-permissions.server';
 import { fetchCartDrawerRecord, persistCartDrawerRecord } from './cart-drawer-record.server';
 import { getDb } from './db.server';
+import { saveCouponBanner } from './coupon-banner.server';
+import { needsInfo, CHOICES } from '../utils/ai-needs-info';
 
 function parseJsonSafe(v, fb) {
   if (!v) return fb;
@@ -111,6 +115,9 @@ async function syncProgressBarToLegacyRecord(shop) {
         iconCustomSvg: t.icon_custom_svg || '',
         products,
         rewardProducts: products,
+        // 'free' = the storefront may only keep this reward while it is really
+        // free at checkout (see syncRewardProducts in cart_drawer_inline.js).
+        rewardPricing: t.reward_pricing === 'free' ? 'free' : 'regular',
       };
     }),
   };
@@ -224,6 +231,41 @@ function productAmbiguousResult(name, candidates) {
   return { success: false, reason: 'ambiguous', message: `Multiple products match "${name}" — ask the merchant which one they mean.`, candidates: candidates.map(c => c.title) };
 }
 
+// A "free product" progress bar reward has to point at real store products —
+// they are what the storefront adds to the cart when the milestone is reached
+// (see syncRewardProducts in cart_drawer_inline.js). Resolves the names the
+// merchant gave to real Shopify product ids, in the same GID form the editor's
+// Reward Products picker saves, and refuses to guess: an unknown or ambiguous
+// name is returned as a failure for the model to ask about.
+async function resolveRewardProducts(ctx, rawNames) {
+  const names = (Array.isArray(rawNames) ? rawNames : [rawNames]).map((n) => String(n ?? '').trim()).filter(Boolean);
+  const results = await Promise.all(names.map((n) => resolveProductByName(ctx.admin, n)));
+  const badIdx = results.findIndex((r) => r.status !== 'found');
+  if (badIdx !== -1) {
+    const bad = results[badIdx];
+    return { error: bad.status === 'ambiguous' ? productAmbiguousResult(names[badIdx], bad.candidates) : productNotFoundResult(names[badIdx]) };
+  }
+  const unique = [...new Map(results.map((r) => [r.id, r])).values()];
+  return { ids: unique.map((r) => r.id), titles: unique.map((r) => r.title) };
+}
+
+// What Brix must tell the merchant after saving a FREE reward product, built
+// from the real result of syncRewardGiftDiscount (never a guess).
+function giftResponseHint(giftDiscount, pricing) {
+  if (pricing === 'regular') return 'The milestone is saved. The reward product is added at its regular price. Say only that.';
+  if (!giftDiscount) return null;
+  if (giftDiscount.verified) return 'The milestone is saved and the reward product is free at checkout once the goal is reached.';
+  return `The milestone IS saved and the product will be added automatically when the goal is reached, but it is NOT free at checkout yet. Reason: ${giftDiscount.message} Tell the merchant exactly that reason in plain words. Do not offer to create a discount manually in Shopify admin; the free discount switches on by itself the next time the progress bar is saved once the reason above is resolved.`;
+}
+
+const NEEDS_REWARD_PRODUCT = {
+  success: false,
+  reason: 'needs_reward_product',
+  message: 'A free-product reward needs a specific store product. Ask the merchant which product should be given free at this milestone, then call the tool again with rewardProductNames.',
+};
+
+const rewardProductIds = (tier) => (Array.isArray(tier?.reward_products) ? tier.reward_products : []);
+
 // Dedicated structured-error shapes for update_fbt_rule/create_fbt_rule's
 // duplicate check — distinct from productNotFoundResult/productAmbiguousResult
 // above (used by create_upsell_rule/create_fbt_rule's own product resolution)
@@ -303,6 +345,36 @@ export const TOOL_EXECUTORS = {
     return { enabledModules: snapshot, aov, catalog, analyticsLocked: !canAccessFeature(ctx.planKey, 'full_analytics') };
   },
 
+  // Opens the in-chat discount form (see DiscountFormWidget). Creates nothing
+  // itself: the merchant reviews the pre-filled details and clicks Create, which
+  // runs create_free_shipping / create_amount_off_promotion / create_discount.
+  async show_discount_form(ctx, { kind, value, minimumAmount, title, code } = {}) {
+    const kinds = ['free_shipping', 'percentage_off', 'amount_off', 'discount_code'];
+    const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
+    return {
+      success: true,
+      form: {
+        kind: kinds.includes(kind) ? kind : 'free_shipping',
+        value: num(value),
+        minimumAmount: num(minimumAmount),
+        title: typeof title === 'string' ? title.slice(0, 80) : '',
+        code: typeof code === 'string' ? code.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30) : '',
+        currency: { code: ctx.currencyCode, symbol: ctx.currencySymbol, locale: ctx.currencyLocale },
+      },
+    };
+  },
+
+  async get_sales_report(ctx, { period } = {}) {
+    if (!canAccessFeature(ctx.planKey, 'full_analytics')) {
+      return { success: false, reason: 'locked', message: 'The visual sales report is part of full analytics, which is locked on the current plan.' };
+    }
+    const safePeriod = REPORT_PERIODS.includes(period) ? period : 'last_30_days';
+    const { report, summary } = await buildSalesReport(ctx.shop, safePeriod, {
+      code: ctx.currencyCode, symbol: ctx.currencySymbol, locale: ctx.currencyLocale,
+    });
+    return { success: true, report, summary };
+  },
+
   // ── Cart drawer config ───────────────────────────────────────────────────
   async set_cart_drawer_enabled(ctx, { enabled }) {
     await saveCartDrawerConfig(ctx.shop, ctx.planKey, { is_enabled: enabled ? 1 : 0 });
@@ -357,6 +429,18 @@ export const TOOL_EXECUTORS = {
   },
 
   async update_countdown_timer(ctx, args) {
+    // Turning a timer on needs a duration; everything else (label, colours,
+    // mode) has a sensible default and is not asked.
+    if (args.enabled === true && !(Number(args.hours) > 0 || Number(args.minutes) > 0)) {
+      let existingMinutes = 0;
+      try {
+        const [rows] = await getDb().execute('SELECT countdown_hours, countdown_minutes FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+        existingMinutes = (Number(rows[0]?.countdown_hours) || 0) * 60 + (Number(rows[0]?.countdown_minutes) || 0);
+      } catch { /* columns not created yet — treat as never configured */ }
+      if (existingMinutes === 0) {
+        return needsInfo('duration', 'Ask the merchant how long the countdown timer should run (for example 15 minutes, 1 hour, 24 hours). Then call this tool again with hours/minutes.', CHOICES.countdownDuration);
+      }
+    }
     const data = await saveCountdownTimerSettings(ctx.shop, ctx.planKey, args);
     return { success: true, countdownTimer: data };
   },
@@ -368,7 +452,7 @@ export const TOOL_EXECUTORS = {
     return { success: true, progressBar: { enabled: !!data.is_enabled, placement: data.placement } };
   },
 
-  async set_progress_bar_goal(ctx, { goalAmount, rewardType, placement }) {
+  async set_progress_bar_goal(ctx, { goalAmount, rewardType: requestedRewardType, rewardProductNames, rewardPricing, placement }) {
     const iconPresetMap = { free_shipping: 'shipping', product: 'gift', discount: 'diamond', gift: 'trophy' };
 
     // goalAmount is now optional in the schema (true partial-update support)
@@ -391,18 +475,57 @@ export const TOOL_EXECUTORS = {
       return { success: false, message: 'No progress bar goal is set yet — please provide a spend amount to get started.' };
     }
 
+    // Reward products — resolved and validated BEFORE anything is written, so
+    // a missing/unknown/ambiguous product can never leave the bar half-set.
+    // Naming products makes the reward a free product by definition. Moving
+    // the reward to any other type clears the products (the storefront adds
+    // every product on a tier that has any, whatever its type).
+    const wantsProducts = (Array.isArray(rewardProductNames) ? rewardProductNames : []).some((n) => String(n ?? '').trim());
+    const rewardType = wantsProducts ? 'product' : requestedRewardType;
+    if (!priorTier && !requestedRewardType && !wantsProducts) {
+      return needsInfo('reward', 'Ask the merchant what reward the progress bar should unlock at that amount: free shipping, or a free product (then which product). Then call this tool again.', CHOICES.progressReward);
+    }
+    let rewardProducts; // undefined = leave the tier's products exactly as they are
+    let rewardProductTitles = [];
+    if (wantsProducts) {
+      const resolved = await resolveRewardProducts(ctx, rewardProductNames);
+      if (resolved.error) return resolved.error;
+      rewardProducts = resolved.ids;
+      rewardProductTitles = resolved.titles;
+    } else if (rewardType && rewardType !== 'product') {
+      rewardProducts = [];
+    }
+    if ((rewardType ?? priorRewardType) === 'product' && (rewardProducts ?? rewardProductIds(priorTier)).length === 0) {
+      return NEEDS_REWARD_PRODUCT;
+    }
+    // A newly chosen reward product needs one decision before anything is
+    // saved: free (BRIX creates the checkout discount) or its regular price.
+    if (wantsProducts && rewardPricing !== 'free' && rewardPricing !== 'regular') {
+      return needsInfo('rewardPricing', `Ask the merchant ONE question: should ${rewardProductTitles.join(' and ')} be free once the goal is reached (BRIX creates the discount automatically), or be added at its regular price? Then call this tool again with rewardPricing "free" or "regular". Do not save anything until they answer.`, CHOICES.rewardPricing);
+    }
+
     // rewardType/iconPreset are passed through as-is (undefined when the
     // merchant only asked to change the goal amount) — saveProgressBarSettings
     // falls back to the tier's existing value in that case, not a hardcoded
     // default, so changing just the goal never resets an already-configured
     // reward type back to free_shipping.
     const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, {
-      is_enabled: 1, goalAmount: effectiveGoalAmount, rewardType,
+      is_enabled: 1, goalAmount: effectiveGoalAmount, rewardType, rewardProducts, rewardPricing,
       iconPreset: rewardType ? iconPresetMap[rewardType] : undefined, placement,
     });
     await syncProgressBarToLegacyRecord(ctx.shop);
+    // Keep the free-gift checkout discount in step with the saved bar (also
+    // when a product reward was just replaced by something else).
+    const giftDiscount = (wantsProducts || rewardProductIds(priorTier).length > 0)
+      ? await syncRewardGiftDiscount(ctx.admin, ctx.shop, { currencyCode: ctx.currencyCode })
+      : null;
 
     const savedTier = data.tiers?.[0];
+    // Read-back check — never report a reward product as set unless the row
+    // we just re-read actually holds it.
+    if (rewardProducts?.length && !rewardProducts.every((id) => rewardProductIds(savedTier).includes(id))) {
+      return { success: false, message: 'The reward product could not be saved to the progress bar. Nothing was confirmed — tell the merchant it failed and to try again.' };
+    }
     // Reports the values actually saved (including a preserved existing
     // one), not just an echo of what this call happened to pass in.
     const savedGoalAmount = savedTier ? Number(savedTier.min_value) : effectiveGoalAmount;
@@ -417,27 +540,85 @@ export const TOOL_EXECUTORS = {
     const unchanged = {};
     if (priorGoalAmount === null || savedGoalAmount !== priorGoalAmount) changed.goalAmount = savedGoalAmount;
     else unchanged.goalAmount = savedGoalAmount;
-    if (priorRewardType === null || savedRewardType !== priorRewardType) changed.rewardType = savedRewardType;
+    // Reward products are the more specific fact, so when they change they
+    // stand in for "the reward type changed to a free product".
+    const productsChanged = wantsProducts && JSON.stringify(rewardProductIds(priorTier)) !== JSON.stringify(rewardProducts);
+    if (productsChanged) changed.rewardProducts = rewardProductTitles;
+    else if (priorRewardType === null || savedRewardType !== priorRewardType) changed.rewardType = savedRewardType;
     else unchanged.rewardType = savedRewardType;
 
     return {
       success: true,
       changed,
       unchanged,
-      progressBar: { enabled: !!data.is_enabled, goalAmount: savedGoalAmount, rewardType: savedRewardType },
+      giftDiscount,
+      responseHint: giftResponseHint(giftDiscount, savedTier?.reward_pricing ?? 'regular'),
+      rewardPricing: savedTier?.reward_pricing ?? 'regular',
+      progressBar: {
+        enabled: !!data.is_enabled, goalAmount: savedGoalAmount, rewardType: savedRewardType,
+        rewardProducts: wantsProducts ? rewardProductTitles : undefined,
+      },
     };
   },
 
   async update_progress_bar_tiers(ctx, { tiers }) {
-    const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, { tiers });
+    const before = await fetchProgressBar(getDb(), ctx.shop);
+    const priorTiers = before?.tiers || [];
+
+    // Every tier's reward products are resolved BEFORE the (full-replace)
+    // write, so one bad product name can't wipe the existing ladder.
+    const built = [];
+    const summary = [];
+    for (let i = 0; i < (tiers || []).length; i++) {
+      const { rewardProductNames, rewardPricing, ...tier } = tiers[i];
+      const wantsProducts = (Array.isArray(rewardProductNames) ? rewardProductNames : []).some((n) => String(n ?? '').trim());
+      const type = wantsProducts ? 'product' : (tier.reward_type || 'free_shipping');
+      let products = [];
+      let titles = [];
+      if (wantsProducts) {
+        const resolved = await resolveRewardProducts(ctx, rewardProductNames);
+        if (resolved.error) return resolved.error;
+        products = resolved.ids;
+        titles = resolved.titles;
+        if (rewardPricing !== 'free' && rewardPricing !== 'regular') {
+          return needsInfo('rewardPricing', `Ask the merchant ONE question: should ${titles.join(' and ')} be free once that milestone is reached (BRIX creates the discount automatically), or be added at its regular price? Then call this tool again with rewardPricing "free" or "regular" on that tier. Do not save anything until they answer.`, CHOICES.rewardPricing);
+        }
+      } else if (type === 'product') {
+        // Not renamed this call: keep what this position already has rather
+        // than dropping the merchant's chosen product on an amount-only edit.
+        const prior = priorTiers[i];
+        if (prior?.reward_type === 'product' && rewardProductIds(prior).length) products = rewardProductIds(prior);
+        else return NEEDS_REWARD_PRODUCT;
+      }
+      const pricing = wantsProducts ? rewardPricing : (priorTiers[i]?.reward_pricing ?? 'regular');
+      built.push({ ...tier, reward_type: type, products, reward_pricing: pricing });
+      summary.push({ minValue: tier.min_value, rewardType: type, rewardProducts: titles.length ? titles : undefined, rewardPricing: type === 'product' ? pricing : undefined });
+    }
+
+    const data = await saveProgressBarSettings(ctx.shop, ctx.planKey, { tiers: built });
     await syncProgressBarToLegacyRecord(ctx.shop);
-    return { success: true, tierCount: data.tiers?.length || 0 };
+    const hadGift = priorTiers.some((t) => rewardProductIds(t).length > 0) || built.some((b) => b.products.length > 0);
+    const giftDiscount = hadGift ? await syncRewardGiftDiscount(ctx.admin, ctx.shop, { currencyCode: ctx.currencyCode }) : null;
+
+    // Read-back check, same as set_progress_bar_goal.
+    const saved = data.tiers || [];
+    const mismatch = built.some((b, i) => b.products.length && !b.products.every((id) => rewardProductIds(saved[i]).includes(id)));
+    if (mismatch) {
+      return { success: false, message: 'The reward products could not be saved to the progress bar. Nothing was confirmed — tell the merchant it failed and to try again.' };
+    }
+    const anyFree = built.some((b) => b.products.length > 0 && b.reward_pricing === 'free');
+    return { success: true, tierCount: saved.length, tiers: summary, giftDiscount, ...(anyFree && giftDiscount ? { responseHint: giftResponseHint(giftDiscount, 'free') } : {}) };
   },
 
   // ── Coupon slider ────────────────────────────────────────────────────────
   async update_coupon_slider(ctx, args) {
     const data = await saveCouponSliderSettings(ctx.shop, ctx.planKey, args);
     return { success: true, couponSlider: { enabled: !!data.is_enabled, template: data.selected_template } };
+  },
+
+  // Product-page Coupon Banner (separate module from the cart drawer's slider above)
+  async update_coupon_banner(ctx, args) {
+    return saveCouponBanner(ctx, args);
   },
 
   // ── Upsell products ──────────────────────────────────────────────────────
@@ -479,7 +660,25 @@ export const TOOL_EXECUTORS = {
     return { success: true, fbt: { enabled: !!data.is_enabled, template: data.selected_template } };
   },
 
-  async create_fbt_rule(ctx, { triggerProductNames, offerProductNames, discountType, discountValue }) {
+  async create_fbt_rule(ctx, { triggerProductNames, offerProductNames, discountType, discountValue, showOn, template }) {
+    // The two decisions that change what a merchant gets, asked before anything
+    // is resolved or written: the template (only if FBT was never set up) and
+    // whether it appears on every product or only specific ones. Never assumed.
+    const namedTriggers = (triggerProductNames || []).some((n) => String(n ?? '').trim());
+    let fbtSetUpBefore = true;
+    try {
+      const [tplRows] = await getDb().execute('SELECT selected_template FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+      fbtSetUpBefore = !!tplRows[0];
+    } catch { /* can't tell — don't block on it */ }
+    if (!fbtSetUpBefore && !template) {
+      return needsInfo('template', 'Ask the merchant which FBT template they want: Classic Grid, Modern Cards, or Vertical List. Then call this tool again.', CHOICES.fbtTemplate);
+    }
+    if (!namedTriggers && showOn !== 'all') {
+      return showOn === 'specific'
+        ? needsInfo('showOnTargets', 'Ask the merchant which product(s) should trigger this FBT (the products it appears on).')
+        : needsInfo('showOn', 'Ask the merchant where this FBT should appear: on all product pages, or only on specific products. Then call this tool again.', CHOICES.fbtShowOn);
+    }
+
     const offerResults = await Promise.all((offerProductNames || []).map((n) => resolveProductByName(ctx.admin, n)));
     const badOffer = offerResults.find((r) => r.status !== 'found');
     if (badOffer) {
@@ -528,7 +727,8 @@ export const TOOL_EXECUTORS = {
       discountType: discountType || 'none',
       discountValue: discountValue || 0,
     });
-    return { success: true, id: ruleId, offers: offerResults.map((r) => r.title) };
+    if (template) await saveFbtWidgetSettings(ctx.shop, ctx.planKey, { selected_template: template });
+    return { success: true, id: ruleId, offers: offerResults.map((r) => r.title), showsOn: triggerResults.length ? triggerResults.map((r) => r.title) : 'all product pages', ...(template ? { template } : {}) };
   },
 
   // Modifies an EXISTING FBT rule's trigger/offer products without deleting
@@ -619,7 +819,7 @@ export const TOOL_EXECUTORS = {
     if (!result.success) return { success: false, message: `Couldn't create discount: ${result.error}` };
     await persistLocalCopy(ctx.requestUrl, ctx.shop, { code: finalCode, title: finalTitle, percentage, minimumAmount, endDate, usageLimit, onePerCustomer, discountId: result.discountId });
     return {
-      success: true, code: finalCode, title: finalTitle, percentage,
+      success: true, confirmMessage: `Discount code ${finalCode} (${percentage}% off) is live.`, code: finalCode, title: finalTitle, percentage,
       displayMinimumAmount: minimumAmount ? formatMoney(minimumAmount, { currencyCode: ctx.currencyCode, locale: ctx.currencyLocale }) : null,
     };
   },
@@ -645,7 +845,7 @@ export const TOOL_EXECUTORS = {
     const discounts = await listActiveDiscounts(ctx.admin);
     const existing = findMatchingPromotion(discounts, { discountType: 'free_shipping', minimumAmount });
     if (existing) {
-      return { success: true, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, minimumAmount: existing.minimumSubtotal, displayAmount };
+      return { success: true, confirmMessage: `You already have free shipping ${displayAmount ? `over ${displayAmount} ` : ''}active, so nothing new was needed.`, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, minimumAmount: existing.minimumSubtotal, displayAmount };
     }
 
     const finalTitle = title || (minimumAmount ? `Free Shipping Over ${displayAmount || minimumAmount}` : 'Free Shipping');
@@ -653,7 +853,8 @@ export const TOOL_EXECUTORS = {
     if (!result.success) return { success: false, promotionCreated: false, message: `Couldn't create the free-shipping promotion: ${result.error}` };
 
     return {
-      success: true, promotionCreated: true, alreadyExisted: false,
+      success: true, confirmMessage: `Free shipping is now live ${displayAmount ? `on orders over ${displayAmount}` : 'on every order'}. It applies automatically at checkout.`,
+      promotionCreated: true, alreadyExisted: false,
       verified: result.status === 'ACTIVE', status: result.status,
       discountId: result.discountId, minimumAmount, displayAmount, title: finalTitle,
       currencyCode: ctx.currencyCode,
@@ -672,7 +873,7 @@ export const TOOL_EXECUTORS = {
     const discounts = await listActiveDiscounts(ctx.admin);
     const existing = findMatchingPromotion(discounts, { discountType, discountValue, minimumAmount });
     if (existing) {
-      return { success: true, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, discountType, discountValue, minimumAmount: existing.minimumSubtotal, displayValue, displayMinimumAmount };
+      return { success: true, confirmMessage: `You already have ${displayValue} off${displayMinimumAmount ? ` orders over ${displayMinimumAmount}` : ''} active, so nothing new was needed.`, alreadyExisted: true, verified: true, promotionCreated: false, discountId: existing.id, discountType, discountValue, minimumAmount: existing.minimumSubtotal, displayValue, displayMinimumAmount };
     }
 
     const finalTitle = title || (amountOff != null ? `${displayValue} Off Storewide` : `${percentage}% Off Storewide`);
@@ -680,7 +881,8 @@ export const TOOL_EXECUTORS = {
     if (!result.success) return { success: false, promotionCreated: false, message: `Couldn't create the discount: ${result.error}` };
 
     return {
-      success: true, promotionCreated: true, alreadyExisted: false,
+      success: true, confirmMessage: `${displayValue} off${displayMinimumAmount ? ` orders over ${displayMinimumAmount}` : ' every order'} is now live. It applies automatically at checkout.`,
+      promotionCreated: true, alreadyExisted: false,
       verified: result.status === 'ACTIVE', status: result.status,
       discountId: result.discountId, discountType, discountValue, minimumAmount, displayValue, displayMinimumAmount, title: finalTitle,
       currencyCode: ctx.currencyCode,
@@ -688,14 +890,21 @@ export const TOOL_EXECUTORS = {
   },
 
   // ── Combo Forge ──────────────────────────────────────────────────────────
-  async create_combo_template(ctx, { layout, collectionName, discountPercentage, templateName }) {
+  async create_combo_template(ctx, { layout, collectionName, discountPercentage, templateName: requestedName }) {
     const gateError = await checkComboPlanGate(ctx.shop);
     if (gateError) return { success: false, reason: 'locked', message: gateError.error };
+
+    // Only the decisions that shape the combo are asked, one at a time; the
+    // page name is not (it defaults from the collection below).
+    if (!layout) return needsInfo('layout', 'Ask the merchant which combo layout they want: Guided Architect (step-by-step), Velocity Stream (tab switcher), or Editorial Split (single grid). Then call this tool again.', CHOICES.comboLayout);
+    if (!String(collectionName ?? '').trim()) return needsInfo('collection', 'Ask the merchant which collection the combo should pull its products from. Then call this tool again.');
+    if (discountPercentage === undefined || discountPercentage === null) return needsInfo('discount', 'Ask the merchant whether the combo should have a discount, and how much (0 for none). Then call this tool again.', CHOICES.comboDiscount);
 
     const collection = await resolveCollectionByName(ctx.admin, collectionName);
     if (collection.status === 'not_found') return { success: false, reason: 'not_found', message: `No collection found matching "${collectionName}".` };
     if (collection.status === 'ambiguous') return { success: false, reason: 'ambiguous', message: `Multiple collections match "${collectionName}" — ask the merchant which one.`, candidates: collection.candidates.map(c => c.title) };
 
+    const templateName = String(requestedName ?? '').trim() || `${collection.title} Combo`;
     const collectionField = layout === 'layout1' ? 'step_1_collection' : 'col_1';
     const customization = {
       layout,
