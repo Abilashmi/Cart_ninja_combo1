@@ -762,7 +762,7 @@ export default function TemplateManager() {
                 onChange={(e) => setSearchValue(e.target.value)}
               />
             </div>
-            <button className="create-btn" onClick={handleCreateTemplate}>
+            <button className="create-btn" data-tour="combo-create" onClick={handleCreateTemplate}>
               <svg
                 width="14"
                 height="14"
@@ -982,7 +982,7 @@ export default function TemplateManager() {
                           : 'Create your first bundle template to get started.'}
                       </p>
                       {!searchValue && (
-                        <button className="create-btn" onClick={handleCreateTemplate} style={{ margin: '0 auto' }}>
+                        <button className="create-btn" data-tour="combo-create" onClick={handleCreateTemplate} style={{ margin: '0 auto' }}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                             <path d="M8 1V15M1 8H15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>

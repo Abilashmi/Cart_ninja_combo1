@@ -3,6 +3,7 @@ import { useFetcher } from 'react-router';
 import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Modal, Banner } from '@shopify/polaris';
 import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
+import ProductPickerBody from '../shared/ProductPickerBody';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
@@ -72,10 +73,8 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
       });
   }, [open, initialSelectedIds, contextProducts]);
 
-  const toggle = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
   return (
-    <Modal open={open} onClose={onClose} title={title || 'Select Products'}
+    <Modal open={open} onClose={onClose} title={title || 'Select Products'} size="large"
       primaryAction={{ content: 'Save Selection', onAction: () => { onSave(selectedIds); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
@@ -92,35 +91,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
           ) : allProducts.length === 0 ? (
             <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
-              {allProducts.map(product => {
-                const sel = selectedIds.includes(product.id);
-                return (
-                  <div key={product.id} onClick={() => toggle(product.id)}
-                    style={{
-                      padding: '8px 10px', border: sel ? '2px solid #2c6ecb' : '1px solid #e5e7eb',
-                      borderRadius: '8px', background: sel ? '#f0f7ff' : '#fff',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
-                    }}
-                  >
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden',
-                      flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#f8fafc', border: '1px solid #f1f5f9',
-                    }}>
-                      {product.image ? (
-                        <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : <span>📦</span>}
-                    </div>
-                    <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
-                    </BlockStack>
-                    {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
-                  </div>
-                );
-              })}
-            </div>
+            <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} />
           )}
         </BlockStack>
       </Modal.Section>

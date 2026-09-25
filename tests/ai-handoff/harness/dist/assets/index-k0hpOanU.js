@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-C4S8Ao1D.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-DulnYKc1.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
 function _mergeNamespaces(n, m) {
   for (var i = 0; i < m.length; i++) {
     const e = m[i];
@@ -12184,6 +12184,30 @@ function useRouteId() {
     /* UseRouteId */
   );
 }
+function useNavigation() {
+  let state = useDataRouterState(
+    "useNavigation"
+    /* UseNavigation */
+  );
+  return state.navigation;
+}
+function useRevalidator() {
+  let dataRouterContext = useDataRouterContext(
+    "useRevalidator"
+    /* UseRevalidator */
+  );
+  let state = useDataRouterState(
+    "useRevalidator"
+    /* UseRevalidator */
+  );
+  let revalidate = reactExports.useCallback(async () => {
+    await dataRouterContext.router.revalidate();
+  }, [dataRouterContext.router]);
+  return reactExports.useMemo(
+    () => ({ revalidate, state: state.revalidation }),
+    [revalidate, state.revalidation]
+  );
+}
 function useLoaderData() {
   let state = useDataRouterState(
     "useLoaderData"
@@ -14043,6 +14067,12 @@ function toEm(value, fontSize) {
   if (unit === UNIT_REM) {
     return "" + parseFloat(value) * BASE_FONT_SIZE / fontSize + UNIT_EM;
   }
+}
+function createVarName(tokenName) {
+  return "--p-" + tokenName;
+}
+function createVar(tokenName) {
+  return "var(" + createVarName(tokenName) + ")";
 }
 function getTokenNames(theme) {
   return Object.values(theme).flatMap(function(tokenGroup) {
@@ -16058,7 +16088,7 @@ function getResponsiveValue(componentName, componentProp, responsiveProp) {
   }
   return Object.fromEntries(Object.entries(responsiveProp).map(([breakpointAlias, responsiveValue]) => [`--pc-${componentName}-${componentProp}-${breakpointAlias}`, responsiveValue]));
 }
-var styles$_ = {
+var styles$$ = {
   "themeContainer": "Polaris-ThemeProvider--themeContainer"
 };
 const themeNamesLocal = ["light", "dark-experimental"];
@@ -16076,7 +16106,7 @@ function ThemeProvider(props) {
     value: getTheme(themeName)
   }, /* @__PURE__ */ React.createElement(ThemeContainer, {
     "data-portal-id": props["data-portal-id"],
-    className: classNames(createThemeClassName(themeName), styles$_.themeContainer, className)
+    className: classNames(createThemeClassName(themeName), styles$$.themeContainer, className)
   }, children)));
 }
 function clamp(number, min, max) {
@@ -17383,6 +17413,15 @@ var SvgMobileIcon = function SvgMobileIcon2(props) {
   }));
 };
 SvgMobileIcon.displayName = "MobileIcon";
+var SvgPageIcon = function SvgPageIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M6.75 4.5c-.69 0-1.25.56-1.25 1.25v8.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25v-4.75h-3.25a1.75 1.75 0 0 1-1.75-1.75v-3.25h-2.75Zm4.25 1.06 2.44 2.44h-2.19a.25.25 0 0 1-.25-.25v-2.19Zm-7 .19a2.75 2.75 0 0 1 2.75-2.75h3.5a.75.75 0 0 1 .53.22l5 5c.141.14.22.331.22.53v5.5a2.75 2.75 0 0 1-2.75 2.75h-6.5a2.75 2.75 0 0 1-2.75-2.75v-8.5Z"
+  }));
+};
+SvgPageIcon.displayName = "PageIcon";
 var SvgPaintBrushFlatIcon = function SvgPaintBrushFlatIcon2(props) {
   return /* @__PURE__ */ React.createElement("svg", Object.assign({
     viewBox: "0 0 20 20"
@@ -17392,6 +17431,15 @@ var SvgPaintBrushFlatIcon = function SvgPaintBrushFlatIcon2(props) {
   }));
 };
 SvgPaintBrushFlatIcon.displayName = "PaintBrushFlatIcon";
+var SvgPlayIcon = function SvgPlayIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M15.375 8.485c1.167.674 1.167 2.358 0 3.031l-7.5 4.33c-1.167.674-2.625-.168-2.625-1.515v-8.66c0-1.348 1.458-2.19 2.625-1.516l7.5 4.33Zm-.75 1.732a.25.25 0 0 0 0-.433l-7.5-4.33a.25.25 0 0 0-.375.217v8.66a.25.25 0 0 0 .375.216l7.5-4.33Z"
+  }));
+};
+SvgPlayIcon.displayName = "PlayIcon";
 var SvgPlusIcon = function SvgPlusIcon2(props) {
   return /* @__PURE__ */ React.createElement("svg", Object.assign({
     viewBox: "0 0 20 20"
@@ -17467,6 +17515,27 @@ var SvgStarFilledIcon = function SvgStarFilledIcon2(props) {
   }));
 };
 SvgStarFilledIcon.displayName = "StarFilledIcon";
+var SvgStoreIcon = function SvgStoreIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M13.257 3h-6.514a1.25 1.25 0 0 0-.983.478l-2.386 3.037a1.75 1.75 0 0 0-.374 1.08v.655a2.75 2.75 0 0 0 1.5 2.45v4.55c0 .966.784 1.75 1.75 1.75h7.5a1.75 1.75 0 0 0 1.75-1.75v-4.55a2.75 2.75 0 0 0 1.5-2.45v-.481c0-.504-.17-.994-.48-1.39l-2.28-2.901a1.25 1.25 0 0 0-.983-.478Zm-.257 12.5h.75a.25.25 0 0 0 .25-.25v-4.25a2.742 2.742 0 0 1-2-.863 2.742 2.742 0 0 1-2 .863 2.742 2.742 0 0 1-2-.863 2.742 2.742 0 0 1-2 .863v4.25c0 .138.112.25.25.25h3.75v-2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v2.5Zm-7-6h-.25c-.69 0-1.25-.56-1.25-1.25v-.654a.25.25 0 0 1 .053-.155l2.312-2.941h6.27l2.205 2.805a.75.75 0 0 1 .16.464v.481c0 .69-.56 1.25-1.25 1.25h-.25c-.69 0-1.25-.56-1.25-1.25v-.5a.75.75 0 0 0-1.5 0v.5a1.25 1.25 0 1 1-2.5 0v-.5a.75.75 0 0 0-1.5 0v.5c0 .69-.56 1.25-1.25 1.25Z"
+  }));
+};
+SvgStoreIcon.displayName = "StoreIcon";
+var SvgTargetIcon = function SvgTargetIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    d: "M4.75 10a5.25 5.25 0 0 1 10.5 0 .75.75 0 0 0 1.5 0 6.75 6.75 0 1 0-6.75 6.75.75.75 0 0 0 0-1.5 5.25 5.25 0 0 1-5.25-5.25Z"
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: "M11.537 9.805a.75.75 0 0 0 1.486-.208 3 3 0 1 0-3.492 3.372.75.75 0 0 0 .26-1.478 1.5 1.5 0 1 1 1.746-1.686Z"
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: "M11.611 10.973a.5.5 0 0 0-.638.638l2.121 6.01a.5.5 0 0 0 .871.135l1.172-1.558 1.038 1.037a.5.5 0 0 0 .707 0l.353-.353a.5.5 0 0 0 0-.707l-1.037-1.038 1.558-1.172a.5.5 0 0 0-.135-.87l-6.01-2.122Z"
+  }));
+};
+SvgTargetIcon.displayName = "TargetIcon";
 var SvgTextAlignCenterIcon = function SvgTextAlignCenterIcon2(props) {
   return /* @__PURE__ */ React.createElement("svg", Object.assign({
     viewBox: "0 0 20 20"
@@ -17533,6 +17602,19 @@ var SvgViewIcon = function SvgViewIcon2(props) {
   }));
 };
 SvgViewIcon.displayName = "ViewIcon";
+var SvgWandIcon = function SvgWandIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M15.165 3.893c-.784-.804-2.077-.804-2.862 0l-8.238 8.438c-.759.777-.759 2.018 0 2.795l.725.742c.778.798 2.06.804 2.847.015l4.082-4.092.006-.006 4.208-4.312c.759-.777.759-2.017 0-2.794l-.768-.786Zm-1.788 1.047c.196-.2.519-.2.715 0l.768.787c.19.194.19.504 0 .699l-1.048 1.073-1.484-1.484 1.049-1.075Zm-2.097 2.148-6.142 6.291c-.19.194-.19.505 0 .699l.725.742c.195.2.515.201.712.004l4.079-4.09 2.11-2.162-1.484-1.484Z"
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: "M14.25 12c.413 0 .75.336.75.75v.75h.75c.413 0 .75.336.75.75 0 .415-.337.75-.75.75h-.75v.75c0 .415-.337.75-.75.75-.415 0-.75-.335-.75-.75v-.75h-.75c-.415 0-.75-.335-.75-.75 0-.414.335-.75.75-.75h.75v-.75c0-.414.335-.75.75-.75Z"
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: "M5.75 3.5c.413 0 .75.336.75.75v.75h.75c.413 0 .75.336.75.75s-.337.75-.75.75h-.75v.75c0 .414-.337.75-.75.75-.415 0-.75-.336-.75-.75v-.75h-.75c-.415 0-.75-.336-.75-.75s.335-.75.75-.75h.75v-.75c0-.414.335-.75.75-.75Z"
+  }));
+};
+SvgWandIcon.displayName = "WandIcon";
 var SvgXCircleIcon = function SvgXCircleIcon2(props) {
   return /* @__PURE__ */ React.createElement("svg", Object.assign({
     viewBox: "0 0 20 20"
@@ -17680,7 +17762,7 @@ function matches(node, selector) {
   let i = matches2.length;
   while (--i >= 0 && matches2.item(i) !== node) return i > -1;
 }
-var styles$Z = {
+var styles$_ = {
   "Button": "Polaris-Button",
   "disabled": "Polaris-Button--disabled",
   "pressed": "Polaris-Button--pressed",
@@ -17711,7 +17793,7 @@ var styles$Z = {
   "Icon": "Polaris-Button__Icon",
   "Spinner": "Polaris-Button__Spinner"
 };
-var styles$Y = {
+var styles$Z = {
   "Icon": "Polaris-Icon",
   "toneInherit": "Polaris-Icon--toneInherit",
   "toneBase": "Polaris-Icon--toneBase",
@@ -17736,7 +17818,7 @@ var styles$Y = {
   "Img": "Polaris-Icon__Img",
   "Placeholder": "Polaris-Icon__Placeholder"
 };
-var styles$X = {
+var styles$Y = {
   "root": "Polaris-Text--root",
   "block": "Polaris-Text--block",
   "truncate": "Polaris-Text--truncate",
@@ -17790,7 +17872,7 @@ const Text = ({
   textDecorationLine
 }) => {
   const Component = as || (visuallyHidden ? "span" : "p");
-  const className = classNames(styles$X.root, variant && styles$X[variant], fontWeight && styles$X[fontWeight], (alignment || truncate) && styles$X.block, alignment && styles$X[alignment], breakWord && styles$X.break, tone && styles$X[tone], numeric && styles$X.numeric, truncate && styles$X.truncate, visuallyHidden && styles$X.visuallyHidden, textDecorationLine && styles$X[textDecorationLine]);
+  const className = classNames(styles$Y.root, variant && styles$Y[variant], fontWeight && styles$Y[fontWeight], (alignment || truncate) && styles$Y.block, alignment && styles$Y[alignment], breakWord && styles$Y.break, tone && styles$Y[tone], numeric && styles$Y.numeric, truncate && styles$Y.truncate, visuallyHidden && styles$Y.visuallyHidden, textDecorationLine && styles$Y[textDecorationLine]);
   return /* @__PURE__ */ React.createElement(Component, Object.assign({
     className
   }, id && {
@@ -17810,14 +17892,14 @@ function Icon({
   } else {
     sourceType = "external";
   }
-  const className = classNames(styles$Y.Icon, tone && styles$Y[variationName("tone", tone)]);
+  const className = classNames(styles$Z.Icon, tone && styles$Z[variationName("tone", tone)]);
   const {
     mdDown
   } = useBreakpoints();
   const SourceComponent = source;
   const contentMarkup = {
     function: /* @__PURE__ */ React.createElement(SourceComponent, Object.assign({
-      className: styles$Y.Svg,
+      className: styles$Z.Svg,
       focusable: "false",
       "aria-hidden": "true"
       // On Mobile we're scaling the viewBox to 18x18 to make the icons bigger
@@ -17827,10 +17909,10 @@ function Icon({
       viewBox: "1 1 18 18"
     } : {})),
     placeholder: /* @__PURE__ */ React.createElement("div", {
-      className: styles$Y.Placeholder
+      className: styles$Z.Placeholder
     }),
     external: /* @__PURE__ */ React.createElement("img", {
-      className: styles$Y.Img,
+      className: styles$Z.Img,
       src: `data:image/svg+xml;utf8,${source}`,
       alt: "",
       "aria-hidden": "true"
@@ -17843,7 +17925,7 @@ function Icon({
     visuallyHidden: true
   }, accessibilityLabel), contentMarkup[sourceType]);
 }
-var styles$W = {
+var styles$X = {
   "Spinner": "Polaris-Spinner",
   "sizeSmall": "Polaris-Spinner--sizeSmall",
   "sizeLarge": "Polaris-Spinner--sizeLarge"
@@ -17854,7 +17936,7 @@ function Spinner$1({
   hasFocusableParent
 }) {
   const isAfterInitialMount = useIsAfterInitialMount();
-  const className = classNames(styles$W.Spinner, size && styles$W[variationName("size", size)]);
+  const className = classNames(styles$X.Spinner, size && styles$X[variationName("size", size)]);
   const spinnerSVGMarkup = size === "large" ? /* @__PURE__ */ React.createElement("svg", {
     viewBox: "0 0 44 44",
     xmlns: "http://www.w3.org/2000/svg"
@@ -18052,9 +18134,9 @@ function Button({
   const {
     mdUp
   } = useBreakpoints();
-  const className = classNames(styles$Z.Button, styles$Z.pressable, styles$Z[variationName("variant", variant)], styles$Z[variationName("size", size)], styles$Z[variationName("textAlign", textAlign)], fullWidth && styles$Z.fullWidth, disclosure && styles$Z.disclosure, icon && children && styles$Z.iconWithText, icon && children == null && styles$Z.iconOnly, isDisabled && styles$Z.disabled, loading && styles$Z.loading, pressed && !disabled && !url && styles$Z.pressed, removeUnderline && styles$Z.removeUnderline, tone && styles$Z[variationName("tone", tone)]);
+  const className = classNames(styles$_.Button, styles$_.pressable, styles$_[variationName("variant", variant)], styles$_[variationName("size", size)], styles$_[variationName("textAlign", textAlign)], fullWidth && styles$_.fullWidth, disclosure && styles$_.disclosure, icon && children && styles$_.iconWithText, icon && children == null && styles$_.iconOnly, isDisabled && styles$_.disabled, loading && styles$_.loading, pressed && !disabled && !url && styles$_.pressed, removeUnderline && styles$_.removeUnderline, tone && styles$_[variationName("tone", tone)]);
   const disclosureMarkup = disclosure ? /* @__PURE__ */ React.createElement("span", {
-    className: loading ? styles$Z.hidden : styles$Z.Icon
+    className: loading ? styles$_.hidden : styles$_.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: loading ? "placeholder" : getDisclosureIconSource(disclosure, SvgChevronUpIcon, SvgChevronDownIcon)
   })) : null;
@@ -18062,7 +18144,7 @@ function Button({
     source: loading ? "placeholder" : icon
   }) : icon;
   const iconMarkup = iconSource ? /* @__PURE__ */ React.createElement("span", {
-    className: loading ? styles$Z.hidden : styles$Z.Icon
+    className: loading ? styles$_.hidden : styles$_.Icon
   }, iconSource) : null;
   const hasPlainText = ["plain", "monochromePlain"].includes(variant);
   let textFontWeight = "medium";
@@ -18082,7 +18164,7 @@ function Button({
     key: disabled ? "text-disabled" : "text"
   }, children) : null;
   const spinnerSVGMarkup = loading ? /* @__PURE__ */ React.createElement("span", {
-    className: styles$Z.Spinner
+    className: styles$_.Spinner
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
     size: "small",
     accessibilityLabel: i18n.translate("Polaris.Button.spinnerAccessibilityLabel")
@@ -18157,7 +18239,7 @@ function buttonFrom({
     variant: plainVariant || destructiveVariant
   }, action, overrides), content);
 }
-var styles$V = {
+var styles$W = {
   "ShadowBevel": "Polaris-ShadowBevel"
 };
 function ShadowBevel(props) {
@@ -18171,7 +18253,7 @@ function ShadowBevel(props) {
   } = props;
   const Component = as;
   return /* @__PURE__ */ React.createElement(Component, {
-    className: styles$V.ShadowBevel,
+    className: styles$W.ShadowBevel,
     style: {
       "--pc-shadow-bevel-z-index": zIndex,
       ...getResponsiveValue("shadow-bevel", "content", mapResponsiveProp(bevel, (bevel2) => bevel2 ? '""' : "none")),
@@ -18186,7 +18268,7 @@ function mapResponsiveProp(responsiveProp, callback) {
   }
   return Object.fromEntries(Object.entries(responsiveProp).map(([breakpointsAlias, value]) => [breakpointsAlias, callback(value)]));
 }
-var styles$U = {
+var styles$V = {
   "listReset": "Polaris-Box--listReset",
   "Box": "Polaris-Box",
   "visuallyHidden": "Polaris-Box--visuallyHidden",
@@ -18280,7 +18362,7 @@ const Box = /* @__PURE__ */ reactExports.forwardRef(({
     zIndex,
     opacity
   };
-  const className = classNames(styles$U.Box, visuallyHidden && styles$U.visuallyHidden, printHidden && styles$U.printHidden, as === "ul" && styles$U.listReset);
+  const className = classNames(styles$V.Box, visuallyHidden && styles$V.visuallyHidden, printHidden && styles$V.printHidden, as === "ul" && styles$V.listReset);
   return /* @__PURE__ */ React.createElement(as, {
     className,
     id,
@@ -18317,7 +18399,7 @@ const Card = ({
     minHeight: "100%"
   }, children)));
 };
-var styles$T = {
+var styles$U = {
   "InlineStack": "Polaris-InlineStack"
 };
 const InlineStack = function InlineStack2({
@@ -18337,11 +18419,11 @@ const InlineStack = function InlineStack2({
     ...getResponsiveValue("inline-stack", "flex-direction", direction)
   };
   return /* @__PURE__ */ React.createElement(Element2, {
-    className: styles$T.InlineStack,
+    className: styles$U.InlineStack,
     style
   }, children);
 };
-var styles$S = {
+var styles$T = {
   "BlockStack": "Polaris-BlockStack",
   "listReset": "Polaris-BlockStack--listReset",
   "fieldsetReset": "Polaris-BlockStack--fieldsetReset"
@@ -18356,7 +18438,7 @@ const BlockStack = ({
   reverseOrder = false,
   ...restProps
 }) => {
-  const className = classNames(styles$S.BlockStack, (as === "ul" || as === "ol") && styles$S.listReset, as === "fieldset" && styles$S.fieldsetReset);
+  const className = classNames(styles$T.BlockStack, (as === "ul" || as === "ol") && styles$T.listReset, as === "fieldset" && styles$T.fieldsetReset);
   const style = {
     "--pc-block-stack-align": align ? `${align}` : null,
     "--pc-block-stack-inline-align": inlineAlign ? `${inlineAlign}` : null,
@@ -18407,7 +18489,7 @@ function FilterActionsProvider({
     value: filterActions
   }, children);
 }
-var styles$R = {
+var styles$S = {
   "Item": "Polaris-ActionList__Item",
   "default": "Polaris-ActionList--default",
   "active": "Polaris-ActionList--active",
@@ -18420,7 +18502,7 @@ var styles$R = {
   "Text": "Polaris-ActionList__Text"
 };
 const WithinFilterContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$Q = {
+var styles$R = {
   "Badge": "Polaris-Badge",
   "toneSuccess": "Polaris-Badge--toneSuccess",
   "toneSuccess-strong": "Polaris-Badge__toneSuccess--strong",
@@ -18523,7 +18605,7 @@ function getDefaultAccessibilityLabel(i18n, progress, tone) {
     });
   }
 }
-var styles$P = {
+var styles$Q = {
   "Pip": "Polaris-Badge-Pip",
   "toneInfo": "Polaris-Badge-Pip--toneInfo",
   "toneSuccess": "Polaris-Badge-Pip--toneSuccess",
@@ -18541,7 +18623,7 @@ function Pip({
   accessibilityLabelOverride
 }) {
   const i18n = useI18n();
-  const className = classNames(styles$P.Pip, tone && styles$P[variationName("tone", tone)], progress && styles$P[variationName("progress", progress)]);
+  const className = classNames(styles$Q.Pip, tone && styles$Q[variationName("tone", tone)], progress && styles$Q[variationName("progress", progress)]);
   const accessibilityLabel = accessibilityLabelOverride ? accessibilityLabelOverride : getDefaultAccessibilityLabel(i18n, progress, tone);
   return /* @__PURE__ */ React.createElement("span", {
     className
@@ -18580,7 +18662,7 @@ function Badge({
 }) {
   const i18n = useI18n();
   const withinFilter = reactExports.useContext(WithinFilterContext);
-  const className = classNames(styles$Q.Badge, tone && styles$Q[variationName("tone", tone)], size && size !== DEFAULT_SIZE && styles$Q[variationName("size", size)], withinFilter && styles$Q.withinFilter);
+  const className = classNames(styles$R.Badge, tone && styles$R[variationName("tone", tone)], size && size !== DEFAULT_SIZE && styles$R[variationName("size", size)], withinFilter && styles$R.withinFilter);
   const accessibilityLabel = toneAndProgressLabelOverride ? toneAndProgressLabelOverride : getDefaultAccessibilityLabel(i18n, progress, tone);
   let accessibilityMarkup = Boolean(accessibilityLabel) && /* @__PURE__ */ React.createElement(Text, {
     as: "span",
@@ -18588,7 +18670,7 @@ function Badge({
   }, accessibilityLabel);
   if (progress && !icon) {
     accessibilityMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$Q.Icon
+      className: styles$R.Icon
     }, /* @__PURE__ */ React.createElement(Icon, {
       accessibilityLabel,
       source: progressIconMap[progress]
@@ -18597,7 +18679,7 @@ function Badge({
   return /* @__PURE__ */ React.createElement("span", {
     className
   }, accessibilityMarkup, icon && /* @__PURE__ */ React.createElement("span", {
-    className: styles$Q.Icon
+    className: styles$R.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: icon
   })), children && /* @__PURE__ */ React.createElement(Text, {
@@ -18616,7 +18698,7 @@ function useToggle(initialState) {
     setFalse: reactExports.useCallback(() => setState(false), [])
   };
 }
-var styles$O = {
+var styles$P = {
   "TooltipContainer": "Polaris-Tooltip__TooltipContainer",
   "HasUnderline": "Polaris-Tooltip__HasUnderline"
 };
@@ -18657,7 +18739,7 @@ function Portal({
 }
 function noop$8() {
 }
-var styles$N = {
+var styles$O = {
   "TooltipOverlay": "Polaris-Tooltip-TooltipOverlay",
   "Tail": "Polaris-Tooltip-TooltipOverlay__Tail",
   "positionedAbove": "Polaris-Tooltip-TooltipOverlay--positionedAbove",
@@ -18757,7 +18839,7 @@ function windowRect(node) {
     width: document2.body.clientWidth
   });
 }
-var styles$M = {
+var styles$N = {
   "PositionedOverlay": "Polaris-PositionedOverlay",
   "fixed": "Polaris-PositionedOverlay--fixed",
   "preventInteraction": "Polaris-PositionedOverlay--preventInteraction"
@@ -18779,7 +18861,7 @@ function useComponentDidMount(callback) {
   }
 }
 const ScrollableContext = /* @__PURE__ */ reactExports.createContext(void 0);
-var styles$L = {
+var styles$M = {
   "Scrollable": "Polaris-Scrollable",
   "hasTopShadow": "Polaris-Scrollable--hasTopShadow",
   "hasBottomShadow": "Polaris-Scrollable--hasBottomShadow",
@@ -18882,7 +18964,7 @@ const ScrollableComponent = /* @__PURE__ */ reactExports.forwardRef(({
       globalThis.removeEventListener("resize", handleResize);
     };
   }, [stickyManager, handleScroll]);
-  const finalClassName = classNames(className, styles$L.Scrollable, vertical && styles$L.vertical, horizontal && styles$L.horizontal, shadow && topShadow && styles$L.hasTopShadow, shadow && bottomShadow && styles$L.hasBottomShadow, scrollbarWidth && styles$L[variationName("scrollbarWidth", scrollbarWidth)], scrollbarGutter && styles$L[variationName("scrollbarGutter", scrollbarGutter.replace(" ", ""))]);
+  const finalClassName = classNames(className, styles$M.Scrollable, vertical && styles$M.vertical, horizontal && styles$M.horizontal, shadow && topShadow && styles$M.hasTopShadow, shadow && bottomShadow && styles$M.hasBottomShadow, scrollbarWidth && styles$M[variationName("scrollbarWidth", scrollbarWidth)], scrollbarGutter && styles$M[variationName("scrollbarGutter", scrollbarGutter.replace(" ", ""))]);
   return /* @__PURE__ */ React.createElement(ScrollableContext.Provider, {
     value: scrollTo
   }, /* @__PURE__ */ React.createElement(StickyManagerContext.Provider, {
@@ -19136,7 +19218,7 @@ class PositionedOverlay extends reactExports.PureComponent {
       width: width == null || isNaN(width) ? void 0 : width,
       zIndex: zIndexOverride || zIndex || void 0
     };
-    const className = classNames(styles$M.PositionedOverlay, fixed && styles$M.fixed, preventInteraction && styles$M.preventInteraction, propClassNames);
+    const className = classNames(styles$N.PositionedOverlay, fixed && styles$N.fixed, preventInteraction && styles$N.preventInteraction, propClassNames);
     return /* @__PURE__ */ React.createElement("div", {
       className,
       style,
@@ -19216,8 +19298,8 @@ function TooltipOverlay({
       positioning,
       chevronOffset
     } = overlayDetails;
-    const containerClassName = classNames(styles$N.TooltipOverlay, measuring && styles$N.measuring, !measuring && styles$N.measured, instant && styles$N.instant, positioning === "above" && styles$N.positionedAbove);
-    const contentClassName = classNames(styles$N.Content, width && styles$N[width]);
+    const containerClassName = classNames(styles$O.TooltipOverlay, measuring && styles$O.measuring, !measuring && styles$O.measured, instant && styles$O.instant, positioning === "above" && styles$O.positionedAbove);
+    const contentClassName = classNames(styles$O.Content, width && styles$O[width]);
     const contentStyles = measuring ? void 0 : {
       minHeight: desiredHeight
     };
@@ -19230,7 +19312,7 @@ function TooltipOverlay({
       style,
       className: containerClassName
     }, layer.props), /* @__PURE__ */ React.createElement("svg", {
-      className: styles$N.Tail,
+      className: styles$O.Tail,
       width: "19",
       height: "11",
       fill: "none"
@@ -19356,7 +19438,7 @@ function Tooltip({
     as: "span",
     variant: "bodyMd"
   }, content))) : null;
-  const wrapperClassNames = classNames(activatorWrapper === "div" && styles$O.TooltipContainer, hasUnderline && styles$O.HasUnderline);
+  const wrapperClassNames = classNames(activatorWrapper === "div" && styles$P.TooltipContainer, hasUnderline && styles$P.HasUnderline);
   return /* @__PURE__ */ React.createElement(WrapperComponent, {
     onFocus: () => {
       handleOpen();
@@ -19439,22 +19521,22 @@ function Item$5({
   role,
   variant = "default"
 }) {
-  const className = classNames(styles$R.Item, disabled && styles$R.disabled, destructive && styles$R.destructive, active && styles$R.active, variant === "default" && styles$R.default, variant === "indented" && styles$R.indented, variant === "menu" && styles$R.menu);
+  const className = classNames(styles$S.Item, disabled && styles$S.disabled, destructive && styles$S.destructive, active && styles$S.active, variant === "default" && styles$S.default, variant === "indented" && styles$S.indented, variant === "menu" && styles$S.menu);
   let prefixMarkup = null;
   if (prefix) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$R.Prefix
+      className: styles$S.Prefix
     }, prefix);
   } else if (icon) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$R.Prefix
+      className: styles$S.Prefix
     }, /* @__PURE__ */ React.createElement(Icon, {
       source: icon
     }));
   } else if (image) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
       role: "presentation",
-      className: styles$R.Prefix,
+      className: styles$S.Prefix,
       style: {
         backgroundImage: `url(${image}`
       }
@@ -19476,15 +19558,15 @@ function Item$5({
     fontWeight: active ? "semibold" : "regular"
   }, contentText);
   const badgeMarkup = badge && /* @__PURE__ */ React.createElement("span", {
-    className: styles$R.Suffix
+    className: styles$S.Suffix
   }, /* @__PURE__ */ React.createElement(Badge, {
     tone: badge.tone
   }, badge.content));
   const suffixMarkup = suffix && /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement("span", {
-    className: styles$R.Suffix
+    className: styles$S.Suffix
   }, suffix));
   const textMarkup = /* @__PURE__ */ React.createElement("span", {
-    className: styles$R.Text
+    className: styles$S.Text
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     variant: "bodyMd",
@@ -19671,7 +19753,7 @@ function KeypressListener({
   }, [keyEvent, handleKeyEvent, useCapture, options, ownerDocument]);
   return null;
 }
-var styles$K = {
+var styles$L = {
   "TextField": "Polaris-TextField",
   "ClearButton": "Polaris-TextField__ClearButton",
   "Loading": "Polaris-TextField__Loading",
@@ -19709,7 +19791,7 @@ var styles$K = {
   "Segment": "Polaris-TextField__Segment",
   "monospaced": "Polaris-TextField--monospaced"
 };
-var styles$J = {
+var styles$K = {
   "hidden": "Polaris-Labelled--hidden",
   "LabelWrapper": "Polaris-Labelled__LabelWrapper",
   "disabled": "Polaris-Labelled--disabled",
@@ -19718,7 +19800,7 @@ var styles$J = {
   "Error": "Polaris-Labelled__Error",
   "Action": "Polaris-Labelled__Action"
 };
-var styles$I = {
+var styles$J = {
   "InlineError": "Polaris-InlineError",
   "Icon": "Polaris-InlineError__Icon"
 };
@@ -19731,9 +19813,9 @@ function InlineError({
   }
   return /* @__PURE__ */ React.createElement("div", {
     id: errorTextID(fieldID),
-    className: styles$I.InlineError
+    className: styles$J.InlineError
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$I.Icon
+    className: styles$J.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgAlertCircleIcon
   })), /* @__PURE__ */ React.createElement(Text, {
@@ -19744,7 +19826,7 @@ function InlineError({
 function errorTextID(id) {
   return `${id}Error`;
 }
-var styles$H = {
+var styles$I = {
   "Label": "Polaris-Label",
   "hidden": "Polaris-Label--hidden",
   "Text": "Polaris-Label__Text",
@@ -19759,13 +19841,13 @@ function Label({
   hidden,
   requiredIndicator
 }) {
-  const className = classNames(styles$H.Label, hidden && styles$H.hidden);
+  const className = classNames(styles$I.Label, hidden && styles$I.hidden);
   return /* @__PURE__ */ React.createElement("div", {
     className
   }, /* @__PURE__ */ React.createElement("label", {
     id: labelID(id),
     htmlFor: id,
-    className: classNames(styles$H.Text, requiredIndicator && styles$H.RequiredIndicator)
+    className: classNames(styles$I.Text, requiredIndicator && styles$I.RequiredIndicator)
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     variant: "bodyMd"
@@ -19784,14 +19866,14 @@ function Labelled({
   readOnly,
   ...rest
 }) {
-  const className = classNames(labelHidden && styles$J.hidden, disabled && styles$J.disabled, readOnly && styles$J.readOnly);
+  const className = classNames(labelHidden && styles$K.hidden, disabled && styles$K.disabled, readOnly && styles$K.readOnly);
   const actionMarkup = action ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$J.Action
+    className: styles$K.Action
   }, buttonFrom(action, {
     variant: "plain"
   })) : null;
   const helpTextMarkup = helpText ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$J.HelpText,
+    className: styles$K.HelpText,
     id: helpTextID$1(id),
     "aria-disabled": disabled
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -19801,13 +19883,13 @@ function Labelled({
     breakWord: true
   }, helpText)) : null;
   const errorMarkup = error && typeof error !== "boolean" && /* @__PURE__ */ React.createElement("div", {
-    className: styles$J.Error
+    className: styles$K.Error
   }, /* @__PURE__ */ React.createElement(InlineError, {
     message: error,
     fieldID: id
   }));
   const labelMarkup = label ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$J.LabelWrapper
+    className: styles$K.LabelWrapper
   }, /* @__PURE__ */ React.createElement(Label, Object.assign({
     id,
     requiredIndicator
@@ -19821,7 +19903,7 @@ function Labelled({
 function helpTextID$1(id) {
   return `${id}HelpText`;
 }
-var styles$G = {
+var styles$H = {
   "Connected": "Polaris-Connected",
   "Item": "Polaris-Connected__Item",
   "Item-primary": "Polaris-Connected__Item--primary",
@@ -19836,7 +19918,7 @@ function Item$4({
     setTrue: forceTrueFocused,
     setFalse: forceFalseFocused
   } = useToggle(false);
-  const className = classNames(styles$G.Item, focused && styles$G["Item-focused"], position === "primary" ? styles$G["Item-primary"] : styles$G["Item-connection"]);
+  const className = classNames(styles$H.Item, focused && styles$H["Item-focused"], position === "primary" ? styles$H["Item-primary"] : styles$H["Item-connection"]);
   return /* @__PURE__ */ React.createElement("div", {
     onBlur: forceFalseFocused,
     onFocus: forceTrueFocused,
@@ -19855,7 +19937,7 @@ function Connected({
     position: "right"
   }, right) : null;
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$G.Connected
+    className: styles$H.Connected
   }, leftConnectionMarkup, /* @__PURE__ */ React.createElement(Item$4, {
     position: "primary"
   }, children), rightConnectionMarkup);
@@ -19877,32 +19959,32 @@ const Spinner = /* @__PURE__ */ React.forwardRef(function Spinner2({
     };
   }
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.Spinner,
+    className: styles$L.Spinner,
     onClick,
     "aria-hidden": true,
     ref
   }, /* @__PURE__ */ React.createElement("div", {
     role: "button",
-    className: styles$K.Segment,
+    className: styles$L.Segment,
     tabIndex: -1,
     onClick: handleStep(1),
     onMouseDown: handleMouseDown(handleStep(1)),
     onMouseUp,
     onBlur
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.SpinnerIcon
+    className: styles$L.SpinnerIcon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgChevronUpIcon
   }))), /* @__PURE__ */ React.createElement("div", {
     role: "button",
-    className: styles$K.Segment,
+    className: styles$L.Segment,
     tabIndex: -1,
     onClick: handleStep(-1),
     onMouseDown: handleMouseDown(handleStep(-1)),
     onMouseUp,
     onBlur
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.SpinnerIcon
+    className: styles$L.SpinnerIcon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgChevronDownIcon
   }))));
@@ -19929,7 +20011,7 @@ function Resizer({
   }, []);
   const minimumLinesMarkup = minimumLines ? /* @__PURE__ */ React.createElement("div", {
     ref: minimumLinesNode,
-    className: styles$K.DummyInput,
+    className: styles$L.DummyInput,
     dangerouslySetInnerHTML: {
       __html: getContentsForMinimumLines(minimumLines)
     }
@@ -19953,13 +20035,13 @@ function Resizer({
   });
   return /* @__PURE__ */ React.createElement("div", {
     "aria-hidden": true,
-    className: styles$K.Resizer
+    className: styles$L.Resizer
   }, /* @__PURE__ */ React.createElement(EventListener, {
     event: "resize",
     handler: handleHeightCheck
   }), /* @__PURE__ */ React.createElement("div", {
     ref: contentNode,
-    className: styles$K.DummyInput,
+    className: styles$L.DummyInput,
     dangerouslySetInnerHTML: {
       __html: getFinalContents(contents)
     }
@@ -20077,12 +20159,12 @@ function TextField$1({
   const normalizedStep = step != null ? step : 1;
   const normalizedMax = max != null ? max : Infinity;
   const normalizedMin = min != null ? min : -Infinity;
-  const className = classNames(styles$K.TextField, Boolean(normalizedValue) && styles$K.hasValue, disabled && styles$K.disabled, readOnly && styles$K.readOnly, error && styles$K.error, tone && styles$K[variationName("tone", tone)], multiline && styles$K.multiline, focus && !disabled && styles$K.focus, variant !== "inherit" && styles$K[variant], size === "slim" && styles$K.slim);
+  const className = classNames(styles$L.TextField, Boolean(normalizedValue) && styles$L.hasValue, disabled && styles$L.disabled, readOnly && styles$L.readOnly, error && styles$L.error, tone && styles$L[variationName("tone", tone)], multiline && styles$L.multiline, focus && !disabled && styles$L.focus, variant !== "inherit" && styles$L[variant], size === "slim" && styles$L.slim);
   const inputType = type === "currency" ? "text" : type;
   const isNumericType = type === "number" || type === "integer";
   const iconPrefix = /* @__PURE__ */ React.isValidElement(prefix) && prefix.type === Icon;
   const prefixMarkup = prefix ? /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$K.Prefix, iconPrefix && styles$K.PrefixIcon),
+    className: classNames(styles$L.Prefix, iconPrefix && styles$L.PrefixIcon),
     id: `${id}-Prefix`,
     ref: prefixRef
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -20090,7 +20172,7 @@ function TextField$1({
     variant: "bodyMd"
   }, prefix)) : null;
   const suffixMarkup = suffix ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.Suffix,
+    className: styles$L.Suffix,
     id: `${id}-Suffix`,
     ref: suffixRef
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -20098,7 +20180,7 @@ function TextField$1({
     variant: "bodyMd"
   }, suffix)) : null;
   const loadingMarkup = loading ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.Loading,
+    className: styles$L.Loading,
     id: `${id}-Loading`,
     ref: loadingRef
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
@@ -20113,7 +20195,7 @@ function TextField$1({
     }) : i18n.translate("Polaris.TextField.characterCount", {
       count: characterCount
     });
-    const characterCountClassName = classNames(styles$K.CharacterCount, multiline && styles$K.AlignFieldBottom);
+    const characterCountClassName = classNames(styles$L.CharacterCount, multiline && styles$L.AlignFieldBottom);
     const characterCountText = !maxLength ? characterCount : `${characterCount}/${maxLength}`;
     characterCountMarkup = /* @__PURE__ */ React.createElement("div", {
       id: `${id}-CharacterCounter`,
@@ -20130,7 +20212,7 @@ function TextField$1({
   const clearButtonVisible = normalizedValue !== "";
   const clearButtonMarkup = clearButton && clearButtonVisible ? /* @__PURE__ */ React.createElement("button", {
     type: "button",
-    className: styles$K.ClearButton,
+    className: styles$L.ClearButton,
     onClick: handleClearButtonPress,
     disabled
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -20216,7 +20298,7 @@ function TextField$1({
     labelledBy.push(`${id}-VerticalContent`);
   }
   labelledBy.unshift(labelID(id));
-  const inputClassName = classNames(styles$K.Input, align && styles$K[variationName("Input-align", align)], suffix && styles$K["Input-suffixed"], clearButton && styles$K["Input-hasClearButton"], monospaced && styles$K.monospaced, suggestion && styles$K.suggestion, autoSize && styles$K["Input-autoSize"]);
+  const inputClassName = classNames(styles$L.Input, align && styles$L[variationName("Input-align", align)], suffix && styles$L["Input-suffixed"], clearButton && styles$L["Input-hasClearButton"], monospaced && styles$L.monospaced, suggestion && styles$L.suggestion, autoSize && styles$L["Input-autoSize"]);
   const handleOnFocus = (event) => {
     setFocus(true);
     if (selectTextOnFocus && !suggestion) {
@@ -20282,19 +20364,19 @@ function TextField$1({
     "data-form-type": autoComplete === "off" ? "other" : void 0
   });
   const inputWithVerticalContentMarkup = verticalContent ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.VerticalContent,
+    className: styles$L.VerticalContent,
     id: `${id}-VerticalContent`,
     ref: verticalContentRef,
     onClick: handleClickChild
   }, verticalContent, input) : null;
   const inputMarkup = verticalContent ? inputWithVerticalContentMarkup : input;
   const backdropMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$K.Backdrop, connectedLeft && styles$K["Backdrop-connectedLeft"], connectedRight && styles$K["Backdrop-connectedRight"])
+    className: classNames(styles$L.Backdrop, connectedLeft && styles$L["Backdrop-connectedLeft"], connectedRight && styles$L["Backdrop-connectedRight"])
   });
   const inputAndSuffixMarkup = autoSize ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$K.InputAndSuffixWrapper
+    className: styles$L.InputAndSuffixWrapper
   }, /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$K.AutoSizeWrapper, suffix && styles$K.AutoSizeWrapperWithSuffix),
+    className: classNames(styles$L.AutoSizeWrapper, suffix && styles$L.AutoSizeWrapperWithSuffix),
     "data-auto-size-value": value || placeholder
   }, inputMarkup), suffixMarkup) : /* @__PURE__ */ React.createElement(React.Fragment, null, inputMarkup, suffixMarkup);
   return /* @__PURE__ */ React.createElement(Labelled, {
@@ -20529,10 +20611,10 @@ function ActionList({
   }, listeners, sectionMarkup));
 }
 ActionList.Item = Item$5;
-var styles$F = {
+var styles$G = {
   "ActionMenu": "Polaris-ActionMenu"
 };
-var styles$E = {
+var styles$F = {
   "RollupActivator": "Polaris-ActionMenu-RollupActions__RollupActivator"
 };
 function setActivatorAttributes(activator, {
@@ -20588,7 +20670,7 @@ function ConditionalRender({
 }) {
   return condition ? children : null;
 }
-var styles$D = {
+var styles$E = {
   "Popover": "Polaris-Popover",
   "PopoverOverlay": "Polaris-Popover__PopoverOverlay",
   "PopoverOverlay-noAnimation": "Polaris-Popover__PopoverOverlay--noAnimation",
@@ -20615,7 +20697,7 @@ function Section$2({
   children
 }) {
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$D.Section
+    className: styles$E.Section
   }, /* @__PURE__ */ React.createElement(Box, {
     paddingInlineStart: "300",
     paddingInlineEnd: "300",
@@ -20634,7 +20716,7 @@ function Pane({
   subdued,
   onScrolledToBottom
 }) {
-  const className = classNames(styles$D.Pane, fixed && styles$D["Pane-fixed"], subdued && styles$D["Pane-subdued"], captureOverscroll && styles$D["Pane-captureOverscroll"]);
+  const className = classNames(styles$E.Pane, fixed && styles$E["Pane-fixed"], subdued && styles$E["Pane-subdued"], captureOverscroll && styles$E["Pane-captureOverscroll"]);
   const content = sectioned ? wrapWithComponent(children, Section$2, {}) : children;
   const style = {
     height,
@@ -20691,11 +20773,11 @@ class PopoverOverlay extends reactExports.PureComponent {
         captureOverscroll
       } = this.props;
       const isCovering = positioning === "cover";
-      const className = classNames(styles$D.Popover, measuring && styles$D.measuring, (fullWidth || isCovering) && styles$D.fullWidth, hideOnPrint && styles$D["PopoverOverlay-hideOnPrint"], positioning && styles$D[variationName("positioned", positioning)]);
+      const className = classNames(styles$E.Popover, measuring && styles$E.measuring, (fullWidth || isCovering) && styles$E.fullWidth, hideOnPrint && styles$E["PopoverOverlay-hideOnPrint"], positioning && styles$E[variationName("positioned", positioning)]);
       const contentStyles = measuring ? void 0 : {
         height: desiredHeight
       };
-      const contentClassNames = classNames(styles$D.Content, fullHeight && styles$D["Content-fullHeight"], fluidContent && styles$D["Content-fluidContent"]);
+      const contentClassNames = classNames(styles$E.Content, fullHeight && styles$E["Content-fullHeight"], fluidContent && styles$E["Content-fluidContent"]);
       const {
         window: window2
       } = this.state;
@@ -20714,11 +20796,11 @@ class PopoverOverlay extends reactExports.PureComponent {
         handler: this.handleEscape,
         document: window2 == null ? void 0 : window2.document
       }), /* @__PURE__ */ React.createElement("div", {
-        className: styles$D.FocusTracker,
+        className: styles$E.FocusTracker,
         tabIndex: 0,
         onFocus: this.handleFocusFirstItem
       }), /* @__PURE__ */ React.createElement("div", {
-        className: styles$D.ContentContainer
+        className: styles$E.ContentContainer
       }, /* @__PURE__ */ React.createElement("div", {
         id,
         tabIndex: autofocusTarget === "none" ? void 0 : -1,
@@ -20729,7 +20811,7 @@ class PopoverOverlay extends reactExports.PureComponent {
         captureOverscroll,
         sectioned
       }))), /* @__PURE__ */ React.createElement("div", {
-        className: styles$D.FocusTracker,
+        className: styles$E.FocusTracker,
         tabIndex: 0,
         onFocus: this.handleFocusLastItem
       }));
@@ -20852,7 +20934,7 @@ class PopoverOverlay extends reactExports.PureComponent {
       transitionStatus
     } = this.state;
     if (transitionStatus === TransitionStatus$1.Exited && !active) return null;
-    const className = classNames(styles$D.PopoverOverlay, transitionStatus === TransitionStatus$1.Entering && styles$D["PopoverOverlay-entering"], transitionStatus === TransitionStatus$1.Entered && styles$D["PopoverOverlay-open"], transitionStatus === TransitionStatus$1.Exiting && styles$D["PopoverOverlay-exiting"], preferredPosition === "cover" && styles$D["PopoverOverlay-noAnimation"]);
+    const className = classNames(styles$E.PopoverOverlay, transitionStatus === TransitionStatus$1.Entering && styles$E["PopoverOverlay-entering"], transitionStatus === TransitionStatus$1.Entered && styles$E["PopoverOverlay-open"], transitionStatus === TransitionStatus$1.Exiting && styles$E["PopoverOverlay-exiting"], preferredPosition === "cover" && styles$E["PopoverOverlay-noAnimation"]);
     return /* @__PURE__ */ React.createElement(PositionedOverlay, {
       ref: this.overlayRef,
       fullWidth,
@@ -21059,7 +21141,7 @@ function RollupActions({
     return null;
   }
   const activatorMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: styles$E.RollupActivator
+    className: styles$F.RollupActivator
   }, /* @__PURE__ */ React.createElement(Button, {
     icon: SvgMenuHorizontalIcon,
     accessibilityLabel: accessibilityLabel || i18n.translate("Polaris.ActionMenu.RollupActions.rollupButton"),
@@ -21077,7 +21159,7 @@ function RollupActions({
     onActionAnyItem: toggleRollupOpen
   }));
 }
-var styles$C = {
+var styles$D = {
   "ActionsLayoutOuter": "Polaris-ActionMenu-Actions__ActionsLayoutOuter",
   "ActionsLayout": "Polaris-ActionMenu-Actions__ActionsLayout",
   "ActionsLayout--measuring": "Polaris-ActionMenu-Actions--actionsLayoutMeasuring",
@@ -21126,10 +21208,10 @@ function getVisibleAndHiddenActionsIndices(actions = [], groups = [], disclosure
     hiddenGroups
   };
 }
-var styles$B = {
+var styles$C = {
   "Details": "Polaris-ActionMenu-MenuGroup__Details"
 };
-var styles$A = {
+var styles$B = {
   "SecondaryAction": "Polaris-ActionMenu-SecondaryAction",
   "critical": "Polaris-ActionMenu-SecondaryAction--critical"
 };
@@ -21150,7 +21232,7 @@ function SecondaryAction({
     content: helpText
   }, buttonMarkup) : buttonMarkup;
   return /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$A.SecondaryAction, tone === "critical" && styles$A.critical)
+    className: classNames(styles$B.SecondaryAction, tone === "critical" && styles$B.critical)
   }, actionMarkup);
 }
 function MenuGroup({
@@ -21197,7 +21279,7 @@ function MenuGroup({
     sections,
     onActionAnyItem: handleClose
   }), details && /* @__PURE__ */ React.createElement("div", {
-    className: styles$B.Details
+    className: styles$C.Details
   }, details));
 }
 const ACTION_SPACING = 8;
@@ -21259,7 +21341,7 @@ function ActionsMeasurer({
   });
   useEventListener("resize", handleMeasurement);
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.ActionsLayoutMeasurer,
+    className: styles$D.ActionsLayoutMeasurer,
     ref: containerNode
   }, actionsMarkup, groupsMarkup, activator);
 }
@@ -21433,9 +21515,9 @@ function Actions({
     handleMeasurement
   });
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.ActionsLayoutOuter
+    className: styles$D.ActionsLayoutOuter
   }, actionsMeasurer, /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$C.ActionsLayout, !hasMeasured && styles$C["ActionsLayout--measuring"])
+    className: classNames(styles$D.ActionsLayout, !hasMeasured && styles$D["ActionsLayout--measuring"])
   }, actionsMarkup, groupsMarkup));
 }
 function isMenuGroup(actionOrMenuGroup) {
@@ -21451,7 +21533,7 @@ function ActionMenu({
   if (actions.length === 0 && groups.length === 0) {
     return null;
   }
-  const actionMenuClassNames = classNames(styles$F.ActionMenu, rollup && styles$F.rollup);
+  const actionMenuClassNames = classNames(styles$G.ActionMenu, rollup && styles$G.rollup);
   const rollupSections = groups.map((group) => convertGroupToSection(group));
   return /* @__PURE__ */ React.createElement("div", {
     className: actionMenuClassNames
@@ -21481,7 +21563,7 @@ function convertGroupToSection({
     }))
   };
 }
-var styles$z = {
+var styles$A = {
   "Listbox": "Polaris-Listbox"
 };
 const ComboboxTextFieldContext = /* @__PURE__ */ reactExports.createContext(void 0);
@@ -21527,7 +21609,7 @@ function scrollOptionIntoView(option, scrollable2) {
 const ListboxContext = /* @__PURE__ */ reactExports.createContext(void 0);
 const WithinListboxContext = /* @__PURE__ */ reactExports.createContext(false);
 const ActionContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$y = {
+var styles$z = {
   "TextOption": "Polaris-Listbox-TextOption",
   "allowMultiple": "Polaris-Listbox-TextOption--allowMultiple",
   "isAction": "Polaris-Listbox-TextOption--isAction",
@@ -21536,7 +21618,7 @@ var styles$y = {
   "Content": "Polaris-Listbox-TextOption__Content",
   "Checkbox": "Polaris-Listbox-TextOption__Checkbox"
 };
-var styles$x = {
+var styles$y = {
   "Checkbox": "Polaris-Checkbox",
   "ChoiceLabel": "Polaris-Checkbox__ChoiceLabel",
   "Backdrop": "Polaris-Checkbox__Backdrop",
@@ -21550,7 +21632,7 @@ var styles$x = {
   "checked": "Polaris-Checkbox--checked",
   "pathAnimation": "Polaris-Checkbox--pathAnimation"
 };
-var styles$w = {
+var styles$x = {
   "Choice": "Polaris-Choice",
   "labelHidden": "Polaris-Choice--labelHidden",
   "Label": "Polaris-Choice__Label",
@@ -21578,7 +21660,7 @@ function Choice({
   bleedInlineEnd,
   tone
 }) {
-  const className = classNames(styles$w.Choice, labelHidden && styles$w.labelHidden, disabled && styles$w.disabled, tone && styles$w[variationName("tone", tone)], labelClassName);
+  const className = classNames(styles$x.Choice, labelHidden && styles$x.labelHidden, disabled && styles$x.disabled, tone && styles$x[variationName("tone", tone)], labelClassName);
   const labelStyle = {
     // Pass through overrides for bleed values if they're set by the prop
     ...getResponsiveProps("choice", "bleed-block-end", "space", bleedBlockEnd || bleed),
@@ -21603,29 +21685,29 @@ function Choice({
       onClick,
       style: sanitizeCustomProperties(labelStyle)
     }, /* @__PURE__ */ React.createElement("span", {
-      className: styles$w.Control
+      className: styles$x.Control
     }, children), /* @__PURE__ */ React.createElement("span", {
-      className: styles$w.Label
+      className: styles$x.Label
     }, /* @__PURE__ */ React.createElement(Text, {
       as: "span",
       variant: "bodyMd"
     }, label)))
   );
   const helpTextMarkup = helpText ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$w.HelpText,
+    className: styles$x.HelpText,
     id: helpTextID(id)
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     tone: disabled ? void 0 : "subdued"
   }, helpText)) : null;
   const errorMarkup = error && typeof error !== "boolean" && /* @__PURE__ */ React.createElement("div", {
-    className: styles$w.Error
+    className: styles$x.Error
   }, /* @__PURE__ */ React.createElement(InlineError, {
     message: error,
     fieldID: id
   }));
   const descriptionMarkup = helpTextMarkup || errorMarkup ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$w.Descriptions
+    className: styles$x.Descriptions
   }, errorMarkup, helpTextMarkup) : null;
   return descriptionMarkup ? /* @__PURE__ */ React.createElement("div", null, labelMarkup, descriptionMarkup) : labelMarkup;
 }
@@ -21688,7 +21770,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     describedBy.push(ariaDescribedByProp);
   }
   const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
-  const wrapperClassName = classNames(styles$x.Checkbox, error && styles$x.error);
+  const wrapperClassName = classNames(styles$y.Checkbox, error && styles$y.error);
   const isIndeterminate = checked === "indeterminate";
   const isChecked = !isIndeterminate && Boolean(checked);
   const indeterminateAttributes = isIndeterminate ? {
@@ -21702,7 +21784,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     shapeRendering: "geometricPrecision",
     textRendering: "geometricPrecision"
   }, /* @__PURE__ */ React.createElement("path", {
-    className: classNames(checked && styles$x.checked),
+    className: classNames(checked && styles$y.checked),
     d: "M1.5,5.5L3.44655,8.22517C3.72862,8.62007,4.30578,8.64717,4.62362,8.28044L10.5,1.5",
     transform: "translate(2 2.980376)",
     opacity: "0",
@@ -21713,7 +21795,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     strokeLinejoin: "round",
     pathLength: "1"
   }));
-  const inputClassName = classNames(styles$x.Input, isIndeterminate && styles$x["Input-indeterminate"], tone && styles$x[variationName("tone", tone)]);
+  const inputClassName = classNames(styles$y.Input, isIndeterminate && styles$y["Input-indeterminate"], tone && styles$y[variationName("tone", tone)]);
   const extraChoiceProps = {
     helpText,
     error,
@@ -21728,7 +21810,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     label,
     labelHidden,
     disabled,
-    labelClassName: classNames(styles$x.ChoiceLabel, labelClassName),
+    labelClassName: classNames(styles$y.ChoiceLabel, labelClassName),
     fill,
     tone
   }, extraChoiceProps), /* @__PURE__ */ React.createElement("span", {
@@ -21751,11 +21833,11 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     "aria-describedby": ariaDescribedBy,
     role: isWithinListbox ? "presentation" : "checkbox"
   }, indeterminateAttributes)), /* @__PURE__ */ React.createElement("span", {
-    className: styles$x.Backdrop,
+    className: styles$y.Backdrop,
     onClick: stopPropagation,
     onKeyUp: stopPropagation
   }), /* @__PURE__ */ React.createElement("span", {
-    className: classNames(styles$x.Icon, !isIndeterminate && styles$x.animated)
+    className: classNames(styles$y.Icon, !isIndeterminate && styles$y.animated)
   }, isIndeterminate ? /* @__PURE__ */ React.createElement(Icon, {
     source: SvgMinusIcon
   }) : iconSource)));
@@ -21774,7 +21856,7 @@ const TextOption = /* @__PURE__ */ reactExports.memo(function TextOption2({
     allowMultiple
   } = reactExports.useContext(ComboboxListboxOptionContext);
   const isAction = reactExports.useContext(ActionContext);
-  const textOptionClassName = classNames(styles$y.TextOption, selected && !allowMultiple && styles$y.selected, disabled && styles$y.disabled, allowMultiple && styles$y.allowMultiple, isAction && styles$y.isAction);
+  const textOptionClassName = classNames(styles$z.TextOption, selected && !allowMultiple && styles$z.selected, disabled && styles$z.disabled, allowMultiple && styles$z.allowMultiple, isAction && styles$z.isAction);
   const optionMarkup = selected ? /* @__PURE__ */ React.createElement(Box, {
     width: "100%"
   }, /* @__PURE__ */ React.createElement(InlineStack, {
@@ -21789,16 +21871,16 @@ const TextOption = /* @__PURE__ */ reactExports.memo(function TextOption2({
   return /* @__PURE__ */ React.createElement("div", {
     className: textOptionClassName
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$y.Content
+    className: styles$z.Content
   }, allowMultiple && !isAction ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$y.Checkbox
+    className: styles$z.Checkbox
   }, /* @__PURE__ */ React.createElement(Checkbox, {
     disabled,
     checked: selected,
     label: children
   })) : optionMarkup));
 });
-var styles$v = {
+var styles$w = {
   "ListItem": "Polaris-Listbox-Loading__ListItem",
   "Loading": "Polaris-Listbox-Loading"
 };
@@ -21823,10 +21905,10 @@ const Loading$1 = /* @__PURE__ */ reactExports.memo(function LoadingOption({
     };
   }, [label, setLoading]);
   return /* @__PURE__ */ React.createElement("li", {
-    className: styles$v.ListItem,
+    className: styles$w.ListItem,
     role: "presentation"
   }, children ? children : /* @__PURE__ */ React.createElement("div", {
-    className: styles$v.Loading
+    className: styles$w.Loading
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
     size: "small",
     accessibilityLabel: label
@@ -21841,7 +21923,7 @@ const listboxWithinSectionDataSelector = {
   attribute: "data-polaris-listbox-within-section-item"
 };
 const SectionContext = /* @__PURE__ */ reactExports.createContext(null);
-var styles$u = {
+var styles$v = {
   "SectionGroup": "Polaris-Listbox-Section__SectionGroup",
   "noDivider": "Polaris-Listbox-Section--noDivider"
 };
@@ -21858,7 +21940,7 @@ function Section$1({
   }, listboxSectionDataSelector.props), title, /* @__PURE__ */ React.createElement("ul", {
     role: "group",
     "aria-labelledby": id,
-    className: classNames(styles$u.SectionGroup, !divider && styles$u.noDivider)
+    className: classNames(styles$v.SectionGroup, !divider && styles$v.noDivider)
   }, children)));
 }
 function useSection() {
@@ -21884,12 +21966,12 @@ function Header$2({
     id: sectionId
   }, content);
 }
-var styles$t = {
+var styles$u = {
   "Action": "Polaris-Listbox-Action",
   "ActionDivider": "Polaris-Listbox-Action__ActionDivider",
   "Icon": "Polaris-Listbox-Action__Icon"
 };
-var styles$s = {
+var styles$t = {
   "Option": "Polaris-Listbox-Option",
   "divider": "Polaris-Listbox-Option--divider"
 };
@@ -21951,7 +22033,7 @@ const Option = /* @__PURE__ */ reactExports.memo(function Option2({
     "data-listbox-option-value": value,
     "data-listbox-option-destructive": destructive,
     "data-within-section": isWithinSection,
-    className: classNames(styles$s.Option, divider && styles$s.divider),
+    className: classNames(styles$t.Option, divider && styles$t.divider),
     id: domId,
     ref: listItemRef,
     tabIndex: -1,
@@ -21973,12 +22055,12 @@ function Action(props) {
     divider
   } = props;
   const iconMarkup = icon && /* @__PURE__ */ React.createElement("div", {
-    className: styles$t.Icon
+    className: styles$u.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     tone: "subdued",
     source: icon
   }));
-  const className = classNames(styles$t.Action, divider && styles$t.ActionDivider);
+  const className = classNames(styles$u.Action, divider && styles$u.ActionDivider);
   return /* @__PURE__ */ React.createElement(ActionContext.Provider, {
     value: true
   }, /* @__PURE__ */ React.createElement(Option, props, /* @__PURE__ */ React.createElement("div", {
@@ -22281,7 +22363,7 @@ function Listbox({
   }, children ? /* @__PURE__ */ React.createElement("ul", {
     tabIndex: 0,
     role: "listbox",
-    className: styles$z.Listbox,
+    className: styles$A.Listbox,
     "aria-label": inCombobox ? void 0 : accessibilityLabel,
     "aria-labelledby": textFieldLabelId,
     "aria-busy": Boolean(loading),
@@ -22298,7 +22380,7 @@ Listbox.Loading = Loading$1;
 Listbox.Section = Section$1;
 Listbox.Header = Header$2;
 Listbox.Action = Action;
-var styles$r = {
+var styles$s = {
   "Listbox": "Polaris-Combobox__Listbox"
 };
 function TextField({
@@ -22455,11 +22537,11 @@ function Combobox({
   }, /* @__PURE__ */ React.createElement(ComboboxListboxOptionContext.Provider, {
     value: listboxOptionContextValue
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$r.Listbox
+    className: styles$s.Listbox
   }, children)))) : null);
 }
 Combobox.TextField = TextField;
-var styles$q = {
+var styles$r = {
   "Backdrop": "Polaris-Backdrop",
   "transparent": "Polaris-Backdrop--transparent",
   "belowNavigation": "Polaris-Backdrop--belowNavigation"
@@ -22489,7 +22571,7 @@ function Backdrop(props) {
     transparent,
     setClosing
   } = props;
-  const className = classNames(styles$q.Backdrop, belowNavigation && styles$q.belowNavigation, transparent && styles$q.transparent);
+  const className = classNames(styles$r.Backdrop, belowNavigation && styles$r.belowNavigation, transparent && styles$r.transparent);
   const handleMouseDown = () => {
     if (setClosing) {
       setClosing(true);
@@ -22511,7 +22593,7 @@ function Backdrop(props) {
   }));
 }
 const BannerContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$p = {
+var styles$q = {
   "Banner": "Polaris-Banner",
   "keyFocused": "Polaris-Banner--keyFocused",
   "withinContentContainer": "Polaris-Banner--withinContentContainer",
@@ -22609,7 +22691,7 @@ function useBannerFocus(bannerRef) {
     shouldShowFocus
   };
 }
-var styles$o = {
+var styles$p = {
   "ButtonGroup": "Polaris-ButtonGroup",
   "Item": "Polaris-ButtonGroup__Item",
   "Item-plain": "Polaris-ButtonGroup__Item--plain",
@@ -22629,7 +22711,7 @@ function Item$3({
     setTrue: forceTrueFocused,
     setFalse: forceFalseFocused
   } = useToggle(false);
-  const className = classNames(styles$o.Item, focused && styles$o["Item-focused"], button.props.variant === "plain" && styles$o["Item-plain"]);
+  const className = classNames(styles$p.Item, focused && styles$p["Item-focused"], button.props.variant === "plain" && styles$p["Item-plain"]);
   return /* @__PURE__ */ React.createElement("div", {
     className,
     onFocus: forceTrueFocused,
@@ -22644,7 +22726,7 @@ function ButtonGroup({
   connectedTop,
   noWrap
 }) {
-  const className = classNames(styles$o.ButtonGroup, gap && styles$o[gap], variant && styles$o[variationName("variant", variant)], fullWidth && styles$o.fullWidth, noWrap && styles$o.noWrap);
+  const className = classNames(styles$p.ButtonGroup, gap && styles$p[gap], variant && styles$p[variationName("variant", variant)], fullWidth && styles$p.fullWidth, noWrap && styles$p.noWrap);
   const contents = elementChildren(children).map((child, index) => /* @__PURE__ */ React.createElement(Item$3, {
     button: child,
     key: index
@@ -22670,7 +22752,7 @@ const Banner = /* @__PURE__ */ reactExports.forwardRef(function Banner2(props, b
     handleMouseUp,
     shouldShowFocus
   } = useBannerFocus(bannerRef);
-  const className = classNames(styles$p.Banner, shouldShowFocus && styles$p.keyFocused, withinContentContainer ? styles$p.withinContentContainer : styles$p.withinPage);
+  const className = classNames(styles$q.Banner, shouldShowFocus && styles$q.keyFocused, withinContentContainer ? styles$q.withinContentContainer : styles$q.withinPage);
   return /* @__PURE__ */ React.createElement(BannerContext.Provider, {
     value: true
   }, /* @__PURE__ */ React.createElement("div", {
@@ -22708,7 +22790,7 @@ function BannerLayout({
       breakWord: true
     }, title) : null,
     bannerIcon: hideIcon ? null : /* @__PURE__ */ React.createElement("span", {
-      className: styles$p[bannerColors.icon]
+      className: styles$q[bannerColors.icon]
     }, /* @__PURE__ */ React.createElement(Icon, {
       source: icon ?? bannerAttributes[bannerTone].icon
     })),
@@ -22720,7 +22802,7 @@ function BannerLayout({
     dismissButton: onDismiss ? /* @__PURE__ */ React.createElement(Button, {
       variant: "tertiary",
       icon: /* @__PURE__ */ React.createElement("span", {
-        className: styles$p[isInlineIconBanner ? "icon-secondary" : bannerColors.icon]
+        className: styles$q[isInlineIconBanner ? "icon-secondary" : bannerColors.icon]
       }, /* @__PURE__ */ React.createElement(Icon, {
         source: SvgXIcon
       })),
@@ -22830,7 +22912,7 @@ function InlineIconBanner({
     gap: "200"
   }, /* @__PURE__ */ React.createElement("div", null, children), actionButtons)))), /* @__PURE__ */ React.createElement("div", {
     ref: dismissIconNode,
-    className: styles$p.DismissIcon
+    className: styles$q.DismissIcon
   }, dismissButton)));
 }
 function WithinContentContainerBanner({
@@ -22864,7 +22946,7 @@ function WithinContentContainerBanner({
     gap: "050"
   }, bannerTitle, /* @__PURE__ */ React.createElement("div", null, children)), actionButtons))), dismissButton));
 }
-var styles$n = {
+var styles$o = {
   "Bleed": "Polaris-Bleed"
 };
 const Bleed = ({
@@ -22906,7 +22988,7 @@ const Bleed = ({
     ...getResponsiveProps("bleed", "margin-inline-end", "space", negativeMarginInlineEnd)
   };
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$n.Bleed,
+    className: styles$o.Bleed,
     style: sanitizeCustomProperties(style)
   }, children);
 };
@@ -22925,7 +23007,7 @@ function Breadcrumbs({
     accessibilityLabel: backAction.accessibilityLabel ?? content
   });
 }
-var styles$m = {
+var styles$n = {
   "LegacyStack": "Polaris-LegacyStack",
   "Item": "Polaris-LegacyStack__Item",
   "noWrap": "Polaris-LegacyStack--noWrap",
@@ -22953,7 +23035,7 @@ function Item$2({
   children,
   fill
 }) {
-  const className = classNames(styles$m.Item, fill && styles$m["Item-fill"]);
+  const className = classNames(styles$n.Item, fill && styles$n["Item-fill"]);
   return /* @__PURE__ */ React.createElement("div", {
     className
   }, children);
@@ -22966,7 +23048,7 @@ const LegacyStack = /* @__PURE__ */ reactExports.memo(function Stack({
   alignment,
   wrap
 }) {
-  const className = classNames(styles$m.LegacyStack, vertical && styles$m.vertical, spacing && styles$m[variationName("spacing", spacing)], distribution && styles$m[variationName("distribution", distribution)], alignment && styles$m[variationName("alignment", alignment)], wrap === false && styles$m.noWrap);
+  const className = classNames(styles$n.LegacyStack, vertical && styles$n.vertical, spacing && styles$n[variationName("spacing", spacing)], distribution && styles$n[variationName("distribution", distribution)], alignment && styles$n[variationName("alignment", alignment)], wrap === false && styles$n.noWrap);
   const itemMarkup = elementChildren(children).map((child, index) => {
     const props = {
       key: index
@@ -22978,10 +23060,10 @@ const LegacyStack = /* @__PURE__ */ reactExports.memo(function Stack({
   }, itemMarkup);
 });
 LegacyStack.Item = Item$2;
-var styles$l = {
+var styles$m = {
   "ChoiceChildren": "Polaris-ChoiceList__ChoiceChildren"
 };
-var styles$k = {
+var styles$l = {
   "RadioButton": "Polaris-RadioButton",
   "Input": "Polaris-RadioButton__Input",
   "Backdrop": "Polaris-RadioButton__Backdrop",
@@ -23029,7 +23111,7 @@ function RadioButton({
     describedBy.push(ariaDescribedByProp);
   }
   const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
-  const inputClassName = classNames(styles$k.Input, tone && styles$k[variationName("tone", tone)]);
+  const inputClassName = classNames(styles$l.Input, tone && styles$l[variationName("tone", tone)]);
   const extraChoiceProps = {
     helpText,
     bleed,
@@ -23043,12 +23125,12 @@ function RadioButton({
     labelHidden,
     disabled,
     id,
-    labelClassName: styles$k.ChoiceLabel,
+    labelClassName: styles$l.ChoiceLabel,
     fill
   }, extraChoiceProps, checked ? {
     tone
   } : {}), /* @__PURE__ */ React.createElement("span", {
-    className: styles$k.RadioButton
+    className: styles$l.RadioButton
   }, /* @__PURE__ */ React.createElement("input", {
     id,
     name,
@@ -23063,7 +23145,7 @@ function RadioButton({
     "aria-describedby": ariaDescribedBy,
     ref: inputNode
   }), /* @__PURE__ */ React.createElement("span", {
-    className: styles$k.Backdrop
+    className: styles$l.Backdrop
   })));
 }
 function ChoiceList({
@@ -23108,7 +23190,7 @@ function ChoiceList({
     const isSelected = choiceIsSelected(choice, selected);
     const renderedChildren = choice.renderChildren ? choice.renderChildren(isSelected) : null;
     const children = renderedChildren ? /* @__PURE__ */ React.createElement("div", {
-      className: styles$l.ChoiceChildren
+      className: styles$m.ChoiceChildren
     }, /* @__PURE__ */ React.createElement(Box, {
       paddingBlockStart: {
         xs: "400",
@@ -23181,6 +23263,117 @@ function updateSelectedChoices({
     return allowMultiple ? [...selected, value] : [value];
   }
   return selected.filter((selectedChoice) => selectedChoice !== value);
+}
+var styles$k = {
+  "Collapsible": "Polaris-Collapsible",
+  "isFullyClosed": "Polaris-Collapsible--isFullyClosed",
+  "expandOnPrint": "Polaris-Collapsible--expandOnPrint",
+  "inline": "Polaris-Collapsible--inline",
+  "animateIn": "Polaris-Collapsible--animateIn"
+};
+function Collapsible({
+  id,
+  expandOnPrint,
+  open,
+  variant = "block",
+  transition = true,
+  children,
+  onAnimationEnd
+}) {
+  const [size, setSize] = reactExports.useState(0);
+  const [isOpen, setIsOpen] = reactExports.useState(open);
+  const collapsibleContainer = reactExports.useRef(null);
+  const animateIn = typeof transition === "object" && transition.animateIn;
+  const [animationState, setAnimationState] = reactExports.useState(animateIn ? "measuring" : "idle");
+  const isFullyOpen = animationState === "idle" && open && isOpen;
+  const isFullyClosed = animationState === "idle" && !open && !isOpen;
+  const content = expandOnPrint || !isFullyClosed ? children : null;
+  const vertical = variant === "block";
+  const wrapperClassName = classNames(styles$k.Collapsible, isFullyClosed && styles$k.isFullyClosed, expandOnPrint && styles$k.expandOnPrint, variant === "inline" && styles$k.inline, animateIn && styles$k.animateIn);
+  const transitionDisabled = isTransitionDisabled(transition);
+  const transitionStyles = typeof transition === "object" && {
+    transitionDelay: createVar(`motion-duration-${transition.delay ?? "0"}`),
+    transitionDuration: transition.duration,
+    transitionTimingFunction: transition.timingFunction
+  };
+  const collapsibleStyles = {
+    ...transitionStyles,
+    ...vertical ? {
+      maxHeight: isFullyOpen ? "none" : `${size}px`,
+      overflow: isFullyOpen ? "visible" : "hidden"
+    } : {
+      maxWidth: isFullyOpen ? "none" : `${size}px`,
+      overflow: isFullyOpen ? "visible" : "hidden"
+    }
+  };
+  const handleCompleteAnimation = reactExports.useCallback(({
+    target
+  }) => {
+    if (target === collapsibleContainer.current) {
+      setAnimationState("idle");
+      setIsOpen(open);
+      onAnimationEnd && onAnimationEnd();
+    }
+  }, [onAnimationEnd, open]);
+  const startAnimation = reactExports.useCallback(() => {
+    if (transitionDisabled) {
+      setIsOpen(open);
+      setAnimationState("idle");
+      if (open && collapsibleContainer.current) {
+        setSize(vertical ? collapsibleContainer.current.scrollHeight : collapsibleContainer.current.scrollWidth);
+      } else {
+        setSize(0);
+      }
+    } else {
+      setAnimationState("measuring");
+    }
+  }, [open, vertical, transitionDisabled]);
+  reactExports.useEffect(() => {
+    if (open !== isOpen) {
+      startAnimation();
+    }
+  }, [open, isOpen]);
+  reactExports.useEffect(() => {
+    if (!open || !collapsibleContainer.current) return;
+    setSize(vertical ? collapsibleContainer.current.scrollHeight : collapsibleContainer.current.scrollWidth);
+  }, []);
+  reactExports.useEffect(() => {
+    if (!collapsibleContainer.current) return;
+    switch (animationState) {
+      case "idle":
+        break;
+      case "measuring":
+        setSize(vertical ? collapsibleContainer.current.scrollHeight : collapsibleContainer.current.scrollWidth);
+        setAnimationState("animating");
+        break;
+      case "animating":
+        setSize(
+          // eslint-disable-next-line no-nested-ternary
+          open ? vertical ? collapsibleContainer.current.scrollHeight : collapsibleContainer.current.scrollWidth : 0
+        );
+    }
+  }, [animationState, vertical, open, isOpen]);
+  return /* @__PURE__ */ React.createElement("div", {
+    id,
+    style: collapsibleStyles,
+    ref: collapsibleContainer,
+    className: wrapperClassName,
+    onTransitionEnd: handleCompleteAnimation,
+    "aria-hidden": !open
+  }, content);
+}
+const zeroDurationRegex = /^0(ms|s)$/;
+function isTransitionDisabled(transitionProp) {
+  if (typeof transitionProp === "boolean") {
+    return !transitionProp;
+  }
+  const {
+    duration
+  } = transitionProp;
+  if (duration && zeroDurationRegex.test(duration.trim())) {
+    return true;
+  }
+  return false;
 }
 var styles$j = {
   "ColorPicker": "Polaris-ColorPicker",
@@ -26050,7 +26243,7 @@ function useIsTouchDevice() {
   useEventListener("touchstart", handleTouchStart);
   return isTouchDevice;
 }
-function usePrevious(value) {
+function usePrevious$1(value) {
   const ref = reactExports.useRef();
   reactExports.useEffect(() => {
     ref.current = value;
@@ -26805,8 +26998,8 @@ const Tabs = ({
     isTabModalOpen,
     isTabPopoverOpen
   } = state;
-  const prevModalOpen = usePrevious(isTabModalOpen);
-  const prevPopoverOpen = usePrevious(isTabPopoverOpen);
+  const prevModalOpen = usePrevious$1(isTabModalOpen);
+  const prevPopoverOpen = usePrevious$1(isTabPopoverOpen);
   reactExports.useEffect(() => {
     const hasModalClosed = prevModalOpen && !isTabModalOpen;
     const hasPopoverClosed = prevPopoverOpen && !isTabPopoverOpen;
@@ -28321,7 +28514,7 @@ function BrixSwatch({ hex, children }) {
 }
 const LazyMarkdown = reactExports.lazy(async () => {
   const [{ default: ReactMarkdown }, { default: remarkGfm }] = await Promise.all([
-    __vitePreload(() => import("./index-C4S8Ao1D.js"), true ? __vite__mapDeps([0,1]) : void 0),
+    __vitePreload(() => import("./index-DulnYKc1.js"), true ? __vite__mapDeps([0,1]) : void 0),
     __vitePreload(() => import("./index-DjYGdUn3.js"), true ? __vite__mapDeps([2,1]) : void 0)
   ]);
   return {
@@ -28594,7 +28787,7 @@ function TrendChart({ daily, tab, fmt }) {
     }
   );
 }
-const CSS$2 = `
+const CSS$3 = `
 .bsr{width:560px;max-width:100%;box-sizing:border-box;background:#fff;border:1px solid #e8e8ec;border-radius:16px;padding:14px;color:#111827;box-shadow:0 1px 2px rgba(16,24,40,.04);animation:bsrIn .3s ease}
 .bsr *{box-sizing:border-box}
 .bsr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap}
@@ -28658,7 +28851,7 @@ function SalesReportWidget({ report }) {
   const funnelMax = Math.max(...funnelSteps.map((s) => s.value), 1);
   const showFunnel = funnelSteps.some((s) => s.value > 0);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bsr", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS$2 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS$3 }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bsr-head", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bsr-title", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bsr-title-ic", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 3v18h18M7 15l4-4 3 3 5-6" }) }) }),
@@ -28775,7 +28968,7 @@ const TYPES = [
     ] })
   }
 ];
-const CSS$1 = `
+const CSS$2 = `
 .bdf{width:520px;max-width:100%;box-sizing:border-box;background:#fff;border:1px solid #e8e8ec;border-radius:16px;padding:14px;color:#111827;box-shadow:0 1px 2px rgba(16,24,40,.04);animation:bdfIn .3s ease}
 .bdf *{box-sizing:border-box}
 .bdf-head{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin-bottom:12px}
@@ -28899,7 +29092,7 @@ function DiscountFormWidget({ prefill, onCreate }) {
   };
   const shown = (key) => touched && errors[key];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bdf", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS$1 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS$2 }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bdf-head", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bdf-head-ic", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M20 12l-8 8-9-9V3h8l9 9z" }),
@@ -28993,7 +29186,7 @@ function pickStyle(tip) {
   }
   return FALLBACK;
 }
-const CSS = `
+const CSS$1 = `
 .brix-tips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;width:100%}
 .brix-tip{position:relative;display:flex;flex-direction:column;gap:10px;background:#fff;border:1px solid #e8e8ec;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:transform .15s ease,box-shadow .15s ease;animation:brixTipIn .28s ease backwards}
 .brix-tip:last-child:nth-child(odd){grid-column:1/-1}
@@ -29023,7 +29216,7 @@ const CSS = `
 `;
 function TipCards({ tips, size = "lg", onPick, disabled = false }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS$1 }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `brix-tips brix-tips-${size}`, children: tips.map((tip, i) => {
       const [icon, color, tint] = pickStyle(tip);
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -31158,7 +31351,7 @@ function DesignSection() {
     ] }) })
   ] });
 }
-function ColorField({ label, value, onChange }) {
+function ColorField$1({ label, value, onChange }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
     TextField$1,
     {
@@ -31228,7 +31421,7 @@ function HeaderSection() {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Background Color",
             value: header.bgColor,
@@ -31236,7 +31429,7 @@ function HeaderSection() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Text Color",
             value: header.textColor,
@@ -31292,7 +31485,7 @@ function AnnouncementsSection() {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Background Color",
             value: announcements.bgColor,
@@ -31300,7 +31493,7 @@ function AnnouncementsSection() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Text Color",
             value: announcements.textColor,
@@ -31353,6 +31546,80 @@ function AnnouncementsSection() {
         ] })
       ] })
     ] }) })
+  ] });
+}
+const CSS = `
+.rpm{display:flex;flex-direction:column;gap:14px}
+.rpm-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rpm-search{flex:1;min-width:160px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid #c9cccf;border-radius:10px;background:#fff;color:#6d7175;transition:border-color .15s,box-shadow .15s}
+.rpm-search:focus-within{border-color:#2c6ecb;box-shadow:0 0 0 3px rgba(44,110,203,.15)}
+.rpm-search input{flex:1;min-width:0;border:none;outline:none;background:transparent;font:inherit;font-size:14px;padding:9px 0;color:#202223}
+.rpm-count{flex-shrink:0;padding:4px 12px;border-radius:999px;background:#f1f2f3;color:#6d7175;font-size:12px;font-weight:650}
+.rpm-count[data-active="true"]{background:#e3f1df;color:#0c5132}
+.rpm-btn{flex-shrink:0;border:1px solid #c9cccf;background:#fff;color:#202223;font:inherit;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,transform .15s}
+.rpm-btn:hover:not(:disabled){background:#f6f6f7;border-color:#b5bac0;transform:translateY(-1px)}
+.rpm-btn:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
+.rpm-btn:disabled{opacity:.5;cursor:default}
+.rpm-btn--quiet{color:#8e1f0b;border-color:#f0c4bd;background:#fff8f7}
+.rpm-btn--quiet:hover:not(:disabled){background:#fdeceb;border-color:#e8a79d}
+.rpm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;max-height:420px;overflow-y:auto;padding:4px}
+.rpm-card{position:relative;display:flex;flex-direction:column;gap:4px;text-align:left;font:inherit;background:#fff;border:1.5px solid #e1e3e5;border-radius:14px;padding:8px 8px 10px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
+.rpm-card:hover{border-color:#b5bac0;transform:translateY(-1px);box-shadow:0 4px 12px rgba(16,24,40,.08)}
+.rpm-card:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
+.rpm-card[data-selected="true"]{border-color:#2c6ecb;background:#f5f9ff;box-shadow:0 0 0 3px rgba(44,110,203,.16)}
+.rpm-img{position:relative;display:block;width:100%;aspect-ratio:1/1;border-radius:10px;background:#f1f2f3 center/cover no-repeat;overflow:hidden}
+.rpm-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#a3a8ae}
+.rpm-check{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:#fff;border:1.5px solid #c9cccf;color:transparent;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.rpm-card[data-selected="true"] .rpm-check{background:#2c6ecb;border-color:#2c6ecb;color:#fff}
+.rpm-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;font-weight:650;color:#202223;line-height:1.3;margin-top:4px}
+.rpm-price{font-size:12px;color:#6d7175}
+.rpm-none{margin:12px 0;text-align:center;color:#6d7175;font-size:13px}
+`;
+function ProductPickerBody({ products, selectedIds, setSelectedIds, currencySymbol = "", resetKey }) {
+  const [query, setQuery] = reactExports.useState("");
+  reactExports.useEffect(() => {
+    setQuery("");
+  }, [resetKey]);
+  const needle = query.trim().toLowerCase();
+  const visible = needle ? products.filter((p) => String(p.title || "").toLowerCase().includes(needle)) : products;
+  const toggle2 = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const allVisibleSelected = visible.length > 0 && visible.every((p) => selectedIds.includes(p.id));
+  const toggleAllVisible = () => {
+    const visibleIds = visible.map((p) => p.id);
+    setSelectedIds((prev) => allVisibleSelected ? prev.filter((id) => !visibleIds.includes(id)) : [...prev, ...visibleIds.filter((id) => !prev.includes(id))]);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: CSS }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpm-bar", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpm-search", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "16", height: "16", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fillRule: "evenodd", d: "M8 3a5 5 0 103.05 8.96l3.49 3.5a.75.75 0 101.06-1.06l-3.5-3.49A5 5 0 008 3zM4.5 8a3.5 3.5 0 116.99.2A3.5 3.5 0 014.5 8z", clipRule: "evenodd" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "search", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "Search products", "aria-label": "Search products" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rpm-count", "data-active": selectedIds.length > 0, children: [
+        selectedIds.length,
+        " selected"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "rpm-btn", onClick: toggleAllVisible, disabled: visible.length === 0, children: allVisibleSelected ? "Deselect all" : needle ? "Select all shown" : "Select all" }),
+      selectedIds.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "rpm-btn rpm-btn--quiet", onClick: () => setSelectedIds([]), children: "Clear" })
+    ] }),
+    visible.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "rpm-none", children: [
+      'No products match "',
+      query,
+      '".'
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rpm-grid", children: visible.map((product) => {
+      const isSelected = selectedIds.includes(product.id);
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "rpm-card", "data-selected": isSelected, "aria-pressed": isSelected, onClick: () => toggle2(product.id), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rpm-img", style: product.image ? { backgroundImage: `url("${product.image}")` } : void 0, children: [
+          !product.image && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpm-ph", children: (product.title || "?").charAt(0).toUpperCase() }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpm-check", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "12", height: "12", viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", strokeWidth: "3", strokeLinecap: "round", strokeLinejoin: "round", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M4 10.5l4 4 8-9" }) }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpm-title", children: product.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rpm-price", children: [
+          currencySymbol,
+          product.price
+        ] })
+      ] }, product.id);
+    }) })
   ] });
 }
 const PLAN_KEYS = ["free", "starter", "pro"];
@@ -31555,7 +31822,7 @@ const useCurrency = () => {
   return context;
 };
 const PRODUCT_PICKER_STORAGE_KEY = "cached_products";
-function ProductPickerModal$1({ open, onClose, onSave, initialSelectedIds, title }) {
+function ProductPickerModal$2({ open, onClose, onSave, initialSelectedIds, title }) {
   const { allProducts: contextProducts } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = reactExports.useState([]);
@@ -31615,86 +31882,99 @@ function ProductPickerModal$1({ open, onClose, onSave, initialSelectedIds, title
       setInitialized(true);
     });
   }, [open, initialSelectedIds, contextProducts]);
-  const toggle2 = (id) => {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  };
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     Modal,
     {
       open,
       onClose,
       title: title || "Select Products",
+      size: "large",
       primaryAction: { content: "Save Selection", onAction: () => {
         onSave(selectedIds);
         onClose();
       } },
       secondaryActions: [{ content: "Cancel", onAction: onClose }],
-      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "400", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodyMd", tone: "subdued", children: "Select products for this reward milestone." }),
-        loading ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", children: "Loading products..." }) : fetchError ? /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "critical", children: "Failed to load products. Check your connection." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "slim", onClick: () => {
-            setLoading(true);
-            setFetchError(false);
-            fetch("/api/upsell").then((r) => r.json()).then((data) => {
-              var _a;
-              setAllProducts(((_a = data == null ? void 0 : data.data) == null ? void 0 : _a.allProducts) || []);
-              setLoading(false);
-            }).catch(() => {
-              setFetchError(true);
-              setLoading(false);
-            });
-          }, children: "Retry" })
-        ] }) : allProducts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "No products found. Make sure your store has products." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "6px", maxHeight: "400px", overflowY: "auto" }, children: allProducts.map((product) => {
-          const isSelected = selectedIds.includes(product.id);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
-            {
-              onClick: () => toggle2(product.id),
-              style: {
-                padding: "8px 10px",
-                border: isSelected ? "2px solid #2c6ecb" : "1px solid #e5e7eb",
-                borderRadius: "8px",
-                background: isSelected ? "#f0f7ff" : "#fff",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                transition: "all 0.15s"
-              },
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "6px",
-                  overflow: "hidden",
-                  flexShrink: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "#f8fafc",
-                  border: "1px solid #f1f5f9"
-                }, children: product.image ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: product.image, alt: product.title, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "📦" }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "050", style: { flex: 1, minWidth: 0 }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { fontWeight: "bold", variant: "bodySm", children: product.title }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { tone: "subdued", variant: "bodyXs", children: [
-                    currencySymbol,
-                    product.price
-                  ] })
-                ] }),
-                isSelected && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#2c6ecb", fontSize: "18px", fontWeight: 700 }, children: "✓" })
-              ]
-            },
-            product.id
-          );
-        }) })
-      ] }) })
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: loading ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", children: "Loading products..." }) : fetchError ? /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "critical", children: "Failed to load products. Check your connection." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "slim", onClick: () => {
+          setLoading(true);
+          setFetchError(false);
+          fetch("/api/upsell").then((r) => r.json()).then((data) => {
+            var _a;
+            setAllProducts(((_a = data == null ? void 0 : data.data) == null ? void 0 : _a.allProducts) || []);
+            setLoading(false);
+          }).catch(() => {
+            setFetchError(true);
+            setLoading(false);
+          });
+        }, children: "Retry" })
+      ] }) : allProducts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "No products found. Make sure your store has products." }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProductPickerBody, { products: allProducts, selectedIds, setSelectedIds, currencySymbol, resetKey: open }) })
     }
   );
 }
+const REWARD_CARD_CSS = `
+.rpc{border:1.5px dashed #c9cccf;border-radius:12px;padding:14px;background:#fafbfb;display:flex;flex-direction:column;gap:12px}
+.rpc[data-filled="true"]{border:1px solid #e1e3e5;border-style:solid;background:linear-gradient(135deg,#f6fbf8 0%,#ffffff 70%);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.rpc-empty{display:flex;align-items:center;gap:12px}
+.rpc-ic{flex-shrink:0;width:40px;height:40px;border-radius:11px;background:#e3f1df;color:#0c5132;display:flex;align-items:center;justify-content:center}
+.rpc-empty .rpc-ic{background:#eef0f2;color:#6d7175}
+.rpc-txt{min-width:0;flex:1}
+.rpc-title{margin:0;font-size:13px;font-weight:650;color:#202223}
+.rpc-sub{margin:2px 0 0;font-size:12px;color:#6d7175;line-height:1.35}
+.rpc-thumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rpc-thumb{position:relative;width:44px;height:44px;border-radius:10px;border:1px solid #e1e3e5;background:#f1f2f3 center/cover no-repeat;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#8c9196;font-size:15px;font-weight:700}
+.rpc-more{width:44px;height:44px;border-radius:10px;background:#eef0f2;color:#4a4f55;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.rpc-names{font-size:12px;color:#4a4f55;line-height:1.4;overflow-wrap:anywhere}
+.rpc-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rpc-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#e3f1df;color:#0c5132;font-size:12px;font-weight:650}
+`;
+function RewardProductsCard({ ids, catalog, onEdit }) {
+  const picked = (ids || []).map((id) => (catalog || []).find((p) => p.id === id)).filter(Boolean);
+  const count = (ids || []).length;
+  const shown = picked.slice(0, 4);
+  const extra = count - shown.length;
+  const gift = /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "20", height: "20", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 8a1 1 0 011-1h12a1 1 0 011 1v2H3V8zm0 3h6v6H5a2 2 0 01-2-2v-4zm8 0h6v4a2 2 0 01-2 2h-4v-6zM10 7V5.5A2.5 2.5 0 107.5 8H10zm0 0h2.5A2.5 2.5 0 1010 5.5V7z" }) });
+  if (count === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: REWARD_CARD_CSS }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc-empty", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpc-ic", children: gift }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc-txt", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rpc-title", children: "No reward product yet" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rpc-sub", children: "Pick the product shoppers get when they reach this milestone." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", onClick: onEdit, children: "Add reward products" })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc", "data-filled": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: REWARD_CARD_CSS }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc-thumbs", children: [
+      shown.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpc-thumb", title: p.title, style: p.image ? { backgroundImage: `url("${p.image}")` } : void 0, children: !p.image && (p.title || "?").charAt(0).toUpperCase() }, p.id)),
+      picked.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rpc-ic", children: gift }),
+      extra > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rpc-more", children: [
+        "+",
+        extra
+      ] })
+    ] }),
+    picked.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc-names", children: [
+      picked.slice(0, 2).map((p) => p.title).join(", "),
+      count > 2 ? ` and ${count - 2} more` : ""
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rpc-actions", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rpc-pill", children: [
+        count,
+        " product",
+        count !== 1 ? "s" : "",
+        " selected"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: onEdit, children: "Edit products" })
+    ] })
+  ] });
+}
 function ProgressBarSection() {
   var _a, _b, _c, _d, _e;
-  const { body, updateProgressBar } = useCartEditor();
+  const { body, updateProgressBar, allProducts: catalog } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
   const { progressBar } = body;
   const [activeTierIndex, setActiveTierIndex] = reactExports.useState(0);
@@ -31786,10 +32066,10 @@ function ProgressBarSection() {
           }
         )
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Background color", value: ((_a = progressBar.colors) == null ? void 0 : _a.background) || "#e5e7eb", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, background: v } }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Fill color", value: ((_b = progressBar.colors) == null ? void 0 : _b.fill) || "#10b981", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, fill: v } }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Icon color", value: ((_c = progressBar.colors) == null ? void 0 : _c.icon) || "#2563eb", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, icon: v } }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Message color", value: ((_d = progressBar.colors) == null ? void 0 : _d.message) || "#10b981", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, message: v } }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Background color", value: ((_a = progressBar.colors) == null ? void 0 : _a.background) || "#e5e7eb", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, background: v } }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Fill color", value: ((_b = progressBar.colors) == null ? void 0 : _b.fill) || "#10b981", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, fill: v } }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Icon color", value: ((_c = progressBar.colors) == null ? void 0 : _c.icon) || "#2563eb", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, icon: v } }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Message color", value: ((_d = progressBar.colors) == null ? void 0 : _d.message) || "#10b981", onChange: (v) => updateProgressBar({ colors: { ...progressBar.colors || {}, message: v } }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
       progressBar.tiers.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: addTier, children: "Add tier" }),
       progressBar.tiers.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -31860,8 +32140,14 @@ function ProgressBarSection() {
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h4", variant: "headingSm", children: "Reward Products" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: () => setPickerTierIndex(activeTierIndex), children: activeTier.rewardProductCount > 0 ? `Edit Products (${activeTier.rewardProductCount} selected)` : "Select Products" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { cursor: "pointer", color: "#2c6ecb", textDecoration: "underline", fontSize: "13px" }, onClick: () => setPickerTierIndex(activeTierIndex), children: activeTier.rewardProductCount > 0 ? `${activeTier.rewardProductCount} product${activeTier.rewardProductCount !== 1 ? "s" : ""} selected. Click to modify.` : "No products selected. Click to add reward products." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                RewardProductsCard,
+                {
+                  ids: activeTier.rewardProducts,
+                  catalog,
+                  onEdit: () => setPickerTierIndex(activeTierIndex)
+                }
+              ),
               activeTier.rewardProductCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                 Select,
                 {
@@ -31913,7 +32199,7 @@ function ProgressBarSection() {
         ] }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ProductPickerModal$1,
+        ProductPickerModal$2,
         {
           open: pickerTierIndex !== null,
           onClose: () => setPickerTierIndex(null),
@@ -31972,8 +32258,8 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Description", value: item.description, onChange: (v) => onUpdate({ description: v }), autoComplete: "off" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h4", variant: "headingSm", children: "Appearance" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Background Color", value: item.bgColor, onChange: (v) => onUpdate({ bgColor: v }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Text Color", value: item.textColor, onChange: (v) => onUpdate({ textColor: v }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Background Color", value: item.bgColor, onChange: (v) => onUpdate({ bgColor: v }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Text Color", value: item.textColor, onChange: (v) => onUpdate({ textColor: v }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1 }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
@@ -32009,8 +32295,8 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h4", variant: "headingSm", children: "Button Settings" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Button Text", value: item.buttonText, onChange: (v) => onUpdate({ buttonText: v }), autoComplete: "off" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Button Background", value: item.buttonBgColor, onChange: (v) => onUpdate({ buttonBgColor: v }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Button Text Color", value: item.buttonTextColor, onChange: (v) => onUpdate({ buttonTextColor: v }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Button Background", value: item.buttonBgColor, onChange: (v) => onUpdate({ buttonBgColor: v }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Button Text Color", value: item.buttonTextColor, onChange: (v) => onUpdate({ buttonTextColor: v }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(CustomizableLockedSection, { featureKey: "open_countdown", children: [
@@ -32031,9 +32317,9 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Timer Label", value: item.timerLabel ?? "Offer expires in", onChange: (v) => onUpdate({ timerLabel: v }), autoComplete: "off" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Expired Label", value: item.timerExpiredLabel ?? "Offer expired!", onChange: (v) => onUpdate({ timerExpiredLabel: v }), autoComplete: "off" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Timer Background", value: item.timerBgColor ?? "#fef2f2", onChange: (v) => onUpdate({ timerBgColor: v }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Timer Text", value: item.timerTextColor ?? "#991b1b", onChange: (v) => onUpdate({ timerTextColor: v }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Accent", value: item.timerAccentColor ?? "#dc2626", onChange: (v) => onUpdate({ timerAccentColor: v }) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Timer Background", value: item.timerBgColor ?? "#fef2f2", onChange: (v) => onUpdate({ timerBgColor: v }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Timer Text", value: item.timerTextColor ?? "#991b1b", onChange: (v) => onUpdate({ timerTextColor: v }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Accent", value: item.timerAccentColor ?? "#dc2626", onChange: (v) => onUpdate({ timerAccentColor: v }) })
           ] })
         ] })
       ] })
@@ -32160,7 +32446,7 @@ function CouponStylesTab() {
         ) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ColorField,
+        ColorField$1,
         {
           label: "Title text color",
           value: couponSlider.titleColor,
@@ -32336,7 +32622,7 @@ const CONFIG_OPTIONS = [
   { value: "manual", label: "Manual Selection", desc: "Hand-pick exactly which products to show as upsells", icon: SvgSettingsIcon }
 ];
 const PRODUCT_CACHE_KEY = "cached_products";
-function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
+function ProductPickerModal$1({ open, onClose, onSave, initialSelectedIds, title }) {
   const { allProducts: contextProducts } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = reactExports.useState([]);
@@ -32396,13 +32682,13 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
       setInitialized(true);
     });
   }, [open, initialSelectedIds, contextProducts]);
-  const toggle2 = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     Modal,
     {
       open,
       onClose,
       title: title || "Select Products",
+      size: "large",
       primaryAction: { content: "Save Selection", onAction: () => {
         onSave(selectedIds);
         onClose();
@@ -32434,48 +32720,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
               setLoading(false);
             });
           }, children: "Retry" })
-        ] }) : allProducts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "No products found. Make sure your store has products." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "6px", maxHeight: "400px", overflowY: "auto" }, children: allProducts.map((product) => {
-          const sel = selectedIds.includes(product.id);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
-            {
-              onClick: () => toggle2(product.id),
-              style: {
-                padding: "8px 10px",
-                border: sel ? "2px solid #2c6ecb" : "1px solid #e5e7eb",
-                borderRadius: "8px",
-                background: sel ? "#f0f7ff" : "#fff",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px"
-              },
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "6px",
-                  overflow: "hidden",
-                  flexShrink: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "#f8fafc",
-                  border: "1px solid #f1f5f9"
-                }, children: product.image ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: product.image, alt: product.title, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "📦" }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "050", style: { flex: 1, minWidth: 0 }, children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { fontWeight: "bold", variant: "bodySm", children: product.title }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { tone: "subdued", variant: "bodyXs", children: [
-                    currencySymbol,
-                    product.price
-                  ] })
-                ] }),
-                sel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#2c6ecb", fontSize: "18px", fontWeight: 700 }, children: "✓" })
-              ]
-            },
-            product.id
-          );
-        }) })
+        ] }) : allProducts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "No products found. Make sure your store has products." }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProductPickerBody, { products: allProducts, selectedIds, setSelectedIds, currencySymbol, resetKey: open })
       ] }) })
     }
   );
@@ -32732,13 +32977,13 @@ function UpsellSection() {
               onChange: (v) => updateUpsellProducts({ titleAlign: v })
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Title color", value: upsellProducts.titleColor, onChange: (v) => updateUpsellProducts({ titleColor: v }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField$1, { label: "Title color", value: upsellProducts.titleColor, onChange: (v) => updateUpsellProducts({ titleColor: v }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Button text", value: upsellProducts.buttonText, onChange: (v) => updateUpsellProducts({ buttonText: v }), autoComplete: "off" })
         ] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProductPickerModal,
+      ProductPickerModal$1,
       {
         open: pickerConfig !== null,
         onClose: closePicker,
@@ -32830,7 +33075,7 @@ function CountdownTimerSection() {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h3", variant: "headingMd", children: "Colors" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Background",
             value: countdownTimer.bgColor,
@@ -32838,7 +33083,7 @@ function CountdownTimerSection() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Text",
             value: countdownTimer.textColor,
@@ -32846,7 +33091,7 @@ function CountdownTimerSection() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Accent",
             value: countdownTimer.accentColor,
@@ -32945,7 +33190,7 @@ function CheckoutSection() {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h3", variant: "headingMd", children: "Button Style" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Background Color",
             value: checkoutButton.bgColor,
@@ -32953,7 +33198,7 @@ function CheckoutSection() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ColorField,
+          ColorField$1,
           {
             label: "Text Color",
             value: checkoutButton.textColor,
@@ -33673,7 +33918,7 @@ function CouponSliderPreview({ cs }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: containerStyle, children: displayCoupons.map((coupon) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { minWidth: 0, width: isSingle ? "140px" : !isGrid && !isVertical ? "140px" : !isGrid && isVertical ? "86px" : void 0, flexShrink: isGrid && !isSingle ? void 0 : 0, display: "flex", flexDirection: "column" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(CouponCard, { coupon, template: cs.template, isVertical }) }, coupon.id)) })
   ] });
 }
-function findProductsByIds(allProducts, ids) {
+function findProductsByIds$1(allProducts, ids) {
   if (!ids || !ids.length) return [];
   return ids.map((id) => allProducts.find((p) => p.id === id)).filter(Boolean);
 }
@@ -33706,7 +33951,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
   };
   const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
   const count = upsell.useAI ? upsell.limit || 3 : manualIds.length || upsell.limit || 3;
-  const resolved = findProductsByIds(allProducts, manualIds);
+  const resolved = findProductsByIds$1(allProducts, manualIds);
   const products = (resolved.length ? resolved : allProducts).slice(0, Math.max(1, count));
   const isHorizontal = upsell.direction === "horizontal";
   const isGrid = upsell.layout === "grid";
@@ -33958,6 +34203,7 @@ function CartPreview({ onSave, onDiscard, isDirty, saveStatus = "idle" }) {
     ] }) })
   ] });
 }
+let lastGiftDiscount = null;
 async function postJson(url, payload) {
   const res = await fetch(url, {
     method: "POST",
@@ -33967,6 +34213,7 @@ async function postJson(url, payload) {
   if (!res.ok) throw new Error(`${url} returned HTTP ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(`${url} returned success:false — ${JSON.stringify(json)}`);
+  if (url === "/api/progress-bar") lastGiftDiscount = json.giftDiscount ?? null;
   return json;
 }
 function CartEditorContent() {
@@ -33974,11 +34221,14 @@ function CartEditorContent() {
   const { isDirty, resetDirty, body, footer, status, settings, header } = useCartEditor();
   const legacyFetcher = useFetcher();
   const [saveStatus, setSaveStatus] = reactExports.useState("idle");
+  const [giftNotice, setGiftNotice] = reactExports.useState("");
   const savedTimerRef = reactExports.useRef(null);
   const handleSave = reactExports.useCallback(async () => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
     setSaveStatus("saving");
+    lastGiftDiscount = null;
+    setGiftNotice("");
     const pb = body.progressBar;
     const cs = body.couponSlider;
     const up = body.upsellProducts;
@@ -34119,6 +34369,9 @@ function CartEditorContent() {
       } catch {
       }
       resetDirty();
+      if (lastGiftDiscount && lastGiftDiscount.state !== "not_needed" && !lastGiftDiscount.verified) {
+        setGiftNotice(`Saved. Free reward products are not free at checkout yet: ${lastGiftDiscount.message}`);
+      }
       setSaveStatus("saved");
       savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 3e3);
     } catch (err) {
@@ -34134,6 +34387,7 @@ function CartEditorContent() {
   }, [isDirty, navigate]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(Frame, { children: [
     saveStatus === "saved" && /* @__PURE__ */ jsxRuntimeExports.jsx(Toast, { content: "Saved", onDismiss: () => setSaveStatus("idle") }),
+    giftNotice && /* @__PURE__ */ jsxRuntimeExports.jsx(Toast, { content: giftNotice, duration: 12e3, onDismiss: () => setGiftNotice("") }),
     saveStatus === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx(Toast, { content: "Save failed", error: true, onDismiss: () => setSaveStatus("idle") }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "row", width: "100%", height: "100vh", overflow: "hidden", background: "#f6f6f7" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 460, minWidth: 460, flexShrink: 0, height: "100vh", overflow: "hidden" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(CartEditorSidebar, { onDiscard: handleDiscard }) }),
@@ -35683,7 +35937,7 @@ function AdvancedSectionComponent({
         /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Discount Unlocked Text", value: config2.discount_unlocked_text || "Discount Unlocked!", onChange: (v) => updateConfig("discount_unlocked_text", v), autoComplete: "off" })
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Coupon", expanded: expandedSections == null ? void 0 : expandedSections.discount, onToggle: () => toggleSection == null ? void 0 : toggleSection("discount"), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-tour": "combo-discount", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Coupon", expanded: expandedSections == null ? void 0 : expandedSections.discount, onToggle: () => toggleSection == null ? void 0 : toggleSection("discount"), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         Checkbox,
         {
@@ -35710,7 +35964,7 @@ function AdvancedSectionComponent({
         /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "No coupons created yet." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "secondary", onClick: () => onCreateCoupon == null ? void 0 : onCreateCoupon(), fullWidth: true, children: "Create Coupon" })
       ] }))
-    ] }) }),
+    ] }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "AI Settings", expanded: expandedSections == null ? void 0 : expandedSections.aiSettings, onToggle: () => toggleSection == null ? void 0 : toggleSection("aiSettings"), children: /* @__PURE__ */ jsxRuntimeExports.jsx(FormLayout, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       Checkbox,
       {
@@ -36252,7 +36506,7 @@ function BuilderActionBar({
       /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { icon: SvgDuplicateIcon, onClick: onDuplicate, disabled: !canPreview, children: "Duplicate" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: onReset, children: "Reset" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: onToggleActive, tone: isActive ? void 0 : "success", variant: isActive ? "secondary" : "primary", children: isActive ? "Deactivate" : "Activate" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", onClick: onSave, disabled: saveDisabled, children: "Save Template" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "data-tour": "combo-save", style: { display: "inline-flex" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", onClick: onSave, disabled: saveDisabled, children: "Save Template" }) })
     ] })
   ] });
 }
@@ -36319,6 +36573,382 @@ function CartDrawerEmbedModal({ open, checked, editorUrl, onContinue }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", children: checked ? "The Cart Drawer app embed is not turned on in your theme yet. Combo pages are displayed by it, so your combo page will not show to shoppers until it is on." : "We couldn't check whether the Cart Drawer app embed is turned on in your theme. Combo pages are displayed by it, so please make sure it is on." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(EmbedSteps, {})
       ] }) })
+    }
+  );
+}
+function TourPointer({ element, stepNumber, totalSteps, title, children, nextLabel = "Next", onNext, onBack, canGoBack, onSkip, nextDisabled = false, hideNext = false, centered = false }) {
+  const [rect, setRect] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    setRect(null);
+    if (!element) return void 0;
+    try {
+      element.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch {
+    }
+    const update = () => {
+      const r = element.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom });
+    };
+    update();
+    const settle = setTimeout(update, 350);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      clearTimeout(settle);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [element]);
+  if (!centered && !rect) return null;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const cardWidth = centered ? Math.min(460, vw - 32) : 320;
+  const cardHeight = 170;
+  const margin = 16;
+  let cardTop;
+  let cardLeft;
+  if (centered) {
+    cardTop = Math.max(margin, (vh - 320) / 2);
+    cardLeft = (vw - cardWidth) / 2;
+  } else {
+    const below = vh - rect.bottom;
+    const above = rect.top;
+    if (rect.height > vh * 0.6) {
+      cardTop = margin;
+      cardLeft = vw - cardWidth - margin;
+    } else {
+      if (below >= cardHeight + margin) cardTop = rect.bottom + 12;
+      else if (above >= cardHeight + margin) cardTop = rect.top - cardHeight - 12;
+      else cardTop = vh - cardHeight - margin;
+      cardTop = Math.max(margin, Math.min(cardTop, vh - cardHeight - margin));
+      cardLeft = Math.min(Math.max(rect.left, margin), vw - cardWidth - margin);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    centered ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "fixed", inset: 0, background: "rgba(15,17,17,0.5)", zIndex: 10500, pointerEvents: "none" } }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        "data-testid": "tour-spotlight",
+        style: {
+          position: "fixed",
+          top: rect.top - 4,
+          left: rect.left - 4,
+          width: rect.width + 8,
+          height: rect.height + 8,
+          borderRadius: 10,
+          border: "2px solid #008060",
+          boxShadow: "0 0 0 4000px rgba(15,17,17,0.5)",
+          pointerEvents: "none",
+          zIndex: 10500,
+          transition: "all .25s ease"
+        }
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        role: "dialog",
+        "aria-label": title,
+        "data-testid": "tour-card",
+        style: {
+          position: "fixed",
+          top: cardTop,
+          left: cardLeft,
+          width: cardWidth,
+          background: "#202223",
+          color: "#fff",
+          borderRadius: 12,
+          padding: 16,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+          zIndex: 10501
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", color: "#9aa0a3", textTransform: "uppercase" }, children: [
+                "Step ",
+                stepNumber,
+                " of ",
+                totalSteps
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", style: { display: "flex", gap: 4 }, children: Array.from({ length: totalSteps }, (_, i) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: i + 1 === stepNumber ? 14 : 5, height: 5, borderRadius: 3, background: i + 1 <= stepNumber ? "#22c55e" : "#45484a", transition: "width .2s" } }, i)) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onSkip, "aria-label": "Skip setup tour", style: { border: "none", background: "transparent", color: "#9aa0a3", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 2 }, children: "×" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 14, fontWeight: 700, marginBottom: 4 }, children: title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 13, color: "#c9cccf", lineHeight: 1.5, marginBottom: 14 }, children }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onSkip, style: { border: "none", background: "transparent", color: "#9aa0a3", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0 }, children: "Skip tour" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              canGoBack && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onBack, style: { border: "1px solid #45484a", background: "transparent", color: "#e3e5e7", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 8 }, children: "Back" }),
+              !hideNext && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onNext, disabled: nextDisabled, style: { border: "none", background: "#008060", color: "#fff", cursor: nextDisabled ? "default" : "pointer", opacity: nextDisabled ? 0.6 : 1, fontSize: 13, fontWeight: 600, padding: "8px 16px", borderRadius: 8 }, children: nextLabel })
+            ] })
+          ] })
+        ]
+      }
+    )
+  ] });
+}
+const COMBO_TOUR_KEY = "cn_combo_tour_v1";
+let tourShop = "";
+function setTourShop(shop) {
+  tourShop = String(shop || "");
+}
+const tourStorageKey = () => tourShop ? `${COMBO_TOUR_KEY}:${tourShop}` : COMBO_TOUR_KEY;
+const COMBO_TOUR_EVENT = "cn-combo-tour-changed";
+const COMBO_TOUR_STEPS = [
+  {
+    id: "create",
+    page: "dashboard",
+    target: '[data-tour="combo-create"]',
+    title: "Start by creating a template",
+    body: "Click Create a bundle (or Create Template below). You will choose how your combo looks on the next screen.",
+    nextLabel: "Create template",
+    clickTarget: true,
+    advanceOnClick: '[data-tour="combo-create"]'
+  },
+  {
+    id: "template",
+    page: "picker",
+    target: ".template-picker-grid",
+    title: "Pick a template",
+    body: "Each layout is a different shopping experience. Choose the one that fits your products. You can change everything about it afterwards.",
+    nextLabel: "Got it",
+    advanceOnClick: ".tpl-pick-card button",
+    hideNext: true
+  },
+  {
+    id: "ai",
+    page: "builder",
+    target: ".bxb-bar",
+    title: "Customize it with AI",
+    body: "Tell Brix what you want: the layout, the wording, colours or products. It changes your template for you."
+  },
+  {
+    id: "preview",
+    page: "builder",
+    target: '[data-tour="combo-preview"]',
+    title: "Tap the preview to edit",
+    body: "This is your live preview. Click any part of it, like the title, a product card or a button, to jump straight to its settings and change it."
+  },
+  {
+    id: "discount",
+    page: "builder",
+    target: '[data-tour="combo-discount"]',
+    beforeStep: "discount",
+    title: "Add a discount",
+    body: "Turn on the coupon to reward shoppers who build a bundle. Pick an existing discount, or create a new one right here."
+  },
+  {
+    id: "save",
+    page: "builder",
+    target: '[data-tour="combo-save"]',
+    title: "Save your template",
+    body: "Click Save Template to keep your work. Activate it when you are ready to publish the combo page to your store."
+  },
+  {
+    id: "embed",
+    page: "builder",
+    target: null,
+    kind: "embed",
+    title: "Last step: turn on the app embed",
+    body: "",
+    nextLabel: "Finish"
+  }
+];
+const safeRead = () => {
+  try {
+    return JSON.parse(localStorage.getItem(tourStorageKey()) || "null");
+  } catch {
+    return null;
+  }
+};
+function readTour() {
+  const value = safeRead();
+  if (!value || typeof value !== "object") return null;
+  const step = Number.isInteger(value.step) ? Math.min(Math.max(value.step, 0), COMBO_TOUR_STEPS.length - 1) : 0;
+  const status = ["active", "dismissed", "done"].includes(value.status) ? value.status : "dismissed";
+  return { status, step };
+}
+function writeTour(state) {
+  try {
+    localStorage.setItem(tourStorageKey(), JSON.stringify(state));
+  } catch {
+  }
+  try {
+    window.dispatchEvent(new CustomEvent(COMBO_TOUR_EVENT));
+  } catch {
+  }
+}
+const startTour = () => writeTour({ status: "active", step: 0 });
+const dismissTour = (step = 0) => writeTour({ status: "dismissed", step });
+const finishTour = () => writeTour({ status: "done", step: COMBO_TOUR_STEPS.length - 1 });
+const goToStep = (step) => writeTour({ status: "active", step });
+function nextStepOnPage(from, dir, page) {
+  for (let i = from; i >= 0 && i < COMBO_TOUR_STEPS.length; i += dir) {
+    if (COMBO_TOUR_STEPS[i].page === page) return i;
+  }
+  return -1;
+}
+const TARGET_WAIT_MS = 4e3;
+function useTourState() {
+  const [state, setState] = reactExports.useState(() => typeof window === "undefined" ? null : readTour());
+  reactExports.useEffect(() => {
+    const sync = () => setState(readTour());
+    sync();
+    window.addEventListener(COMBO_TOUR_EVENT, sync);
+    return () => window.removeEventListener(COMBO_TOUR_EVENT, sync);
+  }, []);
+  return state;
+}
+function useTargetElement(selector, active, onMissing) {
+  const [element, setElement] = reactExports.useState(null);
+  const missingRef = reactExports.useRef(onMissing);
+  missingRef.current = onMissing;
+  reactExports.useEffect(() => {
+    setElement(null);
+    if (!active || !selector) return void 0;
+    const started = Date.now();
+    let timer;
+    const tick = () => {
+      var _a;
+      const found = Array.from(document.querySelectorAll(selector)).find((n) => n.getClientRects().length > 0) || null;
+      if (found) {
+        setElement(found);
+        return;
+      }
+      if (Date.now() - started > TARGET_WAIT_MS) {
+        (_a = missingRef.current) == null ? void 0 : _a.call(missingRef);
+        return;
+      }
+      timer = setTimeout(tick, 250);
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [selector, active]);
+  return element;
+}
+function EmbedStep({ shop, onFinish, onBack, canGoBack, onSkip, total, number }) {
+  const [status, setStatus] = reactExports.useState({ state: "checking" });
+  const editorUrl = shop ? cartDrawerEmbedEditorUrl(shop) : null;
+  const check = reactExports.useCallback(async () => {
+    setStatus({ state: "checking" });
+    try {
+      const res = await fetch("/api/theme-embed-status");
+      const data = await res.json();
+      if (!(data == null ? void 0 : data.checked)) setStatus({ state: "unknown", editorUrl: data == null ? void 0 : data.editorUrl });
+      else setStatus({ state: data.enabled ? "on" : "off", editorUrl: data == null ? void 0 : data.editorUrl });
+    } catch {
+      setStatus({ state: "unknown" });
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    check();
+  }, [check]);
+  const link = status.editorUrl || editorUrl;
+  const chip = {
+    checking: { text: "Checking your theme…", bg: "#3a3d3f", fg: "#c9cccf" },
+    on: { text: "On. Your combo pages will show up.", bg: "#0f3d2a", fg: "#7ee2a8" },
+    off: { text: "Off. Combo pages will not show yet.", bg: "#4a2a12", fg: "#ffc58a" },
+    unknown: { text: "We couldn't check. Please confirm it is on.", bg: "#3a3d3f", fg: "#c9cccf" }
+  }[status.state];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    TourPointer,
+    {
+      centered: true,
+      element: null,
+      stepNumber: number,
+      totalSteps: total,
+      title: "Last step: turn on the app embed",
+      nextLabel: "Finish",
+      onNext: onFinish,
+      onBack,
+      canGoBack,
+      onSkip,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "tour-embed-step", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { style: { margin: "0 0 10px" }, children: [
+          "Combo pages are shown by the ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Cart Drawer app embed" }),
+          ". Until it is switched on in your theme, your combo will not appear on your store."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-testid": "tour-embed-status", style: { background: chip.bg, color: chip.fg, borderRadius: 8, padding: "8px 10px", fontSize: 12.5, fontWeight: 600, marginBottom: 10 }, children: chip.text }),
+        status.state !== "on" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { background: "#fff", color: "#202223", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12.5 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmbedSteps, {}) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+            link && /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: link, target: "_blank", rel: "noreferrer", style: { background: "#fff", color: "#202223", textDecoration: "none", fontWeight: 600, fontSize: 13, padding: "7px 14px", borderRadius: 8 }, children: "Open theme editor" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: check, disabled: status.state === "checking", style: { border: "1px solid #45484a", background: "transparent", color: "#e3e5e7", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: "7px 14px", borderRadius: 8 }, children: status.state === "checking" ? "Checking…" : "I've turned it on, check again" })
+          ] })
+        ] })
+      ] })
+    }
+  );
+}
+function ComboSetupTour({ page, shop, beforeStep }) {
+  setTourShop(shop);
+  const tour = useTourState();
+  const active = (tour == null ? void 0 : tour.status) === "active";
+  const step = active ? COMBO_TOUR_STEPS[tour.step] : null;
+  const ownsStep = !!step && step.page === page;
+  const total = COMBO_TOUR_STEPS.length;
+  const advance = reactExports.useCallback(() => {
+    const from = (tour == null ? void 0 : tour.step) ?? 0;
+    if (from >= total - 1) {
+      finishTour();
+      return;
+    }
+    goToStep(from + 1);
+  }, [tour, total]);
+  const back = reactExports.useCallback(() => {
+    const prev = nextStepOnPage(((tour == null ? void 0 : tour.step) ?? 0) - 1, -1, page);
+    if (prev !== -1) goToStep(prev);
+  }, [tour, page]);
+  const skip = reactExports.useCallback(() => dismissTour((tour == null ? void 0 : tour.step) ?? 0), [tour]);
+  const onMissing = reactExports.useCallback(() => {
+    if (((tour == null ? void 0 : tour.step) ?? 0) === 0) dismissTour(0);
+    else advance();
+  }, [tour, advance]);
+  const element = useTargetElement(step == null ? void 0 : step.target, ownsStep && !!(step == null ? void 0 : step.target), onMissing);
+  reactExports.useEffect(() => {
+    if (ownsStep && (step == null ? void 0 : step.beforeStep)) beforeStep == null ? void 0 : beforeStep(step.beforeStep);
+  }, [ownsStep, step == null ? void 0 : step.id]);
+  reactExports.useEffect(() => {
+    if (!ownsStep || !(step == null ? void 0 : step.advanceOnClick)) return void 0;
+    const onClick = (e) => {
+      var _a, _b;
+      if ((_b = (_a = e.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, step.advanceOnClick)) setTimeout(advance, 0);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [ownsStep, step, advance]);
+  if (!ownsStep) return null;
+  if (step.kind === "embed") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmbedStep,
+      {
+        shop,
+        number: tour.step + 1,
+        total,
+        onFinish: () => finishTour(),
+        onBack: back,
+        canGoBack: nextStepOnPage(tour.step - 1, -1, page) !== -1,
+        onSkip: skip
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    TourPointer,
+    {
+      element,
+      stepNumber: tour.step + 1,
+      totalSteps: total,
+      title: step.title,
+      nextLabel: step.nextLabel || "Next",
+      hideNext: !!step.hideNext,
+      onNext: () => step.clickTarget && element ? element.click() : advance(),
+      onBack: back,
+      canGoBack: nextStepOnPage(tour.step - 1, -1, page) !== -1,
+      onSkip: skip,
+      children: step.body
     }
   );
 }
@@ -37575,6 +38205,12 @@ function Customize() {
       return acc;
     }, {});
   }, []);
+  const tourBeforeStep = reactExports.useCallback((stepId) => {
+    if (stepId === "discount") {
+      setActiveCategory("advanced");
+      setExpandedSections((prev) => onlyOpen(prev, "discount"));
+    }
+  }, [onlyOpen]);
   const SECTION_CATEGORY = {
     general: "layout",
     banner: "layout",
@@ -38122,6 +38758,7 @@ function Customize() {
         },
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrixBar, { size: "md", floating: true }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ComboSetupTour, { page: "picker", shop }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
 .template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
@@ -38330,6 +38967,7 @@ function Customize() {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(BrixBar, { size: "md", floating: true, zIndex: 400, placeholder: "Ask Brix to help with your bundle — layout, copy, colours, products…" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ComboSetupTour, { page: "builder", shop, beforeStep: tourBeforeStep }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           Modal,
           {
@@ -38582,7 +39220,7 @@ function Customize() {
                 }
               )
             ] }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `preview-stage preview-stage--${previewDevice}`, children: previewDevice === "desktop" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: containerRef, className: "preview-scale-panel", style: scaledPanelStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "preview-scale-canvas", style: scaledCanvasStyle, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-tour": "combo-preview", className: `preview-stage preview-stage--${previewDevice}`, children: previewDevice === "desktop" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: containerRef, className: "preview-scale-panel", style: scaledPanelStyle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "preview-scale-canvas", style: scaledCanvasStyle, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "preview-browser-chrome", "aria-hidden": "true", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
@@ -42344,6 +42982,2565 @@ function ComboPreview({
     }
   ) });
 }
+function BundleStackMock() {
+  const { formatMoney: formatMoney2 } = useCurrency();
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cn-bundle", "aria-hidden": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+.cn-bundle{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);
+  border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px)}
+.cn-bundle-card{width:60px;background:#fff;border-radius:10px;padding:7px;box-shadow:0 8px 18px rgba(8,11,40,.22)}
+.cn-bundle-thumb{height:38px;border-radius:7px;background:#fff;overflow:hidden}
+.cn-bundle-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.cn-bundle-line{height:5px;border-radius:999px;background:#ece9f6;margin-top:6px}
+.cn-bundle-line.short{width:60%}
+.cn-bundle-op{color:#fff;font-size:16px;font-weight:700;opacity:.9}
+.cn-bundle-price{display:flex;flex-direction:column;align-items:flex-start;color:#fff;padding-left:2px}
+.cn-bundle-price small{font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;opacity:.8}
+.cn-bundle-price b{font-size:18px;font-weight:700;line-height:1.1}
+.cn-bundle-price s{font-size:11px;opacity:.7}
+      ` }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cn-bundle-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-thumb", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/bundle-thumb-1.jpg", alt: "" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line short" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cn-bundle-op", children: "+" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cn-bundle-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-thumb", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/bundle-thumb-2.jpg", alt: "" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line short" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cn-bundle-op", children: "+" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cn-bundle-card", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-thumb", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/bundle-thumb-3.jpg", alt: "" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cn-bundle-line short" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cn-bundle-op", children: "=" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cn-bundle-price", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Bundle" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: formatMoney2(64) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("s", { children: formatMoney2(96) })
+    ] })
+  ] });
+}
+function TemplateManager() {
+  var _a, _b, _c, _d;
+  const fetcher = useFetcher();
+  const { templates: initialTemplates, shop, discounts } = useLoaderData();
+  const navigate = useNavigate();
+  const shopify2 = useAppBridge();
+  const navigation = useNavigation();
+  const { plan, canAccessFeature } = usePlan();
+  const comboTemplateLimit = (_a = PLANS[plan]) == null ? void 0 : _a.comboTemplateLimit;
+  const [upgradeModalOpen, setUpgradeModalOpen] = reactExports.useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  reactExports.useEffect(() => {
+    if (searchParams.get("comboLimit") === "1") {
+      setUpgradeModalOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("comboLimit");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+  const isMainNavigating = navigation.state !== "idle" && ((_c = (_b = navigation.location) == null ? void 0 : _b.pathname) == null ? void 0 : _c.includes("/app/bundles/customize"));
+  const [isClient, setIsClient] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    setIsClient(true);
+  }, []);
+  const lastMutationRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    var _a2, _b2;
+    if ((_a2 = fetcher.data) == null ? void 0 : _a2.success) {
+      shopify2.toast.show(fetcher.data.message || "Success");
+      lastMutationRef.current = null;
+    } else if ((_b2 = fetcher.data) == null ? void 0 : _b2.error) {
+      shopify2.toast.show(fetcher.data.error, { isError: true });
+      const last = lastMutationRef.current;
+      if ((last == null ? void 0 : last.type) === "delete") {
+        deletedIds.current.delete(last.id);
+        setTemplates((prev) => prev.some((t) => String(t.id) === last.id) ? prev : [...prev, ...(initialTemplates || []).filter((t) => String(t.id) === last.id)]);
+      } else if ((last == null ? void 0 : last.type) === "toggle") {
+        setTemplates((prev) => prev.map(
+          (t) => String(t.id) === last.id ? { ...t, active: last.prevActive } : t
+        ));
+      }
+      lastMutationRef.current = null;
+    }
+  }, [fetcher.data, shopify2, initialTemplates]);
+  const [templates, setTemplates] = reactExports.useState(initialTemplates || []);
+  const deletedIds = reactExports.useRef(/* @__PURE__ */ new Set());
+  const previewFetcher = useFetcher();
+  const previewHandledRef = reactExports.useRef(null);
+  const previewWindowRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    var _a2, _b2, _c2, _d2;
+    if (((_a2 = previewFetcher.data) == null ? void 0 : _a2.success) && ((_b2 = previewFetcher.data) == null ? void 0 : _b2.previewUrl)) {
+      if (previewWindowRef.current) {
+        previewWindowRef.current.location.href = previewFetcher.data.previewUrl;
+      } else {
+        window.open(previewFetcher.data.previewUrl, "_blank");
+      }
+      previewWindowRef.current = null;
+      previewHandledRef.current = null;
+    } else if ((_c2 = previewFetcher.data) == null ? void 0 : _c2.error) {
+      (_d2 = previewWindowRef.current) == null ? void 0 : _d2.close();
+      previewWindowRef.current = null;
+      shopify2.toast.show(previewFetcher.data.error, { isError: true });
+      previewHandledRef.current = null;
+    }
+  }, [previewFetcher.data, shopify2]);
+  const handlePreview = (t) => {
+    previewWindowRef.current = window.open("", "_blank");
+    const formData = new FormData();
+    formData.append("body", JSON.stringify({
+      shop_domain: shop,
+      id: t.id,
+      name: t.title,
+      action: "preview"
+    }));
+    previewFetcher.submit(formData, { method: "POST", action: "/api/bundle-templates" });
+  };
+  reactExports.useEffect(() => {
+    setTemplates(
+      (initialTemplates || []).filter((t) => !deletedIds.current.has(String(t.id)))
+    );
+  }, [initialTemplates]);
+  const [selectedTab] = reactExports.useState(0);
+  const [searchValue, setSearchValue] = reactExports.useState("");
+  const [currentPage, setCurrentPage] = reactExports.useState(1);
+  const itemsPerPage = 8;
+  reactExports.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchValue, selectedTab]);
+  const handleEditNavigate = (id) => {
+    navigate(`/app/bundles/customize?templateId=${id}`);
+  };
+  const filteredTemplates = templates.filter((template) => {
+    var _a2, _b2;
+    const matchesSearch = (template.title || "").toLowerCase().includes((searchValue || "").toLowerCase());
+    const matchesTab = selectedTab === 0 || selectedTab === 1 && template.active || selectedTab === 2 && !template.active;
+    ((_a2 = template.config) == null ? void 0 : _a2.layout) || "layout1";
+    const matchesDesign = true;
+    (_b2 = template.config) == null ? void 0 : _b2.selected_discount_id;
+    const matchesDiscount = true;
+    return matchesSearch && matchesTab && matchesDesign && matchesDiscount;
+  });
+  const [deleteModalOpen, setDeleteModalOpen] = reactExports.useState(false);
+  const [toggleModalOpen, setToggleModalOpen] = reactExports.useState(false);
+  const [targetTemplate, setTargetTemplate] = reactExports.useState(null);
+  const [activePopoverId, setActivePopoverId] = reactExports.useState(null);
+  const confirmDelete = () => {
+    if (targetTemplate) {
+      const deletedId = String(targetTemplate.id);
+      lastMutationRef.current = { type: "delete", id: deletedId };
+      deletedIds.current.add(deletedId);
+      setTemplates((prev) => prev.filter((t) => String(t.id) !== deletedId));
+      fetcher.submit(
+        { id: targetTemplate.id, intent: "delete" },
+        { method: "post", action: "/app/bundles" }
+      );
+      setDeleteModalOpen(false);
+      setTargetTemplate(null);
+    }
+  };
+  const confirmToggleStatus = () => {
+    if (targetTemplate) {
+      const toggledId = String(targetTemplate.id);
+      const newActive = !targetTemplate.active;
+      lastMutationRef.current = { type: "toggle", id: toggledId, prevActive: targetTemplate.active };
+      setTemplates(
+        (prev) => prev.map(
+          (t) => String(t.id) === toggledId ? { ...t, active: newActive } : t
+        )
+      );
+      fetcher.submit(
+        {
+          id: targetTemplate.id,
+          active: newActive,
+          intent: "toggle_active"
+        },
+        { method: "post", action: "/app/bundles" }
+      );
+      setToggleModalOpen(false);
+      setTargetTemplate(null);
+    }
+  };
+  const totalTemplates = filteredTemplates.length;
+  const totalPages = Math.ceil(totalTemplates / itemsPerPage);
+  const validCurrentPage = Math.max(1, Math.min(currentPage, totalPages || 1));
+  const startIndex = (validCurrentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, totalTemplates);
+  const paginatedTemplates = filteredTemplates.slice(startIndex, endIndex);
+  const displayStart = totalTemplates > 0 ? startIndex + 1 : 0;
+  const displayEnd = endIndex;
+  const totalCountStr = totalTemplates;
+  const handleCreateTemplate = () => {
+    const atCap = comboTemplateLimit !== null && comboTemplateLimit !== void 0 && templates.length >= comboTemplateLimit;
+    if (!canAccessFeature("build_a_combo") || atCap) {
+      setUpgradeModalOpen(true);
+      return;
+    }
+    navigate("/app/bundles/customize?mode=template-picker");
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "template-page-wrapper", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `global-loading-bar ${isMainNavigating ? "loading" : ""}`
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+        .template-page-wrapper {
+            background-color: transparent;
+        }
+        .template-content {
+            max-width: none;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .header-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px 24px;
+        }
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #111827;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        .header-subtitle {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #6B7280;
+            margin: 0 0 6px 0;
+        }
+        .tpl-dashboard-stats {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-top: 6px;
+        }
+        .tpl-stat {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B7280;
+        }
+        .tpl-stat + .tpl-stat::before {
+            content: '·';
+            margin-right: 12px;
+            color: #D1D5DB;
+        }
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .search-container {
+            position: relative;
+        }
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            color: #6B7280;
+        }
+        .search-input {
+            padding: 10px 16px 10px 36px;
+            border-radius: 6px;
+            border: 1px solid #E5E7EB;
+            background: #F3F4F6;
+            font-size: 13px;
+            width: 240px;
+            outline: none;
+            transition: all 0.2s;
+            color: #111827;
+        }
+        .search-input::placeholder {
+            color: #9CA3AF;
+        }
+        .search-input:focus {
+            border-color: #111827;
+            background: #fff;
+        }
+        .filter-btn {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: 1px solid #E5E7EB;
+            background: #F3F4F6;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            background: #E5E7EB;
+        }
+        .create-btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            background: #111827;
+            color: #fff;
+            border: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        .create-btn:hover {
+            background: #000000;
+            transform: translateY(-1px);
+        }
+        .section-label {
+            font-size: 13px;
+            font-weight: 800;
+            color: #6B7280;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 16px;
+        }
+        .library-section {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            padding: 20px 20px 20px 20px;
+            border-radius: 12px;
+        }
+        .library-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .library-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0;
+            letter-spacing: -0.3px;
+        }
+        .library-icons {
+            display: flex;
+            gap: 16px;
+            color: #6B7280;
+        }
+        .library-icon-btn {
+            cursor: pointer;
+            color: #6B7280;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .library-icon-btn:hover { color: #111827; }
+        .library-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 12px;
+        }
+        .library-table th {
+            text-align: left;
+            font-size: 13px;
+            font-weight: 800;
+            color: #4B5563;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            padding: 0 24px 4px;
+            border: none;
+        }
+        .library-table td {
+            background: #fff;
+            padding: 12px 20px;
+            vertical-align: middle;
+        }
+        .library-table tr {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            transition: transform 0.2s;
+        }
+        .library-table tr:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+        }
+        .library-table tr td:first-child {
+            border-top-left-radius: 12px;
+            border-bottom-left-radius: 12px;
+        }
+        .library-table tr td:last-child {
+            border-top-right-radius: 12px;
+            border-bottom-right-radius: 12px;
+        }
+        .template-name-wrap {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .template-name-text {
+            font-size: 13px;
+            font-weight: 700;
+            color: #111827;
+        }
+        .date-text {
+            font-size: 13px;
+            color: #4B5563;
+            font-weight: 500;
+        }
+        .discount-text {
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .discount-active { color: #111827; }
+        .discount-none { color: #111827; }
+        .status-pill {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .status-pill.active {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+        }
+        .status-pill.inactive {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+        .status-pill.draft {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+        .actions-flex {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .action-btn {
+            cursor: pointer;
+            color: #6B7280;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+        }
+        .action-btn.edit:hover { color: #111827; }
+        .action-btn.view:hover { color: #111827; }
+        .action-btn.more:hover { color: #111827; }
+        
+        .pagination-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding: 0 4px;
+        }
+        .pagination-info {
+            font-size: 13px;
+            color: #6B7280;
+            font-weight: 500;
+        }
+        .pagination-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .page-btn {
+            padding: 8px 16px;
+            background: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #111827;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+        .page-btn:hover { background: #F9FAFB; }
+        .page-btn.active {
+            background: #111827;
+            color: #fff;
+        }
+        .page-btn.active:hover { background: #000000; }
+        
+        .tpl-empty-state {
+            text-align: center;
+            padding: 48px 20px;
+        }
+        .tpl-empty-icon {
+            margin: 0 auto 16px;
+            display: block;
+            color: #D1D5DB;
+            width: 56px;
+            height: 56px;
+        }
+        .tpl-empty-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #111827;
+            margin: 0 0 6px;
+        }
+        .tpl-empty-desc {
+            font-size: 13px;
+            color: #6B7280;
+            margin: 0 0 24px;
+        }
+
+        /* Loading Bar */
+        .global-loading-bar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: #111827;
+          z-index: 9999;
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 0.2s ease;
+        }
+        .global-loading-bar.loading {
+          transform: scaleX(1);
+          animation: loadingBar 2s infinite linear;
+        }
+        @keyframes loadingBar {
+          0% { transform: scaleX(0); }
+          50% { transform: scaleX(0.7); }
+          100% { transform: scaleX(1); }
+        }
+
+        .mobile-fab {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #111827;
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            align-items: center;
+            justify-content: center;
+            z-index: 99;
+            border: none;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .template-page-wrapper {
+                padding: 16px;
+            }
+            .header-section {
+                flex-direction: column;
+                gap: 16px;
+                margin-bottom: 32px;
+            }
+            .header-title {
+                font-size: 15px;
+            }
+            .header-controls {
+                width: 100%;
+            }
+            .search-container, .search-input {
+                width: 100%;
+            }
+            .create-btn {
+                display: none;
+            }
+            .mobile-fab {
+                display: flex;
+            }
+
+            .library-table {
+                display: block;
+            }
+            .library-table thead {
+                display: none;
+            }
+            .library-table tbody {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding-bottom: 80px;
+            }
+            .library-table tr {
+                display: grid;
+                grid-template-areas:
+                   "title    title   actions"
+                   "discount status  actions";
+                grid-template-columns: max-content minmax(0, 1fr) auto;
+                gap: 4px 10px;
+                align-items: center;
+                padding: 16px;
+                background: #fff;
+                border-radius: 12px;
+                border: 1px solid rgba(0,0,0,0.04);
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .library-table td, .template-name-wrap {
+                display: contents;
+            }
+            .template-name-text {
+                grid-area: title;
+                align-self: end;
+                font-size: 13px;
+                font-weight: 700;
+                color: #111827;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .library-table td:nth-child(2) { display: none; }
+            .library-table td:nth-child(3) {
+                grid-area: discount;
+                align-self: start;
+                white-space: nowrap;
+            }
+            .library-table td:nth-child(4) {
+                grid-area: status;
+                align-self: start;
+                display: flex;
+                align-items: center;
+                white-space: nowrap;
+                min-width: 0;
+            }
+            .library-table td:nth-child(4)::before {
+                content: "•";
+                margin-right: 6px;
+                font-size: 13px;
+                color: #D1D5DB;
+            }
+            .library-table td:nth-child(5) {
+                grid-area: actions;
+                justify-self: end;
+                display: flex;
+            }
+            .library-table .discount-text {
+                font-size: 13px;
+                padding: 2px 6px;
+                margin: 0;
+                background: #f3f4f6;
+                color: #111827;
+                border-radius: 4px;
+                font-weight: 600;
+                display: inline-block;
+            }
+            .library-table .discount-text.discount-none {
+                background: #F3F4F6;
+                color: #4B5563;
+            }
+            .library-table .status-pill, 
+            .library-table .status-pill.active,
+            .library-table .status-pill.inactive {
+                font-size: 13px;
+                padding: 0;
+                margin: 0;
+                background: transparent;
+                color: #6B7280;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .actions-flex { justify-content: flex-end; gap: 0; }
+            .action-btn.edit, .action-btn.view { display: none; }
+        }
+        
+      ` }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "template-content", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "header-card", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "header-subtitle", children: "BUNDLES" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "header-title", children: "Template page" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-dashboard-stats", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tpl-stat tpl-stat-total", children: [
+              templates.length,
+              " total"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tpl-stat tpl-stat-active", children: [
+              templates.filter((t) => t.active).length,
+              " active"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tpl-stat tpl-stat-inactive", children: [
+              templates.filter((t) => !t.active).length,
+              " inactive"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "header-controls", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-container", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "svg",
+              {
+                className: "search-icon",
+                viewBox: "0 0 20 20",
+                fill: "none",
+                xmlns: "http://www.w3.org/2000/svg",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "path",
+                    {
+                      d: "M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z",
+                      stroke: "currentColor",
+                      strokeWidth: "2",
+                      strokeLinecap: "round",
+                      strokeLinejoin: "round"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "path",
+                    {
+                      d: "M19 19L14.65 14.65",
+                      stroke: "currentColor",
+                      strokeWidth: "2",
+                      strokeLinecap: "round",
+                      strokeLinejoin: "round"
+                    }
+                  )
+                ]
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                className: "search-input",
+                placeholder: "Search templates...",
+                value: searchValue,
+                onChange: (e) => setSearchValue(e.target.value)
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "create-btn", "data-tour": "combo-create", onClick: handleCreateTemplate, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "svg",
+              {
+                width: "14",
+                height: "14",
+                viewBox: "0 0 16 16",
+                fill: "none",
+                xmlns: "http://www.w3.org/2000/svg",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    d: "M8 1V15M1 8H15",
+                    stroke: "currentColor",
+                    strokeWidth: "2",
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round"
+                  }
+                )
+              }
+            ),
+            "Create Template"
+          ] })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "library-section", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "library-header", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "library-title", children: "Full Library" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "library-icons", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M4 6h16M4 12h10M4 18h6" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Recent" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "library-table", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "TEMPLATE NAME" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "CREATED AT" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "DISCOUNT" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "STATUS" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "ACTIONS" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("tbody", { children: [
+            paginatedTemplates.map((t) => {
+              var _a2, _b2;
+              const discountId = (_a2 = t.config) == null ? void 0 : _a2.selected_discount_id;
+              const resolvedDiscount = discountId ? discounts == null ? void 0 : discounts.find((d) => String(d.id) === String(discountId)) : null;
+              const discountDisplay = (resolvedDiscount == null ? void 0 : resolvedDiscount.title) || ((_b2 = t.config) == null ? void 0 : _b2.discountName);
+              const statusState = t.active ? "ACTIVE" : "INACTIVE";
+              const statusClass = t.active ? "active" : "inactive";
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "template-name-wrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "template-name-text", children: t.title }) }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "date-text", children: new Date(t.createdAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "2-digit",
+                  year: "numeric"
+                }) }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: discountDisplay ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "discount-text discount-active", children: discountDisplay }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "discount-text discount-none", children: "No Discount" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `status-pill ${statusClass}`, children: statusState }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "actions-flex", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "div",
+                    {
+                      className: "action-btn edit",
+                      onClick: () => handleEditNavigate(t.id),
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "svg",
+                        {
+                          width: "16",
+                          height: "16",
+                          viewBox: "0 0 16 16",
+                          fill: "none",
+                          xmlns: "http://www.w3.org/2000/svg",
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                            "path",
+                            {
+                              d: "M11 2L14 5L5 14H2V11L11 2Z",
+                              stroke: "currentColor",
+                              strokeWidth: "1.5",
+                              strokeLinejoin: "round"
+                            }
+                          )
+                        }
+                      )
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "div",
+                    {
+                      className: "action-btn view",
+                      onClick: () => handlePreview(t),
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                        "svg",
+                        {
+                          width: "18",
+                          height: "18",
+                          viewBox: "0 0 18 18",
+                          fill: "none",
+                          xmlns: "http://www.w3.org/2000/svg",
+                          children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              "path",
+                              {
+                                d: "M9 3C5 3 2 7.5 2 9C2 10.5 5 15 9 15C13 15 16 10.5 16 9C16 7.5 13 3 9 3ZM9 12C7.34315 12 6 10.6569 6 9C6 7.34315 7.34315 6 9 6C10.6569 6 12 7.34315 12 9C12 10.6569 10.6569 12 9 12Z",
+                                fill: "currentColor"
+                              }
+                            ),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              "path",
+                              {
+                                d: "M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z",
+                                fill: "currentColor"
+                              }
+                            )
+                          ]
+                        }
+                      )
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "action-btn more", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Popover2,
+                    {
+                      active: activePopoverId === t.id,
+                      activator: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "div",
+                        {
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            setActivePopoverId(
+                              activePopoverId === t.id ? null : t.id
+                            );
+                          },
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                            "svg",
+                            {
+                              width: "20",
+                              height: "20",
+                              viewBox: "0 0 20 20",
+                              fill: "none",
+                              xmlns: "http://www.w3.org/2000/svg",
+                              children: [
+                                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                  "circle",
+                                  {
+                                    cx: "10",
+                                    cy: "5",
+                                    r: "1.5",
+                                    fill: "currentColor"
+                                  }
+                                ),
+                                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                  "circle",
+                                  {
+                                    cx: "10",
+                                    cy: "10",
+                                    r: "1.5",
+                                    fill: "currentColor"
+                                  }
+                                ),
+                                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                                  "circle",
+                                  {
+                                    cx: "10",
+                                    cy: "15",
+                                    r: "1.5",
+                                    fill: "currentColor"
+                                  }
+                                )
+                              ]
+                            }
+                          )
+                        }
+                      ),
+                      onClose: () => setActivePopoverId(null),
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        ActionList,
+                        {
+                          actionRole: "menuitem",
+                          items: [
+                            {
+                              content: t.active ? "Deactivate" : "Activate",
+                              onAction: () => {
+                                setTargetTemplate(t);
+                                setToggleModalOpen(true);
+                                setActivePopoverId(null);
+                              }
+                            },
+                            {
+                              content: "Delete",
+                              destructive: true,
+                              onAction: () => {
+                                setTargetTemplate(t);
+                                setDeleteModalOpen(true);
+                                setActivePopoverId(null);
+                              }
+                            }
+                          ]
+                        }
+                      )
+                    }
+                  ) })
+                ] }) })
+              ] }, t.id);
+            }),
+            paginatedTemplates.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("tr", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("td", { colSpan: "5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-empty-state", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { className: "tpl-empty-icon", viewBox: "0 0 48 48", fill: "none", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "8", y: "12", width: "32", height: "28", rx: "4", stroke: "currentColor", strokeWidth: "2.5" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M16 12V9a8 8 0 0 1 16 0v3", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M18 24h12M18 31h8", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "tpl-empty-title", children: searchValue ? "No templates match your search" : "No templates yet" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "tpl-empty-desc", children: searchValue ? "Try a different search term or clear the search." : "Create your first bundle template to get started." }),
+              !searchValue && /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "create-btn", "data-tour": "combo-create", onClick: handleCreateTemplate, style: { margin: "0 auto" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 16 16", fill: "none", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M8 1V15M1 8H15", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }) }),
+                "Create Template"
+              ] })
+            ] }) }) })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pagination-row", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "pagination-info", children: [
+            "Showing ",
+            displayStart,
+            "-",
+            displayEnd,
+            " of ",
+            totalCountStr,
+            " templates"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pagination-controls", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: `page-btn ${validCurrentPage === 1 ? "disabled" : ""}`,
+                style: validCurrentPage === 1 ? { opacity: 0.5, cursor: "not-allowed" } : {},
+                disabled: validCurrentPage === 1,
+                onClick: () => setCurrentPage((p) => Math.max(1, p - 1)),
+                children: "Previous"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: `page-btn ${validCurrentPage >= totalPages || totalTemplates === 0 ? "disabled" : "active"}`,
+                style: validCurrentPage >= totalPages || totalTemplates === 0 ? { opacity: 0.5, cursor: "not-allowed" } : {},
+                disabled: validCurrentPage >= totalPages || totalTemplates === 0,
+                onClick: () => setCurrentPage((p) => Math.min(totalPages, p + 1)),
+                children: "Next"
+              }
+            )
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "mobile-fab", onClick: handleCreateTemplate, children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { fill: "currentColor", width: "24", height: "24", viewBox: "0 0 24 24", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" }) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Modal,
+      {
+        open: deleteModalOpen,
+        onClose: () => setDeleteModalOpen(false),
+        title: "Delete Template",
+        primaryAction: {
+          content: "Delete",
+          destructive: true,
+          onAction: confirmDelete
+        },
+        secondaryActions: [
+          { content: "Cancel", onAction: () => setDeleteModalOpen(false) }
+        ],
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", children: [
+          "Are you sure you want to delete ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: targetTemplate == null ? void 0 : targetTemplate.title }),
+          "? This action cannot be undone."
+        ] }) })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Modal,
+      {
+        open: toggleModalOpen,
+        onClose: () => setToggleModalOpen(false),
+        title: (targetTemplate == null ? void 0 : targetTemplate.active) ? "Deactivate Template" : "Activate Template",
+        primaryAction: {
+          content: (targetTemplate == null ? void 0 : targetTemplate.active) ? "Deactivate" : "Activate",
+          onAction: confirmToggleStatus
+        },
+        secondaryActions: [
+          { content: "Cancel", onAction: () => setToggleModalOpen(false) }
+        ],
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", children: [
+          "Are you sure you want to mark ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: targetTemplate == null ? void 0 : targetTemplate.title }),
+          " as",
+          " ",
+          (targetTemplate == null ? void 0 : targetTemplate.active) ? "inactive" : "active",
+          "?"
+        ] }) })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Modal,
+      {
+        open: upgradeModalOpen,
+        onClose: () => setUpgradeModalOpen(false),
+        title: "Upgrade to build more combos",
+        primaryAction: { content: "View plans", onAction: () => navigate("/app/subscribe?highlight=build_a_combo") },
+        secondaryActions: [{ content: "Cancel", onAction: () => setUpgradeModalOpen(false) }],
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(BlockStack, { gap: "300", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", children: !canAccessFeature("build_a_combo") ? "Build a Combo is available on the Starter plan and above." : `Your ${((_d = PLANS[plan]) == null ? void 0 : _d.label) || "Starter"} plan allows up to ${comboTemplateLimit} combo template${comboTemplateLimit === 1 ? "" : "s"}. Upgrade to Pro for unlimited templates.` }) }) })
+      }
+    )
+  ] });
+}
+function AppBundlesIndex() {
+  const { templateCount, publishedCount, totalConversions, totalRevenue, showEmbedWarning, embedEditorUrl, templates: allTemplates = [], shop } = useLoaderData();
+  reactExports.useEffect(() => {
+    setTourShop(shop);
+    if (readTour() === null && allTemplates.length === 0) startTour();
+  }, []);
+  const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const stats = [
+    { label: "Active Templates", value: String(templateCount), icon: SvgPageIcon, accent: "#1a9de0", soft: "#eef0ff" },
+    { label: "Published Pages", value: String(publishedCount), icon: SvgStoreIcon, accent: "#059669", soft: "#e7f8f0" },
+    { label: "Conversions", value: String(totalConversions), icon: SvgChartVerticalIcon, accent: "#1a9de0", soft: "#d4f1fe" },
+    { label: "Bundle Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: SvgCashDollarIcon, accent: "#d97706", soft: "#fdf2e3" }
+  ];
+  const steps = [
+    { label: "Pick a template", sub: "Choose a guided, tabbed, or grid layout", href: "/app/bundles", done: templateCount > 0 },
+    { label: "Customize your combo", sub: "Set collections, content, and styling", href: "/app/bundles/customize", done: false },
+    { label: "Publish a page", sub: "Save & publish to go live on your store", href: "/app/bundles/customize", done: publishedCount > 0 }
+  ];
+  const doneCount = steps.filter((s) => s.done).length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Page, { fullWidth: true, title: "Dashboard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+.bac-hero{position:relative;overflow:hidden;border-radius:16px;padding:28px 32px;background:linear-gradient(120deg,#1a9de0 0%,#17c4a0 55%,#2ecc71 100%);color:#fff;box-shadow:0 12px 30px rgba(26,157,224,.28)}
+.bac-hero::after{content:'';position:absolute;right:-60px;top:-60px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)}
+.bac-hero::before{content:'';position:absolute;right:120px;bottom:-80px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12) 0%,rgba(255,255,255,0) 70%)}
+.bac-hero-inner{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.bac-hero-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:rgba(255,255,255,.18);padding:5px 12px;border-radius:999px;backdrop-filter:blur(4px)}
+.bac-hero-title{font-size:26px;font-weight:800;line-height:1.15;margin:14px 0 6px;letter-spacing:-.4px}
+.bac-hero-sub{font-size:14px;line-height:1.5;color:rgba(255,255,255,.9);max-width:520px}
+.bac-hero-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.bac-hero-btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer;border:none;transition:transform .12s ease,box-shadow .12s ease}
+.bac-hero-btn:hover{transform:translateY(-1px)}
+.bac-hero-btn--primary{background:#fff;color:#1a9de0;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.bac-hero-btn--ghost{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.35)}
+.bac-stat{display:flex;align-items:center;gap:14px}
+.bac-stat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bac-stat-icon svg{width:22px;height:22px}
+.bac-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:#fafbfb;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease,border-color .12s ease;width:100%;font:inherit;text-align:left;color:inherit;margin:0}
+.bac-row:hover{background:#f1f3f9;border-color:#d6d9ef}
+.bac-row-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#eef0ff}
+.bac-row-icon svg{width:18px;height:18px}
+.bac-step{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid #e1e3e5;cursor:pointer;transition:background .12s ease;width:100%;font:inherit;text-align:left;color:inherit;margin:0;background:none}
+.bac-step:hover{background:#fafbfb}
+.bac-step-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.bac-step-dot svg{width:22px;height:22px}
+.bac-step-num{width:22px;height:22px;border-radius:50%;border:2px solid #c9cdd6;color:#8c9196;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.bac-progress-track{height:8px;border-radius:999px;background:#eceef2;overflow:hidden}
+.bac-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#1a9de0,#2ecc71);transition:width .3s ease}
+      ` }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "500", children: [
+      showEmbedWarning && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CartDrawerEmbedBanner,
+        {
+          editorUrl: embedEditorUrl,
+          onCheckAgain: () => revalidator.revalidate(),
+          checking: revalidator.state === "loading"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-hero", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bac-hero-inner", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bac-hero-pill", children: "Bundle Builder" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-hero-title", children: "Build bundle pages that lift order value" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-hero-sub", children: "Create guided, tabbed, or grid bundle pages — no theme code required." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bac-hero-actions", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "bac-hero-btn bac-hero-btn--primary", "data-tour": "combo-create", onClick: () => navigate("/app/bundles/customize"), children: "Create a bundle" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "bac-hero-btn bac-hero-btn--ghost", onClick: startTour, children: "Take the setup tour" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(BundleStackMock, {}) })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrixBar, { size: "md", floating: true }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ComboSetupTour, { page: "dashboard", shop }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(InlineGrid, { columns: { xs: 1, sm: 2, md: 4 }, gap: "400", children: stats.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bac-stat", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-stat-icon", style: { background: s.soft, color: s.accent }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: s.icon }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "050", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: s.label }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "headingLg", children: s.value })
+        ] })
+      ] }) }, s.label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TemplateManager, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineGrid, { columns: { xs: 1, md: "1fr 1fr" }, gap: "400", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { align: "space-between", blockAlign: "center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h2", variant: "headingMd", children: "Getting Started" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "span", variant: "bodySm", tone: "subdued", children: [
+              doneCount,
+              " of ",
+              steps.length
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-progress-track", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-progress-fill", style: { width: `${doneCount / steps.length * 100}%` } }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BlockStack, { gap: "150", children: steps.map((step, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "bac-step", onClick: () => navigate(step.href), children: [
+            step.done ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-step-dot", style: { color: "#059669" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgCheckCircleIcon }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-step-num", children: i + 1 }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "050", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", fontWeight: "semibold", children: step.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyXs", tone: "subdued", children: step.sub })
+            ] })
+          ] }, step.label)) })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h2", variant: "headingMd", children: "Quick Actions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BlockStack, { gap: "150", children: [
+            { label: "Template Library", sub: "Browse preset layouts", href: "/app/bundles", icon: SvgPageIcon, tint: "#eef0ff", accent: "#1a9de0" },
+            { label: "Customize Builder", sub: "Design your bundle page", href: "/app/bundles/customize", icon: SvgWandIcon, tint: "#edfaf4", accent: "#2ecc71" },
+            { label: "Analytics", sub: "View impressions & revenue", href: "/app/analytics", icon: SvgChartVerticalIcon, tint: "#d4f1fe", accent: "#1a9de0" }
+          ].map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "bac-row", onClick: () => navigate(item.href), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "300", blockAlign: "center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bac-row-icon", style: { background: item.tint, color: item.accent }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: item.icon }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", fontWeight: "semibold", children: item.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyXs", tone: "subdued", children: item.sub })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "span", variant: "bodySm", tone: "subdued", children: "›" })
+          ] }, item.label)) })
+        ] }) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: 100 }, "aria-hidden": "true" })
+  ] });
+}
+var AppDistribution;
+(function(AppDistribution2) {
+  AppDistribution2["AppStore"] = "app_store";
+  AppDistribution2["SingleMerchant"] = "single_merchant";
+  AppDistribution2["ShopifyAdmin"] = "shopify_admin";
+})(AppDistribution || (AppDistribution = {}));
+var LoginErrorType;
+(function(LoginErrorType2) {
+  LoginErrorType2["MissingShop"] = "MISSING_SHOP";
+  LoginErrorType2["InvalidShop"] = "INVALID_SHOP";
+})(LoginErrorType || (LoginErrorType = {}));
+const TEMPLATES = [
+  { id: "classic-grid", name: "Classic Grid", apiKey: "fbt1", colors: { bg: "#ffffff", text: "#111827", price: "#059669", button: "#111827", buttonText: "#ffffff", border: "#e5e7eb" }, borderRadius: 8 },
+  { id: "modern-cards", name: "Modern Cards", apiKey: "fbt2", colors: { bg: "#f9fafb", text: "#374151", price: "#dc2626", button: "#4f46e5", buttonText: "#ffffff", border: "#d1d5db" }, borderRadius: 12 },
+  { id: "vertical-list", name: "Vertical List", apiKey: "fbt3", colors: { bg: "#ffffff", text: "#111827", price: "#dc2626", button: "#111827", buttonText: "#ffffff", border: "#e5e7eb" }, borderRadius: 4 }
+];
+const INTERACTION_OPTIONS = [
+  { label: "Classic — Individual Add / Remove", value: "classic" },
+  { label: "Quick Add — Quantity Stepper", value: "quick-add" },
+  { label: "Bundle — Minimum 1 Required", value: "bundle" },
+  { label: "Checkbox + Quantity — Select & adjust", value: "checkbox-qty" }
+];
+const LAYOUT_OPTIONS = [
+  { label: "Carousel — Horizontal scroll", value: "carousel" },
+  { label: "Grid — 2-column grid", value: "grid" },
+  { label: "Vertical — Stacked list", value: "vertical" }
+];
+const PLACEMENT_OPTIONS = [
+  { value: "all", label: "Show on all product pages", helpText: "The same FBT products will appear on every product page" },
+  { value: "specific", label: "Show on a specific product page", helpText: "Select one product page where FBT will appear" },
+  { value: "different", label: "Show different FBT for different product pages", helpText: "Create multiple rules with different FBT products per page" }
+];
+const PREVIEW_SLOT_COUNT = 3;
+const SECTION_TIPS = {
+  interaction: 'Offering "Add All to Cart" in a single click increases bundle conversion by up to 37% — lower friction means more customers complete the bundle.',
+  colors: "Matching your FBT widget colors to your brand palette boosts trust — 71% of consumers expect a consistent visual experience across all touchpoints.",
+  styling: "Larger product images in FBT widgets increase click-through by 23% — shoppers are 60% more likely to add a product they can clearly see."
+};
+const defaultProductStates = () => Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: true, qty: 1, checked: true }));
+function buildPreviewProducts(rules, catalog) {
+  var _a;
+  const ruleProducts = ((_a = (rules || []).find((r) => (r.fbtProducts || []).length > 0)) == null ? void 0 : _a.fbtProducts) || [];
+  const seen2 = /* @__PURE__ */ new Set();
+  const unique = [...ruleProducts, ...catalog || []].filter((p) => {
+    if (!(p == null ? void 0 : p.id) || seen2.has(p.id)) return false;
+    seen2.add(p.id);
+    return true;
+  });
+  return Array.from({ length: PREVIEW_SLOT_COUNT }, (_, i) => {
+    const p = unique[i];
+    return p ? { id: p.id, name: p.title || p.name || `Product ${i + 1}`, price: Number(p.price || 0), image: p.image || "" } : { id: `placeholder-${i}`, name: "Add a product", price: 0, image: "" };
+  });
+}
+function apiKeyToTemplateId(apiKey) {
+  var _a;
+  return ((_a = TEMPLATES.find((t) => t.apiKey === apiKey)) == null ? void 0 : _a.id) ?? "classic-grid";
+}
+function templateIdToApiKey(id) {
+  var _a;
+  return ((_a = TEMPLATES.find((t) => t.id === id)) == null ? void 0 : _a.apiKey) ?? "fbt1";
+}
+function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, title }) {
+  const { symbol: currencySymbol } = useCurrency();
+  const [localSelected, setLocalSelected] = reactExports.useState([]);
+  const prevOpen = usePrevious(open);
+  reactExports.useEffect(() => {
+    if (open && !prevOpen) {
+      setLocalSelected(selectedIds || []);
+    }
+  }, [open, prevOpen, selectedIds]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Modal,
+    {
+      open,
+      onClose,
+      title: title || "Browse Products",
+      size: "large",
+      primaryAction: { content: `Save Selection (${localSelected.length})`, onAction: () => {
+        onSave(localSelected);
+        onClose();
+      } },
+      secondaryActions: [{ content: "Cancel", onAction: onClose }],
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "400", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodyMd", tone: "subdued", children: "Select the products to include." }),
+        allProducts.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "No products found. Make sure your store has products." }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProductPickerBody, { products: allProducts, selectedIds: localSelected, setSelectedIds: setLocalSelected, currencySymbol, resetKey: open })
+      ] }) })
+    }
+  );
+}
+function usePrevious(value) {
+  const ref = reactExports.useRef();
+  reactExports.useEffect(() => {
+    ref.current = value;
+  });
+  return ref.current;
+}
+function ImagePlaceholder({ size = 64, image = "" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+    width: size,
+    height: size,
+    borderRadius: "10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    border: "1px solid #e5e7eb",
+    backgroundColor: "#f3f4f6",
+    backgroundImage: image ? `url(${image})` : void 0,
+    backgroundSize: "cover",
+    backgroundPosition: "center"
+  }, children: !image && /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: size * 0.46, height: size * 0.46, viewBox: "0 0 24 24", fill: "none", stroke: "#9ca3af", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2", ry: "2" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8.5", cy: "8.5", r: "1.5" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "21 15 16 10 5 21" })
+  ] }) });
+}
+function findProductsByIds(allProducts, ids) {
+  return allProducts.filter((p) => ids.includes(p.id)).map((p) => ({
+    id: p.id,
+    title: p.title,
+    handle: p.handle,
+    image: p.image,
+    price: p.price
+  }));
+}
+function scopeLabel(scope) {
+  if (scope === "all") return "All product pages";
+  if (scope === "single") return "Specific product page";
+  return "Per-product rules";
+}
+function summarizeTitles(products, max = 2) {
+  const list = products || [];
+  if (list.length === 0) return "";
+  const shown = list.slice(0, max).map((p) => p.title).join(", ");
+  return list.length > max ? `${shown} +${list.length - max} more` : shown;
+}
+function pluralize(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+    border: `1px solid ${isOpen ? "#b5e3d8" : "#e5e7eb"}`,
+    borderRadius: "10px",
+    overflow: "hidden",
+    transition: "border-color 0.15s, box-shadow 0.15s",
+    boxShadow: isOpen ? "0 0 0 2px rgba(0,128,96,0.06)" : "none"
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: () => onToggle(id),
+        style: {
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "14px 16px",
+          background: isOpen ? "#f6fffe" : "#fafafa",
+          border: "none",
+          cursor: "pointer",
+          borderBottom: isOpen ? "1px solid #e5e7eb" : "none",
+          transition: "background 0.15s"
+        },
+        "aria-expanded": isOpen,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              flexShrink: 0,
+              background: isOpen ? "#e6f4f1" : "#f3f4f6",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.15s"
+            }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: icon }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "span", variant: "bodyMd", fontWeight: "semibold", children: title })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { flexShrink: 0, display: "flex", alignItems: "center", color: "#637381" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: isOpen ? SvgChevronUpIcon : SvgChevronDownIcon }) })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Collapsible, { open: isOpen, id: `fbt-${id}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: "20px 16px", background: "#fff" }, children: [
+      children,
+      tip && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "16px", background: "#eef2ff", border: "1px solid #c7d2fe", borderLeft: "3px solid #6366f1", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: "10px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { minWidth: "18px", width: "18px", height: "18px", borderRadius: "50%", background: "#6366f1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "2px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgMagicIcon }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { style: { margin: 0, fontSize: "12.5px", color: "#312e81", lineHeight: 1.65 }, children: tip })
+      ] })
+    ] }) })
+  ] });
+}
+function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, nextLabel, onNext, onBack, onSkip, onUnavailable, canGoBack }) {
+  const [rect, setRect] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!targetRef.current) onUnavailable == null ? void 0 : onUnavailable();
+  }, [targetRef]);
+  reactExports.useEffect(() => {
+    setRect(null);
+  }, [targetRef]);
+  reactExports.useEffect(() => {
+    const el = targetRef.current;
+    if (!el) return void 0;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.top, left: r.left, width: r.width, height: r.height, bottom: r.bottom });
+    };
+    update();
+    const settleTimer = setTimeout(update, 350);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      clearTimeout(settleTimer);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [targetRef]);
+  if (!rect) return null;
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  const cardWidth = 320;
+  const cardHeight = 150;
+  const margin = 16;
+  const spaceBelow = viewportH - rect.bottom;
+  const spaceAbove = rect.top;
+  let cardTop;
+  if (spaceBelow >= cardHeight + margin) {
+    cardTop = rect.bottom + 12;
+  } else if (spaceAbove >= cardHeight + margin) {
+    cardTop = rect.top - cardHeight - 12;
+  } else {
+    cardTop = viewportH - cardHeight - margin;
+  }
+  cardTop = Math.max(margin, Math.min(cardTop, viewportH - cardHeight - margin));
+  const cardLeft = Math.min(Math.max(rect.left, margin), viewportW - cardWidth - margin);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+      position: "fixed",
+      top: rect.top - 4,
+      left: rect.left - 4,
+      width: rect.width + 8,
+      height: rect.height + 8,
+      borderRadius: "10px",
+      border: "2px solid #008060",
+      boxShadow: "0 0 0 4000px rgba(15,17,17,0.5)",
+      pointerEvents: "none",
+      zIndex: 10500
+    } }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+      position: "fixed",
+      top: cardTop,
+      left: cardLeft,
+      width: `${cardWidth}px`,
+      background: "#202223",
+      color: "#fff",
+      borderRadius: "12px",
+      padding: "16px",
+      boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+      zIndex: 10501
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: "11px", fontWeight: 700, letterSpacing: "0.04em", color: "#9aa0a3", textTransform: "uppercase" }, children: [
+          "Step ",
+          stepNumber,
+          " of ",
+          totalSteps
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onSkip, "aria-label": "Skip setup tour", style: { border: "none", background: "transparent", color: "#9aa0a3", cursor: "pointer", fontSize: "16px", lineHeight: 1, padding: "2px" }, children: "×" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "14px", fontWeight: 700, marginBottom: "4px" }, children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "13px", color: "#c9cccf", lineHeight: 1.5, marginBottom: "14px" }, children: desc }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onSkip, style: { border: "none", background: "transparent", color: "#9aa0a3", cursor: "pointer", fontSize: "12px", fontWeight: 600, padding: 0 }, children: "Skip tour" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+          canGoBack && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onBack, style: { border: "1px solid #45484a", background: "transparent", color: "#e3e5e7", cursor: "pointer", fontSize: "13px", fontWeight: 600, padding: "7px 14px", borderRadius: "8px" }, children: "Back" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onNext, style: { border: "none", background: "#008060", color: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: 600, padding: "8px 16px", borderRadius: "8px" }, children: nextLabel })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+function ColorField({ label, value, onChange }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "13px", fontWeight: 500, color: "#202223", marginBottom: "6px" }, children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "32px", height: "32px", borderRadius: "6px", border: "1px solid #c9cccf", overflow: "hidden", flexShrink: 0, position: "relative" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", inset: 0, background: value, pointerEvents: "none" } }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "color",
+            value,
+            onChange: (e) => onChange(e.target.value),
+            style: { opacity: 0, width: "150%", height: "150%", cursor: "pointer", position: "absolute", top: "-25%", left: "-25%" }
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "13px", color: "#6d7175", fontFamily: "monospace" }, children: value })
+    ] })
+  ] });
+}
+function FBTPage() {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+  const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
+  const { symbol: currencySymbol } = useCurrency();
+  const fetcher = useFetcher();
+  const { canPublishFeature: canPublishFeature2 } = usePlan();
+  const fbtPublishable = canPublishFeature2("fbt");
+  const [isEnabled, setIsEnabled] = reactExports.useState((fbtConfig == null ? void 0 : fbtConfig.is_enabled) !== 0);
+  const fbtEffectiveEnabled = isEnabled && fbtPublishable;
+  const [isConfigModalOpen, setIsConfigModalOpen] = reactExports.useState(false);
+  const [openSection, setOpenSection] = reactExports.useState(null);
+  const [selectedTemplate, setSelectedTemplate] = reactExports.useState(apiKeyToTemplateId(fbtConfig.activeTemplate));
+  const [interactionStyle, setInteractionStyle] = reactExports.useState(
+    fbtConfig.interactionType === "quickAdd" ? "quick-add" : fbtConfig.interactionType === "checkboxQty" ? "checkbox-qty" : fbtConfig.interactionType || "classic"
+  );
+  const [layout, setLayout] = reactExports.useState(() => {
+    const l = fbtConfig.layout || "carousel";
+    if (l === "horizontal") return "carousel";
+    return l;
+  });
+  const [bgColor, setBgColor] = reactExports.useState(fbtConfig.bgColor || "#ffffff");
+  const [textColor, setTextColor] = reactExports.useState(fbtConfig.textColor || "#111827");
+  const [priceColor, setPriceColor] = reactExports.useState(fbtConfig.priceColor || "#059669");
+  const [buttonColor, setButtonColor] = reactExports.useState(fbtConfig.buttonColor || "#111827");
+  const [buttonTextColor, setButtonTextColor] = reactExports.useState(fbtConfig.buttonTextColor || "#ffffff");
+  const [borderColor, setBorderColor] = reactExports.useState(fbtConfig.borderColor || "#e5e7eb");
+  const [borderRadius, setBorderRadius] = reactExports.useState(fbtConfig.borderRadius ?? 8);
+  const [showPrices, setShowPrices] = reactExports.useState(fbtConfig.showPrices !== false);
+  const [showAddAll, setShowAddAll] = reactExports.useState(fbtConfig.showAddAllButton !== false);
+  const [configMode, setConfigMode] = reactExports.useState(fbtConfig.mode === "ai" ? "ai" : "manual");
+  const [fbtCount, setFbtCount] = reactExports.useState(String(fbtConfig.aiProductCount || 6));
+  const [aiConfigured, setAiConfigured] = reactExports.useState(Boolean(fbtConfig.aiEnabled));
+  const [placement, setPlacement] = reactExports.useState("all");
+  const [widgetPlacement, setWidgetPlacement] = reactExports.useState(fbtConfig.widgetPlacement || "above_cart");
+  const [productStates, setProductStates] = reactExports.useState(defaultProductStates());
+  const [hasChanges, setHasChanges] = reactExports.useState(false);
+  const [toastActive, setToastActive] = reactExports.useState(false);
+  const [manualRules, setManualRules] = reactExports.useState(initialRules || []);
+  const [showProductPicker, setShowProductPicker] = reactExports.useState(false);
+  const [pickerTarget, setPickerTarget] = reactExports.useState(null);
+  const [draftRule, setDraftRule] = reactExports.useState(null);
+  const [ruleCreatedToast, setRuleCreatedToast] = reactExports.useState(false);
+  const [configureToast, setConfigureToast] = reactExports.useState(false);
+  const templateStepRef = reactExports.useRef(null);
+  const customizeStepRef = reactExports.useRef(null);
+  const configureStepRef = reactExports.useRef(null);
+  const initialTemplateRef = reactExports.useRef(selectedTemplate);
+  const fbtKey = (name) => `${name}:${shop}`;
+  const [customizedFlag, setCustomizedFlag] = reactExports.useState(false);
+  const [tourStepIndex, setTourStepIndex] = reactExports.useState(null);
+  const templateStepDone = hasSavedFbtConfig || selectedTemplate !== initialTemplateRef.current;
+  const customizeStepDone = hasSavedFbtConfig || customizedFlag;
+  const configureStepDone = manualRules.length > 0 || Boolean(fbtConfig == null ? void 0 : fbtConfig.aiEnabled) || aiConfigured;
+  const tourStepsDone = [templateStepDone, customizeStepDone, configureStepDone];
+  const SETUP_STEPS = [
+    {
+      key: "template",
+      ref: templateStepRef,
+      tourTitle: "Choose your template",
+      tourDesc: "Start with a layout that fits how you want your Frequently Bought Together offer to appear.",
+      nextLabel: "Next",
+      done: templateStepDone
+    },
+    {
+      key: "customize",
+      ref: customizeStepRef,
+      tourTitle: "Customize your offer",
+      tourDesc: "Adjust the appearance and content so the FBT widget matches your storefront.",
+      nextLabel: "Next",
+      done: customizeStepDone
+    },
+    {
+      key: "configure",
+      ref: configureStepRef,
+      tourTitle: "Configure your products",
+      tourDesc: "Choose the products that trigger the recommendation and the products you want to offer together.",
+      nextLabel: "Configure",
+      done: configureStepDone
+    }
+  ];
+  const TOUR_STEP_COUNT = SETUP_STEPS.length;
+  reactExports.useEffect(() => {
+    let customizedFromStorage = false;
+    let tourDismissed = false;
+    try {
+      customizedFromStorage = localStorage.getItem(fbtKey("cn_fbt_setup_customized")) === "1";
+      tourDismissed = localStorage.getItem(fbtKey("cn_fbt_setup_tour_dismissed")) === "1";
+    } catch {
+    }
+    setCustomizedFlag(customizedFromStorage);
+    if (tourDismissed) return;
+    const doneFlags = [
+      hasSavedFbtConfig,
+      hasSavedFbtConfig || customizedFromStorage,
+      manualRules.length > 0 || Boolean(fbtConfig == null ? void 0 : fbtConfig.aiEnabled)
+    ];
+    const refs = [templateStepRef, customizeStepRef, configureStepRef];
+    const firstIncomplete = doneFlags.findIndex((done, i) => {
+      var _a2;
+      return !done && Boolean((_a2 = refs[i]) == null ? void 0 : _a2.current);
+    });
+    if (firstIncomplete === -1) {
+      if (doneFlags.every(Boolean)) {
+        try {
+          localStorage.setItem(fbtKey("cn_fbt_setup_tour_dismissed"), "1");
+        } catch {
+        }
+      }
+      return;
+    }
+    setTourStepIndex(firstIncomplete);
+  }, []);
+  const [tourManualPreview, setTourManualPreview] = reactExports.useState(false);
+  const finishTour2 = () => {
+    setTourStepIndex(null);
+    setTourManualPreview(false);
+    try {
+      localStorage.setItem(fbtKey("cn_fbt_setup_tour_dismissed"), "1");
+    } catch {
+    }
+  };
+  const resolveTourStep = (start, dir, { skipCompleted }) => {
+    var _a2;
+    const refs = [templateStepRef, customizeStepRef, configureStepRef];
+    for (let i = start; i >= 0 && i < TOUR_STEP_COUNT; i += dir) {
+      if (!((_a2 = refs[i]) == null ? void 0 : _a2.current)) continue;
+      if (skipCompleted && tourStepsDone[i]) continue;
+      return i;
+    }
+    return -1;
+  };
+  const advanceTour = (fromIndex) => {
+    const next = resolveTourStep(fromIndex + 1, 1, { skipCompleted: !tourManualPreview });
+    if (next === -1) {
+      finishTour2();
+      return;
+    }
+    setTourStepIndex(next);
+  };
+  const backTour = (fromIndex) => {
+    const prev = resolveTourStep(fromIndex - 1, -1, { skipCompleted: false });
+    if (prev === -1) return;
+    setTourStepIndex(prev);
+  };
+  const finishTourIntoConfigure = () => {
+    finishTour2();
+    setIsConfigModalOpen(true);
+  };
+  const replayTour = () => {
+    setTourManualPreview(true);
+    try {
+      localStorage.removeItem(fbtKey("cn_fbt_setup_tour_dismissed"));
+      setCustomizedFlag(localStorage.getItem(fbtKey("cn_fbt_setup_customized")) === "1");
+    } catch {
+    }
+    const first = resolveTourStep(0, 1, { skipCompleted: false });
+    if (first === -1) {
+      setTourManualPreview(false);
+      setTourStepIndex(null);
+      return;
+    }
+    setTourStepIndex(first);
+  };
+  reactExports.useEffect(() => {
+    if (tourStepIndex === null || tourManualPreview) return;
+    if (tourStepsDone[tourStepIndex]) advanceTour(tourStepIndex);
+  }, [templateStepDone, customizeStepDone, configureStepDone]);
+  reactExports.useEffect(() => {
+    console.log("[FBT SETUP DEBUG]", {
+      fbtPublishable,
+      isConfigModalOpen,
+      tourStepIndex,
+      tourManualPreview,
+      tourDismissedLS: (() => {
+        try {
+          return localStorage.getItem(fbtKey("cn_fbt_setup_tour_dismissed"));
+        } catch {
+          return "ERR";
+        }
+      })(),
+      customizedLS: (() => {
+        try {
+          return localStorage.getItem(fbtKey("cn_fbt_setup_customized"));
+        } catch {
+          return "ERR";
+        }
+      })(),
+      hasSavedFbtConfig,
+      manualRulesCount: manualRules.length,
+      selectedTemplate,
+      templateStepDone,
+      customizeStepDone,
+      configureStepDone,
+      refsMounted: {
+        template: !!templateStepRef.current,
+        customize: !!customizeStepRef.current,
+        configure: !!configureStepRef.current
+      },
+      isSaving: fetcher.state !== "idle"
+    });
+  }, [isConfigModalOpen, tourStepIndex, manualRules.length]);
+  const isSaving = fetcher.state !== "idle";
+  const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
+  const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
+  const draftTriggerProducts = ((_a = draftRule == null ? void 0 : draftRule.triggerIds) == null ? void 0 : _a.length) ? findProductsByIds(allProducts, draftRule.triggerIds) : [];
+  const draftFbtProducts = ((_b = draftRule == null ? void 0 : draftRule.fbtIds) == null ? void 0 : _b.length) ? findProductsByIds(allProducts, draftRule.fbtIds) : [];
+  const draftReady = draftTriggerProducts.length > 0 && draftFbtProducts.length > 0;
+  const lastToastedFetcherDataRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    var _a2;
+    if (!fetcher.data || fetcher.data === lastToastedFetcherDataRef.current) return;
+    lastToastedFetcherDataRef.current = fetcher.data;
+    setToastActive(true);
+    if ((_a2 = fetcher.data) == null ? void 0 : _a2.success) {
+      setHasChanges(false);
+      if (configMode === "ai") setAiConfigured(true);
+      try {
+        localStorage.setItem(fbtKey("cn_fbt_setup_customized"), "1");
+      } catch {
+      }
+    }
+  }, [fetcher.data, configMode]);
+  const mark = () => setHasChanges(true);
+  const toggleSection = reactExports.useCallback((id) => setOpenSection((p) => p === id ? null : id), []);
+  const applyTemplate = (id) => {
+    const t = TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    setSelectedTemplate(id);
+    setBgColor(t.colors.bg);
+    setTextColor(t.colors.text);
+    setPriceColor(t.colors.price);
+    setButtonColor(t.colors.button);
+    setButtonTextColor(t.colors.buttonText);
+    setBorderColor(t.colors.border);
+    setBorderRadius(t.borderRadius);
+    setProductStates(defaultProductStates());
+    if (id === "vertical-list") setLayout("vertical");
+    mark();
+  };
+  const updateProduct = (i, updates) => setProductStates((prev) => prev.map((s, idx) => idx === i ? { ...s, ...updates } : s));
+  const isActive = (i) => {
+    const s = productStates[i];
+    return interactionStyle === "bundle" || interactionStyle === "checkbox-qty" ? s.checked : s.added;
+  };
+  const total = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
+  const activeCount = fbtPreviewProducts.filter((_, i) => isActive(i)).length;
+  const submitFbtConfig = (overrides = {}) => {
+    const curSettings = {
+      layout,
+      interactionType: interactionStyle === "quick-add" ? "quickAdd" : interactionStyle === "checkbox-qty" ? "checkboxQty" : interactionStyle,
+      showPrices,
+      showAddAllButton: showAddAll,
+      bgColor,
+      textColor,
+      priceColor,
+      buttonColor,
+      buttonTextColor,
+      borderColor,
+      borderRadius
+    };
+    const templates = {};
+    for (const t of TEMPLATES) {
+      if (t.id === selectedTemplate) {
+        templates[t.apiKey] = { name: t.name, ...curSettings };
+      } else {
+        templates[t.apiKey] = {
+          name: t.name,
+          layout: "carousel",
+          interactionType: "classic",
+          showPrices: true,
+          showAddAllButton: true,
+          ...t.colors,
+          borderRadius: t.borderRadius
+        };
+      }
+    }
+    fetcher.submit(
+      {
+        selectedTemplate: templateIdToApiKey(selectedTemplate),
+        isEnabled,
+        mode: configMode,
+        templates,
+        manualRules,
+        aiEnabled: configMode === "ai",
+        aiProductCount: Number(fbtCount),
+        widgetPlacement,
+        ...curSettings,
+        shop,
+        ...overrides
+      },
+      { method: "POST", encType: "application/json" }
+    );
+  };
+  const isFbtActuallyConfigured = configMode === "ai" ? aiCountValid : manualRules.length > 0;
+  const handleSave = () => {
+    if (!isFbtActuallyConfigured) {
+      setConfigureToast(true);
+      return;
+    }
+    submitFbtConfig();
+  };
+  const renderAction = (i) => {
+    const s = productStates[i];
+    const btnBase = { borderRadius: `${borderRadius}px`, border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 600, padding: "7px 14px", background: buttonColor, color: buttonTextColor, transition: "background 0.15s" };
+    if (interactionStyle === "bundle") {
+      const isLastChecked = s.checked && activeCount <= 1;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "checkbox",
+          checked: s.checked,
+          disabled: isLastChecked,
+          onChange: (e) => {
+            if (!e.target.checked && activeCount <= 1) return;
+            updateProduct(i, { checked: e.target.checked });
+          },
+          style: { width: "18px", height: "18px", accentColor: buttonColor, cursor: isLastChecked ? "not-allowed" : "pointer", opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }
+        }
+      );
+    }
+    if (interactionStyle === "checkbox-qty") {
+      if (!s.checked) return null;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => updateProduct(i, { qty: Math.max(1, s.qty - 1) }),
+            style: { width: "24px", height: "24px", borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: "#fff", cursor: "pointer", fontSize: "13px", fontWeight: 700, color: textColor, flexShrink: 0 },
+            children: "−"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: textColor, fontSize: "12px", minWidth: "16px", textAlign: "center", fontWeight: 600 }, children: s.qty }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => updateProduct(i, { qty: s.qty + 1 }),
+            style: { width: "24px", height: "24px", borderRadius: `${borderRadius}px`, border: "none", background: buttonColor, color: buttonTextColor, cursor: "pointer", fontSize: "13px", fontWeight: 700, flexShrink: 0 },
+            children: "+"
+          }
+        )
+      ] });
+    }
+    if (interactionStyle === "quick-add") {
+      if (!s.added) return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => updateProduct(i, { added: true }), style: { ...btnBase, background: "#fff", color: buttonColor, border: `1px solid ${borderColor}` }, children: "Add" });
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", width: "100%" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => updateProduct(i, s.qty <= 1 ? { added: false, qty: 1 } : { qty: s.qty - 1 }),
+            style: { width: "28px", height: "28px", borderRadius: `${borderRadius}px`, border: `1px solid ${borderColor}`, background: "#fff", cursor: "pointer", fontSize: "15px", fontWeight: 700, color: textColor, flexShrink: 0 },
+            children: "−"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: textColor, fontSize: "13px", minWidth: "20px", textAlign: "center", fontWeight: 600 }, children: s.qty }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => updateProduct(i, { qty: s.qty + 1 }),
+            style: { width: "28px", height: "28px", borderRadius: `${borderRadius}px`, border: "none", background: buttonColor, color: buttonTextColor, cursor: "pointer", fontSize: "15px", fontWeight: 700, flexShrink: 0 },
+            children: "+"
+          }
+        )
+      ] });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        onClick: () => updateProduct(i, { added: !s.added }),
+        style: { ...btnBase, background: s.added ? "#008060" : buttonColor, whiteSpace: "nowrap" },
+        children: s.added ? "Added" : "Add"
+      }
+    );
+  };
+  const cardStyle = (() => {
+    if (selectedTemplate === "modern-cards") return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      boxShadow: "0 4px 16px rgba(0,0,0,0.13)",
+      border: "none",
+      padding: "12px 8px"
+    };
+    if (selectedTemplate === "vertical-list") return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      border: `1px solid ${borderColor}`,
+      borderLeft: `4px solid ${buttonColor}`,
+      padding: "10px 8px"
+    };
+    return {
+      background: bgColor,
+      borderRadius: `${borderRadius}px`,
+      border: `1px solid ${borderColor}`,
+      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      padding: "10px 8px"
+    };
+  })();
+  const PreviewCard = ({ p, i }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+    ...cardStyle,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "6px",
+    boxSizing: "border-box"
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ImagePlaceholder, { size: 56, image: p.image }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+      color: textColor,
+      fontSize: "11px",
+      fontWeight: 500,
+      lineHeight: 1.35,
+      textAlign: "center",
+      width: "100%",
+      display: "-webkit-box",
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: "vertical",
+      overflow: "hidden",
+      wordBreak: "break-word"
+    }, children: p.name }),
+    showPrices && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: priceColor, fontSize: "13px", fontWeight: 700, textAlign: "center" }, children: [
+      currencySymbol,
+      p.price
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: "auto", width: "100%", display: "flex", justifyContent: "center" }, children: renderAction(i) })
+  ] });
+  const useRowLayout = interactionStyle === "checkbox-qty" || layout === "vertical";
+  const showPlusSeparators = selectedTemplate === "classic-grid" && !useRowLayout && layout !== "grid";
+  const previewProducts = useRowLayout ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column" }, children: fbtPreviewProducts.map((p, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    padding: "10px 2px",
+    borderBottom: i < fbtPreviewProducts.length - 1 ? `1px solid ${borderColor}` : "none"
+  }, children: [
+    interactionStyle === "checkbox-qty" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "checkbox",
+        checked: productStates[i].checked,
+        disabled: productStates[i].checked && activeCount <= 1,
+        onChange: (e) => {
+          if (!e.target.checked && activeCount <= 1) return;
+          updateProduct(i, { checked: e.target.checked });
+        },
+        style: { width: "18px", height: "18px", accentColor: buttonColor, flexShrink: 0, cursor: "pointer" }
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ImagePlaceholder, { size: 44, image: p.image }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, minWidth: 0 }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+        color: textColor,
+        fontSize: "12px",
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }, children: p.name }),
+      showPrices && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: priceColor, fontSize: "12px", fontWeight: 700, marginTop: "2px" }, children: [
+        currencySymbol,
+        p.price
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flexShrink: 0 }, children: renderAction(i) })
+  ] }, p.id)) }) : layout === "grid" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }, children: fbtPreviewProducts.map((p, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(PreviewCard, { p, i }, p.id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", gap: "10px", overflowX: "auto", scrollSnapType: "x mandatory", paddingBottom: "4px", scrollbarWidth: "none" }, children: fbtPreviewProducts.flatMap((p, i) => {
+    const nodes = [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: "0 0 120px", width: "120px", scrollSnapAlign: "start" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PreviewCard, { p, i }) }, p.id)
+    ];
+    if (showPlusSeparators && i < fbtPreviewProducts.length - 1) {
+      nodes.push(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", style: {
+          display: "flex",
+          alignItems: "center",
+          flexShrink: 0,
+          color: textColor,
+          opacity: 0.4,
+          fontSize: "18px",
+          fontWeight: 700
+        }, children: "+" }, `plus-${i}`)
+      );
+    }
+    return nodes;
+  }) });
+  ((_c = INTERACTION_OPTIONS.find((o) => o.value === interactionStyle)) == null ? void 0 : _c.label.split("—")[0].trim()) ?? "";
+  const templateName = ((_d = TEMPLATES.find((t) => t.id === selectedTemplate)) == null ? void 0 : _d.name) ?? "";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(Frame, { children: [
+    toastActive && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Toast,
+      {
+        content: ((_e = fetcher.data) == null ? void 0 : _e.success) ? "FBT settings saved!" : `Save failed: ${((_f = fetcher.data) == null ? void 0 : _f.error) || "unknown error"}`,
+        error: !((_g = fetcher.data) == null ? void 0 : _g.success),
+        onDismiss: () => setToastActive(false)
+      }
+    ),
+    ruleCreatedToast && /* @__PURE__ */ jsxRuntimeExports.jsx(Toast, { content: "FBT rule created", onDismiss: () => setRuleCreatedToast(false) }),
+    configureToast && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Toast,
+      {
+        content: configMode === "ai" ? "Enter a valid FBT product count before saving" : "Configure at least one FBT rule before saving",
+        error: true,
+        onDismiss: () => setConfigureToast(false)
+      }
+    ),
+    !isConfigModalOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(BrixBar, { size: "md", floating: true }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#f6f6f7" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flexShrink: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, rowGap: 6, padding: "7px 14px", background: "#fff", borderBottom: "1px solid #e1e3e5", borderLeft: "4px solid #008060" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 30, height: 30, borderRadius: 7, background: fbtEffectiveEnabled ? "#008060" : "#babec3", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { filter: "brightness(0) invert(1)", display: "flex" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgProductIcon }) }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { minWidth: 0, flex: "1 1 auto" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h1", variant: "headingMd", children: "Frequently Bought Together" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ProBadge, { featureKey: "fbt" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", variant: "bodySm", tone: "subdued", children: [
+            "Cross-sell widget on ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "#008060", fontWeight: 500 }, children: "product pages" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", gap: 10, rowGap: 6, flexShrink: 0 }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: fbtEffectiveEnabled ? "success" : void 0, children: fbtEffectiveEnabled ? "Active" : "Inactive" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => {
+                if (!fbtPublishable) return;
+                const next = !isEnabled;
+                setIsEnabled(next);
+                submitFbtConfig({ isEnabled: next });
+              },
+              disabled: !fbtPublishable,
+              title: !fbtPublishable ? "Upgrade to Starter to enable this on your storefront" : void 0,
+              style: { width: "48px", height: "26px", borderRadius: "13px", border: "none", background: fbtEffectiveEnabled ? "#008060" : "#babec3", position: "relative", cursor: fbtPublishable ? "pointer" : "not-allowed", opacity: fbtPublishable ? 1 : 0.5, transition: "background 0.2s ease", flexShrink: 0, padding: 0 },
+              "aria-label": "Toggle FBT widget",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { position: "absolute", top: "3px", left: fbtEffectiveEnabled ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "50%", background: "#ffffff", transition: "left 0.2s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", display: "block" } })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 1, height: 24, background: "#e1e3e5" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: configureStepRef, style: { display: "inline-flex" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { icon: SvgSettingsIcon, onClick: () => setIsConfigModalOpen(true), size: "slim", children: "Configure" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 1, height: 24, background: "#e1e3e5" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: () => {
+            setHasChanges(false);
+          }, disabled: !hasChanges, size: "slim", children: "Discard" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", onClick: handleSave, loading: isSaving, disabled: !hasChanges, size: "slim", children: "Save" }),
+          tourStepIndex === null && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { icon: SvgPlayIcon, size: "slim", onClick: replayTour, children: "Replay setup tour" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        Modal,
+        {
+          open: isConfigModalOpen,
+          onClose: () => setIsConfigModalOpen(false),
+          title: "Frequently Bought Together — Configuration",
+          size: "large",
+          primaryAction: {
+            content: "Save",
+            loading: isSaving,
+            disabled: configMode === "ai" && !aiCountValid,
+            onAction: () => {
+              setIsConfigModalOpen(false);
+              handleSave();
+            }
+          },
+          secondaryActions: [{ content: "Cancel", onAction: () => setIsConfigModalOpen(false) }],
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+              @media (min-width: 48em) {
+                [class*="Polaris-Modal-Dialog__Modal"][class*="Polaris-Modal-Dialog--sizeLarge"] {
+                  max-width: 46rem;
+                }
+              }
+            ` }),
+            configMode === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsx(Modal.Section, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-qs-row", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                    .brix-qs-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px 24px; }
+                    .brix-qs-item { display: flex; gap: 9px; align-items: flex-start; min-width: 0; }
+                    .brix-qs-n { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #f1f2f3; color: #6d7175; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+                    .brix-qs-b { min-width: 0; }
+                    .brix-qs-t { font-size: 12.5px; font-weight: 600; color: #202223; line-height: 1.35; }
+                    .brix-qs-d { font-size: 11.5px; color: #6d7175; line-height: 1.45; margin-top: 2px; }
+                  ` }),
+              [
+                {
+                  n: 1,
+                  t: "Choose the trigger product",
+                  d: "The product whose page shows this recommendation."
+                },
+                {
+                  n: 2,
+                  t: "Add products to recommend",
+                  d: "The items offered alongside the trigger product."
+                },
+                {
+                  n: 3,
+                  t: "Create the rule",
+                  d: "Adds it below, then Save publishes it to your store."
+                }
+              ].map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-qs-item", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-qs-n", children: s.n }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-qs-b", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brix-qs-t", children: s.t }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brix-qs-d", children: s.d })
+                ] })
+              ] }, s.n))
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Modal.Section, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                .brix-fbt-shell { display: grid; grid-template-columns: 190px 1fr; gap: 28px; align-items: start; }
+                @media (max-width: 700px) {
+                  .brix-fbt-shell { grid-template-columns: 1fr; gap: 18px; }
+                  .brix-fbt-rail { flex-direction: row !important; overflow-x: auto; }
+                }
+              ` }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-fbt-shell", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-fbt-rail", style: { display: "flex", flexDirection: "column", gap: "4px" }, children: [
+                  [
+                    { value: "manual", label: "Manual", icon: SvgSettingsIcon },
+                    { value: "ai", label: "AI-Powered", icon: SvgMagicIcon }
+                  ].map((opt) => {
+                    const selected = configMode === opt.value;
+                    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: () => setConfigMode(opt.value),
+                        style: {
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          width: "100%",
+                          padding: "10px 12px",
+                          borderRadius: "10px",
+                          border: "none",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          background: selected ? "#202223" : "transparent",
+                          color: selected ? "#ffffff" : "#4a4e50",
+                          transition: "background 0.15s ease",
+                          flexShrink: 0
+                        },
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "flex", flexShrink: 0 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: opt.icon }) }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap" }, children: opt.label }),
+                          selected && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "flex", marginLeft: "auto" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgCheckCircleIcon }) })
+                        ]
+                      },
+                      opt.value
+                    );
+                  }),
+                  configMode === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: 1, background: "#e3e5e7", margin: "10px 0" } }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", variant: "bodyXs", tone: "subdued", children: [
+                      manualRules.length,
+                      " rule",
+                      manualRules.length === 1 ? "" : "s",
+                      " saved"
+                    ] })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  configMode === "ai" && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "400", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h3", variant: "headingSm", children: "AI Coverage Run" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "AI will generate recommendations for every store product and save them directly to backend." })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      TextField$1,
+                      {
+                        label: "FBT products per product",
+                        type: "number",
+                        value: fbtCount,
+                        onChange: (v) => {
+                          setFbtCount(v);
+                          mark();
+                        },
+                        autoComplete: "off",
+                        error: !aiCountValid ? "Enter a whole number greater than 0." : void 0,
+                        helpText: aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : void 0
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", disabled: !aiCountValid, loading: isSaving, onClick: handleSave, children: aiConfigured ? "Update Configuration" : "Configure AI" }),
+                      aiConfigured && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { disabled: !aiCountValid, loading: isSaving, onClick: handleSave, children: "Regenerate Suggestions" })
+                    ] })
+                  ] }),
+                  configMode === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "500", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "150", blockAlign: "center", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { flexShrink: 0, width: "22px", height: "22px", borderRadius: "50%", background: "#202223", color: "#fff", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }, children: "1" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h3", variant: "headingSm", children: "Where to show FBT" })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", gap: "8px", paddingLeft: "30px" }, children: PLACEMENT_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
+                        borderRadius: "10px",
+                        border: `1.5px solid ${placement === opt.value ? "#008060" : "#e3e5e7"}`,
+                        background: placement === opt.value ? "#f0faf6" : "#fff",
+                        padding: "2px 6px"
+                      }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(RadioButton, { label: opt.label, helpText: opt.helpText, checked: placement === opt.value, id: `placement-${opt.value}`, name: "placement", onChange: () => setPlacement(opt.value) }) }, opt.value)) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "150", blockAlign: "center", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { flexShrink: 0, width: "22px", height: "22px", borderRadius: "50%", background: "#202223", color: "#fff", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }, children: "2" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h3", variant: "headingSm", children: "Create a rule" })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { paddingLeft: "30px", display: "flex", flexDirection: "column", gap: "14px" }, children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Pick trigger products (pages where FBT shows) and FBT products (what to recommend)." }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                            .brix-pick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+                            .brix-pick { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; text-align: left; font: inherit; cursor: pointer; padding: 11px 13px; border-radius: 10px; border: 1px solid #e3e5e7; background: #fff; transition: border-color .15s, background .15s; }
+                            .brix-pick:hover { border-color: #b5bcc2; background: #fafbfb; }
+                            .brix-pick:focus-visible { outline: 2px solid #008060; outline-offset: 1px; }
+                            .brix-pick[data-filled="true"] { border-color: #008060; }
+                            .brix-pick-ico { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f1f2f3; color: #6d7175; }
+                            .brix-pick[data-filled="true"] .brix-pick-ico { background: #008060; color: #fff; }
+                            .brix-pick-body { display: block; min-width: 0; flex: 1; }
+                            .brix-pick-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #6d7175; letter-spacing: .01em; }
+                            .brix-pick-count { font-variant-numeric: tabular-nums; color: #8c9196; }
+                            /* block + nowrap + hidden are all required together,
+                               otherwise the ellipsis never kicks in on a span. */
+                            .brix-pick-value { display: block; font-size: 12.5px; font-weight: 600; color: #202223; line-height: 1.35; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                            .brix-pick[data-filled="false"] .brix-pick-value { color: #8c9196; font-weight: 500; }
+                          ` }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brix-pick-grid", children: [
+                          {
+                            key: "trigger",
+                            icon: SvgTargetIcon,
+                            label: "Trigger products",
+                            hint: "Pages the widget appears on",
+                            products: draftTriggerProducts
+                          },
+                          {
+                            key: "fbt",
+                            icon: SvgProductIcon,
+                            label: "Recommended products",
+                            hint: "What gets offered alongside",
+                            products: draftFbtProducts
+                          }
+                        ].map((f) => {
+                          const filled = f.products.length > 0;
+                          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                            "button",
+                            {
+                              type: "button",
+                              className: "brix-pick",
+                              "data-filled": filled,
+                              onClick: () => {
+                                setPickerTarget(f.key);
+                                setShowProductPicker(true);
+                              },
+                              title: filled ? f.products.map((p) => p.title).join(", ") : void 0,
+                              children: [
+                                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-pick-ico", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: f.icon }) }),
+                                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "brix-pick-body", children: [
+                                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "brix-pick-label", children: [
+                                    f.label,
+                                    filled && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "brix-pick-count", children: [
+                                      "· ",
+                                      pluralize(f.products.length, "selected")
+                                    ] })
+                                  ] }),
+                                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-pick-value", children: filled ? summarizeTitles(f.products) : f.hint })
+                                ] })
+                              ]
+                            },
+                            f.key
+                          );
+                        }) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "150", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx(
+                              Button,
+                              {
+                                variant: "primary",
+                                disabled: !draftReady,
+                                onClick: () => {
+                                  const rule = {
+                                    id: `rule-${Date.now()}`,
+                                    displayScope: placement === "different" ? "per_product" : placement,
+                                    triggerProducts: draftTriggerProducts,
+                                    fbtProducts: draftFbtProducts,
+                                    aiGenerated: false
+                                  };
+                                  setManualRules((prev) => [...prev, rule]);
+                                  setRuleCreatedToast(true);
+                                  setDraftRule(null);
+                                  mark();
+                                },
+                                children: "Create FBT rule"
+                              }
+                            ),
+                            draftRule && (((_h = draftRule.triggerIds) == null ? void 0 : _h.length) || ((_i = draftRule.fbtIds) == null ? void 0 : _i.length)) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: () => setDraftRule(null), children: "Clear" }) : null
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodyXs", tone: "subdued", children: draftReady ? "Adds the rule below. Save publishes it to your storefront." : "Select a trigger product and at least one recommended product." })
+                        ] })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "h3", variant: "headingSm", children: [
+                        "Saved rules (",
+                        manualRules.length,
+                        ")"
+                      ] }),
+                      manualRules.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "No rules yet. Select trigger and recommended products above to create one." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
+                              .brix-rules { display: flex; flex-direction: column; gap: 8px; }
+                              .brix-rule { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 13px; border-radius: 10px; border: 1px solid #e3e5e7; background: #fff; }
+                              .brix-rule-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+                              .brix-rule-scope { align-self: flex-start; display: inline-flex; font-size: 11px; font-weight: 600; padding: 1px 9px; border-radius: 20px; background: #f0faf6; color: #008060; border: 1px solid #b5e3d8; }
+                              .brix-rule-line { display: flex; gap: 7px; min-width: 0; font-size: 12px; line-height: 1.4; }
+                              .brix-rule-k { flex-shrink: 0; width: 76px; color: #8c9196; font-weight: 600; }
+                              .brix-rule-v { min-width: 0; color: #202223; overflow: hidden; text-overflow: ellipsis; }
+                              .brix-rule-act { flex-shrink: 0; }
+                            ` }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brix-rules", children: manualRules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-rule", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-rule-main", children: [
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-rule-scope", children: scopeLabel(rule.displayScope) }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-rule-line", children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-rule-k", children: "Trigger" }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-rule-v", children: summarizeTitles(rule.triggerProducts) || "—" })
+                            ] }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brix-rule-line", children: [
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-rule-k", children: "Recommends" }),
+                              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brix-rule-v", children: summarizeTitles(rule.fbtProducts) || "—" })
+                            ] })
+                          ] }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brix-rule-act", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", tone: "critical", onClick: () => {
+                            setManualRules((prev) => prev.filter((r) => r.id !== rule.id));
+                            mark();
+                          }, children: "Remove" }) })
+                        ] }, rule.id)) })
+                      ] })
+                    ] })
+                  ] })
+                ] })
+              ] })
+            ] })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ProductPickerModal,
+        {
+          open: showProductPicker,
+          onClose: () => {
+            setShowProductPicker(false);
+            setPickerTarget(null);
+          },
+          allProducts,
+          selectedIds: [],
+          onSave: (ids) => {
+            if (pickerTarget === "trigger") {
+              setDraftRule((prev) => ({ triggerIds: ids, fbtIds: (prev == null ? void 0 : prev.fbtIds) || [] }));
+            } else if (pickerTarget === "fbt") {
+              setDraftRule((prev) => ({ triggerIds: (prev == null ? void 0 : prev.triggerIds) || [], fbtIds: ids }));
+            }
+            mark();
+          },
+          title: pickerTarget === "trigger" ? "Select Trigger Products" : "Select FBT Products"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, display: "grid", gridTemplateColumns: "58% 42%", minHeight: 0, overflow: "hidden" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { overflowY: "auto", padding: "12px 12px 100px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }, children: [
+          fbtPublishable && !fbtEmbedEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Banner,
+            {
+              title: "FBT Widget is not visible on your store yet",
+              tone: "warning",
+              action: { content: "Enable in theme editor", url: `https://${shop}/admin/themes/current/editor?context=apps`, target: "_blank" },
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                "Go to ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "App embeds" }),
+                " and turn on ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("em", { children: "FBT Widget" }),
+                " to show it on your product pages. Once enabled, ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "refresh this page" }),
+                " to confirm the status."
+              ] })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: templateStepRef, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h2", variant: "headingMd", children: "Select Template" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" }, children: TEMPLATES.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => applyTemplate(t.id),
+                style: {
+                  padding: "7px 18px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`,
+                  background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff",
+                  color: selectedTemplate === t.id ? "#008060" : "#202223",
+                  transition: "all 0.15s",
+                  outline: "none"
+                },
+                children: t.name
+              },
+              t.id
+            )) })
+          ] }) }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: customizeStepRef, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "h2", variant: "headingMd", children: [
+              "Customize: ",
+              templateName
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(AccordionSection, { id: "interaction", icon: SvgSettingsIcon, title: "Interaction & Layout", isOpen: openSection === "interaction", onToggle: toggleSection, tip: SECTION_TIPS.interaction, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Interaction Style", options: INTERACTION_OPTIONS, value: interactionStyle, onChange: (v) => {
+                setInteractionStyle(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Select,
+                {
+                  label: "Layout Alignment",
+                  options: LAYOUT_OPTIONS,
+                  value: layout,
+                  onChange: (v) => {
+                    setLayout(v);
+                    mark();
+                  },
+                  helpText: "Choose how products are arranged — applies to every template."
+                }
+              )
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(AccordionSection, { id: "colors", icon: SvgColorIcon, title: "Colors", isOpen: openSection === "colors", onToggle: toggleSection, tip: SECTION_TIPS.colors, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineGrid, { columns: 2, gap: "300", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Background", value: bgColor, onChange: (v) => {
+                setBgColor(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Text Color", value: textColor, onChange: (v) => {
+                setTextColor(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Price Color", value: priceColor, onChange: (v) => {
+                setPriceColor(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Button Color", value: buttonColor, onChange: (v) => {
+                setButtonColor(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Button Text", value: buttonTextColor, onChange: (v) => {
+                setButtonTextColor(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(ColorField, { label: "Border Color", value: borderColor, onChange: (v) => {
+                setBorderColor(v);
+                mark();
+              } })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(AccordionSection, { id: "styling", icon: SvgMagicIcon, title: "Styling & Display", isOpen: openSection === "styling", onToggle: toggleSection, tip: SECTION_TIPS.styling, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SliderField, { label: "Border Radius", value: borderRadius, min: 0, max: 20, suffix: "px", onChange: (v) => {
+                setBorderRadius(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Prices", checked: showPrices, onChange: (v) => {
+                setShowPrices(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show 'Add All' Button", checked: showAddAll, onChange: (v) => {
+                setShowAddAll(v);
+                mark();
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Divider, {}),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Select,
+                {
+                  label: "Widget Placement",
+                  helpText: widgetPlacement === "above_cart" ? "Pinned above Add to Cart — position locked on storefront." : widgetPlacement === "below_cart" ? "Pinned below Add to Cart — position locked on storefront." : "Add the block yourself anywhere on the product page via the theme editor.",
+                  options: [
+                    { label: "Above the Add to Cart button", value: "above_cart" },
+                    { label: "Below the Add to Cart button", value: "below_cart" },
+                    { label: "Custom (place it yourself in the theme editor)", value: "custom" }
+                  ],
+                  value: widgetPlacement,
+                  onChange: (v) => {
+                    setWidgetPlacement(v);
+                    mark();
+                  }
+                }
+              )
+            ] }) })
+          ] }) }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { overflowY: "auto", padding: "8px 8px 100px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h2", variant: "headingMd", children: "Preview" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: {
+            background: bgColor,
+            borderRadius: "12px",
+            padding: "18px",
+            border: `1px solid ${borderColor}`,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+            zoom: 0.78,
+            transformOrigin: "top left"
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginBottom: "14px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: textColor, fontSize: "15px", fontWeight: 700, marginBottom: "6px" }, children: "Frequently Bought Together" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+                display: "inline-block",
+                fontSize: "11px",
+                padding: "2px 9px",
+                borderRadius: "4px",
+                background: "#f3f4f6",
+                color: "#6b7280",
+                border: "1px solid #e5e7eb",
+                fontWeight: 500
+              }, children: templateName.split(" ")[0] })
+            ] }),
+            previewProducts,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "16px", paddingTop: "14px", borderTop: `1px solid ${borderColor}` }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: textColor, fontSize: "12px", marginBottom: "12px" }, children: [
+                interactionStyle === "quick-add" ? "Select items" : `Total (${activeCount} items)`,
+                /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { color: priceColor, fontSize: "20px", fontWeight: 700, lineHeight: 1.3 }, children: [
+                  currencySymbol,
+                  Math.round(total)
+                ] })
+              ] }),
+              showAddAll && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { style: {
+                width: "100%",
+                padding: "13px 16px",
+                borderRadius: `${borderRadius}px`,
+                border: "none",
+                background: buttonColor,
+                color: buttonTextColor,
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+                letterSpacing: "0.02em",
+                transition: "opacity 0.15s"
+              }, children: interactionStyle === "quick-add" ? "Add to Cart" : `Add ${activeCount || fbtPreviewProducts.length} to Cart` })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { textAlign: "center", marginTop: "14px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: {
+              fontSize: "11px",
+              padding: "3px 16px",
+              borderRadius: "20px",
+              background: "#f3f4f6",
+              color: "#9ca3af",
+              border: "1px solid #e5e7eb",
+              fontWeight: 500
+            }, children: templateName }) })
+          ] })
+        ] }) }) })
+      ] })
+    ] }),
+    tourStepIndex !== null && (() => {
+      const step = SETUP_STEPS[tourStepIndex];
+      if (!step) return null;
+      const isLast = tourStepIndex === TOUR_STEP_COUNT - 1;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SetupTourPointer,
+        {
+          targetRef: step.ref,
+          stepNumber: tourStepIndex + 1,
+          totalSteps: TOUR_STEP_COUNT,
+          title: step.tourTitle,
+          desc: step.tourDesc,
+          nextLabel: step.nextLabel,
+          onNext: () => isLast ? finishTourIntoConfigure() : advanceTour(tourStepIndex),
+          onBack: () => backTour(tourStepIndex),
+          canGoBack: resolveTourStep(tourStepIndex - 1, -1, { skipCompleted: false }) !== -1,
+          onSkip: finishTour2,
+          onUnavailable: () => advanceTour(tourStepIndex)
+        }
+      );
+    })()
+  ] });
+}
 window.__handoffEvents = [];
 window.addEventListener(HANDOFF_RECEIVED_EVENT, (e) => window.__handoffEvents.push(e.detail));
 const BarPage = ({ title }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: 24 }, children: [
@@ -42359,6 +45556,7 @@ const BannerPage = () => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: {
     }
   }
 ) });
+const svgImage = (c) => "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="${c}"/></svg>`);
 const TEMPLATE = { id: 5, title: "My combo", active: false, page_handle: "my-combo", config: { layout: "layout2" } };
 window.__saves = [];
 const router = createBrowserRouter([
@@ -42366,7 +45564,7 @@ const router = createBrowserRouter([
   {
     path: "/app/bundles/customize",
     Component: Customize,
-    loader: () => ({ initialTemplate: TEMPLATE, existingTemplates: [], activeDiscounts: [], layoutFiles: [], collections: [], initialProducts: [], shop: "demo.myshopify.com" })
+    loader: () => ({ initialTemplate: window.__NO_TEMPLATE ? null : TEMPLATE, existingTemplates: [], activeDiscounts: [], layoutFiles: [], collections: [], initialProducts: [], shop: "demo.myshopify.com" })
   },
   { path: "/app/bundles/templates", element: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "data-testid": "templates-list", children: "Templates list" }) },
   {
@@ -42393,9 +45591,10 @@ const router = createBrowserRouter([
     Component: CartEditorPage,
     loader: () => ({
       allProducts: [
-        { id: "gid://shopify/Product/1", title: "Yoga Mat Pro", price: "250", image: "" },
+        { id: "gid://shopify/Product/1", title: "Yoga Mat Pro", price: "250", image: svgImage("#a78bfa") },
         { id: "gid://shopify/Product/2", title: "Travel Towel", price: "40", image: "" },
-        { id: "gid://shopify/Product/3", title: "Water Bottle", price: "90", image: "" }
+        { id: "gid://shopify/Product/3", title: "Water Bottle With A Very Long Product Name For Wrapping", price: "90", image: svgImage("#34d399") },
+        { id: "gid://shopify/Product/4", title: "Gift Card", price: "10", image: svgImage("#fb923c") }
       ],
       pbRecord: {
         id: 1,
@@ -42409,7 +45608,19 @@ const router = createBrowserRouter([
     })
   },
   { path: "/app/fbt", element: /* @__PURE__ */ jsxRuntimeExports.jsx(BarPage, { title: "FBT" }) },
+  // The real FBT page (with its setup tour), mocked loader.
+  {
+    path: "/app/fbt-real",
+    Component: FBTPage,
+    loader: () => ({ shop: window.__SHOP || "demo.myshopify.com", fbtConfig: { activeTemplate: "fbt1", mode: "manual", layout: "horizontal" }, allProducts: [{ id: "gid://shopify/Product/1", title: "Yoga Mat", price: "25", image: "" }], manualRules: [], fbtEmbedEnabled: true, hasSavedFbtConfig: false })
+  },
   { path: "/app/bundles", element: /* @__PURE__ */ jsxRuntimeExports.jsx(BarPage, { title: "Build a Combo" }) },
+  // The real Build a Combo dashboard (with the setup tour), mocked loader.
+  {
+    path: "/app/bundles-real",
+    Component: AppBundlesIndex,
+    loader: () => ({ templateCount: 0, publishedCount: 0, publishedPages: [], templates: window.__TEMPLATES || [], shop: "demo.myshopify.com", discounts: [], totalConversions: 0, totalRevenue: 0, showEmbedWarning: false, embedEditorUrl: "#" })
+  },
   { path: "/app/productwidget", element: /* @__PURE__ */ jsxRuntimeExports.jsx(BarPage, { title: "Coupon Banner" }) },
   { path: "/app/analytics", element: /* @__PURE__ */ jsxRuntimeExports.jsx(BarPage, { title: "Analytics" }) }
 ]);

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useLoaderData, useNavigate, useRevalidator } from 'react-router';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Icon,
@@ -12,6 +13,8 @@ import { BundleStackMock } from '../components/feature/BundleStackMock';
 import BrixBar from '../components/ai-agent/BrixBar';
 import TemplateManager from '../components/bundles/TemplateManager';
 import CartDrawerEmbedBanner from '../components/bundles/CartDrawerEmbedBanner';
+import ComboSetupTour from '../components/bundles/ComboSetupTour';
+import { readTour, startTour, setTourShop } from '../utils/combo-tour';
 import { getEmbedStatus } from '../services/theme-embed.server';
 import { CART_DRAWER_EMBED_HANDLE, cartDrawerEmbedEditorUrl } from '../config/theme-extension';
 
@@ -207,7 +210,15 @@ export const action = async ({ request }) => {
 };
 
 export default function AppBundlesIndex() {
-  const { templateCount, publishedCount, totalConversions, totalRevenue, showEmbedWarning, embedEditorUrl } = useLoaderData();
+  const { templateCount, publishedCount, totalConversions, totalRevenue, showEmbedWarning, embedEditorUrl, templates: allTemplates = [], shop } = useLoaderData();
+
+  // A store's first visit (nothing remembered yet, no templates): the tour starts by
+  // itself, once. After that it only runs when the merchant clicks "Take the setup tour".
+  useEffect(() => {
+    setTourShop(shop);
+    if (readTour() === null && allTemplates.length === 0) startTour();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const navigate = useNavigate();
   const revalidator = useRevalidator();
 
@@ -239,6 +250,7 @@ export default function AppBundlesIndex() {
 .bac-hero-btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer;border:none;transition:transform .12s ease,box-shadow .12s ease}
 .bac-hero-btn:hover{transform:translateY(-1px)}
 .bac-hero-btn--primary{background:#fff;color:#1a9de0;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+.bac-hero-btn--ghost{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.35)}
 .bac-stat{display:flex;align-items:center;gap:14px}
 .bac-stat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .bac-stat-icon svg{width:22px;height:22px}
@@ -275,8 +287,11 @@ export default function AppBundlesIndex() {
                 Create guided, tabbed, or grid bundle pages — no theme code required.
               </div>
               <div className="bac-hero-actions">
-                <button className="bac-hero-btn bac-hero-btn--primary" onClick={() => navigate('/app/bundles/customize')}>
+                <button className="bac-hero-btn bac-hero-btn--primary" data-tour="combo-create" onClick={() => navigate('/app/bundles/customize')}>
                   Create a bundle
+                </button>
+                <button className="bac-hero-btn bac-hero-btn--ghost" onClick={startTour}>
+                  Take the setup tour
                 </button>
               </div>
             </div>
@@ -285,6 +300,7 @@ export default function AppBundlesIndex() {
         </div>
 
         <BrixBar size="md" floating />
+        <ComboSetupTour page="dashboard" shop={shop} />
 
         {/* Stats row */}
         <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">

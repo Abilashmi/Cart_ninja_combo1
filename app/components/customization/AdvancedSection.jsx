@@ -37,6 +37,7 @@ function AdvancedSectionComponent({
         </FormLayout>
       </SectionCard>
 
+      <div data-tour="combo-discount">
       <SectionCard title="Coupon" expanded={expandedSections?.discount} onToggle={() => toggleSection?.('discount')}>
         <FormLayout>
           <Checkbox
@@ -73,6 +74,7 @@ function AdvancedSectionComponent({
           )}
         </FormLayout>
       </SectionCard>
+      </div>
 
       <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
         <FormLayout>

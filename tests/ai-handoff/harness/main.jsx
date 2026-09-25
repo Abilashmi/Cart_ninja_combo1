@@ -9,6 +9,8 @@ import BrixBar from '../../../app/components/ai-agent/BrixBar.jsx';
 import CartEditorPage from '../../../app/components/CartEditorPage.jsx';
 import { HANDOFF_RECEIVED_EVENT } from '../../../app/utils/ai-handoff.js';
 import Customize from '../../../app/routes/app.bundles.customize.jsx';
+import BundlesDashboard from '../../../app/routes/app.bundles._index.jsx';
+import FbtPage from '../../../app/routes/app.fbt.jsx';
 import CartDrawerEmbedBanner from '../../../app/components/bundles/CartDrawerEmbedBanner.jsx';
 import { cartDrawerEmbedEditorUrl } from '../../../app/config/theme-extension.js';
 
@@ -37,6 +39,7 @@ const BannerPage = () => (
 
 // The real Build a Combo builder, with mocked loader and mocked API endpoints.
 // window.__EMBED_STATUS (set per test) is what /api/theme-embed-status returns.
+const svgImage = (c) => 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="${c}"/></svg>`);
 const TEMPLATE = { id: 5, title: 'My combo', active: false, page_handle: 'my-combo', config: { layout: 'layout2' } };
 window.__saves = [];
 
@@ -45,7 +48,7 @@ const router = createBrowserRouter([
   {
     path: '/app/bundles/customize',
     Component: Customize,
-    loader: () => ({ initialTemplate: TEMPLATE, existingTemplates: [], activeDiscounts: [], layoutFiles: [], collections: [], initialProducts: [], shop: 'demo.myshopify.com' }),
+    loader: () => ({ initialTemplate: window.__NO_TEMPLATE ? null : TEMPLATE, existingTemplates: [], activeDiscounts: [], layoutFiles: [], collections: [], initialProducts: [], shop: 'demo.myshopify.com' }),
   },
   { path: '/app/bundles/templates', element: <div data-testid="templates-list">Templates list</div> },
   {
@@ -69,9 +72,10 @@ const router = createBrowserRouter([
     Component: CartEditorPage,
     loader: () => ({
       allProducts: [
-        { id: 'gid://shopify/Product/1', title: 'Yoga Mat Pro', price: '250', image: '' },
+        { id: 'gid://shopify/Product/1', title: 'Yoga Mat Pro', price: '250', image: svgImage('#a78bfa') },
         { id: 'gid://shopify/Product/2', title: 'Travel Towel', price: '40', image: '' },
-        { id: 'gid://shopify/Product/3', title: 'Water Bottle', price: '90', image: '' },
+        { id: 'gid://shopify/Product/3', title: 'Water Bottle With A Very Long Product Name For Wrapping', price: '90', image: svgImage('#34d399') },
+        { id: 'gid://shopify/Product/4', title: 'Gift Card', price: '10', image: svgImage('#fb923c') },
       ],
       pbRecord: {
         id: 1, is_enabled: 1, mode: 'amount', show_on_empty: 1, placement: 'top',
@@ -81,7 +85,19 @@ const router = createBrowserRouter([
     }),
   },
   { path: '/app/fbt', element: <BarPage title="FBT" /> },
+  // The real FBT page (with its setup tour), mocked loader.
+  {
+    path: '/app/fbt-real',
+    Component: FbtPage,
+    loader: () => ({ shop: window.__SHOP || 'demo.myshopify.com', fbtConfig: { activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal' }, allProducts: [{ id: 'gid://shopify/Product/1', title: 'Yoga Mat', price: '25', image: '' }], manualRules: [], fbtEmbedEnabled: true, hasSavedFbtConfig: false }),
+  },
   { path: '/app/bundles', element: <BarPage title="Build a Combo" /> },
+  // The real Build a Combo dashboard (with the setup tour), mocked loader.
+  {
+    path: '/app/bundles-real',
+    Component: BundlesDashboard,
+    loader: () => ({ templateCount: 0, publishedCount: 0, publishedPages: [], templates: window.__TEMPLATES || [], shop: 'demo.myshopify.com', discounts: [], totalConversions: 0, totalRevenue: 0, showEmbedWarning: false, embedEditorUrl: '#' }),
+  },
   { path: '/app/productwidget', element: <BarPage title="Coupon Banner" /> },
   { path: '/app/analytics', element: <BarPage title="Analytics" /> },
 ]);

@@ -100,7 +100,9 @@ export function BuilderActionBar({
         <Button onClick={onToggleActive} tone={isActive ? undefined : 'success'} variant={isActive ? 'secondary' : 'primary'}>
           {isActive ? 'Deactivate' : 'Activate'}
         </Button>
-        <Button variant="primary" onClick={onSave} disabled={saveDisabled}>Save Template</Button>
+        <span data-tour="combo-save" style={{ display: 'inline-flex' }}>
+          <Button variant="primary" onClick={onSave} disabled={saveDisabled}>Save Template</Button>
+        </span>
       </div>
     </div>
   );

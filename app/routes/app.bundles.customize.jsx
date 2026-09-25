@@ -40,6 +40,7 @@ import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
 import BrixBar from '../components/ai-agent/BrixBar';
 import CartDrawerEmbedModal from '../components/bundles/CartDrawerEmbedModal';
+import ComboSetupTour from '../components/bundles/ComboSetupTour';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import { checkComboPlanGate } from '../services/combo-templates.server';
 import prisma from '../db.server';
@@ -2356,6 +2357,15 @@ export default function Customize() {
     return Object.keys(prev).reduce((acc, k) => { acc[k] = k === key; return acc; }, {});
   }, []);
 
+  // The setup tour points at the Coupon section, which lives on the Advanced
+  // tab: open it first so there is something to point at.
+  const tourBeforeStep = useCallback((stepId) => {
+    if (stepId === 'discount') {
+      setActiveCategory('advanced');
+      setExpandedSections((prev) => onlyOpen(prev, 'discount'));
+    }
+  }, [onlyOpen]);
+
   const SECTION_CATEGORY = {
     general: 'layout', banner: 'layout', products: 'layout',
     content: 'style', productCard: 'style', previewBar: 'style',
@@ -3005,6 +3015,7 @@ export default function Customize() {
         }}
       >
         <BrixBar size="md" floating />
+        <ComboSetupTour page="picker" shop={shop} />
         <style>{`
 .template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
@@ -3219,6 +3230,7 @@ export default function Customize() {
           issueCount={0}
         />
         <BrixBar size="md" floating zIndex={400} placeholder="Ask Brix to help with your bundle — layout, copy, colours, products…" />
+        <ComboSetupTour page="builder" shop={shop} beforeStep={tourBeforeStep} />
         <Modal
           open={aiBundleOpen}
           onClose={() => { if (!aiBundleLoading) { setAiBundleOpen(false); setAiError(''); } }}
@@ -3464,7 +3476,7 @@ export default function Customize() {
                   </Button>
                 </ButtonGroup>
               </div>
-              <div className={`preview-stage preview-stage--${previewDevice}`}>
+              <div data-tour="combo-preview" className={`preview-stage preview-stage--${previewDevice}`}>
                 {previewDevice === 'desktop' ? (
                   <div ref={containerRef} className="preview-scale-panel" style={scaledPanelStyle}>
                     <div className="preview-scale-canvas" style={scaledCanvasStyle}>

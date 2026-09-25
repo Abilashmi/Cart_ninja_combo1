@@ -10,13 +10,14 @@ import BrixBar from '../components/ai-agent/BrixBar';
 import { SliderField } from '../components/shared/SliderField';
 import {
   SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
-  CheckCircleIcon, TargetIcon,
+  CheckCircleIcon, TargetIcon, PlayIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { ProBadge } from '../components/plan/PlanGate';
 import { usePlan } from '../components/PlanContext';
 import { useCurrency } from '../components/CurrencyContext';
+import ProductPickerBody from '../components/shared/ProductPickerBody';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 
@@ -406,12 +407,8 @@ function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, t
     }
   }, [open, prevOpen, selectedIds]);
 
-  const toggle = (id) => setLocalSelected(prev =>
-    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-  );
-
   return (
-    <Modal open={open} onClose={onClose} title={title || 'Browse Products'}
+    <Modal open={open} onClose={onClose} title={title || 'Browse Products'} size="large"
       primaryAction={{ content: `Save Selection (${localSelected.length})`, onAction: () => { onSave(localSelected); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
@@ -421,35 +418,7 @@ function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, t
           {allProducts.length === 0 ? (
             <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
-              {allProducts.map(product => {
-                const sel = localSelected.includes(product.id);
-                return (
-                  <div key={product.id} onClick={() => toggle(product.id)}
-                    style={{
-                      padding: '8px 10px', border: sel ? '2px solid #2c6ecb' : '1px solid #e5e7eb',
-                      borderRadius: '8px', background: sel ? '#f0f7ff' : '#fff',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
-                    }}
-                  >
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden',
-                      flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#f8fafc', border: '1px solid #f1f5f9',
-                    }}>
-                      {product.image ? (
-                        <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : <span>📦</span>}
-                    </div>
-                    <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
-                    </BlockStack>
-                    {sel && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
-                  </div>
-                );
-              })}
-            </div>
+            <ProductPickerBody products={allProducts} selectedIds={localSelected} setSelectedIds={setLocalSelected} currencySymbol={currencySymbol} resetKey={open} />
           )}
         </BlockStack>
       </Modal.Section>
@@ -761,6 +730,9 @@ export default function FBTPage() {
   const configureStepRef = useRef(null);
   const initialTemplateRef = useRef(selectedTemplate);
 
+  // The tour's memory is per store, so installing on another store starts it there too.
+  const fbtKey = (name) => `${name}:${shop}`;
+
   const [customizedFlag, setCustomizedFlag] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(null); // null = tour hidden
 
@@ -809,8 +781,8 @@ export default function FBTPage() {
     let customizedFromStorage = false;
     let tourDismissed = false;
     try {
-      customizedFromStorage = localStorage.getItem('cn_fbt_setup_customized') === '1';
-      tourDismissed = localStorage.getItem('cn_fbt_setup_tour_dismissed') === '1';
+      customizedFromStorage = localStorage.getItem(fbtKey('cn_fbt_setup_customized')) === '1';
+      tourDismissed = localStorage.getItem(fbtKey('cn_fbt_setup_tour_dismissed')) === '1';
     } catch {}
     setCustomizedFlag(customizedFromStorage);
     if (tourDismissed) return;
@@ -831,7 +803,7 @@ export default function FBTPage() {
       // permanently suppress the tour — leave the flag alone and let the
       // next visit try again.
       if (doneFlags.every(Boolean)) {
-        try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+        try { localStorage.setItem(fbtKey('cn_fbt_setup_tour_dismissed'), '1'); } catch {}
       }
       return;
     }
@@ -850,7 +822,7 @@ export default function FBTPage() {
   const finishTour = () => {
     setTourStepIndex(null);
     setTourManualPreview(false);
-    try { localStorage.setItem('cn_fbt_setup_tour_dismissed', '1'); } catch {}
+    try { localStorage.setItem(fbtKey('cn_fbt_setup_tour_dismissed'), '1'); } catch {}
   };
 
   // Walks from `start` in `dir` (+1/-1) to the first step that is actually
@@ -903,11 +875,11 @@ export default function FBTPage() {
   const replayTour = () => {
     setTourManualPreview(true);
     try {
-      localStorage.removeItem('cn_fbt_setup_tour_dismissed');
+      localStorage.removeItem(fbtKey('cn_fbt_setup_tour_dismissed'));
       // Re-read (never clear) the one key that records real work: the
       // Customize step's completion. Keeps the replayed guide's ticks
       // honest if this state drifted from storage.
-      setCustomizedFlag(localStorage.getItem('cn_fbt_setup_customized') === '1');
+      setCustomizedFlag(localStorage.getItem(fbtKey('cn_fbt_setup_customized')) === '1');
     } catch {}
     // Start on the first step whose target actually exists, so a replay can
     // never park tourStepIndex on a missing target. Completed steps are
@@ -936,8 +908,8 @@ export default function FBTPage() {
       isConfigModalOpen,
       tourStepIndex,
       tourManualPreview,
-      tourDismissedLS: (() => { try { return localStorage.getItem('cn_fbt_setup_tour_dismissed'); } catch { return 'ERR'; } })(),
-      customizedLS: (() => { try { return localStorage.getItem('cn_fbt_setup_customized'); } catch { return 'ERR'; } })(),
+      tourDismissedLS: (() => { try { return localStorage.getItem(fbtKey('cn_fbt_setup_tour_dismissed')); } catch { return 'ERR'; } })(),
+      customizedLS: (() => { try { return localStorage.getItem(fbtKey('cn_fbt_setup_customized')); } catch { return 'ERR'; } })(),
       hasSavedFbtConfig,
       manualRulesCount: manualRules.length,
       selectedTemplate,
@@ -983,7 +955,7 @@ export default function FBTPage() {
       // Setup tour's "Customize" step: a successful save is the one clear,
       // reliable signal that real customization work was done and kept —
       // not just that the accordion was opened and closed again.
-      try { localStorage.setItem('cn_fbt_setup_customized', '1'); } catch {}
+      try { localStorage.setItem(fbtKey('cn_fbt_setup_customized'), '1'); } catch {}
     }
   }, [fetcher.data, configMode]);
 
@@ -1323,7 +1295,7 @@ export default function FBTPage() {
             <Button onClick={() => { setHasChanges(false); }} disabled={!hasChanges} size="slim">Discard</Button>
             <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
             {tourStepIndex === null && (
-              <Button variant="plain" size="slim" onClick={replayTour}>Replay setup tour</Button>
+              <Button icon={PlayIcon} size="slim" onClick={replayTour}>Replay setup tour</Button>
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal } from '@shopify/polaris';
 import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, DiscountFilledIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
+import ProductPickerBody from '../shared/ProductPickerBody';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection, ProBadge } from '../plan/PlanGate';
@@ -16,6 +17,7 @@ const TIER_ICON_MAP = {
 };
 
 const PRODUCT_PICKER_STORAGE_KEY = 'cached_products';
+
 
 function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
   const { allProducts: contextProducts } = useCartEditor();
@@ -74,69 +76,99 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
       });
   }, [open, initialSelectedIds, contextProducts]);
 
-  const toggle = (id) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
   return (
-    <Modal open={open} onClose={onClose} title={title || 'Select Products'}
+    <Modal open={open} onClose={onClose} title={title || 'Select Products'} size="large"
       primaryAction={{ content: 'Save Selection', onAction: () => { onSave(selectedIds); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
       <Modal.Section>
-        <BlockStack gap="400">
-          <Text variant="bodyMd" tone="subdued">Select products for this reward milestone.</Text>
-          {loading ? (
-            <Text as="p" variant="bodyMd">Loading products...</Text>
-          ) : fetchError ? (
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd" tone="critical">Failed to load products. Check your connection.</Text>
-              <Button size="slim" onClick={() => { setLoading(true); setFetchError(false); fetch('/api/upsell').then(r => r.json()).then(data => { setAllProducts(data?.data?.allProducts || []); setLoading(false); }).catch(() => { setFetchError(true); setLoading(false); }) }}>Retry</Button>
-            </BlockStack>
-          ) : allProducts.length === 0 ? (
-            <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '400px', overflowY: 'auto' }}>
-              {allProducts.map(product => {
-                const isSelected = selectedIds.includes(product.id);
-                return (
-                  <div key={product.id} onClick={() => toggle(product.id)}
-                    style={{
-                      padding: '8px 10px', border: isSelected ? '2px solid #2c6ecb' : '1px solid #e5e7eb',
-                      borderRadius: '8px', background: isSelected ? '#f0f7ff' : '#fff',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden',
-                      flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#f8fafc', border: '1px solid #f1f5f9',
-                    }}>
-                      {product.image ? (
-                        <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span>📦</span>
-                      )}
-                    </div>
-                    <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
-                      <Text fontWeight="bold" variant="bodySm">{product.title}</Text>
-                      <Text tone="subdued" variant="bodyXs">{currencySymbol}{product.price}</Text>
-                    </BlockStack>
-                    {isSelected && <span style={{ color: '#2c6ecb', fontSize: '18px', fontWeight: 700 }}>✓</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </BlockStack>
+        {loading ? (
+          <Text as="p" variant="bodyMd">Loading products...</Text>
+        ) : fetchError ? (
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" tone="critical">Failed to load products. Check your connection.</Text>
+            <Button size="slim" onClick={() => { setLoading(true); setFetchError(false); fetch('/api/upsell').then(r => r.json()).then(data => { setAllProducts(data?.data?.allProducts || []); setLoading(false); }).catch(() => { setFetchError(true); setLoading(false); }) }}>Retry</Button>
+          </BlockStack>
+        ) : allProducts.length === 0 ? (
+          <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
+        ) : (
+          <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} />
+        )}
       </Modal.Section>
     </Modal>
   );
 }
 
+const REWARD_CARD_CSS = `
+.rpc{border:1.5px dashed #c9cccf;border-radius:12px;padding:14px;background:#fafbfb;display:flex;flex-direction:column;gap:12px}
+.rpc[data-filled="true"]{border:1px solid #e1e3e5;border-style:solid;background:linear-gradient(135deg,#f6fbf8 0%,#ffffff 70%);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.rpc-empty{display:flex;align-items:center;gap:12px}
+.rpc-ic{flex-shrink:0;width:40px;height:40px;border-radius:11px;background:#e3f1df;color:#0c5132;display:flex;align-items:center;justify-content:center}
+.rpc-empty .rpc-ic{background:#eef0f2;color:#6d7175}
+.rpc-txt{min-width:0;flex:1}
+.rpc-title{margin:0;font-size:13px;font-weight:650;color:#202223}
+.rpc-sub{margin:2px 0 0;font-size:12px;color:#6d7175;line-height:1.35}
+.rpc-thumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rpc-thumb{position:relative;width:44px;height:44px;border-radius:10px;border:1px solid #e1e3e5;background:#f1f2f3 center/cover no-repeat;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#8c9196;font-size:15px;font-weight:700}
+.rpc-more{width:44px;height:44px;border-radius:10px;background:#eef0f2;color:#4a4f55;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.rpc-names{font-size:12px;color:#4a4f55;line-height:1.4;overflow-wrap:anywhere}
+.rpc-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rpc-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#e3f1df;color:#0c5132;font-size:12px;font-weight:650}
+`;
+
+// The reward-products field of a milestone: an empty state that invites adding
+// products, or the picked products as thumbnails with an obvious Edit button.
+function RewardProductsCard({ ids, catalog, onEdit }) {
+  const picked = (ids || []).map((id) => (catalog || []).find((p) => p.id === id)).filter(Boolean);
+  const count = (ids || []).length;
+  const shown = picked.slice(0, 4);
+  const extra = count - shown.length;
+  const gift = (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M3 8a1 1 0 011-1h12a1 1 0 011 1v2H3V8zm0 3h6v6H5a2 2 0 01-2-2v-4zm8 0h6v4a2 2 0 01-2 2h-4v-6zM10 7V5.5A2.5 2.5 0 107.5 8H10zm0 0h2.5A2.5 2.5 0 1010 5.5V7z" />
+    </svg>
+  );
+  if (count === 0) {
+    return (
+      <div className="rpc">
+        <style>{REWARD_CARD_CSS}</style>
+        <div className="rpc-empty">
+          <span className="rpc-ic">{gift}</span>
+          <div className="rpc-txt">
+            <p className="rpc-title">No reward product yet</p>
+            <p className="rpc-sub">Pick the product shoppers get when they reach this milestone.</p>
+          </div>
+        </div>
+        <Button variant="primary" onClick={onEdit}>Add reward products</Button>
+      </div>
+    );
+  }
+  return (
+    <div className="rpc" data-filled="true">
+      <style>{REWARD_CARD_CSS}</style>
+      <div className="rpc-thumbs">
+        {shown.map((p) => (
+          <span key={p.id} className="rpc-thumb" title={p.title} style={p.image ? { backgroundImage: `url("${p.image}")` } : undefined}>
+            {!p.image && (p.title || '?').charAt(0).toUpperCase()}
+          </span>
+        ))}
+        {/* Products picked earlier that the loaded catalog doesn't include still count. */}
+        {picked.length === 0 && <span className="rpc-ic">{gift}</span>}
+        {extra > 0 && <span className="rpc-more">+{extra}</span>}
+      </div>
+      {picked.length > 0 && (
+        <div className="rpc-names">{picked.slice(0, 2).map((p) => p.title).join(', ')}{count > 2 ? ` and ${count - 2} more` : ''}</div>
+      )}
+      <div className="rpc-actions">
+        <span className="rpc-pill">{count} product{count !== 1 ? 's' : ''} selected</span>
+        <Button onClick={onEdit}>Edit products</Button>
+      </div>
+    </div>
+  );
+}
+
 export function ProgressBarSection() {
-  const { body, updateProgressBar } = useCartEditor();
+  const { body, updateProgressBar, allProducts: catalog } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
   const { progressBar } = body;
   const [activeTierIndex, setActiveTierIndex] = useState(0);
@@ -296,16 +328,11 @@ export function ProgressBarSection() {
                 />
                 <BlockStack gap="200">
                   <Text as="h4" variant="headingSm">Reward Products</Text>
-                  <Button onClick={() => setPickerTierIndex(activeTierIndex)}>
-                    {activeTier.rewardProductCount > 0
-                      ? `Edit Products (${activeTier.rewardProductCount} selected)`
-                      : 'Select Products'}
-                  </Button>
-                  <div style={{ cursor: 'pointer', color: '#2c6ecb', textDecoration: 'underline', fontSize: '13px' }} onClick={() => setPickerTierIndex(activeTierIndex)}>
-                    {activeTier.rewardProductCount > 0
-                      ? `${activeTier.rewardProductCount} product${activeTier.rewardProductCount !== 1 ? 's' : ''} selected. Click to modify.`
-                      : 'No products selected. Click to add reward products.'}
-                  </div>
+                  <RewardProductsCard
+                    ids={activeTier.rewardProducts}
+                    catalog={catalog}
+                    onEdit={() => setPickerTierIndex(activeTierIndex)}
+                  />
                   {activeTier.rewardProductCount > 0 && (
                     <Select
                       label="Reward price"

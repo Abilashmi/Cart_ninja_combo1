@@ -5,3 +5,5 @@ export const getDb = null;
 export const sendToPhp = null;
 export const checkComboPlanGate = null;
 export default {};
+export const getEmbedStatus = null;
+export const getShopPlan = null;
