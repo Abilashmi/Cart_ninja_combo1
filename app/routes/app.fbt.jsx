@@ -299,14 +299,20 @@ export const action = async ({ request }) => {
 
     let aiCoverage = null;
     if (mode === 'ai') {
-      // AI Coverage Run: generates real per-product rules from actual order
-      // history (see generateAiFbtRules) and rebuilds the storefront-facing
-      // condition blob from exactly those rows. The client's manualRules are
-      // deliberately ignored here — sending them into fbt_rules/condition
-      // (as this branch used to, unconditionally) is the bug that made
-      // switching to AI mode keep showing the old manual rule: both modes
-      // were writing the exact same rows.
-      aiCoverage = await generateAiFbtRules(admin, shop, aiProductCount);
+      // AI Coverage Run only actually RUNS when this save came from the
+      // Configure AI / Regenerate Suggestions buttons (regenerateAi: true,
+      // set explicitly in submitFbtConfig's onClick). Every other save while
+      // mode happens to be 'ai' — changing layout, colors, widget placement,
+      // the on/off toggle — used to unconditionally re-run the full catalog
+      // scan too, since this branch only checked `mode === 'ai'`. That's
+      // real, avoidable cost (an Admin GraphQL catalog fetch + a co-purchase
+      // query) for a change that has nothing to do with AI suggestions, and
+      // it re-sorts/re-writes every AI rule on every unrelated save. The
+      // already-generated source='ai' rows are left completely untouched
+      // here otherwise.
+      if (body.regenerateAi) {
+        aiCoverage = await generateAiFbtRules(admin, shop, aiProductCount);
+      }
     } else {
       // Manual mode: replace only this shop's manual rows (never the AI
       // rows an earlier Coverage Run may have generated — those stay put,
@@ -1069,12 +1075,18 @@ export default function FBTPage() {
   // still work even with no rules/AI set up yet, so the check lives here
   // rather than inside submitFbtConfig.
   const isFbtActuallyConfigured = configMode === 'ai' ? aiCountValid : manualRules.length > 0;
-  const handleSave = () => {
+  // `regenerateAi` is only ever passed true from the Configure AI/Regenerate
+  // Suggestions buttons below — every other call site (the main toolbar
+  // Save button, the Active/Inactive toggle) calls handleSave()/
+  // submitFbtConfig() with no override, so the server only re-runs the AI
+  // Coverage Run when the merchant actually asked it to, not on every
+  // unrelated save made while AI mode happens to be selected.
+  const handleSave = (overrides = {}) => {
     if (!isFbtActuallyConfigured) {
       setConfigureToast(true);
       return;
     }
-    submitFbtConfig();
+    submitFbtConfig(overrides);
   };
 
   /* ── renderAction: per-product button based on interaction style ── */
@@ -1472,11 +1484,11 @@ export default function FBTPage() {
                         helpText={aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : undefined}
                       />
                       <InlineStack gap="200">
-                        <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>
+                        <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={() => handleSave({ regenerateAi: true })}>
                           {aiConfigured ? 'Update Configuration' : 'Configure AI'}
                         </Button>
                         {aiConfigured && (
-                          <Button disabled={!aiCountValid} loading={isSaving} onClick={handleSave}>Regenerate Suggestions</Button>
+                          <Button disabled={!aiCountValid} loading={isSaving} onClick={() => handleSave({ regenerateAi: true })}>Regenerate Suggestions</Button>
                         )}
                       </InlineStack>
                     </BlockStack>
