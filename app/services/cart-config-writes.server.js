@@ -972,6 +972,7 @@ async function fetchCatalogForAiFbt(admin) {
               productType
               featuredImage { url }
               priceRangeV2 { minVariantPrice { amount } }
+              collections(first: 3) { edges { node { id } } }
             }
           }
         }
@@ -991,6 +992,14 @@ async function fetchCatalogForAiFbt(admin) {
         title: n.title,
         handle: n.handle,
         productType: n.productType || '',
+        // Many merchants never fill in Product Type at all (it's an easy
+        // field to skip) but do organize their catalog into Collections —
+        // this store's own catalog is a real example: every product has an
+        // empty productType, but real, purposeful collections exist. Without
+        // this, the productType fallback below has nothing to group by and
+        // every product gets skipped, so AI Coverage Run silently covers 0
+        // products and the storefront widget goes completely blank.
+        collectionIds: (n.collections?.edges || []).map((e) => e.node.id),
         image: n.featuredImage?.url || '',
         price: n.priceRangeV2?.minVariantPrice?.amount || '0',
       });
