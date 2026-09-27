@@ -584,8 +584,19 @@ export default function ProductWidgetPage() {
     };
     // Per-coupon overrides: { [couponId]: { headingText, subtextText, bgColor, textColor, accentColor, buttonColor, buttonTextColor, displayCondition, productHandles } }
     const [couponOverrides, setCouponOverrides] = useState(() => {
-        const styleMap = couponConfig?.temp1CouponStyle || couponConfig?.temp2CouponStyle || couponConfig?.temp3CouponStyle || {};
-        const condArr = couponConfig?.temp1CouponCondition || couponConfig?.temp2CouponCondition || couponConfig?.temp3CouponCondition || [];
+        // Was `couponConfig?.temp1CouponStyle || couponConfig?.temp2CouponStyle
+        // || couponConfig?.temp3CouponStyle || {}` — the loader always fills a
+        // template with no saved data as `{}` (never null/undefined), and `{}`
+        // is truthy in JS, so this `||` chain could never actually fall through
+        // past temp1CouponStyle: whenever the merchant was on any template
+        // other than Classic Banner, its real per-coupon heading/subtext/etc
+        // overrides were silently discarded in favor of temp1's permanently-
+        // empty map, which is exactly why "FIRST ORDER" / "Get 10% Discount"
+        // never showed back up for Minimal Card even though it was really
+        // saved. Read the CURRENTLY SELECTED template's own map directly,
+        // same as activeTpl does just above.
+        const styleMap = couponConfig?.[`${tKey}CouponStyle`] || {};
+        const condArr = couponConfig?.[`${tKey}CouponCondition`] || [];
         const out = {};
         Object.keys(styleMap || {}).forEach((cid) => { out[cid] = { ...styleMap[cid] }; });
         (Array.isArray(condArr) ? condArr : []).forEach((c) => {
@@ -643,6 +654,19 @@ export default function ProductWidgetPage() {
             setBtnTextColor(src.buttonTextColor);
             setBorderRadius(src.borderRadius); setFontSize(src.fontSize); setPadding(src.padding);
         }
+        // Same fix as couponOverrides' own useState initializer above, applied
+        // on tab switch: pull this template's real per-coupon overrides
+        // directly by key instead of leaving couponOverrides frozen with
+        // whichever template's map happened to load first.
+        const styleMap = couponConfig?.[`${t.tplKey}CouponStyle`] || {};
+        const condArr = couponConfig?.[`${t.tplKey}CouponCondition`] || [];
+        const nextOverrides = {};
+        Object.keys(styleMap).forEach((cid) => { nextOverrides[cid] = { ...styleMap[cid] }; });
+        (Array.isArray(condArr) ? condArr : []).forEach((c) => {
+            if (!c || !c.couponId) return;
+            nextOverrides[c.couponId] = { ...(nextOverrides[c.couponId] || {}), displayCondition: c.displayCondition || "all", productHandles: c.productHandles || [], collectionHandles: c.collectionHandles || [] };
+        });
+        setCouponOverrides(nextOverrides);
         mark();
     };
 
