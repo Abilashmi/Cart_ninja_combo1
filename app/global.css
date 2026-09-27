@@ -203,8 +203,8 @@ p {
 /* Device-accurate preview shell styles for the Combo Forge builder
    (app.bundles.customize.jsx) live entirely in that route's own <style>
    block, scoped and kept in sync with its JS-computed scale values —
-   do not redefine .preview-stage/.preview-viewport/.preview-scale-*/
-   .customize-layout-grid here, a stale duplicate previously fought the
+   do not redefine .preview-stage/.preview-viewport/.preview-scale-*
+   or .customize-layout-grid here, a stale duplicate previously fought the
    route's rules for cascade priority and caused inconsistent clipping. */
 
 .template-status-meta {

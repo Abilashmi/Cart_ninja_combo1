@@ -33,6 +33,59 @@ function unique(arr){
   return out;
 }
 
+function escapeHtmlJs(v){
+  return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* Countdown Timer strip — saved by the admin's productwidget page (see
+   save_coupon_slider_widget.php's timerEnabled/timerHours/... columns) but,
+   until now, never rendered anywhere on the storefront: this file had no
+   countdown markup or ticking logic at all, so turning it on in the admin
+   did nothing here regardless of what was persisted. 'Session' behavior —
+   the deadline is set once per browser session (sessionStorage) so it
+   doesn't quietly reset back to the full duration on every page view, but
+   still starts fresh for a new visit — matching the Cart Drawer's own
+   countdown timer's 'session' mode (cart_drawer_inline.js). */
+function getCouponTimerDeadline(shop,hours,minutes){
+  var durationMs=((Number(hours)||0)*3600+(Number(minutes)||0)*60)*1000;
+  if(durationMs<=0)return null;
+  var key='ps_coupon_timer_deadline_'+shop;
+  try{
+    var stored=parseInt(sessionStorage.getItem(key)||'0',10);
+    if(stored&&stored>Date.now())return stored;
+    var deadline=Date.now()+durationMs;
+    sessionStorage.setItem(key,String(deadline));
+    return deadline;
+  }catch(e){
+    return Date.now()+durationMs;
+  }
+}
+
+function startCouponTimer(el,data,shop){
+  if(!data||!data.timerEnabled)return;
+  var deadline=getCouponTimerDeadline(shop,data.timerHours,data.timerMins);
+  if(!deadline)return;
+  var labelEl=el.querySelector('.ps-timer-label');
+  var textEl=el.querySelector('.ps-timer-text');
+  if(!textEl)return;
+  var iv=null;
+  function pad(n){return n<10?('0'+n):(''+n);}
+  function tick(){
+    var remainingMs=deadline-Date.now();
+    if(remainingMs<=0){
+      labelEl.textContent=data.timerExpired||'Offer expired!';
+      textEl.textContent='';
+      if(iv){clearInterval(iv);iv=null;}
+      return;
+    }
+    var totalSeconds=Math.floor(remainingMs/1000);
+    var h=Math.floor(totalSeconds/3600),m=Math.floor((totalSeconds%3600)/60),s=totalSeconds%60;
+    textEl.textContent=h>0?(pad(h)+':'+pad(m)+':'+pad(s)):(pad(m)+':'+pad(s));
+  }
+  tick();
+  iv=setInterval(tick,1000);
+}
+
 function getCartProductHandles(){
   if(_cartHandlesPromise)return _cartHandlesPromise;
   _cartHandlesPromise=fetch('/cart.js',{credentials:'same-origin'})
@@ -274,12 +327,20 @@ function renderSlider(el,data,ctx){
   el.innerHTML=
     '<div class="ps-slider">'
       +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
+      +(data&&data.timerEnabled
+        ?('<div class="ps-timer-bar" style="margin-bottom:10px;padding:8px 14px;border-radius:6px;background:'+escapeHtmlJs(data.timerBg||'#fef2f2')+';color:'+escapeHtmlJs(data.timerText||'#991b1b')+';font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">'
+          +'<span class="ps-timer-label">'+escapeHtmlJs(data.timerLabel||'Offer expires in')+'</span>'
+          +'<span class="ps-timer-text" style="color:'+escapeHtmlJs(data.timerAccent||'#dc2626')+';font-weight:800;letter-spacing:0.5px;"></span>'
+        +'</div>')
+        :'')
       +'<div class="ps-slider-row">'
         +'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>'
         +'<div class="ps-coupon-wrapper"></div>'
         +'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>'
       +'</div>'
     +'</div>';
+
+  startCouponTimer(el,data,el.dataset.shop);
 
   var w=el.querySelector('.ps-coupon-wrapper');
   var prv=el.querySelector('.ps-prev');

@@ -20,6 +20,9 @@ import { useCurrency } from '../components/CurrencyContext';
 import ProductPickerBody from '../components/shared/ProductPickerBody';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
+import {
+  ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules,
+} from '../services/cart-config-writes.server';
 
 function parseJson(val, fallback) {
   if (!val) return fallback;
@@ -91,11 +94,17 @@ export const loader = async ({ request }) => {
       let manualRules = [];
       try {
         const db = getDb();
+        await ensureFbtRulesSourceColumn(db);
         const [settings] = await db.execute(
           'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
         );
+        // Scoped to source='manual' — an AI Coverage Run's generated rows
+        // live in the same table (tagged source='ai') and must never leak
+        // into the Manual tab's rule list, or switching modes back to
+        // Manual would show/resave AI-generated rules as if the merchant
+        // had built them by hand.
         const [rules] = await db.execute(
-          'SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]
+          "SELECT * FROM fbt_rules WHERE shop_domain = ? AND source = 'manual' AND is_active = 1 ORDER BY sort_order ASC", [shop]
         );
         if (settings.length > 0) {
           const s = settings[0];
@@ -223,7 +232,7 @@ export const loader = async ({ request }) => {
 
 /* ─── ACTION ──────────────────────────────────────────────────────────────── */
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const body = await request.json();
   try {
@@ -288,42 +297,63 @@ export const action = async ({ request }) => {
       widgetPlacement,
     ]);
 
-    // Replace manual rules in fbt_rules table
-    await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ?', [shop]);
-    for (let i = 0; i < manualRules.length; i++) {
-      const r = manualRules[i];
-      await db.execute(`
-        INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order)
-        VALUES (?,?,?,?,?,?,1,?)
-      `, [
-        shop,
-        r.name || `Rule ${i + 1}`,
-        toTriggerScopeEnum(r.displayScope || r.trigger_scope),
-        r.triggerProducts?.length ? JSON.stringify(r.triggerProducts) : null,
-        r.triggerCollections?.length ? JSON.stringify(r.triggerCollections) : null,
-        r.fbtProducts?.length ? JSON.stringify(r.fbtProducts) : null,
-        i,
-      ]);
+    let aiCoverage = null;
+    if (mode === 'ai') {
+      // AI Coverage Run: generates real per-product rules from actual order
+      // history (see generateAiFbtRules) and rebuilds the storefront-facing
+      // condition blob from exactly those rows. The client's manualRules are
+      // deliberately ignored here — sending them into fbt_rules/condition
+      // (as this branch used to, unconditionally) is the bug that made
+      // switching to AI mode keep showing the old manual rule: both modes
+      // were writing the exact same rows.
+      aiCoverage = await generateAiFbtRules(admin, shop, aiProductCount);
+    } else {
+      // Manual mode: replace only this shop's manual rows (never the AI
+      // rows an earlier Coverage Run may have generated — those stay put,
+      // untouched, ready to resume the moment mode flips back to 'ai'),
+      // then rebuild condition from exactly what's left.
+      await ensureFbtRulesSourceColumn(db);
+      await db.execute("DELETE FROM fbt_rules WHERE shop_domain = ? AND source = 'manual'", [shop]);
+      for (let i = 0; i < manualRules.length; i++) {
+        const r = manualRules[i];
+        await db.execute(`
+          INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
+          VALUES (?,?,?,?,?,?,1,?,'manual')
+        `, [
+          shop,
+          r.name || `Rule ${i + 1}`,
+          toTriggerScopeEnum(r.displayScope || r.trigger_scope),
+          r.triggerProducts?.length ? JSON.stringify(r.triggerProducts) : null,
+          r.triggerCollections?.length ? JSON.stringify(r.triggerCollections) : null,
+          r.fbtProducts?.length ? JSON.stringify(r.fbtProducts) : null,
+          i,
+        ]);
+      }
+      await rebuildFbtLegacyConditionForMode(shop, 'manual');
     }
 
-    // Also write to legacy fbt_widget (storefront-facing), with placement embedded in each template
+    // Also write to legacy fbt_widget (storefront-facing), with placement
+    // embedded in each template. `condition`/`selectedMode` are deliberately
+    // NOT set here — the mode branch above (rebuildFbtLegacyConditionForMode
+    // / generateAiFbtRules) already wrote those authoritatively from
+    // fbt_rules, and always runs first, so this only ever updates the
+    // template/style columns it actually owns.
     await db.execute(`
-      INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, \`condition\`, ai_enabled, ai_product_count, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3))
+      INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, ai_enabled, ai_product_count, updated_at)
+      VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3))
       ON DUPLICATE KEY UPDATE
         temp1=VALUES(temp1),temp2=VALUES(temp2),temp3=VALUES(temp3),
-        selectedTemp=VALUES(selectedTemp),selectedMode=VALUES(selectedMode),
-        \`condition\`=VALUES(\`condition\`),ai_enabled=VALUES(ai_enabled),
+        selectedTemp=VALUES(selectedTemp),ai_enabled=VALUES(ai_enabled),
         ai_product_count=VALUES(ai_product_count),updated_at=CURRENT_TIMESTAMP(3)
     `, [
       shop,
       templates.fbt1 ? JSON.stringify({ ...templates.fbt1, widgetPlacement }) : null,
       templates.fbt2 ? JSON.stringify({ ...templates.fbt2, widgetPlacement }) : null,
       templates.fbt3 ? JSON.stringify({ ...templates.fbt3, widgetPlacement }) : null,
-      selectedTemplate, mode, JSON.stringify(manualRules), aiEnabled, aiProductCount,
+      selectedTemplate, aiEnabled, aiProductCount,
     ]);
 
-    return { success: true };
+    return { success: true, aiCoverage };
   } catch (e) {
     console.error('[FBT action] DB write:', e.message);
     return { success: false, error: e.message };

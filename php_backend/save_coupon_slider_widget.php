@@ -79,6 +79,33 @@ function encodeForJsonColumn($value) {
     return json_encode($value);
 }
 
+// Self-heals the Countdown Timer columns onto coupon_slider_widget — this
+// endpoint used to have no columns for them at all, so the admin page's
+// "Countdown Timer" section (Enable countdown timer / hours / minutes /
+// label / colors) was saved from the browser, POSTed here, and silently
+// dropped: nothing in the INSERT below referenced them, so the timer looked
+// configured in the admin session but was never actually persisted — the
+// next page load (or the very next unrelated save) reverted to "off" with
+// no error shown anywhere. Column names deliberately match the JS payload's
+// own field names (timerEnabled/timerHours/...) so the GET response's raw
+// row can be handed straight back to the client with no renaming step.
+function ensureTimerColumns($pdo) {
+    static $ensured = false;
+    if ($ensured) return;
+    $pdo->exec("
+        ALTER TABLE coupon_slider_widget
+            ADD COLUMN IF NOT EXISTS timerEnabled TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS timerHours INT NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS timerMins INT NOT NULL DEFAULT 15,
+            ADD COLUMN IF NOT EXISTS timerLabel VARCHAR(255) NOT NULL DEFAULT 'Offer expires in',
+            ADD COLUMN IF NOT EXISTS timerExpired VARCHAR(255) NOT NULL DEFAULT 'Offer expired!',
+            ADD COLUMN IF NOT EXISTS timerBg VARCHAR(20) NOT NULL DEFAULT '#fef2f2',
+            ADD COLUMN IF NOT EXISTS timerText VARCHAR(20) NOT NULL DEFAULT '#991b1b',
+            ADD COLUMN IF NOT EXISTS timerAccent VARCHAR(20) NOT NULL DEFAULT '#dc2626'
+    ");
+    $ensured = true;
+}
+
 function payloadValue($payload, $keys, $default = null) {
     foreach ($keys as $key) {
         if (array_key_exists($key, $payload)) {
@@ -164,6 +191,7 @@ if ($requestMethod === 'GET') {
     }
 
     try {
+        ensureTimerColumns($pdo);
         $stmt = $pdo->prepare('
             SELECT *
             FROM coupon_slider_widget
@@ -375,6 +403,15 @@ $temp1CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp1CouponCondi
 $temp2CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp2CouponConditionSource));
 $temp3CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp3CouponConditionSource));
 
+$timerEnabled = payloadValue($payload, ['timerEnabled'], false) ? 1 : 0;
+$timerHours = (int) payloadValue($payload, ['timerHours'], 0);
+$timerMins = (int) payloadValue($payload, ['timerMins'], 15);
+$timerLabel = (string) payloadValue($payload, ['timerLabel'], 'Offer expires in');
+$timerExpired = (string) payloadValue($payload, ['timerExpired'], 'Offer expired!');
+$timerBg = (string) payloadValue($payload, ['timerBg'], '#fef2f2');
+$timerText = (string) payloadValue($payload, ['timerText'], '#991b1b');
+$timerAccent = (string) payloadValue($payload, ['timerAccent'], '#dc2626');
+
 // Support multiple coupons: store a JSON array (column is longtext). Fall back to a single id.
 $globalCouponArr = $payload['selectedCouponsGlobal'] ?? null;
 if (is_array($globalCouponArr)) {
@@ -384,6 +421,12 @@ if (is_array($globalCouponArr)) {
     $selectedTemplateCoupon = json_encode($cleanCouponIds);
 } else {
     $selectedTemplateCoupon = normalizeSelectedTemplateCoupon($selectedTemplateCouponSource);
+}
+
+try {
+    ensureTimerColumns($pdo);
+} catch (PDOException $e) {
+    logError('ensureTimerColumns failed', ['error' => $e->getMessage()]);
 }
 
 $sql = '
@@ -400,6 +443,14 @@ INSERT INTO coupon_slider_widget (
     temp1CouponCondition,
     temp2CouponCondition,
     temp3CouponCondition,
+    timerEnabled,
+    timerHours,
+    timerMins,
+    timerLabel,
+    timerExpired,
+    timerBg,
+    timerText,
+    timerAccent,
     updated_at
 ) VALUES (
     :shopDomain,
@@ -414,6 +465,14 @@ INSERT INTO coupon_slider_widget (
     :temp1CouponCondition,
     :temp2CouponCondition,
     :temp3CouponCondition,
+    :timerEnabled,
+    :timerHours,
+    :timerMins,
+    :timerLabel,
+    :timerExpired,
+    :timerBg,
+    :timerText,
+    :timerAccent,
     CURRENT_TIMESTAMP(3)
 )
 ON DUPLICATE KEY UPDATE
@@ -428,6 +487,14 @@ ON DUPLICATE KEY UPDATE
     temp1CouponCondition = VALUES(temp1CouponCondition),
     temp2CouponCondition = VALUES(temp2CouponCondition),
     temp3CouponCondition = VALUES(temp3CouponCondition),
+    timerEnabled = VALUES(timerEnabled),
+    timerHours = VALUES(timerHours),
+    timerMins = VALUES(timerMins),
+    timerLabel = VALUES(timerLabel),
+    timerExpired = VALUES(timerExpired),
+    timerBg = VALUES(timerBg),
+    timerText = VALUES(timerText),
+    timerAccent = VALUES(timerAccent),
     updated_at = CURRENT_TIMESTAMP(3)
 ';
 
@@ -446,7 +513,15 @@ try {
         ':temp3CouponStyle'       => $temp3CouponStyle,
         ':temp1CouponCondition'   => $temp1CouponCondition,
         ':temp2CouponCondition'   => $temp2CouponCondition,
-        ':temp3CouponCondition'   => $temp3CouponCondition
+        ':temp3CouponCondition'   => $temp3CouponCondition,
+        ':timerEnabled'           => $timerEnabled,
+        ':timerHours'             => $timerHours,
+        ':timerMins'              => $timerMins,
+        ':timerLabel'             => $timerLabel,
+        ':timerExpired'           => $timerExpired,
+        ':timerBg'                => $timerBg,
+        ':timerText'              => $timerText,
+        ':timerAccent'            => $timerAccent
     ]);
 
     echo json_encode([

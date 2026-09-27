@@ -148,6 +148,21 @@ export async function loader({ request }) {
             temp1CouponCondition: couponWidget?.temp1CouponCondition || [],
             temp2CouponCondition: couponWidget?.temp2CouponCondition || [],
             temp3CouponCondition: couponWidget?.temp3CouponCondition || [],
+            // Countdown Timer — was previously saved (see save_coupon_slider_
+            // widget.php) but never read back here, so the page's timer* state
+            // always started from its hardcoded defaults instead of what was
+            // actually last configured, and the very next save would silently
+            // re-persist those defaults over the merchant's real setting.
+            // Number(...) === 1 rather than a bare truthy check: PDO can hand
+            // back "0" for a disabled timer, which is a non-empty (truthy) string.
+            timerEnabled: Number(couponWidget?.timerEnabled) === 1,
+            timerHours: couponWidget?.timerHours != null ? Number(couponWidget.timerHours) : 0,
+            timerMins: couponWidget?.timerMins != null ? Number(couponWidget.timerMins) : 15,
+            timerLabel: couponWidget?.timerLabel || 'Offer expires in',
+            timerExpired: couponWidget?.timerExpired || 'Offer expired!',
+            timerBg: couponWidget?.timerBg || '#fef2f2',
+            timerText: couponWidget?.timerText || '#991b1b',
+            timerAccent: couponWidget?.timerAccent || '#dc2626',
         };
     }
     if (!couponConfig) couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
@@ -427,6 +442,23 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
     const open = alwaysOpen || openState;
     const ov = override || {};
     const td = templateDefaults || {};
+    // Neither Browse button had any error handling — if shopify.resourcePicker
+    // ever rejects (e.g. it's called before App Bridge has fully finished
+    // initializing in the embedded iframe, a known source of an intermittent
+    // "nothing happens" click), the promise rejection was silently swallowed:
+    // no picker, no error, nothing in the UI to say why. That's indistinguishable
+    // from "not listing any products/collections" to whoever's clicking it.
+    const [pickerError, setPickerError] = useState("");
+    const openPicker = async (type, onResult) => {
+        setPickerError("");
+        try {
+            const result = await shopify.resourcePicker({ type, multiple: true });
+            if (result) onResult(result);
+        } catch (e) {
+            console.error(`[CouponOverridePanel] resourcePicker(${type}) failed:`, e);
+            setPickerError(`Couldn't open the ${type} picker (${e?.message || "unknown error"}). Try reloading the page.`);
+        }
+    };
     const colorRow = (label, key, def) => (
         <InlineStack gap="200" blockAlign="center">
             <div style={{ flex: 1 }}><Text as="span" variant="bodySm">{label}</Text></div>
@@ -456,12 +488,10 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
                         {colorRow("Button text", "buttonTextColor", "#ffffff")}
                         <Select label="Show on" value={ov.displayCondition || "all"} onChange={(v) => onChange({ displayCondition: v })}
                             options={[{ label: "All product pages", value: "all" }, { label: "Specific products", value: "product_handle" }, { label: "Specific collections", value: "collection_handle" }]} />
+                        {pickerError && <Banner tone="critical" onDismiss={() => setPickerError("")}>{pickerError}</Banner>}
                         {ov.displayCondition === "product_handle" && (
                             <BlockStack gap="200">
-                                <Button size="slim" onClick={async () => {
-                                    const result = await shopify.resourcePicker({ type: 'product', multiple: true });
-                                    if (result) onChange({ productHandles: result.map(p => p.handle) });
-                                }}>Browse Products</Button>
+                                <Button size="slim" onClick={() => openPicker('product', (result) => onChange({ productHandles: result.map(p => p.handle) }))}>Browse Products</Button>
                                 {(ov.productHandles || []).length > 0 && (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                         {(ov.productHandles || []).map(h => (
@@ -477,10 +507,7 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
                         )}
                         {ov.displayCondition === "collection_handle" && (
                             <BlockStack gap="200">
-                                <Button size="slim" onClick={async () => {
-                                    const result = await shopify.resourcePicker({ type: 'collection', multiple: true });
-                                    if (result) onChange({ collectionHandles: result.map(c => c.handle) });
-                                }}>Browse Collections</Button>
+                                <Button size="slim" onClick={() => openPicker('collection', (result) => onChange({ collectionHandles: result.map(c => c.handle) }))}>Browse Collections</Button>
                                 {(ov.collectionHandles || []).length > 0 && (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                         {(ov.collectionHandles || []).map(h => (
@@ -535,14 +562,19 @@ export default function ProductWidgetPage() {
     const [borderRadius,setBorderRadius]= useState(activeTpl.borderRadius ?? 12);
     const [fontSize,    setFontSize]    = useState(activeTpl.fontSize    ?? 16);
     const [padding,     setPadding]     = useState(activeTpl.padding     ?? 16);
-    const [timerEnabled,setTimerEnabled]= useState(false);
-    const [timerHours,  setTimerHours]  = useState(0);
-    const [timerMins,   setTimerMins]   = useState(15);
-    const [timerLabel,  setTimerLabel]  = useState("Offer expires in");
-    const [timerExpired,setTimerExpired]= useState("Offer expired!");
-    const [timerBg,     setTimerBg]     = useState("#fef2f2");
-    const [timerText,   setTimerText]   = useState("#991b1b");
-    const [timerAccent, setTimerAccent] = useState("#dc2626");
+    // Seeded from couponConfig (the last-saved config) exactly like heading/
+    // subtext/bgColor above — these previously always started from a
+    // hardcoded default regardless of what was last configured, which is
+    // why both the editor and the live preview looked reset to "off" on
+    // every page load even after saving a real timer setting.
+    const [timerEnabled,setTimerEnabled]= useState(!!couponConfig?.timerEnabled);
+    const [timerHours,  setTimerHours]  = useState(couponConfig?.timerHours ?? 0);
+    const [timerMins,   setTimerMins]   = useState(couponConfig?.timerMins ?? 15);
+    const [timerLabel,  setTimerLabel]  = useState(couponConfig?.timerLabel || "Offer expires in");
+    const [timerExpired,setTimerExpired]= useState(couponConfig?.timerExpired || "Offer expired!");
+    const [timerBg,     setTimerBg]     = useState(couponConfig?.timerBg || "#fef2f2");
+    const [timerText,   setTimerText]   = useState(couponConfig?.timerText || "#991b1b");
+    const [timerAccent, setTimerAccent] = useState(couponConfig?.timerAccent || "#dc2626");
     const [selectedCouponIds, setSelectedCouponIds] = useState(
         Array.isArray(couponConfig?.selectedActiveCoupons) ? couponConfig.selectedActiveCoupons.filter(Boolean) : []
     );

@@ -14,6 +14,7 @@
 import { getDb } from './db.server';
 import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
+import { buildAiFbtRules } from '../utils/fbt-ai.shared';
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -894,6 +895,193 @@ export async function removeFbtRule(shop, ruleId) {
     await writeFbtLegacyCondition(db, shop, filtered);
   }
   return { removed: true };
+}
+
+// Tags every fbt_rules row with which mode created it — 'manual' (the admin
+// page's own rule builder) or 'ai' (generateAiFbtRules below). Without this,
+// switching the FBT admin page's mode selector between Manual and AI does
+// nothing real: both modes wrote into the exact same fbt_rules/condition
+// rows, so whichever set was saved last kept showing on the storefront no
+// matter which mode was selected afterward — reported as "FBT still shows
+// the old rule even after switching to AI". Self-heals like the other
+// ADD COLUMN helpers above; existing rows default to 'manual' since every
+// row created before this was written by the admin page's manual rule
+// builder (appendFbtRule's chat-created rows are a separate, unaffected
+// concern — they stay visible in both modes' fbt_rules reads today, but
+// they aren't what this bug was about).
+let fbtRulesSourceColumnEnsured = false;
+export async function ensureFbtRulesSourceColumn(db) {
+  if (fbtRulesSourceColumnEnsured) return;
+  await db.execute(`
+    ALTER TABLE fbt_rules
+      ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'manual'
+  `);
+  fbtRulesSourceColumnEnsured = true;
+}
+
+// Rebuilds the storefront-facing fbt_widget.condition blob from exactly the
+// fbt_rules rows tagged with the given mode — the one and only place that
+// blob gets written now, so it can never end up holding a stale mix of the
+// other mode's rules. Also flips fbt_widget.selectedMode to match, since the
+// widget script itself doesn't branch on mode but this keeps the stored
+// record honest about which set is live.
+export async function rebuildFbtLegacyConditionForMode(shop, mode) {
+  const db = getDb();
+  await ensureFbtRulesSourceColumn(db);
+  const [rows] = await db.execute(
+    'SELECT * FROM fbt_rules WHERE shop_domain = ? AND source = ? AND is_active = 1 ORDER BY sort_order ASC',
+    [shop, mode]
+  );
+  const condition = rows.map((r) => ({
+    id: String(r.id),
+    name: r.name,
+    displayScope: r.trigger_scope === 'all' ? 'all' : 'per_product',
+    triggerProducts: parseJsonSafe(r.trigger_products, []),
+    triggerCollections: parseJsonSafe(r.trigger_collections, []),
+    fbtProducts: parseJsonSafe(r.fbt_products, []),
+    aiGenerated: mode === 'ai',
+  }));
+  await writeFbtLegacyCondition(db, shop, condition);
+  await db.execute('UPDATE fbt_widget SET selectedMode = ? WHERE shopDomain = ?', [mode, shop]);
+}
+
+// Bounded so one "Configure AI" / "Regenerate Suggestions" click stays
+// inside a single request — a shop with a bigger catalog gets its first
+// AI_COVERAGE_PRODUCT_CAP active products covered per run (reported honestly
+// via the returned productsSkipped/truncated, never silently).
+const AI_COVERAGE_PRODUCT_CAP = 300;
+
+function extractNumericGid(gid) {
+  const m = String(gid || '').match(/(\d+)$/);
+  return m ? m[1] : null;
+}
+
+async function fetchCatalogForAiFbt(admin) {
+  const products = [];
+  let cursor = null;
+  for (let page = 0; page < 3 && products.length < AI_COVERAGE_PRODUCT_CAP; page++) {
+    const res = await admin.graphql(
+      `query CatalogPage($cursor: String) {
+        products(first: 100, after: $cursor, query: "status:active") {
+          pageInfo { hasNextPage endCursor }
+          edges {
+            node {
+              id
+              title
+              handle
+              productType
+              featuredImage { url }
+              priceRangeV2 { minVariantPrice { amount } }
+            }
+          }
+        }
+      }`,
+      { variables: { cursor } }
+    );
+    const data = await res.json();
+    const conn = data.data?.products;
+    if (!conn) break;
+    for (const edge of conn.edges) {
+      const n = edge.node;
+      const numericId = extractNumericGid(n.id);
+      if (!numericId) continue;
+      products.push({
+        gid: n.id,
+        numericId,
+        title: n.title,
+        handle: n.handle,
+        productType: n.productType || '',
+        image: n.featuredImage?.url || '',
+        price: n.priceRangeV2?.minVariantPrice?.amount || '0',
+      });
+    }
+    if (!conn.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return products.slice(0, AI_COVERAGE_PRODUCT_CAP);
+}
+
+// Real co-purchase counts from actual order history (store_order_line_items,
+// populated by every orders webhook via order-ingest.server.js) — the
+// genuine "frequently bought together" signal, and the reason this needs no
+// LLM call at all. Grouped/ranked in JS rather than a SQL window function so
+// this doesn't depend on a specific MySQL version being available in
+// production.
+async function fetchCoPurchaseMap(db, shop, countPerProduct) {
+  const [rows] = await db.execute(
+    `SELECT a.product_id AS trigger_id, b.product_id AS offer_id, COUNT(DISTINCT a.order_id) AS cnt
+     FROM store_order_line_items a
+     JOIN store_order_line_items b
+       ON a.shop_domain = b.shop_domain AND a.order_id = b.order_id AND a.product_id <> b.product_id
+     WHERE a.shop_domain = ? AND a.product_id IS NOT NULL AND b.product_id IS NOT NULL
+     GROUP BY a.product_id, b.product_id`,
+    [shop]
+  );
+  const byTrigger = new Map();
+  for (const r of rows) {
+    const list = byTrigger.get(r.trigger_id) || [];
+    list.push({ id: r.offer_id, cnt: r.cnt });
+    byTrigger.set(r.trigger_id, list);
+  }
+  for (const [key, list] of byTrigger) {
+    list.sort((a, b) => b.cnt - a.cnt);
+    byTrigger.set(key, list.slice(0, countPerProduct));
+  }
+  return byTrigger;
+}
+
+// The "AI Coverage Run" behind the FBT admin page's Configure AI/Regenerate
+// Suggestions buttons. Generates one rule per catalog product, ranking its
+// offer products by real co-purchase history first (fetchCoPurchaseMap) and
+// falling back to "same product type" only for products with no purchase
+// signal yet (a new store, or a product nobody's bought alongside anything).
+// A product with neither signal gets skipped — no rule — rather than being
+// forced to pair with something unrelated; that guesswork is exactly the bug
+// this replaces (see the FBT note in ai-product-knowledge.js). Every row
+// this writes is tagged source='ai' and only source='ai' rows are ever
+// touched here, so a merchant's own manual rules are never affected by
+// running or re-running this.
+export async function generateAiFbtRules(admin, shop, countPerProduct) {
+  const db = getDb();
+  await ensureFbtRulesSourceColumn(db);
+  const n = Math.max(1, Math.min(10, Number(countPerProduct) || 3));
+
+  const [catalog, coPurchaseMap] = await Promise.all([
+    fetchCatalogForAiFbt(admin),
+    fetchCoPurchaseMap(db, shop, n),
+  ]);
+
+  // Ranking/fallback decision logic lives in the pure, unit-tested
+  // app/utils/fbt-ai.shared.js — kept out of this function so it can be
+  // tested without a live DB pool or Admin GraphQL client.
+  const { rules, covered } = buildAiFbtRules(catalog, coPurchaseMap, n);
+
+  await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
+  for (let i = 0; i < rules.length; i++) {
+    const r = rules[i];
+    await db.execute(`
+      INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
+      VALUES (?,?,?,?,?,?,1,?,?)
+    `, [
+      shop, r.name, 'specific_products',
+      JSON.stringify(r.trigger_products), null, JSON.stringify(r.fbt_products),
+      i, 'ai',
+    ]);
+  }
+
+  await db.execute(`
+    INSERT INTO fbt_widget_settings (shop_domain, is_enabled, mode, ai_product_count)
+    VALUES (?, 1, 'ai', ?)
+    ON DUPLICATE KEY UPDATE mode = 'ai', ai_product_count = VALUES(ai_product_count), updated_at = CURRENT_TIMESTAMP(3)
+  `, [shop, n]);
+  await rebuildFbtLegacyConditionForMode(shop, 'ai');
+
+  return {
+    totalProducts: catalog.length,
+    productsCovered: covered,
+    productsSkipped: catalog.length - covered,
+    truncated: catalog.length >= AI_COVERAGE_PRODUCT_CAP,
+  };
 }
 
 // ── Countdown Timer (cart drawer's own — distinct from the Product Widget's
