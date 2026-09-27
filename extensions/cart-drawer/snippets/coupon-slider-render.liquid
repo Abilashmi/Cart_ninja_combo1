@@ -61,26 +61,43 @@ function getCouponTimerDeadline(shop,hours,minutes){
   }
 }
 
+// The timer markup itself lives inside each buildCard() card now (see
+// timerStripHtml below), matching the admin preview — which renders it
+// below the button, inside the same card container, not as a separate bar
+// floating above the widget title. A card can repeat (the slider can hold
+// several coupons), so this drives every '.ps-timer-text'/'.ps-timer-label'
+// pair found under el off the one shared deadline (timerEnabled/hours/mins
+// are widget-level settings, not per-coupon — there's only ever one real
+// countdown regardless of how many cards are showing).
+function timerStripHtml(data){
+  if(!data||!data.timerEnabled)return '';
+  return '<div class="ps-timer-bar" style="margin-top:10px;padding:8px 14px;border-radius:6px;background:'+escapeHtmlJs(data.timerBg||'#fef2f2')+';color:'+escapeHtmlJs(data.timerText||'#991b1b')+';font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">'
+    +'<span class="ps-timer-label">'+escapeHtmlJs(data.timerLabel||'Offer expires in')+'</span>'
+    +'<span class="ps-timer-text" style="color:'+escapeHtmlJs(data.timerAccent||'#dc2626')+';font-weight:800;letter-spacing:0.5px;"></span>'
+  +'</div>';
+}
+
 function startCouponTimer(el,data,shop){
   if(!data||!data.timerEnabled)return;
   var deadline=getCouponTimerDeadline(shop,data.timerHours,data.timerMins);
   if(!deadline)return;
-  var labelEl=el.querySelector('.ps-timer-label');
-  var textEl=el.querySelector('.ps-timer-text');
-  if(!textEl)return;
+  var pairs=Array.prototype.map.call(el.querySelectorAll('.ps-timer-text'),function(textEl){
+    return {textEl:textEl,labelEl:textEl.closest('.ps-timer-bar').querySelector('.ps-timer-label')};
+  });
+  if(!pairs.length)return;
   var iv=null;
   function pad(n){return n<10?('0'+n):(''+n);}
   function tick(){
     var remainingMs=deadline-Date.now();
     if(remainingMs<=0){
-      labelEl.textContent=data.timerExpired||'Offer expired!';
-      textEl.textContent='';
+      pairs.forEach(function(p){p.labelEl.textContent=data.timerExpired||'Offer expired!';p.textEl.textContent='';});
       if(iv){clearInterval(iv);iv=null;}
       return;
     }
     var totalSeconds=Math.floor(remainingMs/1000);
     var h=Math.floor(totalSeconds/3600),m=Math.floor((totalSeconds%3600)/60),s=totalSeconds%60;
-    textEl.textContent=h>0?(pad(h)+':'+pad(m)+':'+pad(s)):(pad(m)+':'+pad(s));
+    var display=h>0?(pad(h)+':'+pad(m)+':'+pad(s)):(pad(m)+':'+pad(s));
+    pairs.forEach(function(p){p.textEl.textContent=display;});
   }
   tick();
   iv=setInterval(tick,1000);
@@ -152,7 +169,7 @@ function getStyles(d,tpl){
   return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
 }
 
-function buildCard(tpl,s,code,h,sub){
+function buildCard(tpl,s,code,h,sub,timerData){
   var fs=parseInt(s.fontSize)||13;
   var br=parseInt(s.borderRadius)||6;
   var p=parseInt(s.padding)||16;
@@ -177,20 +194,22 @@ function buildCard(tpl,s,code,h,sub){
       +'border-radius:'+br+'px;'
       +'padding:16px 18px;'
       +'box-shadow:0 2px 12px rgba(0,0,0,0.07);'
-      +'display:flex;flex-direction:row;'
-      +'align-items:center;justify-content:space-between;'
-      +'gap:14px;flex:0 0 320px;min-width:320px;box-sizing:border-box;';
+      +'display:flex;flex-direction:column;'
+      +'flex:0 0 320px;min-width:320px;box-sizing:border-box;';
     card.innerHTML=
-      '<div style="flex:1;min-width:100px;overflow:hidden;">'
-        +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-        +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
+      '<div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px;">'
+        +'<div style="flex:1;min-width:100px;overflow:hidden;">'
+          +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
+        +'</div>'
+        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+          +'background:'+bc+';color:'+btc+';border:none;'
+          +'padding:9px 16px;border-radius:'+br+'px;'
+          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
+          +bt1
+        +'</button>'
       +'</div>'
-      +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
-        +'background:'+bc+';color:'+btc+';border:none;'
-        +'padding:9px 16px;border-radius:'+br+'px;'
-        +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
-        +bt1
-      +'</button>';
+      +timerStripHtml(timerData);
 
   }else if(tpl==='template2'){
     /* ── Template 2: Ticket ──────────────────────────────────────────────
@@ -198,28 +217,30 @@ function buildCard(tpl,s,code,h,sub){
     card.style.cssText=
       'background:'+bg+';'
       +'border-radius:'+br+'px;'
-      +'display:flex;flex-direction:row;'
-      +'overflow:visible;'
+      +'display:flex;flex-direction:column;'
       +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
       +'flex:0 0 320px;min-width:320px;'
-      +'box-sizing:border-box;position:relative;align-items:stretch;';
+      +'box-sizing:border-box;';
     card.innerHTML=
-      '<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
-      +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
-      +'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
-        +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+ac+';margin-bottom:8px;display:block;white-space:nowrap;">Your Code</span>'
-        +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
+      '<div style="display:flex;flex-direction:row;overflow:visible;position:relative;align-items:stretch;">'
+        +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
+        +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
+        +'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
+          +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+ac+';margin-bottom:8px;display:block;white-space:nowrap;">Your Code</span>'
+          +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
+        +'</div>'
+        +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
+          +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
+          +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+            +'background:'+bc+';color:'+btc+';border:none;'
+            +'padding:7px 14px;border-radius:'+br+'px;'
+            +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
+            +bt1
+          +'</button>'
+        +'</div>'
       +'</div>'
-      +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
-        +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-        +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
-        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
-          +'background:'+bc+';color:'+btc+';border:none;'
-          +'padding:7px 14px;border-radius:'+br+'px;'
-          +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
-          +bt1
-        +'</button>'
-      +'</div>';
+      +(timerData&&timerData.timerEnabled?('<div style="padding:0 16px 14px;">'+timerStripHtml(timerData)+'</div>'):'');
 
   }else if(tpl==='template3'){
     /* ── Template 3: Bold & Vibrant ──────────────────────────────────────
@@ -248,7 +269,8 @@ function buildCard(tpl,s,code,h,sub){
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
           +bt3
         +'</button>'
-      +'</div>';
+      +'</div>'
+      +timerStripHtml(timerData);
 
   }
 
@@ -327,12 +349,6 @@ function renderSlider(el,data,ctx){
   el.innerHTML=
     '<div class="ps-slider">'
       +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
-      +(data&&data.timerEnabled
-        ?('<div class="ps-timer-bar" style="margin-bottom:10px;padding:8px 14px;border-radius:6px;background:'+escapeHtmlJs(data.timerBg||'#fef2f2')+';color:'+escapeHtmlJs(data.timerText||'#991b1b')+';font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">'
-          +'<span class="ps-timer-label">'+escapeHtmlJs(data.timerLabel||'Offer expires in')+'</span>'
-          +'<span class="ps-timer-text" style="color:'+escapeHtmlJs(data.timerAccent||'#dc2626')+';font-weight:800;letter-spacing:0.5px;"></span>'
-        +'</div>')
-        :'')
       +'<div class="ps-slider-row">'
         +'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>'
         +'<div class="ps-coupon-wrapper"></div>'
@@ -340,15 +356,20 @@ function renderSlider(el,data,ctx){
       +'</div>'
     +'</div>';
 
-  startCouponTimer(el,data,el.dataset.shop);
-
   var w=el.querySelector('.ps-coupon-wrapper');
   var prv=el.querySelector('.ps-prev');
   var nxt=el.querySelector('.ps-next');
 
+  // The countdown strip now lives inside each card (see buildCard's
+  // timerStripHtml call), below the button — matching where the admin
+  // Preview panel shows it, instead of a single bar floating above the
+  // widget title outside any card. startCouponTimer runs after the cards
+  // exist in the DOM since it queries for their .ps-timer-text elements.
   itemsToRender.forEach(function(item){
-    w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext));
+    w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext,data));
   });
+
+  startCouponTimer(el,data,el.dataset.shop);
 
   /* Nav state: disable prev at start, next at end */
   function updateNavState(){

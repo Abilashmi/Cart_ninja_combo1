@@ -3,6 +3,7 @@ api_version = "2025-10"
 [[extensions]]
 name = "BRIX free gift discount"
 handle = "brix-reward-discount"
+uid = "24e75190-5ab3-ce78-ae32-d373f2b8823b514a9359"
 type = "function"
 description = "Makes the reward product BRIX adds at a Progress Bar milestone free once the cart really reaches that milestone."
 
