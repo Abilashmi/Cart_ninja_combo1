@@ -363,6 +363,37 @@ if (!$shopDomain) {
     exit;
 }
 
+// The admin page only ever sends ONE template's styles per save — whichever
+// is currently selected (see app.productwidget.jsx's submitCouponConfig,
+// which builds a single flat `template` object keyed by the active
+// `activeTemplate`, never all three). Before this fetch existed, the two
+// templates NOT included in a given save had no source anywhere in
+// $payload, so their computed value fell all the way through to null —
+// and the INSERT below unconditionally applied that null via
+// `tempNDefaultStyle = VALUES(tempNDefaultStyle)`, wiping out whatever
+// customization was previously saved for them on every single save. That's
+// the actual cause behind "the preview shows a placeholder instead of what
+// was last configured" — the merchant's real Minimal Card customization,
+// say, gets nulled out the next time they save anything while looking at
+// Classic Banner or Bold & Vibrant.
+$existingTemplateRow = [];
+try {
+    $existStmt = $pdo->prepare('
+        SELECT temp1DefaultStyle, temp2DefaultStyle, temp3DefaultStyle,
+               temp1CouponStyle, temp2CouponStyle, temp3CouponStyle,
+               temp1CouponCondition, temp2CouponCondition, temp3CouponCondition
+        FROM coupon_slider_widget WHERE shopDomain = :shopDomain LIMIT 1
+    ');
+    $existStmt->execute([':shopDomain' => $shopDomain]);
+    $existingTemplateRow = $existStmt->fetch() ?: [];
+} catch (PDOException $e) {
+    logError('Failed to fetch existing row before partial template save', ['error' => $e->getMessage()]);
+}
+
+$template1Present = array_key_exists('template1', $payload);
+$template2Present = array_key_exists('template2', $payload);
+$template3Present = array_key_exists('template3', $payload);
+
 $template1 = decodeIfJsonString($payload['template1'] ?? []);
 $template2 = decodeIfJsonString($payload['template2'] ?? []);
 $template3 = decodeIfJsonString($payload['template3'] ?? []);
@@ -391,17 +422,20 @@ $temp1CouponConditionSource = $template1['couponConditions'] ?? ($template1['con
 $temp2CouponConditionSource = $template2['couponConditions'] ?? ($template2['conditions'] ?? payloadValue($payload, ['temp2CouponCondition'], null));
 $temp3CouponConditionSource = $template3['couponConditions'] ?? ($template3['conditions'] ?? payloadValue($payload, ['temp3CouponCondition'], null));
 
-$temp1DefaultStyle = encodeForJsonColumn(decodeIfJsonString($temp1DefaultStyleSource));
-$temp2DefaultStyle = encodeForJsonColumn(decodeIfJsonString($temp2DefaultStyleSource));
-$temp3DefaultStyle = encodeForJsonColumn(decodeIfJsonString($temp3DefaultStyleSource));
+// Only encode this save's computed value for a template that was actually
+// present in the payload; otherwise keep the existing stored value exactly
+// as-is so an untouched template is never silently cleared.
+$temp1DefaultStyle = $template1Present ? encodeForJsonColumn(decodeIfJsonString($temp1DefaultStyleSource)) : ($existingTemplateRow['temp1DefaultStyle'] ?? null);
+$temp2DefaultStyle = $template2Present ? encodeForJsonColumn(decodeIfJsonString($temp2DefaultStyleSource)) : ($existingTemplateRow['temp2DefaultStyle'] ?? null);
+$temp3DefaultStyle = $template3Present ? encodeForJsonColumn(decodeIfJsonString($temp3DefaultStyleSource)) : ($existingTemplateRow['temp3DefaultStyle'] ?? null);
 
-$temp1CouponStyle = encodeForJsonColumn(decodeIfJsonString($temp1CouponStyleSource));
-$temp2CouponStyle = encodeForJsonColumn(decodeIfJsonString($temp2CouponStyleSource));
-$temp3CouponStyle = encodeForJsonColumn(decodeIfJsonString($temp3CouponStyleSource));
+$temp1CouponStyle = $template1Present ? encodeForJsonColumn(decodeIfJsonString($temp1CouponStyleSource)) : ($existingTemplateRow['temp1CouponStyle'] ?? null);
+$temp2CouponStyle = $template2Present ? encodeForJsonColumn(decodeIfJsonString($temp2CouponStyleSource)) : ($existingTemplateRow['temp2CouponStyle'] ?? null);
+$temp3CouponStyle = $template3Present ? encodeForJsonColumn(decodeIfJsonString($temp3CouponStyleSource)) : ($existingTemplateRow['temp3CouponStyle'] ?? null);
 
-$temp1CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp1CouponConditionSource));
-$temp2CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp2CouponConditionSource));
-$temp3CouponCondition = encodeForJsonColumn(decodeIfJsonString($temp3CouponConditionSource));
+$temp1CouponCondition = $template1Present ? encodeForJsonColumn(decodeIfJsonString($temp1CouponConditionSource)) : ($existingTemplateRow['temp1CouponCondition'] ?? null);
+$temp2CouponCondition = $template2Present ? encodeForJsonColumn(decodeIfJsonString($temp2CouponConditionSource)) : ($existingTemplateRow['temp2CouponCondition'] ?? null);
+$temp3CouponCondition = $template3Present ? encodeForJsonColumn(decodeIfJsonString($temp3CouponConditionSource)) : ($existingTemplateRow['temp3CouponCondition'] ?? null);
 
 $timerEnabled = payloadValue($payload, ['timerEnabled'], false) ? 1 : 0;
 $timerHours = (int) payloadValue($payload, ['timerHours'], 0);

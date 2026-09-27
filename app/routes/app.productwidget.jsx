@@ -626,7 +626,16 @@ export default function ProductWidgetPage() {
         const t = TEMPLATES.find(x => x.id === id);
         if (!t) return;
         setSelectedTemplate(id);
-        const src = FAKE_COUPON_CONFIG.templates[t.tplKey];
+        // Was always FAKE_COUPON_CONFIG's hardcoded marketing-copy default,
+        // never this template's actual saved config — so clicking a template
+        // tab silently discarded whatever heading/subtext/colors the
+        // merchant had previously customized for it, replacing the editor's
+        // (and preview's) state with generic placeholder text. Reading
+        // couponConfig first — the same merged real-config-over-defaults
+        // object the loader already builds — means switching tabs shows
+        // what was actually last configured, falling back to the stock
+        // default only the first time a template has never been touched.
+        const src = couponConfig?.templates?.[t.tplKey] || FAKE_COUPON_CONFIG.templates[t.tplKey];
         if (src) {
             setHeading(src.headingText); setSubtext(src.subtextText);
             setBgColor(src.bgColor); setTextColor(src.textColor);
