@@ -131,6 +131,49 @@ async function syncProgressBarToLegacyRecord(shop) {
   await persistCartDrawerRecord(shop, record);
 }
 
+// The storefront (cart_drawer_inline.js's parseCountdownData) reads the
+// countdown bar from the legacy cart_drawer.countdown_status/countdown_data
+// blob — NOT from the normalized cart_drawer_config.countdown_* columns
+// saveCountdownTimerSettings writes to. Same dual-write gap as progress bar
+// above: the manual Cart Editor already sends both (CartEditorPage.jsx's
+// handleSave posts countdown_status/countdown_data alongside the normalized
+// save), but the update_countdown_timer tool only wrote the normalized side,
+// so a timer turned on via BrixBar chat saved fine in the admin and never
+// appeared on the storefront. Every countdown-timer AI tool must sync here too.
+async function syncCountdownTimerToLegacyRecord(shop) {
+  const db = getDb();
+  const [rows] = await db.execute(
+    'SELECT countdown_enabled, countdown_mode, countdown_hours, countdown_minutes, countdown_label, countdown_expired_label, countdown_bg_color, countdown_text_color, countdown_accent_color, countdown_show_on_products, countdown_show_on_coupons, countdown_coupon_code, countdown_coupon_mode FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1',
+    [shop]
+  );
+  const row = rows[0];
+  if (!row) return;
+
+  const countdownData = {
+    enabled: !!row.countdown_enabled,
+    mode: row.countdown_mode,
+    hours: row.countdown_hours,
+    minutes: row.countdown_minutes,
+    label: row.countdown_label,
+    expiredLabel: row.countdown_expired_label,
+    bgColor: row.countdown_bg_color,
+    textColor: row.countdown_text_color,
+    accentColor: row.countdown_accent_color,
+    showOnProducts: !!row.countdown_show_on_products,
+    showOnCoupons: !!row.countdown_show_on_coupons,
+    couponCode: row.countdown_coupon_code,
+    couponMode: row.countdown_coupon_mode,
+  };
+
+  const existing = (await fetchCartDrawerRecord(shop)) || {};
+  const record = {
+    ...existing,
+    countdown_status: row.countdown_enabled ? 1 : 0,
+    countdown_data: JSON.stringify(countdownData),
+  };
+  await persistCartDrawerRecord(shop, record);
+}
+
 // ── Color helpers for suggest_theme_colors ──────────────────────────────────
 // Turns one base theme (detected or currently-saved) into several distinct,
 // always-readable combos by rotating hue — rather than inventing arbitrary
@@ -442,6 +485,7 @@ export const TOOL_EXECUTORS = {
       }
     }
     const data = await saveCountdownTimerSettings(ctx.shop, ctx.planKey, args);
+    await syncCountdownTimerToLegacyRecord(ctx.shop);
     return { success: true, countdownTimer: data };
   },
 
