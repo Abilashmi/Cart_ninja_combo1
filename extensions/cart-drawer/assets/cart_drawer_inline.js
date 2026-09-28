@@ -2844,7 +2844,9 @@
     if (!els.length) return;
     const entries = Array.from(els).map((el) => ({
       el,
+      labelEl: el.querySelector('.cc-coupon-timer-label'),
       textEl: el.querySelector('.cc-coupon-timer-text'),
+      label: el.dataset.label || 'Offer expires in',
       expiredLabel: el.dataset.expiredLabel || 'Offer expired!',
       deadline: getCouponCardTimerDeadline(el.dataset.couponId, Number(el.dataset.hours), Number(el.dataset.mins)),
     })).filter((e) => e.textEl && e.deadline);
@@ -2856,10 +2858,12 @@
       entries.forEach((e) => {
         const remainingMs = e.deadline - Date.now();
         if (remainingMs <= 0) {
-          e.textEl.textContent = e.expiredLabel;
+          if (e.labelEl) e.labelEl.textContent = e.expiredLabel;
+          e.textEl.textContent = '';
           return;
         }
         anyLive = true;
+        if (e.labelEl) e.labelEl.textContent = e.label;
         const totalSeconds = Math.floor(remainingMs / 1000);
         const h = Math.floor(totalSeconds / 3600);
         const m = Math.floor((totalSeconds % 3600) / 60);
@@ -3014,9 +3018,17 @@
     // no room for a full "Offer expires in" label at that size; the label
     // still surfaces as a hover title instead). The actual ticking numbers
     // are filled in by startCouponTimers() after this HTML is in the DOM.
+    // Layout mirrors app/components/CartPreview.jsx's CouponTimerDisplay
+    // exactly (same padding/margin/border-radius/font sizes, label left +
+    // time right) — the previous version only showed the bare countdown
+    // number (label was a hover-only title attribute), which is why it
+    // looked "wrong" next to what the admin's own live preview shows.
     function couponTimerHtml(coupon) {
       if (!coupon.timerEnabled) return '';
-      return `<div class="cc-coupon-timer" data-coupon-id="${escapeHtml(String(coupon.id))}" data-hours="${coupon.timerHours}" data-mins="${coupon.timerMinutes}" data-expired-label="${escapeHtml(coupon.timerExpiredLabel)}" title="${escapeHtml(coupon.timerLabel)}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;color:${coupon.timerAccentColor};background:${coupon.timerBgColor};border-radius:4px;padding:2px 4px;text-align:center;"><span class="cc-coupon-timer-text"></span></div>`;
+      return `<div class="cc-coupon-timer" data-coupon-id="${escapeHtml(String(coupon.id))}" data-hours="${coupon.timerHours}" data-mins="${coupon.timerMinutes}" data-label="${escapeHtml(coupon.timerLabel)}" data-expired-label="${escapeHtml(coupon.timerExpiredLabel)}" style="margin-top:5px;background:${coupon.timerBgColor};border-radius:4px;padding:3px 6px;display:flex;justify-content:space-between;align-items:center;gap:4px;">
+        <span class="cc-coupon-timer-label" style="font-size:8px;color:${coupon.timerTextColor};font-weight:500;line-height:1.3;">${escapeHtml(coupon.timerLabel)}</span>
+        <span class="cc-coupon-timer-text" style="font-size:9px;color:${coupon.timerAccentColor};font-weight:700;flex-shrink:0;"></span>
+      </div>`;
     }
 
     couponsToShow.forEach((coupon) => {
