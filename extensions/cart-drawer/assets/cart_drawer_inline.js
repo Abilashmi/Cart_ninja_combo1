@@ -3041,12 +3041,12 @@
         const iconSvg = ccIconSvg(coupon.iconKey, 14, baseColor);
         html += `
     <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:#fff;border:1px solid #e5e7eb;border-left:3px solid ${baseColor};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+      ${couponTimerHtml(coupon)}
       <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
         <span style="color:${baseColor};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>
         <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(coupon.label || coupon.code)}</span>
       </div>
       <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
-      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${coupon.code === _lastCopiedCode ? '#10b981' : baseColor};background:${coupon.code === _lastCopiedCode ? '#10b981' : 'transparent'};color:${coupon.code === _lastCopiedCode ? '#fff' : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
         ${escapeHtml(btnLabel)}
       </button>
@@ -3063,10 +3063,10 @@
         const iconSvg = ccIconSvg(coupon.iconKey, 20, tc);
         html += `
     <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 8px;background:${bg};border-radius:${borderR}px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;box-shadow:0 2px 8px ${bg}55;box-sizing:border-box;height:100%;">
+      ${couponTimerHtml(coupon)}
       <span style="color:${tc};display:flex;line-height:0;">${iconSvg}</span>
       <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(coupon.label || coupon.code)}</div>
       ${coupon.description ? `<div style="font-size:8px;color:${tc};opacity:0.85;line-height:1.3;flex:1;">${escapeHtml(coupon.description)}</div>` : ''}
-      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
         ${escapeHtml(btnLabel)}
       </button>
@@ -3083,6 +3083,7 @@
         const iconSvg = ccIconSvg(coupon.iconKey, 14, tc);
         html += `
     <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:${bg};color:${tc};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+      ${couponTimerHtml(coupon)}
       <div style="display:flex;align-items:flex-start;gap:5px;">
         <span style="color:${tc};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>
         <div style="flex:1;min-width:0;">
@@ -3090,7 +3091,6 @@
           <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
         </div>
       </div>
-      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
         ${escapeHtml(btnLabel)}
       </button>
