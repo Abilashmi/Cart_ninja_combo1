@@ -636,6 +636,20 @@
           backgroundColor: c.buttonBgColor || c.buttonBackgroundColor || '#000000',
           textColor: c.buttonTextColor || '#ffffff',
         },
+        // Per-coupon Countdown Timer (CouponSliderSection.jsx's "Enable timer
+        // for this coupon", the open_countdown plan feature) — was dropped
+        // here entirely, so even though it saved fine and survived plan
+        // gating server-side, the cart drawer's own coupon cards had no way
+        // to know it existed. renderCouponSection needs these to build the
+        // per-card timer strip.
+        timerEnabled: c.timerEnabled === true,
+        timerHours: Number(c.timerHours) || 0,
+        timerMinutes: c.timerMinutes != null ? Number(c.timerMinutes) : 15,
+        timerLabel: c.timerLabel || 'Offer expires in',
+        timerExpiredLabel: c.timerExpiredLabel || 'Offer expired!',
+        timerBgColor: c.timerBgColor || '#fef2f2',
+        timerTextColor: c.timerTextColor || '#991b1b',
+        timerAccentColor: c.timerAccentColor || '#dc2626',
       }));
     }
 
@@ -2739,6 +2753,7 @@
     }
 
     startCountdownTicker();
+    startCouponTimers();
   }
 
   /* =================== COUNTDOWN TIMER TICKER =================== */
@@ -2796,6 +2811,70 @@
     _ccCountdownInterval = setInterval(tick, 1000);
   }
 
+  /* =================== PER-COUPON COUNTDOWN TIMER TICKER =================== */
+  // Drives the compact .cc-coupon-timer-text spans built by renderCouponSection's
+  // couponTimerHtml() — a separate mechanism from the standalone Countdown Timer
+  // bar above (CONFIG.countdown): this one is per-coupon (CouponSliderSection.jsx's
+  // "Enable timer for this coupon", the open_countdown plan feature), so each card
+  // gets its own deadline keyed by shop+coupon id. 'Session' behavior only, same
+  // as getCountdownDeadline's session branch — no per-coupon "fixed" mode exists
+  // in the admin UI for this timer.
+  let _ccCouponTimerInterval = null;
+  function getCouponCardTimerDeadline(couponId, hours, minutes) {
+    const durationMs = ((hours || 0) * 3600 + (minutes || 0) * 60) * 1000;
+    if (durationMs <= 0) return null;
+    const key = 'cc_coupon_timer_deadline_' + SHOP + '_' + couponId;
+    try {
+      const stored = parseInt(sessionStorage.getItem(key) || '0', 10);
+      if (stored && stored > Date.now()) return stored;
+      const deadline = Date.now() + durationMs;
+      sessionStorage.setItem(key, String(deadline));
+      return deadline;
+    } catch (e) {
+      return Date.now() + durationMs;
+    }
+  }
+
+  function startCouponTimers() {
+    if (_ccCouponTimerInterval) {
+      clearInterval(_ccCouponTimerInterval);
+      _ccCouponTimerInterval = null;
+    }
+    const els = document.querySelectorAll('.cc-coupon-timer');
+    if (!els.length) return;
+    const entries = Array.from(els).map((el) => ({
+      el,
+      textEl: el.querySelector('.cc-coupon-timer-text'),
+      expiredLabel: el.dataset.expiredLabel || 'Offer expired!',
+      deadline: getCouponCardTimerDeadline(el.dataset.couponId, Number(el.dataset.hours), Number(el.dataset.mins)),
+    })).filter((e) => e.textEl && e.deadline);
+    if (!entries.length) return;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function tick() {
+      let anyLive = false;
+      entries.forEach((e) => {
+        const remainingMs = e.deadline - Date.now();
+        if (remainingMs <= 0) {
+          e.textEl.textContent = e.expiredLabel;
+          return;
+        }
+        anyLive = true;
+        const totalSeconds = Math.floor(remainingMs / 1000);
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        e.textEl.textContent = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+      });
+      if (!anyLive && _ccCouponTimerInterval) {
+        clearInterval(_ccCouponTimerInterval);
+        _ccCouponTimerInterval = null;
+      }
+    }
+    tick();
+    _ccCouponTimerInterval = setInterval(tick, 1000);
+  }
+
   /* =================== COUPON SECTION RENDERER =================== */
 
   function renderCouponSection(couponConfig, cartTotal) {
@@ -2836,6 +2915,14 @@
             buttonBackgroundColor: btn.backgroundColor ?? '#000000',
             buttonTextColor: btn.textColor ?? '#ffffff',
             borderRadius: saved.borderRadius || 8,
+            timerEnabled: saved.timerEnabled === true,
+            timerHours: saved.timerHours || 0,
+            timerMinutes: saved.timerMinutes != null ? saved.timerMinutes : 15,
+            timerLabel: saved.timerLabel || 'Offer expires in',
+            timerExpiredLabel: saved.timerExpiredLabel || 'Offer expired!',
+            timerBgColor: saved.timerBgColor || '#fef2f2',
+            timerTextColor: saved.timerTextColor || '#991b1b',
+            timerAccentColor: saved.timerAccentColor || '#dc2626',
           };
         }
 
@@ -2922,6 +3009,16 @@
   <div id="cc-coupon-list" class="cc-hide-scrollbar" style="${couponListStyle}">
 `;
 
+    // Compact per-card countdown strip (cards are only 132px wide, so this is
+    // deliberately much smaller than the Coupon Banner widget's own timer —
+    // no room for a full "Offer expires in" label at that size; the label
+    // still surfaces as a hover title instead). The actual ticking numbers
+    // are filled in by startCouponTimers() after this HTML is in the DOM.
+    function couponTimerHtml(coupon) {
+      if (!coupon.timerEnabled) return '';
+      return `<div class="cc-coupon-timer" data-coupon-id="${escapeHtml(String(coupon.id))}" data-hours="${coupon.timerHours}" data-mins="${coupon.timerMinutes}" data-expired-label="${escapeHtml(coupon.timerExpiredLabel)}" title="${escapeHtml(coupon.timerLabel)}" style="font-size:8px;font-weight:800;letter-spacing:0.3px;color:${coupon.timerAccentColor};background:${coupon.timerBgColor};border-radius:4px;padding:2px 4px;text-align:center;"><span class="cc-coupon-timer-text"></span></div>`;
+    }
+
     couponsToShow.forEach((coupon) => {
 
       if (style === 'style-1') {
@@ -2937,6 +3034,7 @@
         <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(coupon.label || coupon.code)}</span>
       </div>
       <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
+      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${coupon.code === _lastCopiedCode ? '#10b981' : baseColor};background:${coupon.code === _lastCopiedCode ? '#10b981' : 'transparent'};color:${coupon.code === _lastCopiedCode ? '#fff' : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
         ${escapeHtml(btnLabel)}
       </button>
@@ -2956,6 +3054,7 @@
       <span style="color:${tc};display:flex;line-height:0;">${iconSvg}</span>
       <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(coupon.label || coupon.code)}</div>
       ${coupon.description ? `<div style="font-size:8px;color:${tc};opacity:0.85;line-height:1.3;flex:1;">${escapeHtml(coupon.description)}</div>` : ''}
+      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
         ${escapeHtml(btnLabel)}
       </button>
@@ -2979,6 +3078,7 @@
           <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
         </div>
       </div>
+      ${couponTimerHtml(coupon)}
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
         ${escapeHtml(btnLabel)}
       </button>
