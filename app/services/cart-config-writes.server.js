@@ -1080,7 +1080,7 @@ export async function generateAiFbtRules(admin, shop, countPerProduct) {
   const db = getDb();
   await ensureFbtRulesSourceColumn(db);
 
-  const { rules, covered, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
+  const { rules, covered, n, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
 
   await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
   for (let i = 0; i < rules.length; i++) {
