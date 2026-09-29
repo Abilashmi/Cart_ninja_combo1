@@ -125,7 +125,7 @@ function LimitPicker({ value, onChange }) {
 }
 
 export function UpsellSection() {
-  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule } = useCartEditor();
+  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, resetDirty } = useCartEditor();
   const { upsellProducts } = body;
   const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
   const [pickerConfig, setPickerConfig] = useState(null);
@@ -145,7 +145,12 @@ export function UpsellSection() {
       // this just syncs the editor's local state to match what's now live,
       // replacing any previous AI-generated rules (a merchant's own manual
       // rules were already preserved server-side and are included here).
+      // updateUpsellProducts always marks the page dirty (it has no way to
+      // know this particular change is already saved), which lit up the
+      // main Save button and made a regenerate that had genuinely already
+      // saved look unsaved — resetDirty right after corrects that.
       updateUpsellProducts({ manualRules: aiFetcher.data.rules || [] });
+      resetDirty();
       const { productsCovered, totalProducts, productsSkipped } = aiFetcher.data;
       setAiStatus({
         type: 'success',
