@@ -125,7 +125,7 @@ function LimitPicker({ value, onChange }) {
 }
 
 export function UpsellSection() {
-  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, allProducts } = useCartEditor();
+  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule } = useCartEditor();
   const { upsellProducts } = body;
   const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
   const [pickerConfig, setPickerConfig] = useState(null);
@@ -140,26 +140,18 @@ export function UpsellSection() {
     appliedAiDataRef.current = aiFetcher.data;
 
     if (aiFetcher.data.success) {
-      const suggestions = aiFetcher.data.suggestions || [];
-      suggestions.forEach((s) => {
-        addUpsellRule({
-          id: `rule-${Date.now()}-${s.id}`,
-          // No specific trigger product — these are general catalog
-          // recommendations, meant to show regardless of cart contents.
-          // The storefront (cart_drawer_inline.js renderUpsellSectionAsync)
-          // only treats a rule with empty triggerProductIds as a global
-          // match when triggerType is explicitly 'all' — without it, these
-          // rules silently never match once the cart has items.
-          triggerType: 'all',
-          triggerProductCount: 1,
-          triggerProductIds: [],
-          upsellProductCount: 1,
-          upsellProductIds: [s.id],
-        });
-      });
+      // generateAiUpsellRules already wrote these directly to the DB (same
+      // "click Regenerate, it's saved" behavior as FBT's AI Coverage Run) —
+      // this just syncs the editor's local state to match what's now live,
+      // replacing any previous AI-generated rules (a merchant's own manual
+      // rules were already preserved server-side and are included here).
+      updateUpsellProducts({ manualRules: aiFetcher.data.rules || [] });
+      const { productsCovered, totalProducts, productsSkipped } = aiFetcher.data;
       setAiStatus({
         type: 'success',
-        message: `Added ${suggestions.length} AI-suggested upsell rule${suggestions.length === 1 ? '' : 's'}. Switch to Manual Selection to review or edit them.`,
+        message: productsSkipped > 0
+          ? `Generated real pairings for ${productsCovered} of ${totalProducts} products — the other ${productsSkipped} had no purchase history or shared collection to pair from yet, so no rule was invented for them.`
+          : `Generated real pairings for all ${productsCovered} products, based on actual order history and collections.`,
       });
     } else {
       setAiStatus({ type: 'error', message: aiFetcher.data.error || 'Failed to generate suggestions.' });
@@ -192,11 +184,12 @@ export function UpsellSection() {
 
   const handleGenerateAiSuggestions = () => {
     setAiStatus(null);
+    // The catalog is fetched server-side against the real store now (same
+    // as FBT's AI Coverage Run), so it no longer needs the client's product
+    // list — `count` is products-per-trigger (reuses the same "Max upsells
+    // to show" picker below), not a flat total.
     aiFetcher.submit(
-      {
-        products: (allProducts || []).map((p) => ({ id: p.id, title: p.title, price: p.price, image: p.image })),
-        count: upsellProducts.limit || 3,
-      },
+      { count: upsellProducts.limit || 3 },
       { method: 'POST', action: '/api/upsell-ai-suggestions', encType: 'application/json' }
     );
   };
@@ -249,18 +242,15 @@ export function UpsellSection() {
               <BlockStack gap="100">
                 <Text as="h3" variant="headingSm">AI Settings</Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  AI reviews your store&rsquo;s product catalog and creates upsell rules for you automatically.
+                  Ranks each product&rsquo;s upsell by real order history first, then by shared collections — never an invented pairing. Generates one rule per product, matched to whatever&rsquo;s actually in the cart.
                 </Text>
               </BlockStack>
               <LimitPicker value={upsellProducts.limit} onChange={(v) => updateUpsellProducts({ limit: v })} />
               <InlineStack gap="200">
-                <Button variant="primary" onClick={handleGenerateAiSuggestions} loading={aiLoading} disabled={!allProducts?.length}>
+                <Button variant="primary" onClick={handleGenerateAiSuggestions} loading={aiLoading}>
                   Regenerate Suggestions
                 </Button>
               </InlineStack>
-              {!allProducts?.length && (
-                <Banner tone="warning">No products loaded yet — open the product picker once or reload the page.</Banner>
-              )}
               {aiStatus && (
                 <Banner tone={aiStatus.type === 'success' ? 'success' : 'critical'}>{aiStatus.message}</Banner>
               )}

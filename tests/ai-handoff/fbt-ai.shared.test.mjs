@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildAiFbtRules, toFbtOfferShape } from '../../app/utils/fbt-ai.shared.js';
+import { buildAiFbtRules, toFbtOfferShape, shapeAiUpsellRules } from '../../app/utils/fbt-ai.shared.js';
 
 function product(id, title, productType, price, collectionIds = []) {
   return { gid: `gid://shopify/Product/${id}`, numericId: id, title, handle: title.toLowerCase(), productType, collectionIds, image: '', price };
@@ -102,4 +102,30 @@ test('a co-purchased id that no longer exists in the current catalog is silently
 test('toFbtOfferShape only carries the fields the storefront widget actually reads', () => {
   const p = product('1', 'A', 'X', '10');
   assert.deepEqual(toFbtOfferShape(p), { id: p.gid, title: 'A', handle: 'a', image: '', price: '10' });
+});
+
+test('shapeAiUpsellRules reshapes into the Upsell widget\'s own manual-rule format, matched by specific trigger product', () => {
+  const mug = product('1', 'Mug', 'Kitchen', '15');
+  const plate = product('2', 'Plate', 'Kitchen', '18');
+  const { rules } = buildAiFbtRules([mug, plate], new Map(), 1);
+
+  const upsellRules = shapeAiUpsellRules(rules, 'test');
+  assert.equal(upsellRules.length, 2);
+  const mugRule = upsellRules.find((r) => r.triggerProductIds[0] === mug.gid);
+  assert.equal(mugRule.aiGenerated, true, 'must be tagged so a later regenerate can replace only AI rows, never a merchant\'s own rules');
+  assert.equal(mugRule.triggerType, 'specific', 'must require its specific trigger product in cart — never a blanket "always show" rule');
+  assert.deepEqual(mugRule.triggerProductIds, [mug.gid]);
+  assert.deepEqual(mugRule.upsellProductIds, [plate.gid]);
+  assert.equal(mugRule.upsellProductCount, 1);
+});
+
+test('shapeAiUpsellRules ids are unique per rule (no accidental collisions when idPrefix is shared)', () => {
+  const a = product('1', 'A', 'Kitchen', '10');
+  const b = product('2', 'B', 'Kitchen', '11');
+  const c = product('3', 'C', 'Kitchen', '12');
+  const { rules } = buildAiFbtRules([a, b, c], new Map(), 1);
+
+  const upsellRules = shapeAiUpsellRules(rules, 'test');
+  const ids = upsellRules.map((r) => r.id);
+  assert.equal(new Set(ids).size, ids.length);
 });

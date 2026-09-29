@@ -1,13 +1,14 @@
-// Pure ranking logic behind the FBT admin page's "AI Coverage Run" (Configure
-// AI / Regenerate Suggestions) — factored out of
-// app/services/cart-config-writes.server.js's generateAiFbtRules so the
-// actual decision logic (what pairs with what, and when to give up rather
-// than guess) can be unit-tested without a live MySQL pool or Shopify Admin
-// GraphQL client. No LLM involved anywhere in this file: rankings come from
-// real co-purchase counts (store_order_line_items, via fetchCoPurchaseMap in
-// the server file) with a same-productType fallback for products with no
-// purchase history yet. A product with neither signal gets no rule at all —
-// never an invented, unrelated pairing.
+// Pure ranking logic behind both FBT's "AI Coverage Run" (Configure AI /
+// Regenerate Suggestions) and the Upsell widget's "AI Recommendations" —
+// factored out of app/services/cart-config-writes.server.js's
+// computeAiPairingRules so the actual decision logic (what pairs with what,
+// and when to give up rather than guess) can be unit-tested without a live
+// MySQL pool or Shopify Admin GraphQL client. No LLM involved anywhere in
+// this file: rankings come from real co-purchase counts
+// (store_order_line_items, via fetchCoPurchaseMap in the server file) with a
+// same-productType fallback for products with no purchase history yet. A
+// product with neither signal gets no rule at all — never an invented,
+// unrelated pairing.
 
 export function toFbtOfferShape(p) {
   return { id: p.gid, title: p.title, handle: p.handle, image: p.image, price: p.price };
@@ -112,4 +113,25 @@ export function buildAiFbtRules(catalog, coPurchaseMap, countPerProduct) {
   }
 
   return { rules, covered };
+}
+
+// Reshapes buildAiFbtRules' generic {trigger_products, fbt_products} output
+// into the Upsell widget's own manual-rule shape (the same one
+// UpsellSection.jsx's manual "Add new rule" button builds by hand, and the
+// same one cart_drawer_inline.js's renderUpsellSectionAsync already matches
+// against cart contents) — one rule per product, aiGenerated:true so a
+// later regenerate can replace only these, never a merchant's own rules.
+// idPrefix lets the caller make ids deterministic in tests; defaults to a
+// timestamp so real runs never collide.
+export function shapeAiUpsellRules(rules, idPrefix = `ai-${Date.now()}`) {
+  return rules.map((r, i) => ({
+    id: `${idPrefix}-${i}`,
+    aiGenerated: true,
+    triggerType: 'specific',
+    triggerProductCount: r.trigger_products.length,
+    triggerProductIds: r.trigger_products.map((p) => p.id),
+    upsellProductCount: r.fbt_products.length,
+    upsellProductIds: r.fbt_products.map((p) => p.id),
+    upsellProductDetails: r.fbt_products,
+  }));
 }

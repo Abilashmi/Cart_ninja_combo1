@@ -14,7 +14,7 @@
 import { getDb } from './db.server';
 import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
-import { buildAiFbtRules } from '../utils/fbt-ai.shared';
+import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -1039,20 +1039,18 @@ async function fetchCoPurchaseMap(db, shop, countPerProduct) {
   return byTrigger;
 }
 
-// The "AI Coverage Run" behind the FBT admin page's Configure AI/Regenerate
-// Suggestions buttons. Generates one rule per catalog product, ranking its
-// offer products by real co-purchase history first (fetchCoPurchaseMap) and
-// falling back to "same product type" only for products with no purchase
-// signal yet (a new store, or a product nobody's bought alongside anything).
-// A product with neither signal gets skipped — no rule — rather than being
-// forced to pair with something unrelated; that guesswork is exactly the bug
-// this replaces (see the FBT note in ai-product-knowledge.js). Every row
-// this writes is tagged source='ai' and only source='ai' rows are ever
-// touched here, so a merchant's own manual rules are never affected by
-// running or re-running this.
-export async function generateAiFbtRules(admin, shop, countPerProduct) {
+// The real "who genuinely pairs with what" engine — shared by FBT's AI
+// Coverage Run and the Upsell widget's AI Recommendations (see
+// generateAiUpsellRules below), since the ranking logic (real co-purchase
+// history first, same-product-type/collection fallback, skip rather than
+// invent a pairing) is identical between the two; only what each feature
+// does with the resulting rules differs. Kept here, not in either feature's
+// own function, so neither one can drift from the other. Ranking/fallback
+// decision logic itself lives in the pure, unit-tested
+// app/utils/fbt-ai.shared.js so it can be tested without a live DB pool or
+// Admin GraphQL client.
+async function computeAiPairingRules(admin, shop, countPerProduct) {
   const db = getDb();
-  await ensureFbtRulesSourceColumn(db);
   const n = Math.max(1, Math.min(10, Number(countPerProduct) || 3));
 
   const [catalog, coPurchaseMap] = await Promise.all([
@@ -1060,10 +1058,29 @@ export async function generateAiFbtRules(admin, shop, countPerProduct) {
     fetchCoPurchaseMap(db, shop, n),
   ]);
 
-  // Ranking/fallback decision logic lives in the pure, unit-tested
-  // app/utils/fbt-ai.shared.js — kept out of this function so it can be
-  // tested without a live DB pool or Admin GraphQL client.
   const { rules, covered } = buildAiFbtRules(catalog, coPurchaseMap, n);
+
+  return {
+    rules,
+    covered,
+    n,
+    totalProducts: catalog.length,
+    productsSkipped: catalog.length - covered,
+    truncated: catalog.length >= AI_COVERAGE_PRODUCT_CAP,
+  };
+}
+
+// The "AI Coverage Run" behind the FBT admin page's Configure AI/Regenerate
+// Suggestions buttons. Generates one rule per catalog product (see
+// computeAiPairingRules above for the ranking). Every row this writes is
+// tagged source='ai' and only source='ai' rows are ever touched here, so a
+// merchant's own manual rules are never affected by running or re-running
+// this.
+export async function generateAiFbtRules(admin, shop, countPerProduct) {
+  const db = getDb();
+  await ensureFbtRulesSourceColumn(db);
+
+  const { rules, covered, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
 
   await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
   for (let i = 0; i < rules.length; i++) {
@@ -1085,12 +1102,42 @@ export async function generateAiFbtRules(admin, shop, countPerProduct) {
   `, [shop, n]);
   await rebuildFbtLegacyConditionForMode(shop, 'ai');
 
-  return {
-    totalProducts: catalog.length,
-    productsCovered: covered,
-    productsSkipped: catalog.length - covered,
-    truncated: catalog.length >= AI_COVERAGE_PRODUCT_CAP,
-  };
+  return { totalProducts, productsCovered: covered, productsSkipped, truncated };
+}
+
+// The Upsell widget's own "AI Recommendations" — was previously a bare LLM
+// call (api.upsell-ai-suggestions.jsx) that asked a model to freely pick a
+// flat count of "good upsells" from up to 100 catalog products with zero
+// grounding in real purchase behavior, and applied every pick as a blanket
+// triggerType:'all' rule — shown on every cart regardless of what's actually
+// in it, never genuinely "matching" the product the shopper just added. Now
+// reuses the exact same real engine as FBT's AI Coverage Run
+// (computeAiPairingRules) and produces one rule per catalog product, so the
+// storefront (renderUpsellSectionAsync in cart_drawer_inline.js, which
+// already only matches a rule when its triggerProductIds is in the cart)
+// actually shows a genuinely-paired product for whatever was added — the
+// exact "like FBT" behavior asked for.
+//
+// upsell_widget_settings.manual_rules is a single undifferentiated JSON
+// array with no source column (unlike fbt_rules) — AI-generated rules are
+// tagged aiGenerated:true on the rule object itself so a later regenerate
+// can replace only those, never a merchant's own hand-built rules.
+export async function generateAiUpsellRules(admin, shop, planKey, countPerProduct) {
+  const db = getDb();
+
+  const { rules, covered, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
+
+  const aiRules = shapeAiUpsellRules(rules);
+
+  const [exRows] = await db.execute('SELECT manual_rules FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  let existingRules = [];
+  try { existingRules = exRows[0]?.manual_rules ? JSON.parse(exRows[0].manual_rules) : []; } catch { existingRules = []; }
+  const keptManualRules = (Array.isArray(existingRules) ? existingRules : []).filter((r) => !r?.aiGenerated);
+  const nextManualRules = [...keptManualRules, ...aiRules];
+
+  const settings = await saveUpsellWidgetSettings(shop, planKey, { manualRules: nextManualRules });
+
+  return { totalProducts, productsCovered: covered, productsSkipped, truncated, rules: aiRules, settings };
 }
 
 // ── Countdown Timer (cart drawer's own — distinct from the Product Widget's
