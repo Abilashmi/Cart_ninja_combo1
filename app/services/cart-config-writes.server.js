@@ -15,6 +15,10 @@ import { getDb } from './db.server';
 import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
+import { withTimeout } from '../utils/with-timeout';
+
+// Ceiling for a single Shopify Admin API call made from a save path.
+const SHOPIFY_CALL_TIMEOUT_MS = 20_000;
 
 function flag(v, d = 1) {
   if (v == null) return d;
@@ -986,7 +990,7 @@ async function fetchCatalogForAiFbt(admin) {
   const products = [];
   let cursor = null;
   for (let page = 0; page < 3 && products.length < AI_COVERAGE_PRODUCT_CAP; page++) {
-    const res = await admin.graphql(
+    const res = await withTimeout(admin.graphql(
       `query CatalogPage($cursor: String) {
         products(first: 100, after: $cursor, query: "status:active") {
           pageInfo { hasNextPage endCursor }
@@ -1004,7 +1008,13 @@ async function fetchCatalogForAiFbt(admin) {
         }
       }`,
       { variables: { cursor } }
-    );
+    ), SHOPIFY_CALL_TIMEOUT_MS, null);
+    // Bounded per page: admin.graphql takes no AbortSignal, and this runs
+    // inside the FBT save action — a stalled page here would hold the whole
+    // request open, leaving the admin's Save button a permanently disabled
+    // spinner. Stopping early just means covering fewer products this run,
+    // which the returned productsSkipped/truncated counts already report.
+    if (!res) break;
     const data = await res.json();
     const conn = data.data?.products;
     if (!conn) break;

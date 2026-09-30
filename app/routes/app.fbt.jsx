@@ -23,6 +23,17 @@ import { canPublishFeature } from '../config/plans';
 import {
   ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules,
 } from '../services/cart-config-writes.server';
+import { withTimeout } from '../utils/with-timeout';
+
+// Ceiling for a single Shopify Admin API call in this route. Generous enough
+// that a merely-slow response still succeeds, low enough that a stalled one
+// can't leave the page stuck on a spinner.
+const SHOPIFY_CALL_TIMEOUT_MS = 20_000;
+
+// How long a save may stay in flight before the UI stops trusting it and
+// hands the merchant back a usable button. Comfortably above a slow-but-real
+// AI Coverage Run so it never fires on a save that's merely working hard.
+const SAVE_STALL_TIMEOUT_MS = 60_000;
 
 function parseJson(val, fallback) {
   if (!val) return fallback;
@@ -56,7 +67,15 @@ export const loader = async ({ request }) => {
     /* fetch products from Shopify */
     (async () => {
       try {
-        const prodRes = await admin.graphql(`
+        // Bounded: this loader also runs as the revalidation React Router
+        // fires after every save, and admin.graphql accepts no AbortSignal,
+        // so a stalled Shopify call would otherwise keep the fetcher
+        // non-idle indefinitely — which renders the Save button as a
+        // permanently disabled spinner that swallows further clicks without
+        // sending anything. The try/catch below can't help with that: a
+        // hang isn't an error. Degrading to an empty product list only
+        // affects the rule builder's picker, never a save.
+        const prodRes = await withTimeout(admin.graphql(`
           query getProducts {
             products(first: 50) {
               edges {
@@ -74,7 +93,11 @@ export const loader = async ({ request }) => {
               }
             }
           }
-        `);
+        `), SHOPIFY_CALL_TIMEOUT_MS, null);
+        if (!prodRes) {
+          console.error('[FBT loader] products: Shopify call timed out');
+          return [];
+        }
         const prodData = await prodRes.json();
         return (prodData?.data?.products?.edges || []).map(e => ({
           id: e.node.id,
@@ -960,7 +983,24 @@ export default function FBTPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfigModalOpen, tourStepIndex, manualRules.length]);
 
-  const isSaving = fetcher.state !== 'idle';
+  // A save that never settles used to leave every `loading` button spinning
+  // forever — and Polaris renders a loading button as disabled, so further
+  // clicks did nothing and sent no request at all, with no error to explain
+  // it. The server-side timeouts should stop that happening, but this is the
+  // backstop: past this point stop claiming to be saving, so the merchant
+  // gets the button back and can retry.
+  const [saveStalled, setSaveStalled] = useState(false);
+  useEffect(() => {
+    if (fetcher.state === 'idle') {
+      setSaveStalled(false);
+      return undefined;
+    }
+    setSaveStalled(false);
+    const timer = setTimeout(() => setSaveStalled(true), SAVE_STALL_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [fetcher.state]);
+
+  const isSaving = fetcher.state !== 'idle' && !saveStalled;
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
   const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
   const draftTriggerProducts = draftRule?.triggerIds?.length ? findProductsByIds(allProducts, draftRule.triggerIds) : [];
@@ -1288,6 +1328,13 @@ export default function FBTPage() {
           content={configMode === 'ai' ? 'Enter a valid FBT product count before saving' : 'Configure at least one FBT rule before saving'}
           error
           onDismiss={() => setConfigureToast(false)}
+        />
+      )}
+      {saveStalled && (
+        <Toast
+          content="Still waiting on Shopify — your changes may not have saved. Try Save again."
+          error
+          onDismiss={() => setSaveStalled(false)}
         />
       )}
       {!isConfigModalOpen && <BrixBar size="md" floating />}
