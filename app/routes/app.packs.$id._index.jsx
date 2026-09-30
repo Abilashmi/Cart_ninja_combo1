@@ -5,7 +5,7 @@ import { packsRouteContext, throwPackResponse } from '../services/packs-loader.s
 import { getPack, listActivePacks } from '../services/packs.server';
 import { hydratePacks, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
 import PackPreview from '../components/packs/PackPreview';
-import { PACK_TEMPLATES } from '../utils/packs.shared.js';
+import { PACK_DESIGNS, packTypeOf } from '../utils/packs.shared.js';
 import { formatMoney } from '../utils/currency.shared';
 
 export async function loader({ request, params }) {
@@ -13,7 +13,7 @@ export async function loader({ request, params }) {
   try {
     const stored = await getPack(shop, params.id);
     if (!stored) throw new Response('This Pack does not exist or belongs to a different store.', { status: 404 });
-    const [pack] = await hydratePacks(admin, [stored], currency);
+    const [pack] = await hydratePacks(admin, [stored], currency, { includeVariants: true });
     const checkoutDiscount = planState === 'enabled' && pack.status === 'active' ? await getCheckoutDiscountStatus(admin, await listActivePacks(shop)) : null;
     return { pack, planState, currency, checkoutDiscount };
   } catch (error) {
@@ -51,7 +51,7 @@ export default function PackDetail() {
   return (
     <Page
       title={pack.productTitle}
-      subtitle={pack.variantTitle}
+      subtitle={pack.variantScope === 'all' ? 'All variants' : `${(pack.allowedVariantIds || []).length} selected variant${(pack.allowedVariantIds || []).length === 1 ? '' : 's'}`}
       backAction={{ content: 'Packs', onAction: () => navigate('/app/packs') }}
       titleMetadata={<Badge tone={statusTone[pack.displayStatus]}>{statusLabel[pack.displayStatus] || pack.displayStatus}</Badge>}
       primaryAction={{ content: 'Edit', onAction: () => navigate(`/app/packs/${pack.id}/edit`) }}
@@ -110,7 +110,8 @@ export default function PackDetail() {
                   <Text as="h2" variant="headingMd">Details</Text>
                   <Divider />
                   <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
-                    <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Template</Text><Text as="span">{PACK_TEMPLATES.find((template) => template.id === pack.template)?.name || pack.template}</Text></BlockStack>
+                    <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Type · Design</Text><Text as="span">{packTypeOf(pack.template).name} · {PACK_DESIGNS.find((design) => design.id === pack.customization?.design?.preset)?.name || 'Classic'}</Text></BlockStack>
+                    <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Variant coverage</Text><Text as="span">{pack.variantScope === 'all' ? 'All variants' : `${(pack.allowedVariantIds || []).length} selected variant${(pack.allowedVariantIds || []).length === 1 ? '' : 's'}`}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Availability</Text><Text as="span">{pack.available ? 'In stock' : 'Out of stock'}{pack.maxQuantity ? ` · max ${pack.maxQuantity} per order` : ''}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Version</Text><Text as="span">{pack.version}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Last updated</Text><Text as="span">{pack.updatedAt ? new Date(pack.updatedAt).toLocaleString() : '—'}</Text></BlockStack>
@@ -119,11 +120,15 @@ export default function PackDetail() {
               </Card>
             </BlockStack>
           </Layout.Section>
-          <Layout.Section variant="oneThird">
+        </Layout>
+        <Layout>
+          <Layout.Section>
             <Card>
               <BlockStack gap="300">
                 <Text as="h3" variant="headingSm">Storefront preview</Text>
-                <PackPreview template={pack.template} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} formatMoney={fmt} />
+                <div style={{ maxWidth: 640 }}>
+                  <PackPreview template={pack.template} packType={pack.packType} variants={pack.variants} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} formatMoney={fmt} />
+                </div>
               </BlockStack>
             </Card>
           </Layout.Section>

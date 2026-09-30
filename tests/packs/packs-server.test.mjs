@@ -14,7 +14,7 @@ const realFetch = globalThis.fetch;
 let rows = [];
 let nextId = 1;
 let mode = 'ok'; // 'ok' | 'missing_table' | 'db_down'
-const COLS = ['shop_domain', 'product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template', 'tiers_json', 'customization_json'];
+const COLS = ['shop_domain', 'product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template', 'pack_type', 'variant_scope', 'allowed_variant_ids_json', 'tiers_json', 'customization_json'];
 
 function respond(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -43,12 +43,12 @@ globalThis.fetch = async (url, init) => {
     return respond({ success: true, insertId: row.id, affectedRows: 1 });
   }
   if (q.startsWith('UPDATE brix_packs SET product_id=?')) {
-    const target = rows.find((r) => r.id === params[11] && r.shop_domain === params[12]);
+    const target = rows.find((r) => r.id === params[14] && r.shop_domain === params[15]);
     if (!target) return respond({ success: true, affectedRows: 0 });
     const next = { ...target, product_id: params[0], variant_id: params[1] };
     if (dupe(next, target.id)) return respond({ success: false, error: 'Duplicate entry for key brix_packs_shop_variant' }, 500);
-    ['product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template'].forEach((col, i) => { target[col] = params[i]; });
-    target.tiers_json = params[9]; target.customization_json = params[10]; target.version += 1;
+    ['product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template', 'pack_type', 'variant_scope', 'allowed_variant_ids_json'].forEach((col, i) => { target[col] = params[i]; });
+    target.tiers_json = params[12]; target.customization_json = params[13]; target.version += 1;
     return respond({ success: true, affectedRows: 1 });
   }
   if (q.startsWith('UPDATE brix_packs SET status=?')) {
@@ -96,7 +96,7 @@ test('save + read round trip; ids stored numeric; customization deep-merged with
   assert.equal(pack.customization.colors.primary, '#ff0000');
   assert.equal(pack.customization.colors.text, '#202223'); // untouched default survived
   assert.equal(pack.customization.typography.headingSize, 20);
-  assert.equal(pack.customization.spacing.cardGap, 10);
+  assert.equal(pack.customization.spacing.cardGap, 12); // default bumped for more breathing room between cards
   // update touching a different group must not reset colors
   const updated = await savePack('a.myshopify.com', base({ id: pack.id, customization: { typography: { headingSize: 30 } } }));
   assert.equal(updated.customization.colors.primary, '#ff0000');

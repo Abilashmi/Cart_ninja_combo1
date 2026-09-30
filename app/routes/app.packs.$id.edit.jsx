@@ -4,7 +4,7 @@ import { getPack } from '../services/packs.server';
 import { hydratePacks } from '../services/packs-shopify.server';
 import PackBuilder from '../components/packs/PackBuilder';
 
-const STEP_INDEX = { product: 0, template: 1, tiers: 2, customization: 3, review: 4 };
+const STEP_INDEX = { product: 0, type: 1, configure: 2, design: 3, customize: 4, review: 5 };
 
 export async function loader({ request, params }) {
   const { admin, shop, planState, currency } = await packsRouteContext(request);

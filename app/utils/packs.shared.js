@@ -17,6 +17,25 @@ export const PACK_TEMPLATES = [
   { id: 'choose_each_item', name: 'Choose Each Item', description: 'Shoppers pick a real Shopify variant for every item in the Pack.', preview: 'M · S · L', recommended: 'Best for mix and match' },
   { id: 'visual_offer', name: 'Visual Offer', description: 'Large promotional cards with product image and prominent savings.', preview: 'BEST VALUE — Save 12%', recommended: 'Best for promotions' },
 ];
+// Customer-facing Pack types. `template` (stored) stays the source of truth
+// for rendering/behavior family: Standard = same_variant (or visual_offer,
+// its image-card layout), Mix & Match = choose_each_item. `pack_type` (also
+// stored, see below) is the authoritative merchant-facing axis the Pack
+// belongs to a *product* on — same_variant vs mix_match — and always keeps
+// `template` in sync: mix_match forces template='choose_each_item'.
+export const PACK_TYPES = [
+  { id: 'same_variant', name: 'Same Variant', templates: ['same_variant', 'visual_offer'], defaultTemplate: 'same_variant', description: 'Customer buys multiple quantities of the same selected variant.', example: 'Black / Medium × 3' },
+  { id: 'mix_match', name: 'Mix & Match', templates: ['choose_each_item'], defaultTemplate: 'choose_each_item', description: 'Customer can combine different variants in one Pack.', example: 'Black / Medium + White / Small + Blue / Medium' },
+];
+export const VALID_PACK_TYPES = new Set(PACK_TYPES.map((type) => type.id));
+export const packTypeOf = (template) => PACK_TYPES.find((type) => type.templates.includes(template)) || PACK_TYPES[0];
+
+// A Pack belongs to a Shopify product first, then declares which of that
+// product's variants it applies to: every variant ('all'), or a merchant-
+// curated subset ('selected'). Replaces the old "exactly one variant" model.
+export const VARIANT_SCOPES = ['all', 'selected'];
+export const VALID_VARIANT_SCOPES = new Set(VARIANT_SCOPES);
+
 export const VALID_TEMPLATES = new Set(PACK_TEMPLATES.map((template) => template.id));
 export const VALID_STATUSES = new Set(['draft', 'active', 'inactive', 'configuration_error']);
 export const DISCOUNT_TYPES = ['none', 'percentage', 'fixed'];
@@ -55,6 +74,49 @@ export function sameShopifyId(a, b) {
   const left = toNumericId(a);
   const right = toNumericId(b);
   return left !== null && right !== null && left === right;
+}
+
+// ─── Variant coverage (pack_type + variant_scope + allowed_variant_ids) ───────
+
+/** Coerce a raw (browser-submitted) list of variant ids to a deduped numeric-string array. */
+export function normalizeVariantIds(rawIds) {
+  if (!Array.isArray(rawIds)) return [];
+  const seen = new Set();
+  for (const raw of rawIds) {
+    const id = toNumericId(raw);
+    if (id) seen.add(id);
+  }
+  return [...seen];
+}
+
+/**
+ * Validate how a Pack covers its product's variants, given the product's
+ * REAL variant ids (from Shopify — never trust the browser's own list).
+ * Returns { valid, errors, allowedVariantIds } where allowedVariantIds is the
+ * normalised, product-scoped list to persist ('all' scope stores [] — it is
+ * resolved against the live variant list on every read instead of a snapshot
+ * that would silently go stale when the merchant adds a new variant).
+ */
+export function validateVariantCoverage({ packType, variantScope, allowedVariantIds }, productVariantIds) {
+  const errors = [];
+  if (!VALID_PACK_TYPES.has(packType)) errors.push({ field: 'packType', message: 'Choose a valid Pack type.' });
+  if (!VALID_VARIANT_SCOPES.has(variantScope)) errors.push({ field: 'variantScope', message: 'Choose a valid variant scope.' });
+  if (errors.length) return { valid: false, errors, allowedVariantIds: [] };
+
+  const productIds = new Set(productVariantIds.map((id) => toNumericId(id)).filter(Boolean));
+  if (variantScope === 'all') {
+    if (productIds.size === 0) errors.push({ field: 'variantScope', message: 'This product has no variants to apply the Pack to.' });
+    return { valid: errors.length === 0, errors, allowedVariantIds: [] };
+  }
+
+  const requested = normalizeVariantIds(allowedVariantIds);
+  const foreign = requested.filter((id) => !productIds.has(id));
+  if (foreign.length) errors.push({ field: 'allowedVariantIds', message: 'One or more selected variants do not belong to this product.' });
+  const owned = requested.filter((id) => productIds.has(id));
+  if (owned.length === 0) {
+    errors.push({ field: 'allowedVariantIds', message: packType === 'mix_match' ? 'Select at least one variant customers can choose from.' : 'Select at least one variant this Pack applies to.' });
+  }
+  return { valid: errors.length === 0, errors, allowedVariantIds: owned };
 }
 
 // ─── Money ───────────────────────────────────────────────────────────────────
@@ -206,13 +268,29 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
 // live here — a control that has no rendering effect must not be saved.
 export const DEFAULT_CUSTOMIZATION = {
   content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '' },
-  savings: { visible: true, mode: 'save_amount' },
+  savings: { visible: true, mode: 'save_amount', label: 'Save' },
   colors: { primary: '#008060', background: '#ffffff', cardBackground: '#ffffff', selectedCard: '#e6f4f1', border: '#dfe3e8', text: '#202223', price: '#202223', discount: '#008060', badge: '#fff4d6', button: '#008060', buttonText: '#ffffff' },
   borders: { radius: 8, width: 1, style: 'solid', shadow: false },
   typography: { headingSize: 20, packTitleSize: 15, priceSize: 18, descriptionSize: 13, fontWeight: 600, alignment: 'left' },
-  spacing: { cardPadding: 16, cardGap: 10, sectionSpacing: 20, buttonSpacing: 16 },
+  spacing: { cardPadding: 18, cardGap: 12, sectionSpacing: 20, buttonSpacing: 16 },
   images: { enabled: true, size: 'medium', position: 'top' },
+  design: { preset: 'classic' },
 };
+
+// Layout presets. Each id is a structurally different layout, rendered by
+// PackPreview.jsx and packs-widget.js (see their layoutOf): 'classic' = stacked
+// list, 'highlight' = compact quantity selector + summary panel, 'premium' =
+// side-by-side offer cards. `style` only nudges shape/spacing to suit the
+// layout — never colors, so switching layouts keeps the merchant's palette
+// the same (content, savings and Pack behaviour are never touched either).
+// The ids are kept from the earlier presets so saved Packs stay valid.
+export const PACK_DESIGNS = [
+  { id: 'classic', name: 'Classic list', description: 'Stacked rows with a radio button — clear and familiar.', style: {} },
+  { id: 'highlight', name: 'Compact selector', description: 'Quantity buttons in a row, one price summary below — saves space.', style: {
+    borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 8 } } },
+  { id: 'premium', name: 'Offer cards', description: 'Side-by-side cards with bold prices — visual and punchy.', style: {
+    borders: { radius: 12 }, typography: { priceSize: 20 }, spacing: { cardPadding: 16, cardGap: 10 } } },
+];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const str = (max) => ({ type: 'string', max });
@@ -223,12 +301,13 @@ const color = () => ({ type: 'color' });
 
 export const CUSTOMIZATION_SCHEMA = {
   content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160) },
-  savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent') },
+  savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent'), label: str(24) },
   colors: Object.fromEntries(Object.keys(DEFAULT_CUSTOMIZATION.colors).map((key) => [key, color()])),
   borders: { radius: num(0, 32), width: num(0, 6), style: oneOf('solid', 'dashed', 'dotted'), shadow: bool() },
   typography: { headingSize: num(12, 40), packTitleSize: num(11, 28), priceSize: num(12, 36), descriptionSize: num(10, 24), fontWeight: oneOf(400, 500, 600, 700), alignment: oneOf('left', 'center', 'right') },
   spacing: { cardPadding: num(4, 40), cardGap: num(0, 32), sectionSpacing: num(0, 60), buttonSpacing: num(0, 40) },
   images: { enabled: bool(), size: oneOf('small', 'medium', 'large'), position: oneOf('top', 'left') },
+  design: { preset: oneOf(...PACK_DESIGNS.map((design) => design.id)) },
 };
 
 export function defaultCustomization() {
@@ -300,6 +379,21 @@ export function mergeCustomization(...layers) {
     }
   }
   return merged;
+}
+
+/**
+ * Restyle `customization` with a design preset: colors/borders/typography/spacing
+ * reset to defaults + the preset's style; content, savings and images are kept.
+ * Also serves as "Reset to default" for the styling groups.
+ */
+export function applyDesign(customization, designId) {
+  const design = PACK_DESIGNS.find((item) => item.id === designId) || PACK_DESIGNS[0];
+  const current = mergeCustomization(customization);
+  const next = { ...current, design: { preset: design.id } };
+  for (const group of ['colors', 'borders', 'typography', 'spacing']) {
+    next[group] = { ...DEFAULT_CUSTOMIZATION[group], ...(design.style[group] || {}) };
+  }
+  return next;
 }
 
 // ─── Misc display helpers ────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   toNumericId, toGid, sameShopifyId, calculateTier, calculateTierFromPrices, normalizeTiers, validateTiers,
   sanitizeCustomization, mergeCustomization, defaultCustomization, currencyDecimals,
+  normalizeVariantIds, validateVariantCoverage,
 } from '../../app/utils/packs.shared.js';
 
 test('Shopify id helpers match exactly, never by suffix', () => {
@@ -99,6 +100,41 @@ test('customization merge preserves nested defaults', () => {
   const next = mergeCustomization(stored, { colors: { primary: '#123456' } });
   assert.equal(next.typography.headingSize, 30);
   assert.equal(next.colors.primary, '#123456');
+});
+
+test('normalizeVariantIds dedupes and coerces GIDs to numeric strings', () => {
+  assert.deepEqual(normalizeVariantIds(['gid://shopify/ProductVariant/1', '2', 2, '1', 'nope']), ['1', '2']);
+  assert.deepEqual(normalizeVariantIds(null), []);
+  assert.deepEqual(normalizeVariantIds('not-an-array'), []);
+});
+
+test('validateVariantCoverage: a Pack belongs to a product first, then declares which variants it covers', () => {
+  const productVariantIds = ['1', '2', '3'];
+  // scope='all' never needs an explicit list, and is invalid without any variants at all.
+  const all = validateVariantCoverage({ packType: 'same_variant', variantScope: 'all', allowedVariantIds: [] }, productVariantIds);
+  assert.equal(all.valid, true);
+  assert.deepEqual(all.allowedVariantIds, []);
+  assert.equal(validateVariantCoverage({ packType: 'same_variant', variantScope: 'all', allowedVariantIds: [] }, []).valid, false);
+  // scope='selected' requires at least one REAL variant of the product.
+  const none = validateVariantCoverage({ packType: 'same_variant', variantScope: 'selected', allowedVariantIds: [] }, productVariantIds);
+  assert.equal(none.valid, false);
+  assert.match(none.errors[0].message, /at least one/);
+  // Variant ids from another product are never silently trusted or dropped —
+  // ANY foreign id makes the whole submission invalid (never a partial "trust
+  // what you can verify" pass), even when some of the ids are real.
+  const foreign = validateVariantCoverage({ packType: 'same_variant', variantScope: 'selected', allowedVariantIds: ['9', '99'] }, productVariantIds);
+  assert.equal(foreign.valid, false);
+  assert.deepEqual(foreign.allowedVariantIds, []);
+  const mixed = validateVariantCoverage({ packType: 'mix_match', variantScope: 'selected', allowedVariantIds: ['1', '9', '2'] }, productVariantIds);
+  assert.equal(mixed.valid, false);
+  assert.match(mixed.errors[0].message, /do not belong/);
+  // Only real ids, no foreign ones: valid, and the returned list is exactly what was given.
+  const real = validateVariantCoverage({ packType: 'mix_match', variantScope: 'selected', allowedVariantIds: ['1', '2'] }, productVariantIds);
+  assert.equal(real.valid, true);
+  assert.deepEqual(real.allowedVariantIds, ['1', '2']);
+  // Invalid pack_type / variant_scope values are rejected outright.
+  assert.equal(validateVariantCoverage({ packType: 'bogus', variantScope: 'all' }, productVariantIds).valid, false);
+  assert.equal(validateVariantCoverage({ packType: 'same_variant', variantScope: 'bogus' }, productVariantIds).valid, false);
 });
 
 test('sanitizeCustomization validates and drops unknown fields', () => {

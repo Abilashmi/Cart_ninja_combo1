@@ -3,7 +3,7 @@ import { getFeatureState } from '../config/plans';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { PackError, packErrorResponse, listActivePacksForProduct, listActivePacks } from '../services/packs.server';
-import { fetchProduct, hydratePacks, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
+import { hydratePacks, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
 import { toNumericId } from '../utils/packs.shared.js';
 
 /**
@@ -41,12 +41,15 @@ function ok(body) {
 }
 
 // Only what the widget needs — no shop, timestamps, internal status, etc.
-function publicPack(pack, productVariants) {
+function publicPack(pack) {
   return {
     id: pack.id,
     version: pack.version,
     variantId: pack.variantId,
     template: pack.template,
+    packType: pack.packType,
+    variantScope: pack.variantScope,
+    allowedVariantIds: pack.variantScope === 'all' ? [] : pack.allowedVariantIds || [],
     productTitle: pack.productTitle,
     variantTitle: pack.variantTitle,
     productImage: pack.productImage,
@@ -58,7 +61,10 @@ function publicPack(pack, productVariants) {
       subtotal: tier.subtotal, discountAmount: tier.discountAmount, price: tier.price, savings: tier.savings, effectiveUnitPrice: tier.effectiveUnitPrice,
     })),
     customization: pack.customization,
-    variants: pack.template === 'choose_each_item' ? productVariants : undefined,
+    // Needed whenever the widget must price/offer more than the anchor variant:
+    // mix_match (any item can be any allowed variant) or same_variant covering
+    // more than one variant (scope='all' or several selected variants).
+    variants: pack.variants,
   };
 }
 
@@ -90,7 +96,7 @@ export async function loader({ request }) {
     if (!stored.length) return ok({ ...empty, reason: 'no_active_pack' });
 
     const currency = await getShopCurrency(admin, shop);
-    const hydrated = await hydratePacks(admin, stored, currency);
+    const hydrated = await hydratePacks(admin, stored, currency, { includeVariants: true });
     const priced = hydrated.filter((pack) => pack.priceVerified);
     if (!priced.length) return ok({ ...empty, currency, reason: 'price_unverified' });
 
@@ -98,9 +104,7 @@ export async function loader({ request }) {
     const checkoutDiscount = await getCheckoutDiscountStatus(admin, await listActivePacks(shop));
     if (!checkoutDiscount.verified && !preview) return ok({ ...empty, currency, checkoutDiscount, reason: 'discount_unverified' });
 
-    const needsVariants = priced.some((pack) => pack.template === 'choose_each_item');
-    const productVariants = needsVariants ? (await fetchProduct(admin, productId)).variants : undefined;
-    const body = { packs: priced.map((pack) => publicPack(pack, productVariants)), reason: null, currency: { code: currency.code, locale: currency.locale }, checkoutDiscount, preview };
+    const body = { packs: priced.map((pack) => publicPack(pack)), reason: null, currency: { code: currency.code, locale: currency.locale }, checkoutDiscount, preview };
     if (!preview) cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, body });
     return ok(body);
   } catch (error) {

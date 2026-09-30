@@ -55,6 +55,24 @@
     return node;
   }
 
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function checkmarkSvg(size) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', size || 11);
+    svg.setAttribute('height', size || 11);
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('aria-hidden', 'true');
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M3 8.5L6.5 12L13 4.5');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '2.2');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
+
   function numericId(value) {
     var match = /(\d+)$/.exec(String(value == null ? '' : value));
     return match ? match[1] : null;
@@ -110,10 +128,28 @@
     return fromUrl ? numericId(fromUrl) : null;
   }
 
+  // A same_variant Pack applies to whichever of its covered variants the
+  // shopper currently has selected (scope='all' -> any variant of the
+  // product; scope='selected' -> one of allowedVariantIds). A mix_match Pack
+  // isn't tied to the page's variant selector at all — it composes its own
+  // items — so it's offered independently of the currently selected variant.
+  function matchesVariant(pack, variantId) {
+    if (!variantId) return false;
+    if (pack.variantScope === 'all') return true;
+    var allowed = pack.allowedVariantIds || [];
+    for (var i = 0; i < allowed.length; i += 1) if (numericId(allowed[i]) === variantId) return true;
+    return false;
+  }
+
   function packForVariant(packs, variantId) {
     if (!packs.length) return null;
-    if (!variantId) return packs.length === 1 ? packs[0] : null;
-    for (var i = 0; i < packs.length; i += 1) if (numericId(packs[i].variantId) === variantId) return packs[i];
+    for (var i = 0; i < packs.length; i += 1) {
+      if (packs[i].packType !== 'mix_match' && matchesVariant(packs[i], variantId)) return packs[i];
+    }
+    for (var j = 0; j < packs.length; j += 1) if (packs[j].packType === 'mix_match') return packs[j];
+    // No packType (older cached response) and nothing else matched: fall back
+    // to the previous single-pack behaviour rather than showing nothing.
+    if (!variantId && packs.length === 1) return packs[0];
     return null;
   }
 
@@ -137,8 +173,7 @@
     '.brix-packs-sub{margin:0 0 14px;font-size:var(--brix-packs-desc);opacity:.75}',
     '.brix-packs-preview{margin:0 0 12px;padding:8px 10px;background:#fff4d6;color:#5c4400;border:1px solid #e1b955;border-radius:6px;font-size:12px}',
     '.brix-packs-tiers{display:grid;gap:var(--brix-packs-gap);margin:0;padding:0;border:0}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-tiers{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}',
-    '.brix-packs-tier{position:relative;display:grid;grid-template-columns:auto 1fr auto;column-gap:12px;align-items:center;width:100%;margin:0;padding:var(--brix-packs-card-pad);background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:left;cursor:pointer}',
+    '.brix-packs-tier{position:relative;display:grid;grid-template-columns:auto 1fr auto;column-gap:16px;align-items:center;width:100%;margin:0;padding:var(--brix-packs-card-pad);background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:left;cursor:pointer}',
     '.brix-packs-tier:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
     '.brix-packs-tier:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
     '.brix-packs-tier[aria-checked="true"]{background:var(--brix-packs-selected);border-color:var(--brix-packs-primary);box-shadow:0 0 0 1px var(--brix-packs-primary)}',
@@ -146,6 +181,7 @@
     '.brix-packs-radio{width:18px;height:18px;border:2px solid var(--brix-packs-border);border-radius:50%;display:inline-block;position:relative}',
     '.brix-packs-tier[aria-checked="true"] .brix-packs-radio{border-color:var(--brix-packs-primary)}',
     '.brix-packs-tier[aria-checked="true"] .brix-packs-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--brix-packs-primary)}',
+    '.brix-packs-content{min-width:0}',
     '.brix-packs-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight)}',
     '.brix-packs-meta{display:block;font-size:var(--brix-packs-desc);opacity:.75}',
     '.brix-packs-badge{display:inline-block;padding:2px 8px;background:var(--brix-packs-badge);color:var(--brix-packs-text);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.2px;text-transform:uppercase}',
@@ -153,18 +189,47 @@
     '.brix-packs-price strong{display:block;font-size:var(--brix-packs-priceSize);font-weight:var(--brix-packs-weight)}',
     '.brix-packs-was{font-size:var(--brix-packs-desc);text-decoration:line-through;opacity:.6}',
     '.brix-packs-save{display:block;font-size:var(--brix-packs-desc);font-weight:600;color:var(--brix-packs-discount)}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-tier{grid-template-columns:1fr;row-gap:6px;text-align:center;justify-items:center;padding-top:calc(var(--brix-packs-card-pad) + 6px)}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-radio{display:none}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-price{text-align:center}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-title{justify-content:center}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);white-space:nowrap}',
-    '.brix-packs-widget[data-template="visual_offer"] .brix-packs-save{padding:2px 10px;background:var(--brix-packs-selected);border-radius:999px}',
+    '.brix-packs-checkmark{display:none;position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
+    '.brix-packs-qty{display:none}',
     '.brix-packs-img{display:block;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);max-width:100%}',
     '.brix-packs-img[data-size="small"]{width:48px;height:48px}.brix-packs-img[data-size="medium"]{width:72px;height:72px}.brix-packs-img[data-size="large"]{width:104px;height:104px}',
-    '.brix-packs-widget[data-template="visual_offer"][data-image-position="left"] .brix-packs-tier{grid-template-columns:auto 1fr auto;text-align:left;justify-items:stretch}',
-    '.brix-packs-widget[data-template="visual_offer"][data-image-position="left"] .brix-packs-price,.brix-packs-widget[data-template="visual_offer"][data-image-position="left"] .brix-packs-title{text-align:left;justify-content:flex-start}',
-    '.brix-packs-choose{margin-top:12px;display:grid;gap:8px}',
-    '.brix-packs-choose label{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;font-size:var(--brix-packs-desc)}',
+    /* ── Layout: list (Classic) — stacked rows, radio on the left, price on the right. */
+    '.brix-packs-widget[data-layout="list"][data-image="1"] .brix-packs-tier{grid-template-columns:auto auto 1fr auto}',
+    /* ── Layout: cards (Offer cards) — side-by-side cards, big quantity numeral, savings pill. */
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-tiers{grid-template-columns:repeat(var(--brix-packs-cols,3),minmax(0,1fr))}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier{grid-template-columns:1fr;row-gap:8px;text-align:center;justify-items:center;align-content:start;padding-top:calc(var(--brix-packs-card-pad) + 8px)}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-radio{display:none}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-price{text-align:center}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-title{justify-content:center}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);white-space:nowrap}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-save{display:inline-block;margin-top:6px;padding:3px 8px;font-size:11px;white-space:nowrap;background:var(--brix-packs-selected);border-radius:999px}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier[aria-checked="true"] .brix-packs-save{background:var(--brix-packs-card)}',
+    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier[aria-checked="true"] .brix-packs-checkmark{display:flex}',
+    '.brix-packs-widget[data-layout="cards"]:not([data-image="1"]) .brix-packs-qty{display:block;font-size:calc(var(--brix-packs-h) * 1.5);font-weight:800;line-height:1;color:var(--brix-packs-primary)}',
+    '.brix-packs-qty small{font-size:.5em;font-weight:700;margin-left:1px}',
+    /* Image-left cards need a full-width row, not a narrow auto-fit column, or the price overflows the card. */
+    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-tiers{grid-template-columns:1fr}',
+    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-tier{grid-template-columns:auto 1fr auto;text-align:left;justify-items:stretch;padding-top:var(--brix-packs-card-pad)}',
+    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-price,.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-title{text-align:left;justify-content:flex-start}',
+    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-badge{position:static;transform:none}',
+    /* ── Layout: chips (Compact selector) — a row of quantity buttons + one summary panel. */
+    '.brix-packs-widget[data-layout="chips"] .brix-packs-tiers{display:flex;flex-wrap:wrap;gap:var(--brix-packs-gap);padding-top:8px}',
+    '.brix-packs-chip{position:relative;flex:1 1 0;min-width:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;margin:0;padding:12px 8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:center;cursor:pointer;transition:background .15s ease,border-color .15s ease}',
+    '.brix-packs-chip:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
+    '.brix-packs-chip:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    '.brix-packs-chip[aria-checked="true"]{background:var(--brix-packs-primary);border-color:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
+    '.brix-packs-chip[disabled]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-chip-label{font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight);line-height:1.2}',
+    '.brix-packs-chip-save{font-size:11px;font-weight:700;color:var(--brix-packs-discount)}',
+    '.brix-packs-chip[aria-checked="true"] .brix-packs-chip-save{color:inherit;opacity:.9}',
+    '.brix-packs-chip .brix-packs-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;padding:1px 7px}',
+    '.brix-packs-summary{display:flex;align-items:center;gap:14px;margin-top:var(--brix-packs-gap);padding:var(--brix-packs-card-pad);background:var(--brix-packs-selected);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-primary);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-summary .brix-packs-content{flex:1}',
+    '.brix-packs-summary + .brix-packs-choose{margin-top:var(--brix-packs-gap)}',
+    '.brix-packs-choose{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;margin:0;padding:14px var(--brix-packs-card-pad);background:var(--brix-packs-selected);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-primary);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-choose-hint{margin:0;font-size:var(--brix-packs-desc);opacity:.75}',
+    '.brix-packs-choose-items{display:flex;flex-wrap:wrap;gap:10px}',
+    '.brix-packs-choose label{display:flex;flex-direction:column;gap:4px;flex:1 1 130px;min-width:110px;font-size:var(--brix-packs-desc)}',
     '.brix-packs-choose select{width:100%;padding:8px;font:inherit;border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);background:var(--brix-packs-card);color:var(--brix-packs-text)}',
     '.brix-packs-promo{margin:12px 0 0;font-size:var(--brix-packs-desc);opacity:.8;text-align:var(--brix-packs-align)}',
     '.brix-packs-msg{margin:12px 0 0;padding:8px 10px;border-radius:6px;font-size:13px}',
@@ -172,7 +237,7 @@
     '.brix-packs-msg[data-type="success"]{background:#e3f5ea;color:#14532d;border:1px solid #a7d7b8}',
     '.brix-packs-add{display:block;width:100%;margin-top:var(--brix-packs-btn-gap);padding:13px 16px;background:var(--brix-packs-button);color:var(--brix-packs-button-text);border:0;border-radius:var(--brix-packs-radius);font:inherit;font-weight:700;cursor:pointer}',
     '.brix-packs-add[disabled]{opacity:.55;cursor:not-allowed}',
-    '@media (max-width:480px){.brix-packs-tier{column-gap:10px}.brix-packs-widget[data-template="visual_offer"] .brix-packs-tiers{grid-template-columns:1fr 1fr}}',
+    '@media (max-width:480px){.brix-packs-tier{column-gap:10px}.brix-packs-widget[data-layout="cards"]:not([data-image-position="left"]) .brix-packs-tiers{grid-template-columns:1fr 1fr}.brix-packs-chip{min-width:60px;padding:10px 4px 8px}}',
   ].join('\n');
 
   function injectStyle() {
@@ -208,25 +273,63 @@
 
   // ── rendering ──────────────────────────────────────────────────────────────
 
+  // Each design preset is a structurally different layout (mirrors layoutOf
+  // in app/components/packs/PackPreview.jsx):
+  //   classic   -> 'list'  stacked rows, radio on the left
+  //   highlight -> 'chips' row of quantity buttons + one summary panel
+  //   premium   -> 'cards' side-by-side offer cards
+  // Packs saved with the old "image cards" template keep their card layout.
+  function layoutOf(design, template) {
+    if (design === 'highlight') return 'chips';
+    if (design === 'premium' || template === 'visual_offer') return 'cards';
+    return 'list';
+  }
+
   function tierDisabled(pack, tier) {
     return !pack.available || (pack.maxQuantity !== null && pack.maxQuantity !== undefined && tier.quantity > pack.maxQuantity);
   }
 
+  // Default every chooser slot to the shopper's currently selected variant
+  // when it's one of the Pack's own variants, otherwise the first available one.
+  function defaultChoice(pack) {
+    if (pack.variants) {
+      for (var i = 0; i < pack.variants.length; i += 1) if (pack.variants[i].id === lastVariant) return lastVariant;
+      if (pack.variants[0]) return pack.variants[0].id;
+    }
+    return numericId(pack.variantId);
+  }
+
   function ensureChosen(pack, quantity) {
+    var fallback = defaultChoice(pack);
     var next = [];
-    for (var i = 0; i < quantity; i += 1) next.push(state.chosen[i] || numericId(pack.variantId));
+    for (var i = 0; i < quantity; i += 1) next.push(state.chosen[i] || fallback);
     state.chosen = next;
   }
 
-  // Effective price/savings for a tier as displayed (choose-each-item recomputes
-  // from the variants the shopper picked; other templates use the server values).
+  function priceOfVariant(pack, variantId) {
+    if (pack.variants) {
+      for (var i = 0; i < pack.variants.length; i += 1) if (pack.variants[i].id === variantId) return pack.variants[i].price;
+    }
+    return pack.basePrice;
+  }
+
+  // Effective price/savings for a tier as displayed:
+  //  - mix_match recomputes from the variants the shopper picked per item.
+  //  - same_variant covering more than one variant recomputes from whichever
+  //    variant is currently selected on the product page (prices differ per
+  //    variant — see priceOfVariant).
+  //  - everything else uses the server-computed values as-is.
   function displayedTier(pack, tier, index) {
-    if (pack.template === 'choose_each_item' && index === state.tierIndex && pack.variants) {
-      var prices = state.chosen.map(function (id) {
-        for (var i = 0; i < pack.variants.length; i += 1) if (pack.variants[i].id === id) return pack.variants[i].price;
-        return pack.basePrice;
-      });
+    if (pack.packType === 'mix_match' && index === state.tierIndex && pack.variants) {
+      ensureChosen(pack, tier.quantity); // one entry per item BEFORE pricing, or the total covers too few items
+      var prices = state.chosen.map(function (id) { return priceOfVariant(pack, id); });
       return calc(prices, tier, money.decimals);
+    }
+    if (pack.packType !== 'mix_match' && pack.variants && pack.variants.length > 1) {
+      var unitPrice = priceOfVariant(pack, lastVariant);
+      var sameVariantPrices = [];
+      for (var i = 0; i < tier.quantity; i += 1) sameVariantPrices.push(unitPrice);
+      return calc(sameVariantPrices, tier, money.decimals);
     }
     return { subtotal: tier.subtotal, savings: tier.savings, price: tier.price };
   }
@@ -238,9 +341,14 @@
     var custom = pack.customization || {};
     var content = custom.content || {};
     var savingsCfg = custom.savings || {};
+    var saveWord = (savingsCfg.label && String(savingsCfg.label).trim()) || 'Save';
     var images = custom.images || {};
+    var design = (custom.design && custom.design.preset) || 'classic';
+    var layout = layoutOf(design, pack.template);
 
-    var section = el('section', { class: 'brix-packs-widget', 'data-template': pack.template, 'data-image-position': images.position === 'left' ? 'left' : 'top', 'aria-label': content.heading || 'Packs' });
+    var hasImage = images.enabled !== false && Boolean(pack.productImage);
+
+    var section = el('section', { class: 'brix-packs-widget', 'data-template': pack.template, 'data-design': design, 'data-layout': layout, 'data-image': hasImage ? '1' : null, 'data-image-position': images.position === 'left' ? 'left' : 'top', 'aria-label': content.heading || 'Packs' });
     applyCustomization(section, custom);
 
     var head = el('div', { class: 'brix-packs-head' }, [
@@ -251,47 +359,93 @@
 
     var discount = state.data.checkoutDiscount;
     if (state.data.preview && discount && !discount.verified) {
-      section.appendChild(el('div', { class: 'brix-packs-preview', role: 'status', text: 'Preview only \u2014 ' + (discount.message || 'the checkout discount is not active') + ' Shoppers do not see this widget until it is, and this discount will not be applied at checkout.' }));
+      section.appendChild(el('div', { class: 'brix-packs-preview', role: 'status', text: 'Preview only — ' + (discount.message || 'the checkout discount is not active') + ' Shoppers do not see this widget until it is, and this discount will not be applied at checkout.' }));
     }
 
-    var group = el('div', { class: 'brix-packs-tiers', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack' });
-    pack.tiers.forEach(function (tier, index) {
-      var shown = displayedTier(pack, tier, index);
-      var disabled = tierDisabled(pack, tier);
-      var selected = index === state.tierIndex;
-      var saveText = null;
-      if (savingsCfg.visible !== false && shown.savings > 0) {
-        if (savingsCfg.mode === 'save_percent' || money.hidden) saveText = 'Save ' + percentLabel(shown.subtotal, shown.savings);
-        else saveText = 'Save ' + money.format(shown.savings);
-      }
-      var image = (pack.template === 'visual_offer' && images.enabled !== false && pack.productImage)
-        ? el('img', { class: 'brix-packs-img', src: pack.productImage, alt: '', loading: 'lazy', 'data-size': images.size || 'medium' }) : null;
+    function saveTextFor(shown) {
+      if (savingsCfg.visible === false || !(shown.savings > 0)) return null;
+      if (savingsCfg.mode === 'save_percent' || money.hidden) return saveWord + ' ' + percentLabel(shown.subtotal, shown.savings);
+      return saveWord + ' ' + money.format(shown.savings);
+    }
+    function metaFor(tier, shown) {
+      // Narrow offer cards only have room for one short line.
+      if (layout === 'cards' && images.position !== 'left') return (!money.hidden && shown.savings > 0 && tier.quantity > 0) ? money.format(shown.price / tier.quantity) + ' each' : tier.quantity + ' item' + (tier.quantity === 1 ? '' : 's');
       var meta = tier.quantity + ' item' + (tier.quantity === 1 ? '' : 's');
-      if (!money.hidden && shown.savings > 0 && tier.quantity > 0) meta += ' \u00b7 ' + money.format(shown.price / tier.quantity) + ' each';
-      var button = el('button', {
-        type: 'button', class: 'brix-packs-tier', role: 'radio', 'aria-checked': selected ? 'true' : 'false', 'data-index': index,
+      if (!money.hidden && shown.savings > 0 && tier.quantity > 0) meta += ' · ' + money.format(shown.price / tier.quantity) + ' each';
+      return meta;
+    }
+    function imageEl() {
+      return hasImage ? el('img', { class: 'brix-packs-img', src: pack.productImage, alt: '', loading: 'lazy', 'data-size': images.size || 'medium' }) : null;
+    }
+    function priceEl(shown, saveText) {
+      if (money.hidden) return el('span', { class: 'brix-packs-price' }, [saveText ? el('span', { class: 'brix-packs-save', text: saveText }) : null]);
+      return el('span', { class: 'brix-packs-price' }, [
+        shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shown.subtotal) }) : null,
+        el('strong', { text: money.format(shown.price) }),
+        saveText ? el('span', { class: 'brix-packs-save', text: saveText }) : null,
+      ]);
+    }
+    function tierButtonProps(index, disabled, selected, className) {
+      return {
+        type: 'button', class: className, role: 'radio', 'aria-checked': selected ? 'true' : 'false', 'data-index': index,
         disabled: disabled, title: disabled ? (pack.available ? 'Only ' + pack.maxQuantity + ' in stock' : 'Sold out') : null,
         tabindex: selected ? '0' : '-1',
         onclick: function () { selectTier(index); },
         onkeydown: function (event) { onTierKey(event, index); },
-      }, [
+      };
+    }
+
+    var group = el('div', { class: 'brix-packs-tiers', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack', style: '--brix-packs-cols:' + Math.min(Math.max(pack.tiers.length, 1), 4) });
+    pack.tiers.forEach(function (tier, index) {
+      var shown = displayedTier(pack, tier, index);
+      var disabled = tierDisabled(pack, tier);
+      var selected = index === state.tierIndex;
+      if (layout === 'chips') {
+        // Compact selector: each tier is a small quantity button; the details
+        // for the selected one live in the summary panel below the row.
+        var chipSave = savingsCfg.visible !== false && shown.savings > 0 ? saveWord + ' ' + percentLabel(shown.subtotal, shown.savings) : null;
+        group.appendChild(el('button', tierButtonProps(index, disabled, selected, 'brix-packs-chip'), [
+          tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null,
+          el('span', { class: 'brix-packs-chip-label', text: tier.name || 'Buy ' + tier.quantity }),
+          chipSave ? el('span', { class: 'brix-packs-chip-save', text: chipSave }) : null,
+        ]));
+        return;
+      }
+      group.appendChild(el('button', tierButtonProps(index, disabled, selected, 'brix-packs-tier'), [
         el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
-        image,
-        el('span', {}, [
+        el('span', { class: 'brix-packs-checkmark', 'aria-hidden': 'true' }, [checkmarkSvg(11)]),
+        imageEl(),
+        el('span', { class: 'brix-packs-qty', 'aria-hidden': 'true' }, [String(tier.quantity), el('small', { text: '×' })]),
+        el('span', { class: 'brix-packs-content' }, [
           el('span', { class: 'brix-packs-title' }, [tier.name || 'Buy ' + tier.quantity, tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null]),
-          el('span', { class: 'brix-packs-meta', text: meta }),
+          el('span', { class: 'brix-packs-meta', text: metaFor(tier, shown) }),
         ]),
-        money.hidden ? el('span', { class: 'brix-packs-price' }, [saveText ? el('span', { class: 'brix-packs-save', text: saveText }) : null]) : el('span', { class: 'brix-packs-price' }, [
-          shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shown.subtotal) }) : null,
-          el('strong', { text: money.format(shown.price) }),
-          saveText ? el('span', { class: 'brix-packs-save', text: saveText }) : null,
-        ]),
-      ]);
-      group.appendChild(button);
+        priceEl(shown, saveTextFor(shown)),
+      ]));
+      // Directly below the selected tier, not after the whole list — so it
+      // reads as "here's what you're building for the pack you just picked".
+      // `.brix-packs-choose` spans every column (grid-column:1/-1) so it never
+      // squeezes into a single narrow column of the cards layout or disturbs
+      // the other tiers' own grid placement.
+      if (pack.packType === 'mix_match' && pack.variants && selected) group.appendChild(renderChoosers(pack));
     });
     section.appendChild(group);
 
-    if (pack.template === 'choose_each_item' && pack.variants) section.appendChild(renderChoosers(pack));
+    if (layout === 'chips') {
+      var active = pack.tiers[state.tierIndex];
+      if (active) {
+        var activeShown = displayedTier(pack, active, state.tierIndex);
+        section.appendChild(el('div', { class: 'brix-packs-summary', 'aria-live': 'polite' }, [
+          imageEl(),
+          el('span', { class: 'brix-packs-content' }, [
+            el('span', { class: 'brix-packs-title' }, [active.name || 'Buy ' + active.quantity, active.badge ? el('span', { class: 'brix-packs-badge', text: active.badge }) : null]),
+            el('span', { class: 'brix-packs-meta', text: metaFor(active, activeShown) }),
+          ]),
+          priceEl(activeShown, saveTextFor(activeShown)),
+        ]));
+      }
+      if (pack.packType === 'mix_match' && pack.variants) section.appendChild(renderChoosers(pack));
+    }
 
     if (content.promoText) section.appendChild(el('p', { class: 'brix-packs-promo', text: content.promoText }));
     if (state.message) section.appendChild(el('div', { class: 'brix-packs-msg', role: 'alert', 'data-type': state.message.type, text: state.message.text }));
@@ -307,6 +461,8 @@
     var wrap = el('div', { class: 'brix-packs-choose' });
     if (!tier) return wrap;
     ensureChosen(pack, tier.quantity);
+    wrap.appendChild(el('p', { class: 'brix-packs-choose-hint', text: 'Choose a variant for each item in this pack.' }));
+    var items = el('div', { class: 'brix-packs-choose-items' });
     var sellable = pack.variants.filter(function (variant) { return variant.availableForSale; });
     for (var i = 0; i < tier.quantity; i += 1) {
       (function (slot) {
@@ -314,9 +470,10 @@
           sellable.map(function (variant) {
             return el('option', { value: variant.id, selected: variant.id === state.chosen[slot], text: variant.title + (money.hidden ? '' : ' \u2014 ' + money.format(variant.price)) });
           }));
-        wrap.appendChild(el('label', { for: 'brix-packs-item-' + slot }, [el('span', { text: 'Item ' + (slot + 1) }), select]));
+        items.appendChild(el('label', { for: 'brix-packs-item-' + slot }, [el('span', { text: 'Item ' + (slot + 1) }), select]));
       })(i);
     }
+    wrap.appendChild(items);
     return wrap;
   }
 
@@ -356,7 +513,13 @@
   function buildItems(pack, tier) {
     var group = token();
     var properties = { _brix_pack_id: String(pack.id), _brix_pack_quantity: String(tier.quantity), _brix_pack_version: String(pack.version), _brix_pack_group: group };
-    if (pack.template !== 'choose_each_item') return [{ id: Number(numericId(pack.variantId)), quantity: tier.quantity, properties: properties }];
+    if (pack.packType !== 'mix_match') {
+      // The real variant to add is whichever one the shopper currently has
+      // selected on the product page — it may be any of the Pack's allowed
+      // variants, not necessarily the anchor pack.variantId.
+      var variantId = lastVariant || numericId(pack.variantId);
+      return [{ id: Number(variantId), quantity: tier.quantity, properties: properties }];
+    }
     ensureChosen(pack, tier.quantity);
     var counts = {};
     var order = [];
@@ -404,8 +567,25 @@
     if (form && form.parentNode && root.nextElementSibling !== form) form.parentNode.insertBefore(root, form);
   }
 
+  // While a Pack is shown for the selected variant the Pack decides the quantity,
+  // so the theme's own quantity selector is hidden (and restored when it is not).
+  function setThemeQuantityHidden(hidden) {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (!form) return;
+    var inputs = Array.prototype.slice.call(form.querySelectorAll('input[name="quantity"]'));
+    if (form.id) inputs = inputs.concat(Array.prototype.slice.call(document.querySelectorAll('input[name="quantity"][form="' + form.id + '"]')));
+    inputs.forEach(function (input) {
+      var box = input.closest('quantity-input, .quantity, .product-form__quantity, .product-form__input--quantity') || input.parentElement;
+      if (!box) return;
+      var wrapper = box.closest('.product-form__input') || box;
+      if (hidden) { wrapper.setAttribute('data-brix-packs-hidden', '1'); wrapper.style.display = 'none'; }
+      else if (wrapper.getAttribute('data-brix-packs-hidden')) { wrapper.removeAttribute('data-brix-packs-hidden'); wrapper.style.display = ''; }
+    });
+  }
+
   function showFor(variantId) {
     var next = packForVariant(state.data.packs, variantId);
+    setThemeQuantityHidden(Boolean(next));
     if (next === state.pack) return;
     state.pack = next;
     state.tierIndex = 0;
@@ -449,6 +629,7 @@
       setInterval(function () {
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
+        else setThemeQuantityHidden(Boolean(state.pack)); // a theme re-render can bring the selector back
       }, 700);
     })
     .catch(function () { fail('could not reach the Packs service.'); });

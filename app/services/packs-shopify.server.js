@@ -6,7 +6,7 @@
  *   - verifying that the checkout discount is really installed and active
  */
 import { PackError } from './packs.server';
-import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId } from '../utils/packs.shared.js';
+import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage } from '../utils/packs.shared.js';
 
 export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
 export const PACKS_DISCOUNT_TITLE = 'BRIX Packs';
@@ -98,12 +98,40 @@ export async function verifyProductVariant(admin, productId, variantId, { requir
 }
 
 /**
+ * Verify a Pack's product-level variant coverage (pack_type / variant_scope /
+ * allowed_variant_ids) against Shopify. Never trusts browser-supplied variant
+ * ids — they are checked against the product's REAL variants and anything
+ * that doesn't belong is dropped (validateVariantCoverage). Returns the
+ * verified product, the resolved list of applicable variants (all of the
+ * product's variants for scope='all', or just the owned subset for
+ * scope='selected'), and an anchor variant (the first applicable one) used
+ * for base pricing / display / the row's legacy variant_id column.
+ */
+export async function verifyPackCoverage(admin, productId, { packType, variantScope, allowedVariantIds }, { requireAvailable = false } = {}) {
+  const product = await fetchProduct(admin, productId);
+  const check = validateVariantCoverage({ packType, variantScope, allowedVariantIds }, product.variants.map((variant) => variant.id));
+  if (!check.valid) throw new PackError('invalid_variant', check.errors[0].message, { status: 422, details: { errors: check.errors } });
+
+  const applicableVariants = variantScope === 'all' ? product.variants : product.variants.filter((variant) => check.allowedVariantIds.includes(variant.id));
+  if (applicableVariants.some((variant) => variant.price === null || variant.price < 0)) {
+    throw new PackError('price_unverified', 'Could not verify the current price of one of this Pack’s variants.', { status: 502 });
+  }
+  if (requireAvailable) {
+    if (product.status !== 'ACTIVE') throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
+    if (!applicableVariants.some((variant) => variant.availableForSale)) throw new PackError('variant_unavailable', 'None of this Pack’s variants are in stock, so it cannot be activated.', { status: 409 });
+  }
+
+  const anchorVariant = applicableVariants[0];
+  return { product, applicableVariants, allowedVariantIds: check.allowedVariantIds, anchorVariant };
+}
+
+/**
  * Attach live data + freshly calculated tier prices to stored Packs.
  * `pack.tiers[*].price/savings/...` are always derived here, never stored.
  * A Pack whose variant is gone / unpriced is flagged (`issue`) rather than
  * throwing so one broken Pack can't break a whole list or the storefront.
  */
-export async function hydratePacks(admin, packs, currency) {
+export async function hydratePacks(admin, packs, currency, { includeVariants = false } = {}) {
   if (!packs.length) return [];
   let live = new Map();
   let lookupFailed = null;
@@ -112,6 +140,27 @@ export async function hydratePacks(admin, packs, currency) {
   } catch (error) {
     lookupFailed = error instanceof PackError ? error.message : 'Could not verify prices with Shopify.';
   }
+
+  // Packs whose coverage spans more than one variant (mix_match, or
+  // same_variant with scope='all'/multiple selected variants) need the full,
+  // live-priced variant list — not just the anchor — so the storefront/admin
+  // preview can price and offer every applicable variant. Fetched once per
+  // distinct product, only when the caller actually needs it.
+  const variantsByProduct = new Map();
+  if (includeVariants) {
+    const needsExpansion = packs.filter((pack) => pack.packType === 'mix_match' || pack.variantScope === 'all' || (pack.allowedVariantIds || []).length > 1);
+    const productIds = [...new Set(needsExpansion.map((pack) => pack.productId))];
+    await Promise.all(productIds.map(async (productId) => {
+      try {
+        const product = await fetchProduct(admin, productId);
+        variantsByProduct.set(productId, product.variants);
+      } catch {
+        // Leave unset — the pack simply won't get an expanded variant list;
+        // its own issue/priceVerified flag (from the anchor lookup) still applies.
+      }
+    }));
+  }
+
   return packs.map((pack) => {
     const variant = live.get(pack.variantId);
     let issue = lookupFailed;
@@ -121,18 +170,27 @@ export async function hydratePacks(admin, packs, currency) {
     const priceVerified = !issue;
     const basePrice = priceVerified ? variant.price : pack.basePrice;
     const tiers = normalizeTiers(pack.tiers).map((tier) => ({ ...tier, ...calculateTier(basePrice, tier, { currencyCode: currency?.code, locale: currency?.locale }) }));
+
+    let variants;
+    const productVariants = variantsByProduct.get(pack.productId);
+    if (productVariants) {
+      const applicable = pack.variantScope === 'all' ? productVariants : productVariants.filter((item) => (pack.allowedVariantIds || []).includes(item.id));
+      variants = applicable.filter((item) => item.price !== null);
+    }
+
     return {
       ...pack,
       basePrice,
       tiers,
       priceVerified,
       issue: issue || null,
-      available: Boolean(variant?.availableForSale),
+      available: Boolean(variant?.availableForSale) || Boolean(variants?.some((item) => item.availableForSale)),
       maxQuantity: variant?.maxQuantity ?? null,
       productTitle: variant?.productTitle || pack.productTitle,
       variantTitle: variant?.title || pack.variantTitle,
       productImage: variant?.productImage || pack.productImage,
       productHandle: variant?.productHandle || '',
+      variants,
       displayStatus: issue && pack.status === 'active' ? 'configuration_error' : pack.status,
       currency: currency ? { code: currency.code, locale: currency.locale } : null,
     };
@@ -155,6 +213,13 @@ export function buildFunctionConfig(activePacks, currencyCode = null) {
       productId: pack.productId,
       variantId: pack.variantId,
       template: pack.template,
+      // The Function trusts these (never the storefront's own claim) to decide
+      // which variant(s) a cart line marked with this Pack's id is allowed to be.
+      // A pack with no (or empty) allowedVariantIds falls back to its anchor
+      // variantId alone, so a scope='selected' pack never ends up trusting
+      // every variant of the product just because the list came in empty.
+      variantScope: pack.variantScope,
+      allowedVariantIds: pack.variantScope === 'all' ? [] : (Array.isArray(pack.allowedVariantIds) && pack.allowedVariantIds.length ? pack.allowedVariantIds : [pack.variantId]),
       tiers: normalizeTiers(pack.tiers).map((tier) => ({ quantity: tier.quantity, discountType: tier.discountType, discountValue: tier.discountValue })),
     };
   }

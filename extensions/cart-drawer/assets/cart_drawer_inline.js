@@ -2586,6 +2586,8 @@
         const lineTotal = price;
         const isGift = isGiftLine(item);
         const isRewardItem = isGift || rewardProductIds.has(String(item.product_id));
+        // BRIX Pack lines: the Pack fixes the quantity, so no stepper (remove still works).
+        const packLine = !isGift && item.properties && item.properties._brix_pack_id ? item.properties : null;
         // FREE only when the cart line really is at 0 (the checkout discount is
         // applied) — never claimed from the property alone.
         const isFreeGift = isGift && item.final_line_price === 0;
@@ -2620,7 +2622,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
-            ${isRewardItem ? '' : `<div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
+            ${packLine ? `<span style="padding:4px 10px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700;white-space:nowrap;">Pack${packLine._brix_pack_quantity ? ' of ' + escapeHtml(packLine._brix_pack_quantity) : ''}</span>` : isRewardItem ? '' : `<div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity - 1})">−</button>
               <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity
           }</span>

@@ -61,7 +61,8 @@ export const FEATURES = {
   ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
 
   fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  coupon_lock_pro:          { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  packs:                    { label: 'Packs',                           states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  coupon_lock_pro:        { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
 
   progress_bar:             { label: 'Progress Bar',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   ai_cart_upsell:           { label: 'AI Cart Upsell',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },

@@ -9,7 +9,7 @@
  * first prototype stored full GIDs, so every lookup accepts both spellings.
  */
 import { getDb } from './db.server';
-import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES } from '../utils/packs.shared.js';
+import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES, VALID_PACK_TYPES, VALID_VARIANT_SCOPES, normalizeVariantIds } from '../utils/packs.shared.js';
 
 /** Error with a stable machine-readable `code` and a merchant-safe message. */
 export class PackError extends Error {
@@ -26,6 +26,18 @@ function parseJson(value, fallback) {
   try { const parsed = JSON.parse(value || ''); return parsed ?? fallback; } catch { return fallback; }
 }
 
+// `created_at`/`updated_at` are MySQL TIMESTAMP columns (stored as UTC), but
+// the PHP db_proxy returns them as a bare "YYYY-MM-DD HH:MM:SS" string with no
+// timezone marker. `new Date(...)` on the client would otherwise parse that as
+// local time instead of UTC, showing the right date but the wrong time
+// (off by the viewer's UTC offset). Mark it explicitly so it parses correctly.
+function toIsoUtc(value) {
+  if (!value) return value;
+  const text = String(value).trim();
+  if (/Z$|[+-]\d{2}:?\d{2}$/.test(text)) return text;
+  return `${text.replace(' ', 'T')}Z`;
+}
+
 /** Translate low-level DB failures into PackErrors without leaking SQL / hosts. */
 function mapDbError(error) {
   if (error instanceof PackError) return error;
@@ -33,6 +45,10 @@ function mapDbError(error) {
   if (/doesn't exist|does not exist|no such table|ER_NO_SUCH_TABLE|1146/i.test(message)) {
     console.error('[packs.server] brix_packs table missing:', message.slice(0, 200));
     return new PackError('storage_not_ready', 'Packs storage is not set up yet. Run migrations/create_brix_packs.sql on the database (see CLAUDE.md).', { status: 503 });
+  }
+  if (/unknown column '(pack_type|variant_scope|allowed_variant_ids_json)'|ER_BAD_FIELD_ERROR|1054/i.test(message)) {
+    console.error('[packs.server] brix_packs missing variant-scope columns:', message.slice(0, 200));
+    return new PackError('storage_outdated', 'Packs storage needs an update. Run migrations/alter_brix_packs_variant_scope.sql on the database.', { status: 503 });
   }
   if (/duplicate entry|ER_DUP_ENTRY|1062/i.test(message)) {
     return new PackError('duplicate', 'A Pack already exists for this product and variant.', { status: 409 });
@@ -53,11 +69,20 @@ export function parsePackId(id) {
 
 export function rowToPack(row) {
   const parsedCustomization = sanitizeCustomization(parseJson(row.customization_json, {})).value;
+  // Columns added by migrations/alter_brix_packs_variant_scope.sql — default
+  // to the pre-migration single-variant shape so rows on a DB that hasn't run
+  // that migration yet still read back correctly instead of throwing.
+  const packType = row.pack_type || (row.template === 'choose_each_item' ? 'mix_match' : 'same_variant');
+  const variantScope = row.variant_scope || 'selected';
+  const anchorVariantId = toNumericId(row.variant_id) || String(row.variant_id);
+  const allowedVariantIds = row.allowed_variant_ids_json ? normalizeVariantIds(parseJson(row.allowed_variant_ids_json, [])) : [anchorVariantId];
   return {
     id: Number(row.id),
     shop: row.shop_domain,
     productId: toNumericId(row.product_id) || String(row.product_id),
-    variantId: toNumericId(row.variant_id) || String(row.variant_id),
+    // Anchor variant — base price/display and the row's legacy unique key.
+    // Which variants the Pack actually applies to is variantScope/allowedVariantIds.
+    variantId: anchorVariantId,
     productTitle: row.product_title,
     variantTitle: row.variant_title,
     productImage: row.product_image || '',
@@ -66,11 +91,14 @@ export function rowToPack(row) {
     status: row.status,
     enabled: Boolean(row.enabled),
     template: row.template,
+    packType,
+    variantScope,
+    allowedVariantIds: variantScope === 'all' ? [] : allowedVariantIds,
     version: Number(row.version || 1),
     tiers: parseJson(row.tiers_json, []),
     customization: mergeCustomization(parsedCustomization),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: toIsoUtc(row.created_at),
+    updatedAt: toIsoUtc(row.updated_at),
   };
 }
 
@@ -134,6 +162,16 @@ export async function savePack(shop, input) {
   const productId = toNumericId(input.productId);
   const variantId = toNumericId(input.variantId);
   if (!productId || !variantId) throw new PackError('invalid_variant', 'A valid Shopify product and variant are required.');
+  const packType = VALID_PACK_TYPES.has(input.packType) ? input.packType : 'same_variant';
+  const variantScope = VALID_VARIANT_SCOPES.has(input.variantScope) ? input.variantScope : 'selected';
+  // 'all' scope is resolved against the live variant list on every read, never
+  // frozen into a snapshot here — storing [] keeps that intent unambiguous.
+  // The real "at least one variant" merchant-facing validation happens in
+  // verifyPackCoverage before this is ever called; a caller that gives no
+  // coverage info at all (e.g. a direct/legacy savePack call) falls back to
+  // just the one variant it did give, matching the pre-redesign behavior.
+  const rawAllowed = normalizeVariantIds(input.allowedVariantIds);
+  const allowedVariantIds = variantScope === 'all' ? [] : (rawAllowed.length ? rawAllowed : [variantId]);
   const packId = input.id ? parsePackId(input.id) : null;
 
   let existing = null;
@@ -151,18 +189,19 @@ export async function savePack(shop, input) {
   const customization = mergeCustomization(existing?.customization || defaultCustomization(), sanitizeCustomization(input.customization).value);
   const tiersJson = JSON.stringify(input.tiers);
   const customizationJson = JSON.stringify(customization);
+  const allowedVariantIdsJson = JSON.stringify(allowedVariantIds);
 
   return run(async (db) => {
     if (packId) {
       await db.execute(
-        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, version=version+1, tiers_json=?, customization_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
-        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, tiersJson, customizationJson, packId, shop]
+        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, pack_type=?, variant_scope=?, allowed_variant_ids_json=?, version=version+1, tiers_json=?, customization_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
+        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, packId, shop]
       );
       return getPack(shop, packId);
     }
     const [result] = await db.execute(
-      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, tiers_json, customization_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, tiersJson, customizationJson]
+      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, pack_type, variant_scope, allowed_variant_ids_json, tiers_json, customization_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson]
     );
     return getPack(shop, result.insertId);
   });

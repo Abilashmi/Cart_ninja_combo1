@@ -78,7 +78,8 @@ test('fixed discount: total off per pack, only in the shop currency', () => {
 });
 
 test('choose-each-item: mixed variants in one group share one pack discount', () => {
-  const mixed = { ...config, packs: { 7: { ...config.packs[7], template: 'choose_each_item' } } };
+  // Mix & Match with variantScope='all' — any variant of the product may fill a slot.
+  const mixed = { ...config, packs: { 7: { ...config.packs[7], template: 'choose_each_item', variantScope: 'all' } } };
   const lines = [
     line({ id: 'gid://shopify/CartLine/1', quantity: 2, packQty: 3, variant: '200', group: 'x', unit: 10 }),
     line({ id: 'gid://shopify/CartLine/2', quantity: 1, packQty: 3, variant: '201', group: 'x', unit: 30 }),
@@ -95,12 +96,35 @@ test('choose-each-item: mixed variants in one group share one pack discount', ()
   assert.deepEqual(run(input([line({ quantity: 3, packQty: 3, variant: '201' })])), { operations: [] });
 });
 
+test('variantScope="all": a same_variant Pack accepts ANY variant of its product, not just its anchor', () => {
+  const allScope = { ...config, packs: { 7: { ...config.packs[7], variantScope: 'all' } } };
+  // anchor is variant '200'; a shopper buying variant '201' of the SAME product still gets the discount.
+  const [candidate] = candidates(run(input([line({ quantity: 3, packQty: 3, variant: '201' })], allScope)));
+  assert.equal(candidate.value.percentage.value, '10');
+  // a different product is still rejected even with scope='all'.
+  assert.deepEqual(run(input([line({ quantity: 3, packQty: 3, variant: '201', product: '999' })], allScope)), { operations: [] });
+});
+
+test('variantScope="selected": only variants in allowedVariantIds are trusted, even for the same product', () => {
+  const selected = { ...config, packs: { 7: { ...config.packs[7], variantScope: 'selected', allowedVariantIds: ['200', '201'] } } };
+  const ok = candidates(run(input([line({ quantity: 3, packQty: 3, variant: '201' })], selected)));
+  assert.equal(ok[0].value.percentage.value, '10');
+  // '202' was never added to allowedVariantIds -> not trusted, no discount.
+  assert.deepEqual(run(input([line({ quantity: 3, packQty: 3, variant: '202' })], selected)), { operations: [] });
+});
+
 test('buildFunctionConfig (server) produces exactly the shape the function reads', () => {
   const built = buildFunctionConfig([{ id: 7, version: 3, productId: '100', variantId: '200', template: 'same_variant', tiers: [{ quantity: 3, discountType: 'percentage', discountValue: 10, name: 'x', badge: 'y' }, { quantity: 1, discountType: 'none' }] }], 'INR');
   assert.equal(built.currency, 'INR');
   assert.deepEqual(built.packs['7'].tiers, [{ quantity: 1, discountType: 'none', discountValue: 0 }, { quantity: 3, discountType: 'percentage', discountValue: 10 }]);
+  // Given a pack object with no variantScope/allowedVariantIds at all (older
+  // callers), the config must still fall back to trusting the anchor variant
+  // alone — never an empty allowedVariantIds that would silently match nothing.
+  assert.deepEqual(built.packs['7'].allowedVariantIds, ['200']);
   const [candidate] = candidates(run(input([line({ quantity: 3, packQty: 3 })], built)));
   assert.equal(candidate.value.percentage.value, '10');
+  // ...and must NOT accept a different variant of the same product.
+  assert.deepEqual(run(input([line({ quantity: 3, packQty: 3, variant: '201' })], built)), { operations: [] });
 });
 
 test('never crashes on malformed input', () => {

@@ -3,7 +3,7 @@ import { getFeatureState } from '../config/plans';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { PackError, packErrorResponse, getPack, listPacks, listActivePacks, savePack, deletePack, setPackStatus, parsePackId } from '../services/packs.server';
-import { fetchProduct, verifyProductVariant, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
+import { fetchProduct, verifyProductVariant, verifyPackCoverage, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
 import { VALID_TEMPLATES, calculateTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId } from '../utils/packs.shared.js';
 
 /**
@@ -57,7 +57,7 @@ export async function loader({ request }) {
     if (url.searchParams.get('id')) {
       const pack = await getPack(shop, url.searchParams.get('id'));
       if (!pack) throw new PackError('not_found', 'Pack not found.', { status: 404 });
-      const [hydrated] = await hydratePacks(admin, [pack], currency);
+      const [hydrated] = await hydratePacks(admin, [pack], currency, { includeVariants: true });
       return Response.json({ success: true, pack: hydrated, currency });
     }
     const packs = await hydratePacks(admin, await listPacks(shop), currency);
@@ -117,11 +117,11 @@ export async function action({ request }) {
   }
 }
 
-/** Tiers + live variant must be valid before a Pack may go (or stay) live. */
+/** Tiers + live variant coverage must be valid before a Pack may go (or stay) live. */
 async function assertActivatable(admin, pack, currency) {
-  const { variant } = await verifyProductVariant(admin, pack.productId, pack.variantId, { requireAvailable: true });
+  const { anchorVariant } = await verifyPackCoverage(admin, pack.productId, { packType: pack.packType, variantScope: pack.variantScope, allowedVariantIds: pack.allowedVariantIds }, { requireAvailable: true });
   const tiers = normalizeTiers(pack.tiers);
-  const check = validateTiers(tiers, { basePrice: variant.price, currencyCode: currency.code });
+  const check = validateTiers(tiers, { basePrice: anchorVariant.price, currencyCode: currency.code });
   if (!check.valid) throw new PackError('invalid_tiers', `Fix the Pack tiers before enabling: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
 }
 
@@ -141,7 +141,7 @@ async function previewPack(admin, body, currency) {
 
 async function saveFromBody({ admin, shop, planState, currency }, body) {
   if (!VALID_TEMPLATES.has(body.template)) throw new PackError('invalid_template', 'Choose a valid Pack template.', { status: 422 });
-  if (!toNumericId(body.productId) || !toNumericId(body.variantId)) throw new PackError('invalid_variant', 'Select a Shopify product and variant first.', { status: 422 });
+  if (!toNumericId(body.productId)) throw new PackError('invalid_variant', 'Select a Shopify product first.', { status: 422 });
 
   const existing = body.id ? await getPack(shop, body.id) : null;
   if (body.id && !existing) throw new PackError('not_found', 'Pack not found.', { status: 404 });
@@ -159,20 +159,29 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
   const custom = sanitizeCustomization(body.customization);
   if (custom.errors.length) throw new PackError('invalid_customization', custom.errors[0], { status: 422, details: { errors: custom.errors } });
 
-  const { product, variant } = await verifyProductVariant(admin, body.productId, body.variantId, { requireAvailable: status === 'active' });
-  const priced = validateTiers(tiers, { basePrice: variant.price, currencyCode: currency.code });
+  // Re-verifies product + every allowed/scope='all' variant against Shopify —
+  // the browser's own variant list/ids are never trusted for what gets saved.
+  const { product, anchorVariant, allowedVariantIds } = await verifyPackCoverage(
+    admin, body.productId,
+    { packType: body.packType, variantScope: body.variantScope, allowedVariantIds: body.allowedVariantIds },
+    { requireAvailable: status === 'active' }
+  );
+  const priced = validateTiers(tiers, { basePrice: anchorVariant.price, currencyCode: currency.code });
   if (!priced.valid) throw new PackError('invalid_tiers', priced.errors[0].message, { status: 422, details: { errors: priced.errors } });
 
   const saved = await savePack(shop, {
     id: existing?.id || null,
     productId: product.id,
-    variantId: variant.id,
+    variantId: anchorVariant.id,
     productTitle: product.title,
-    variantTitle: variant.title,
+    variantTitle: anchorVariant.title,
     productImage: product.image,
-    basePrice: variant.price,
+    basePrice: anchorVariant.price,
     status,
     template: body.template,
+    packType: body.packType,
+    variantScope: body.variantScope,
+    allowedVariantIds,
     tiers,
     customization: custom.value,
   });
@@ -186,6 +195,6 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
     warning = sync.warning;
     if (status === 'active') checkoutDiscount = await getCheckoutDiscountStatus(admin, active);
   }
-  const [hydrated] = await hydratePacks(admin, [saved], currency);
+  const [hydrated] = await hydratePacks(admin, [saved], currency, { includeVariants: true });
   return { success: true, pack: hydrated, checkoutDiscount, warning };
 }

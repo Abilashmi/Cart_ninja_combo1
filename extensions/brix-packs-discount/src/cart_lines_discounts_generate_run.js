@@ -16,7 +16,18 @@
 // cart quantity so it no longer matches a tier, no discount is given (never a
 // wrong one). Config shape (see app/services/packs-shopify.server.js):
 //   { version: 1, currency: "USD", packs: { "<packId>": { id, productId, variantId, template,
+//       variantScope: "all"|"selected", allowedVariantIds: [...],
 //       tiers: [{ quantity, discountType: "percentage"|"fixed"|"none", discountValue }] } } }
+//
+// A Pack now belongs to a PRODUCT, not one fixed variant: `variantId` is only
+// the anchor/display variant. Which variant(s) a cart line may legitimately
+// claim this pack for is variantScope/allowedVariantIds — "all" accepts any
+// variant of `productId`, "selected" accepts only a variant in
+// `allowedVariantIds`. `choose_each_item` (Mix & Match) already worked this
+// way for its own reason (shoppers pick a different variant per item); the
+// same trust check now also covers Same Variant packs with scope='all' or
+// multiple selected variants, so a shopper can be on any allowed variant's
+// product page and still get the discount for that exact variant.
 
 const NONE = { operations: [] };
 const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'UGX', 'XAF', 'XOF', 'XPF', 'PYG', 'RWF', 'KMF', 'DJF', 'GNF', 'VUV', 'BIF']);
@@ -64,10 +75,14 @@ export function cartLinesDiscountsGenerateRun(input) {
     if (!packId || !packQuantity) continue;
     const pack = Object.values(packs).find((entry) => String(entry?.id) === String(packId));
     if (!pack || !Array.isArray(pack.tiers)) continue;
-    // The line must really be this pack's product (and, unless the template lets
-    // shoppers mix variants, this pack's variant) — properties alone prove nothing.
+    // The line must really be this pack's product, and (unless the pack's
+    // variant coverage is 'all') one of the variants it's actually configured
+    // for — properties alone prove nothing.
     if (numericId(merchandise.product?.id) !== String(pack.productId)) continue;
-    if (pack.template !== 'choose_each_item' && numericId(merchandise.id) !== String(pack.variantId)) continue;
+    if (pack.variantScope !== 'all') {
+      const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
+      if (!allowed.some((id) => String(id) === numericId(merchandise.id))) continue;
+    }
     const key = `${packId}:${packQuantity}:${line.packGroup?.value || line.id}`;
     if (!groups.has(key)) groups.set(key, { pack, packQuantity, lines: [] });
     groups.get(key).lines.push(line);
