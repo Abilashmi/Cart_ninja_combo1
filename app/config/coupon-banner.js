@@ -27,3 +27,27 @@ export function couponBannerTemplateKey(value) {
   if (/^template[123]$/.test(v)) return v;
   return COUPON_BANNER_TEMPLATES[v]?.key ?? null;
 }
+
+// ── Custom (external) coupons ──────────────────────────────────────────────
+// A code the merchant already created elsewhere (Shopify admin, Shiprocket,
+// another app). BRIX only stores and displays the code. It never creates,
+// changes or validates the discount behind it. Stored in
+// coupon_slider_settings.custom_coupons (see coupon-banner.server.js) as
+// [{ id, code, type: 'custom', source: 'external', createdAt }]. The `id`
+// takes the place of a Shopify discount GID in selectedCouponsGlobal and the
+// per-coupon style maps, so selection, styling and the storefront work unchanged.
+export const CUSTOM_COUPON_ID_PREFIX = 'custom:';
+export const CUSTOM_COUPON_MAX_LENGTH = 255; // Shopify's own discount-code limit
+
+export const customCouponId = (code) => `${CUSTOM_COUPON_ID_PREFIX}${code}`;
+export const isCustomCouponId = (id) => String(id || '').startsWith(CUSTOM_COUPON_ID_PREFIX);
+
+// Trims whitespace but keeps the code's own case. Returns { code } or { error }.
+export function validateCustomCouponCode(raw, existingCodes = []) {
+  const code = String(raw ?? '').trim();
+  if (!code) return { error: 'empty', message: 'Enter a coupon code.' };
+  if (code.length > CUSTOM_COUPON_MAX_LENGTH) return { error: 'too_long', message: `Coupon codes can be at most ${CUSTOM_COUPON_MAX_LENGTH} characters.` };
+  // Shopify matches discount codes case-insensitively, so SAVE10 and save10 are the same coupon.
+  if (existingCodes.some((c) => String(c || '').trim().toLowerCase() === code.toLowerCase())) return { error: 'duplicate', message: 'Coupon already exists.' };
+  return { code };
+}

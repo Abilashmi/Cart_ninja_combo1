@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useState, useCallback } from 'react';
 import { useLoaderData, useFetcher, useNavigate, useRevalidator } from 'react-router';
-import { Page, Card, BlockStack, InlineStack, Text, Button, Badge, EmptyState, IndexTable, Select, TextField, Banner, Thumbnail, Box, Modal, useIndexResourceState } from '@shopify/polaris';
+import { Page, Card, BlockStack, InlineStack, Text, Button, Badge, EmptyState, IndexTable, Select, TextField, Banner, Thumbnail, Box, Modal, Tooltip, useIndexResourceState } from '@shopify/polaris';
 import { packsRouteContext } from '../services/packs-loader.server';
 import { PackError, listPacks } from '../services/packs.server';
 import { hydratePacks, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
@@ -15,12 +15,12 @@ export async function loader({ request }) {
     const packs = await hydratePacks(admin, stored, currency);
     const active = packs.filter((pack) => pack.status === 'active');
     const checkoutDiscount = planState === 'enabled' && active.length ? await getCheckoutDiscountStatus(admin, active, { shop }) : null;
-    return { packs, planState, currency, checkoutDiscount, loadError: null };
+    return { packs, planState, currency, checkoutDiscount, shop, loadError: null };
   } catch (error) {
     if (error instanceof Response) throw error;
     const message = error instanceof PackError ? error.message : 'Packs could not be loaded. Please try again.';
     if (!(error instanceof PackError)) console.error('[app.packs._index]', String(error?.message || error).slice(0, 300));
-    return { packs: [], planState, currency, checkoutDiscount: null, loadError: message };
+    return { packs: [], planState, currency, checkoutDiscount: null, shop, loadError: message };
   }
 }
 
@@ -28,7 +28,19 @@ const designLabels = Object.fromEntries(PACK_DESIGNS.map((design) => [design.id,
 const statusTone = { active: 'success', inactive: 'attention', draft: 'info', configuration_error: 'critical' };
 const statusLabel = { active: 'Active', inactive: 'Inactive', draft: 'Draft', configuration_error: 'Configuration error' };
 
-function PackActions({ pack, canPublish, onDeleteRequest }) {
+// The Pack's product page on the live store (new tab). myshopify.com redirects
+// to the store's primary domain. While the checkout discount isn't verified,
+// shoppers don't see the Pack, so the merchant gets the widget's preview mode.
+function storefrontUrl(shop, pack, discountVerified) {
+  if (!shop || !pack.productHandle) return null;
+  const params = new URLSearchParams();
+  if (pack.variantScope !== 'all' && pack.variantId) params.set('variant', pack.variantId);
+  if (!discountVerified) params.set('brix_packs_preview', '1');
+  const query = params.toString();
+  return `https://${shop}/products/${encodeURIComponent(pack.productHandle)}${query ? `?${query}` : ''}`;
+}
+
+function PackActions({ pack, canPublish, onDeleteRequest, shop, discountVerified }) {
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const busy = fetcher.state !== 'idle';
@@ -42,7 +54,12 @@ function PackActions({ pack, canPublish, onDeleteRequest }) {
     <div onClick={(e) => e.stopPropagation()}>
       <BlockStack gap="100">
         <InlineStack gap="200" wrap={false} blockAlign="center">
-          <Button size="slim" onClick={() => navigate(`/app/packs/${pack.id}`)}>View</Button>
+          {(() => {
+            const url = isActive ? storefrontUrl(shop, pack, discountVerified) : null;
+            const view = <Button size="slim" url={url || undefined} target="_blank" disabled={!url} accessibilityLabel={`View ${pack.productTitle} on your store`}>View</Button>;
+            if (url) return view;
+            return <Tooltip content={isActive ? 'This product’s store page couldn’t be found.' : 'Activate this Pack to see it on your store.'}><span>{view}</span></Tooltip>;
+          })()}
           <Button size="slim" onClick={() => navigate(`/app/packs/${pack.id}/edit`)}>Edit</Button>
           <button
             type="button"
@@ -73,7 +90,7 @@ async function deletePackRequest(id) {
 }
 
 export default function AppPacks() {
-  const { packs, planState, currency, checkoutDiscount, loadError } = useLoaderData();
+  const { packs, planState, currency, checkoutDiscount, shop, loadError } = useLoaderData();
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -122,7 +139,6 @@ export default function AppPacks() {
             <p>{checkoutDiscount.message} Until it is, shoppers won’t see your active Packs, because their savings wouldn’t apply at checkout.</p>
           </Banner>
         )}
-        {checkoutDiscount?.verified && <Banner tone="success" title="Checkout discount is active"><p>Active Packs apply their savings at checkout.</p></Banner>}
         <Card padding="0">
           <Box padding="400">
             <InlineStack gap="300" wrap blockAlign="end">
@@ -169,7 +185,7 @@ export default function AppPacks() {
                     </BlockStack>
                   </IndexTable.Cell>
                   <IndexTable.Cell>{pack.updatedAt ? new Date(pack.updatedAt).toLocaleDateString() : '—'}</IndexTable.Cell>
-                  <IndexTable.Cell><PackActions pack={pack} canPublish={canPublish} onDeleteRequest={setDeleteTarget} /></IndexTable.Cell>
+                  <IndexTable.Cell><PackActions pack={pack} canPublish={canPublish} onDeleteRequest={setDeleteTarget} shop={shop} discountVerified={Boolean(checkoutDiscount?.verified)} /></IndexTable.Cell>
                 </IndexTable.Row>
               ))}
             </IndexTable>

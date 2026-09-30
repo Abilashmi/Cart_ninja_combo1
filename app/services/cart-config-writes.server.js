@@ -64,7 +64,7 @@ function pickFlag(v, exVal, def) {
 // Reading information_schema instead takes no lock on the table itself, so
 // the normal path is now one cheap SELECT and zero ALTERs, forever.
 const ensuredColumnGroups = new Set();
-async function ensureColumns(db, cacheKey, table, defs) {
+export async function ensureColumns(db, cacheKey, table, defs) {
   if (ensuredColumnGroups.has(cacheKey)) return;
   const [rows] = await db.execute(
     'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',

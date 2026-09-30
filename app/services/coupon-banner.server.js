@@ -12,7 +12,7 @@
 // `needs_info` result telling the model which single thing to ask next.
 import { BASE_PHP_URL } from '../utils/api-helpers';
 import { getDb } from './db.server';
-import { saveCouponSliderSettings } from './cart-config-writes.server';
+import { saveCouponSliderSettings, ensureColumns } from './cart-config-writes.server';
 import { resolveProductByName } from './upsell-rules.server';
 import { resolveCollectionByName } from './collection-resolver.server';
 import { canPublishFeature } from './plan-permissions.server';
@@ -20,6 +20,7 @@ import { localizeCurrencyDeep } from '../utils/currency-text';
 import { needsInfo } from '../utils/ai-needs-info';
 import {
   COUPON_BANNER_TEMPLATE_DEFAULTS, COUPON_BANNER_TEMPLATES, COUPON_BANNER_PLACEMENTS, couponBannerTemplateKey,
+  customCouponId, validateCustomCouponCode,
 } from '../config/coupon-banner';
 
 const PREFIX = { template1: 'temp1', template2: 'temp2', template3: 'temp3' };
@@ -54,7 +55,7 @@ async function readSettings(shop) {
 }
 
 // Newest first, active codes only — the same list the editor page offers.
-async function listActiveCoupons(admin) {
+export async function listActiveCoupons(admin) {
   const res = await admin.graphql(`query DiscountList { discountNodes(first: 100, reverse: true) { edges { node { id discount {
     ... on DiscountCodeBasic { title codes(first: 1) { edges { node { code } } } status }
     ... on DiscountCodeBxgy { title codes(first: 1) { edges { node { code } } } status }
@@ -210,4 +211,64 @@ export async function saveCouponBanner(ctx, args = {}) {
     liveOnStorefront: publishable && !!savedSettings?.is_enabled,
     note: publishable ? undefined : 'This plan can design the Coupon Banner but not publish it — it will not show on the storefront until the merchant upgrades. Say this plainly.',
   };
+}
+
+// ── Custom (external) coupons ─────────────────────────────────────────────
+// Codes created outside BRIX that the merchant wants to show in the banner.
+// Stored as a JSON list on the existing coupon_slider_settings row. Nothing
+// here creates, changes or checks a discount in Shopify or anywhere else.
+async function ensureCustomCouponsColumn(db) {
+  await ensureColumns(db, 'coupon_slider_settings.custom_coupons', 'coupon_slider_settings', [
+    { name: 'custom_coupons', ddl: '`custom_coupons` LONGTEXT NULL' },
+  ]);
+}
+
+function parseCustomCoupons(value) {
+  let list;
+  try { list = JSON.parse(value || '[]'); } catch { list = []; }
+  return asArray(list).filter((c) => c && typeof c.code === 'string' && c.code.trim())
+    .map((c) => ({ id: customCouponId(c.code), code: c.code, type: 'custom', source: 'external', createdAt: c.createdAt || null }));
+}
+
+export async function listCustomCoupons(shop) {
+  const db = getDb();
+  await ensureCustomCouponsColumn(db);
+  const [rows] = await db.execute('SELECT custom_coupons FROM coupon_slider_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+  return parseCustomCoupons(rows?.[0]?.custom_coupons);
+}
+
+/**
+ * Adds an externally-created coupon code. Rejects empty codes and duplicates
+ * of another custom code or of an active Shopify discount code already in
+ * the list. Returns { success, coupon } or { success: false, error, message }
+ * with a merchant-safe message.
+ */
+export async function addCustomCoupon({ shop, admin }, rawCode) {
+  let existing;
+  try {
+    existing = await listCustomCoupons(shop);
+  } catch (error) {
+    console.error('[coupon-banner] could not read custom coupons:', String(error?.message || '').slice(0, 200));
+    return { success: false, error: 'save_failed', message: 'Couldn’t add the coupon right now. Please try again.' };
+  }
+  let shopifyCodes = [];
+  try { shopifyCodes = (await listActiveCoupons(admin)).map((c) => c.code); } catch { /* the custom-list check still applies */ }
+
+  const check = validateCustomCouponCode(rawCode, [...existing.map((c) => c.code), ...shopifyCodes]);
+  if (check.error) return { success: false, error: check.error, message: check.message };
+
+  const coupon = { id: customCouponId(check.code), code: check.code, type: 'custom', source: 'external', createdAt: new Date().toISOString() };
+  const next = [coupon, ...existing].map(({ code, type, source, createdAt }) => ({ code, type, source, createdAt }));
+  try {
+    // Only custom_coupons is written; every other column keeps its value (or
+    // its table default for a shop that has no row yet).
+    await getDb().execute(
+      'INSERT INTO coupon_slider_settings (shop_domain, custom_coupons) VALUES (?, ?) ON DUPLICATE KEY UPDATE custom_coupons = VALUES(custom_coupons)',
+      [shop, JSON.stringify(next)]
+    );
+  } catch (error) {
+    console.error('[coupon-banner] could not save custom coupon:', String(error?.message || '').slice(0, 200));
+    return { success: false, error: 'save_failed', message: 'Couldn’t add the coupon right now. Please try again.' };
+  }
+  return { success: true, coupon };
 }

@@ -4,7 +4,8 @@
   php_backend/packs_storefront.php through the app proxy (/apps/cart-app).
   PHP has no Shopify access, so the widget prices Packs from the live variant
   data below. It renders nothing unless an active, verified Pack exists.
-  The inline script moves the widget next to the theme's Add to Cart form.
+  packs_widget.js then moves it below the product price (or into the
+  "BRIX Packs position" block when the Pack's placement is Custom).
 {%- endcomment -%}
 {% if product %}
   <div
@@ -30,23 +31,12 @@
             "available": {{ variant.available | json }},
             "inventoryQuantity": {{ variant.inventory_quantity | default: 0 | json }},
             "inventoryPolicy": {{ variant.inventory_policy | json }},
-            "inventoryManagement": {{ variant.inventory_management | json }}
+            "inventoryManagement": {{ variant.inventory_management | json }},
+            "image": {% if variant.featured_image %}{{ variant.featured_image | image_url: width: 160 | json }}{% else %}""{% endif %}
           }{% unless forloop.last %},{% endunless %}
         {%- endfor -%}
       ]
     }
-  </script>
-  <script>
-    (function () {
-      var root = document.querySelector('[data-brix-packs-root]');
-      var form = document.querySelector('form[action*="/cart/add"]');
-      if (!root || !form) return;
-      var anchor = form.closest('product-form') || form;
-      root.style.margin = '16px 0';
-      root.style.padding = '0';
-      root.style.maxWidth = 'none';
-      anchor.parentNode.insertBefore(root, anchor);
-    })();
   </script>
   <script src="{{ 'packs_widget.js' | asset_url }}" defer></script>
 {% endif %}

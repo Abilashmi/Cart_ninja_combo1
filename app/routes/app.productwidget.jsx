@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLoaderData, useRouteError, useFetcher } from "react-router";
+import { useLoaderData, useRouteError, useFetcher, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -7,17 +7,18 @@ import { BASE_PHP_URL } from "../utils/api-helpers";
 import {
     Page, Card, BlockStack, InlineStack, Text, Button,
     TextField, Badge, Checkbox, Divider, Select,
-    Icon, Collapsible, Toast, Frame, Banner,
+    Icon, Collapsible, Toast, Frame, Banner, Modal, ChoiceList,
 } from "@shopify/polaris";
 import BrixBar from "../components/ai-agent/BrixBar";
 import { SliderField } from "../components/shared/SliderField";
 import {
     DiscountIcon, ColorIcon, MagicIcon, ClockIcon,
-    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon,
+    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon, PlusIcon,
 } from "@shopify/polaris-icons";
 import { ProBadge } from "../components/plan/PlanGate";
 import { usePlan } from "../components/PlanContext";
-import { COUPON_BANNER_TEMPLATE_DEFAULTS } from "../config/coupon-banner";
+import { COUPON_BANNER_TEMPLATE_DEFAULTS, validateCustomCouponCode } from "../config/coupon-banner";
+import { listCustomCoupons, addCustomCoupon } from "../services/coupon-banner.server";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -89,6 +90,8 @@ export async function loader({ request }) {
         fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
         getEmbedStatus(shop, session.accessToken),
     ]);
+    // Codes created outside BRIX that the merchant added via "+ Custom Coupon".
+    const customCoupons = await listCustomCoupons(shop).catch((e) => { console.error("Failed to fetch custom coupons:", e); return []; });
 
     let products = [];
     try {
@@ -178,14 +181,20 @@ export async function loader({ request }) {
 
     const { couponEmbedEnabled, fbtEmbedEnabled } = embedStatus;
 
-    return { couponConfig, fbtConfig, products, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled };
+    return { couponConfig, fbtConfig, products, shop, discounts, customCoupons, couponEmbedEnabled, fbtEmbedEnabled };
 }
 
 /* ─── ACTION ──────────────────────────────────────────────────────────────── */
 export async function action({ request }) {
-    const { session } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
     const body = await request.json();
+
+    // "+ Custom Coupon" → "Just add this coupon code": store the code only.
+    // No discount is created or changed anywhere.
+    if (body?.intent === "add_custom_coupon") {
+        return addCustomCoupon({ shop, admin }, body.code);
+    }
 
     const { activeTemplate, template, couponStyles, couponConditions, selectedActiveCoupons, isEnabled, ...rest } = body;
 
@@ -328,7 +337,7 @@ function CountdownStrip({ hours, minutes, label, expiredLabel, bgColor, textColo
 }
 
 /* ─── COUPON SELECTOR ─────────────────────────────────────────────────────── */
-function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear }) {
+function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear, onAddCustom }) {
     const filtered = (discounts || []).filter((c) => {
         if (!search) return true;
         const q = search.toLowerCase();
@@ -358,6 +367,23 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
                         Clear all
                     </button>
                 </div>
+            )}
+
+            {onAddCustom && (
+                <button
+                    type="button"
+                    onClick={onAddCustom}
+                    aria-label="Add custom coupon code"
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: "#ffffff", border: "1.5px dashed #b5e3d8", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                    <span style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#e6f4f1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon source={PlusIcon} tone="success" />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#008060" }}>Add custom coupon code</span>
+                        <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>Made the coupon in Shopify, Shiprocket or another app? Add its code here.</span>
+                    </span>
+                </button>
             )}
 
             {!discounts || discounts.length === 0 ? (
@@ -432,6 +458,70 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
                 </BlockStack>
             )}
         </BlockStack>
+    );
+}
+
+/* "+ Custom Coupon": add a code created outside BRIX, or hand it to the Discount Creator */
+function CustomCouponModal({ open, onClose, existingCodes, fetcher, onCreateInBrix, hasUnsavedChanges }) {
+    const [code, setCode] = useState("");
+    const [mode, setMode] = useState("external");
+    const [error, setError] = useState("");
+    const saving = fetcher.state !== "idle";
+
+    // Fresh form every time the dialog opens.
+    useEffect(() => { if (open) { setCode(""); setMode("external"); setError(""); } }, [open]);
+    // Server-side rejection (duplicate, save failure) shows on the field.
+    useEffect(() => {
+        if (fetcher.state === "idle" && fetcher.data && fetcher.data.success === false) setError(fetcher.data.message || "Couldn’t add the coupon. Please try again.");
+    }, [fetcher.state, fetcher.data]);
+
+    const submit = () => {
+        const check = validateCustomCouponCode(code, existingCodes);
+        if (check.error) { setError(check.message); return; }
+        setError("");
+        if (mode === "brix") { onCreateInBrix(check.code); return; }
+        fetcher.submit({ intent: "add_custom_coupon", code: check.code }, { method: "POST", encType: "application/json" });
+    };
+
+    return (
+        <Modal
+            open={open}
+            onClose={saving ? () => {} : onClose}
+            title="Add Custom Coupon"
+            primaryAction={{ content: saving ? "Adding coupon…" : mode === "brix" ? "Continue" : "Add Coupon", onAction: submit, loading: saving, disabled: saving }}
+            secondaryActions={[{ content: "Cancel", onAction: onClose, disabled: saving }]}
+        >
+            <Modal.Section>
+                <BlockStack gap="400">
+                    <TextField
+                        label="Coupon Code"
+                        placeholder="e.g. SAVE200"
+                        value={code}
+                        onChange={(v) => { setCode(v); if (error) setError(""); }}
+                        error={error || undefined}
+                        autoComplete="off"
+                        maxLength={255}
+                        disabled={saving}
+                    />
+                    <ChoiceList
+                        title="How do you want to use this coupon?"
+                        selected={[mode]}
+                        onChange={([v]) => setMode(v)}
+                        disabled={saving}
+                        choices={[
+                            { label: "Just add this coupon code", value: "external", helpText: "I already created this coupon somewhere else. Just add the code to BRIX." },
+                            { label: "Create this coupon in BRIX", value: "brix", helpText: "Create and manage this discount through the BRIX Discount Engine." },
+                        ]}
+                    />
+                    {mode === "external" && (
+                        <Text as="p" variant="bodySm" tone="subdued">BRIX only shows this code in your banner. It doesn’t create or check the discount, so make sure it’s active where you created it.</Text>
+                    )}
+                    {mode === "brix" && hasUnsavedChanges && (
+                        <Banner tone="warning"><p>You have unsaved changes on this page. Save them first, or they’ll be lost when you continue.</p></Banner>
+                    )}
+                </BlockStack>
+            </Modal.Section>
+        </Modal>
     );
 }
 
@@ -530,8 +620,15 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function ProductWidgetPage() {
-    const { couponConfig, shop, discounts, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
+    const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
+    const customCouponFetcher = useFetcher();
+    const navigate = useNavigate();
+    const shopifyBridge = useAppBridge();
+    // Custom (external) coupons first, then the store's active Shopify codes.
+    const [customCoupons, setCustomCoupons] = useState(() => (loadedCustomCoupons || []).map((c) => ({ ...c, title: "Custom coupon", isCustom: true })));
+    const allCoupons = [...customCoupons, ...(discounts || [])];
+    const [customCouponOpen, setCustomCouponOpen] = useState(false);
     const { canPublishFeature } = usePlan();
     const couponPublishable = canPublishFeature('coupon_lock_pro');
 
@@ -633,6 +730,19 @@ export default function ProductWidgetPage() {
 
     const mark = () => setHasChanges(true);
 
+    // Custom coupon saved → add it to the list, select it, close the dialog.
+    // The selection itself is saved with the page's Save, like any other coupon.
+    useEffect(() => {
+        const data = customCouponFetcher.data;
+        if (customCouponFetcher.state !== "idle" || !data?.success || !data.coupon) return;
+        const added = { ...data.coupon, title: "Custom coupon", isCustom: true };
+        setCustomCoupons((prev) => (prev.some((c) => c.id === added.id) ? prev : [added, ...prev]));
+        setSelectedCouponIds((prev) => (prev.includes(added.id) ? prev : [added.id, ...prev]));
+        setHasChanges(true);
+        setCustomCouponOpen(false);
+        shopifyBridge.toast.show("Coupon added successfully");
+    }, [customCouponFetcher.state, customCouponFetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const applyTemplate = (id) => {
         const t = TEMPLATES.find(x => x.id === id);
         if (!t) return;
@@ -684,7 +794,7 @@ export default function ProductWidgetPage() {
         const couponConditions = [];
         selectedCouponIds.forEach((cid) => {
             const ov = couponOverrides[cid] || {};
-            const couponObj = (discounts || []).find((c) => c.id === cid);
+            const couponObj = allCoupons.find((c) => c.id === cid);
             const style = {};
             // Save the real discount code so "Copy Code" copies the code, not the GID number
             if (couponObj?.code) style.couponCode = couponObj.code;
@@ -718,7 +828,7 @@ export default function ProductWidgetPage() {
     /* live preview */
     // Effective values for the coupon currently being customized (override → global default)
     const editOv = couponOverrides[editingCouponId] || {};
-    const editingCoupon = (discounts || []).find((c) => c.id === editingCouponId);
+    const editingCoupon = allCoupons.find((c) => c.id === editingCouponId);
     const pvHeading = editOv.headingText || heading;
     const pvSubtext = editOv.subtextText || subtext;
     const pvBg = editOv.bgColor || bgColor;
@@ -726,7 +836,7 @@ export default function ProductWidgetPage() {
     const pvAccent = editOv.accentColor || accentColor;
     const pvButton = editOv.buttonColor || buttonColor;
     const pvBtnText = editOv.buttonTextColor || btnTextColor;
-    const previewCode = editingCoupon?.code || (discounts || []).find((c) => c.id === selectedCouponIds[0])?.code || "CODE";
+    const previewCode = editingCoupon?.code || allCoupons.find((c) => c.id === selectedCouponIds[0])?.code || "CODE";
     const btn = { background: pvButton, color: pvBtnText, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
     // Default button label matches what the real storefront widget falls back
     // to per template (see buildCard() in coupon-slider-render.liquid) —
@@ -795,6 +905,14 @@ export default function ProductWidgetPage() {
     return (
         <Frame>
             {toastActive && <Toast content="Settings saved!" onDismiss={() => setToastActive(false)} />}
+            <CustomCouponModal
+                open={customCouponOpen}
+                onClose={() => setCustomCouponOpen(false)}
+                existingCodes={allCoupons.map((c) => c.code)}
+                fetcher={customCouponFetcher}
+                hasUnsavedChanges={hasChanges}
+                onCreateInBrix={(code) => { setCustomCouponOpen(false); navigate(`/app/discounts/create?prefillCode=${encodeURIComponent(code)}`); }}
+            />
             <BrixBar size="md" floating />
             <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#f6f6f7" }}>
 
@@ -879,7 +997,8 @@ export default function ProductWidgetPage() {
 
                                     <AccordionSection id="coupon" icon={DiscountIcon} title="Coupon Selection" isOpen={openSection === "coupon"} onToggle={toggleSection} tip={SECTION_TIPS.coupon}>
                                         <CouponSelector
-                                            discounts={discounts}
+                                            discounts={allCoupons}
+                                            onAddCustom={() => setCustomCouponOpen(true)}
                                             selectedCouponIds={selectedCouponIds}
                                             search={couponSearch}
                                             onSearchChange={setCouponSearch}
@@ -899,7 +1018,7 @@ export default function ProductWidgetPage() {
                                                     value={editingCouponId || selectedCouponIds[0]}
                                                     onChange={setEditingCouponId}
                                                     options={selectedCouponIds.map((cid) => {
-                                                        const c = (discounts || []).find((x) => x.id === cid);
+                                                        const c = allCoupons.find((x) => x.id === cid);
                                                         return { label: c?.code || cid, value: cid };
                                                     })}
                                                 />

@@ -119,6 +119,21 @@
 
   const CURRENCY_SYMBOL = getCurrencySymbol(CURRENCY_CODE);
 
+  // Money is shown exactly as Shopify charges it, with the currency's own
+  // decimals (USD/INR/EUR 2, JPY/KRW 0) — never rounded to a whole number,
+  // or $45.90 would show as $46.
+  const CURRENCY_DECIMALS = (function () {
+    try { return new Intl.NumberFormat('en', { style: 'currency', currency: CURRENCY_CODE }).resolvedOptions().maximumFractionDigits; } catch (e) { return 2; }
+  })();
+  const MONEY_NUMBER = (function () {
+    var options = { minimumFractionDigits: CURRENCY_DECIMALS, maximumFractionDigits: CURRENCY_DECIMALS };
+    try { return new Intl.NumberFormat(document.documentElement.lang || undefined, options); } catch (e) { return new Intl.NumberFormat('en', options); }
+  })();
+  function formatMoney(amount) {
+    var value = Number(amount);
+    return CURRENCY_SYMBOL + MONEY_NUMBER.format(isFinite(value) ? value : 0);
+  }
+
   // Inline SVG paths matching Polaris icons used in the admin preview
   const CC_ICON_PATHS = {
     discount: '<path d="M3.25 5.5c0-1.242 1.007-2.25 2.25-2.25.414 0 .75.336.75.75s-.336.75-.75.75-.75.336-.75.75-.336.75-.75.75-.75-.336-.75-.75Z"/><path d="M12.78 7.22c.293.293.293.768 0 1.06l-4.5 4.5c-.293.293-.767.293-1.06 0-.293-.292-.293-.767 0-1.06l4.5-4.5c.293-.293.767-.293 1.06 0Z"/><path d="M9 8c0 .553-.448 1-1 1s-1-.447-1-1c0-.552.448-1 1-1s1 .448 1 1Z"/><path d="M12 13c.552 0 1-.447 1-1 0-.552-.448-1-1-1s-1 .448-1 1c0 .553.448 1 1 1Z"/><path d="M3.25 14.5c0 1.243 1.007 2.25 2.25 2.25.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75s-.75-.335-.75-.75c0-.414-.336-.75-.75-.75s-.75.336-.75.75Z"/><path d="M16.75 14.5c0 1.243-1.007 2.25-2.25 2.25-.414 0-.75-.335-.75-.75 0-.414.336-.75.75-.75s.75-.335.75-.75c0-.414.336-.75.75-.75s.75.336.75.75Z"/><path d="M16.75 5.5c0-1.242-1.007-2.25-2.25-2.25-.414 0-.75.336-.75.75s.336.75.75.75.75.336.75.75.336.75.75.75.75-.336.75-.75Z"/><path d="M16 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 16.75c.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75 0 .415.336.75.75.75h2Z"/><path d="M4 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 4.75c.414 0 .75-.336.75-.75s-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75s.336.75.75.75h2Z"/>',
@@ -2389,9 +2404,9 @@
         // remaining amount.
         const progressTemplate = pInfo.upcoming.progressMessage || `You're {amount} away from unlocking ${nextLabel}!`;
         const progressMsg = fillProgressMessageTemplate(progressTemplate, {
-          amountStr: pInfo.mode === 'quantity' ? String(remaining) : `${CURRENCY_SYMBOL}${remaining}`,
+          amountStr: pInfo.mode === 'quantity' ? String(remaining) : formatMoney(pInfo.nextAmount),
           itemsStr: String(remaining),
-          targetStr: pInfo.mode === 'quantity' ? String(pInfo.upcoming.target) : `${CURRENCY_SYMBOL}${pInfo.upcoming.target}`,
+          targetStr: pInfo.mode === 'quantity' ? String(pInfo.upcoming.target) : formatMoney(pInfo.upcoming.target),
         });
         pbHtml += `
     <p style="margin:0;font-size:15px;font-weight:500;color:#64748b;">
@@ -2462,7 +2477,7 @@
         pbHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;line-height:0;">${iconHtml}</span>`;
         pbHtml += `</div>`;
 
-        const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
+        const amountDisplay = pInfo.mode === 'amount' ? formatMoney(ms.target) : ms.target + ' items';
         const tierLabel = ms.title || ms.description;
 
         // Must be position:absolute (top:100%, relative to the node-sized
@@ -2615,10 +2630,8 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
           <div style="display:flex;flex-direction:column;">
             <div style="display:flex;align-items:center;gap:6px;">
-              ${isFreeGift ? `<span style="font-size:12px;color:#047857;font-weight:600;">Added for reaching your milestone</span>` : `<span style="font-size:14px;font-weight:700;color:#0f172a;">${CURRENCY_SYMBOL}${unitPrice.toFixed(0)}</span>`}
-              ${isRewardItem ? '' : `<span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${CURRENCY_SYMBOL}${unitPrice.toFixed(
-            0
-          )})</span>`}
+              ${isFreeGift ? `<span style="font-size:12px;color:#047857;font-weight:600;">Added for reaching your milestone</span>` : `<span style="font-size:14px;font-weight:700;color:#0f172a;">${formatMoney(unitPrice)}</span>`}
+              ${isRewardItem ? '' : `<span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${formatMoney(unitPrice)})</span>`}
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
@@ -2630,8 +2643,8 @@
             </div>`}
             <div style="text-align:right;min-width:60px;">
               ${isFreeGift
-                ? `<span style="display:inline-block;padding:2px 10px;border-radius:7px;background:#059669;color:#fff;font-weight:800;font-size:12px;letter-spacing:.06em;">FREE</span><div style="font-size:12px;color:#6b7280;text-decoration:line-through;margin-top:2px;">${CURRENCY_SYMBOL}${originalLine.toFixed(0)}</div>`
-                : `<span style="font-weight:800;font-size:15px;color:#0f172a;">${CURRENCY_SYMBOL}${lineTotal.toFixed(0)}</span>`}
+                ? `<span style="display:inline-block;padding:2px 10px;border-radius:7px;background:#059669;color:#fff;font-weight:800;font-size:12px;letter-spacing:.06em;">FREE</span><div style="font-size:12px;color:#6b7280;text-decoration:line-through;margin-top:2px;">${formatMoney(originalLine)}</div>`
+                : `<span style="font-weight:800;font-size:15px;color:#0f172a;">${formatMoney(lineTotal)}</span>`}
             </div>
           </div>
         </div>
@@ -2688,7 +2701,7 @@
   <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span>
-      <span style="font-size:14px;color:#0f172a;font-weight:700;">${CURRENCY_SYMBOL}${subtotal.toFixed(0)}</span>
+      <span style="font-size:14px;color:#0f172a;font-weight:700;">${formatMoney(subtotal)}</span>
     </div>
 `;
 
@@ -2696,7 +2709,7 @@
       drawerHtml += `
     <div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;">
       <span style="font-size:14px;font-weight:500;">Discounts</span>
-      <span style="font-size:14px;font-weight:700;">-${CURRENCY_SYMBOL}${totalDiscount.toFixed(0)}</span>
+      <span style="font-size:14px;font-weight:700;">-${formatMoney(totalDiscount)}</span>
     </div>
 `;
     }
@@ -2704,7 +2717,7 @@
     drawerHtml += `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;">
       <span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span>
-      <span style="font-size:18px;color:#0f172a;font-weight:900;">${CURRENCY_SYMBOL}${finalTotal.toFixed(0)}</span>
+      <span style="font-size:18px;color:#0f172a;font-weight:900;">${formatMoney(finalTotal)}</span>
     </div>
   </div>
   ${renderCheckoutButton(appliedCouponCodes)}
@@ -3297,10 +3310,10 @@
       if (!resolvedFromStore && !hasSavedTitle) return;
 
       const title = detail.title || 'Product';
-      const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
+      const priceText = detail.price ? formatMoney(parseFloat(detail.price)) : '';
       const compareAtText =
         detail.compareAtPrice && parseFloat(detail.compareAtPrice) > parseFloat(detail.price || 0)
-          ? CURRENCY_SYMBOL + parseFloat(detail.compareAtPrice).toFixed(0)
+          ? formatMoney(parseFloat(detail.compareAtPrice))
           : '';
       const imageHtml =
         detail.image && detail.image !== '📦' && detail.image !== null

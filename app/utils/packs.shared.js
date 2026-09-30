@@ -267,29 +267,35 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
 // Only fields the storefront widget (app/routes/packs.js.jsx) actually renders
 // live here — a control that has no rendering effect must not be saved.
 export const DEFAULT_CUSTOMIZATION = {
-  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '' },
+  // showBuyNow: the widget's own Buy Now button (adds the Pack, then goes to
+  // checkout). While it's on, the theme's Buy it now button is hidden.
+  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true },
   savings: { visible: true, mode: 'save_amount', label: 'Save' },
   colors: { primary: '#008060', background: '#ffffff', cardBackground: '#ffffff', selectedCard: '#e6f4f1', border: '#dfe3e8', text: '#202223', price: '#202223', discount: '#008060', badge: '#fff4d6', button: '#008060', buttonText: '#ffffff' },
   borders: { radius: 8, width: 1, style: 'solid', shadow: false },
   typography: { headingSize: 20, packTitleSize: 15, priceSize: 18, descriptionSize: 13, fontWeight: 600, alignment: 'left' },
   spacing: { cardPadding: 18, cardGap: 12, sectionSpacing: 20, buttonSpacing: 16 },
   images: { enabled: true, size: 'medium', position: 'top' },
-  design: { preset: 'classic' },
+  design: { preset: 'stacked' },
+  // Where the storefront widget sits: right below the product price, or in a
+  // "BRIX Packs position" app block the merchant places in the theme editor.
+  placement: { position: 'below_price' },
 };
 
 // Layout presets. Each id is a structurally different layout, rendered by
-// PackPreview.jsx and packs-widget.js (see their layoutOf): 'classic' = stacked
-// list, 'highlight' = compact quantity selector + summary panel, 'premium' =
-// side-by-side offer cards. `style` only nudges shape/spacing to suit the
-// layout — never colors, so switching layouts keeps the merchant's palette
-// the same (content, savings and Pack behaviour are never touched either).
-// The ids are kept from the earlier presets so saved Packs stay valid.
+// PackPreview.jsx and packs_widget.js (see their layoutOf): 'tabs' = pack tabs
+// over one panel, 'stacked' = one card of rows where the chosen row opens its
+// pickers, 'visual' = pack tabs + one photo picker per item. `style` only
+// nudges shape/spacing to suit the layout — never colors, so switching layouts
+// keeps the merchant's palette (content, savings and Pack behaviour are never
+// touched either).
 export const PACK_DESIGNS = [
-  { id: 'classic', name: 'Classic list', description: 'Stacked rows with a radio button — clear and familiar.', style: {} },
-  { id: 'highlight', name: 'Compact selector', description: 'Quantity buttons in a row, one price summary below — saves space.', style: {
+  { id: 'tabs', name: 'Pack tabs', description: 'Packs side by side as tabs; the chosen pack’s variants and price show below.', style: {
     borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 8 } } },
-  { id: 'premium', name: 'Offer cards', description: 'Side-by-side cards with bold prices — visual and punchy.', style: {
-    borders: { radius: 12 }, typography: { priceSize: 20 }, spacing: { cardPadding: 16, cardGap: 10 } } },
+  { id: 'stacked', name: 'Stacked packs', description: 'Packs stacked in one card; the chosen pack opens to pick its variants.', style: {
+    borders: { radius: 10 } } },
+  { id: 'visual', name: 'Visual picker', description: 'One picker per item with the variant photo — made for Mix & Match.', style: {
+    borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 10 } } },
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -300,7 +306,7 @@ const bool = () => ({ type: 'boolean' });
 const color = () => ({ type: 'color' });
 
 export const CUSTOMIZATION_SCHEMA = {
-  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160) },
+  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160), buyNow: str(40), showBuyNow: bool() },
   savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent'), label: str(24) },
   colors: Object.fromEntries(Object.keys(DEFAULT_CUSTOMIZATION.colors).map((key) => [key, color()])),
   borders: { radius: num(0, 32), width: num(0, 6), style: oneOf('solid', 'dashed', 'dotted'), shadow: bool() },
@@ -308,6 +314,7 @@ export const CUSTOMIZATION_SCHEMA = {
   spacing: { cardPadding: num(4, 40), cardGap: num(0, 32), sectionSpacing: num(0, 60), buttonSpacing: num(0, 40) },
   images: { enabled: bool(), size: oneOf('small', 'medium', 'large'), position: oneOf('top', 'left') },
   design: { preset: oneOf(...PACK_DESIGNS.map((design) => design.id)) },
+  placement: { position: oneOf('below_price', 'custom') },
 };
 
 export function defaultCustomization() {
@@ -323,11 +330,21 @@ function isPlainObject(value) {
  * Unknown groups/keys are dropped; wrong types / out-of-range values are
  * reported. Returns { value, errors } where `value` only contains valid fields.
  */
+// Layouts that were removed, mapped to their closest current layout so Packs
+// saved with them keep working (also mirrored in packs_widget.js layoutOf,
+// which reads raw saved customization from the PHP endpoint).
+export const LEGACY_DESIGN_MAP = { classic: 'stacked', highlight: 'tabs', premium: 'tabs' };
+// Placements that were removed (next to the buy buttons) now show below the price.
+const LEGACY_PLACEMENTS = new Set(['above_buttons', 'below_buttons']);
+
 export function sanitizeCustomization(input) {
   const errors = [];
   const value = {};
   if (input === undefined || input === null) return { value, errors };
   if (!isPlainObject(input)) return { value, errors: ['Customization must be an object.'] };
+  const legacy = isPlainObject(input.design) && LEGACY_DESIGN_MAP[input.design.preset];
+  if (legacy) input = { ...input, design: { ...input.design, preset: legacy } };
+  if (isPlainObject(input.placement) && LEGACY_PLACEMENTS.has(input.placement.position)) input = { ...input, placement: { ...input.placement, position: 'below_price' } };
   for (const [group, fields] of Object.entries(CUSTOMIZATION_SCHEMA)) {
     if (input[group] === undefined) continue;
     if (!isPlainObject(input[group])) { errors.push(`Customization "${group}" must be an object.`); continue; }

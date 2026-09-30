@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
-import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon } from '@shopify/polaris-icons';
+import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
@@ -18,9 +18,15 @@ const REVIEW_STEP = STEPS.length - 1;
 
 // Mock offers used only for the miniature design previews.
 const SAMPLE_TIERS = [
-  { quantity: 1, name: 'Buy 1', badge: '', savings: 0, subtotal: 40, price: 40 },
-  { quantity: 2, name: 'Buy 2', badge: 'Popular', savings: 8, subtotal: 80, price: 72 },
-  { quantity: 3, name: 'Buy 3', badge: '', savings: 18, subtotal: 120, price: 102 },
+  { quantity: 1, name: 'Buy 1', badge: '', discountType: 'none', discountValue: 0, savings: 0, subtotal: 40, price: 40 },
+  { quantity: 2, name: 'Buy 2', badge: 'Popular', discountType: 'percentage', discountValue: 10, savings: 8, subtotal: 80, price: 72 },
+  { quantity: 3, name: 'Buy 3', badge: '', discountType: 'percentage', discountValue: 15, savings: 18, subtotal: 120, price: 102 },
+];
+// Layout thumbnails: Pack tabs and Visual picker are for choosing variants per
+// item, so their thumbnails get sample variants; Stacked packs shows one variant.
+const SAMPLE_VARIANTS = [
+  { id: 'sample-1', title: 'Black', price: 40, availableForSale: true },
+  { id: 'sample-2', title: 'White', price: 40, availableForSale: true },
 ];
 
 const blankTier = (quantity, discountType = 'none', discountValue = '') => ({ name: '', quantity: String(quantity), discountType, discountValue: String(discountValue), badge: '' });
@@ -387,7 +393,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
               <button key={design.id} type="button" role="radio" aria-checked={selected} aria-label={design.name} onClick={() => chooseLayout(design.id)} className={`pd-card${selected ? ' pd-card--on' : ''}`}>
                 <div className="pd-stage" aria-hidden="true">
                   <div style={{ zoom: 0.62, width: '100%', pointerEvents: 'none' }}>
-                    <PackPreview template={form.template === 'choose_each_item' ? 'same_variant' : form.template} customization={thumb} tiers={SAMPLE_TIERS} productImage={form.productImage} formatMoney={fmt} />
+                    <PackPreview template={form.template === 'choose_each_item' ? 'same_variant' : form.template} customization={thumb} tiers={SAMPLE_TIERS} variants={design.id === 'stacked' ? undefined : SAMPLE_VARIANTS} productImage={form.productImage} productTitle={form.productTitle} formatMoney={fmt} />
                   </div>
                 </div>
                 <div className="pd-meta">
@@ -711,6 +717,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
     { id: 'image', label: 'Image', icon: ImageIcon, description: 'Show the product photo inside each offer.', prefixes: ['images.'] },
+    { id: 'placement', label: 'Placement', icon: LayoutBuyButtonIcon, description: 'Where the Pack appears on the product page.', prefixes: ['placement.'] },
   ];
   const tabHasError = (tab) => customCheck.errors.some((message) => tab.prefixes.some((prefix) => message.startsWith(prefix)));
 
@@ -782,7 +789,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 </div>
                 <Text as="p" tone="subdued" variant="bodySm">A short product description goes here, giving shoppers context about this item before they see the Pack offer below.</Text>
                 <div style={{ margin: '16px 0' }}>
-                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} formatMoney={fmt} compact={previewViewport === 'mobile'} />
+                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} formatMoney={fmt} />
                 </div>
               </div>
             </div>
@@ -806,6 +813,10 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         <FieldGroup title="Call to action">
           {contentField('promoText', 'Promotional text', 160, 'Shown just above the button.')}
           {contentField('cta', 'Button label', 40)}
+        </FieldGroup>
+        <FieldGroup title="Buy Now">
+          <Toggle label="Show a Buy Now button" helpText="Adds the Pack and goes straight to checkout. While it’s on, your theme’s own Buy it now button is hidden on this product." checked={form.customization.content.showBuyNow !== false} onChange={(value) => updateCustom('content', 'showBuyNow', value)} />
+          {form.customization.content.showBuyNow !== false && contentField('buyNow', 'Buy Now button label', 40)}
         </FieldGroup>
       </BlockStack>
     ),
@@ -869,6 +880,18 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           <Segmented label="Image position" disabled={!form.customization.images.enabled} options={[['top', 'Above title'], ['left', 'Left of title']]} value={form.customization.images.position} onChange={(value) => updateCustom('images', 'position', value)} />
         </FieldGroup>
         {!form.productImage && <Banner tone="info"><p>This product has no image yet. Pick a product with an image in step 1 to use this.</p></Banner>}
+      </BlockStack>
+    ),
+    placement: (
+      <BlockStack gap="400">
+        <Segmented label="Show the Pack" options={[['below_price', 'Below the price'], ['custom', 'Custom']]} value={form.customization.placement.position} onChange={(value) => updateCustom('placement', 'position', value)} />
+        {form.customization.placement.position === 'custom' ? (
+          <Banner tone="info" title="Choose the spot in your theme editor">
+            <p>In Online Store → Themes → Customize, open a product page, click Add block and choose “BRIX Packs position”, then drag it where you want the Pack. Until that block is added, the Pack shows below the price.</p>
+          </Banner>
+        ) : (
+          <Text as="p" variant="bodySm" tone="subdued">The Pack appears right under the product price. While it’s shown, your theme’s Add to cart and quantity selector are hidden (and Buy it now, while the Pack’s own Buy Now is on) — the Pack has its own buttons.</Text>
+        )}
       </BlockStack>
     ),
   };

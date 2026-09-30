@@ -41,7 +41,10 @@
   var CART_EVENTS = ['cart:item-added', 'cart:updated', 'cart:add', 'cart:refresh', 'on:cart:add', 'shopify:cart:added', 'theme:cart:open', 'cart:open'];
   var HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
-  var state = { data: null, pack: null, tierIndex: 0, chosen: [], busy: false, message: null };
+  // busy: false | 'add' | 'buy'. pickVariant: the variant chosen in the Pack's
+  // own picker (same_variant Packs); null follows the theme's variant picker.
+  // openPicker: key of the Visual picker dropdown that is open, or null.
+  var state = { data: null, pack: null, tierIndex: 0, chosen: [], busy: false, message: null, pickVariant: null, redirecting: false, openPicker: null };
   var lastVariant = null;
   var money = null;
 
@@ -62,24 +65,6 @@
       node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
     });
     return node;
-  }
-
-  var SVG_NS = 'http://www.w3.org/2000/svg';
-  function checkmarkSvg(size) {
-    var svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', size || 11);
-    svg.setAttribute('height', size || 11);
-    svg.setAttribute('viewBox', '0 0 16 16');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('aria-hidden', 'true');
-    var path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d', 'M3 8.5L6.5 12L13 4.5');
-    path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '2.2');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(path);
-    return svg;
   }
 
   function numericId(value) {
@@ -135,6 +120,7 @@
         availableForSale: Boolean(variant.available),
         maxQuantity: variant.inventoryManagement === 'shopify' && variant.inventoryPolicy === 'deny' && stock > 0 ? stock : null,
         inventoryQuantity: isFinite(stock) ? stock : null,
+        image: variant.image || '',
       };
     });
 
@@ -213,7 +199,8 @@
   }
 
   function currentVariantId() {
-    var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
+    var form = productForm();
+    var input = form && form.querySelector('[name="id"]');
     if (input && input.value) return numericId(input.value);
     var fromUrl = new URLSearchParams(location.search).get('variant');
     return fromUrl ? numericId(fromUrl) : null;
@@ -263,7 +250,6 @@
     '.brix-packs-heading{margin:0 0 4px;font-size:var(--brix-packs-h);font-weight:var(--brix-packs-weight);color:var(--brix-packs-text)}',
     '.brix-packs-sub{margin:0 0 14px;font-size:var(--brix-packs-desc);opacity:.75}',
     '.brix-packs-preview{margin:0 0 12px;padding:8px 10px;background:#fff4d6;color:#5c4400;border:1px solid #e1b955;border-radius:6px;font-size:12px}',
-    '.brix-packs-tiers{display:grid;gap:var(--brix-packs-gap);margin:0;padding:0;border:0}',
     '.brix-packs-tier{position:relative;display:grid;grid-template-columns:auto 1fr auto;column-gap:16px;align-items:center;width:100%;margin:0;padding:var(--brix-packs-card-pad);background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:left;cursor:pointer}',
     '.brix-packs-tier:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
     '.brix-packs-tier:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
@@ -280,55 +266,65 @@
     '.brix-packs-price strong{display:block;font-size:var(--brix-packs-priceSize);font-weight:var(--brix-packs-weight)}',
     '.brix-packs-was{font-size:var(--brix-packs-desc);text-decoration:line-through;opacity:.6}',
     '.brix-packs-save{display:block;font-size:var(--brix-packs-desc);font-weight:600;color:var(--brix-packs-discount)}',
-    '.brix-packs-checkmark{display:none;position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
-    '.brix-packs-qty{display:none}',
     '.brix-packs-img{display:block;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);max-width:100%}',
     '.brix-packs-img[data-size="small"]{width:48px;height:48px}.brix-packs-img[data-size="medium"]{width:72px;height:72px}.brix-packs-img[data-size="large"]{width:104px;height:104px}',
-    /* ── Layout: list (Classic) — stacked rows, radio on the left, price on the right. */
-    '.brix-packs-widget[data-layout="list"][data-image="1"] .brix-packs-tier{grid-template-columns:auto auto 1fr auto}',
-    /* ── Layout: cards (Offer cards) — side-by-side cards, big quantity numeral, savings pill. */
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-tiers{grid-template-columns:repeat(var(--brix-packs-cols,3),minmax(0,1fr))}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier{grid-template-columns:1fr;row-gap:8px;text-align:center;justify-items:center;align-content:start;padding-top:calc(var(--brix-packs-card-pad) + 8px)}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-radio{display:none}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-price{text-align:center}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-title{justify-content:center}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);white-space:nowrap}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-save{display:inline-block;margin-top:6px;padding:3px 8px;font-size:11px;white-space:nowrap;background:var(--brix-packs-selected);border-radius:999px}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier[aria-checked="true"] .brix-packs-save{background:var(--brix-packs-card)}',
-    '.brix-packs-widget[data-layout="cards"] .brix-packs-tier[aria-checked="true"] .brix-packs-checkmark{display:flex}',
-    '.brix-packs-widget[data-layout="cards"]:not([data-image="1"]) .brix-packs-qty{display:block;font-size:calc(var(--brix-packs-h) * 1.5);font-weight:800;line-height:1;color:var(--brix-packs-primary)}',
-    '.brix-packs-qty small{font-size:.5em;font-weight:700;margin-left:1px}',
-    /* Image-left cards need a full-width row, not a narrow auto-fit column, or the price overflows the card. */
-    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-tiers{grid-template-columns:1fr}',
-    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-tier{grid-template-columns:auto 1fr auto;text-align:left;justify-items:stretch;padding-top:var(--brix-packs-card-pad)}',
-    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-price,.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-title{text-align:left;justify-content:flex-start}',
-    '.brix-packs-widget[data-layout="cards"][data-image-position="left"] .brix-packs-badge{position:static;transform:none}',
-    /* ── Layout: chips (Compact selector) — a row of quantity buttons + one summary panel. */
-    '.brix-packs-widget[data-layout="chips"] .brix-packs-tiers{display:flex;flex-wrap:wrap;gap:var(--brix-packs-gap);padding-top:8px}',
-    '.brix-packs-chip{position:relative;flex:1 1 0;min-width:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;margin:0;padding:12px 8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:center;cursor:pointer;transition:background .15s ease,border-color .15s ease}',
-    '.brix-packs-chip:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
-    '.brix-packs-chip:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
-    '.brix-packs-chip[aria-checked="true"]{background:var(--brix-packs-primary);border-color:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
-    '.brix-packs-chip[disabled]{opacity:.5;cursor:not-allowed}',
-    '.brix-packs-chip-label{font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight);line-height:1.2}',
-    '.brix-packs-chip-save{font-size:11px;font-weight:700;color:var(--brix-packs-discount)}',
-    '.brix-packs-chip[aria-checked="true"] .brix-packs-chip-save{color:inherit;opacity:.9}',
-    '.brix-packs-chip .brix-packs-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;padding:1px 7px}',
-    '.brix-packs-summary{display:flex;align-items:center;gap:14px;margin-top:var(--brix-packs-gap);padding:var(--brix-packs-card-pad);background:var(--brix-packs-selected);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-primary);border-radius:var(--brix-packs-radius)}',
-    '.brix-packs-summary .brix-packs-content{flex:1}',
-    '.brix-packs-summary + .brix-packs-choose{margin-top:var(--brix-packs-gap)}',
-    '.brix-packs-choose{grid-column:1/-1;display:flex;flex-direction:column;gap:10px;margin:0;padding:14px var(--brix-packs-card-pad);background:var(--brix-packs-selected);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-primary);border-radius:var(--brix-packs-radius)}',
-    '.brix-packs-choose-hint{margin:0;font-size:var(--brix-packs-desc);opacity:.75}',
-    '.brix-packs-choose-items{display:flex;flex-wrap:wrap;gap:10px}',
-    '.brix-packs-choose label{display:flex;flex-direction:column;gap:4px;flex:1 1 130px;min-width:110px;font-size:var(--brix-packs-desc)}',
-    '.brix-packs-choose select{width:100%;padding:8px;font:inherit;border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);background:var(--brix-packs-card);color:var(--brix-packs-text)}',
     '.brix-packs-promo{margin:12px 0 0;font-size:var(--brix-packs-desc);opacity:.8;text-align:var(--brix-packs-align)}',
     '.brix-packs-msg{margin:12px 0 0;padding:8px 10px;border-radius:6px;font-size:13px}',
     '.brix-packs-msg[data-type="error"]{background:#fde7e7;color:#8a1f1f;border:1px solid #f0b3b3}',
     '.brix-packs-msg[data-type="success"]{background:#e3f5ea;color:#14532d;border:1px solid #a7d7b8}',
     '.brix-packs-add{display:block;width:100%;margin-top:var(--brix-packs-btn-gap);padding:13px 16px;background:var(--brix-packs-button);color:var(--brix-packs-button-text);border:0;border-radius:var(--brix-packs-radius);font:inherit;font-weight:700;cursor:pointer}',
     '.brix-packs-add[disabled]{opacity:.55;cursor:not-allowed}',
-    '@media (max-width:480px){.brix-packs-tier{column-gap:10px}.brix-packs-widget[data-layout="cards"]:not([data-image-position="left"]) .brix-packs-tiers{grid-template-columns:1fr 1fr}.brix-packs-chip{min-width:60px;padding:10px 4px 8px}}',
+    '.brix-packs-actions{display:flex;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
+    '.brix-packs-actions .brix-packs-add{margin-top:0;flex:1 1 0}',
+    '.brix-packs-buy{flex:1 1 0;padding:13px 16px;background:var(--brix-packs-card);color:var(--brix-packs-button);border:2px solid var(--brix-packs-button);border-radius:var(--brix-packs-radius);font:inherit;font-weight:700;cursor:pointer}',
+    '.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
+    /* ── Layouts: tabs (Pack tabs) + visual (Visual picker) — a row of pack tabs over one panel. */
+    '.brix-packs-tabs{display:flex;gap:var(--brix-packs-gap);padding-top:8px}',
+    '.brix-packs-tab{position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;margin:0;padding:12px 8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:center;cursor:pointer}',
+    '.brix-packs-tab:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
+    '.brix-packs-tab:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    '.brix-packs-tab[aria-checked="true"]{background:var(--brix-packs-selected);border-color:var(--brix-packs-primary);box-shadow:0 0 0 1px var(--brix-packs-primary)}',
+    '.brix-packs-tab[disabled]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-tab .brix-packs-badge{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;padding:1px 7px}',
+    '.brix-packs-tab-label{font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight);line-height:1.2}',
+    '.brix-packs-tab-price{font-size:var(--brix-packs-desc);opacity:.8}',
+    '.brix-packs-panel{display:flex;flex-direction:column;gap:12px;margin-top:var(--brix-packs-gap);padding:var(--brix-packs-card-pad);background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-panel-head{display:flex;align-items:center;gap:12px}',
+    '.brix-packs-panel-head .brix-packs-content{flex:1}',
+    /* ── Layout: stacked (Stacked packs) — one card, rows divided; the chosen row opens its pickers. */
+    '.brix-packs-stack{background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-stack-item:first-child{border-radius:var(--brix-packs-radius) var(--brix-packs-radius) 0 0}.brix-packs-stack-item:last-child{border-radius:0 0 var(--brix-packs-radius) var(--brix-packs-radius)}.brix-packs-stack-item:only-child{border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-stack-item + .brix-packs-stack-item{border-top:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border)}',
+    '.brix-packs-stack-item[data-selected="1"]{background:var(--brix-packs-selected);box-shadow:inset 3px 0 0 var(--brix-packs-primary)}',
+    '.brix-packs-stack .brix-packs-tier,.brix-packs-stack .brix-packs-tier[aria-checked="true"]{border:0;border-radius:0;background:transparent;box-shadow:none}',
+    '.brix-packs-widget[data-layout="visual"][data-image="1"] .brix-packs-tier{grid-template-columns:auto auto 1fr auto}',
+    '.brix-packs-expand{padding:0 var(--brix-packs-card-pad) var(--brix-packs-card-pad)}',
+    /* ── Item choices: plain dropdowns (tabs), photo tiles (stacked), photo dropdowns (visual). */
+    '.brix-packs-selects{display:flex;flex-direction:column;gap:8px}',
+    '.brix-packs-select-row{display:flex;flex-direction:column;gap:4px;font-size:var(--brix-packs-desc)}',
+    '.brix-packs-widget select{width:100%;padding:8px;font:inherit;border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);background:var(--brix-packs-card);color:var(--brix-packs-text)}',
+    '.brix-packs-tiles-wrap{display:flex;flex-direction:column;gap:10px}',
+    '.brix-packs-tiles{display:flex;flex-wrap:wrap;gap:var(--brix-packs-gap)}',
+    '.brix-packs-tile{flex:1 1 0;min-width:84px;max-width:150px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font-size:var(--brix-packs-desc);text-align:center}',
+    '.brix-packs-tile img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);background:#f1f2f4}',
+    '.brix-packs-tile-name{font-weight:600;overflow-wrap:anywhere}',
+    '.brix-packs-dds{display:flex;flex-direction:column;gap:8px}',
+    '.brix-packs-dd{position:relative}',
+    '.brix-packs-dd-trigger{width:100%;display:flex;align-items:center;gap:10px;margin:0;padding:8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);font:inherit;text-align:left;cursor:pointer}',
+    '.brix-packs-dd-trigger:hover,.brix-packs-dd-trigger[aria-expanded="true"]{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-dd-trigger:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    '.brix-packs-dd img,.brix-packs-dd-noimg{display:block;width:44px;height:44px;flex-shrink:0;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);background:#f1f2f4}',
+    '.brix-packs-dd-text{flex:1;min-width:0;display:flex;flex-direction:column}',
+    '.brix-packs-dd-label{font-size:11px;opacity:.7}',
+    '.brix-packs-dd-value{font-weight:600;overflow-wrap:anywhere}',
+    '.brix-packs-dd-price{font-size:var(--brix-packs-desc);opacity:.8;white-space:nowrap}',
+    '.brix-packs-dd-caret{opacity:.6}',
+    '.brix-packs-dd-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:280px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);box-shadow:0 8px 24px rgba(0,0,0,.14)}',
+    '.brix-packs-dd-option{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer}',
+    '.brix-packs-dd-option .brix-packs-dd-value{flex:1}',
+    '.brix-packs-dd-option:hover,.brix-packs-dd-option:focus{background:var(--brix-packs-selected);outline:none}',
+    '.brix-packs-dd-option[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--brix-packs-primary)}',
+    '@media (max-width:480px){.brix-packs-tier{column-gap:10px}.brix-packs-tab{padding:10px 4px 8px}}',
   ].join('\n');
 
   function injectStyle() {
@@ -366,14 +362,17 @@
 
   // Each design preset is a structurally different layout (mirrors layoutOf
   // in app/components/packs/PackPreview.jsx):
-  //   classic   -> 'list'  stacked rows, radio on the left
-  //   highlight -> 'chips' row of quantity buttons + one summary panel
-  //   premium   -> 'cards' side-by-side offer cards
-  // Packs saved with the old "image cards" template keep their card layout.
+  //   tabs    -> packs side by side; under the chosen pack, one dropdown per item
+  //   stacked -> packs as rows; the chosen row shows the variant photo per item
+  //   visual  -> packs as rows; the chosen row opens one photo dropdown per item
+  // Removed layouts map to their closest current one (LEGACY_DESIGN_MAP in
+  // app/utils/packs.shared.js); this reads raw saved settings from PHP, so it
+  // maps them itself. The old "image cards" template becomes tabs.
+  var LEGACY_LAYOUTS = { classic: 'stacked', highlight: 'tabs', premium: 'tabs' };
   function layoutOf(design, template) {
-    if (design === 'highlight') return 'chips';
-    if (design === 'premium' || template === 'visual_offer') return 'cards';
-    return 'list';
+    if (design === 'tabs' || design === 'stacked' || design === 'visual') return design;
+    if (LEGACY_LAYOUTS[design]) return LEGACY_LAYOUTS[design];
+    return template === 'visual_offer' ? 'tabs' : 'stacked';
   }
 
   function tierDisabled(pack, tier) {
@@ -383,11 +382,31 @@
   // Default every chooser slot to the shopper's currently selected variant
   // when it's one of the Pack's own variants, otherwise the first available one.
   function defaultChoice(pack) {
-    if (pack.variants) {
-      for (var i = 0; i < pack.variants.length; i += 1) if (pack.variants[i].id === lastVariant) return lastVariant;
-      if (pack.variants[0]) return pack.variants[0].id;
-    }
+    var sellable = sellableOf(pack);
+    for (var i = 0; i < sellable.length; i += 1) if (sellable[i].id === lastVariant) return lastVariant;
+    if (sellable[0]) return sellable[0].id;
+    if (pack.variants && pack.variants[0]) return pack.variants[0].id;
     return numericId(pack.variantId);
+  }
+
+  function sellableOf(pack) {
+    return (pack.variants || []).filter(function (variant) { return variant.availableForSale; });
+  }
+
+  function layoutFor(pack) {
+    var custom = pack.customization || {};
+    return layoutOf((custom.design && custom.design.preset) || 'stacked', pack.template);
+  }
+
+  // One variant choice per item: always for Mix & Match; for other Packs in
+  // the layouts built for choosing per item (Pack tabs, Visual picker) when
+  // there's more than one variant to choose from. The checkout discount
+  // accepts any allowed variant in a Pack, so mixing variants is safe.
+  function perItem(pack) {
+    if (!pack.variants || !pack.variants.length) return false;
+    if (pack.packType === 'mix_match') return true;
+    var layout = layoutFor(pack);
+    return (layout === 'tabs' || layout === 'visual') && sellableOf(pack).length > 1;
   }
 
   function ensureChosen(pack, quantity) {
@@ -404,6 +423,19 @@
     return pack.basePrice;
   }
 
+  function variantOf(pack, variantId) {
+    var list = pack.variants || [];
+    for (var i = 0; i < list.length; i += 1) if (list[i].id === variantId) return list[i];
+    return null;
+  }
+
+  // The variant a same_variant Pack adds: the one picked in the Pack's own
+  // picker, else the theme's selected variant, else the Pack's anchor variant.
+  function packVariantId(pack) {
+    if (state.pickVariant && variantOf(pack, state.pickVariant)) return state.pickVariant;
+    return lastVariant || numericId(pack.variantId);
+  }
+
   // Effective price/savings for a tier as displayed:
   //  - mix_match recomputes from the variants the shopper picked per item.
   //  - same_variant covering more than one variant recomputes from whichever
@@ -411,13 +443,13 @@
   //    variant — see priceOfVariant).
   //  - everything else uses the server-computed values as-is.
   function displayedTier(pack, tier, index) {
-    if (pack.packType === 'mix_match' && index === state.tierIndex && pack.variants) {
+    if (perItem(pack) && index === state.tierIndex) {
       ensureChosen(pack, tier.quantity); // one entry per item BEFORE pricing, or the total covers too few items
       var prices = state.chosen.map(function (id) { return priceOfVariant(pack, id); });
       return calc(prices, tier, money.decimals);
     }
     if (pack.packType !== 'mix_match' && pack.variants && pack.variants.length > 1) {
-      var unitPrice = priceOfVariant(pack, lastVariant);
+      var unitPrice = priceOfVariant(pack, packVariantId(pack));
       var sameVariantPrices = [];
       for (var i = 0; i < tier.quantity; i += 1) sameVariantPrices.push(unitPrice);
       return calc(sameVariantPrices, tier, money.decimals);
@@ -434,7 +466,7 @@
     var savingsCfg = custom.savings || {};
     var saveWord = (savingsCfg.label && String(savingsCfg.label).trim()) || 'Save';
     var images = custom.images || {};
-    var design = (custom.design && custom.design.preset) || 'classic';
+    var design = (custom.design && custom.design.preset) || 'stacked';
     var layout = layoutOf(design, pack.template);
 
     var hasImage = images.enabled !== false && Boolean(pack.productImage);
@@ -459,8 +491,6 @@
       return saveWord + ' ' + money.format(shown.savings);
     }
     function metaFor(tier, shown) {
-      // Narrow offer cards only have room for one short line.
-      if (layout === 'cards' && images.position !== 'left') return (!money.hidden && shown.savings > 0 && tier.quantity > 0) ? money.format(shown.price / tier.quantity) + ' each' : tier.quantity + ' item' + (tier.quantity === 1 ? '' : 's');
       var meta = tier.quantity + ' item' + (tier.quantity === 1 ? '' : 's');
       if (!money.hidden && shown.savings > 0 && tier.quantity > 0) meta += ' · ' + money.format(shown.price / tier.quantity) + ' each';
       return meta;
@@ -486,86 +516,215 @@
       };
     }
 
-    var group = el('div', { class: 'brix-packs-tiers', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack', style: '--brix-packs-cols:' + Math.min(Math.max(pack.tiers.length, 1), 4) });
-    pack.tiers.forEach(function (tier, index) {
-      var shown = displayedTier(pack, tier, index);
-      var disabled = tierDisabled(pack, tier);
-      var selected = index === state.tierIndex;
-      if (layout === 'chips') {
-        // Compact selector: each tier is a small quantity button; the details
-        // for the selected one live in the summary panel below the row.
-        var chipSave = savingsCfg.visible !== false && shown.savings > 0 ? saveWord + ' ' + percentLabel(shown.subtotal, shown.savings) : null;
-        group.appendChild(el('button', tierButtonProps(index, disabled, selected, 'brix-packs-chip'), [
-          tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null,
-          el('span', { class: 'brix-packs-chip-label', text: tier.name || 'Buy ' + tier.quantity }),
-          chipSave ? el('span', { class: 'brix-packs-chip-save', text: chipSave }) : null,
-        ]));
-        return;
-      }
-      group.appendChild(el('button', tierButtonProps(index, disabled, selected, 'brix-packs-tier'), [
-        el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
-        el('span', { class: 'brix-packs-checkmark', 'aria-hidden': 'true' }, [checkmarkSvg(11)]),
-        imageEl(),
-        el('span', { class: 'brix-packs-qty', 'aria-hidden': 'true' }, [String(tier.quantity), el('small', { text: '×' })]),
-        el('span', { class: 'brix-packs-content' }, [
-          el('span', { class: 'brix-packs-title' }, [tier.name || 'Buy ' + tier.quantity, tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null]),
-          el('span', { class: 'brix-packs-meta', text: metaFor(tier, shown) }),
-        ]),
-        priceEl(shown, saveTextFor(shown)),
-      ]));
-      // Directly below the selected tier, not after the whole list — so it
-      // reads as "here's what you're building for the pack you just picked".
-      // `.brix-packs-choose` spans every column (grid-column:1/-1) so it never
-      // squeezes into a single narrow column of the cards layout or disturbs
-      // the other tiers' own grid placement.
-      if (pack.packType === 'mix_match' && pack.variants && selected) group.appendChild(renderChoosers(pack));
-    });
-    section.appendChild(group);
+    function titleContent(tier, shown) {
+      return el('span', { class: 'brix-packs-content' }, [
+        el('span', { class: 'brix-packs-title' }, [tier.name || 'Buy ' + tier.quantity, tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null]),
+        el('span', { class: 'brix-packs-meta', text: metaFor(tier, shown) }),
+      ]);
+    }
 
-    if (layout === 'chips') {
-      var active = pack.tiers[state.tierIndex];
-      if (active) {
-        var activeShown = displayedTier(pack, active, state.tierIndex);
-        section.appendChild(el('div', { class: 'brix-packs-summary', 'aria-live': 'polite' }, [
-          imageEl(),
-          el('span', { class: 'brix-packs-content' }, [
-            el('span', { class: 'brix-packs-title' }, [active.name || 'Buy ' + active.quantity, active.badge ? el('span', { class: 'brix-packs-badge', text: active.badge }) : null]),
-            el('span', { class: 'brix-packs-meta', text: metaFor(active, activeShown) }),
-          ]),
-          priceEl(activeShown, saveTextFor(activeShown)),
+    if (layout === 'tabs') {
+      // Design 1: packs side by side; one dropdown per item underneath.
+      var tabs = el('div', { class: 'brix-packs-tabs', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack' });
+      pack.tiers.forEach(function (tier, index) {
+        var tabShown = displayedTier(pack, tier, index);
+        tabs.appendChild(el('button', tierButtonProps(index, tierDisabled(pack, tier), index === state.tierIndex, 'brix-packs-tab'), [
+          tier.badge ? el('span', { class: 'brix-packs-badge', text: tier.badge }) : null,
+          el('span', { class: 'brix-packs-tab-label', text: tier.name || 'Buy ' + tier.quantity }),
+          money.hidden ? null : el('span', { class: 'brix-packs-tab-price', text: money.format(tabShown.price) }),
+        ]));
+      });
+      section.appendChild(tabs);
+      var current = pack.tiers[state.tierIndex];
+      if (current) {
+        var currentShown = displayedTier(pack, current, state.tierIndex);
+        section.appendChild(el('div', { class: 'brix-packs-panel', 'aria-live': 'polite' }, [
+          renderItemSelects(pack, current),
+          el('div', { class: 'brix-packs-panel-head' }, [imageEl(), titleContent(current, currentShown), priceEl(currentShown, saveTextFor(currentShown))]),
         ]));
       }
-      if (pack.packType === 'mix_match' && pack.variants) section.appendChild(renderChoosers(pack));
+    } else {
+      // Designs 2 and 3: packs as rows. The chosen row opens underneath —
+      // Stacked shows the variant photo per item, Visual one photo dropdown per item.
+      var stack = el('div', { class: 'brix-packs-stack', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack' });
+      pack.tiers.forEach(function (tier, index) {
+        var rowShown = displayedTier(pack, tier, index);
+        var isSelected = index === state.tierIndex;
+        var item = el('div', { class: 'brix-packs-stack-item', 'data-selected': isSelected ? '1' : null }, [
+          el('button', tierButtonProps(index, tierDisabled(pack, tier), isSelected, 'brix-packs-tier'), [
+            el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
+            layout === 'stacked' ? null : imageEl(),
+            titleContent(tier, rowShown),
+            priceEl(rowShown, saveTextFor(rowShown)),
+          ]),
+        ]);
+        if (isSelected) {
+          var opened = layout === 'visual' ? renderImageDropdowns(pack, tier) : renderTiles(pack, tier);
+          if (opened) item.appendChild(el('div', { class: 'brix-packs-expand' }, [opened]));
+        }
+        stack.appendChild(item);
+      });
+      section.appendChild(stack);
     }
 
     if (content.promoText) section.appendChild(el('p', { class: 'brix-packs-promo', text: content.promoText }));
     if (state.message) section.appendChild(el('div', { class: 'brix-packs-msg', role: 'alert', 'data-type': state.message.type, text: state.message.text }));
 
     var selectedTier = pack.tiers[state.tierIndex];
-    var addDisabled = state.busy || !selectedTier || tierDisabled(pack, selectedTier);
-    section.appendChild(el('button', { type: 'button', class: 'brix-packs-add', disabled: addDisabled, onclick: addToCart, text: state.busy ? 'Adding\u2026' : (pack.available ? (content.cta || 'Add Pack to Cart') : 'Sold out') }));
+    var addDisabled = Boolean(state.busy) || !selectedTier || tierDisabled(pack, selectedTier);
+    var addButton = el('button', { type: 'button', class: 'brix-packs-add', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? 'Adding\u2026' : (pack.available ? (content.cta || 'Add Pack to Cart') : 'Sold out') });
+    if (buyNowOn(pack) && pack.available) {
+      section.appendChild(el('div', { class: 'brix-packs-actions' }, [
+        addButton,
+        el('button', { type: 'button', class: 'brix-packs-buy', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? 'Going to checkout\u2026' : (content.buyNow || 'Buy Now') }),
+      ]));
+    } else {
+      section.appendChild(addButton);
+    }
     root.appendChild(section);
+    // Keep keyboard focus on the open Visual picker list after re-rendering.
+    if (state.openPicker !== null) {
+      var option = root.querySelector('.brix-packs-dd[data-key="' + state.openPicker + '"] [aria-selected="true"]') || root.querySelector('.brix-packs-dd[data-key="' + state.openPicker + '"] [role="option"]');
+      if (option) option.focus();
+    }
   }
 
-  function renderChoosers(pack) {
-    var tier = pack.tiers[state.tierIndex];
-    var wrap = el('div', { class: 'brix-packs-choose' });
-    if (!tier) return wrap;
+  function variantImage(pack, variant) {
+    return (variant && variant.image) || pack.productImage || '';
+  }
+
+  function optionText(variant) {
+    return variant.title + (money.hidden ? '' : ' \u2014 ' + money.format(variant.price));
+  }
+
+  function nativeSelect(label, value, options, onchange) {
+    return el('select', { 'aria-label': label, onchange: onchange }, options.map(function (variant) {
+      return el('option', { value: variant.id, selected: variant.id === value, text: optionText(variant) });
+    }));
+  }
+
+  function chooseItem(slot) {
+    return function (event) { state.chosen[slot] = event.target.value; state.message = null; render(); };
+  }
+
+  function pickSameVariant(event) {
+    state.pickVariant = event.target.value;
+    state.message = null;
+    render();
+  }
+
+  // Design 1 (Pack tabs): one plain dropdown per item, stacked vertically.
+  function renderItemSelects(pack, tier) {
+    var sellable = sellableOf(pack);
+    if (!sellable.length) return null;
+    if (!perItem(pack)) return null;
     ensureChosen(pack, tier.quantity);
-    wrap.appendChild(el('p', { class: 'brix-packs-choose-hint', text: 'Choose a variant for each item in this pack.' }));
-    var items = el('div', { class: 'brix-packs-choose-items' });
-    var sellable = pack.variants.filter(function (variant) { return variant.availableForSale; });
+    var list = el('div', { class: 'brix-packs-selects' });
     for (var i = 0; i < tier.quantity; i += 1) {
-      (function (slot) {
-        var select = el('select', { id: 'brix-packs-item-' + slot, 'aria-label': 'Item ' + (slot + 1) + ' variant', onchange: function (event) { state.chosen[slot] = event.target.value; state.message = null; render(); } },
-          sellable.map(function (variant) {
-            return el('option', { value: variant.id, selected: variant.id === state.chosen[slot], text: variant.title + (money.hidden ? '' : ' \u2014 ' + money.format(variant.price)) });
-          }));
-        items.appendChild(el('label', { for: 'brix-packs-item-' + slot }, [el('span', { text: 'Item ' + (slot + 1) }), select]));
-      })(i);
+      list.appendChild(el('label', { class: 'brix-packs-select-row' }, [el('span', { text: 'Item ' + (i + 1) }), nativeSelect('Item ' + (i + 1) + ' variant', state.chosen[i], sellable, chooseItem(i))]));
     }
-    wrap.appendChild(items);
+    return list;
+  }
+
+  // A single-variant product's only variant is called "Default Title" by Shopify.
+  function tileName(pack, variant) {
+    var title = variant ? variant.title : pack.variantTitle;
+    return !title || title === 'Default Title' ? (pack.productTitle || '') : title;
+  }
+
+  // Design 2 (Stacked packs): the variant's photo once per item. A product
+  // with several variants gets one dropdown above that switches them all;
+  // Mix & Match gets a small dropdown under each photo instead.
+  function renderTiles(pack, tier) {
+    var sellable = sellableOf(pack);
+    var each = perItem(pack);
+    if (each) ensureChosen(pack, tier.quantity);
+    var wrap = el('div', { class: 'brix-packs-tiles-wrap' });
+    if (!each && sellable.length > 1) {
+      var current = packVariantId(pack);
+      if (!sellable.some(function (variant) { return variant.id === current; })) current = sellable[0].id;
+      wrap.appendChild(el('label', { class: 'brix-packs-select-row' }, [el('span', { text: tier.quantity > 1 ? 'Variant (all ' + tier.quantity + ' items)' : 'Variant' }), nativeSelect('Variant', current, sellable, pickSameVariant)]));
+    }
+    var tiles = el('div', { class: 'brix-packs-tiles' });
+    for (var i = 0; i < tier.quantity; i += 1) {
+      var id = each ? state.chosen[i] : packVariantId(pack);
+      var variant = variantOf(pack, id);
+      var image = variantImage(pack, variant);
+      tiles.appendChild(el('div', { class: 'brix-packs-tile' }, [
+        image ? el('img', { src: image, alt: variant ? variant.title : (pack.variantTitle || ''), loading: 'lazy' }) : null,
+        el('span', { class: 'brix-packs-tile-name', text: tileName(pack, variant) }),
+        each ? nativeSelect('Item ' + (i + 1) + ' variant', id, sellable, chooseItem(i)) : null,
+      ]));
+    }
+    wrap.appendChild(tiles);
     return wrap;
+  }
+
+  // Design 3 (Visual picker): one dropdown per item whose closed box AND every
+  // option show the variant photo. A single-variant product has nothing to
+  // choose, so it shows the photos like Stacked packs.
+  function renderImageDropdowns(pack, tier) {
+    var sellable = sellableOf(pack);
+    if (!sellable.length || (!perItem(pack) && sellable.length < 2)) return renderTiles(pack, tier);
+    var list = el('div', { class: 'brix-packs-dds' });
+    if (perItem(pack)) {
+      ensureChosen(pack, tier.quantity);
+      for (var i = 0; i < tier.quantity; i += 1) {
+        (function (slot) {
+          list.appendChild(imageDropdown(pack, 'item-' + slot, 'Item ' + (slot + 1), state.chosen[slot], sellable, function (id) { state.chosen[slot] = id; }));
+        })(i);
+      }
+    } else {
+      list.appendChild(imageDropdown(pack, 'all', tier.quantity > 1 ? 'Variant (all ' + tier.quantity + ' items)' : 'Variant', packVariantId(pack), sellable, function (id) { state.pickVariant = id; }));
+    }
+    return list;
+  }
+
+  function imageDropdown(pack, key, label, value, options, onpick) {
+    var chosen = variantOf(pack, value);
+    if (!chosen || !options.some(function (variant) { return variant.id === chosen.id; })) chosen = options[0];
+    var open = state.openPicker === key;
+    function pick(id) { onpick(id); state.openPicker = null; state.message = null; render(); focusTrigger(key); }
+    function close() { state.openPicker = null; render(); focusTrigger(key); }
+    function photo(variant) {
+      var image = variantImage(pack, variant);
+      return image ? el('img', { src: image, alt: '', loading: 'lazy' }) : el('span', { class: 'brix-packs-dd-noimg', 'aria-hidden': 'true' });
+    }
+    var trigger = el('button', {
+      type: 'button', class: 'brix-packs-dd-trigger', 'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false', 'aria-label': label + ': ' + chosen.title,
+      onclick: function (event) { event.stopPropagation(); state.openPicker = open ? null : key; render(); },
+      onkeydown: function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); state.openPicker = key; render(); } },
+    }, [
+      photo(chosen),
+      el('span', { class: 'brix-packs-dd-text' }, [el('span', { class: 'brix-packs-dd-label', text: label }), el('span', { class: 'brix-packs-dd-value', text: chosen.title })]),
+      money.hidden ? null : el('span', { class: 'brix-packs-dd-price', text: money.format(chosen.price) }),
+      el('span', { class: 'brix-packs-dd-caret', 'aria-hidden': 'true', text: '\u25BE' }),
+    ]);
+    var children = [trigger];
+    if (open) {
+      children.push(el('ul', { class: 'brix-packs-dd-list', role: 'listbox', 'aria-label': label }, options.map(function (variant, index) {
+        return el('li', {
+          role: 'option', class: 'brix-packs-dd-option', tabindex: '-1', 'data-index': index, 'aria-selected': variant.id === chosen.id ? 'true' : 'false',
+          onclick: function (event) { event.stopPropagation(); pick(variant.id); },
+          onkeydown: function (event) {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(variant.id); return; }
+            if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+            if (event.key === 'Tab') { state.openPicker = null; render(); return; }
+            var step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+            if (!step) return;
+            event.preventDefault();
+            var next = event.currentTarget.parentNode.children[(index + step + options.length) % options.length];
+            if (next) next.focus();
+          },
+        }, [photo(variant), el('span', { class: 'brix-packs-dd-value', text: variant.title }), money.hidden ? null : el('span', { class: 'brix-packs-dd-price', text: money.format(variant.price) })]);
+      })));
+    }
+    return el('div', { class: 'brix-packs-dd', 'data-key': key }, children);
+  }
+
+  function focusTrigger(key) {
+    var trigger = root.querySelector('.brix-packs-dd[data-key="' + key + '"] .brix-packs-dd-trigger');
+    if (trigger) trigger.focus();
   }
 
   function selectTier(index) {
@@ -604,11 +763,11 @@
   function buildItems(pack, tier) {
     var group = token();
     var properties = { _brix_pack_id: String(pack.id), _brix_pack_quantity: String(tier.quantity), _brix_pack_version: String(pack.version), _brix_pack_group: group };
-    if (pack.packType !== 'mix_match') {
-      // The real variant to add is whichever one the shopper currently has
-      // selected on the product page — it may be any of the Pack's allowed
+    if (!perItem(pack)) {
+      // Every item is the same variant: the one picked in the Pack, else the
+      // one selected on the product page — any of the Pack's allowed
       // variants, not necessarily the anchor pack.variantId.
-      var variantId = lastVariant || numericId(pack.variantId);
+      var variantId = packVariantId(pack);
       return [{ id: Number(variantId), quantity: tier.quantity, properties: properties }];
     }
     ensureChosen(pack, tier.quantity);
@@ -624,11 +783,16 @@
     return 'Could not add the pack to your cart. Please try again.';
   }
 
-  function addToCart() {
+  function checkoutUrl() {
+    return ((window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/') + 'checkout';
+  }
+
+  // buyNow: add the Pack, then go straight to checkout (like the theme's Buy it now).
+  function addToCart(buyNow) {
     var pack = state.pack;
     var tier = pack && pack.tiers[state.tierIndex];
     if (!tier || state.busy) return;
-    state.busy = true;
+    state.busy = buyNow ? 'buy' : 'add';
     state.message = null;
     render();
     var items = buildItems(pack, tier);
@@ -640,44 +804,129 @@
         });
       })
       .then(function (body) {
-        state.message = { type: 'success', text: 'Added to your cart.' };
-        var detail = { packId: pack.id, quantity: tier.quantity, items: body && body.items };
+        var detail = { packId: pack.id, quantity: tier.quantity, items: body && body.items, buyNow: Boolean(buyNow) };
         document.dispatchEvent(new CustomEvent('brix:packs:added', { detail: detail }));
+        if (buyNow) { state.redirecting = true; window.location.assign(checkoutUrl()); return; }
+        state.message = { type: 'success', text: 'Added to your cart.' };
         notifyCartUpdated(detail);
       })
       .catch(function (error) {
         state.message = { type: 'error', text: error && error.message && error.message.indexOf('Failed to fetch') < 0 ? error.message : 'Could not reach the cart. Check your connection and try again.' };
       })
-      .then(function () { state.busy = false; render(); });
+      .then(function () { if (state.redirecting) return; state.busy = false; render(); });
   }
 
   // ── boot ───────────────────────────────────────────────────────────────────
 
-  function place() {
-    var form = document.querySelector('form[action*="/cart/add"]');
-    if (form && form.parentNode && root.nextElementSibling !== form) form.parentNode.insertBefore(root, form);
+  // The theme's real product form. Themes like Dawn also render a hidden
+  // "installment" form posting to /cart/add right under the price, so the first
+  // match isn't safe: prefer a form with its own submit button.
+  function productForm() {
+    var forms = Array.prototype.slice.call(document.querySelectorAll('form[action*="/cart/add"]'));
+    var real = forms.filter(function (form) {
+      return !/installment/i.test((form.getAttribute('id') || '') + ' ' + (form.getAttribute('class') || '')) && form.querySelector('[name="add"], [type="submit"]');
+    });
+    return real[0] || forms[0] || null;
   }
 
-  // While a Pack is shown for the selected variant the Pack decides the quantity,
-  // so the theme's own quantity selector is hidden (and restored when it is not).
-  function setThemeQuantityHidden(hidden) {
-    var form = document.querySelector('form[action*="/cart/add"]');
+  // 'below_price' (default) or 'custom'. Packs saved with the removed
+  // "next to the buy buttons" choices show below the price.
+  function placementOf(pack) {
+    var position = pack && pack.customization && pack.customization.placement && pack.customization.placement.position;
+    return position === 'custom' ? 'custom' : 'below_price';
+  }
+
+  // Common theme price blocks, most specific first (Dawn wraps its price in
+  // #price-<section id>).
+  var PRICE_SELECTORS = ['[id^="price-template"]', '[id^="ProductPrice"]', '.product__price', '.product-single__price', '.product-price', '.product__info-price', '.price__container', '[data-product-price]', '.price'];
+
+  // The product's price block: searched from the product form outwards, so a
+  // price in a recommendations section elsewhere on the page is never picked.
+  // Returns the block's top-level element within the nearest container that
+  // holds both the price and the product form, or null.
+  function priceAnchor() {
+    var form = productForm();
+    if (!form) return null;
+    var container = form.parentElement;
+    for (var depth = 0; container && depth < 8; depth += 1) {
+      for (var i = 0; i < PRICE_SELECTORS.length; i += 1) {
+        var matches = container.querySelectorAll(PRICE_SELECTORS[i]);
+        for (var m = 0; m < matches.length; m += 1) {
+          var price = matches[m];
+          if (form.contains(price) || root.contains(price) || price.contains(form)) continue;
+          var block = price;
+          while (block.parentElement && block.parentElement !== container) block = block.parentElement;
+          return block;
+        }
+      }
+      container = container.parentElement;
+    }
+    return null;
+  }
+
+  // below_price: right after the product price. custom: inside the "BRIX Packs
+  // position" app block. When neither is found, above the buy buttons.
+  function place(pack) {
+    if (root.getAttribute('style')) root.removeAttribute('style'); // the embed's pre-placement spacing
+    var slot = placementOf(pack) === 'custom' && document.querySelector('[data-brix-packs-slot]');
+    if (slot) { if (root.parentNode !== slot) slot.appendChild(root); return; }
+    var price = priceAnchor();
+    if (price && price.parentNode) {
+      if (price.nextElementSibling !== root) price.parentNode.insertBefore(root, price.nextSibling);
+      return;
+    }
+    var form = productForm();
+    var anchor = form && (form.closest('product-form') || form);
+    if (anchor && anchor.parentNode && root.nextElementSibling !== anchor) anchor.parentNode.insertBefore(root, anchor);
+  }
+
+  function setHidden(node, hidden) {
+    if (hidden) { node.setAttribute('data-brix-packs-hidden', '1'); node.style.display = 'none'; }
+    else if (node.getAttribute('data-brix-packs-hidden')) { node.removeAttribute('data-brix-packs-hidden'); node.style.display = ''; }
+  }
+
+  // While a Pack is shown for the selected variant, the Pack's own button adds
+  // it to the cart with the Pack's quantity, so the theme's quantity selector
+  // and Add to cart button are hidden (and restored when no Pack applies).
+  // Buy it now (dynamic checkout) is left alone.
+  function buyNowOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return Boolean(pack) && content.showBuyNow !== false;
+  }
+
+  function setThemeControlsHidden(hidden, hidePayment) {
+    var form = productForm();
     if (!form) return;
+    // getAttribute, not form.id: the form contains <input name="id">, which
+    // shadows the form's `id` property.
+    var formId = form.getAttribute('id');
     var inputs = Array.prototype.slice.call(form.querySelectorAll('input[name="quantity"]'));
-    if (form.id) inputs = inputs.concat(Array.prototype.slice.call(document.querySelectorAll('input[name="quantity"][form="' + form.id + '"]')));
+    if (formId) inputs = inputs.concat(Array.prototype.slice.call(document.querySelectorAll('input[name="quantity"][form="' + formId + '"]')));
     inputs.forEach(function (input) {
       var box = input.closest('quantity-input, .quantity, .product-form__quantity, .product-form__input--quantity') || input.parentElement;
       if (!box) return;
-      var wrapper = box.closest('.product-form__input') || box;
-      if (hidden) { wrapper.setAttribute('data-brix-packs-hidden', '1'); wrapper.style.display = 'none'; }
-      else if (wrapper.getAttribute('data-brix-packs-hidden')) { wrapper.removeAttribute('data-brix-packs-hidden'); wrapper.style.display = ''; }
+      setHidden(box.closest('.product-form__input') || box, hidden);
+    });
+    var buttons = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
+    if (formId) buttons = buttons.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    buttons.forEach(function (button) {
+      if (button.closest('.shopify-payment-button, [data-shopify="payment-button"]') || root.contains(button)) return;
+      setHidden(button, hidden);
+    });
+    // The theme's Buy it now (dynamic checkout) goes too when the Pack has its
+    // own Buy Now, so there's one clear way to buy the Pack.
+    Array.prototype.forEach.call(form.querySelectorAll('.shopify-payment-button, [data-shopify="payment-button"]'), function (node) {
+      if (!root.contains(node)) setHidden(node, hidden && Boolean(hidePayment));
     });
   }
 
   function showFor(variantId) {
     var next = packForVariant(state.data.packs, variantId);
-    setThemeQuantityHidden(Boolean(next));
-    if (next === state.pack) return;
+    setThemeControlsHidden(Boolean(next), buyNowOn(next));
+    if (next) place(next);
+    // A new theme variant takes over from the Pack's own picker.
+    state.pickVariant = null;
+    if (next === state.pack) { render(); return; }
     state.pack = next;
     state.tierIndex = 0;
     state.chosen = [];
@@ -698,6 +947,10 @@
     }
     if (window.console && console.warn) console.warn('[BRIX Packs] ' + message);
   }
+
+  document.addEventListener('click', function () {
+    if (state.openPicker !== null) { state.openPicker = null; render(); }
+  });
 
   if (!shop || !productId || !endpoint) { fail('missing shop, product or API address.'); return; }
 
@@ -720,13 +973,15 @@
       injectStyle();
       money = makeMoney(data.currency);
       state.data = data;
-      place();
       lastVariant = currentVariantId();
       showFor(lastVariant);
       setInterval(function () {
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
-        else setThemeQuantityHidden(Boolean(state.pack)); // a theme re-render can bring the selector back
+        else {
+          setThemeControlsHidden(Boolean(state.pack), buyNowOn(state.pack)); // a theme re-render can bring them back
+          if (state.pack && !root.isConnected) { place(state.pack); } // a theme re-render replaced the block the Pack sat in
+        }
       }, 700);
     })
     .catch(function () { fail('could not reach the Packs service.'); });

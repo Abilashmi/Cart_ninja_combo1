@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   toNumericId, toGid, sameShopifyId, calculateTier, calculateTierFromPrices, normalizeTiers, validateTiers,
   sanitizeCustomization, mergeCustomization, defaultCustomization, currencyDecimals,
-  normalizeVariantIds, validateVariantCoverage,
+  normalizeVariantIds, validateVariantCoverage, PACK_DESIGNS,
 } from '../../app/utils/packs.shared.js';
 
 test('Shopify id helpers match exactly, never by suffix', () => {
@@ -147,4 +147,33 @@ test('sanitizeCustomization validates and drops unknown fields', () => {
   const bad = sanitizeCustomization({ colors: { primary: 'red; background:url(x)' }, borders: { radius: 999 }, content: { heading: 5 }, spacing: 'no' });
   assert.equal(bad.errors.length, 4);
   assert.equal(sanitizeCustomization('nope').errors.length, 1);
+});
+
+test('only the three current layouts are offered; removed ones map to the closest current layout', () => {
+  assert.deepEqual(PACK_DESIGNS.map((design) => design.id), ['tabs', 'stacked', 'visual']);
+  assert.equal(defaultCustomization().design.preset, 'stacked');
+  for (const [old, next] of [['classic', 'stacked'], ['highlight', 'tabs'], ['premium', 'tabs']]) {
+    const result = sanitizeCustomization({ design: { preset: old } });
+    assert.deepEqual(result.errors, [], `${old} is not rejected`);
+    assert.equal(mergeCustomization(result.value).design.preset, next);
+  }
+  assert.ok(sanitizeCustomization({ design: { preset: 'bogus' } }).errors.length > 0);
+});
+
+test('Buy Now is on by default and its label is validated', () => {
+  assert.equal(defaultCustomization().content.showBuyNow, true);
+  assert.equal(defaultCustomization().content.buyNow, 'Buy Now');
+  assert.deepEqual(sanitizeCustomization({ content: { showBuyNow: false, buyNow: 'Buy it now' } }).value.content, { showBuyNow: false, buyNow: 'Buy it now' });
+  assert.ok(sanitizeCustomization({ content: { buyNow: 'x'.repeat(41) } }).errors.length > 0);
+});
+
+test('placement is below the price or custom; old buy-button placements become below the price', () => {
+  assert.equal(defaultCustomization().placement.position, 'below_price');
+  for (const old of ['above_buttons', 'below_buttons']) {
+    const result = sanitizeCustomization({ placement: { position: old } });
+    assert.deepEqual(result.errors, []);
+    assert.equal(mergeCustomization(result.value).placement.position, 'below_price');
+  }
+  assert.equal(sanitizeCustomization({ placement: { position: 'custom' } }).value.placement.position, 'custom');
+  assert.ok(sanitizeCustomization({ placement: { position: 'sidebar' } }).errors.length > 0);
 });

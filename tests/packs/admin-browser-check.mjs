@@ -102,6 +102,28 @@ await check('routing: list -> Create Pack opens the builder (not the list); /new
   await context.close();
 });
 
+await check('list: View opens the product page on the live store in a new tab; inactive Packs cannot be viewed', async () => {
+  const packs = [
+    pack({ id: 11, status: 'active', displayStatus: 'active', productTitle: 'Tee', productHandle: 'tee', variantId: '200', variantScope: 'selected' }),
+    pack({ id: 12, status: 'active', displayStatus: 'active', productTitle: 'Snowboard', productHandle: 'the-complete-snowboard', variantScope: 'all' }),
+    pack({ id: 13, status: 'inactive', displayStatus: 'inactive', productTitle: 'Mug', productHandle: 'mug' }),
+  ];
+  const verified = { verified: true, state: 'active', message: 'ok' };
+  const { page, context } = await open({ start: '/app/packs', data: { list: { packs, planState: 'enabled', currency, checkoutDiscount: verified, shop: SHOP, loadError: null } } });
+  const view = (title) => page.getByRole('link', { name: `View ${title} on your store` });
+  await view('Tee').waitFor();
+  assert.equal(await view('Tee').getAttribute('href'), `https://${SHOP}/products/tee?variant=200`);
+  assert.equal(await view('Tee').getAttribute('target'), '_blank');
+  assert.equal(await view('Snowboard').getAttribute('href'), `https://${SHOP}/products/the-complete-snowboard`);
+  assert.equal(await page.getByRole('button', { name: 'View Mug on your store' }).isDisabled(), true);
+  await context.close();
+
+  const unverified = await open({ start: '/app/packs', data: { list: { packs: packs.slice(0, 1), planState: 'enabled', currency, checkoutDiscount: { verified: false, state: 'discount_missing', message: 'x' }, shop: SHOP, loadError: null } } });
+  await unverified.page.getByRole('link', { name: 'View Tee on your store' }).waitFor();
+  assert.equal(await unverified.page.getByRole('link', { name: 'View Tee on your store' }).getAttribute('href'), `https://${SHOP}/products/tee?variant=200&brix_packs_preview=1`);
+  await unverified.context.close();
+});
+
 await check('list: rows show product, variant, offer summary, status, updated; filters; Enable is gated by plan; actions link to the right pack', async () => {
   const packs = [
     pack({ id: 1, productTitle: 'Tee', variantTitle: 'M', status: 'active', displayStatus: 'active', enabled: true }),

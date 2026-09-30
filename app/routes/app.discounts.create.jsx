@@ -750,6 +750,9 @@ export default function CreateDiscount() {
     const [searchParams] = useSearchParams();
     const discountIdFromQuery = searchParams.get("discountId");
     const codeFromQuery       = searchParams.get("code");
+    // Create-mode prefill (e.g. Coupon Banner → "Create this coupon in BRIX").
+    // Separate from `code`, which opens an EXISTING coupon for editing.
+    const prefillCode         = (searchParams.get("prefillCode") || "").trim().slice(0, 255);
     const navigation  = useNavigation();
     const submit      = useSubmit();
     const shopify     = useAppBridge();
@@ -834,7 +837,7 @@ export default function CreateDiscount() {
 
     /* ── Form State ── */
     const [title, setTitle] = useState(existingCoupon?.title || existingCoupon?.heading || "");
-    const [code,  setCode]  = useState(existingCoupon?.code  || "");
+    const [code,  setCode]  = useState(existingCoupon?.code  || (isEditMode ? "" : prefillCode));
     const [type,  setType]  = useState([existingCoupon?.type || "amount_off_products"]);
     const [method, setMethod] = useState([existingCoupon?.method || "code"]);
     const [value, setValue] = useState(existingCoupon?.value !== undefined ? String(existingCoupon.value) : "");

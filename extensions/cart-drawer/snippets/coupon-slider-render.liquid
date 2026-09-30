@@ -331,7 +331,9 @@ function renderSlider(el,data,ctx){
     /* couponCode: item.code (selectedTemplateCoupon) -> ov.couponCode (temp*CouponStyle) -> fallback */
     var ovCode=(ov.couponCode&&!/^\d+$/.test(ov.couponCode))?ov.couponCode:null;
     var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
-    var code=storedCode||ovCode||sCode||nid.split('/').pop();
+    /* custom:<code> = a code added via "+ Custom Coupon" (created outside BRIX); the id carries the code itself */
+    var customCode=nid.indexOf('custom:')===0?nid.slice(7):null;
+    var code=storedCode||ovCode||sCode||customCode||nid.split('/').pop();
 
     /* headingText: item.h -> ov.headingText (per-coupon) -> template default */
     var h=storedH!==null?storedH:(ov.headingText!==undefined?ov.headingText:(s.headingText||code));

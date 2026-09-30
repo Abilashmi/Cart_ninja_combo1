@@ -4,5 +4,5 @@ import { previewEnabled, renderStorefrontFrame } from '../services/packs-preview
 export async function loader({ request }) {
   if (!previewEnabled()) return new Response('Not found', { status: 404 });
   const params = new URL(request.url).searchParams;
-  return new Response(renderStorefrontFrame({ design: params.get('design') || 'classic', type: params.get('type') === 'mix' ? 'mix' : 'standard' }), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(renderStorefrontFrame({ design: params.get('design') || 'stacked', type: params.get('type') === 'mix' ? 'mix' : 'standard' }), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }

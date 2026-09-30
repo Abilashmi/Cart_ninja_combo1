@@ -239,7 +239,7 @@ function fillProgressMessageTemplate(template, { amountStr, itemsStr, targetStr 
 }
 
 function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
-  const { symbol: currencySymbol } = useCurrency();
+  const { symbol: currencySymbol, formatMoney } = useCurrency();
   const isCount = pb.mode === 'count';
   // A tier with no (or zero/negative) minimum spend can't be placed on the
   // track — it would divide-by-zero the fill % and stack every marker at
@@ -334,6 +334,8 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   // 0.4 must never display as "0 left" while the tier genuinely isn't
   // reached yet.
   const remaining = nextTier ? Math.max(1, Math.ceil(nextTier.minimumSpend - currentValue)) : 0;
+  // Money left to spend is shown exactly (e.g. $4.10), like the storefront drawer.
+  const remainingSpend = nextTier ? Math.max(0, nextTier.minimumSpend - currentValue) : 0;
   const nextTierLabel = nextTier ? (nextTier.title || nextTier.description || 'your next reward') : '';
   // {amount}/{items}/{target} — {amount} and {items} both resolve to the
   // same remaining value (currency-formatted vs. a bare number respectively;
@@ -344,9 +346,9 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   const progressMessageText = nextTier ? fillProgressMessageTemplate(
     nextTier.progressMessage || `You're {amount} away from unlocking ${nextTierLabel}!`,
     {
-      amountStr: isCount ? String(remaining) : `${currencySymbol}${remaining}`,
+      amountStr: isCount ? String(remaining) : formatMoney(remainingSpend),
       itemsStr: String(remaining),
-      targetStr: isCount ? String(nextTier.minimumSpend) : `${currencySymbol}${nextTier.minimumSpend}`,
+      targetStr: isCount ? String(nextTier.minimumSpend) : formatMoney(nextTier.minimumSpend),
     }
   ) : '';
   const radius = pb.borderRadius;
@@ -408,7 +410,7 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
                   // pill — the title/description label below is unaffected.
                   !pb.hideMilestoneAmount && (
                     <div style={{ fontSize: '9px', color: '#374151', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '5px', padding: '2px 6px', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {isCount ? `${tier.minimumSpend}` : `${currencySymbol}${tier.minimumSpend}`}
+                      {isCount ? `${tier.minimumSpend}` : formatMoney(tier.minimumSpend)}
                     </div>
                   )
                 )}
@@ -551,7 +553,8 @@ function UpsellReviewStars({ productId }) {
   );
 }
 
-function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currencySymbol, lockBadge, onAdd }) {
+function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadge, onAdd }) {
+  const { formatMoney } = useCurrency();
   const addProduct = (product) => (e) => { e.stopPropagation(); onAdd?.(product); };
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
@@ -564,7 +567,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
   const products = (resolved.length ? resolved : allProducts).slice(0, Math.max(1, count));
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
-  const formatPrice = (p) => `${currencySymbol}${Number(p || 0).toFixed(0)}`;
+  const formatPrice = (p) => formatMoney(Number(p || 0));
 
   return (
     <div className="cart-preview-upsell-section">
@@ -618,7 +621,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, currency
 
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
-  const { symbol: currencySymbol } = useCurrency();
+  const { symbol: currencySymbol, formatMoney } = useCurrency();
 
   const designTheme = settings.design?.theme;
   const isDarkTheme = designTheme === "dark";
@@ -878,7 +881,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 12, fontWeight: 500 }}>{product.title}</div>
-                            <div style={{ fontSize: 11, color: '#6d7175' }}>{currencySymbol}{Number(product.price || 0).toFixed(0)}</div>
+                            <div style={{ fontSize: 11, color: '#6d7175' }}>{formatMoney(Number(product.price || 0))}</div>
                           </div>
                           <button onClick={(e) => { e.stopPropagation(); addToPreviewCart(product); }} style={{ padding: '5px 12px', borderRadius: 5, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>Add</button>
                         </div>
@@ -908,18 +911,18 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       {/* Subtotal */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                         <span style={{ fontSize: 12, color: '#6d7175' }}>Subtotal</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{currencySymbol}{subtotal.toFixed(0)}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(subtotal)}</span>
                       </div>
                       {rewards.some((r) => r.pricing === 'free' && r.product) && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                           <span style={{ fontSize: 12, color: '#047857', fontWeight: 600 }}>Free gift savings</span>
-                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 700 }}>{currencySymbol}{rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0).toFixed(0)} saved</span>
+                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 700 }}>{formatMoney(rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0))} saved</span>
                         </div>
                       )}
                       {/* Total */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
-                        <span style={{ fontSize: 14, fontWeight: 700 }}>{currencySymbol}{subtotal.toFixed(0)}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>{formatMoney(subtotal)}</span>
                       </div>
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (

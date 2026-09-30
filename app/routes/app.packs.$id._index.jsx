@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLoaderData, useLocation, useNavigate, useFetcher } from 'react-router';
+import { useAppBridge } from '@shopify/app-bridge-react';
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Badge, Banner, Divider, Modal, Thumbnail, InlineGrid } from '@shopify/polaris';
 import { packsRouteContext, throwPackResponse } from '../services/packs-loader.server';
 import { getPack, listActivePacks } from '../services/packs.server';
@@ -35,6 +36,12 @@ export default function PackDetail() {
   const isActive = pack.status === 'active';
   const canPublish = planState === 'enabled';
   const justSaved = location.state?.saved ? location.state : null;
+  const shopify = useAppBridge();
+
+  // One toast per save (location.key changes on each navigation here).
+  useEffect(() => {
+    if (justSaved) shopify.toast.show('Pack saved');
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navigate away ONLY after the server confirmed the delete.
   useEffect(() => {
@@ -64,15 +71,15 @@ export default function PackDetail() {
       ]}
     >
       <BlockStack gap="400">
-        {justSaved && <Banner tone="success" title="Pack saved"><p>{isActive ? 'Your changes are live once the checkout discount below is active.' : 'Your Pack is saved.'}</p></Banner>}
         {statusError && <Banner tone="critical" title="Couldn’t update this Pack"><p>{statusError}</p></Banner>}
         {statusResult?.success && !statusError && <Banner tone="success"><p>{statusResult.pack.status === 'active' ? 'Pack enabled.' : 'Pack disabled.'}</p></Banner>}
         {syncWarning && <Banner tone="warning" title="Checkout discount needs attention"><p>{syncWarning}</p></Banner>}
         {!canPublish && <Banner tone="info" title="Preview mode"><p>Your plan lets you build and preview Packs. Enabling them on your storefront requires Starter or Pro.</p></Banner>}
         {pack.issue && <Banner tone="critical" title="Configuration error"><p>{pack.issue}</p></Banner>}
-        {isActive && liveDiscount && (
-          <Banner tone={liveDiscount.verified ? 'success' : 'warning'} title={liveDiscount.verified ? 'Checkout discount is active' : 'Checkout discount isn’t active yet'}>
-            <p>{liveDiscount.verified ? 'Shoppers see this Pack and its savings are applied at checkout.' : `${liveDiscount.message} Shoppers won’t see this Pack until the discount is verified.`}</p>
+        {/* Only a problem is shown; an active discount needs no banner. */}
+        {isActive && liveDiscount && !liveDiscount.verified && (
+          <Banner tone="warning" title="Checkout discount isn’t active yet">
+            <p>{`${liveDiscount.message} Shoppers won’t see this Pack until the discount is verified.`}</p>
           </Banner>
         )}
         <Layout>
@@ -127,7 +134,7 @@ export default function PackDetail() {
               <BlockStack gap="300">
                 <Text as="h3" variant="headingSm">Storefront preview</Text>
                 <div style={{ maxWidth: 640 }}>
-                  <PackPreview template={pack.template} packType={pack.packType} variants={pack.variants} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} formatMoney={fmt} />
+                  <PackPreview template={pack.template} packType={pack.packType} variants={pack.variants} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} productTitle={pack.productTitle} formatMoney={fmt} />
                 </div>
               </BlockStack>
             </Card>
