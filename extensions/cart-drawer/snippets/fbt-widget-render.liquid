@@ -274,6 +274,52 @@
     return variantByProductId;
   }
 
+  // Never suggest a product that's fully out of stock — a saved FBT rule's
+  // products are a point-in-time snapshot and stock changes far more often
+  // than a merchant edits a rule, so this always re-checks live. Only
+  // excludes a product when the live storefront catalog positively says
+  // every variant is unavailable; a product simply missing from the bulk
+  // /products.json page (e.g. beyond its limit) or whose handle lookup
+  // fails is left in rather than guessed at. "Live"/published is already
+  // guaranteed separately: /products.json never lists an unpublished
+  // product, and a per-handle fetch 404s for one.
+  async function filterAvailableFbtProducts(products){
+    var availableById=new Map();
+    try{
+      var res=await fetch('/products.json?limit=250');
+      if(res.ok){
+        var json=await res.json();
+        var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
+        ajaxProducts.forEach(function(ap){
+          var pid=String(ap&&ap.id||'');
+          var variants=Array.isArray(ap&&ap.variants)?ap.variants:[];
+          if(pid)availableById.set(pid,variants.some(function(v){return v&&v.available;}));
+        });
+      }
+    }catch(e){}
+
+    var out=[];
+    for(var i=0;i<(products||[]).length;i++){
+      var product=products[i];
+      var numId=extractNumericId(product&&product.id);
+      if(availableById.has(numId)){
+        if(availableById.get(numId))out.push(product);
+        continue;
+      }
+      var handle=String(product&&product.handle||'').trim();
+      if(!handle){out.push(product);continue;}
+      try{
+        var hr=await fetch('/products/'+encodeURIComponent(handle)+'.js');
+        if(!hr.ok){out.push(product);continue;}
+        var hj=await hr.json();
+        var hvariants=Array.isArray(hj&&hj.variants)?hj.variants:[];
+        var isAvailable=hvariants.some(function(v){return v&&v.available;});
+        if(isAvailable)out.push(product);
+      }catch(e){out.push(product);}
+    }
+    return out;
+  }
+
   customElements.define('ps-fbt-widget',class extends HTMLElement{
     connectedCallback(){
       if(this._psInit)return;
@@ -352,7 +398,7 @@
       var API_URL='https://int.thebrix.io/save_fbt_widget.php?shopdomain='+encodeURIComponent(shop);
       fetch(API_URL)
         .then(function(r){return r.json();})
-        .then(function(response){
+        .then(async function(response){
           if(!response||response.status!=='success')return;
           var data=response.data;
           /* Plan gating: on Free, FBT is Preview Only — the backend already
@@ -390,6 +436,8 @@
           });
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
+          matchedProducts=await filterAvailableFbtProducts(matchedProducts);
+          if(!matchedProducts.length)return;
           renderFBT(el,config,matchedProducts,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
           placeWidget(apiPlacement);
         })
