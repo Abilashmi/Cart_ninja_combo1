@@ -871,6 +871,13 @@
             image: p?.images?.[0]?.src || p?.featured_image || null,
             handle: p?.handle || '',
             variantId: p?.variants?.[0]?.id || null,
+            // /products.json only ever lists products published to the
+            // Online Store channel, so "live" is already covered just by a
+            // product appearing here at all — but it says nothing about
+            // stock. Without this, an upsell/FBT suggestion could point at
+            // a fully sold-out product with an Add-to-Cart button that
+            // fails at checkout.
+            available: Array.isArray(p?.variants) ? p.variants.some((v) => v && v.available) : true,
           };
         });
 
@@ -3172,6 +3179,17 @@
                String(d.id).includes(productId)
       );
       return detail && detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
+    });
+
+    // Never suggest a product every variant of which is out of stock — only
+    // excludes when the live storefront catalog positively says so (a
+    // product simply missing from that catalog page, e.g. beyond the
+    // /products.json?limit=250 cutoff, is left alone rather than guessed
+    // at). "Live"/published is already guaranteed above: /products.json
+    // never lists an unpublished product in the first place.
+    upsellProducts = upsellProducts.filter((productId) => {
+      const detail = storeDetailsById && storeDetailsById[String(productId)];
+      return !detail || detail.available !== false;
     });
 
     if (upsellProducts.length === 0) return '';
