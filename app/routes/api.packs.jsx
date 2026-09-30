@@ -101,7 +101,7 @@ export async function action({ request }) {
       const updated = await setPackStatus(shop, id, target);
       const active = await packsForFunction(shop, planState);
       const sync = await syncCheckoutDiscount(admin, active, { install: target === 'active', currencyCode: currency.code });
-      const checkoutDiscount = target === 'active' ? await getCheckoutDiscountStatus(admin, active) : null;
+      const checkoutDiscount = target === 'active' ? await getCheckoutDiscountStatus(admin, active, { shop }) : null;
       const [hydrated] = await hydratePacks(admin, [updated], currency);
       return Response.json({ success: true, pack: hydrated, checkoutDiscount, warning: sync.warning });
     }
@@ -193,7 +193,7 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
     const active = await packsForFunction(shop, planState);
     const sync = await syncCheckoutDiscount(admin, active, { install: status === 'active', currencyCode: currency.code });
     warning = sync.warning;
-    if (status === 'active') checkoutDiscount = await getCheckoutDiscountStatus(admin, active);
+    if (status === 'active') checkoutDiscount = await getCheckoutDiscountStatus(admin, active, { shop });
   }
   const [hydrated] = await hydratePacks(admin, [saved], currency, { includeVariants: true });
   return { success: true, pack: hydrated, checkoutDiscount, warning };

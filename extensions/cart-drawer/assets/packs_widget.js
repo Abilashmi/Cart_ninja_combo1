@@ -1,10 +1,18 @@
 /*
  * BRIX Packs storefront widget.
  *
- * Served at /packs.js by app/routes/packs[.]js.jsx (loaded as a raw string, so
- * this file is plain browser JavaScript — no imports, no JSX).
+ * Stores load it from the theme extension (blocks/Packs.liquid -> asset_url);
+ * the admin preview and tests load it from the Node app's /packs.js
+ * (app/routes/packs[.]js.jsx). Plain browser JavaScript — no imports, no JSX.
  *
- * Flow: fetch /api/packs-storefront -> pick the Pack for the variant currently
+ * Data source: `data-endpoint` on the root. On stores that is
+ * php_backend/packs_storefront.php via the app proxy, which returns stored
+ * Packs WITHOUT prices (pricing:'client'); they are priced here from the
+ * product page's live Liquid variant data (see priceOnPage). Without
+ * `data-endpoint` it uses the Node /api/packs-storefront, which returns
+ * Packs already priced from the Shopify Admin API.
+ *
+ * Flow: fetch Pack data -> pick the Pack for the variant currently
  * selected on the product page -> render the Pack's template -> add the REAL
  * variant to the cart with the chosen quantity. Line-item properties only
  * *mark* the line; the discount itself is applied by the BRIX Packs Shopify
@@ -25,6 +33,7 @@
   if (!api && scriptEl && scriptEl.src) {
     try { api = new URL(scriptEl.src).origin; } catch (e) { api = ''; }
   }
+  var endpoint = root.getAttribute('data-endpoint') || (api ? api + '/api/packs-storefront' : '');
   var shop = root.getAttribute('data-shop');
   var productId = root.getAttribute('data-product-id');
   var preview = /[?&]brix_packs_preview=1\b/.test(location.search);
@@ -90,6 +99,88 @@
     else if (tier.discountType === 'fixed') discount = Math.round(Number(tier.discountValue) * factor);
     discount = Math.min(Math.max(discount, 0), subtotal);
     return { subtotal: subtotal / factor, savings: discount / factor, price: (subtotal - discount) / factor };
+  }
+
+  // Live product data rendered by Packs.liquid. Prices are in the shopper's
+  // presentment currency, in Liquid's x100 minor units.
+  function readPageProduct() {
+    var node = document.querySelector('script[data-brix-packs-product]');
+    if (!node) return null;
+    try { return JSON.parse(node.textContent); } catch (e) { return null; }
+  }
+
+  // Price stored Packs (pricing:'client') from the page's live variants,
+  // mirroring hydratePacks in app/services/packs-shopify.server.js. A Pack whose
+  // anchor variant isn't on this page is dropped — never priced from a cache.
+  function priceOnPage(data, product) {
+    var shopCode = product.shopCurrency;
+    var code = product.currency || shopCode;
+    var rate = 1;
+    if (code !== shopCode) {
+      // Fixed tier discounts are stored in the shop currency.
+      var parsed = parseFloat(window.Shopify && window.Shopify.currency && window.Shopify.currency.rate);
+      if (isFinite(parsed) && parsed > 0) rate = parsed; else code = shopCode; // makeMoney then hides amounts
+    }
+    var decimals = 2;
+    try { decimals = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
+
+    var byId = {};
+    (product.variants || []).forEach(function (variant) {
+      var price = Number(variant.price) / 100;
+      var stock = Number(variant.inventoryQuantity);
+      byId[String(variant.id)] = {
+        id: String(variant.id),
+        title: variant.title,
+        price: isFinite(price) && price >= 0 ? price : null,
+        availableForSale: Boolean(variant.available),
+        maxQuantity: variant.inventoryManagement === 'shopify' && variant.inventoryPolicy === 'deny' && stock > 0 ? stock : null,
+        inventoryQuantity: isFinite(stock) ? stock : null,
+      };
+    });
+
+    var packs = [];
+    (data.packs || []).forEach(function (pack) {
+      var anchor = byId[numericId(pack.variantId)];
+      if (!anchor || anchor.price === null) return;
+      var tiers = (pack.tiers || []).map(function (tier) {
+        var t = {};
+        Object.keys(tier).forEach(function (key) { t[key] = tier[key]; });
+        if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
+        var prices = [];
+        for (var i = 0; i < t.quantity; i += 1) prices.push(anchor.price);
+        var priced = calc(prices, t, decimals);
+        t.subtotal = priced.subtotal;
+        t.savings = priced.savings;
+        t.discountAmount = priced.savings;
+        t.price = priced.price;
+        t.effectiveUnitPrice = t.quantity > 0 ? Math.round((priced.price / t.quantity) * Math.pow(10, decimals)) / Math.pow(10, decimals) : 0;
+        return t;
+      });
+      var variants;
+      var allowed = pack.allowedVariantIds || [];
+      if (pack.packType === 'mix_match' || pack.variantScope === 'all' || allowed.length > 1) {
+        variants = Object.keys(byId).map(function (id) { return byId[id]; }).filter(function (variant) {
+          return variant.price !== null && (pack.variantScope === 'all' || allowed.indexOf(variant.id) >= 0);
+        });
+      }
+      var copy = {};
+      Object.keys(pack).forEach(function (key) { copy[key] = pack[key]; });
+      copy.basePrice = anchor.price;
+      copy.tiers = tiers;
+      copy.variants = variants;
+      copy.available = anchor.availableForSale || Boolean(variants && variants.some(function (variant) { return variant.availableForSale; }));
+      copy.maxQuantity = anchor.maxQuantity;
+      copy.productTitle = product.title || pack.productTitle;
+      copy.variantTitle = anchor.title;
+      copy.productImage = product.image || pack.productImage;
+      packs.push(copy);
+    });
+
+    var priced = {};
+    Object.keys(data).forEach(function (key) { priced[key] = data[key]; });
+    priced.packs = packs;
+    priced.currency = { code: code, locale: document.documentElement.lang || undefined };
+    return priced;
   }
 
   function makeMoney(currency) {
@@ -608,14 +699,20 @@
     if (window.console && console.warn) console.warn('[BRIX Packs] ' + message);
   }
 
-  if (!shop || !productId || !api) { fail('missing shop, product or API address.'); return; }
+  if (!shop || !productId || !endpoint) { fail('missing shop, product or API address.'); return; }
 
-  var url = api + '/api/packs-storefront?shop=' + encodeURIComponent(shop) + '&productId=' + encodeURIComponent(productId) + (preview ? '&preview=1' : '');
+  var url = endpoint + (endpoint.indexOf('?') >= 0 ? '&' : '?') + 'shop=' + encodeURIComponent(shop) + '&productId=' + encodeURIComponent(productId) + (preview ? '&preview=1' : '');
   fetch(url, { headers: { Accept: 'application/json' } })
     .then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
     .then(function (result) {
       if (!result.ok || !result.body || !result.body.success) { fail((result.body && result.body.error) || 'the Packs service returned an error.'); return; }
       var data = result.body;
+      if (data.pricing === 'client' && data.packs && data.packs.length) {
+        var product = readPageProduct();
+        if (!product) { fail('the product data from Packs.liquid is missing.'); return; }
+        data = priceOnPage(data, product);
+        if (!data.packs.length) data.reason = 'price_unverified';
+      }
       if (!data.packs || !data.packs.length) {
         if (preview) fail('no widget to show (' + (data.reason || 'no active Pack') + ').');
         return;

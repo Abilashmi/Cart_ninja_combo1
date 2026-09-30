@@ -5,7 +5,7 @@
  *   - keeping the checkout discount function's config in sync
  *   - verifying that the checkout discount is really installed and active
  */
-import { PackError } from './packs.server';
+import { PackError, saveStorefrontDiscountState } from './packs.server';
 import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage } from '../utils/packs.shared.js';
 
 export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
@@ -253,15 +253,18 @@ async function readFunctionConfig(admin) {
   return data?.shop?.metafield?.jsonValue || null;
 }
 
+// `automaticDiscountNodes` is deprecated and never returns app (Function)
+// discounts, so this must go through `discountNodes`.
 async function findInstalledDiscount(admin) {
   const data = await gql(admin, `#graphql
     query PackDiscounts {
-      automaticDiscountNodes(first: 100) {
-        nodes { id automaticDiscount { __typename ... on DiscountAutomaticApp { title status appDiscountType { functionId } } } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { id discount { __typename ... on DiscountAutomaticApp { title status appDiscountType { functionId } } } }
       }
     }`);
-  const nodes = data?.automaticDiscountNodes?.nodes || [];
-  return nodes.find((node) => node.automaticDiscount?.__typename === 'DiscountAutomaticApp' && node.automaticDiscount.title === PACKS_DISCOUNT_TITLE) || null;
+  const nodes = data?.discountNodes?.nodes || [];
+  const node = nodes.find((item) => item.discount?.__typename === 'DiscountAutomaticApp' && item.discount.title === PACKS_DISCOUNT_TITLE);
+  return node ? { id: node.id, automaticDiscount: node.discount } : null;
 }
 
 /**
@@ -306,7 +309,15 @@ export async function ensurePacksDiscount(admin) {
  *
  * States: active | discount_missing | discount_inactive | config_out_of_date | unknown
  */
-export async function getCheckoutDiscountStatus(admin, activePacks = []) {
+export async function getCheckoutDiscountStatus(admin, activePacks = [], { shop = null } = {}) {
+  const status = await readCheckoutDiscountStatus(admin, activePacks);
+  // Pass `shop` to also record the result for the PHP storefront endpoint.
+  // An 'unknown' result (Shopify unreachable) keeps the last recorded state.
+  if (shop && status.state !== 'unknown') await saveStorefrontDiscountState(shop, status, activePacks);
+  return status;
+}
+
+async function readCheckoutDiscountStatus(admin, activePacks) {
   try {
     const discount = await findInstalledDiscount(admin);
     if (!discount) return { verified: false, state: 'discount_missing', message: 'The Packs checkout discount is not installed on this store.' };

@@ -11,7 +11,7 @@ function Checkmark({ size = 11, color = 'currentColor' }) {
 }
 
 // Each design preset is a structurally different layout — kept identical to
-// layoutOf in app/storefront/packs-widget.js so the preview matches the store:
+// layoutOf in extensions/cart-drawer/assets/packs_widget.js so the preview matches the store:
 //   classic -> 'list', highlight -> 'chips' (compact selector), premium -> 'cards'.
 // Packs saved with the old "image cards" template keep their card layout.
 export function layoutOf(preset, template) {
@@ -22,7 +22,7 @@ export function layoutOf(preset, template) {
 
 /**
  * Admin-side preview of the storefront Packs widget. It mirrors the storefront
- * templates and customization (app/storefront/packs-widget.js) but ONLY renders
+ * templates and customization (extensions/cart-drawer/assets/packs_widget.js) but ONLY renders
  * values it is given — tier prices come from the shared/server calculation, so
  * the preview can never disagree with what the server computed.
  *

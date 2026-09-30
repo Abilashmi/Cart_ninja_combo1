@@ -101,7 +101,7 @@ export async function loader({ request }) {
     if (!priced.length) return ok({ ...empty, currency, reason: 'price_unverified' });
 
     // Verify against ALL of the shop's active Packs so config drift is caught.
-    const checkoutDiscount = await getCheckoutDiscountStatus(admin, await listActivePacks(shop));
+    const checkoutDiscount = await getCheckoutDiscountStatus(admin, await listActivePacks(shop), { shop });
     if (!checkoutDiscount.verified && !preview) return ok({ ...empty, currency, checkoutDiscount, reason: 'discount_unverified' });
 
     const body = { packs: priced.map((pack) => publicPack(pack)), reason: null, currency: { code: currency.code, locale: currency.locale }, checkoutDiscount, preview };

@@ -60,15 +60,18 @@ async function writeRewardConfig(admin, config) {
   if (errors.length) throw new Error(`Could not sync the free gift configuration: ${errors[0].message}`);
 }
 
+// `automaticDiscountNodes` is deprecated and never returns app (Function)
+// discounts, so this must go through `discountNodes`.
 async function findInstalledDiscount(admin) {
   const data = await gql(admin, `#graphql
     query RewardDiscounts {
-      automaticDiscountNodes(first: 100) {
-        nodes { id automaticDiscount { __typename ... on DiscountAutomaticApp { title status } } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { id discount { __typename ... on DiscountAutomaticApp { title status } } }
       }
     }`);
-  const nodes = data?.automaticDiscountNodes?.nodes || [];
-  return nodes.find((node) => node.automaticDiscount?.__typename === 'DiscountAutomaticApp' && node.automaticDiscount.title === REWARD_DISCOUNT_TITLE) || null;
+  const nodes = data?.discountNodes?.nodes || [];
+  const node = nodes.find((item) => item.discount?.__typename === 'DiscountAutomaticApp' && item.discount.title === REWARD_DISCOUNT_TITLE);
+  return node ? { id: node.id, automaticDiscount: node.discount } : null;
 }
 
 /** Create the automatic app discount that runs the Function, if it isn't there yet. */

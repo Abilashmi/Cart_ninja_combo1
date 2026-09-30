@@ -164,7 +164,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   // The variants this Pack actually applies to: every variant ('all'), or the
   // merchant-curated subset ('selected'). Base pricing previews off the first
   // one — the real storefront always prices off whichever variant the shopper
-  // has selected (see packs-widget.js / PackPreview's variant switcher).
+  // has selected (see packs_widget.js / PackPreview's variant switcher).
   const applicableVariants = form.variantScope === 'all' ? variants : variants.filter((variant) => form.allowedVariantIds.includes(variant.id));
   const anchorVariant = applicableVariants[0] || null;
   const basePrice = anchorVariant?.price ?? null;
@@ -207,7 +207,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   // ── review: server-side calculation ────────────────────────────────────────
   // Priced against the anchor variant only — an illustrative preview; the
   // storefront always prices off whichever variant the shopper actually has
-  // selected (see displayedTier in packs-widget.js).
+  // selected (see displayedTier in packs_widget.js).
   useEffect(() => {
     if (step !== REVIEW_STEP || !form.productId || !anchorVariant) return undefined;
     let cancelled = false;

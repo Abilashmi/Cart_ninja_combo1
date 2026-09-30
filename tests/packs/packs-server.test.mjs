@@ -209,10 +209,10 @@ test('hydratePacks recalculates every tier from the LIVE price and flags broken 
 
 test('checkout discount status is only "verified" when discount is ACTIVE and config is in sync', async () => {
   const pack = { id: 7, version: 2, variantId: '200' };
-  const discount = (status) => ({ data: { automaticDiscountNodes: { nodes: [{ id: 'gid://shopify/DiscountAutomaticNode/1', automaticDiscount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Packs', status } }] } } });
+  const discount = (status) => ({ data: { discountNodes: { nodes: [{ id: 'gid://shopify/DiscountAutomaticNode/1', discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Packs', status } }] } } });
   const config = (packs) => ({ data: { shop: { metafield: { jsonValue: { version: 1, packs } } } } });
   const make = (disc, cfg) => fakeAdmin((query) => (query.includes('PackDiscounts') ? disc : cfg));
-  assert.equal((await shopify.getCheckoutDiscountStatus(make({ data: { automaticDiscountNodes: { nodes: [] } } }, config({})), [pack])).state, 'discount_missing');
+  assert.equal((await shopify.getCheckoutDiscountStatus(make({ data: { discountNodes: { nodes: [] } } }, config({})), [pack])).state, 'discount_missing');
   assert.equal((await shopify.getCheckoutDiscountStatus(make(discount('EXPIRED'), config({})), [pack])).state, 'discount_inactive');
   assert.equal((await shopify.getCheckoutDiscountStatus(make(discount('ACTIVE'), config({})), [pack])).state, 'config_out_of_date');
   assert.equal((await shopify.getCheckoutDiscountStatus(make(discount('ACTIVE'), config({ 7: { id: 7, version: 1 } })), [pack])).state, 'config_out_of_date'); // stale version
@@ -223,13 +223,13 @@ test('checkout discount status is only "verified" when discount is ACTIVE and co
 
 test('ensurePacksDiscount reports an undeployed function instead of pretending it worked', async () => {
   const admin = fakeAdmin((query) => (query.includes('PackDiscounts')
-    ? { data: { automaticDiscountNodes: { nodes: [] } } }
+    ? { data: { discountNodes: { nodes: [] } } }
     : { data: { discountAutomaticAppCreate: { automaticAppDiscount: null, userErrors: [{ field: ['automaticAppDiscount', 'functionHandle'], message: 'Could not find Function brix-packs-discount', code: 'INVALID' }] } } }));
   await assert.rejects(() => shopify.ensurePacksDiscount(admin), (error) => error.code === 'function_not_deployed');
   const sync = await shopify.syncCheckoutDiscount(fakeAdmin((query) => {
     if (query.includes('PackShopId')) return { data: { shop: { id: 'gid://shopify/Shop/1' } } };
     if (query.includes('PackConfig')) return { data: { metafieldsSet: { metafields: [{ id: 'm' }], userErrors: [] } } };
-    if (query.includes('PackDiscounts')) return { data: { automaticDiscountNodes: { nodes: [] } } };
+    if (query.includes('PackDiscounts')) return { data: { discountNodes: { nodes: [] } } };
     return { data: { discountAutomaticAppCreate: { automaticAppDiscount: null, userErrors: [{ message: 'Could not find Function', code: 'INVALID' }] } } };
   }), [{ id: 1, version: 1, productId: '1', variantId: '2', template: 'same_variant', tiers: [] }], { currencyCode: 'INR' });
   assert.equal(sync.ok, false);

@@ -1,7 +1,7 @@
 /**
  * DEV-ONLY customer-facing preview of the BRIX Packs storefront widget.
  *
- * The widget itself is the real one (app/storefront/packs-widget.js, served at
+ * The widget itself is the real one (extensions/cart-drawer/assets/packs_widget.js, served at
  * /packs.js). This module only supplies what Shopify would: a product page shell
  * and the /api/packs-storefront payload, built with the same shared Pack logic
  * (tier maths + design presets in app/utils/packs.shared.js). No Shopify, proxy,

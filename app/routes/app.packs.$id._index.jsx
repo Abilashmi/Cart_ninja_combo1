@@ -14,7 +14,7 @@ export async function loader({ request, params }) {
     const stored = await getPack(shop, params.id);
     if (!stored) throw new Response('This Pack does not exist or belongs to a different store.', { status: 404 });
     const [pack] = await hydratePacks(admin, [stored], currency, { includeVariants: true });
-    const checkoutDiscount = planState === 'enabled' && pack.status === 'active' ? await getCheckoutDiscountStatus(admin, await listActivePacks(shop)) : null;
+    const checkoutDiscount = planState === 'enabled' && pack.status === 'active' ? await getCheckoutDiscountStatus(admin, await listActivePacks(shop), { shop }) : null;
     return { pack, planState, currency, checkoutDiscount };
   } catch (error) {
     return throwPackResponse(error);

@@ -14,7 +14,7 @@ export async function loader({ request }) {
     const stored = await listPacks(shop);
     const packs = await hydratePacks(admin, stored, currency);
     const active = packs.filter((pack) => pack.status === 'active');
-    const checkoutDiscount = planState === 'enabled' && active.length ? await getCheckoutDiscountStatus(admin, active) : null;
+    const checkoutDiscount = planState === 'enabled' && active.length ? await getCheckoutDiscountStatus(admin, active, { shop }) : null;
     return { packs, planState, currency, checkoutDiscount, loadError: null };
   } catch (error) {
     if (error instanceof Response) throw error;

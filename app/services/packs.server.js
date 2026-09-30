@@ -137,6 +137,29 @@ export async function listActivePacks(shop) {
   });
 }
 
+/**
+ * Record the last checkout-discount verification for the shop so the PHP
+ * storefront endpoint (php_backend/packs_storefront.php) — which has no
+ * Shopify access — can decide whether shoppers may see Packs.
+ * `verifiedPacks` maps pack id -> version that was confirmed in the Function
+ * config; PHP only shows Packs whose current version is in that map.
+ * Never throws: a failed write only means the storefront keeps the previous state.
+ */
+export async function saveStorefrontDiscountState(shop, status, activePacks = []) {
+  const verifiedPacks = status?.verified ? Object.fromEntries(activePacks.map((pack) => [String(pack.id), Number(pack.version || 1)])) : {};
+  try {
+    await getDb().execute(
+      `INSERT INTO brix_packs_shop_state (shop_domain, discount_verified, discount_state, discount_message, verified_packs_json, checked_at)
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON DUPLICATE KEY UPDATE discount_verified = VALUES(discount_verified), discount_state = VALUES(discount_state),
+         discount_message = VALUES(discount_message), verified_packs_json = VALUES(verified_packs_json), checked_at = CURRENT_TIMESTAMP`,
+      [shop, status?.verified ? 1 : 0, String(status?.state || 'unknown').slice(0, 32), String(status?.message || '').slice(0, 255), JSON.stringify(verifiedPacks)]
+    );
+  } catch (error) {
+    console.error('[packs.server] could not record storefront discount state:', String(error?.message || '').slice(0, 200));
+  }
+}
+
 /** Another Pack (not `excludeId`) already owns this product+variant for the shop? */
 export async function findDuplicatePack(shop, productId, variantId, excludeId = null) {
   const product = toNumericId(productId);
