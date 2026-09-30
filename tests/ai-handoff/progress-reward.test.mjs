@@ -30,6 +30,16 @@ globalThis.fetch = async (url, init) => {
     return done();
   }
   if (q.startsWith('SELECT * FROM progress_bar_tiers')) return ok(tiers.filter((t) => t.is_active).sort((a, b) => a.sort_order - b.sort_order));
+  // ensureColumns() checks information_schema before touching the table, so
+  // it only ever issues an ALTER when a column is genuinely missing (an
+  // ALTER takes a metadata lock even when it changes nothing, which is what
+  // used to hang the FBT admin page). Answering as "the column is already
+  // there" is both the real production state and an assertion that the
+  // ALTER handler below stays unreached on the normal path.
+  if (q.startsWith('SELECT COLUMN_NAME FROM information_schema.COLUMNS')) {
+    const COLUMNS_BY_TABLE = { progress_bar_tiers: ['reward_pricing'] };
+    return ok((COLUMNS_BY_TABLE[params[0]] || []).map((c) => ({ COLUMN_NAME: c })));
+  }
   if (q.startsWith('ALTER TABLE progress_bar_tiers')) return done();
   if (q.startsWith('SELECT id, reward_type, icon_preset')) return ok(tiers.slice(0, 1));
   if (q.startsWith('DELETE FROM progress_bar_tiers')) { tiers = []; return done(); }

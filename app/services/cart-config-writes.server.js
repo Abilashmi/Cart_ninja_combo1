@@ -36,16 +36,54 @@ function pickFlag(v, exVal, def) {
   return def;
 }
 
-let announcementStyleColumnsEnsured = false;
+// Adds only the columns that are genuinely missing, and issues no
+// ALTER TABLE at all when they're all already there.
+//
+// This matters much more than it looks. `ALTER TABLE ... ADD COLUMN IF NOT
+// EXISTS` still has to take an exclusive METADATA LOCK on the table even
+// when it changes nothing — and MySQL's lock_wait_timeout defaults to
+// 31536000 seconds (a year), so if any other connection is holding even a
+// shared lock on that table (an in-flight query, an open transaction), the
+// ALTER waits essentially forever. Worse, once an ALTER is queued waiting
+// for that lock, every later query on the same table queues behind it, so
+// one stuck ALTER freezes the table for every request.
+//
+// That was the cause of the FBT admin page hanging on Save "loading
+// forever": its loader calls ensureFbtRulesSourceColumn on every load,
+// including the revalidation React Router fires after each save, and the
+// per-process `ensured` flag resets on every deploy — so the first save
+// after a restart re-ran the ALTER. Right after an AI Coverage Run (a
+// DELETE plus up to 300 sequential INSERTs against fbt_rules) there is
+// almost always a concurrent connection holding a lock on that exact
+// table, which is why it hung specifically then.
+//
+// Reading information_schema instead takes no lock on the table itself, so
+// the normal path is now one cheap SELECT and zero ALTERs, forever.
+const ensuredColumnGroups = new Set();
+async function ensureColumns(db, cacheKey, table, defs) {
+  if (ensuredColumnGroups.has(cacheKey)) return;
+  const [rows] = await db.execute(
+    'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+    [table]
+  );
+  const existing = new Set(
+    (rows || []).map((r) => String(r.COLUMN_NAME ?? r.column_name ?? '').toLowerCase())
+  );
+  const missing = defs.filter((d) => !existing.has(d.name.toLowerCase()));
+  if (missing.length) {
+    await db.execute(
+      `ALTER TABLE \`${table}\` ${missing.map((d) => `ADD COLUMN ${d.ddl}`).join(', ')}`
+    );
+  }
+  ensuredColumnGroups.add(cacheKey);
+}
+
 async function ensureAnnouncementStyleColumns(db) {
-  if (announcementStyleColumnsEnsured) return;
-  await db.execute(`
-    ALTER TABLE cart_drawer_config
-      ADD COLUMN IF NOT EXISTS announcement_bold       TINYINT(1)  NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS announcement_italic     TINYINT(1)  NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS announcement_text_align VARCHAR(10) NOT NULL DEFAULT 'center'
-  `);
-  announcementStyleColumnsEnsured = true;
+  await ensureColumns(db, 'cart_drawer_config.announcement_style', 'cart_drawer_config', [
+    { name: 'announcement_bold', ddl: '`announcement_bold` TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'announcement_italic', ddl: '`announcement_italic` TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'announcement_text_align', ddl: "`announcement_text_align` VARCHAR(10) NOT NULL DEFAULT 'center'" },
+  ]);
 }
 
 // Self-heals the countdown_* columns onto cart_drawer_config the same way
@@ -56,36 +94,28 @@ async function ensureAnnouncementStyleColumns(db) {
 // checkout via the free gift discount Function) or added at its regular price.
 // Self-heals the column like the ones above. Existing tiers default to 'regular' so
 // nothing that was already live silently becomes free; 'free' is always an explicit choice.
-let rewardPricingColumnEnsured = false;
 export async function ensureRewardPricingColumn(db) {
-  if (rewardPricingColumnEnsured) return;
-  await db.execute(`
-    ALTER TABLE progress_bar_tiers
-      ADD COLUMN IF NOT EXISTS reward_pricing VARCHAR(10) NOT NULL DEFAULT 'regular'
-  `);
-  rewardPricingColumnEnsured = true;
+  await ensureColumns(db, 'progress_bar_tiers.reward_pricing', 'progress_bar_tiers', [
+    { name: 'reward_pricing', ddl: "`reward_pricing` VARCHAR(10) NOT NULL DEFAULT 'regular'" },
+  ]);
 }
 
-let countdownTimerColumnsEnsured = false;
 export async function ensureCountdownTimerColumns(db) {
-  if (countdownTimerColumnsEnsured) return;
-  await db.execute(`
-    ALTER TABLE cart_drawer_config
-      ADD COLUMN IF NOT EXISTS countdown_enabled          TINYINT(1)   NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS countdown_mode              VARCHAR(10)  NOT NULL DEFAULT 'session',
-      ADD COLUMN IF NOT EXISTS countdown_hours              INT          NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS countdown_minutes            INT          NOT NULL DEFAULT 15,
-      ADD COLUMN IF NOT EXISTS countdown_label              VARCHAR(255) NOT NULL DEFAULT 'Offer expires in',
-      ADD COLUMN IF NOT EXISTS countdown_expired_label      VARCHAR(255) NOT NULL DEFAULT 'Offer expired!',
-      ADD COLUMN IF NOT EXISTS countdown_bg_color           VARCHAR(20)  NOT NULL DEFAULT '#fef2f2',
-      ADD COLUMN IF NOT EXISTS countdown_text_color         VARCHAR(20)  NOT NULL DEFAULT '#991b1b',
-      ADD COLUMN IF NOT EXISTS countdown_accent_color       VARCHAR(20)  NOT NULL DEFAULT '#dc2626',
-      ADD COLUMN IF NOT EXISTS countdown_show_on_products   TINYINT(1)   NOT NULL DEFAULT 1,
-      ADD COLUMN IF NOT EXISTS countdown_show_on_coupons    TINYINT(1)   NOT NULL DEFAULT 1,
-      ADD COLUMN IF NOT EXISTS countdown_coupon_code        VARCHAR(100) NULL,
-      ADD COLUMN IF NOT EXISTS countdown_coupon_mode        VARCHAR(10)  NOT NULL DEFAULT 'manual'
-  `);
-  countdownTimerColumnsEnsured = true;
+  await ensureColumns(db, 'cart_drawer_config.countdown', 'cart_drawer_config', [
+    { name: 'countdown_enabled', ddl: '`countdown_enabled` TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'countdown_mode', ddl: "`countdown_mode` VARCHAR(10) NOT NULL DEFAULT 'session'" },
+    { name: 'countdown_hours', ddl: '`countdown_hours` INT NOT NULL DEFAULT 0' },
+    { name: 'countdown_minutes', ddl: '`countdown_minutes` INT NOT NULL DEFAULT 15' },
+    { name: 'countdown_label', ddl: "`countdown_label` VARCHAR(255) NOT NULL DEFAULT 'Offer expires in'" },
+    { name: 'countdown_expired_label', ddl: "`countdown_expired_label` VARCHAR(255) NOT NULL DEFAULT 'Offer expired!'" },
+    { name: 'countdown_bg_color', ddl: "`countdown_bg_color` VARCHAR(20) NOT NULL DEFAULT '#fef2f2'" },
+    { name: 'countdown_text_color', ddl: "`countdown_text_color` VARCHAR(20) NOT NULL DEFAULT '#991b1b'" },
+    { name: 'countdown_accent_color', ddl: "`countdown_accent_color` VARCHAR(20) NOT NULL DEFAULT '#dc2626'" },
+    { name: 'countdown_show_on_products', ddl: '`countdown_show_on_products` TINYINT(1) NOT NULL DEFAULT 1' },
+    { name: 'countdown_show_on_coupons', ddl: '`countdown_show_on_coupons` TINYINT(1) NOT NULL DEFAULT 1' },
+    { name: 'countdown_coupon_code', ddl: '`countdown_coupon_code` VARCHAR(100) NULL' },
+    { name: 'countdown_coupon_mode', ddl: "`countdown_coupon_mode` VARCHAR(10) NOT NULL DEFAULT 'manual'" },
+  ]);
 }
 
 // ── Cart Drawer Config (design/general/header/announcements/emptyCart/checkoutButton/customCSS) ──
@@ -909,14 +939,10 @@ export async function removeFbtRule(shop, ruleId) {
 // builder (appendFbtRule's chat-created rows are a separate, unaffected
 // concern — they stay visible in both modes' fbt_rules reads today, but
 // they aren't what this bug was about).
-let fbtRulesSourceColumnEnsured = false;
 export async function ensureFbtRulesSourceColumn(db) {
-  if (fbtRulesSourceColumnEnsured) return;
-  await db.execute(`
-    ALTER TABLE fbt_rules
-      ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'manual'
-  `);
-  fbtRulesSourceColumnEnsured = true;
+  await ensureColumns(db, 'fbt_rules.source', 'fbt_rules', [
+    { name: 'source', ddl: "`source` VARCHAR(10) NOT NULL DEFAULT 'manual'" },
+  ]);
 }
 
 // Rebuilds the storefront-facing fbt_widget.condition blob from exactly the
@@ -1083,16 +1109,31 @@ export async function generateAiFbtRules(admin, shop, countPerProduct) {
   const { rules, covered, n, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
 
   await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
-  for (let i = 0; i < rules.length; i++) {
-    const r = rules[i];
-    await db.execute(`
-      INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
-      VALUES (?,?,?,?,?,?,1,?,?)
-    `, [
-      shop, r.name, 'specific_products',
-      JSON.stringify(r.trigger_products), null, JSON.stringify(r.fbt_products),
-      i, 'ai',
-    ]);
+
+  // One multi-row INSERT per chunk, not one statement per rule. getDb() is
+  // not a local MySQL pool — it's an HTTPS proxy to php_backend/db_proxy.php
+  // (see db.server.js), so every execute() is a full network round trip to
+  // another host. At up to AI_COVERAGE_PRODUCT_CAP generated rules this loop
+  // was issuing ~300 sequential round trips, which is tens of seconds of the
+  // admin sitting on "Saving…" — the "save just loads and loads" report.
+  // Chunked rather than one giant statement so a single query stays well
+  // clear of max_allowed_packet (each row carries two JSON product blobs).
+  const RULE_INSERT_CHUNK = 50;
+  for (let start = 0; start < rules.length; start += RULE_INSERT_CHUNK) {
+    const chunk = rules.slice(start, start + RULE_INSERT_CHUNK);
+    const params = [];
+    chunk.forEach((r, idx) => {
+      params.push(
+        shop, r.name, 'specific_products',
+        JSON.stringify(r.trigger_products), null, JSON.stringify(r.fbt_products),
+        start + idx, 'ai'
+      );
+    });
+    await db.execute(
+      `INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
+       VALUES ${chunk.map(() => '(?,?,?,?,?,?,1,?,?)').join(',')}`,
+      params
+    );
   }
 
   await db.execute(`
