@@ -1121,7 +1121,19 @@ export default function FBTPage() {
   // submitFbtConfig() with no override, so the server only re-runs the AI
   // Coverage Run when the merchant actually asked it to, not on every
   // unrelated save made while AI mode happens to be selected.
-  const handleSave = (overrides = {}) => {
+  const handleSave = (maybeOverrides) => {
+    // Only ever accept a plain options object. Polaris forwards the click
+    // event to onClick, so a bare `onClick={handleSave}` passes a React
+    // SyntheticEvent in here — and spreading that into the submit body made
+    // JSON.stringify throw on its circular DOM references (target,
+    // nativeEvent). The request was then never created at all, while the
+    // fetcher stayed non-idle: a Save button spinning forever, nothing in
+    // the network log, and one unexplained console error. Guarded here as
+    // well as at the call site so re-passing the bare reference can't
+    // quietly bring it back.
+    const overrides = maybeOverrides && Object.getPrototypeOf(maybeOverrides) === Object.prototype
+      ? maybeOverrides
+      : {};
     if (!isFbtActuallyConfigured) {
       setConfigureToast(true);
       return;
@@ -1382,7 +1394,7 @@ export default function FBTPage() {
             </div>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
             <Button onClick={() => { setHasChanges(false); }} disabled={!hasChanges} size="slim">Discard</Button>
-            <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+            <Button variant="primary" onClick={() => handleSave()} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
             {tourStepIndex === null && (
               <Button icon={PlayIcon} size="slim" onClick={replayTour}>Replay setup tour</Button>
             )}
