@@ -1,4 +1,11 @@
-import React, { useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
+
+// BRIX COD Checkout: when a provider supplies { onCod }, the bar shows a
+// Cash on Delivery button next to Checkout. Provided by the storefront combo
+// iframe (preview.$templateId.jsx, once the parent page confirms COD is on)
+// and by the builder preview (display only). A context instead of a prop so
+// the four layout components between here and those pages stay unchanged.
+export const ComboCodContext = createContext(null);
 
 export const CdoPreviewBar = ({
   config,
@@ -12,6 +19,7 @@ export const CdoPreviewBar = ({
   onResetClick,
 }) => {
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+  const cod = useContext(ComboCodContext);
   if (!config.show_preview_bar) return null;
 
   const maxSel = parseInt(config.max_products) || 5;
@@ -413,6 +421,29 @@ export const CdoPreviewBar = ({
                     disabled={loading || !canOpenDrawer}
                   >
                     {config.preview_checkout_btn_text || 'Checkout'}
+                  </button>
+                )}
+                {cod && config.show_cod_button !== false && (
+                  <button
+                    type="button"
+                    onClick={() => { if (!loading && canOpenDrawer) cod.onCod(); }}
+                    style={{
+                      flex: isMobile ? 1 : 'none',
+                      width: isMobile ? '100%' : 'auto',
+                      background: config.cod_btn_bg || '#ffffff',
+                      color: config.cod_btn_text_color || '#111827',
+                      border: `1.5px solid ${config.cod_btn_text_color || '#111827'}`,
+                      padding: '10px 20px',
+                      borderRadius: config.preview_border_radius || 6,
+                      fontWeight: 700,
+                      cursor: (loading || !canOpenDrawer) ? 'not-allowed' : 'pointer',
+                      minHeight: isMobile ? '48px' : 'auto',
+                      fontSize: isMobile ? '13px' : 'inherit',
+                      opacity: (loading || !canOpenDrawer) ? 0.6 : 1,
+                    }}
+                    disabled={loading || !canOpenDrawer}
+                  >
+                    {config.cod_btn_text || 'Cash on Delivery'}
                   </button>
                 )}
                 {config.show_preview_add_to_cart_btn && (

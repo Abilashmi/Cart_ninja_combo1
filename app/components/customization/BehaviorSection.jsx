@@ -71,6 +71,24 @@ function BehaviorSectionComponent({
                 )}
                 {PxField && <PxField label="Button Border Radius" value={config.preview_border_radius ?? 6} onChange={(v) => updateConfig('preview_border_radius', v)} />}
               </div>
+              <div className="cst-section-divider">
+                <Text variant="headingSm" as="h6">Combo Summary — Cash on Delivery Button</Text>
+                <Checkbox
+                  label="Show Cash on Delivery button"
+                  helpText="Appears only when COD Checkout is turned on for combo pages in BRIX › COD Checkout."
+                  checked={config.show_cod_button !== false}
+                  onChange={(v) => updateConfig('show_cod_button', v)}
+                />
+                {config.show_cod_button !== false && (
+                  <>
+                    <TextField label="Text" value={config.cod_btn_text || 'Cash on Delivery'} onChange={(v) => updateConfig('cod_btn_text', v)} autoComplete="off" />
+                    <div className="cst-grid-2">
+                      {ColorPickerField && <ColorPickerField label="Background" value={config.cod_btn_bg || '#ffffff'} onChange={(v) => updateConfig('cod_btn_bg', v)} />}
+                      {ColorPickerField && <ColorPickerField label="Text & Border" value={config.cod_btn_text_color || '#111827'} onChange={(v) => updateConfig('cod_btn_text_color', v)} />}
+                    </div>
+                  </>
+                )}
+              </div>
               {layout === 'layout4' && (
                 <>
                   <TextField label="Checkout Button Text" value={config.preview_checkout_btn_text || 'Proceed to Checkout'} onChange={(v) => updateConfig('preview_checkout_btn_text', v)} autoComplete="off" />

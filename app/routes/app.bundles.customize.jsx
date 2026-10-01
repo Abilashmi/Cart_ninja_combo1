@@ -34,7 +34,8 @@ import {
 } from '@shopify/polaris-icons';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
-import { CdoPreviewBar } from '../components/CdoPreviewBar';
+import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
+import { getCodSettings } from '../services/cod.server';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
@@ -649,6 +650,12 @@ export const loader = async ({ request }) => {
     return Response.json({ collections, products, shopPages });
   }
 
+  // BRIX COD Checkout: the preview bar shows the Cash on Delivery button
+  // only when the merchant has COD on for combo pages (see app.cod.jsx).
+  const codEnabledPromise = getCodSettings(shop)
+    .then((s) => Boolean(s.enabled && s.surfaces.combo))
+    .catch(() => false);
+
   // No templateId means this is a brand-new template, not an edit of an
   // existing one. Block Free shops / Starter shops at their cap here too —
   // TemplateManager already hides the "Create Template" button for them, but
@@ -877,6 +884,7 @@ export const loader = async ({ request }) => {
     existingTemplates: shopTemplates.map((t) => ({ id: t.id, title: t.title })),
     layoutFiles,
     activeDiscounts,
+    codEnabled: await codEnabledPromise,
   });
 };
 
@@ -1383,6 +1391,11 @@ const DEFAULT_COMBO_CONFIG = {
   preview_checkout_btn_text: 'Proceed to Checkout',
   preview_checkout_btn_bg: '#000000',
   preview_checkout_btn_text_color: '#ffffff',
+  // BRIX COD Checkout button (shown only when COD is on for combo pages)
+  show_cod_button: true,
+  cod_btn_text: 'Cash on Delivery',
+  cod_btn_bg: '#ffffff',
+  cod_btn_text_color: '#111827',
   preview_reset_btn_text: 'Reset Combo',
   preview_reset_btn_bg: '#ff4d4d',
   preview_reset_btn_text_color: '#ffffff',
@@ -4230,6 +4243,9 @@ function InlineEdit({ value, configKey, onUpdate, style }) {
   );
 }
 
+// Builder preview only: the COD button is shown but does nothing.
+const BUILDER_COD_PREVIEW = { onCod: () => {} };
+
 function ComboPreview({
   config,
   device,
@@ -4248,6 +4264,7 @@ function ComboPreview({
   onRequestSection = () => { },
 }) {
   const { symbol: currencySymbol } = useCurrency();
+  const { codEnabled } = useLoaderData() || {};
   const isMobile = device === 'mobile';
   const sliderRef = useRef(null);
   const tabScrollRef = useRef(null);
@@ -5275,14 +5292,16 @@ function ComboPreview({
       onMouseLeave={() => setInspectHover(null)}
       onClick={(e) => { e.stopPropagation(); setInspectActive('previewBar'); onRequestSection('previewBar'); }}
     >
-      <CdoPreviewBar
-        config={config}
-        selectedProducts={selectedProducts}
-        totalPrice={totalPrice}
-        finalPrice={finalPrice}
-        isMobile={isMobile}
-        currencySymbol={currencySymbol}
-      />
+      <ComboCodContext.Provider value={codEnabled ? BUILDER_COD_PREVIEW : null}>
+        <CdoPreviewBar
+          config={config}
+          selectedProducts={selectedProducts}
+          totalPrice={totalPrice}
+          finalPrice={finalPrice}
+          isMobile={isMobile}
+          currencySymbol={currencySymbol}
+        />
+      </ComboCodContext.Provider>
     </div>
   );
 

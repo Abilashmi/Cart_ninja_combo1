@@ -183,6 +183,7 @@ const SCRIPT_BODY = String.raw`
       activeDiscounts: data.activeDiscounts || [],
       // Internal per-shop switch (php_backend/integrations_admin.php) — see onCheckout.
       shiprocketEnabled: data.shiprocketEnabled === true,
+      codAvailable: false, // set once brix_cod.js confirms COD is on (see whenCodAvailable)
       productMap: productMap,
       variantPriceMap: variantPriceMap,
       selectedMap: {}, // { [variantId]: { productId, qty } }
@@ -383,6 +384,55 @@ const SCRIPT_BODY = String.raw`
     var qty = state.selectedMap[variantId].qty || 0;
     if (qty <= 1) onRemove(root, state, variantId);
     else onQtyChange(root, state, variantId, qty - 1);
+  }
+
+  // Items, discount code and combo attributes for the current selection —
+  // the same ones onCheckout below sends to Shopify / Shiprocket.
+  function buildComboItems(state) {
+    var items = [];
+    for (var variantId in state.selectedMap) {
+      var sel = state.selectedMap[variantId];
+      items.push({ variantId: Number(String(variantId).split('/').pop()), quantity: sel.qty || 1 });
+    }
+    return {
+      items: items,
+      coupon: state.discountApplicable && state.selectedDiscount && state.selectedDiscount.code ? state.selectedDiscount.code : null,
+      attributes: {
+        combo_source: 'ComboForge',
+        combo_template_id: String(state.templateId),
+        combo_template_name: state.templateName,
+      },
+    };
+  }
+
+  // BRIX COD Checkout: the Cash on Delivery sheet comes from the cart-drawer
+  // app embed (extensions/cart-drawer/assets/brix_cod.js). Its "Pay online"
+  // falls back to this page's normal checkout (onCheckout).
+  function onCod(root, state) {
+    if (state.totalSelected === 0 || !window.BrixCod) return;
+    var co = buildComboItems(state);
+    if (co.items.length === 0) return;
+    trackEvent(state, 'click', state.finalPrice);
+    window.BrixCod.open({
+      surface: 'combo',
+      items: co.items,
+      coupon: co.coupon,
+      attributes: co.attributes,
+      onPayOnline: function () { onCheckout(root, state); },
+    });
+  }
+
+  // Waits briefly for brix_cod.js (same app embed, may run a moment later)
+  // and calls cb() only when the merchant has COD on for combo pages.
+  function whenCodAvailable(cb) {
+    var tries = 0;
+    (function check() {
+      if (window.BrixCod) {
+        window.BrixCod.isAvailable('combo').then(function (ok) { if (ok) cb(); });
+        return;
+      }
+      if (++tries < 40) setTimeout(check, 100);
+    })();
   }
 
   function onCheckout(root, state) {
@@ -965,6 +1015,17 @@ const SCRIPT_BODY = String.raw`
         fontSize: isMobile ? '13px' : 'inherit', opacity: canOpenDrawer ? '1' : '0.6',
       }) + '">' + esc(config.preview_checkout_btn_text || 'Checkout') + '</button>';
     }
+    if (state.codAvailable && config.show_cod_button !== false) {
+      html += '<button type="button" data-combo-action="cod"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
+        flex: isMobile ? '1' : 'none', width: isMobile ? '100%' : 'auto',
+        background: config.cod_btn_bg || '#ffffff',
+        color: config.cod_btn_text_color || '#111827',
+        border: '1.5px solid ' + (config.cod_btn_text_color || '#111827'),
+        padding: '10px 20px', borderRadius: (config.preview_border_radius || 6) + 'px', fontWeight: '700',
+        cursor: canOpenDrawer ? 'pointer' : 'not-allowed', minHeight: isMobile ? '48px' : 'auto',
+        fontSize: isMobile ? '13px' : 'inherit', opacity: canOpenDrawer ? '1' : '0.6',
+      }) + '">' + esc(config.cod_btn_text || 'Cash on Delivery') + '</button>';
+    }
     if (config.show_preview_add_to_cart_btn) {
       html += '<button type="button" data-combo-action="cart-drawer-open"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
         flex: isMobile ? '1' : 'none', width: isMobile ? '100%' : 'auto', background: config.preview_add_to_cart_btn_bg || '#fff',
@@ -1180,6 +1241,7 @@ const SCRIPT_BODY = String.raw`
         return;
       }
       if (action === 'checkout') { onCheckout(root, state); return; }
+      if (action === 'cod') { onCod(root, state); return; }
       if (action === 'reset') { onReset(root, state); return; }
       if (action === 'cart-drawer-open') { state.cartDrawerOpen = true; render(root); return; }
       if (action === 'cart-drawer-close') { state.cartDrawerOpen = false; render(root); return; }
@@ -1247,6 +1309,23 @@ const SCRIPT_BODY = String.raw`
         }
       } else if (e.data.type === 'brix-combo-ready') {
         postViewport();
+        // Layouts 2-4 render inside this iframe, but the COD sheet lives on
+        // this (parent) page — tell the frame to show its COD button.
+        whenCodAvailable(function () {
+          try { iframe.contentWindow.postMessage({ type: 'brix-combo-cod-available' }, '*'); } catch (err) {}
+        });
+      } else if (e.data.type === 'brix-combo-cod-open' && window.BrixCod) {
+        var fallback = String(e.data.fallbackUrl || '');
+        var shopOrigin = 'https://' + String(shop).replace(/^https?:\/\//, '');
+        window.BrixCod.open({
+          surface: 'combo',
+          items: Array.isArray(e.data.items) ? e.data.items : [],
+          coupon: e.data.coupon || null,
+          attributes: e.data.attributes || null,
+          onPayOnline: function () {
+            if (fallback.indexOf(shopOrigin + '/') === 0 || fallback.indexOf(window.location.origin + '/') === 0) window.location.href = fallback;
+          },
+        });
       }
     });
   }
@@ -1343,6 +1422,9 @@ const SCRIPT_BODY = String.raw`
       loadGoogleFont(state.config.heading_font_family);
       render(root);
       trackEvent(state, 'view');
+      if (state.config.show_cod_button !== false) {
+        whenCodAvailable(function () { state.codAvailable = true; render(root); });
+      }
     }).catch(function () {
       root.innerHTML = '';
     });

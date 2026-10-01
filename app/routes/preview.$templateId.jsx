@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLoaderData, useParams } from 'react-router';
 import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
-import { CdoPreviewBar } from '../components/CdoPreviewBar';
+import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
 // ⚠) — 1em/currentColor so each inherits the calling element's own
@@ -1617,28 +1617,68 @@ export default function ComboPreviewPage() {
     setLightboxProduct(product);
   };
 
-  const onCheckout = () => {
-    if (totalSelected === 0) return;
+  const checkoutDestination = () => {
     const cartLines = [];
     Object.entries(selectedMap).forEach(([variantId, sel]) => {
       const shortId = String(variantId).split('/').pop();
       cartLines.push(`${shortId}:${sel.qty || 1}`);
     });
-    if (cartLines.length === 0) return;
-    trackEvent('click', finalPrice);
+    if (cartLines.length === 0) return null;
     const shopDomain = shop.replace(/^https?:\/\//, '');
     const params = new URLSearchParams();
     params.set('attributes[combo_source]', 'ComboForge');
     params.set('attributes[combo_template_id]', String(templateId));
     params.set('attributes[combo_template_name]', templateName);
     const cartPath = `/cart/${cartLines.join(',')}?${params.toString()}`;
-    const destination = discountApplicable && selectedDiscount?.code
+    return discountApplicable && selectedDiscount?.code
       ? `https://${shopDomain}/discount/${encodeURIComponent(selectedDiscount.code)}?redirect=${encodeURIComponent(cartPath)}`
       : `https://${shopDomain}${cartPath}`;
+  };
+
+  const onCheckout = () => {
+    if (totalSelected === 0) return;
+    const destination = checkoutDestination();
+    if (!destination) return;
+    trackEvent('click', finalPrice);
     // Inside the storefront's iframe (embed=1), navigate the top window so
     // checkout leaves the frame instead of loading inside it.
     (embed ? window.top : window).location.href = destination;
   };
+
+  // BRIX COD Checkout: the COD sheet lives on the parent storefront page
+  // (brix_cod.js), so inside the iframe we only show the button once the
+  // parent says COD is on, and hand the selection back to it to open.
+  const [codAvailable, setCodAvailable] = useState(false);
+  useEffect(() => {
+    if (!embed) return undefined;
+    const handler = (e) => {
+      if (e.source === window.parent && e.data && e.data.type === 'brix-combo-cod-available') setCodAvailable(true);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [embed]);
+
+  const codContext = embed && codAvailable ? {
+    onCod: () => {
+      const destination = checkoutDestination();
+      if (totalSelected === 0 || !destination) return;
+      trackEvent('click', finalPrice);
+      window.parent.postMessage({
+        type: 'brix-combo-cod-open',
+        items: Object.entries(selectedMap).map(([variantId, sel]) => ({
+          variantId: Number(String(variantId).split('/').pop()),
+          quantity: sel.qty || 1,
+        })),
+        coupon: discountApplicable && selectedDiscount?.code ? selectedDiscount.code : null,
+        attributes: {
+          combo_source: 'ComboForge',
+          combo_template_id: String(templateId),
+          combo_template_name: templateName,
+        },
+        fallbackUrl: destination,
+      }, '*');
+    },
+  } : null;
 
   const onReset = () => setSelectedMap({});
 
@@ -1672,6 +1712,7 @@ export default function ComboPreviewPage() {
     : [];
 
   return (
+    <ComboCodContext.Provider value={codContext}>
     <div ref={rootRef} style={{ minHeight: embed ? 'auto' : '100vh', background: embed ? 'transparent' : '#f4f5f7' }}>
       <style>{`
         @keyframes combo-shimmer {
@@ -1839,5 +1880,6 @@ export default function ComboPreviewPage() {
         <Lightbox images={lightboxImages} onClose={() => setLightboxProduct(null)} />
       )}
     </div>
+    </ComboCodContext.Provider>
   );
 }

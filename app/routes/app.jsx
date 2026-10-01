@@ -78,6 +78,7 @@ export default function App() {
                             <s-link href="/app/cartdrawer">Cart Editor</s-link>
                             <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/packs">Packs</s-link>
+                            <s-link href="/app/cod">COD Checkout</s-link>
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>

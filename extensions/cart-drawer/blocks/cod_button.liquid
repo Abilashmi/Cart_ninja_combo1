@@ -1,0 +1,22 @@
+{% comment %}
+  BRIX COD Checkout — optional product-page block.
+
+  The Cash on Delivery button is added under Add to Cart automatically by
+  brix_cod.js (loaded by the "Custom Cart Drawer" app embed). Add this block
+  only to choose a different spot on the product page: the button then
+  renders here instead. It shows nothing unless COD is on in BRIX.
+{% endcomment %}
+{% if product %}
+  <div data-brix-cod-slot="block" style="margin: {{ block.settings.margin_top }}px 0 0 0; width: 100%;"></div>
+{% endif %}
+{% schema %}
+{
+  "name": "COD button",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "paragraph", "content": "Shows the BRIX Cash on Delivery button here. Turn on COD Checkout in the BRIX app, and keep the Custom Cart Drawer app embed enabled." },
+    { "type": "range", "id": "margin_top", "label": "Space above", "min": 0, "max": 40, "step": 2, "unit": "px", "default": 10 }
+  ]
+}
+{% endschema %}

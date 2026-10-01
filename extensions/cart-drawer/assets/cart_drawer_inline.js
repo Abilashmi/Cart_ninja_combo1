@@ -2112,6 +2112,24 @@
     window.location.href = href;
   }
 
+  // BRIX COD Checkout (brix_cod.js): fills #cc-cod-slot with the Cash on
+  // Delivery button when the merchant has COD on, and draws nothing
+  // otherwise. "Pay online" inside the COD sheet goes through ccGoToCheckout,
+  // so prepaid keeps using Shopify (or Shiprocket) checkout exactly as before.
+  function initCodButton(cart) {
+    const slot = document.getElementById('cc-cod-slot');
+    if (!slot || !window.BrixCod) return;
+    const href = appliedCouponCodes.length > 0
+      ? '/checkout?discount=' + encodeURIComponent(appliedCouponCodes[0])
+      : '/checkout';
+    window.BrixCod.mountDrawerButton(slot, {
+      cart,
+      coupon: appliedCouponCodes[0] || null,
+      onPayOnline: () => ccGoToCheckout(href),
+      onSuccess: () => closeDrawer(),
+    });
+  }
+
   // Click handler for the Shiprocket-shop standard button — same
   // re-bind-every-render rationale as initSwipeCheckout below. No-op when
   // the standard <a> button (or another mode) was rendered instead.
@@ -2762,6 +2780,7 @@
       <span style="font-size:18px;color:#0f172a;font-weight:900;">${formatMoney(finalTotal)}</span>
     </div>
   </div>
+  <div id="cc-cod-slot"></div>
   ${renderCheckoutButton(appliedCouponCodes)}
   <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
@@ -2795,6 +2814,7 @@
       initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
+      initCodButton(cart);
     } else {
       // Subsequent updates: only replace drawer inner content (no flash)
       const drawer = document.getElementById('cc-drawer');
@@ -2816,6 +2836,7 @@
       initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
+      initCodButton(cart);
     }
 
     startCountdownTicker();

@@ -62,6 +62,7 @@ export const FEATURES = {
 
   fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   packs:                    { label: 'Packs',                           states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  cod_checkout:             { label: 'COD Checkout',                    states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
   coupon_lock_pro:        { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
 
   progress_bar:             { label: 'Progress Bar',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
