@@ -119,6 +119,127 @@ export function validateVariantCoverage({ packType, variantScope, allowedVariant
   return { valid: errors.length === 0, errors, allowedVariantIds: owned };
 }
 
+// ─── Item selection: Shopify options -> real variants ────────────────────────
+//
+// A Pack of N lets the shopper pick N items, each a REAL Shopify variant. These
+// helpers are the single description of that logic; packs_widget.js (plain
+// browser JS, no imports) mirrors them function for function — keep in sync.
+// Option names/values are always read from Shopify data, never assumed.
+
+const DEFAULT_OPTION_VALUE = 'Default Title';
+
+/**
+ * Normalise option data for a Pack's variants.
+ *  - productOptions: Shopify option names (['Size','Color'], as Liquid's
+ *    product.options) or [{ name, values }]; may be missing.
+ *  - variants: [{ id, title, options?: ['M','Black'], ... }] — `options` are the
+ *    variant's option values in product-option order.
+ * Returns { options: [{ name, values }], variants } where each variant gains
+ * `optionValues` and `options` only lists values these variants really use (in
+ * Shopify's order). A product without real options (Shopify's single "Default
+ * Title" variant) has no options. If option data is missing but there are
+ * several variants, one "Variant" option of their titles is used instead, so
+ * a shopper can still pick every variant.
+ */
+export function normalizeOptionData(productOptions, variants) {
+  const list = Array.isArray(variants) ? variants : [];
+  const names = (Array.isArray(productOptions) ? productOptions : []).map((option) => (option && typeof option === 'object' ? option.name : option)).filter((name) => typeof name === 'string' && name);
+  const valueOrder = (Array.isArray(productOptions) ? productOptions : []).map((option) => (option && Array.isArray(option.values) ? option.values.map(String) : []));
+  const usable = names.length > 0 && list.length > 0 && list.every((variant) => Array.isArray(variant.options) && variant.options.length >= names.length);
+  if (!usable) {
+    const withTitles = list.map((variant) => ({ ...variant, optionValues: list.length > 1 ? [String(variant.title)] : [] }));
+    return { options: list.length > 1 ? [{ name: 'Variant', values: withTitles.map((variant) => variant.optionValues[0]) }] : [], variants: withTitles };
+  }
+  const shaped = list.map((variant) => ({ ...variant, optionValues: variant.options.slice(0, names.length).map(String) }));
+  if (names.length === 1 && shaped.every((variant) => variant.optionValues[0] === DEFAULT_OPTION_VALUE)) {
+    return { options: [], variants: shaped.map((variant) => ({ ...variant, optionValues: [] })) };
+  }
+  const options = names.map((name, index) => {
+    const used = [];
+    for (const variant of shaped) if (!used.includes(variant.optionValues[index])) used.push(variant.optionValues[index]);
+    const order = valueOrder[index] || [];
+    return { name, values: [...order.filter((value) => used.includes(value)), ...used.filter((value) => !order.includes(value))] };
+  });
+  return { options, variants: shaped };
+}
+
+/** A fresh item selection: '' per option, except options with only one value. */
+export function emptySelection(options) {
+  return options.map((option) => (option.values.length === 1 ? option.values[0] : ''));
+}
+
+/** The variant matching every selected value exactly, or null. Never a "closest" match. */
+export function resolveVariant(variants, options, values) {
+  if (options.length === 0) return variants.length === 1 ? variants[0] : null;
+  if (!Array.isArray(values) || values.length !== options.length || values.some((value) => !value)) return null;
+  return variants.find((variant) => variant.optionValues.every((value, index) => value === values[index])) || null;
+}
+
+/**
+ * The choices for option `index` given the options chosen BEFORE it (Shopify's
+ * own cascading rule: option 1 is always open; option 2 is filtered by
+ * option 1; and so on). A value is `exists` when some variant has it with the
+ * earlier picks, and `available` when such a variant is also for sale.
+ */
+export function optionChoices(variants, options, values, index) {
+  return options[index].values.map((value) => {
+    const matching = variants.filter((variant) => variant.optionValues[index] === value
+      && variant.optionValues.slice(0, index).every((earlier, j) => !values[j] || earlier === values[j]));
+    return { value, exists: matching.length > 0, available: matching.some((variant) => variant.availableForSale !== false) };
+  });
+}
+
+/**
+ * Where one item stands: { variant, problem } with problem one of
+ *   null | 'incomplete' (an option is not chosen) | 'unavailable' (no such
+ *   combination) | 'sold_out'. `missing` lists the unchosen option names.
+ */
+export function selectionStatus(variants, options, values) {
+  const missing = options.filter((option, index) => !values?.[index]).map((option) => option.name);
+  if (missing.length) return { variant: null, problem: 'incomplete', missing };
+  const variant = resolveVariant(variants, options, values);
+  if (!variant) return { variant: null, problem: 'unavailable', missing };
+  if (variant.availableForSale === false) return { variant, problem: 'sold_out', missing };
+  return { variant, problem: null, missing };
+}
+
+/**
+ * The Pack's selection rules, from its existing configuration — no separate
+ * setting exists. Same Variant Packs ("multiple quantities of the same
+ * selected variant") use one variant for every item. Mix & Match Packs let
+ * every item be its own variant, and repeats are allowed (the builder has
+ * always told merchants so, and the checkout Function prices any mix).
+ */
+export function packSelectionRules(pack) {
+  return { sameVariant: pack?.packType !== 'mix_match', allowDuplicates: true };
+}
+
+/**
+ * Can one more `variant` be added to `picks` (variant ids already chosen)?
+ * Returns null when it can, else 'full' | 'duplicate' | 'stock' | 'sold_out'.
+ * `maxQuantity` (Shopify stock when overselling is denied) caps how many
+ * units of ONE variant a Pack may hold — the Pack never has stock of its own.
+ */
+export function pickBlockReason(picks, variant, { quantity, allowDuplicates = true }) {
+  if (variant.availableForSale === false) return 'sold_out';
+  if (picks.length >= quantity) return 'full';
+  const already = picks.filter((id) => String(id) === String(variant.id)).length;
+  if (already > 0 && !allowDuplicates) return 'duplicate';
+  if (variant.maxQuantity !== null && variant.maxQuantity !== undefined && already + 1 > Number(variant.maxQuantity)) return 'stock';
+  return null;
+}
+
+/** ['200','201','200'] -> [{ id:'200', quantity:2 }, { id:'201', quantity:1 }] — one cart line per real variant. */
+export function groupCartItems(variantIds) {
+  const lines = [];
+  for (const id of variantIds) {
+    const line = lines.find((item) => item.id === String(id));
+    if (line) line.quantity += 1;
+    else lines.push({ id: String(id), quantity: 1 });
+  }
+  return lines;
+}
+
 // ─── Money ───────────────────────────────────────────────────────────────────
 
 // Currencies Intl doesn't need to be asked about — fast path; anything else
@@ -283,26 +404,28 @@ export const DEFAULT_CUSTOMIZATION = {
     addBorder: '#008060', buyNowBackground: '#ffffff', buyNowText: '#008060', buyNowBorder: '#008060',
   },
   images: { enabled: true, size: 'medium', position: 'top' },
-  design: { preset: 'stacked' },
+  design: { preset: 'slots' },
   // Where the storefront widget sits: right below the product price, or in a
   // "BRIX Packs position" app block the merchant places in the theme editor.
   placement: { position: 'below_price' },
 };
 
-// Layout presets. Each id is a structurally different layout, rendered by
-// PackPreview.jsx and packs_widget.js (see their layoutOf): 'tabs' = pack tabs
-// over one panel, 'stacked' = one card of rows where the chosen row opens its
-// pickers, 'visual' = pack tabs + one photo picker per item. `style` only
-// nudges shape/spacing to suit the layout — never colors, so switching layouts
-// keeps the merchant's palette (content, savings and Pack behaviour are never
-// touched either).
+// Storefront templates (stored as customization.design.preset). All three show
+// the packs as a horizontal row of cards; the chosen pack's quantity decides
+// how many items the shopper picks. They differ in HOW items are picked, and
+// are rendered by packs_widget.js (the admin PackPreview mounts that same
+// widget): 'slots' = one compact slot per item with a dropdown per Shopify
+// option, 'quick_add' = a grid of variant cards with a top-right "+" button,
+// 'image_slots' = one large photo card per item with its option dropdowns
+// underneath. `style` only nudges shape/spacing — never colors, so switching
+// keeps the merchant's palette (content, savings and Pack behaviour too).
 export const PACK_DESIGNS = [
-  { id: 'tabs', name: 'Pack tabs', description: 'Packs side by side as tabs; the chosen pack’s variants and price show below.', style: {
-    borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 8 } } },
-  { id: 'stacked', name: 'Stacked packs', description: 'Packs stacked in one card; the chosen pack opens to pick its variants.', style: {
-    borders: { radius: 10 } } },
-  { id: 'visual', name: 'Visual picker', description: 'One picker per item with the variant photo — made for Mix & Match.', style: {
-    borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 10 } } },
+  { id: 'slots', name: 'Horizontal Select', description: 'Pack cards in a row. Each item gets its own slot with a dropdown for every product option.',
+    highlights: ['Horizontal packs', 'One slot per item', 'Option dropdowns'], style: { borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 10 } } },
+  { id: 'quick_add', name: 'Quick Add Picker', description: 'Pack cards in a row over a grid of variant photos. Shoppers tap + to add each item.',
+    highlights: ['Horizontal packs', 'Variant photo grid', '+ quick add', 'Selected count'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 10 } } },
+  { id: 'image_slots', name: 'Image Variant Select', description: 'Pack cards in a row. Every item shows a large photo that updates as its options are chosen.',
+    highlights: ['Horizontal packs', 'Photo in every slot', 'Option dropdowns'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -344,7 +467,9 @@ function isPlainObject(value) {
 // Layouts that were removed, mapped to their closest current layout so Packs
 // saved with them keep working (also mirrored in packs_widget.js layoutOf,
 // which reads raw saved customization from the PHP endpoint).
-export const LEGACY_DESIGN_MAP = { classic: 'stacked', highlight: 'tabs', premium: 'tabs' };
+// The pre-redesign layouts: Pack tabs / Stacked packs -> Horizontal Select,
+// Visual picker (photo per item) -> Image Variant Select.
+export const LEGACY_DESIGN_MAP = { classic: 'slots', highlight: 'slots', premium: 'slots', tabs: 'slots', stacked: 'slots', visual: 'image_slots' };
 // Placements that were removed (next to the buy buttons) now show below the price.
 const LEGACY_PLACEMENTS = new Set(['above_buttons', 'below_buttons']);
 
@@ -409,6 +534,7 @@ export function mergeCustomization(...layers) {
     }
   }
   if (!hasButtons) merged.buttons = { ...merged.buttons, ...legacyButtonColors(merged) };
+  if (LEGACY_DESIGN_MAP[merged.design.preset]) merged.design = { ...merged.design, preset: LEGACY_DESIGN_MAP[merged.design.preset] };
   return merged;
 }
 

@@ -12,21 +12,24 @@ import {
 } from '../../utils/packs.shared.js';
 
 const PREVIEW_ZOOM = 0.8;
-const STEPS = ['Product', 'Pack type', 'Configure', 'Design', 'Customize', 'Review'];
+const STEPS = ['Product', 'Pack type', 'Configure', 'Template', 'Customize', 'Review'];
 const STEP_KEYS = ['product', 'type', 'configure', 'design', 'customize', 'review'];
 const REVIEW_STEP = STEPS.length - 1;
 
-// Mock offers used only for the miniature design previews.
+// Sample offers/variants for the template thumbnails, used only until the
+// merchant's own product and tiers are available (then those are shown).
 const SAMPLE_TIERS = [
   { quantity: 1, name: 'Buy 1', badge: '', discountType: 'none', discountValue: 0, savings: 0, subtotal: 40, price: 40 },
   { quantity: 2, name: 'Buy 2', badge: 'Popular', discountType: 'percentage', discountValue: 10, savings: 8, subtotal: 80, price: 72 },
   { quantity: 3, name: 'Buy 3', badge: '', discountType: 'percentage', discountValue: 15, savings: 18, subtotal: 120, price: 102 },
 ];
-// Layout thumbnails: Pack tabs and Visual picker are for choosing variants per
-// item, so their thumbnails get sample variants; Stacked packs shows one variant.
+const sampleShirt = (fill) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><rect width="300" height="300" fill="#f3f3f1"/><path d="M80 95h140l25 40-38 18v82c0 9-7 16-16 16h-82c-9 0-16-7-16-16v-82l-38-18z" fill="${fill}"/><path d="M125 95q25 22 50 0" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="5"/></svg>`)}`;
+const SAMPLE_OPTIONS = ['Size', 'Color'];
 const SAMPLE_VARIANTS = [
-  { id: 'sample-1', title: 'Black', price: 40, availableForSale: true },
-  { id: 'sample-2', title: 'White', price: 40, availableForSale: true },
+  { id: 'sample-1', title: 'M / Black', options: ['M', 'Black'], price: 40, availableForSale: true, image: sampleShirt('#1f1f1f') },
+  { id: 'sample-2', title: 'M / Blue', options: ['M', 'Blue'], price: 40, availableForSale: true, image: sampleShirt('#2f5f9e') },
+  { id: 'sample-3', title: 'L / White', options: ['L', 'White'], price: 40, availableForSale: true, image: sampleShirt('#e9e9e6') },
+  { id: 'sample-4', title: 'L / Black', options: ['L', 'Black'], price: 40, availableForSale: true, image: sampleShirt('#1f1f1f') },
 ];
 
 const blankTier = (quantity, discountType = 'none', discountValue = '') => ({ name: '', quantity: String(quantity), discountType, discountValue: String(discountValue), badge: '' });
@@ -377,30 +380,38 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   // it) — the merchant's colors are carried over, so switching never repaints.
   const withLayout = (designId) => ({ ...applyDesign(form.customization, designId), colors: form.customization.colors });
   const chooseLayout = (designId) => update({ customization: withLayout(designId), template: form.template === 'visual_offer' ? 'same_variant' : form.template });
+  // Thumbnails show this Pack's real product, variants, options and tiers once
+  // they're loaded (samples before that), as Mix & Match so every template's
+  // item picking is visible, with one item already chosen.
+  const useRealData = applicableVariants.length > 0;
+  const thumbVariants = useRealData ? applicableVariants : SAMPLE_VARIANTS;
+  const thumbOptions = useRealData ? productData.product?.options : SAMPLE_OPTIONS;
+  const thumbTiers = previewTiers.length > 1 ? previewTiers : SAMPLE_TIERS;
   const designStep = (
     <Card>
       <BlockStack gap="500">
         <BlockStack gap="100">
-          <Text as="h2" variant="headingMd">Choose a layout</Text>
-          <Text as="p" tone="subdued">Each layout arranges your offers differently. Your colors stay the same, and you can fine-tune everything in the next step.</Text>
+          <Text as="h2" variant="headingMd">Choose a template</Text>
+          <Text as="p" tone="subdued">Every template shows your Packs side by side. They differ in how shoppers choose the items in their Pack. Your colors stay the same, and you can fine-tune everything in the next step.</Text>
         </BlockStack>
-        <div role="radiogroup" aria-label="Pack layout" className="pd-grid">
+        <div role="radiogroup" aria-label="Pack template" className="pd-grid">
           {PACK_DESIGNS.map((design) => {
             const selected = form.customization.design.preset === design.id;
             const styled = withLayout(design.id);
-            const thumb = { ...styled, images: { ...styled.images, enabled: false }, content: { ...styled.content, promoText: '' } };
+            const thumb = { ...styled, content: { ...styled.content, promoText: '', subheading: '' } };
             return (
               <button key={design.id} type="button" role="radio" aria-checked={selected} aria-label={design.name} onClick={() => chooseLayout(design.id)} className={`pd-card${selected ? ' pd-card--on' : ''}`}>
-                <div className="pd-stage" aria-hidden="true">
-                  <div style={{ zoom: 0.62, width: '100%', pointerEvents: 'none' }}>
-                    <PackPreview template={form.template === 'choose_each_item' ? 'same_variant' : form.template} customization={thumb} tiers={SAMPLE_TIERS} variants={design.id === 'stacked' ? undefined : SAMPLE_VARIANTS} productImage={form.productImage} productTitle={form.productTitle} formatMoney={fmt} />
+                <div className="pd-stage" aria-hidden="true" inert="">
+                  <div style={{ zoom: 0.56, width: '100%', pointerEvents: 'none' }}>
+                    <PackPreview template="choose_each_item" packType="mix_match" customization={thumb} tiers={thumbTiers} variants={thumbVariants} productOptions={thumbOptions} productImage={form.productImage || (useRealData ? '' : SAMPLE_VARIANTS[0].image)} productTitle={form.productTitle || 'Classic Tee'} currency={currency} demo />
                   </div>
                 </div>
                 <div className="pd-meta">
                   <span className={`pd-radio${selected ? ' pd-radio--on' : ''}`} aria-hidden="true">{selected && checkSvg(10)}</span>
-                  <BlockStack gap="050">
+                  <BlockStack gap="150">
                     <Text as="span" fontWeight="semibold">{design.name}</Text>
                     <Text as="span" variant="bodySm" tone="subdued">{design.description}</Text>
+                    <span className="pd-tags">{design.highlights.map((item) => <span key={item} className="pd-tag">{item}</span>)}</span>
                   </BlockStack>
                 </div>
               </button>
@@ -481,8 +492,10 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pd-card{display:flex;flex-direction:column;text-align:left;font:inherit;cursor:pointer;background:#fff;border:2px solid #e3e5e8;border-radius:16px;padding:0;overflow:hidden;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
 .pd-card:hover{border-color:#9a9a9a;transform:translateY(-2px);box-shadow:0 8px 22px rgba(15,23,42,.08)}
 .pd-card--on,.pd-card--on:hover{border-color:#111111;box-shadow:0 8px 24px rgba(17,17,17,.18)}
-.pd-stage{height:250px;overflow:hidden;padding:18px;background:linear-gradient(180deg,#f7f7f8 0%,#eef0f3 100%);border-bottom:1px solid #eceef0;display:flex;align-items:flex-start}
-.pd-card--on .pd-stage{background:linear-gradient(180deg,#f7f7f7 0%,#ececec 100%)}
+.pd-stage{height:300px;overflow:hidden;padding:16px;background:#f4f5f6;border-bottom:1px solid #eceef0;display:flex;align-items:flex-start}
+.pd-card--on .pd-stage{background:#efefef}
+.pd-tags{display:flex;flex-wrap:wrap;gap:4px}
+.pd-tag{padding:2px 8px;border-radius:999px;background:#f1f2f4;color:#4a4f55;font-size:11px;font-weight:600}
 .pd-meta{display:flex;gap:12px;align-items:flex-start;padding:14px 16px}
 .pd-radio{width:20px;height:20px;border-radius:50%;border:2px solid #c9cccf;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center}
 .pd-radio--on{border-color:#111111;background:#111111}
@@ -717,7 +730,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.'] },
     { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Style the Add to Cart and Buy Now buttons.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
-    { id: 'image', label: 'Image', icon: ImageIcon, description: 'Show the product photo inside each offer.', prefixes: ['images.'] },
+    { id: 'image', label: 'Image', icon: ImageIcon, description: 'Photo size and position in the item slots.', prefixes: ['images.'] },
     { id: 'placement', label: 'Placement', icon: LayoutBuyButtonIcon, description: 'Where the Pack appears on the product page.', prefixes: ['placement.'] },
   ];
   const tabHasError = (tab) => customCheck.errors.some((message) => tab.prefixes.some((prefix) => message.startsWith(prefix)));
@@ -790,7 +803,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 </div>
                 <Text as="p" tone="subdued" variant="bodySm">A short product description goes here, giving shoppers context about this item before they see the Pack offer below.</Text>
                 <div style={{ margin: '16px 0' }}>
-                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} formatMoney={fmt} />
+                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} productOptions={productData.product?.options} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} currency={currency} />
                 </div>
               </div>
             </div>
@@ -898,10 +911,11 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     image: (
       <BlockStack gap="400">
-        <Toggle label="Show product image" helpText="Adds the product photo to each offer card." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
+        <Toggle label="Show photos in item slots" helpText="Horizontal Select: a small variant photo next to each item. Quick Add Picker and Image Variant Select are photo-based and always show them." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
         <FieldGroup title="Placement">
-          <Segmented label="Image size" disabled={!form.customization.images.enabled} options={['small', 'medium', 'large'].map((value) => [value, capitalize(value)])} value={form.customization.images.size} onChange={(value) => updateCustom('images', 'size', value)} />
-          <Segmented label="Image position" disabled={!form.customization.images.enabled} options={[['top', 'Above title'], ['left', 'Left of title']]} value={form.customization.images.position} onChange={(value) => updateCustom('images', 'position', value)} />
+          <Segmented label="Image size" options={['small', 'medium', 'large'].map((value) => [value, capitalize(value)])} value={form.customization.images.size} onChange={(value) => updateCustom('images', 'size', value)} />
+          <Segmented label="Image position" disabled={form.customization.design.preset !== 'image_slots'} options={[['top', 'Above options'], ['left', 'Left of options']]} value={form.customization.images.position} onChange={(value) => updateCustom('images', 'position', value)} />
+          <Text as="p" variant="bodySm" tone="subdued">Position applies to Image Variant Select. On phones the photo always sits above the options.</Text>
         </FieldGroup>
         {!form.productImage && <Banner tone="info"><p>This product has no image yet. Pick a product with an image in step 1 to use this.</p></Banner>}
       </BlockStack>

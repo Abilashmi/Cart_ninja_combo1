@@ -117,7 +117,7 @@ export default function PackDetail() {
                   <Text as="h2" variant="headingMd">Details</Text>
                   <Divider />
                   <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
-                    <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Type · Design</Text><Text as="span">{packTypeOf(pack.template).name} · {PACK_DESIGNS.find((design) => design.id === pack.customization?.design?.preset)?.name || 'Classic'}</Text></BlockStack>
+                    <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Type · Template</Text><Text as="span">{packTypeOf(pack.template).name} · {PACK_DESIGNS.find((design) => design.id === pack.customization?.design?.preset)?.name || 'Horizontal Select'}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Variant coverage</Text><Text as="span">{pack.variantScope === 'all' ? 'All variants' : `${(pack.allowedVariantIds || []).length} selected variant${(pack.allowedVariantIds || []).length === 1 ? '' : 's'}`}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Availability</Text><Text as="span">{pack.available ? 'In stock' : 'Out of stock'}{pack.maxQuantity ? ` · max ${pack.maxQuantity} per order` : ''}</Text></BlockStack>
                     <BlockStack gap="050"><Text as="span" tone="subdued" variant="bodySm">Version</Text><Text as="span">{pack.version}</Text></BlockStack>
@@ -134,7 +134,7 @@ export default function PackDetail() {
               <BlockStack gap="300">
                 <Text as="h3" variant="headingSm">Storefront preview</Text>
                 <div style={{ maxWidth: 640 }}>
-                  <PackPreview template={pack.template} packType={pack.packType} variants={pack.variants} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} productTitle={pack.productTitle} formatMoney={fmt} />
+                  <PackPreview template={pack.template} packType={pack.packType} variants={pack.variants} productOptions={pack.productOptions} customization={pack.customization} tiers={pack.tiers} productImage={pack.productImage} productTitle={pack.productTitle} currency={currency} />
                 </div>
               </BlockStack>
             </Card>

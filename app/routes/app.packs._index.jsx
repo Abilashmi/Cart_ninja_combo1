@@ -159,7 +159,7 @@ export default function AppPacks() {
               promotedBulkActions={[
                 { content: 'Delete Packs', destructive: true, onAction: () => setBulkDeleteOpen(true) },
               ]}
-              headings={[{ title: 'Product' }, { title: 'Variant' }, { title: 'Offer' }, { title: 'Type' }, { title: 'Design' }, { title: 'Status' }, { title: 'Updated' }, { title: 'Actions' }]}
+              headings={[{ title: 'Product' }, { title: 'Variant' }, { title: 'Offer' }, { title: 'Type' }, { title: 'Template' }, { title: 'Status' }, { title: 'Updated' }, { title: 'Actions' }]}
             >
               {visible.map((pack, index) => (
                 <IndexTable.Row id={String(pack.id)} key={pack.id} position={index} selected={selectedResources.includes(String(pack.id))}>
@@ -177,7 +177,7 @@ export default function AppPacks() {
                     </BlockStack>
                   </IndexTable.Cell>
                   <IndexTable.Cell>{packTypeOf(pack.template).name}</IndexTable.Cell>
-                  <IndexTable.Cell>{designLabels[pack.customization?.design?.preset] || 'Classic'}</IndexTable.Cell>
+                  <IndexTable.Cell>{designLabels[pack.customization?.design?.preset] || 'Horizontal Select'}</IndexTable.Cell>
                   <IndexTable.Cell>
                     <BlockStack gap="050">
                       <Badge tone={statusTone[pack.displayStatus] || 'new'}>{statusLabel[pack.displayStatus] || pack.displayStatus}</Badge>

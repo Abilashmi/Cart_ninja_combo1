@@ -637,17 +637,18 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Welcome hero */}
-          <div style={{ background: 'linear-gradient(135deg, #e8f9fe 0%, #edfaf4 50%, #f0fdf4 100%)', border: '1px solid #d4f1fe', borderRadius: 16, padding: '28px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
-            <div>
+          <div style={{ background: '#ffffff', border: '1px solid #e3e5e8', borderRadius: 16, padding: '28px 32px', boxShadow: '0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ display: 'inline-block', marginBottom: 10, padding: '3px 10px', borderRadius: 999, background: '#f3f3f3', color: '#4a4f55', fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Getting started</span>
               <Text as="h1" variant="headingXl" fontWeight="bold">Welcome to Brix</Text>
               <div style={{ marginTop: 6 }}>
                 <Text as="p" variant="bodyMd" tone="subdued">Let's get your store set up. Complete the steps below to go live and start earning.</Text>
               </div>
-              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 180, height: 8, background: '#d4f1fe', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, #1a9de0, #2ecc71)', borderRadius: 4, transition: 'width 0.3s' }} />
+              <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div role="progressbar" aria-label="Setup progress" aria-valuemin={0} aria-valuemax={STEPS.length} aria-valuenow={doneCount} style={{ width: 220, height: 6, background: '#ececec', borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${progressPct}%`, background: '#111111', borderRadius: 999, transition: 'width 0.3s' }} />
                 </div>
-                <Text as="p" variant="bodySm" fontWeight="semibold">{doneCount} / {STEPS.length} steps done</Text>
+                <Text as="p" variant="bodySm" fontWeight="semibold">{doneCount} of {STEPS.length} steps done</Text>
               </div>
             </div>
             <ModeToggle />

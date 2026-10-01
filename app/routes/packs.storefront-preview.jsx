@@ -6,5 +6,5 @@ export async function loader({ request }) {
   if (!previewEnabled()) return new Response('Not found', { status: 404 });
   const params = new URL(request.url).searchParams;
   const device = ['desktop', 'tablet', 'mobile'].includes(params.get('device')) ? params.get('device') : 'desktop';
-  return new Response(renderPreviewShell({ design: params.get('design') || 'stacked', type: params.get('type') === 'mix' ? 'mix' : 'standard', device }), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  return new Response(renderPreviewShell({ design: params.get('design') || 'slots', type: params.get('type') === 'mix' ? 'mix' : 'standard', device }), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }

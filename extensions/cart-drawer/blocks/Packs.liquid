@@ -3,7 +3,9 @@
   The script ships with this extension; the Pack data comes from
   php_backend/packs_storefront.php through the app proxy (/apps/cart-app).
   PHP has no Shopify access, so the widget prices Packs from the live variant
-  data below. It renders nothing unless an active, verified Pack exists.
+  data below (including the product's real option names and each variant's
+  option values, so the Pack's item selectors match the product's options).
+  It renders nothing unless an active, verified Pack exists.
   packs_widget.js then moves it below the product price (or into the
   "BRIX Packs position" block when the Pack's placement is Custom).
 {%- endcomment -%}
@@ -22,6 +24,7 @@
       "image": {% if product.featured_image %}{{ product.featured_image | image_url: width: 600 | json }}{% else %}""{% endif %},
       "currency": {{ cart.currency.iso_code | json }},
       "shopCurrency": {{ shop.currency | json }},
+      "options": {{ product.options | json }},
       "variants": [
         {%- for variant in product.variants -%}
           {
@@ -32,7 +35,8 @@
             "inventoryQuantity": {{ variant.inventory_quantity | default: 0 | json }},
             "inventoryPolicy": {{ variant.inventory_policy | json }},
             "inventoryManagement": {{ variant.inventory_management | json }},
-            "image": {% if variant.featured_image %}{{ variant.featured_image | image_url: width: 160 | json }}{% else %}""{% endif %}
+            "options": {{ variant.options | json }},
+            "image": {% if variant.featured_image %}{{ variant.featured_image | image_url: width: 480 | json }}{% else %}""{% endif %}
           }{% unless forloop.last %},{% endunless %}
         {%- endfor -%}
       ]

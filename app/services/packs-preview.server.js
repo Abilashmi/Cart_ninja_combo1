@@ -28,8 +28,8 @@ const OFFERS = [
 // Illustration only: stands in for the Shopify product photo.
 const IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600"><rect width="600" height="600" fill="#f1f1ef"/><path d="M150 210h300l30 60-60 30v150c0 22-18 40-40 40H220c-22 0-40-18-40-40V300l-60-30z" fill="#1c1c1c"/><path d="M240 210q60 50 120 0" fill="none" stroke="#3a3a3a" stroke-width="10"/></svg>')}`;
 
-export function buildPreviewPayload({ design = 'stacked', type = 'standard' } = {}) {
-  const designId = PACK_DESIGNS.some((item) => item.id === design) ? design : 'stacked';
+export function buildPreviewPayload({ design = 'slots', type = 'standard' } = {}) {
+  const designId = PACK_DESIGNS.some((item) => item.id === design) ? design : 'slots';
   const packType = type === 'mix' ? 'mix_match' : 'same_variant';
   const template = packType === 'mix_match' ? 'choose_each_item' : 'same_variant';
   const customization = applyDesign(mergeCustomization({ ...defaultCustomization(), content: { ...defaultCustomization().content, heading: 'Choose your pack', subheading: 'Buy more and save more.' } }), designId);
@@ -38,7 +38,7 @@ export function buildPreviewPayload({ design = 'stacked', type = 'standard' } = 
     quantity: tier.quantity, name: tier.name, badge: tier.badge, discountType: tier.discountType, discountValue: tier.discountValue,
     subtotal: tier.subtotal, discountAmount: tier.discountAmount, price: tier.price, savings: tier.savings, effectiveUnitPrice: tier.effectiveUnitPrice,
   }));
-  const publicVariants = VARIANTS.map(({ id, title, price, availableForSale }) => ({ id, title, price, availableForSale }));
+  const publicVariants = VARIANTS.map(({ id, title, price, availableForSale, color, size }) => ({ id, title, price, availableForSale, options: [color, size] }));
   // One Pack covering the whole product (variantScope='all') — matches the real
   // architecture: a Pack belongs to a product, then declares which variants it
   // applies to. `variants` is always attached here so the mock also
@@ -46,7 +46,7 @@ export function buildPreviewPayload({ design = 'stacked', type = 'standard' } = 
   const packs = [{
     id: 1, version: 1, variantId: VARIANTS[0].id, template, packType, variantScope: 'all', allowedVariantIds: [],
     productTitle: 'Padded Underwear', variantTitle: VARIANTS[0].title, productImage: IMAGE,
-    basePrice: BASE_PRICE, available: true, maxQuantity: 10, tiers: publicTiers, customization, variants: publicVariants,
+    basePrice: BASE_PRICE, available: true, maxQuantity: 10, tiers: publicTiers, customization, variants: publicVariants, productOptions: ['Color', 'Size'],
   }];
   return { success: true, packs, reason: null, currency: CURRENCY, checkoutDiscount: { verified: true, state: 'active', message: '' }, preview: false };
 }

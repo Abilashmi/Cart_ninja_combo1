@@ -12,7 +12,7 @@ export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
 export const PACKS_DISCOUNT_TITLE = 'BRIX Packs';
 export const PACKS_CONFIG_KEY = 'packs_config';
 
-const VARIANT_FIELDS = `id title price availableForSale inventoryQuantity inventoryPolicy image { url } product { id title handle status featuredImage { url } }`;
+const VARIANT_FIELDS = `id title price availableForSale inventoryQuantity inventoryPolicy image { url } selectedOptions { name value } product { id title handle status featuredImage { url } }`;
 
 async function gql(admin, query, variables) {
   let payload;
@@ -42,7 +42,15 @@ function shapeVariant(node) {
     inventoryQuantity: Number.isFinite(Number(node.inventoryQuantity)) ? Number(node.inventoryQuantity) : null,
     inventoryPolicy: node.inventoryPolicy || null,
     image: node.image?.url || '',
+    // Option values in product-option order (Size, Color, …) — whatever the
+    // merchant's options really are; the storefront resolves picks against them.
+    options: (node.selectedOptions || []).map((option) => option.value),
   };
+}
+
+// Option names in Shopify's order, read from the variants themselves.
+function optionNamesOf(nodes) {
+  return (nodes[0]?.selectedOptions || []).map((option) => option.name);
 }
 
 /** A product and all (up to 100) of its variants, straight from Shopify. */
@@ -53,7 +61,7 @@ export async function fetchProduct(admin, productId) {
     query PackProduct($id: ID!) {
       product(id: $id) {
         id title handle status featuredImage { url }
-        variants(first: 100) { nodes { id title price availableForSale inventoryQuantity inventoryPolicy image { url } } }
+        variants(first: 100) { nodes { id title price availableForSale inventoryQuantity inventoryPolicy image { url } selectedOptions { name value } } }
       }
     }`, { id: gid });
   const product = data?.product;
@@ -64,6 +72,7 @@ export async function fetchProduct(admin, productId) {
     handle: product.handle,
     status: product.status,
     image: product.featuredImage?.url || '',
+    options: optionNamesOf(product.variants.nodes),
     variants: product.variants.nodes.map(shapeVariant),
   };
 }
@@ -141,19 +150,19 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
     lookupFailed = error instanceof PackError ? error.message : 'Could not verify prices with Shopify.';
   }
 
-  // Packs whose coverage spans more than one variant (mix_match, or
-  // same_variant with scope='all'/multiple selected variants) need the full,
-  // live-priced variant list — not just the anchor — so the storefront/admin
-  // preview can price and offer every applicable variant. Fetched once per
+  // The storefront / admin preview needs every applicable variant, live-priced
+  // and with its Shopify option values, so shoppers can pick an item per slot
+  // (even a single-variant Pack shows its photo and options). Fetched once per
   // distinct product, only when the caller actually needs it.
   const variantsByProduct = new Map();
+  const optionsByProduct = new Map();
   if (includeVariants) {
-    const needsExpansion = packs.filter((pack) => pack.packType === 'mix_match' || pack.variantScope === 'all' || (pack.allowedVariantIds || []).length > 1);
-    const productIds = [...new Set(needsExpansion.map((pack) => pack.productId))];
+    const productIds = [...new Set(packs.map((pack) => pack.productId))];
     await Promise.all(productIds.map(async (productId) => {
       try {
         const product = await fetchProduct(admin, productId);
         variantsByProduct.set(productId, product.variants);
+        optionsByProduct.set(productId, product.options);
       } catch {
         // Leave unset — the pack simply won't get an expanded variant list;
         // its own issue/priceVerified flag (from the anchor lookup) still applies.
@@ -191,6 +200,7 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
       productImage: variant?.productImage || pack.productImage,
       productHandle: variant?.productHandle || '',
       variants,
+      productOptions: optionsByProduct.get(pack.productId),
       displayStatus: issue && pack.status === 'active' ? 'configuration_error' : pack.status,
       currency: currency ? { code: currency.code, locale: currency.locale } : null,
     };

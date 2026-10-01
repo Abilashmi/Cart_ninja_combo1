@@ -1,5 +1,6 @@
-// Real-browser check of the admin PackPreview (the Builder's live preview) for
-// the three layouts, so it matches the storefront widget.
+// Real-browser check of the admin PackPreview (the Builder's live preview and
+// template thumbnails). PackPreview mounts the real storefront widget, so this
+// verifies the admin shows the same three templates and interactions.
 //
 //   node tests/packs/preview-browser-check.mjs
 import { chromium } from '@playwright/test';
@@ -24,10 +25,11 @@ const tiers = [
   { quantity: 3, name: 'Buy 3', badge: 'Best value', discountType: 'percentage', discountValue: 10, subtotal: 240, savings: 24, price: 216 },
 ];
 const variants = [
-  { id: '200', title: 'Black / M', price: 80, availableForSale: true, image: swatch('#111111') },
-  { id: '201', title: 'White / L', price: 100, availableForSale: true, image: swatch('#eeeeee') },
+  { id: '200', title: 'M / Black', options: ['M', 'Black'], price: 80, availableForSale: true, image: swatch('#111111') },
+  { id: '201', title: 'L / White', options: ['L', 'White'], price: 100, availableForSale: true, image: swatch('#eeeeee') },
+  { id: '202', title: 'L / Black', options: ['L', 'Black'], price: 80, availableForSale: true, image: swatch('#222222') },
 ];
-const props = (preset, over = {}) => ({ template: 'same_variant', packType: 'same_variant', variants, tiers, productImage: swatch('#cccccc'), productTitle: 'Tee', customization: { ...defaultCustomization(), design: { preset } }, ...over });
+const props = (preset, over = {}) => ({ template: 'choose_each_item', packType: 'mix_match', variants, productOptions: ['Size', 'Color'], tiers, productImage: swatch('#cccccc'), productTitle: 'Tee', customization: { ...defaultCustomization(), design: { preset } }, ...over });
 
 const results = [];
 const check = async (name, fn) => {
@@ -46,44 +48,68 @@ async function open(p) {
     return route.fulfill({ status: 404, body: '' });
   });
   await page.goto('http://preview.test/');
-  await page.locator('#preview section').waitFor();
+  await page.locator('#preview .brix-packs-widget').waitFor();
   return { page, errors };
 }
+const text = (page) => page.locator('#preview').innerText();
 
-console.log('\nPackPreview (admin) — layout checks');
+console.log('\nPackPreview (admin) — template checks');
 
-await check('Pack tabs: tabs across, one plain dropdown per item under the chosen pack', async () => {
-  const { page, errors } = await open(props('tabs'));
-  await page.getByRole('radio', { name: /Buy 3/ }).click();
-  assert.equal(await page.locator('#preview select').count(), 3);
-  await page.locator('#preview select').nth(1).selectOption('201');
-  assert.match(await page.locator('#preview').innerText(), /₹234\.00/); // (80 + 100 + 80) x 0.9
-  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-tabs.png') });
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-
-await check('Stacked packs: rows; the chosen row shows the photo per item (product name for a single variant)', async () => {
-  const { page, errors } = await open(props('stacked', { variants: [{ id: '200', title: 'Default Title', price: 80, availableForSale: true, image: swatch('#3366cc') }] }));
-  await page.getByRole('radio', { name: /Buy 3/ }).click();
-  assert.equal(await page.locator('#preview img[src*="3366cc"]').count(), 3);
-  assert.doesNotMatch(await page.locator('#preview').innerText(), /Default Title/);
-  assert.equal(await page.locator('#preview select').count(), 0);
-  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-stacked.png') });
-  assert.deepEqual(errors, []);
-  await page.close();
-});
-
-await check('Visual picker: rows; photo dropdown per item with photos in every option', async () => {
-  const { page, errors } = await open(props('visual'));
+await check('Horizontal Select: horizontal packs, a slot per item with Shopify option dropdowns; Add to cart is simulated', async () => {
+  const { page, errors } = await open(props('slots'));
   await page.getByRole('radio', { name: /Buy 2/ }).click();
-  const triggers = page.locator('#preview button[aria-haspopup="listbox"]');
-  assert.equal(await triggers.count(), 2);
-  await triggers.nth(1).click();
-  assert.equal(await page.locator('#preview [role="option"] img').count(), 2);
-  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-visual.png') });
-  await page.locator('#preview [role="option"]', { hasText: 'White / L' }).click();
-  assert.match(await triggers.nth(1).innerText(), /White \/ L/);
+  assert.equal(await page.locator('#preview .brix-packs-slot').count(), 2);
+  await page.getByLabel('Item 1 Size').selectOption('M');
+  await page.getByLabel('Item 1 Color').selectOption('Black');
+  await page.getByLabel('Item 2 Size').selectOption('L');
+  await page.getByLabel('Item 2 Color').selectOption('White');
+  assert.match(await text(page), /₹171\.00/); // (80 + 100) x 0.95
+  await page.locator('#preview .brix-packs-add').click();
+  assert.match(await text(page), /Preview only — on your store this adds to the cart: M \/ Black × 1, L \/ White × 1/);
+  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-slots.png') });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await check('Quick Add Picker: variant cards with +, selected count, blocked when full', async () => {
+  const { page, errors } = await open(props('quick_add'));
+  await page.getByRole('radio', { name: /Buy 2/ }).click();
+  assert.match(await text(page), /Selected: 0 \/ 2/);
+  await page.getByRole('button', { name: 'Add M / Black to your pack' }).click();
+  await page.getByRole('button', { name: 'Add another M / Black' }).click();
+  assert.match(await text(page), /Selected: 2 \/ 2/);
+  assert.equal(await page.getByRole('button', { name: /Add L \/ White to your pack/ }).getAttribute('aria-disabled'), 'true');
+  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-quick-add.png') });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await check('Image Variant Select: a photo per slot that follows the chosen variant', async () => {
+  const { page, errors } = await open(props('image_slots'));
+  await page.getByRole('radio', { name: /Buy 2/ }).click();
+  assert.equal(await page.locator('#preview .brix-packs-icard img').count(), 2);
+  await page.getByLabel('Item 2 Size').selectOption('L');
+  await page.getByLabel('Item 2 Color').selectOption('White');
+  assert.match(await page.locator('#preview .brix-packs-icard').nth(1).locator('img').getAttribute('src'), /eeeeee/);
+  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-image-slots.png') });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await check('thumbnail (demo): second pack chosen with one item already picked', async () => {
+  const { page, errors } = await open(props('quick_add', { demo: true }));
+  assert.equal(await page.getByRole('radio', { name: /Buy 2/ }).getAttribute('aria-checked'), 'true');
+  assert.match(await text(page), /Selected: 1 \/ 2/);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+await check('Same Variant Pack, single-variant product: one selection, no dropdowns, product name instead of Default Title', async () => {
+  const { page, errors } = await open(props('slots', { packType: 'same_variant', template: 'same_variant', productOptions: ['Title'], variants: [{ id: '300', title: 'Default Title', options: ['Default Title'], price: 80, availableForSale: true, image: swatch('#3366cc') }] }));
+  await page.getByRole('radio', { name: /Buy 3/ }).click();
+  assert.equal(await page.locator('#preview select').count(), 0);
+  assert.match(await text(page), /all 3 items/i);
+  assert.doesNotMatch(await text(page), /Default Title/);
   assert.deepEqual(errors, []);
   await page.close();
 });

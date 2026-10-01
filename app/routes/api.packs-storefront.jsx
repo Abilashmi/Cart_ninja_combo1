@@ -65,6 +65,9 @@ function publicPack(pack) {
     // mix_match (any item can be any allowed variant) or same_variant covering
     // more than one variant (scope='all' or several selected variants).
     variants: pack.variants,
+    // Shopify option names (Size, Color, …) in order; each variant carries its
+    // values in `options`, so the widget builds one selector per real option.
+    productOptions: pack.productOptions,
   };
 }
 

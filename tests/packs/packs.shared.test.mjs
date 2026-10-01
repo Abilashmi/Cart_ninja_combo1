@@ -5,6 +5,7 @@ import {
   toNumericId, toGid, sameShopifyId, calculateTier, calculateTierFromPrices, normalizeTiers, validateTiers,
   sanitizeCustomization, mergeCustomization, defaultCustomization, currencyDecimals,
   normalizeVariantIds, validateVariantCoverage, PACK_DESIGNS, applyDesign,
+  normalizeOptionData, emptySelection, resolveVariant, optionChoices, selectionStatus, packSelectionRules, pickBlockReason, groupCartItems,
 } from '../../app/utils/packs.shared.js';
 
 test('Shopify id helpers match exactly, never by suffix', () => {
@@ -149,10 +150,11 @@ test('sanitizeCustomization validates and drops unknown fields', () => {
   assert.equal(sanitizeCustomization('nope').errors.length, 1);
 });
 
-test('only the three current layouts are offered; removed ones map to the closest current layout', () => {
-  assert.deepEqual(PACK_DESIGNS.map((design) => design.id), ['tabs', 'stacked', 'visual']);
-  assert.equal(defaultCustomization().design.preset, 'stacked');
-  for (const [old, next] of [['classic', 'stacked'], ['highlight', 'tabs'], ['premium', 'tabs']]) {
+test('only the three current templates are offered; removed ones map to the closest current template', () => {
+  assert.deepEqual(PACK_DESIGNS.map((design) => design.id), ['slots', 'quick_add', 'image_slots']);
+  assert.deepEqual(PACK_DESIGNS.map((design) => design.name), ['Horizontal Select', 'Quick Add Picker', 'Image Variant Select']);
+  assert.equal(defaultCustomization().design.preset, 'slots');
+  for (const [old, next] of [['classic', 'slots'], ['highlight', 'slots'], ['premium', 'slots'], ['tabs', 'slots'], ['stacked', 'slots'], ['visual', 'image_slots']]) {
     const result = sanitizeCustomization({ design: { preset: old } });
     assert.deepEqual(result.errors, [], `${old} is not rejected`);
     assert.equal(mergeCustomization(result.value).design.preset, next);
@@ -182,7 +184,7 @@ test('button customization: validated; Packs saved before it keep their old butt
   // Once saved with buttons, its own values win.
   assert.equal(mergeCustomization(legacy, { colors: { button: '#000000' } }).buttons.buyNowText, '#aa0000');
   // Reset styling resets the buttons too.
-  assert.deepEqual(applyDesign(good.value, 'stacked').buttons, defaults.buttons);
+  assert.deepEqual(applyDesign(good.value, 'slots').buttons, defaults.buttons);
 });
 
 test('placement is below the price or custom; old buy-button placements become below the price', () => {
@@ -194,4 +196,72 @@ test('placement is below the price or custom; old buy-button placements become b
   }
   assert.equal(sanitizeCustomization({ placement: { position: 'custom' } }).value.placement.position, 'custom');
   assert.ok(sanitizeCustomization({ placement: { position: 'sidebar' } }).errors.length > 0);
+});
+
+// ─── item selection: Shopify options -> real variants ─────────────────────────
+const tee = [
+  { id: '1', title: 'S / Red', options: ['S', 'Red'], price: 40, availableForSale: true },
+  { id: '2', title: 'M / Red', options: ['M', 'Red'], price: 40, availableForSale: true },
+  { id: '3', title: 'M / Blue', options: ['M', 'Blue'], price: 42, availableForSale: true },
+  { id: '4', title: 'L / Blue', options: ['L', 'Blue'], price: 42, availableForSale: false },
+  { id: '5', title: 'XL / Blue', options: ['XL', 'Blue'], price: 42, availableForSale: true, maxQuantity: 1 },
+];
+
+test('options come from Shopify data: any names, any count, only values the variants use', () => {
+  const { options, variants } = normalizeOptionData(['Size', 'Color'], tee);
+  assert.deepEqual(options, [{ name: 'Size', values: ['S', 'M', 'L', 'XL'] }, { name: 'Color', values: ['Red', 'Blue'] }]);
+  assert.deepEqual(variants[2].optionValues, ['M', 'Blue']);
+  const three = normalizeOptionData([{ name: 'Finish', values: ['Gloss', 'Matte'] }, 'Capacity', 'Color'], [
+    { id: 'a', options: ['Matte', '500ml', 'Black'] }, { id: 'b', options: ['Gloss', '1L', 'Black'] },
+  ]);
+  assert.deepEqual(three.options.map((option) => option.name), ['Finish', 'Capacity', 'Color']);
+  assert.deepEqual(three.options[0].values, ['Gloss', 'Matte'], 'Shopify value order kept');
+  assert.deepEqual(three.options[2].values, ['Black'], 'single value');
+  assert.deepEqual(emptySelection(three.options), ['', '', 'Black'], 'a one-value option is pre-chosen');
+});
+
+test('no real options (Default Title) -> nothing to choose, the one variant resolves; missing option data falls back to titles', () => {
+  const single = normalizeOptionData(['Title'], [{ id: '9', title: 'Default Title', options: ['Default Title'] }]);
+  assert.deepEqual(single.options, []);
+  assert.equal(resolveVariant(single.variants, single.options, []).id, '9');
+  const noData = normalizeOptionData(null, [{ id: '1', title: 'Black / M' }, { id: '2', title: 'White / L' }]);
+  assert.deepEqual(noData.options, [{ name: 'Variant', values: ['Black / M', 'White / L'] }]);
+  assert.equal(resolveVariant(noData.variants, noData.options, ['White / L']).id, '2');
+});
+
+test('variant resolution is exact; unavailable combinations never fall back to another variant', () => {
+  const { options, variants } = normalizeOptionData(['Size', 'Color'], tee);
+  assert.equal(resolveVariant(variants, options, ['M', 'Blue']).id, '3');
+  assert.equal(resolveVariant(variants, options, ['S', 'Blue']), null);
+  assert.equal(resolveVariant(variants, options, ['M', '']), null);
+  assert.deepEqual(selectionStatus(variants, options, ['', 'Red']), { variant: null, problem: 'incomplete', missing: ['Size'] });
+  assert.equal(selectionStatus(variants, options, ['S', 'Blue']).problem, 'unavailable');
+  assert.equal(selectionStatus(variants, options, ['L', 'Blue']).problem, 'sold_out');
+  assert.equal(selectionStatus(variants, options, ['M', 'Red']).problem, null);
+});
+
+test('option choices cascade from earlier options and flag sold-out / missing values', () => {
+  const { options, variants } = normalizeOptionData(['Color', 'Size'], tee.map((v) => ({ ...v, options: [v.options[1], v.options[0]] })));
+  const sizes = optionChoices(variants, options, ['Red', ''], 1);
+  assert.deepEqual(sizes.map((c) => [c.value, c.exists, c.available]), [['S', true, true], ['M', true, true], ['L', false, false], ['XL', false, false]]);
+  const blue = optionChoices(variants, options, ['Blue', ''], 1);
+  assert.deepEqual(blue.find((c) => c.value === 'L'), { value: 'L', exists: true, available: false }, 'sold out');
+  assert.ok(optionChoices(variants, options, ['', 'L'], 0).every((c) => c.exists), 'the first option is never filtered by later ones');
+});
+
+test('selection rules follow the Pack type; quick-add blocks full packs, duplicates (if disallowed) and stock', () => {
+  assert.deepEqual(packSelectionRules({ packType: 'same_variant' }), { sameVariant: true, allowDuplicates: true });
+  assert.deepEqual(packSelectionRules({ packType: 'mix_match' }), { sameVariant: false, allowDuplicates: true });
+  const [s, , , l, xl] = tee;
+  assert.equal(pickBlockReason([], s, { quantity: 2 }), null);
+  assert.equal(pickBlockReason(['1'], s, { quantity: 2 }), null, 'same variant twice is allowed');
+  assert.equal(pickBlockReason(['1'], s, { quantity: 2, allowDuplicates: false }), 'duplicate');
+  assert.equal(pickBlockReason(['1', '2'], s, { quantity: 2 }), 'full');
+  assert.equal(pickBlockReason([], l, { quantity: 2 }), 'sold_out');
+  assert.equal(pickBlockReason(['5'], xl, { quantity: 3 }), 'stock', 'only 1 XL in stock');
+});
+
+test('cart lines: one per real variant with the units picked', () => {
+  assert.deepEqual(groupCartItems(['2', '3', '2']), [{ id: '2', quantity: 2 }, { id: '3', quantity: 1 }]);
+  assert.deepEqual(groupCartItems(['2', '2']), [{ id: '2', quantity: 2 }]);
 });
