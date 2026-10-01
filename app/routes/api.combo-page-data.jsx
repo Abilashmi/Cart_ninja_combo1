@@ -1,4 +1,5 @@
 import { loadComboPageData, loadComboPageDataByHandle } from '../services/combo-page.server';
+import { isShiprocketEnabled } from '../services/shop-integrations.server';
 
 // Public JSON endpoint for the storefront combo-page script
 // (app/routes/combo-page[.]js.jsx) — no admin auth, since the caller is an
@@ -32,7 +33,11 @@ export async function loader({ request }) {
     const data = templateId
       ? await loadComboPageData(shop, templateId)
       : await loadComboPageDataByHandle(shop, handle);
-    return Response.json({ success: true, data }, { headers: CORS_HEADERS });
+    // Added here rather than in loadComboPageData: only the live storefront
+    // script hands checkout to Shiprocket, never the admin preview route
+    // that shares that loader.
+    const shiprocketEnabled = await isShiprocketEnabled(shop);
+    return Response.json({ success: true, data: { ...data, shiprocketEnabled } }, { headers: CORS_HEADERS });
   } catch (error) {
     if (error instanceof Response) {
       return Response.json(

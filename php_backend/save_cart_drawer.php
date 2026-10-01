@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/plan_helpers.php';
+require_once __DIR__ . '/shop_integrations.php';
 
 function ensureWatermarkColumn($pdo) {
     static $ensured = false;
@@ -232,6 +233,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $planKey = resolve_plan_key($pdo, $shopDomain);
         $result = applyPlanGatingToCartDrawerResult($result, $planKey, $pdo, $shopDomain);
+
+        // Internal per-shop switch (integrations_admin.php) — tells the
+        // storefront drawer to hand checkout to Shiprocket instead of
+        // navigating to /checkout. Reads as false on any lookup failure.
+        $result['shiprocket_enabled'] = shiprocketEnabledForShop($pdo, $shopDomain);
 
         echo json_encode([
             "status" => "success",
