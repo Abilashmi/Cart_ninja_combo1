@@ -10,12 +10,13 @@ import path from 'node:path';
 import os from 'node:os';
 
 const SCRIPT = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cod.js'), 'utf8');
-const API = 'https://api.test';
+const API = 'https://api.test';   // BRIX app server: OTP, quote, order
+const PHP = 'https://php.test';   // PHP backend: settings + PIN lookups
 const config = {
   success: true, enabled: true, surfaces: { drawer: true, product: true, combo: true }, otpRequired: true,
   minOrder: 299, maxOrder: 5000, codFee: 49, shippingFee: 0, freeShippingAbove: 0, blockedPincodes: ['744101'],
   excludedProductTags: ['no-cod'], allowCoupons: true, prepaidNudgeText: 'Pay online and get 5% off with code PREPAID5.',
-  buttons: { drawerText: 'Cash on Delivery', productText: 'Buy with Cash on Delivery', bg: '#0d6b4c', color: '#ffffff' }, currency: 'INR',
+  buttons: { drawerText: 'Cash on Delivery', productText: 'Buy with Cash on Delivery', bg: '#0d6b4c', color: '#ffffff' },
 };
 const quote = {
   currency: 'INR', lines: [{ title: 'Cold Brew Kit', variantTitle: 'Hazelnut', quantity: 1, image: null, originalTotal: 899, total: 899 }],
@@ -28,6 +29,8 @@ const check = (name, ok, detail = '') => { results.push({ name, ok }); console.l
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
 const posted = [];
+const phpReads = [];
+const nodeCalls = [];
 let cartCleared = false;
 
 await page.route('**/*', async (route) => {
@@ -38,20 +41,23 @@ await page.route('**/*', async (route) => {
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><main>
       <form action="/cart/add" id="product-form"><input type="hidden" name="id" value="11"><input name="quantity" value="2"><input name="properties[Engraving]" value="AR"><button type="submit" name="add">Add to cart</button></form>
       </main><script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'}};window.ShopifyAnalytics={meta:{page:{pageType:'product'}}};</script>
-      <script src="https://cdn.test/brix_cod.js" data-api="${API}" data-shop="demo.myshopify.com"></script></body></html>` });
+      <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-api="${API}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
   }
   if (url.href === 'https://cdn.test/brix_cod.js') return route.fulfill({ contentType: 'application/javascript', body: SCRIPT });
   if (url.pathname === '/products/undefined.js' || url.pathname.startsWith('/products/')) return json({ tags: ['coffee'] });
   if (url.pathname === '/cart.js') return json({ items: [{ variant_id: 11, quantity: 1, properties: {}, final_line_price: 89900 }] });
   if (url.pathname === '/cart/clear.js') { cartCleared = true; return json({ items: [] }); }
-  if (url.origin !== API) return route.fulfill({ status: 404, body: '' });
-  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST' } });
-  if (body) posted.push({ path: url.pathname, body });
-  if (url.pathname === '/api/cod/config') return json(config);
-  if (url.pathname === '/api/cod/pincode') {
+  if (url.origin === PHP && url.pathname === '/cod_storefront.php') {
+    phpReads.push(url.searchParams.get('action'));
+    if (route.request().method() !== 'GET') return json({ success: false }, 405);
+    if (url.searchParams.get('action') === 'config') return json(config);
     const pin = url.searchParams.get('pin');
     return json({ success: true, pincode: pin, found: pin === '560001', city: 'Bangalore', state: 'Karnataka', blocked: false });
   }
+  if (url.origin !== API) return route.fulfill({ status: 404, body: '' });
+  nodeCalls.push(url.pathname);
+  if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST' } });
+  if (body) posted.push({ path: url.pathname, body });
   if (url.pathname === '/api/cod/otp') {
     if (body.step === 'send') return json({ success: true, resendAfter: 30 });
     return body.code === '1234' ? json({ success: true, token: 'tok' }) : json({ success: false, code: 'otp_wrong', error: "That code doesn't match. 4 tries left." }, 400);
@@ -145,6 +151,8 @@ await page.waitForFunction(() => window.__comboOnline === true);
 check('combo: Pay online hands back to the normal checkout', true);
 
 await page.screenshot({ path: path.join(os.tmpdir(), 'brix-cod-last.png') });
+check('settings and PIN lookups come from the PHP backend', phpReads.includes('config') && phpReads.includes('pincode'));
+check('the app server is only used for OTP, pricing and the order', nodeCalls.length > 0 && nodeCalls.every((p) => ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].includes(p)), [...new Set(nodeCalls)].join(', '));
 check('no page errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;

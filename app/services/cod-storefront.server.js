@@ -1,6 +1,7 @@
 /**
  * Shared plumbing for the public BRIX COD storefront endpoints
- * (api.cod.config / api.cod.pincode / api.cod.otp / api.cod.quote / api.cod.order).
+ * (api.cod.otp / api.cod.quote / api.cod.order). Settings and PIN lookups
+ * for the storefront are served by php_backend/cod_storefront.php instead.
  *
  * These are called cross-origin straight from the storefront (like
  * api.combo-page-data), so they are unauthenticated: every write is protected

@@ -332,3 +332,58 @@ test('PHP: settings round-trip through cod_settings.php', async () => {
   assert.deepEqual(stored.blockedPincodes, ['744101']);
   assert.equal(stored.buttons.drawerText, 'Pay cash on delivery');
 });
+
+/* ── storefront reads: php_backend/cod_storefront.php ───────────────────────── */
+
+const storefront = (query) => fetch(`${harness.baseUrl}/cod_storefront.php?${query}`)
+  .then(async (res) => ({ status: res.status, cors: res.headers.get('access-control-allow-origin'), json: await res.json() }));
+const setPlan = (plan) => sql('REPLACE INTO shops (shop_domain, plan_name, plan_key) VALUES (?, ?, ?)', [SHOP, plan, plan])
+  .catch(() => sql('REPLACE INTO shops (shop_domain, plan_name) VALUES (?, ?)', [SHOP, plan]));
+
+test('storefront config: off until COD is on AND the plan publishes it', async () => {
+  assert.deepEqual((await storefront(`action=config&shop=${SHOP}`)).json, { success: true, enabled: false }, 'no settings yet');
+  await cod.saveCodSettings(SHOP, { enabled: true });
+  await setPlan('free');
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.enabled, false, 'Free plan = preview only');
+  await sql('UPDATE shops SET plan_key = ? WHERE shop_domain = ?', ['starter', SHOP]);
+  const res = await storefront(`action=config&shop=${SHOP}`);
+  assert.equal(res.cors, '*');
+  assert.equal(res.json.enabled, true);
+});
+
+test('storefront config: returns display settings only, OTP only when Node has SMS', async () => {
+  await setPlan('pro');
+  await sql('UPDATE shops SET plan_key = ? WHERE shop_domain = ?', ['pro', SHOP]);
+  await cod.saveCodSettings(SHOP, {
+    enabled: true, codFee: 49, minOrder: 299, blockedPincodes: '744101', requireOtp: true,
+    surfaces: { combo: false }, buttons: { drawerText: 'Pay cash on delivery', bg: '#0d6b4c' },
+  });
+  const { json } = await storefront(`action=config&shop=${SHOP}`);
+  assert.equal(json.codFee, 49);
+  assert.equal(json.minOrder, 299);
+  assert.deepEqual(json.blockedPincodes, ['744101']);
+  assert.deepEqual(json.surfaces, { drawer: true, product: true, combo: false });
+  assert.equal(json.buttons.drawerText, 'Pay cash on delivery');
+  assert.equal(json.otpRequired, true, 'COD_OTP_DEV_LOG counts as an SMS provider in tests');
+  assert.equal('_runtime' in json, false);
+  assert.equal('orderTags' in json, false, 'merchant-only fields are not exposed');
+
+  process.env.COD_OTP_DEV_LOG = '0';
+  try {
+    await cod.syncCodRuntime(SHOP);
+    assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.otpRequired, false, 'no SMS provider → no OTP step');
+  } finally {
+    process.env.COD_OTP_DEV_LOG = '1';
+    await cod.syncCodRuntime(SHOP);
+  }
+});
+
+test('storefront pincode: validates, reports blocked PINs', async () => {
+  await cod.saveCodSettings(SHOP, { enabled: true, blockedPincodes: '744101' });
+  assert.equal((await storefront(`action=pincode&shop=${SHOP}&pin=12345`)).json.code, 'invalid_pincode');
+  const blocked = (await storefront(`action=pincode&shop=${SHOP}&pin=744101`)).json;
+  assert.equal(blocked.success, true);
+  assert.equal(blocked.blocked, true);
+  assert.equal((await storefront(`action=pincode&shop=${SHOP}&pin=560001`)).json.blocked, false);
+  assert.equal((await storefront('action=config&shop=evil.com')).json.code, 'invalid_shop');
+});

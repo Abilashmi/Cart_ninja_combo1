@@ -11,7 +11,7 @@ import { getShopPlan } from '../services/plan-permissions.server';
 import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
-import { CodError, getCodSettings, saveCodSettings, listCodOrders, summarizeCodOrders } from '../services/cod.server';
+import { CodError, getCodSettings, saveCodSettings, syncCodRuntime, listCodOrders, summarizeCodOrders } from '../services/cod.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 
 export async function loader({ request }) {
@@ -24,6 +24,7 @@ export async function loader({ request }) {
   let loadError = null;
   try {
     settings = await getCodSettings(shop);
+    await syncCodRuntime(shop);
     orders = await listCodOrders(admin, shop, 50);
   } catch (error) {
     if (error instanceof CodError && error.code === 'storage_missing') {

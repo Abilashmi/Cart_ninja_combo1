@@ -1,15 +1,22 @@
-/* BRIX COD Checkout \u2014 storefront sheet (see CLAUDE.md, "BRIX COD Checkout").
+/* BRIX COD Checkout - storefront sheet (see CLAUDE.md, "BRIX COD Checkout").
  *
  * One Cash-on-Delivery flow shared by three entry points:
- *   - cart drawer   (cart_drawer_inline.js \u2192 BrixCod.mountDrawerButton)
+ *   - cart drawer   (cart_drawer_inline.js -> BrixCod.mountDrawerButton)
  *   - product page  (auto-injected under Add to Cart, or into the
  *                    "COD button" app block's [data-brix-cod-slot])
- *   - combo pages   (combo-page.js / preview iframe \u2192 BrixCod.open)
+ *   - combo pages   (combo-page.js / preview iframe -> BrixCod.open)
  *
- * Flow: phone (+ OTP when the store has SMS set up) \u2192 address \u2192 review
- * (priced by Shopify on our server) \u2192 order placed in Shopify as
+ * Flow: phone (+ OTP when the store has SMS set up) -> address -> review
+ * (priced by Shopify on our server) -> order placed in Shopify as
  * "Payment pending", tagged COD. Prepaid is never handled here: "Pay online"
  * always hands back to the caller's normal checkout path.
+ *
+ * Where data comes from:
+ *   - COD settings and PIN code lookups: the BRIX PHP backend
+ *     (php_backend/cod_storefront.php on data-php), like the cart drawer's
+ *     own settings.
+ *   - OTP, pricing and placing the order: the BRIX app server (data-api),
+ *     the only place holding the store's Shopify access.
  *
  * Every server call re-checks the merchant's rules; anything shown here
  * before that (min/max hints) is only a hint.
@@ -20,9 +27,11 @@
 
   var script = document.currentScript;
   var API = ((script && script.getAttribute('data-api')) || 'https://cartdrawer.fly.dev').replace(/\/$/, '');
+  var PHP_API = ((script && script.getAttribute('data-php')) || 'https://int.thebrix.io').replace(/\/$/, '');
   var SHOP = (script && script.getAttribute('data-shop')) || (window.Shopify && window.Shopify.shop) || '';
+  var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v1';
+  var CONFIG_KEY = 'brix_cod_config_v2';
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -75,6 +84,14 @@
     });
   }
 
+  // Public reads from php_backend/cod_storefront.php.
+  function phpGet(action, params) {
+    var url = PHP_API + '/cod_storefront.php?action=' + action + '&shop=' + encodeURIComponent(SHOP) + (params || '');
+    return window.fetch(url, { method: 'GET' }).then(function (res) {
+      return res.json().catch(function () { return { success: false }; });
+    }, function () { return { success: false, code: 'network' }; });
+  }
+
   /* ---------- config ---------- */
 
   var configPromise = null;
@@ -89,8 +106,8 @@
       return configPromise;
     }
     if (!SHOP) { configValue = null; configPromise = Promise.resolve(null); return configPromise; }
-    configPromise = api('/api/cod/config').then(function (json) {
-      configValue = json && json.success && json.enabled ? json : null;
+    configPromise = phpGet('config').then(function (json) {
+      configValue = json && json.success && json.enabled ? Object.assign({ currency: CURRENCY }, json) : null;
       writeStore('sessionStorage', CONFIG_KEY, { shop: SHOP, config: configValue, expiresAt: Date.now() + 60000 });
       return configValue;
     });
@@ -360,7 +377,7 @@
     var note = this.sh.querySelector('[data-pin]');
     if ((this.cfg.blockedPincodes || []).indexOf(pin) !== -1) { this.showPinBlocked(pin); return; }
     if (note) note.innerHTML = '';
-    api('/api/cod/pincode?pin=' + encodeURIComponent(pin)).then(function (json) {
+    phpGet('pincode', '&pin=' + encodeURIComponent(pin)).then(function (json) {
       if (self.view !== 'address') return;
       var pinInput = self.sh.querySelector('#cod-pin');
       if (!pinInput || pinInput.value !== pin) return;

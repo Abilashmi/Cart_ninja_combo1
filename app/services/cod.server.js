@@ -81,12 +81,32 @@ export async function getCodSettings(shop) {
   return sanitizeCodSettings(settings || {}, DEFAULT_COD_SETTINGS);
 }
 
+// Facts only this Node server knows, stored next to the settings so the
+// storefront can read everything from php_backend/cod_storefront.php.
+function runtimeFacts() {
+  return { otpAvailable: otpAvailable() };
+}
+
 /** Merge `patch` onto the saved settings (omitted fields keep their saved value). */
 export async function saveCodSettings(shop, patch) {
   const current = await getCodSettings(shop);
   const next = sanitizeCodSettings(patch, current);
-  await php('cod_settings.php', { action: 'save', shop, settings: next });
+  await php('cod_settings.php', { action: 'save', shop, settings: { ...next, _runtime: runtimeFacts() } });
   return next;
+}
+
+/**
+ * Re-saves the stored settings when the runtime facts changed since the last
+ * save (e.g. an SMS provider was configured), so the storefront's OTP step
+ * matches what /api/cod/otp will actually accept. Called by the admin page.
+ */
+export async function syncCodRuntime(shop) {
+  const { settings: raw } = await php('cod_settings.php', { action: 'get', shop });
+  if (!raw) return;
+  const facts = runtimeFacts();
+  if (JSON.stringify(raw._runtime || null) === JSON.stringify(facts)) return;
+  const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
+  await php('cod_settings.php', { action: 'save', shop, settings: { ...settings, _runtime: facts } });
 }
 
 /* ───────────────────────── secrets / hashing ───────────────────────── */
@@ -551,26 +571,4 @@ export function summarizeCodOrders(orders) {
     cancelledCount: cancelled.length,
     cancelRate: orders.length ? Math.round((cancelled.length / orders.length) * 100) : 0,
   };
-}
-
-/* ───────────────────────── PIN code lookup ───────────────────────── */
-
-const pinCache = new Map();
-
-/** India Post lookup. Returns { city, state } or null — never throws. */
-export async function lookupPincode(pin) {
-  const cached = pinCache.get(pin);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  let value = null;
-  try {
-    const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: AbortSignal.timeout(3500) });
-    const body = await res.json();
-    const office = body?.[0]?.Status === 'Success' ? body[0].PostOffice?.[0] : null;
-    if (office?.State) value = { city: office.District || office.Block || office.Name || '', state: office.State };
-  } catch {
-    value = null;
-  }
-  pinCache.set(pin, { value, expiresAt: Date.now() + (value ? 24 * 3600e3 : 5 * 60e3) });
-  if (pinCache.size > 5000) pinCache.delete(pinCache.keys().next().value);
-  return value;
 }
