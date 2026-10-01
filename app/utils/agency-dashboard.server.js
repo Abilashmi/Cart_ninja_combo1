@@ -47,11 +47,19 @@ function logAgencyStatusDebug(shop, fields) {
   );
 }
 
-export async function getAgencyStoreStatus(shop) {
+// The Home loader awaits this before it does anything else, so however long
+// the Agency Dashboard takes to answer is added to every merchant's Home
+// page load. With no limit, a slow or half-reachable dashboard held Home on
+// a blank loading state for 15s+. The check already fails open to ordinary
+// Home on any error, so a timeout just reaches that same outcome sooner;
+// the abort lands in the catch below as stage "ERROR".
+const AGENCY_STATUS_TIMEOUT_MS = 3000;
+
+export async function getAgencyStoreStatus(shop, { timeoutMs = AGENCY_STATUS_TIMEOUT_MS } = {}) {
   try {
     const res = await fetch(
       agencyDashboardUrl(`${STATUS_ENDPOINT}?shop_domain=${encodeURIComponent(shop)}`),
-      { headers: agencyDashboardHeaders() }
+      { headers: agencyDashboardHeaders(), signal: AbortSignal.timeout(timeoutMs) }
     );
     const body = await res.json();
     if (!res.ok || !body?.success) {
