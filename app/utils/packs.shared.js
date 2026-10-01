@@ -267,14 +267,21 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
 // Only fields the storefront widget (app/routes/packs.js.jsx) actually renders
 // live here — a control that has no rendering effect must not be saved.
 export const DEFAULT_CUSTOMIZATION = {
-  // showBuyNow: the widget's own Buy Now button (adds the Pack, then goes to
-  // checkout). While it's on, the theme's Buy it now button is hidden.
+  // showBuyNow: the widget's own Buy Now button (checks out only the Pack, in a
+  // cart of its own). While it's on, the theme's Buy it now button is hidden.
   content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true },
   savings: { visible: true, mode: 'save_amount', label: 'Save' },
   colors: { primary: '#008060', background: '#ffffff', cardBackground: '#ffffff', selectedCard: '#e6f4f1', border: '#dfe3e8', text: '#202223', price: '#202223', discount: '#008060', badge: '#fff4d6', button: '#008060', buttonText: '#ffffff' },
   borders: { radius: 8, width: 1, style: 'solid', shadow: false },
   typography: { headingSize: 20, packTitleSize: 15, priceSize: 18, descriptionSize: 13, fontWeight: 600, alignment: 'left' },
   spacing: { cardPadding: 18, cardGap: 12, sectionSpacing: 20, buttonSpacing: 16 },
+  // Add to Cart + Buy Now buttons. Add to Cart's fill/text stay colors.button /
+  // colors.buttonText. Packs saved before this group existed get it derived
+  // from their colors (see mergeCustomization), so their look doesn't change.
+  buttons: {
+    layout: 'side_by_side', order: 'add_first', radius: 8, fontSize: 15, fontWeight: 700, paddingY: 13, borderWidth: 2, uppercase: false,
+    addBorder: '#008060', buyNowBackground: '#ffffff', buyNowText: '#008060', buyNowBorder: '#008060',
+  },
   images: { enabled: true, size: 'medium', position: 'top' },
   design: { preset: 'stacked' },
   // Where the storefront widget sits: right below the product price, or in a
@@ -312,6 +319,10 @@ export const CUSTOMIZATION_SCHEMA = {
   borders: { radius: num(0, 32), width: num(0, 6), style: oneOf('solid', 'dashed', 'dotted'), shadow: bool() },
   typography: { headingSize: num(12, 40), packTitleSize: num(11, 28), priceSize: num(12, 36), descriptionSize: num(10, 24), fontWeight: oneOf(400, 500, 600, 700), alignment: oneOf('left', 'center', 'right') },
   spacing: { cardPadding: num(4, 40), cardGap: num(0, 32), sectionSpacing: num(0, 60), buttonSpacing: num(0, 40) },
+  buttons: {
+    layout: oneOf('side_by_side', 'stacked'), order: oneOf('add_first', 'buy_first'), radius: num(0, 40), fontSize: num(11, 24), fontWeight: oneOf(400, 500, 600, 700),
+    paddingY: num(6, 24), borderWidth: num(0, 4), uppercase: bool(), addBorder: color(), buyNowBackground: color(), buyNowText: color(), buyNowBorder: color(),
+  },
   images: { enabled: bool(), size: oneOf('small', 'medium', 'large'), position: oneOf('top', 'left') },
   design: { preset: oneOf(...PACK_DESIGNS.map((design) => design.id)) },
   placement: { position: oneOf('below_price', 'custom') },
@@ -386,8 +397,10 @@ export function sanitizeCustomization(input) {
  */
 export function mergeCustomization(...layers) {
   const merged = defaultCustomization();
+  let hasButtons = false;
   for (const layer of layers) {
     if (!isPlainObject(layer)) continue;
+    if (isPlainObject(layer.buttons)) hasButtons = true;
     for (const group of Object.keys(CUSTOMIZATION_SCHEMA)) {
       if (!isPlainObject(layer[group])) continue;
       for (const key of Object.keys(CUSTOMIZATION_SCHEMA[group])) {
@@ -395,11 +408,20 @@ export function mergeCustomization(...layers) {
       }
     }
   }
+  if (!hasButtons) merged.buttons = { ...merged.buttons, ...legacyButtonColors(merged) };
   return merged;
 }
 
+// Saved before the `buttons` group existed: Buy Now was an outline in the
+// Add to Cart color on the card background, both using the card corner radius.
+// Mirrored in packs_widget.js buttonVars (it reads raw saved customization).
+function legacyButtonColors(custom) {
+  const button = custom.colors.button;
+  return { addBorder: button, buyNowBackground: custom.colors.cardBackground, buyNowText: button, buyNowBorder: button, radius: custom.borders.radius };
+}
+
 /**
- * Restyle `customization` with a design preset: colors/borders/typography/spacing
+ * Restyle `customization` with a design preset: colors/borders/typography/spacing/buttons
  * reset to defaults + the preset's style; content, savings and images are kept.
  * Also serves as "Reset to default" for the styling groups.
  */
@@ -407,7 +429,7 @@ export function applyDesign(customization, designId) {
   const design = PACK_DESIGNS.find((item) => item.id === designId) || PACK_DESIGNS[0];
   const current = mergeCustomization(customization);
   const next = { ...current, design: { preset: design.id } };
-  for (const group of ['colors', 'borders', 'typography', 'spacing']) {
+  for (const group of ['colors', 'borders', 'typography', 'spacing', 'buttons']) {
     next[group] = { ...DEFAULT_CUSTOMIZATION[group], ...(design.style[group] || {}) };
   }
   return next;

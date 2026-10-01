@@ -272,12 +272,13 @@
     '.brix-packs-msg{margin:12px 0 0;padding:8px 10px;border-radius:6px;font-size:13px}',
     '.brix-packs-msg[data-type="error"]{background:#fde7e7;color:#8a1f1f;border:1px solid #f0b3b3}',
     '.brix-packs-msg[data-type="success"]{background:#e3f5ea;color:#14532d;border:1px solid #a7d7b8}',
-    '.brix-packs-add{display:block;width:100%;margin-top:var(--brix-packs-btn-gap);padding:13px 16px;background:var(--brix-packs-button);color:var(--brix-packs-button-text);border:0;border-radius:var(--brix-packs-radius);font:inherit;font-weight:700;cursor:pointer}',
-    '.brix-packs-add[disabled]{opacity:.55;cursor:not-allowed}',
-    '.brix-packs-actions{display:flex;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
-    '.brix-packs-actions .brix-packs-add{margin-top:0;flex:1 1 0}',
-    '.brix-packs-buy{flex:1 1 0;padding:13px 16px;background:var(--brix-packs-card);color:var(--brix-packs-button);border:2px solid var(--brix-packs-button);border-radius:var(--brix-packs-radius);font:inherit;font-weight:700;cursor:pointer}',
-    '.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
+    '.brix-packs-add,.brix-packs-buy{display:block;width:100%;padding:var(--brix-packs-btn-py) 16px;border-radius:var(--brix-packs-btn-radius);font:inherit;font-size:var(--brix-packs-btn-size);font-weight:var(--brix-packs-btn-weight);text-transform:var(--brix-packs-btn-case);letter-spacing:var(--brix-packs-btn-spacing);cursor:pointer;transition:filter .15s}',
+    '.brix-packs-add{margin-top:var(--brix-packs-btn-gap);background:var(--brix-packs-button);color:var(--brix-packs-button-text);border:var(--brix-packs-btn-bw) solid var(--brix-packs-add-border)}',
+    '.brix-packs-buy{background:var(--brix-packs-buy-bg);color:var(--brix-packs-buy-text);border:var(--brix-packs-btn-bw) solid var(--brix-packs-buy-border)}',
+    '.brix-packs-add:hover:not([disabled]),.brix-packs-buy:hover:not([disabled]){filter:brightness(.92)}',
+    '.brix-packs-add[disabled],.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
+    '.brix-packs-actions{display:flex;flex-direction:var(--brix-packs-btn-dir);gap:10px;margin-top:var(--brix-packs-btn-gap)}',
+    '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
     /* ── Layouts: tabs (Pack tabs) + visual (Visual picker) — a row of pack tabs over one panel. */
     '.brix-packs-tabs{display:flex;gap:var(--brix-packs-gap);padding-top:8px}',
     '.brix-packs-tab{position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;margin:0;padding:12px 8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:center;cursor:pointer}',
@@ -354,8 +355,37 @@
       '--brix-packs-pad': px(space.cardPadding, 16), '--brix-packs-card-pad': px(space.cardPadding, 16), '--brix-packs-gap': px(space.cardGap, 10),
       '--brix-packs-section': px(space.sectionSpacing, 20), '--brix-packs-btn-gap': px(space.buttonSpacing, 16),
     };
+    var buttonVars = buttonStyleVars(custom, color, px);
+    Object.keys(buttonVars).forEach(function (name) { vars[name] = buttonVars[name]; });
     Object.keys(vars).forEach(function (name) { section.style.setProperty(name, vars[name]); });
     if (borders.shadow) section.classList.add('is-shadow');
+  }
+
+  // Add to Cart + Buy Now styling (customization.buttons). Packs saved before
+  // that group existed fall back to their old look — Buy Now an outline in the
+  // button color on the card background — same as mergeCustomization's
+  // legacyButtonColors in app/utils/packs.shared.js.
+  function buttonStyleVars(custom, color, px) {
+    var b = custom.buttons || {};
+    var button = color('button', '#008060');
+    function bColor(key, fallback) { return HEX.test(b[key] || '') ? b[key] : fallback; }
+    var reversed = b.order === 'buy_first';
+    var dir = b.layout === 'stacked' ? (reversed ? 'column-reverse' : 'column') : (reversed ? 'row-reverse' : 'row');
+    var weight = [400, 500, 600, 700].indexOf(Number(b.fontWeight)) >= 0 ? String(Number(b.fontWeight)) : '700';
+    return {
+      '--brix-packs-add-border': bColor('addBorder', button),
+      '--brix-packs-buy-bg': bColor('buyNowBackground', color('cardBackground', '#ffffff')),
+      '--brix-packs-buy-text': bColor('buyNowText', button),
+      '--brix-packs-buy-border': bColor('buyNowBorder', button),
+      '--brix-packs-btn-radius': px(b.radius, Number((custom.borders || {}).radius) >= 0 ? Number(custom.borders.radius) : 8),
+      '--brix-packs-btn-bw': px(b.borderWidth, 2),
+      '--brix-packs-btn-py': px(b.paddingY, 13),
+      '--brix-packs-btn-size': b.fontSize === undefined ? 'inherit' : px(b.fontSize, 15),
+      '--brix-packs-btn-weight': weight,
+      '--brix-packs-btn-case': b.uppercase ? 'uppercase' : 'none',
+      '--brix-packs-btn-spacing': b.uppercase ? '.04em' : 'normal',
+      '--brix-packs-btn-dir': dir,
+    };
   }
 
   // ── rendering ──────────────────────────────────────────────────────────────
@@ -573,6 +603,7 @@
     var selectedTier = pack.tiers[state.tierIndex];
     var addDisabled = Boolean(state.busy) || !selectedTier || tierDisabled(pack, selectedTier);
     var addButton = el('button', { type: 'button', class: 'brix-packs-add', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? 'Adding\u2026' : (pack.available ? (content.cta || 'Add Pack to Cart') : 'Sold out') });
+    // Buy Now checks out only this Pack; the shopper's cart is left as it was.
     if (buyNowOn(pack) && pack.available) {
       section.appendChild(el('div', { class: 'brix-packs-actions' }, [
         addButton,
@@ -783,11 +814,51 @@
     return 'Could not add the pack to your cart. Please try again.';
   }
 
-  function checkoutUrl() {
-    return ((window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/') + 'checkout';
+  // Buy Now checks out ONLY the Pack, like Shopify's own Buy it now: it creates
+  // a separate cart through the Storefront API (tokenless access allows cart
+  // writes from the storefront) and goes to that cart's checkout. The shopper's
+  // regular cart is never touched. Every line keeps its _brix_pack_* properties
+  // (cart line attributes) so the Packs discount Function still applies.
+  var STOREFRONT_API = '/api/2026-07/graphql.json';
+  var CART_CREATE = 'mutation BrixPackBuyNow($input: CartInput!) { cartCreate(input: $input) { cart { checkoutUrl } userErrors { message } } }';
+
+  function buyNowCart(items) {
+    var input = {
+      lines: items.map(function (item) {
+        return {
+          merchandiseId: 'gid://shopify/ProductVariant/' + item.id,
+          quantity: item.quantity,
+          attributes: Object.keys(item.properties).map(function (key) { return { key: key, value: item.properties[key] }; }),
+        };
+      }),
+    };
+    // Price the checkout in the shopper's market, like the page they're on.
+    var country = window.Shopify && window.Shopify.country;
+    if (/^[A-Z]{2}$/.test(country || '')) input.buyerIdentity = { countryCode: country };
+    return fetch(STOREFRONT_API, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ query: CART_CREATE, variables: { input: input } }) })
+      .then(function (response) {
+        return response.json().catch(function () { return null; }).then(function (body) {
+          var result = body && body.data && body.data.cartCreate;
+          var userError = result && result.userErrors && result.userErrors[0];
+          if (userError && userError.message) throw new Error(userError.message);
+          var url = result && result.cart && result.cart.checkoutUrl;
+          if (!response.ok || !url) throw new Error('Could not start checkout for this pack. Please try again, or add it to your cart.');
+          return url;
+        });
+      });
   }
 
-  // buyNow: add the Pack, then go straight to checkout (like the theme's Buy it now).
+  function addItems(items) {
+    return fetch(cartAddUrl(), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ items: items }) })
+      .then(function (response) {
+        return response.json().catch(function () { return null; }).then(function (body) {
+          if (!response.ok) throw new Error(cartErrorMessage(response, body));
+          return body;
+        });
+      });
+  }
+
+  // buyNow: check out just this Pack (see buyNowCart); otherwise add it to the cart.
   function addToCart(buyNow) {
     var pack = state.pack;
     var tier = pack && pack.tiers[state.tierIndex];
@@ -796,22 +867,17 @@
     state.message = null;
     render();
     var items = buildItems(pack, tier);
-    fetch(cartAddUrl(), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ items: items }) })
-      .then(function (response) {
-        return response.json().catch(function () { return null; }).then(function (body) {
-          if (!response.ok) throw new Error(cartErrorMessage(response, body));
-          return body;
-        });
-      })
-      .then(function (body) {
-        var detail = { packId: pack.id, quantity: tier.quantity, items: body && body.items, buyNow: Boolean(buyNow) };
+    var request = buyNow ? buyNowCart(items) : addItems(items);
+    request
+      .then(function (result) {
+        var detail = { packId: pack.id, quantity: tier.quantity, items: buyNow ? items : result && result.items, buyNow: Boolean(buyNow) };
         document.dispatchEvent(new CustomEvent('brix:packs:added', { detail: detail }));
-        if (buyNow) { state.redirecting = true; window.location.assign(checkoutUrl()); return; }
+        if (buyNow) { state.redirecting = true; window.location.assign(result); return; }
         state.message = { type: 'success', text: 'Added to your cart.' };
         notifyCartUpdated(detail);
       })
       .catch(function (error) {
-        state.message = { type: 'error', text: error && error.message && error.message.indexOf('Failed to fetch') < 0 ? error.message : 'Could not reach the cart. Check your connection and try again.' };
+        state.message = { type: 'error', text: error && error.message && error.message.indexOf('Failed to fetch') < 0 ? error.message : 'Could not reach the store. Check your connection and try again.' };
       })
       .then(function () { if (state.redirecting) return; state.busy = false; render(); });
   }

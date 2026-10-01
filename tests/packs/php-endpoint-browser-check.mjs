@@ -55,18 +55,26 @@ const dawnMain = (variantInput, slot) => `<section id="recs-top"><div class="pri
   ${slot ? '<div id="custom-slot" data-brix-packs-slot></div>' : ''}
 </main><section id="recs"><div class="card"><div class="price">$10</div></div></section>`;
 
-async function open({ body, pageProduct = product(), shopifyGlobals = '', variantInput = '200', dawn = false, slot = false }) {
+// Storefront API cartCreate (the Pack's Buy Now): a cart of its own + its checkout.
+const cartCreateOk = { data: { cartCreate: { cart: { checkoutUrl: 'http://shop.test/checkouts/cn/pack-only' }, userErrors: [] } } };
+
+async function open({ body, pageProduct = product(), shopifyGlobals = '', variantInput = '200', dawn = false, slot = false, cartCreate = cartCreateOk }) {
   const context = await browser.newContext();
   const page = await context.newPage();
   const requests = [];
   const cartCalls = [];
+  const storefrontCalls = [];
   await page.route('http://shop.test/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/cart/add.js') {
       cartCalls.push(JSON.parse(route.request().postData()));
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cartCalls.at(-1).items }) });
     }
-    if (url.pathname === '/checkout') return route.fulfill({ contentType: 'text/html', body: '<h1>Checkout</h1>' });
+    if (/^\/api\/[\d-]+\/graphql\.json$/.test(url.pathname)) {
+      storefrontCalls.push(JSON.parse(route.request().postData()));
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(cartCreate) });
+    }
+    if (url.pathname.startsWith('/checkouts/')) return route.fulfill({ contentType: 'text/html', body: '<h1>Checkout</h1>' });
     if (url.pathname === '/apps/cart-app/packs_storefront.php') {
       requests.push(url);
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
@@ -80,7 +88,7 @@ async function open({ body, pageProduct = product(), shopifyGlobals = '', varian
       <script src="/packs_widget.js" defer></script></body></html>` });
   });
   await page.goto('http://shop.test/products/tee');
-  return { page, context, requests, cartCalls };
+  return { page, context, requests, cartCalls, storefrontCalls };
 }
 
 console.log('\nBRIX Packs widget — PHP endpoint (client pricing) checks');
@@ -216,7 +224,7 @@ const shirtProduct = () => product({
     { id: 202, title: 'Red / S', price: 9000, available: false, inventoryQuantity: 0, inventoryPolicy: 'deny', inventoryManagement: 'shopify', image: swatch('#cc0000') },
   ],
 });
-const withDesign = (preset, over = {}) => pack({ customization: { design: { preset }, content: { heading: 'Choose Your Pack', cta: 'Add to Cart', ...(over.content || {}) } }, ...over.pack });
+const withDesign = (preset, over = {}) => pack({ customization: { design: { preset }, content: { heading: 'Choose Your Pack', cta: 'Add to Cart', ...(over.content || {}) }, ...(over.colors ? { colors: over.colors } : {}), ...(over.buttons ? { buttons: over.buttons } : {}) }, ...over.pack });
 const mixMatch = (preset, content) => withDesign(preset, { content, pack: { packType: 'mix_match', variantScope: 'all', allowedVariantIds: [] } });
 const shotDir = path.join(process.cwd(), 'tests', 'packs', 'screenshots');
 fs.mkdirSync(shotDir, { recursive: true });
@@ -328,18 +336,71 @@ await check('Design 3 · Visual picker also works for Mix & Match Packs', async 
   await context.close();
 });
 
-await check('Buy Now: adds the Pack (with Pack markers) then goes to checkout; the theme Buy it now is hidden', async () => {
-  const { page, context, cartCalls } = await open({ body: phpBody([withDesign('tabs')]), dawn: true });
+await check('Buy Now: checks out ONLY the Pack (own cart, with Pack markers) and never touches the shopper cart; the theme Buy it now is hidden', async () => {
+  const { page, context, cartCalls, storefrontCalls } = await open({ body: phpBody([withDesign('tabs')]), dawn: true, shopifyGlobals: 'window.Shopify = { country: "IN" };' });
   await page.waitForSelector('.brix-packs-buy');
   assert.equal(await page.locator('#buy-now').isVisible(), false, "theme's Buy it now hidden");
   assert.equal(await page.locator('#theme-add').isVisible(), false);
   assert.equal(await page.locator('.brix-packs-buy').innerText(), 'Buy Now');
   await page.locator('.brix-packs-tab').nth(1).click();
-  await Promise.all([page.waitForURL('**/checkout'), page.locator('.brix-packs-buy').click()]);
-  assert.equal(cartCalls.length, 1);
-  assert.equal(cartCalls[0].items[0].quantity, 2);
-  assert.equal(cartCalls[0].items[0].properties._brix_pack_id, '7');
+  await Promise.all([page.waitForURL('**/checkouts/cn/pack-only'), page.locator('.brix-packs-buy').click()]);
+  assert.equal(cartCalls.length, 0, 'the shopper cart (/cart/add.js) is not used');
+  assert.equal(storefrontCalls.length, 1);
+  assert.match(storefrontCalls[0].query, /cartCreate/);
+  const input = storefrontCalls[0].variables.input;
+  assert.deepEqual(input.buyerIdentity, { countryCode: 'IN' });
+  assert.equal(input.lines.length, 1);
+  assert.equal(input.lines[0].merchandiseId, 'gid://shopify/ProductVariant/200');
+  assert.equal(input.lines[0].quantity, 2);
+  const attrs = Object.fromEntries(input.lines[0].attributes.map((a) => [a.key, a.value]));
+  assert.equal(attrs._brix_pack_id, '7');
+  assert.equal(attrs._brix_pack_quantity, '2');
+  assert.ok(attrs._brix_pack_group);
   await context.close();
+});
+
+await check('Buy Now: a Shopify cart error is shown, the shopper stays on the page and the cart is untouched', async () => {
+  const { page, context, cartCalls } = await open({ body: phpBody([withDesign('tabs')]), dawn: true, cartCreate: { data: { cartCreate: { cart: null, userErrors: [{ message: 'Only 1 item left in stock.' }] } } } });
+  await page.waitForSelector('.brix-packs-buy');
+  await page.locator('.brix-packs-buy').click();
+  await page.waitForSelector('.brix-packs-msg[data-type="error"]');
+  assert.match(await page.locator('.brix-packs-msg').innerText(), /Only 1 item left/);
+  assert.equal(new URL(page.url()).pathname, '/products/tee');
+  assert.equal(cartCalls.length, 0);
+  assert.equal(await page.locator('.brix-packs-buy').isDisabled(), false, 'can try again');
+  await context.close();
+});
+
+await check('Add to Cart still adds the Pack to the shopper cart', async () => {
+  const { page, context, cartCalls, storefrontCalls } = await open({ body: phpBody([withDesign('tabs')]), dawn: true });
+  await page.waitForSelector('.brix-packs-add');
+  await page.locator('.brix-packs-add').click();
+  await page.waitForSelector('.brix-packs-msg[data-type="success"]');
+  assert.equal(cartCalls.length, 1);
+  assert.equal(storefrontCalls.length, 0);
+  await context.close();
+});
+
+await check('button customization: colors, shape, stacked + Buy Now first; old Packs keep the outline Buy Now look', async () => {
+  const styled = withDesign('tabs', { buttons: { layout: 'stacked', order: 'buy_first', radius: 20, fontSize: 18, fontWeight: 500, paddingY: 10, borderWidth: 3, uppercase: true, addBorder: '#111111', buyNowBackground: '#ff0000', buyNowText: '#00ff00', buyNowBorder: '#0000ff' } });
+  const { page, context } = await open({ body: phpBody([styled]), dawn: true });
+  await page.waitForSelector('.brix-packs-buy');
+  const buy = await page.locator('.brix-packs-buy').evaluate((node) => { const s = getComputedStyle(node); return { bg: s.backgroundColor, color: s.color, border: s.borderTopColor, bw: s.borderTopWidth, radius: s.borderTopLeftRadius, size: s.fontSize, weight: s.fontWeight, transform: s.textTransform, pad: s.paddingTop }; });
+  assert.deepEqual(buy, { bg: 'rgb(255, 0, 0)', color: 'rgb(0, 255, 0)', border: 'rgb(0, 0, 255)', bw: '3px', radius: '20px', size: '18px', weight: '500', transform: 'uppercase', pad: '10px' });
+  assert.equal(await page.locator('.brix-packs-add').evaluate((node) => getComputedStyle(node).borderTopColor), 'rgb(17, 17, 17)');
+  assert.equal(await page.locator('.brix-packs-actions').evaluate((node) => getComputedStyle(node).flexDirection), 'column-reverse');
+  const addBox = await page.locator('.brix-packs-add').boundingBox();
+  const buyBox = await page.locator('.brix-packs-buy').boundingBox();
+  assert.ok(buyBox.y < addBox.y, 'Buy Now shown above Add to Cart');
+  await context.close();
+
+  // Saved before the buttons group existed: Buy Now = outline in the button color on the card background.
+  const legacy = await open({ body: phpBody([withDesign('tabs', { colors: { button: '#aa0000', cardBackground: '#fafafa' } })]), dawn: true });
+  await legacy.page.waitForSelector('.brix-packs-buy');
+  const old = await legacy.page.locator('.brix-packs-buy').evaluate((node) => { const s = getComputedStyle(node); return { bg: s.backgroundColor, color: s.color, border: s.borderTopColor }; });
+  assert.deepEqual(old, { bg: 'rgb(250, 250, 250)', color: 'rgb(170, 0, 0)', border: 'rgb(170, 0, 0)' });
+  assert.equal(await legacy.page.locator('.brix-packs-actions').evaluate((node) => getComputedStyle(node).flexDirection), 'row');
+  await legacy.context.close();
 });
 
 await check('Buy Now switched off: no Pack Buy Now, theme Buy it now stays; a saved "classic" Pack shows as Stacked packs', async () => {

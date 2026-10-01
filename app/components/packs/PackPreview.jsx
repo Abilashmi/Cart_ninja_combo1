@@ -35,7 +35,11 @@ export default function PackPreview({ template, packType, variants, customizatio
   const [selected, setSelected] = useState(0);
   const [chosen, setChosen] = useState([]);
   const [openPicker, setOpenPicker] = useState(null);
-  const { colors, borders, typography, spacing, content, savings, images, design } = custom;
+  const { colors, borders, typography, spacing, content, savings, images, design, buttons } = custom;
+  const buttonBase = {
+    flex: '1 1 0', padding: `${buttons.paddingY}px 16px`, borderRadius: buttons.radius, font: 'inherit', fontSize: buttons.fontSize, fontWeight: buttons.fontWeight,
+    textTransform: buttons.uppercase ? 'uppercase' : 'none', letterSpacing: buttons.uppercase ? '.04em' : 'normal', cursor: 'default',
+  };
   const layout = layoutOf(design.preset, template);
   const sellable = useMemo(() => (Array.isArray(variants) ? variants.filter((variant) => variant.availableForSale !== false) : []), [variants]);
   // Same rule as perItem() in packs_widget.js: one choice per item for Mix &
@@ -279,12 +283,20 @@ export default function PackPreview({ template, packType, variants, customizatio
       {layout === 'tabs' ? renderTabs() : renderRows()}
 
       {content.promoText && <p style={{ margin: '12px 0 0', fontSize: typography.descriptionSize, opacity: 0.8, textAlign: typography.alignment }}>{content.promoText}</p>}
-      <div style={{ display: 'flex', gap: 10, marginTop: spacing.buttonSpacing }}>
-        <button type="button" style={{ flex: '1 1 0', padding: '13px 16px', background: colors.button, color: colors.buttonText, border: 0, borderRadius: borders.radius, font: 'inherit', fontWeight: 700, cursor: 'default' }}>{content.cta || 'Add Pack to Cart'}</button>
+      <div style={{ display: 'flex', flexDirection: buttonDirection(buttons), gap: 10, marginTop: spacing.buttonSpacing }}>
+        <button type="button" style={{ ...buttonBase, background: colors.button, color: colors.buttonText, border: `${buttons.borderWidth}px solid ${buttons.addBorder}` }}>{content.cta || 'Add Pack to Cart'}</button>
         {content.showBuyNow !== false && (
-          <button type="button" style={{ flex: '1 1 0', padding: '13px 16px', background: colors.cardBackground, color: colors.button, border: `2px solid ${colors.button}`, borderRadius: borders.radius, font: 'inherit', fontWeight: 700, cursor: 'default' }}>{content.buyNow || 'Buy Now'}</button>
+          <button type="button" style={{ ...buttonBase, background: buttons.buyNowBackground, color: buttons.buyNowText, border: `${buttons.borderWidth}px solid ${buttons.buyNowBorder}` }}>{content.buyNow || 'Buy Now'}</button>
         )}
       </div>
     </section>
   );
+}
+
+// Same as .brix-packs-actions in packs_widget.js: stacked or side by side,
+// Buy Now first when the merchant puts it first.
+function buttonDirection(buttons) {
+  const reversed = buttons.order === 'buy_first';
+  if (buttons.layout === 'stacked') return reversed ? 'column-reverse' : 'column';
+  return reversed ? 'row-reverse' : 'row';
 }

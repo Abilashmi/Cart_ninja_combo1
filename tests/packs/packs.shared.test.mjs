@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   toNumericId, toGid, sameShopifyId, calculateTier, calculateTierFromPrices, normalizeTiers, validateTiers,
   sanitizeCustomization, mergeCustomization, defaultCustomization, currencyDecimals,
-  normalizeVariantIds, validateVariantCoverage, PACK_DESIGNS,
+  normalizeVariantIds, validateVariantCoverage, PACK_DESIGNS, applyDesign,
 } from '../../app/utils/packs.shared.js';
 
 test('Shopify id helpers match exactly, never by suffix', () => {
@@ -165,6 +165,24 @@ test('Buy Now is on by default and its label is validated', () => {
   assert.equal(defaultCustomization().content.buyNow, 'Buy Now');
   assert.deepEqual(sanitizeCustomization({ content: { showBuyNow: false, buyNow: 'Buy it now' } }).value.content, { showBuyNow: false, buyNow: 'Buy it now' });
   assert.ok(sanitizeCustomization({ content: { buyNow: 'x'.repeat(41) } }).errors.length > 0);
+});
+
+test('button customization: validated; Packs saved before it keep their old button look', () => {
+  const defaults = defaultCustomization();
+  assert.equal(defaults.buttons.layout, 'side_by_side');
+  assert.deepEqual(mergeCustomization({}).buttons, defaults.buttons, 'default palette derives the same values as the defaults');
+  const good = sanitizeCustomization({ buttons: { layout: 'stacked', order: 'buy_first', radius: 20, fontWeight: '500', uppercase: true, buyNowBackground: '#ff0000' } });
+  assert.deepEqual(good.errors, []);
+  assert.equal(good.value.buttons.fontWeight, 500);
+  const bad = sanitizeCustomization({ buttons: { layout: 'grid', radius: 99, buyNowText: 'red', uppercase: 'yes' } });
+  assert.equal(bad.errors.length, 4);
+  // Old Pack (no buttons group): Buy Now stays an outline in its button color on the card background.
+  const legacy = mergeCustomization({ colors: { button: '#aa0000', cardBackground: '#fafafa' }, borders: { radius: 4 } });
+  assert.deepEqual([legacy.buttons.addBorder, legacy.buttons.buyNowBackground, legacy.buttons.buyNowText, legacy.buttons.buyNowBorder, legacy.buttons.radius], ['#aa0000', '#fafafa', '#aa0000', '#aa0000', 4]);
+  // Once saved with buttons, its own values win.
+  assert.equal(mergeCustomization(legacy, { colors: { button: '#000000' } }).buttons.buyNowText, '#aa0000');
+  // Reset styling resets the buttons too.
+  assert.deepEqual(applyDesign(good.value, 'stacked').buttons, defaults.buttons);
 });
 
 test('placement is below the price or custom; old buy-button placements become below the price', () => {

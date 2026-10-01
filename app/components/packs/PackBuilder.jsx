@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
-import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon } from '@shopify/polaris-icons';
+import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
@@ -704,17 +704,18 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       />
     );
   };
-  const colorField = (key, label) => <ColorField key={key} label={label} value={form.customization.colors[key]} onChange={(value) => updateCustom('colors', key, value)} error={customCheck.errors.find((message) => message.startsWith(`colors.${key} `))} />;
+  const colorField = (key, label, group = 'colors') => <ColorField key={key} label={label} value={form.customization[group][key]} onChange={(value) => updateCustom(group, key, value)} error={customCheck.errors.find((message) => message.startsWith(`${group}.${key} `))} />;
   const capitalize = (value) => value[0].toUpperCase() + value.slice(1);
 
   // ── Customize step: one focused panel at a time. An icon grid at the top
   // (with an error dot per section) makes every section reachable in one
   // click, and Previous/Next at the bottom walks through them in order.
   const CUSTOMIZE_TABS = [
-    { id: 'content', label: 'Content', icon: TextBlockIcon, description: 'The heading, subtext and button wording shoppers read.', prefixes: ['content.'] },
+    { id: 'content', label: 'Content', icon: TextBlockIcon, description: 'The heading, subtext and promo text shoppers read.', prefixes: ['content.heading', 'content.subheading', 'content.promoText'] },
     { id: 'colors', label: 'Colors', icon: PaintBrushFlatIcon, description: 'Match the widget to your brand and theme.', prefixes: ['colors.'] },
     { id: 'typography', label: 'Typography', icon: TextFontIcon, description: 'Text sizes, weight and heading alignment.', prefixes: ['typography.'] },
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.'] },
+    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Style the Add to Cart and Buy Now buttons.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
     { id: 'image', label: 'Image', icon: ImageIcon, description: 'Show the product photo inside each offer.', prefixes: ['images.'] },
     { id: 'placement', label: 'Placement', icon: LayoutBuyButtonIcon, description: 'Where the Pack appears on the product page.', prefixes: ['placement.'] },
@@ -811,12 +812,35 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           {contentField('subheading', 'Subheading', 160)}
         </FieldGroup>
         <FieldGroup title="Call to action">
-          {contentField('promoText', 'Promotional text', 160, 'Shown just above the button.')}
+          {contentField('promoText', 'Promotional text', 160, 'Shown just above the buttons. Button labels are under Buttons.')}
+        </FieldGroup>
+      </BlockStack>
+    ),
+    buttons: (
+      <BlockStack gap="400">
+        <FieldGroup title="Add to Cart">
           {contentField('cta', 'Button label', 40)}
+          <div className="pz-colors">{colorField('button', 'Background')}{colorField('buttonText', 'Text')}{colorField('addBorder', 'Border', 'buttons')}</div>
         </FieldGroup>
         <FieldGroup title="Buy Now">
-          <Toggle label="Show a Buy Now button" helpText="Adds the Pack and goes straight to checkout. While it’s on, your theme’s own Buy it now button is hidden on this product." checked={form.customization.content.showBuyNow !== false} onChange={(value) => updateCustom('content', 'showBuyNow', value)} />
-          {form.customization.content.showBuyNow !== false && contentField('buyNow', 'Buy Now button label', 40)}
+          <Toggle label="Show a Buy Now button" helpText="Checks out only this Pack — whatever else is in the shopper’s cart stays there for later. While it’s on, your theme’s own Buy it now button is hidden on this product." checked={form.customization.content.showBuyNow !== false} onChange={(value) => updateCustom('content', 'showBuyNow', value)} />
+          {form.customization.content.showBuyNow !== false && (
+            <>
+              {contentField('buyNow', 'Button label', 40)}
+              <div className="pz-colors">{colorField('buyNowBackground', 'Background', 'buttons')}{colorField('buyNowText', 'Text', 'buttons')}{colorField('buyNowBorder', 'Border', 'buttons')}</div>
+              <Segmented label="Arrangement" options={[['side_by_side', 'Side by side'], ['stacked', 'Stacked']]} value={form.customization.buttons.layout} onChange={(value) => updateCustom('buttons', 'layout', value)} />
+              <Segmented label="Order" options={[['add_first', 'Add to Cart first'], ['buy_first', 'Buy Now first']]} value={form.customization.buttons.order} onChange={(value) => updateCustom('buttons', 'order', value)} />
+            </>
+          )}
+        </FieldGroup>
+        <FieldGroup title="Shape & text">
+          {sizeField('buttons', 'radius', 'Corner radius')}
+          {sizeField('buttons', 'borderWidth', 'Border width')}
+          {sizeField('buttons', 'paddingY', 'Height (top & bottom padding)')}
+          {sizeField('buttons', 'fontSize', 'Text size')}
+          <Segmented label="Font weight" options={[[400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold']]} value={Number(form.customization.buttons.fontWeight)} onChange={(value) => updateCustom('buttons', 'fontWeight', value)} />
+          <Toggle label="Uppercase text" checked={form.customization.buttons.uppercase} onChange={(value) => updateCustom('buttons', 'uppercase', value)} />
+          {sizeField('spacing', 'buttonSpacing', 'Space above buttons')}
         </FieldGroup>
       </BlockStack>
     ),
@@ -828,8 +852,9 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         <FieldGroup title="Text">
           <div className="pz-colors">{[['text', 'Text'], ['price', 'Price'], ['discount', 'Savings text']].map(([key, label]) => colorField(key, label))}</div>
         </FieldGroup>
-        <FieldGroup title="Badge & button">
-          <div className="pz-colors">{[['badge', 'Badge background'], ['button', 'Button'], ['buttonText', 'Button text']].map(([key, label]) => colorField(key, label))}</div>
+        <FieldGroup title="Badge">
+          <div className="pz-colors">{colorField('badge', 'Badge background')}</div>
+          <Text as="p" variant="bodySm" tone="subdued">Button colors are under Buttons.</Text>
         </FieldGroup>
       </BlockStack>
     ),
@@ -859,7 +884,6 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           {sizeField('spacing', 'cardPadding', 'Card padding')}
           {sizeField('spacing', 'cardGap', 'Gap between cards')}
           {sizeField('spacing', 'sectionSpacing', 'Space around widget')}
-          {sizeField('spacing', 'buttonSpacing', 'Space above button')}
         </FieldGroup>
       </BlockStack>
     ),
