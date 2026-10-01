@@ -77,7 +77,9 @@ export default function App() {
                             <s-link href="/app/brix-ai">Brix AI</s-link>
                             <s-link href="/app/cartdrawer">Cart Editor</s-link>
                             <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
-                            <s-link href="/app/packs">Packs</s-link>
+                            {/* Packs is hidden from the nav for now. The routes
+                                under /app/packs are untouched and still reachable
+                                directly, so re-adding this one line brings it back. */}
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
