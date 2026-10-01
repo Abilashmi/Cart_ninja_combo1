@@ -130,7 +130,9 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
     if (!applicableVariants.some((variant) => variant.availableForSale)) throw new PackError('variant_unavailable', 'None of this Pack’s variants are in stock, so it cannot be activated.', { status: 409 });
   }
 
-  const anchorVariant = applicableVariants[0];
+  // Anchor on an in-stock variant when there is one: some sold-out variants
+  // never block the Pack — shoppers simply can't choose those.
+  const anchorVariant = applicableVariants.find((variant) => variant.availableForSale) || applicableVariants[0];
   return { product, applicableVariants, allowedVariantIds: check.allowedVariantIds, anchorVariant };
 }
 

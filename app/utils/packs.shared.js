@@ -416,16 +416,16 @@ export const DEFAULT_CUSTOMIZATION = {
 // are rendered by packs_widget.js (the admin PackPreview mounts that same
 // widget): 'slots' = one compact slot per item with a dropdown per Shopify
 // option, 'quick_add' = a grid of variant cards with a top-right "+" button,
-// 'image_slots' = one large photo card per item with its option dropdowns
-// underneath. `style` only nudges shape/spacing — never colors, so switching
+// 'image_slots' = the packs as rows instead; the chosen row opens one photo
+// dropdown per item listing whole variants. `style` only nudges shape/spacing — never colors, so switching
 // keeps the merchant's palette (content, savings and Pack behaviour too).
 export const PACK_DESIGNS = [
   { id: 'slots', name: 'Horizontal Select', description: 'Pack cards in a row. Each item gets its own slot with a dropdown for every product option.',
     highlights: ['Horizontal packs', 'One slot per item', 'Option dropdowns'], style: { borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 10 } } },
   { id: 'quick_add', name: 'Quick Add Picker', description: 'Pack cards in a row over a grid of variant photos. Shoppers tap + to add each item.',
     highlights: ['Horizontal packs', 'Variant photo grid', '+ quick add', 'Selected count'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 10 } } },
-  { id: 'image_slots', name: 'Image Variant Select', description: 'Pack cards in a row. Every item shows a large photo that updates as its options are chosen.',
-    highlights: ['Horizontal packs', 'Photo in every slot', 'Option dropdowns'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
+  { id: 'image_slots', name: 'Image Variant Select', description: 'Packs as rows. The chosen pack opens a photo dropdown per item listing every variant with its photo and price.',
+    highlights: ['Stacked packs', 'Photo dropdown per item', 'Whole-variant choices'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

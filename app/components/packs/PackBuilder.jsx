@@ -175,7 +175,10 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   // one — the real storefront always prices off whichever variant the shopper
   // has selected (see packs_widget.js / PackPreview's variant switcher).
   const applicableVariants = form.variantScope === 'all' ? variants : variants.filter((variant) => form.allowedVariantIds.includes(variant.id));
-  const anchorVariant = applicableVariants[0] || null;
+  // Anchor on the first in-stock variant (same rule as verifyPackCoverage), so
+  // sold-out variants never block a Pack that still has stock to sell.
+  const anchorVariant = applicableVariants.find((variant) => variant.availableForSale) || applicableVariants[0] || null;
+  const soldOutCount = applicableVariants.filter((variant) => !variant.availableForSale).length;
   const basePrice = anchorVariant?.price ?? null;
 
   const coverageCheck = useMemo(
@@ -911,11 +914,9 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     image: (
       <BlockStack gap="400">
-        <Toggle label="Show photos in item slots" helpText="Horizontal Select: a small variant photo next to each item. Quick Add Picker and Image Variant Select are photo-based and always show them." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
+        <Toggle label="Show product photos" helpText="Horizontal Select: a small variant photo next to each item. Image Variant Select: the product photo on each pack row (its item dropdowns always show variant photos). Quick Add Picker is photo-based and always shows them." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
         <FieldGroup title="Placement">
           <Segmented label="Image size" options={['small', 'medium', 'large'].map((value) => [value, capitalize(value)])} value={form.customization.images.size} onChange={(value) => updateCustom('images', 'size', value)} />
-          <Segmented label="Image position" disabled={form.customization.design.preset !== 'image_slots'} options={[['top', 'Above options'], ['left', 'Left of options']]} value={form.customization.images.position} onChange={(value) => updateCustom('images', 'position', value)} />
-          <Text as="p" variant="bodySm" tone="subdued">Position applies to Image Variant Select. On phones the photo always sits above the options.</Text>
         </FieldGroup>
         {!form.productImage && <Banner tone="info"><p>This product has no image yet. Pick a product with an image in step 1 to use this.</p></Banner>}
       </BlockStack>
@@ -1024,7 +1025,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                     </table>
                   </div>
                   <Text as="p" variant="bodySm" tone="subdued">Calculated by BRIX from the live Shopify price of {fmt(reviewData.variant.price)} per unit ({currency.code}).</Text>
-                  {!reviewData.variant.availableForSale && <Banner tone="warning"><p>This variant is out of stock in Shopify. You can save a draft, but the Pack can’t be activated until it’s available.</p></Banner>}
+                  {!reviewData.variant.availableForSale && <Banner tone="warning"><p>None of this Pack’s variants are in stock in Shopify. You can save a draft, but the Pack can’t be activated until one is available.</p></Banner>}
+                  {reviewData.variant.availableForSale && soldOutCount > 0 && <Banner tone="info"><p>{soldOutCount} of {applicableVariants.length} variants are out of stock. The Pack still works: shoppers only see the in-stock variants, and the others come back automatically when they’re restocked.</p></Banner>}
                 </BlockStack>
               )}
             </BlockStack>

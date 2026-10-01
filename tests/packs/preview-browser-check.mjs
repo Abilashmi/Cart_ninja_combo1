@@ -84,13 +84,17 @@ await check('Quick Add Picker: variant cards with +, selected count, blocked whe
   await page.close();
 });
 
-await check('Image Variant Select: a photo per slot that follows the chosen variant', async () => {
+await check('Image Variant Select: packs as rows; a photo dropdown of whole variants per item', async () => {
   const { page, errors } = await open(props('image_slots'));
   await page.getByRole('radio', { name: /Buy 2/ }).click();
-  assert.equal(await page.locator('#preview .brix-packs-icard img').count(), 2);
-  await page.getByLabel('Item 2 Size').selectOption('L');
-  await page.getByLabel('Item 2 Color').selectOption('White');
-  assert.match(await page.locator('#preview .brix-packs-icard').nth(1).locator('img').getAttribute('src'), /eeeeee/);
+  assert.equal(await page.locator('#preview .brix-packs-tier').count(), 3, 'packs as rows');
+  assert.equal(await page.locator('#preview .brix-packs-dd').count(), 2);
+  assert.equal(await page.locator('#preview select').count(), 0, 'no per-option selects');
+  await page.getByRole('button', { name: /^Item 2:/ }).click();
+  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-image-slots-open.png') });
+  await page.getByRole('option', { name: /^L \/ White/ }).click();
+  assert.match(await page.getByRole('button', { name: /^Item 2:/ }).locator('img').getAttribute('src'), /eeeeee/);
+  assert.match(await text(page), /₹171\.00/); // (80 + 100) x 0.95
   await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-image-slots.png') });
   assert.deepEqual(errors, []);
   await page.close();

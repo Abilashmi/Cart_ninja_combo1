@@ -187,6 +187,19 @@ test('verifyProductVariant trusts only Shopify data and explains failures', asyn
   await assert.rejects(() => shopify.verifyProductVariant(fakeAdmin(() => ({ errors: [{ message: 'token shpat_secret invalid' }] })), '100', '200'), (error) => error.code === 'shopify_error' && !/shpat/.test(error.message));
 });
 
+test('verifyPackCoverage: some sold-out variants never block a Pack; it anchors on the first in-stock one', async () => {
+  const node = (id, available) => ({ id: `gid://shopify/ProductVariant/${id}`, title: `V${id}`, price: '80.00', availableForSale: available, inventoryQuantity: available ? 3 : 0, inventoryPolicy: 'DENY', image: null, selectedOptions: [] });
+  const productWith = (nodes) => ({ id: 'gid://shopify/Product/100', title: 'Tee', handle: 'tee', status: 'ACTIVE', featuredImage: null, variants: { nodes } });
+  // 6 variants, 3 sold out — including the first.
+  const admin = fakeAdmin(() => ({ data: { product: productWith([node(300, false), node(301, true), node(302, false), node(303, true), node(304, false), node(305, true)]) } }));
+  const coverage = await shopify.verifyPackCoverage(admin, '100', { packType: 'mix_match', variantScope: 'all', allowedVariantIds: [] }, { requireAvailable: true });
+  assert.equal(coverage.anchorVariant.id, '301', 'first in-stock variant, not the sold-out first one');
+  assert.equal(coverage.applicableVariants.length, 6, 'the sold-out variants still belong to the Pack (they come back when restocked)');
+  // Only when EVERY variant is sold out can it not be activated.
+  const allOut = fakeAdmin(() => ({ data: { product: productWith([node(300, false), node(301, false)]) } }));
+  await assert.rejects(() => shopify.verifyPackCoverage(allOut, '100', { packType: 'mix_match', variantScope: 'all', allowedVariantIds: [] }, { requireAvailable: true }), (error) => error.code === 'variant_unavailable');
+});
+
 test('hydratePacks recalculates every tier from the LIVE price and flags broken packs', async () => {
   const stored = await savePack('a.myshopify.com', base({ basePrice: 1 })); // stale cached price of 1
   const missing = await savePack('a.myshopify.com', base({ variantId: '999' }));

@@ -158,8 +158,17 @@
 
     var packs = [];
     (data.packs || []).forEach(function (pack) {
-      var anchor = byId[numericId(pack.variantId)];
-      if (!anchor || anchor.price === null) return;
+      var saved = byId[numericId(pack.variantId)];
+      if (!saved || saved.price === null) return;
+      // Every variant the Pack covers, in the product's own order.
+      var allowed = (pack.allowedVariantIds || []).map(numericId);
+      var variants = order.map(function (id) { return byId[id]; }).filter(function (variant) {
+        return variant.price !== null && (pack.variantScope === 'all' || allowed.indexOf(variant.id) >= 0);
+      });
+      if (!variants.length) variants = [saved];
+      // Price from an in-stock variant when the saved one has sold out
+      // (a Pack saved before its first variant ran out).
+      var anchor = forSale(saved) ? saved : (variants.filter(forSale)[0] || saved);
       var tiers = (pack.tiers || []).map(function (tier) {
         var t = shallow(tier);
         if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
@@ -173,12 +182,6 @@
         t.effectiveUnitPrice = t.quantity > 0 ? Math.round((priced.price / t.quantity) * Math.pow(10, decimals)) / Math.pow(10, decimals) : 0;
         return t;
       });
-      // Every variant the Pack covers, in the product's own order.
-      var allowed = (pack.allowedVariantIds || []).map(numericId);
-      var variants = order.map(function (id) { return byId[id]; }).filter(function (variant) {
-        return variant.price !== null && (pack.variantScope === 'all' || allowed.indexOf(variant.id) >= 0);
-      });
-      if (!variants.length) variants = [anchor];
       var copy = shallow(pack);
       copy.basePrice = anchor.price;
       copy.tiers = tiers;
@@ -358,13 +361,14 @@
     '.brix-packs-save{display:block;font-size:var(--brix-packs-desc);font-weight:600;color:var(--brix-packs-discount)}',
     '.brix-packs-was{font-size:var(--brix-packs-desc);opacity:.55;text-decoration:line-through}',
     /* ── Pack cards: always one horizontal row; scrolls sideways when there isn't room. */
-    '.brix-packs-cards{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(118px,1fr);gap:var(--brix-packs-gap);margin:4px -3px 0;padding:12px 3px 4px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:thin;-webkit-overflow-scrolling:touch}',
-    '.brix-packs-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;margin:0;padding:12px 12px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:left;cursor:pointer;scroll-snap-align:start;transition:border-color .15s,box-shadow .15s,background .15s}',
+    // Cards share the row and wrap when it is too narrow — never a scrollbar.
+    '.brix-packs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:var(--brix-packs-gap);margin:4px 0 0;padding:12px 0 4px}',
+    '.brix-packs-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;margin:0;padding:12px 12px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s}',
     '.brix-packs-card:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
     '.brix-packs-card:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
     '.brix-packs-card[aria-checked="true"]{background:var(--brix-packs-selected);border-color:var(--brix-packs-primary);box-shadow:inset 0 0 0 1px var(--brix-packs-primary)}',
     '.brix-packs-card[disabled]{opacity:.5;cursor:not-allowed}',
-    '.brix-packs-card .brix-packs-badge{position:absolute;top:-10px;left:10px;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}',
+    '.brix-packs-card .brix-packs-badge{position:absolute;top:-10px;left:10px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}',
     '.brix-packs-card-check{position:absolute;top:10px;right:10px;width:18px;height:18px;border:2px solid var(--brix-packs-border);border-radius:50%;background:var(--brix-packs-card)}',
     '.brix-packs-card[aria-checked="true"] .brix-packs-card-check{border-color:var(--brix-packs-primary);background:var(--brix-packs-primary)}',
     '.brix-packs-card[aria-checked="true"] .brix-packs-card-check::after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid var(--brix-packs-button-text);border-width:0 2px 2px 0;transform:rotate(45deg)}',
@@ -410,25 +414,48 @@
     '.brix-packs-slots[data-size="small"] .brix-packs-thumb{width:44px;height:44px}.brix-packs-slots[data-size="large"] .brix-packs-thumb{width:76px;height:76px}',
     '.brix-packs-slot-main{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}',
     '.brix-packs-slot-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px}',
-    /* ── Template 3 · Image Variant Select: a photo card per item. */
-    '.brix-packs-icards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--brix-packs-gap)}',
-    '.brix-packs-icard{display:flex;flex-direction:column;min-width:0;overflow:hidden;background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
-    '.brix-packs-icard[data-state="done"]{border-color:var(--brix-packs-primary);box-shadow:inset 0 0 0 1px var(--brix-packs-primary)}',
-    '.brix-packs-icard[data-state="problem"]{border-color:#b42318}',
-    '.brix-packs-icard-media{position:relative;aspect-ratio:4/3;overflow:hidden;background:#f3f3f4;border-bottom:1px solid var(--brix-packs-border)}',
-    '.brix-packs-icards[data-size="small"] .brix-packs-icard-media{aspect-ratio:16/10}.brix-packs-icards[data-size="large"] .brix-packs-icard-media{aspect-ratio:1/1}',
-    '.brix-packs-icard-media img{display:block;width:100%;height:100%;object-fit:cover;transition:opacity .2s}',
-    '.brix-packs-icard-num{position:absolute;top:8px;left:8px;min-width:26px;height:26px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(255,255,255,.94);color:#111;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.18)}',
-    '.brix-packs-icard-body{display:flex;flex-direction:column;gap:10px;padding:12px}',
-    '.brix-packs-icard-head{display:flex;flex-direction:column;gap:2px;min-width:0}',
-    '.brix-packs-icard-title{font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight);line-height:1.25;overflow-wrap:anywhere}',
-    '.brix-packs-icard-meta{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 8px}',
-    '.brix-packs-icard-price{font-size:var(--brix-packs-desc);font-weight:600;color:var(--brix-packs-price)}',
-    '.brix-packs-icard .brix-packs-fields{grid-template-columns:1fr}',
-    '.brix-packs-icards[data-position="left"]{grid-template-columns:1fr}',
-    '.brix-packs-icards[data-position="left"] .brix-packs-icard{flex-direction:row}',
-    '.brix-packs-icards[data-position="left"] .brix-packs-icard-media{flex:0 0 38%;aspect-ratio:auto;min-height:170px;border-bottom:0;border-right:1px solid var(--brix-packs-border)}',
-    '.brix-packs-icards[data-position="left"] .brix-packs-icard-body{flex:1;min-width:0}',
+    /* ── Template 3 · Image Variant Select: packs as rows; the chosen row opens
+       one photo dropdown per item, listing whole variants. */
+    '.brix-packs-stack{margin-top:4px;background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-stack-item:first-child{border-radius:var(--brix-packs-radius) var(--brix-packs-radius) 0 0}.brix-packs-stack-item:last-child{border-radius:0 0 var(--brix-packs-radius) var(--brix-packs-radius)}.brix-packs-stack-item:only-child{border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-stack-item + .brix-packs-stack-item{border-top:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border)}',
+    '.brix-packs-stack-item[data-selected="1"]{background:var(--brix-packs-selected);box-shadow:inset 3px 0 0 var(--brix-packs-primary)}',
+    '.brix-packs-tier{position:relative;display:grid;grid-template-columns:auto 1fr auto;column-gap:16px;align-items:center;width:100%;margin:0;padding:var(--brix-packs-card-pad);background:transparent;color:var(--brix-packs-text);border:0;border-radius:inherit;font:inherit;text-align:left;cursor:pointer}',
+    '.brix-packs-tier[data-image="1"]{grid-template-columns:auto auto 1fr auto}',
+    '.brix-packs-tier:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:-2px}',
+    '.brix-packs-tier[disabled]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-radio{width:18px;height:18px;border:2px solid var(--brix-packs-border);border-radius:50%;display:inline-block;position:relative}',
+    '.brix-packs-tier[aria-checked="true"] .brix-packs-radio{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-tier[aria-checked="true"] .brix-packs-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--brix-packs-primary)}',
+    '.brix-packs-img{display:block;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);max-width:100%;background:#f3f3f4}',
+    '.brix-packs-img[data-size="small"]{width:48px;height:48px}.brix-packs-img[data-size="medium"]{width:72px;height:72px}.brix-packs-img[data-size="large"]{width:104px;height:104px}',
+    '.brix-packs-content{min-width:0}',
+    '.brix-packs-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight)}',
+    '.brix-packs-meta{display:block;font-size:var(--brix-packs-desc);opacity:.75}',
+    '.brix-packs-price{text-align:right;color:var(--brix-packs-price)}',
+    '.brix-packs-price strong{display:block;font-size:var(--brix-packs-priceSize);font-weight:var(--brix-packs-weight)}',
+    '.brix-packs-price .brix-packs-was{display:block}',
+    '.brix-packs-expand{padding:0 var(--brix-packs-card-pad) var(--brix-packs-card-pad)}',
+    '.brix-packs-dds{display:flex;flex-direction:column;gap:8px}',
+    '.brix-packs-dd{position:relative}',
+    '.brix-packs-dd-trigger{width:100%;display:flex;align-items:center;gap:10px;margin:0;padding:8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);font:inherit;text-align:left;cursor:pointer}',
+    '.brix-packs-dd-trigger.is-static{cursor:default}',
+    '.brix-packs-dd-trigger:not(.is-static):hover,.brix-packs-dd-trigger[aria-expanded="true"]{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-dd-trigger:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    '.brix-packs-dd-trigger[aria-invalid="true"]{border-color:#b42318}',
+    '.brix-packs-dd img,.brix-packs-dd-noimg{display:block;width:44px;height:44px;flex-shrink:0;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);background:#f1f2f4}',
+    '.brix-packs-dd-text{flex:1;min-width:0;display:flex;flex-direction:column}',
+    '.brix-packs-dd-label{font-size:11px;opacity:.7}',
+    '.brix-packs-dd-value{font-weight:600;overflow-wrap:anywhere}',
+    '.brix-packs-dd-price{font-size:var(--brix-packs-desc);opacity:.8;white-space:nowrap}',
+    '.brix-packs-dd-note{font-size:11px;font-weight:600;text-transform:uppercase;opacity:.7;white-space:nowrap}',
+    '.brix-packs-dd-caret{opacity:.6}',
+    '.brix-packs-dd-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:280px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);box-shadow:0 8px 24px rgba(0,0,0,.14)}',
+    '.brix-packs-dd-option{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer}',
+    '.brix-packs-dd-option .brix-packs-dd-value{flex:1}',
+    '.brix-packs-dd-option:hover,.brix-packs-dd-option:focus{background:var(--brix-packs-selected);outline:none}',
+    '.brix-packs-dd-option[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--brix-packs-primary)}',
+    '.brix-packs-dd-option[aria-disabled="true"]{opacity:.5;cursor:not-allowed}',
     /* ── Template 2 · Quick Add Picker: variant cards with a top-right "+". */
     // A scroll box of about two rows; the third row peeks in so it's clear the list scrolls.
     '.brix-packs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:var(--brix-packs-gap);max-height:min(470px,70vh);margin:0;padding:3px 6px 3px 3px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;list-style:none}',
@@ -473,7 +500,7 @@
     '.brix-packs-add[disabled],.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
     '.brix-packs-actions{display:flex;flex-direction:var(--brix-packs-btn-dir);gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
-    '@media (max-width:480px){.brix-packs-cards{grid-auto-columns:minmax(96px,1fr)}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-icard-media,.brix-packs-icards[data-size] .brix-packs-icard-media{aspect-ratio:16/10}.brix-packs-icards{grid-template-columns:1fr}.brix-packs-icards[data-position="left"] .brix-packs-icard{flex-direction:column}.brix-packs-icards[data-position="left"] .brix-packs-icard-media{flex:none;aspect-ratio:4/3;min-height:0;border-right:0;border-bottom:1px solid var(--brix-packs-border)}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}}',
+    '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}}',
   ].join('\n');
 
   function injectStyle() {
@@ -552,7 +579,17 @@
     //   Same Variant Packs keep one slot that stands for every item.
     // picks: variant ids chosen in the Quick Add Picker, one per item.
     // open: a pack card was chosen; the Quick Add Picker shows its grid only then.
-    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false };
+    // openPicker: item slot whose Image Variant Select dropdown is open, or null.
+    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null };
+    // A click anywhere outside the open dropdown closes it.
+    function onDocumentClick(event) {
+      if (state.openPicker === null) return;
+      var open = root.querySelector('.brix-packs-dd[data-open="1"]');
+      if (open && open.contains(event.target)) return;
+      state.openPicker = null;
+      render();
+    }
+    document.addEventListener('click', onDocumentClick);
     var themeVariant = null; // the variant selected on the product page (storefront)
     var money = null;
     var cache = { pack: null, model: null };
@@ -561,6 +598,10 @@
     function model(pack) {
       if (cache.pack === pack) return cache.model;
       var list = pack.variants && pack.variants.length ? pack.variants : [{ id: numericId(pack.variantId) || String(pack.variantId), title: pack.variantTitle || '', price: pack.basePrice, availableForSale: pack.available !== false, maxQuantity: pack.maxQuantity, image: '', options: [] }];
+      // Sold-out variants are left out of the choices; the Pack still sells its
+      // in-stock ones. Only when every variant is sold out is the Pack shown sold out.
+      var inStock = list.filter(forSale);
+      if (inStock.length) list = inStock;
       var normalized = normalizeOptionData(pack.productOptions, list.map(function (variant) { return shallow(variant, { id: String(variant.id) }); }));
       cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: packSelectionRules(pack) } };
       return cache.model;
@@ -617,10 +658,18 @@
       if (!tier) return;
       var m = model(pack);
       var count = m.rules.sameVariant ? 1 : tier.quantity;
+      // Image Variant Select starts every item on the shopper's variant (as far
+      // as its stock allows), like the old photo-dropdown design.
+      var prefill = layoutFor(pack) === 'image_slots' ? defaultVariant(m) : null;
+      if (prefill && !forSale(prefill)) prefill = null;
+      var prefilled = 0;
       var slots = [];
       for (var i = 0; i < count; i += 1) {
         var existing = state.slots[i];
-        slots.push(existing && existing.length === m.options.length ? existing : emptySelection(m.options));
+        if (existing && existing.length === m.options.length) { slots.push(existing); continue; }
+        var fits = prefill && (!hasStockCap(prefill) || prefilled < Number(prefill.maxQuantity));
+        if (fits) prefilled += 1;
+        slots.push(fits ? prefill.optionValues.slice() : emptySelection(m.options));
       }
       state.slots = slots;
       if (m.rules.sameVariant) {
@@ -738,11 +787,13 @@
       return item.problem === 'incomplete' ? 'todo' : 'problem';
     }
 
+    // Only says something when the shopper still has to act; a chosen item is
+    // shown by the slot's own done state, not a repeated "\u2713 name" label.
     function stateTag(pack, item) {
       var tone = slotTone(item);
       var text;
-      if (tone === 'done') text = '\u2713 ' + variantName(pack, item.variant);
-      else if (item.problem === 'incomplete') text = item.missing.length ? 'Choose ' + item.missing.join(', ').toLowerCase() : 'Not chosen';
+      if (tone === 'done') return null;
+      if (item.problem === 'incomplete') text = item.missing.length ? 'Choose ' + item.missing.join(', ').toLowerCase() : 'Not chosen';
       else text = 'Needs a change';
       return el('span', { class: 'brix-packs-state', 'data-tone': tone, text: text });
     }
@@ -840,41 +891,100 @@
       return list;
     }
 
-    // Template 3 · Image Variant Select: a photo card per item; the photo is
-    // the resolved variant's own image (or the product photo when it has none).
-    function renderImageSlots(pack, tier, items, custom) {
+    // Template 3 · Image Variant Select: one photo dropdown per item (one for
+    // a Same Variant Pack). Every entry is a whole variant — its own photo,
+    // name and price — not one box per Shopify option.
+    function renderVariantDropdowns(pack, tier, items) {
       var m = model(pack);
-      var images = custom.images || {};
-      var grid = el('div', { class: 'brix-packs-icards', 'data-position': images.position === 'left' ? 'left' : 'top', 'data-size': images.size || 'medium' });
+      var list = el('div', { class: 'brix-packs-dds' });
       var count = m.rules.sameVariant ? 1 : tier.quantity;
       for (var slot = 0; slot < count; slot += 1) {
         var item = slotItem(m, items, slot);
-        var label = slotLabel(m, tier, slot);
-        var msgId = uid + '-m' + slot;
-        var titleId = uid + '-t' + slot;
         var problem = problemText(pack, item, m);
-        var resolved = item.variant && !item.problem;
-        var alt = (pack.productTitle || '') + (item.variant ? ' \u2014 ' + variantName(pack, item.variant) : '');
-        grid.appendChild(el('div', { class: 'brix-packs-icard', role: 'group', 'aria-labelledby': titleId, 'data-state': slotTone(item) }, [
-          el('div', { class: 'brix-packs-icard-media' }, [
-            photo(slotImage(pack, state.slots[slot], item), alt),
-            el('span', { class: 'brix-packs-icard-num', 'aria-hidden': 'true', text: m.rules.sameVariant ? '\u00d7' + tier.quantity : String(slot + 1) }),
-          ]),
-          el('div', { class: 'brix-packs-icard-body' }, [
-            el('div', { class: 'brix-packs-icard-head' }, [
-              el('span', { class: 'brix-packs-label', id: titleId, text: label }),
-              el('strong', { class: 'brix-packs-icard-title', text: pack.productTitle || variantName(pack, item.variant) }),
-              el('div', { class: 'brix-packs-icard-meta' }, [
-                stateTag(pack, item),
-                resolved && !money.hidden ? el('span', { class: 'brix-packs-icard-price', text: money.format(item.variant.price) }) : null,
-              ]),
-            ]),
-            fieldsFor(pack, slot, label, item, msgId),
-            problem ? el('p', { class: 'brix-packs-problem', id: msgId, text: problem }) : null,
-          ]),
+        var msgId = uid + '-m' + slot;
+        list.appendChild(el('div', { class: 'brix-packs-dd-item', 'data-state': slotTone(item) }, [
+          variantDropdown(pack, tier, slot, slotLabel(m, tier, slot), item, problem ? msgId : null),
+          problem ? el('p', { class: 'brix-packs-problem', id: msgId, text: problem }) : null,
         ]));
       }
-      return grid;
+      return list;
+    }
+
+    // Why `variant` can't be chosen for `slot` right now ('' = it can).
+    function variantBlock(m, tier, slot, variant) {
+      if (!forSale(variant)) return 'Sold out';
+      if (!hasStockCap(variant)) return '';
+      var max = Number(variant.maxQuantity);
+      if (m.rules.sameVariant) return max < tier.quantity ? 'Only ' + max + ' left' : '';
+      var used = 0;
+      state.slots.forEach(function (values, index) {
+        if (index === slot) return;
+        var other = resolveVariant(m.variants, m.options, values);
+        if (other && other.id === variant.id) used += 1;
+      });
+      return used >= max ? 'Only ' + max + ' left' : '';
+    }
+
+    function variantDropdown(pack, tier, slot, label, item, msgId) {
+      var m = model(pack);
+      var chosen = item.variant;
+      var open = state.openPicker === slot;
+      var name = chosen ? variantName(pack, chosen) : 'Choose an item';
+      var face = [
+        ddPhoto(chosen ? chosen.image || pack.productImage : pack.productImage),
+        el('span', { class: 'brix-packs-dd-text' }, [el('span', { class: 'brix-packs-dd-label', text: label }), el('span', { class: 'brix-packs-dd-value', text: name })]),
+        chosen && !money.hidden ? el('span', { class: 'brix-packs-dd-price', text: money.format(chosen.price) }) : null,
+      ];
+      // A product with one variant has nothing to choose: show it, don't ask.
+      if (m.variants.length < 2) return el('div', { class: 'brix-packs-dd', 'data-key': slot }, [el('div', { class: 'brix-packs-dd-trigger is-static' }, face)]);
+      function focusTrigger() {
+        var node = root.querySelector('[data-fk="dd-' + slot + '"]');
+        if (node) node.focus();
+      }
+      function pick(variant) {
+        state.slots[slot] = variant.optionValues.slice();
+        state.openPicker = null;
+        state.message = null;
+        render();
+        focusTrigger();
+      }
+      var trigger = el('button', {
+        type: 'button', class: 'brix-packs-dd-trigger', 'data-fk': 'dd-' + slot, 'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false',
+        'aria-label': label + ': ' + name, 'aria-invalid': msgId ? 'true' : null, 'aria-describedby': msgId,
+        onclick: function (event) { event.stopPropagation(); state.openPicker = open ? null : slot; render(); },
+        onkeydown: function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); state.openPicker = slot; render(); } },
+      }, face.concat([el('span', { class: 'brix-packs-dd-caret', 'aria-hidden': 'true', text: '\u25be' })]));
+      var children = [trigger];
+      if (open) {
+        children.push(el('ul', { class: 'brix-packs-dd-list', role: 'listbox', 'aria-label': label }, m.variants.map(function (variant, index) {
+          var why = variantBlock(m, tier, slot, variant);
+          return el('li', {
+            role: 'option', class: 'brix-packs-dd-option', tabindex: '-1', 'data-variant-id': variant.id,
+            'aria-selected': chosen && chosen.id === variant.id ? 'true' : 'false', 'aria-disabled': why ? 'true' : null,
+            onclick: function (event) { event.stopPropagation(); if (!why) pick(variant); },
+            onkeydown: function (event) {
+              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!why) pick(variant); return; }
+              if (event.key === 'Escape') { event.preventDefault(); state.openPicker = null; render(); focusTrigger(); return; }
+              if (event.key === 'Tab') { state.openPicker = null; render(); return; }
+              var step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              var next = event.currentTarget.parentNode.children[(index + step + m.variants.length) % m.variants.length];
+              if (next) next.focus();
+            },
+          }, [
+            ddPhoto(variant.image || pack.productImage),
+            el('span', { class: 'brix-packs-dd-value', text: variantName(pack, variant) }),
+            why ? el('span', { class: 'brix-packs-dd-note', text: why }) : null,
+            money.hidden ? null : el('span', { class: 'brix-packs-dd-price', text: money.format(variant.price) }),
+          ]);
+        })));
+      }
+      return el('div', { class: 'brix-packs-dd', 'data-key': slot, 'data-open': open ? '1' : null }, children);
+    }
+
+    function ddPhoto(src) {
+      return src ? el('img', { src: src, alt: '', loading: 'lazy', decoding: 'async' }) : el('span', { class: 'brix-packs-dd-noimg', 'aria-hidden': 'true' });
     }
 
     function blockText(reason, pack, variant) {
@@ -984,21 +1094,47 @@
         return saveWord + ' ' + money.format(shown.savings);
       }
 
-      // Pack cards — one horizontal row of radio buttons.
-      var cards = el('div', { class: 'brix-packs-cards', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack' });
+      // Pack cards — one horizontal row of radio buttons. Image Variant Select
+      // lists the packs as rows instead; the chosen row opens its item dropdowns.
+      var rows = layout === 'image_slots';
+      var cards = el('div', { class: rows ? 'brix-packs-stack' : 'brix-packs-cards', role: 'radiogroup', 'aria-label': content.heading || 'Choose a pack' });
       // Quick Add Picker: nothing is chosen (and no grid shown) until the shopper picks a pack.
       var closed = layout === 'quick_add' && !state.open;
+      var images = custom.images || {};
+      var rowImage = rows && images.enabled !== false && pack.productImage ? pack.productImage : '';
       pack.tiers.forEach(function (t, index) {
         var shown = shownTier(pack, t, index);
         var selected = !closed && index === state.tierIndex;
         var disabled = tierDisabled(pack, t);
         var save = saveTextFor(shown);
-        cards.appendChild(el('button', {
-          type: 'button', class: 'brix-packs-card', role: 'radio', 'aria-checked': selected ? 'true' : 'false', 'data-index': index, 'data-fk': 'tier-' + index,
+        var tierProps = {
+          type: 'button', class: rows ? 'brix-packs-tier' : 'brix-packs-card', role: 'radio', 'aria-checked': selected ? 'true' : 'false', 'data-index': index, 'data-fk': 'tier-' + index,
           disabled: disabled, title: disabled ? (pack.available === false ? 'Sold out' : 'Not enough stock for this pack') : null, tabindex: index === state.tierIndex ? '0' : '-1',
           onclick: function () { selectTier(index, false); },
           onkeydown: function (event) { onTierKey(event, index); },
-        }, [
+        };
+        if (rows) {
+          var meta = itemsText(t.quantity) + (!money.hidden && shown.savings > 0 ? ' \u00b7 ' + money.format(shown.price / t.quantity) + ' each' : '');
+          var row = el('div', { class: 'brix-packs-stack-item', 'data-selected': selected ? '1' : null }, [
+            el('button', shallow(tierProps, { 'data-image': rowImage ? '1' : null }), [
+              el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
+              rowImage ? el('img', { class: 'brix-packs-img', src: rowImage, alt: '', loading: 'lazy', 'data-size': images.size || 'medium' }) : null,
+              el('span', { class: 'brix-packs-content' }, [
+                el('span', { class: 'brix-packs-title' }, [tierName(t), t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null]),
+                el('span', { class: 'brix-packs-meta', text: disabled ? (pack.available === false ? 'Sold out' : 'Low stock') : meta }),
+              ]),
+              el('span', { class: 'brix-packs-price' }, [
+                !money.hidden && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shown.subtotal) }) : null,
+                money.hidden ? null : el('strong', { text: money.format(shown.price) }),
+                save ? el('span', { class: 'brix-packs-save', text: save }) : null,
+              ]),
+            ]),
+          ]);
+          if (selected) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': 'Choose your items' }, [renderVariantDropdowns(pack, t, itemsFor(pack, t))]));
+          cards.appendChild(row);
+          return;
+        }
+        cards.appendChild(el('button', tierProps, [
           t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
           el('span', { class: 'brix-packs-card-check', 'aria-hidden': 'true' }),
           el('span', { class: 'brix-packs-card-name', text: tierName(t) }),
@@ -1018,6 +1154,9 @@
       var ready = !closed && Boolean(tier) && items.length > 0 && done === items.length;
       if (tier && closed) {
         section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: 'Choose a pack to pick your items.' }));
+      } else if (tier && rows) {
+        // The chosen row already shows the price and the item dropdowns.
+        if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier) {
         var body = el('div', { class: 'brix-packs-body', 'aria-label': 'Choose your items', role: 'group' });
         if (layout === 'quick_add') {
@@ -1025,7 +1164,7 @@
           renderQuickAdd(pack, tier, items).forEach(function (node) { body.appendChild(node); });
         } else {
           body.appendChild(progress(progressTitle(m, tier), done, tier.quantity));
-          body.appendChild(layout === 'image_slots' ? renderImageSlots(pack, tier, items, custom) : renderSlots(pack, tier, items, custom));
+          body.appendChild(renderSlots(pack, tier, items, custom));
         }
         section.appendChild(body);
 
@@ -1058,6 +1197,12 @@
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
       restoreFocus(focusKey);
+      // Keep keyboard focus inside an open variant dropdown after re-rendering.
+      if (state.openPicker !== null) {
+        var list = root.querySelector('.brix-packs-dd[data-open="1"] .brix-packs-dd-list');
+        var option = list && (list.querySelector('[aria-selected="true"]') || list.querySelector('[role="option"]'));
+        if (option) option.focus();
+      }
     }
 
     // Re-rendering replaces the DOM; keep keyboard focus on the same control
@@ -1126,6 +1271,7 @@
       if (!tier || tierDisabled(state.pack, tier)) return;
       state.tierIndex = index;
       state.open = true;
+      state.openPicker = null;
       state.message = null;
       syncSelections(state.pack);
       render();
@@ -1302,7 +1448,7 @@
         }
         render();
       },
-      destroy: function () { root.textContent = ''; state.pack = null; },
+      destroy: function () { document.removeEventListener('click', onDocumentClick); root.textContent = ''; state.pack = null; },
     };
   }
 
