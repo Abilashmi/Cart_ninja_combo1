@@ -5,10 +5,10 @@
   <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
   <!-- BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
        product pages and combo pages. Shows nothing unless the merchant turned
-       COD on in BRIX. Settings come from the PHP backend (data-php); placing
-       the order goes to the BRIX app server (data-api). Must load before
+       COD on in BRIX. The browser only talks to the PHP backend (data-php),
+       which relays order placement to the BRIX app server. Must load before
        cart_drawer_inline.js. -->
-  <script src="{{ 'brix_cod.js' | asset_url }}" data-php="https://int.thebrix.io" data-api="https://cartdrawer.fly.dev" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}" defer></script>
+  <script src="{{ 'brix_cod.js' | asset_url }}" data-php="https://int.thebrix.io" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}" defer></script>
   <script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>
 
   <!-- Combo pages: auto-detects /pages/* URLs that match a published combo
