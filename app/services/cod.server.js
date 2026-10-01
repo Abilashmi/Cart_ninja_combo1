@@ -9,13 +9,13 @@
  * draftOrderComplete). Prepaid orders never come here; they use Shopify's own
  * checkout exactly as before.
  *
- * Tables (MySQL via db_proxy, created on first use — see ensureCodTables):
- *   cod_settings  one JSON settings blob per shop
- *   cod_otp       hashed one-time codes
- *   cod_orders    one row per COD order attempt (idempotency + daily limits + admin list)
+ * Storage lives in the PHP backend (php_backend/cod_settings.php, cod_otp.php,
+ * cod_orders.php), which owns the cod_settings / cod_otp / cod_orders tables.
+ * This module only sends it hashes of phone numbers and OTP codes, never the
+ * raw values.
  */
 import crypto from 'node:crypto';
-import { getDb } from './db.server';
+import { BASE_PHP_URL } from '../utils/api-helpers';
 import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
@@ -41,95 +41,51 @@ export function codErrorResponse(error, headers = {}) {
   return Response.json({ success: false, error: 'Something went wrong. Please try again, or pay online.', code: 'internal_error' }, { status: 500, headers });
 }
 
-/* ───────────────────────── storage ───────────────────────── */
+/* ───────────────────────── storage (PHP backend) ───────────────────────── */
 
-let tablesReady = false;
+const PHP_TIMEOUT_MS = 15_000;
 
-export async function ensureCodTables(db = getDb()) {
-  if (tablesReady) return;
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS cod_settings (
-      shop          VARCHAR(255) NOT NULL,
-      settings_json TEXT NOT NULL,
-      updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (shop)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS cod_otp (
-      id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      shop        VARCHAR(255) NOT NULL,
-      phone_hash  CHAR(64) NOT NULL,
-      code_hash   CHAR(64) NOT NULL,
-      attempts    INT NOT NULL DEFAULT 0,
-      verified    TINYINT(1) NOT NULL DEFAULT 0,
-      expires_at  DATETIME NOT NULL,
-      created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      KEY idx_cod_otp_phone (shop, phone_hash, created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS cod_orders (
-      id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-      shop            VARCHAR(255) NOT NULL,
-      idem_key        VARCHAR(64) NOT NULL,
-      status          VARCHAR(16) NOT NULL DEFAULT 'creating',
-      source          VARCHAR(16) NOT NULL,
-      phone_hash      CHAR(64) NOT NULL,
-      phone_masked    VARCHAR(16) NOT NULL,
-      phone_verified  TINYINT(1) NOT NULL DEFAULT 0,
-      customer_name   VARCHAR(120) NULL,
-      pincode         VARCHAR(10) NULL,
-      total           DECIMAL(12,2) NULL,
-      currency        VARCHAR(8) NULL,
-      draft_order_id  VARCHAR(64) NULL,
-      order_id        VARCHAR(64) NULL,
-      order_name      VARCHAR(32) NULL,
-      created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (id),
-      UNIQUE KEY uniq_cod_orders_idem (shop, idem_key),
-      KEY idx_cod_orders_phone (shop, phone_hash, created_at),
-      KEY idx_cod_orders_shop (shop, created_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  tablesReady = true;
-}
-
-async function run(fn) {
-  const db = getDb();
+/**
+ * Calls one of the COD PHP endpoints (php_backend/cod_*.php), which own the
+ * cod_settings / cod_otp / cod_orders tables. Returns the parsed JSON on
+ * success; throws a CodError otherwise. Expected refusals (409 duplicate,
+ * 429 OTP limits) keep the PHP code and message so callers can react.
+ */
+async function php(file, body) {
+  let res;
+  let json;
   try {
-    await ensureCodTables(db);
-    return await fn(db);
+    res = await fetch(`${BASE_PHP_URL}/${file}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(PHP_TIMEOUT_MS),
+    });
+    json = await res.json().catch(() => null); // e.g. the host's HTML 404 page
   } catch (error) {
-    if (error instanceof CodError) throw error;
-    if (/duplicate entry|ER_DUP_ENTRY|1062/i.test(String(error?.message || ''))) {
-      throw new CodError('duplicate', 'This request was already received.', { status: 409 });
-    }
-    console.error('[cod] database error:', String(error?.message || error).slice(0, 300));
+    console.error(`[cod] ${file} unreachable:`, String(error?.message || error).slice(0, 200));
     throw new CodError('database_error', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
   }
+  if (res.ok && json?.success) return json;
+  if (res.status === 404 && !json?.code) {
+    console.error(`[cod] ${BASE_PHP_URL}/${file} not found — upload php_backend/cod_*.php to the PHP server.`);
+    throw new CodError('storage_missing', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
+  }
+  if ([409, 429].includes(res.status) && json?.code) throw new CodError(json.code, json.error, { status: res.status });
+  console.error(`[cod] ${file} ${body.action} failed:`, res.status, JSON.stringify(json).slice(0, 300));
+  throw new CodError('database_error', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
 }
 
 export async function getCodSettings(shop) {
-  return run(async (db) => {
-    const [rows] = await db.execute('SELECT settings_json FROM cod_settings WHERE shop = ? LIMIT 1', [shop]);
-    if (!rows?.length) return sanitizeCodSettings({}, DEFAULT_COD_SETTINGS);
-    let stored = {};
-    try { stored = JSON.parse(rows[0].settings_json || '{}') || {}; } catch { stored = {}; }
-    return sanitizeCodSettings(stored, DEFAULT_COD_SETTINGS);
-  });
+  const { settings } = await php('cod_settings.php', { action: 'get', shop });
+  return sanitizeCodSettings(settings || {}, DEFAULT_COD_SETTINGS);
 }
 
 /** Merge `patch` onto the saved settings (omitted fields keep their saved value). */
 export async function saveCodSettings(shop, patch) {
   const current = await getCodSettings(shop);
   const next = sanitizeCodSettings(patch, current);
-  await run((db) => db.execute(
-    'INSERT INTO cod_settings (shop, settings_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json)',
-    [shop, JSON.stringify(next)],
-  ));
+  await php('cod_settings.php', { action: 'save', shop, settings: next });
   return next;
 }
 
@@ -200,69 +156,35 @@ export function clientIp(request) {
 
 /* ───────────────────────── OTP ───────────────────────── */
 
-const OTP_TTL_MIN = 10;
-const OTP_MAX_ATTEMPTS = 5;
-const OTP_MAX_SENDS_PER_HOUR = 5;
-const OTP_RESEND_SECONDS = 30;
+// Limits (30 s between codes, 5 per hour, 10 min expiry, 5 tries) are
+// enforced by php_backend/cod_otp.php.
 
 export function otpAvailable() {
   return smsProviderStatus().configured;
 }
 
 export async function sendCodOtp(shop, phone) {
-  const hash = phoneHash(shop, phone);
-  await run(async (db) => {
-    const [recent] = await db.execute(
-      `SELECT COUNT(*) AS sends, MAX(TIMESTAMPDIFF(SECOND, created_at, NOW()) < ?) AS too_soon
-         FROM cod_otp WHERE shop = ? AND phone_hash = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
-      [OTP_RESEND_SECONDS, shop, hash],
-    );
-    const sends = Number(recent?.[0]?.sends || 0);
-    if (Number(recent?.[0]?.too_soon || 0) === 1) {
-      throw new CodError('otp_too_soon', `Please wait ${OTP_RESEND_SECONDS} seconds before asking for a new code.`, { status: 429 });
-    }
-    if (sends >= OTP_MAX_SENDS_PER_HOUR) {
-      throw new CodError('otp_limit', 'Too many codes were sent to this number. Try again in an hour, or pay online.', { status: 429 });
-    }
-  });
-
   const code = String(crypto.randomInt(0, 10000)).padStart(4, '0');
-  const [insert] = await run((db) => db.execute(
-    `INSERT INTO cod_otp (shop, phone_hash, code_hash, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ${OTP_TTL_MIN} MINUTE))`,
-    [shop, hash, codeHash(shop, phone, code)],
-  ));
+  const { id, resendAfter } = await php('cod_otp.php', {
+    action: 'create', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
+  });
   const result = await sendOtpSms(phone, code);
   if (!result.sent) {
-    await run((db) => db.execute('DELETE FROM cod_otp WHERE id = ?', [insert.insertId])).catch(() => {});
+    await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
     throw new CodError('otp_send_failed', "We couldn't send the code to this number. Check it and try again, or pay online.", { status: 503 });
   }
-  return { resendAfter: OTP_RESEND_SECONDS };
+  return { resendAfter: resendAfter || 30 };
 }
 
 export async function verifyCodOtp(shop, phone, code) {
   if (!/^\d{4}$/.test(String(code || ''))) throw new CodError('otp_invalid', 'Enter the 4-digit code from the SMS.');
-  const hash = phoneHash(shop, phone);
-  return run(async (db) => {
-    const [rows] = await db.execute(
-      `SELECT id, code_hash, attempts FROM cod_otp
-        WHERE shop = ? AND phone_hash = ? AND verified = 0 AND expires_at > NOW()
-        ORDER BY id DESC LIMIT 1`,
-      [shop, hash],
-    );
-    const row = rows?.[0];
-    if (!row) throw new CodError('otp_expired', 'This code has expired. Ask for a new one.');
-    if (Number(row.attempts) >= OTP_MAX_ATTEMPTS) throw new CodError('otp_locked', 'Too many wrong tries. Ask for a new code.');
-    const expected = codeHash(shop, phone, code);
-    const ok = expected.length === String(row.code_hash).length
-      && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(row.code_hash)));
-    if (!ok) {
-      await db.execute('UPDATE cod_otp SET attempts = attempts + 1 WHERE id = ?', [row.id]);
-      const left = OTP_MAX_ATTEMPTS - Number(row.attempts) - 1;
-      throw new CodError('otp_wrong', left > 0 ? `That code doesn't match. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong tries. Ask for a new code.');
-    }
-    await db.execute('UPDATE cod_otp SET verified = 1 WHERE id = ?', [row.id]);
-    return { token: issuePhoneToken(shop, phone) };
+  const { result, attemptsLeft } = await php('cod_otp.php', {
+    action: 'verify', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
   });
+  if (result === 'ok') return { token: issuePhoneToken(shop, phone) };
+  if (result === 'wrong') throw new CodError('otp_wrong', `That code doesn't match. ${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left.`);
+  if (result === 'locked') throw new CodError('otp_locked', 'Too many wrong tries. Ask for a new code.');
+  throw new CodError('otp_expired', 'This code has expired. Ask for a new one.');
 }
 
 /* ───────────────────────── Shopify ───────────────────────── */
@@ -486,22 +408,13 @@ export async function placeCodOrder(admin, {
   if (!/^[\w-]{8,64}$/.test(String(idemKey || ''))) throw new CodError('invalid_request', 'Refresh the page and try again.');
   const hash = phoneHash(shop, phone);
 
-  const existing = await run(async (db) => {
-    const [rows] = await db.execute('SELECT status, order_name, order_id, total, currency FROM cod_orders WHERE shop = ? AND idem_key = ? LIMIT 1', [shop, idemKey]);
-    return rows?.[0] || null;
-  });
+  const { order: existing } = await php('cod_orders.php', { action: 'find', shop, idem_key: idemKey });
   if (existing?.status === 'placed') {
     return { orderName: existing.order_name, orderId: existing.order_id, total: Number(existing.total), currency: existing.currency, statusPageUrl: null, repeated: true };
   }
   if (existing) throw new CodError('in_progress', 'Your order is already being placed. Please wait a moment.', { status: 409 });
 
-  const placedToday = await run(async (db) => {
-    const [rows] = await db.execute(
-      "SELECT COUNT(*) AS n FROM cod_orders WHERE shop = ? AND phone_hash = ? AND status = 'placed' AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)",
-      [shop, hash],
-    );
-    return Number(rows?.[0]?.n || 0);
-  });
+  const { count: placedToday } = await php('cod_orders.php', { action: 'count_recent', shop, phone_hash: hash });
   if (placedToday >= settings.dailyLimitPerPhone) {
     throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429 });
   }
@@ -509,17 +422,16 @@ export async function placeCodOrder(admin, {
   const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode });
 
   try {
-    await run((db) => db.execute(
-      `INSERT INTO cod_orders (shop, idem_key, status, source, phone_hash, phone_masked, phone_verified, customer_name, pincode, total, currency)
-       VALUES (?, ?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [shop, idemKey, surface, hash, maskPhone(phone), phoneVerified ? 1 : 0, address.name.slice(0, 120), address.pincode, quote.total, quote.currency],
-    ));
+    await php('cod_orders.php', {
+      action: 'begin', shop, idem_key: idemKey, source: surface, phone_hash: hash, phone_masked: maskPhone(phone),
+      phone_verified: phoneVerified, customer_name: address.name, pincode: address.pincode, total: quote.total, currency: quote.currency,
+    });
   } catch (error) {
     if (error instanceof CodError && error.code === 'duplicate') throw new CodError('in_progress', 'Your order is already being placed. Please wait a moment.', { status: 409 });
     throw error;
   }
 
-  const clearAttempt = () => run((db) => db.execute("DELETE FROM cod_orders WHERE shop = ? AND idem_key = ? AND status = 'creating'", [shop, idemKey])).catch(() => {});
+  const clearAttempt = () => php('cod_orders.php', { action: 'abandon', shop, idem_key: idemKey }).catch(() => {});
 
   const tags = [...new Set(['COD', 'BRIX-COD', `brix-src-${surface}`, ...settings.orderTags])];
   const customAttributes = [
@@ -568,10 +480,11 @@ export async function placeCodOrder(admin, {
 
     const total = Number(order.totalPriceSet?.shopMoney?.amount ?? quote.total);
     const currency = order.totalPriceSet?.shopMoney?.currencyCode || quote.currency;
-    await run((db) => db.execute(
-      "UPDATE cod_orders SET status = 'placed', draft_order_id = ?, order_id = ?, order_name = ?, total = ?, currency = ? WHERE shop = ? AND idem_key = ?",
-      [draftId, order.id, order.name, total, currency, shop, idemKey],
-    )).catch((error) => console.error('[cod] order placed but tracking row update failed:', order.name, error?.message));
+    // The Shopify order exists now — a failed bookkeeping write must not turn
+    // it into an error for the shopper (who would then retry and order twice).
+    await php('cod_orders.php', {
+      action: 'complete', shop, idem_key: idemKey, draft_order_id: draftId, order_id: order.id, order_name: order.name, total, currency,
+    }).catch((error) => console.error('[cod] order placed but tracking row update failed:', order.name, error?.message));
 
     return { orderName: order.name, orderId: order.id, statusPageUrl: order.statusPageUrl || null, total, currency };
   } catch (error) {
@@ -584,14 +497,7 @@ export async function placeCodOrder(admin, {
 /* ───────────────────────── admin: orders list ───────────────────────── */
 
 export async function listCodOrders(admin, shop, limit = 50) {
-  const rows = await run(async (db) => {
-    const [r] = await db.execute(
-      `SELECT order_id, order_name, source, phone_masked, phone_verified, customer_name, pincode, total, currency, created_at
-         FROM cod_orders WHERE shop = ? AND status = 'placed' ORDER BY id DESC LIMIT ${Math.min(200, Math.max(1, Number(limit) || 50))}`,
-      [shop],
-    );
-    return r || [];
-  });
+  const { orders: rows = [] } = await php('cod_orders.php', { action: 'list', shop, limit });
   const ids = rows.map((r) => r.order_id).filter(Boolean);
   const live = new Map();
   if (ids.length && admin) {
@@ -620,12 +526,12 @@ export async function listCodOrders(admin, shop, limit = 50) {
       orderNumericId: String(r.order_id || '').split('/').pop(),
       source: r.source,
       phone: r.phone_masked,
-      phoneVerified: Number(r.phone_verified) === 1,
+      phoneVerified: r.phone_verified === true,
       customer: r.customer_name,
       pincode: r.pincode,
       total: Number(r.total || 0),
       currency: r.currency,
-      createdAt: r.created_at ? `${String(r.created_at).replace(' ', 'T')}Z` : null,
+      createdAt: r.created_at || null,
       status,
       fulfillment: node?.displayFulfillmentStatus || null,
     };

@@ -26,7 +26,11 @@ export async function loader({ request }) {
     settings = await getCodSettings(shop);
     orders = await listCodOrders(admin, shop, 50);
   } catch (error) {
-    loadError = error instanceof CodError ? error.message : 'COD Checkout could not be loaded. Please try again.';
+    if (error instanceof CodError && error.code === 'storage_missing') {
+      loadError = "COD Checkout's files aren't on the BRIX PHP server yet (php_backend/cod_*.php). Upload them, then reload this page.";
+    } else {
+      loadError = error instanceof CodError ? error.message : 'COD Checkout could not be loaded. Please try again.';
+    }
     if (!(error instanceof CodError)) console.error('[app.cod] load failed:', String(error?.message || error).slice(0, 300));
   }
   return {

@@ -62,6 +62,7 @@ const FEATURES = [
     'mobile_swipe_checkout'    => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
     'build_a_combo'            => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],
     'packs'                    => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
+    'cod_checkout'             => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
     'open_countdown'           => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
     'custom_css'               => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
     'priority_email_support'   => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],

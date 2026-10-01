@@ -1,88 +1,38 @@
 /* eslint-env node */
 /* global globalThis */
 // Run with: node --import ./tests/packs/register.mjs --test tests/cod
-// Exercises app/services/cod.server.js WITHOUT touching any real database,
-// SMS provider or Shopify store: global fetch is replaced by an in-memory
-// emulation of php_backend/db_proxy.php, OTPs go to the dev log, and Admin
-// API calls go to a fake `admin` object that records every operation.
-import test, { beforeEach } from 'node:test';
+// Exercises app/services/cod.server.js against the REAL php_backend/cod_*.php
+// files on a throwaway MariaDB (see php-harness.mjs: XAMPP binaries, a fresh
+// data folder in the temp dir, its own port). OTPs go to the dev log and
+// Admin API calls go to a fake `admin` object that records every operation.
+// Nothing touches the shared production database, an SMS provider or a store.
+import test, { after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { harnessAvailable, startHarness } from './php-harness.mjs';
 
+if (!harnessAvailable()) {
+  console.log('SKIP cod-server tests: XAMPP PHP / MariaDB binaries not found (set XAMPP_DIR).');
+  process.exit(0);
+}
+
+const harness = await startHarness();
+process.env.PHP_BASE_URL = harness.baseUrl;
+process.env.SHOPIFY_API_KEY = harness.secret;
 process.env.SHOPIFY_API_SECRET = 'test-secret';
-process.env.SHOPIFY_API_KEY = 'test-key';
 process.env.COD_OTP_DEV_LOG = '1';
 delete process.env.MSG91_AUTH_KEY;
 
-const realFetch = globalThis.fetch;
 const SHOP = 'demo.myshopify.com';
+const sql = (q, p = []) => harness.db.query(q, p).then(([rows]) => rows);
+// "Time travel": age stored rows instead of waiting in real time.
+const ageOtp = (seconds) => sql(`UPDATE cod_otp SET created_at = created_at - INTERVAL ${seconds} SECOND`);
+const ageOrders = (hours) => sql(`UPDATE cod_orders SET created_at = created_at - INTERVAL ${hours} HOUR`);
+const orderRows = () => sql('SELECT * FROM cod_orders ORDER BY id');
 
-/* ── fake db_proxy ─────────────────────────────────────────────────────────── */
-let db;
-let clock; // ms, drives NOW() inside the fake DB
-function resetDb() {
-  db = { settings: new Map(), otp: [], orders: [], nextId: 1 };
-  clock = Date.UTC(2026, 9, 1, 10, 0, 0);
+async function resetDb() {
+  for (const t of ['cod_settings', 'cod_otp', 'cod_orders']) await sql(`DELETE FROM ${t}`).catch(() => {});
 }
-const respond = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-
-globalThis.fetch = async (url, init) => {
-  if (!String(url).endsWith('/db_proxy.php')) return realFetch(url, init);
-  const { sql, params: p } = JSON.parse(init.body);
-  const q = sql.replace(/\s+/g, ' ').trim();
-  const rows = (r) => respond({ success: true, rows: r });
-  const write = (affectedRows = 1, insertId = 0) => respond({ success: true, affectedRows, insertId });
-
-  if (q.startsWith('CREATE TABLE')) return write(0);
-  if (q.startsWith('SELECT settings_json FROM cod_settings')) {
-    return rows(db.settings.has(p[0]) ? [{ settings_json: db.settings.get(p[0]) }] : []);
-  }
-  if (q.startsWith('INSERT INTO cod_settings')) { db.settings.set(p[0], p[1]); return write(); }
-
-  if (q.includes('FROM cod_otp WHERE shop = ? AND phone_hash = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)')) {
-    const recent = db.otp.filter((o) => o.shop === p[1] && o.phone_hash === p[2] && clock - o.created < 3600e3);
-    const tooSoon = recent.some((o) => (clock - o.created) / 1000 < p[0]);
-    return rows([{ sends: recent.length, too_soon: recent.length ? (tooSoon ? 1 : 0) : null }]);
-  }
-  if (q.startsWith('INSERT INTO cod_otp')) {
-    const id = db.nextId++;
-    db.otp.push({ id, shop: p[0], phone_hash: p[1], code_hash: p[2], attempts: 0, verified: 0, created: clock, expires: clock + 10 * 60e3 });
-    return write(1, id);
-  }
-  if (q.startsWith('DELETE FROM cod_otp WHERE id = ?')) { db.otp = db.otp.filter((o) => o.id !== p[0]); return write(); }
-  if (q.startsWith('SELECT id, code_hash, attempts FROM cod_otp')) {
-    const r = db.otp.filter((o) => o.shop === p[0] && o.phone_hash === p[1] && !o.verified && o.expires > clock).sort((a, b) => b.id - a.id);
-    return rows(r.slice(0, 1));
-  }
-  if (q.startsWith('UPDATE cod_otp SET attempts')) { db.otp.find((o) => o.id === p[0]).attempts++; return write(); }
-  if (q.startsWith('UPDATE cod_otp SET verified')) { db.otp.find((o) => o.id === p[0]).verified = 1; return write(); }
-
-  if (q.startsWith('SELECT status, order_name, order_id, total, currency FROM cod_orders')) {
-    return rows(db.orders.filter((o) => o.shop === p[0] && o.idem_key === p[1]));
-  }
-  if (q.startsWith('SELECT COUNT(*) AS n FROM cod_orders')) {
-    return rows([{ n: db.orders.filter((o) => o.shop === p[0] && o.phone_hash === p[1] && o.status === 'placed' && clock - o.created < 86400e3).length }]);
-  }
-  if (q.startsWith('INSERT INTO cod_orders')) {
-    if (db.orders.some((o) => o.shop === p[0] && o.idem_key === p[1])) {
-      return respond({ success: false, error: "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'x' for key 'uniq_cod_orders_idem'" }, 500);
-    }
-    db.orders.push({ id: db.nextId++, shop: p[0], idem_key: p[1], status: 'creating', source: p[2], phone_hash: p[3], phone_masked: p[4], phone_verified: p[5], customer_name: p[6], pincode: p[7], total: p[8], currency: p[9], created: clock });
-    return write();
-  }
-  if (q.startsWith("DELETE FROM cod_orders WHERE shop = ? AND idem_key = ? AND status = 'creating'")) {
-    db.orders = db.orders.filter((o) => !(o.shop === p[0] && o.idem_key === p[1] && o.status === 'creating'));
-    return write();
-  }
-  if (q.startsWith("UPDATE cod_orders SET status = 'placed'")) {
-    const o = db.orders.find((r) => r.shop === p[5] && r.idem_key === p[6]);
-    Object.assign(o, { status: 'placed', draft_order_id: p[0], order_id: p[1], order_name: p[2], total: p[3], currency: p[4] });
-    return write();
-  }
-  if (q.startsWith('SELECT order_id, order_name, source')) {
-    return rows(db.orders.filter((o) => o.shop === p[0] && o.status === 'placed').reverse().map((o) => ({ ...o, created_at: '2026-10-01 10:00:00' })));
-  }
-  return respond({ success: false, error: `fake db: unhandled SQL: ${q.slice(0, 120)}` }, 500);
-};
+after(() => harness.stop());
 
 /* ── fake Shopify admin ────────────────────────────────────────────────────── */
 function fakeAdmin(opts = {}) {
@@ -192,8 +142,8 @@ test('OTP: resend is throttled to one per 30 seconds and five per hour', async (
   try {
     await cod.sendCodOtp(SHOP, '9876543210');
     await assert.rejects(cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_too_soon');
-    for (let i = 0; i < 4; i++) { clock += 31e3; await cod.sendCodOtp(SHOP, '9876543210'); }
-    clock += 31e3;
+    for (let i = 0; i < 4; i++) { await ageOtp(31); await cod.sendCodOtp(SHOP, '9876543210'); }
+    await ageOtp(31);
     await assert.rejects(cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_limit');
   } finally { console.log = realLog; }
 });
@@ -205,7 +155,8 @@ test('OTP: five wrong tries lock the code', async () => {
   try { await cod.sendCodOtp(SHOP, '9876543210'); } finally { console.log = realLog; }
   const code = /: (\d{4})$/.exec(logs[0])[1];
   const wrong = code === '9999' ? '1111' : '9999';
-  for (let i = 0; i < 5; i++) await assert.rejects(cod.verifyCodOtp(SHOP, '9876543210', wrong), (e) => e.code === 'otp_wrong');
+  for (let i = 0; i < 4; i++) await assert.rejects(cod.verifyCodOtp(SHOP, '9876543210', wrong), (e) => e.code === 'otp_wrong');
+  await assert.rejects(cod.verifyCodOtp(SHOP, '9876543210', wrong), (e) => e.code === 'otp_locked', 'the fifth wrong try locks it');
   await assert.rejects(cod.verifyCodOtp(SHOP, '9876543210', code), (e) => e.code === 'otp_locked', 'even the right code is refused once locked');
 });
 
@@ -278,7 +229,7 @@ test('order: creates a payment-pending Shopify order tagged COD with the address
   assert.ok(!create.customAttributes.some((a) => a.key === 'bad key!'));
   assert.ok(admin.calls.some((c) => c.op === 'CodComplete' && c.variables.id === 'gid://shopify/DraftOrder/9'));
 
-  const row = db.orders[0];
+  const [row] = await orderRows();
   assert.equal(row.status, 'placed');
   assert.equal(row.order_name, '#1047');
   assert.equal(row.phone_masked, '98XXXX3210');
@@ -299,7 +250,7 @@ test('order: daily per-phone limit', async () => {
   const settings = settingsOn({ dailyLimitPerPhone: 1 });
   await place(admin, { settings, idemKey: 'idem-key-a001' });
   await assert.rejects(place(admin, { settings, idemKey: 'idem-key-a002' }), (e) => e.code === 'daily_limit');
-  clock += 86400e3 + 1000;
+  await ageOrders(25);
   await place(admin, { settings, idemKey: 'idem-key-a003' });
 });
 
@@ -307,7 +258,7 @@ test('order: when Shopify refuses to complete, the draft is deleted and the shop
   const admin = fakeAdmin({ failComplete: true });
   await assert.rejects(place(admin), (e) => e.code === 'order_rejected' && /Inventory unavailable/.test(e.message));
   assert.ok(admin.calls.some((c) => c.op === 'CodDraftDelete'));
-  assert.equal(db.orders.length, 0);
+  assert.equal((await orderRows()).length, 0);
   const order = await place(fakeAdmin());
   assert.equal(order.orderName, '#1047');
 });
@@ -337,4 +288,47 @@ test('rate limiter', () => {
   assert.equal(cod.rateLimit('k', 2, 1000, t + 1), true);
   assert.equal(cod.rateLimit('k', 2, 1000, t + 2), false);
   assert.equal(cod.rateLimit('k', 2, 1000, t + 1001), true);
+});
+
+/* ── the PHP endpoints themselves ───────────────────────────────────────────── */
+
+const callPhp = (file, body, secret = harness.secret) => fetch(`${harness.baseUrl}/${file}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Forge-Secret': secret },
+  body: JSON.stringify(body),
+}).then(async (res) => ({ status: res.status, json: await res.json() }));
+
+test('PHP: every COD endpoint refuses calls without the Forge secret', async () => {
+  for (const file of ['cod_settings.php', 'cod_otp.php', 'cod_orders.php']) {
+    const res = await callPhp(file, { action: 'get', shop: SHOP }, 'wrong');
+    assert.equal(res.status, 403, file);
+  }
+});
+
+test('PHP: rejects bad shops, non-hash phones, unknown actions and bad sources', async () => {
+  assert.equal((await callPhp('cod_settings.php', { action: 'get', shop: 'evil.com' })).json.code, 'invalid_shop');
+  assert.equal((await callPhp('cod_otp.php', { action: 'create', shop: SHOP, phone_hash: '9876543210', code_hash: 'a'.repeat(64) })).json.code, 'invalid_phone_hash');
+  assert.equal((await callPhp('cod_orders.php', { action: 'drop_table', shop: SHOP })).json.code, 'invalid_action');
+  assert.equal((await callPhp('cod_orders.php', { action: 'begin', shop: SHOP, idem_key: 'idem-key-x001', source: 'admin', phone_hash: 'a'.repeat(64) })).json.code, 'invalid_source');
+});
+
+test('PHP: tables hold only hashes, never the raw phone number or OTP code', async () => {
+  const logs = [];
+  const realLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try { await cod.sendCodOtp(SHOP, '9876543210'); } finally { console.log = realLog; }
+  const code = /: (\d{4})$/.exec(logs[0])[1];
+  await place(fakeAdmin());
+  const dump = JSON.stringify([...(await sql('SELECT * FROM cod_otp')), ...(await orderRows())]);
+  assert.ok(!dump.includes('9876543210'), 'raw phone stored');
+  assert.ok(!new RegExp(`"${code}"`).test(dump), 'raw OTP stored');
+});
+
+test('PHP: settings round-trip through cod_settings.php', async () => {
+  await cod.saveCodSettings(SHOP, { enabled: true, blockedPincodes: '744101', buttons: { drawerText: 'Pay cash on delivery' } });
+  const [row] = await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]);
+  const stored = JSON.parse(row.settings_json);
+  assert.equal(stored.enabled, true);
+  assert.deepEqual(stored.blockedPincodes, ['744101']);
+  assert.equal(stored.buttons.drawerText, 'Pay cash on delivery');
 });
