@@ -181,6 +181,8 @@ const SCRIPT_BODY = String.raw`
       productsByHandle: data.productsByHandle || {},
       collectionNameMap: data.collectionNameMap || {},
       activeDiscounts: data.activeDiscounts || [],
+      // Internal per-shop switch (php_backend/integrations_admin.php) — see onCheckout.
+      shiprocketEnabled: data.shiprocketEnabled === true,
       productMap: productMap,
       variantPriceMap: variantPriceMap,
       selectedMap: {}, // { [variantId]: { productId, qty } }
@@ -386,10 +388,12 @@ const SCRIPT_BODY = String.raw`
   function onCheckout(root, state) {
     if (state.totalSelected === 0) return;
     var cartLines = [];
+    var items = [];
     for (var variantId in state.selectedMap) {
       var sel = state.selectedMap[variantId];
       var shortId = String(variantId).split('/').pop();
       cartLines.push(shortId + ':' + (sel.qty || 1));
+      items.push({ variantId: Number(shortId), quantity: sel.qty || 1 });
     }
     if (cartLines.length === 0) return;
     trackEvent(state, 'click', state.finalPrice);
@@ -406,6 +410,25 @@ const SCRIPT_BODY = String.raw`
       destination = 'https://' + shopDomain + '/discount/' + encodeURIComponent(state.selectedDiscount.code) + '?redirect=' + encodeURIComponent(cartPath);
     } else {
       destination = 'https://' + shopDomain + cartPath;
+    }
+
+    // Shops we've switched to Shiprocket checkout: hand it the same items,
+    // discount code and combo attributes the cart link above carries.
+    // window.BrixCheckout comes from the cart-drawer app embed
+    // (extensions/cart-drawer/assets/brix_checkout.js) and falls back to
+    // destination itself if Shiprocket isn't on the page or fails to open.
+    if (state.shiprocketEnabled && window.BrixCheckout) {
+      window.BrixCheckout.checkoutItems({
+        items: items,
+        coupon: state.discountApplicable && state.selectedDiscount && state.selectedDiscount.code ? state.selectedDiscount.code : null,
+        attributes: {
+          combo_source: 'ComboForge',
+          combo_template_id: String(state.templateId),
+          combo_template_name: state.templateName,
+        },
+        fallbackUrl: destination,
+      });
+      return;
     }
     window.location.href = destination;
   }

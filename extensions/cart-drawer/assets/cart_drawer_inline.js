@@ -338,6 +338,9 @@
           checkoutButtonStyle: parseCheckoutButtonStyle(d),
           checkoutName: d.checkoutName || 'Checkout Now',
           checkoutFooterText: d.checkoutFooterText || 'Shipping and taxes calculated at checkout',
+          // Internal per-shop switch (php_backend/integrations_admin.php),
+          // off unless we've turned it on for this shop — see ccGoToCheckout.
+          shiprocketEnabled: isEnabled(d.shiprocket_enabled),
           // Server (php_backend/save_cart_drawer.php) already intersects this
           // with the shop's plan — Free always sends true regardless of the
           // merchant's toggle. Default true here too so a fetch hiccup never
@@ -2074,12 +2077,51 @@
   </button>`;
     }
 
+    // Shiprocket's theme script swaps any `a[href="/checkout"]` it finds for
+    // its own button, which then gets wiped by our next re-render — so on
+    // Shiprocket shops the standard button is a plain <button> it won't match,
+    // wired up by initStandardCheckout below. Same look, same label.
+    if (CONFIG.shiprocketEnabled) {
+      return `
+  <button type="button" id="cc-standard-checkout-btn" data-href="${href}" style="width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
+    ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
+  </button>`;
+    }
+
     return `
   <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
     <button style="width:100%;padding:16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
       ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
     </button>
   </a>`;
+  }
+
+  // Single exit to checkout for every button mode. Shops without the
+  // Shiprocket switch navigate to `href` exactly as they always have. Shops
+  // with it hand off to Shiprocket's checkout via brix_checkout.js, which
+  // itself falls back to `href` if Shiprocket isn't on the page or fails.
+  function ccGoToCheckout(href) {
+    if (CONFIG && CONFIG.shiprocketEnabled && window.BrixCheckout) {
+      window.BrixCheckout.checkoutCart({
+        coupon: appliedCouponCodes[0] || null,
+        fallbackUrl: href,
+        onOpen: closeDrawer,
+      });
+      return;
+    }
+    window.location.href = href;
+  }
+
+  // Click handler for the Shiprocket-shop standard button — same
+  // re-bind-every-render rationale as initSwipeCheckout below. No-op when
+  // the standard <a> button (or another mode) was rendered instead.
+  function initStandardCheckout() {
+    const btn = document.getElementById('cc-standard-checkout-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      try { window.ccSendClickEvent('checkout_click'); } catch (e) {}
+      ccGoToCheckout(btn.getAttribute('data-href'));
+    });
   }
 
   // Drag-to-confirm gesture for the swipe checkout button — re-run after
@@ -2124,7 +2166,7 @@
         setX(maxX);
         track.style.opacity = '0.7';
         try { window.ccSendClickEvent('checkout_click'); } catch (e) {}
-        window.location.href = href;
+        ccGoToCheckout(href);
       } else {
         setX(0);
       }
@@ -2169,7 +2211,7 @@
 
     function go() {
       try { window.ccSendClickEvent('checkout_click'); } catch (e) { /* analytics beacon failure must never block checkout navigation */ }
-      window.location.href = href;
+      ccGoToCheckout(href);
     }
 
     btn.addEventListener('click', function (e) {
@@ -2750,6 +2792,7 @@
         });
       });
       document.getElementById('cc-backdrop').addEventListener('click', closeDrawer);
+      initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
     } else {
@@ -2770,6 +2813,7 @@
       // Re-attach backdrop listener
       const backdrop = document.getElementById('cc-backdrop');
       if (backdrop) backdrop.addEventListener('click', closeDrawer);
+      initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
     }
