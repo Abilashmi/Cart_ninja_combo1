@@ -1105,11 +1105,18 @@
   // 4. Common Shopify theme custom events
   // Covers Dawn, Debut, Brooklyn, Impulse, Turbo, Prestige, Broadcast,
   // Focal, Impact, Symmetry, Flex, Warehouse, Pipeline, District, and most 3rd-party themes
+  //
+  // 'cart:refresh' is deliberately NOT in this list: it means "re-render the
+  // cart", not "an item was added". Warehouse fires it from window.onpageshow
+  // on every page load (to fix stale carts after the back button), which
+  // opened this drawer on every refresh, even with an empty cart. Real adds
+  // on such themes still arrive via 'product:added', the fetch/XHR patches
+  // and the /cart.js poll above; this app's own widgets (FBT, Packs) fire
+  // 'cart:open'/'cart:item-added' alongside it, which are still listed.
   [
     'cart:item-added',
     'cart:updated',
     'cart:add',
-    'cart:refresh',
     'on:cart:add',
     'shopify:cart:added',
     'theme:cart:open',
