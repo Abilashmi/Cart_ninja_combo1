@@ -15,8 +15,10 @@
  *   - COD settings and PIN code lookups: the BRIX PHP backend
  *     (php_backend/cod_storefront.php on data-php), like the cart drawer's
  *     own settings.
- *   - OTP, pricing and placing the order: the BRIX app server (data-api),
- *     the only place holding the store's Shopify access.
+ *   - OTP, pricing and placing the order: php_backend/cod_checkout.php,
+ *     which relays them server-to-server to the BRIX app server (the only
+ *     place holding the store's Shopify access).
+ * The browser only ever talks to the PHP backend.
  *
  * Every server call re-checks the merchant's rules; anything shown here
  * before that (min/max hints) is only a hint.
@@ -26,7 +28,6 @@
   if (window.BrixCod) return;
 
   var script = document.currentScript;
-  var API = ((script && script.getAttribute('data-api')) || 'https://cartdrawer.fly.dev').replace(/\/$/, '');
   var PHP_API = ((script && script.getAttribute('data-php')) || 'https://int.thebrix.io').replace(/\/$/, '');
   var SHOP = (script && script.getAttribute('data-shop')) || (window.Shopify && window.Shopify.shop) || '';
   var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
@@ -72,12 +73,11 @@
     return function (n) { n = Number(n) || 0; return nf ? nf.format(n) : (code || '') + ' ' + n.toFixed(2); };
   }
 
-  function api(path, body) {
-    var init = body
-      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ shop: SHOP }, body)) }
-      : { method: 'GET' };
-    var url = API + path + (body ? '' : (path.indexOf('?') === -1 ? '?' : '&') + 'shop=' + encodeURIComponent(SHOP));
-    return window.fetch(url, init).then(function (res) {
+  // OTP, pricing and placing the order: POSTed to php_backend/cod_checkout.php,
+  // which relays them to the BRIX app server (the browser never calls it).
+  function api(endpoint, body) {
+    var init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ endpoint: endpoint, shop: SHOP }, body)) };
+    return window.fetch(PHP_API + '/cod_checkout.php', init).then(function (res) {
       return res.json().catch(function () { return { success: false, error: 'Something went wrong. Please try again.' }; });
     }, function () {
       return { success: false, code: 'network', error: "We couldn't connect. Check your internet and try again." };
@@ -140,7 +140,7 @@
   var CSS = [
     ':host{all:initial}',
     '*{box-sizing:border-box;font-family:inherit}',
-    '.ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .2s}',
+    '.ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483647;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .2s}',
     '.ov.on{opacity:1}',
     '.sh{background:#fff;color:#111827;width:100%;max-width:460px;max-height:92vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;transform:translateY(24px);transition:transform .22s;font-size:15px;line-height:1.45;box-shadow:0 -10px 40px rgba(0,0,0,.2)}',
     '.ov.on .sh{transform:none}',
@@ -212,6 +212,9 @@
   Sheet.prototype.build = function () {
     var host = document.createElement('div');
     host.setAttribute('data-brix-cod-sheet', '');
+    // Same top layer as the BRIX cart drawer (#cc-overlay, z-index 2147483647);
+    // appended after it, so the sheet always opens in front of the drawer.
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;';
     var shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     shadow.innerHTML = '<style>' + CSS + '</style><div class="ov" part="overlay"><div class="sh" role="dialog" aria-modal="true" aria-label="Cash on Delivery checkout"></div></div>';
     this.host = host;
@@ -297,7 +300,7 @@
   Sheet.prototype.start = function () {
     var self = this;
     this.loading('Checking Cash on Delivery\u2026');
-    api('/api/cod/quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon }).then(function (json) {
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon }).then(function (json) {
       if (!json.success) { self.fail(json.error); return; }
       self.quote = json.quote;
       self.go(self.otpFlow() && !self.validToken() ? 'phone' : 'address');
@@ -418,7 +421,7 @@
   Sheet.prototype.viewReview = function () {
     var self = this;
     this.loading('Getting your total\u2026');
-    api('/api/cod/quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode }).then(function (json) {
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode }).then(function (json) {
       if (self.view !== 'review') return;
       if (!json.success) {
         self.frame('Review your order', 'address', 3, '<div class="n er" role="alert">' + esc(json.error) + '</div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
@@ -521,7 +524,7 @@
     }
     this.setError('');
     this.setBusy(true, 'Sending\u2026');
-    api('/api/cod/otp', { step: 'send', phone: this.phone }).then(function (json) {
+    api('otp', { step: 'send', phone: this.phone }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
         if (isResend) { self.setError(json.error); self.startResendTimer(); } else self.setError(json.error);
@@ -537,7 +540,7 @@
     if (!/^\d{4}$/.test(code || '')) { this.setError('Enter the 4-digit code from the SMS.'); return; }
     this.setError('');
     this.setBusy(true, 'Checking\u2026');
-    api('/api/cod/otp', { step: 'verify', phone: this.phone, code: code }).then(function (json) {
+    api('otp', { step: 'verify', phone: this.phone, code: code }).then(function (json) {
       self.setBusy(false);
       if (!json.success) { self.setError(json.error); var el = self.sh.querySelector('[name="code"]'); if (el) { el.value = ''; try { el.focus(); } catch (e) { /* ignore */ } } return; }
       self.token = { shop: SHOP, phone: self.phone, token: json.token, expiresAt: Date.now() + 25 * 60000 };
@@ -573,7 +576,7 @@
     var self = this;
     this.setError('');
     this.setBusy(true, 'Placing your order\u2026');
-    api('/api/cod/order', {
+    api('order', {
       surface: this.opts.surface,
       items: this.items,
       coupon: this.quote && this.quote.coupon && this.quote.coupon.applied ? this.quote.coupon.code : null,

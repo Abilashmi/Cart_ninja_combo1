@@ -387,3 +387,55 @@ test('storefront pincode: validates, reports blocked PINs', async () => {
   assert.equal((await storefront(`action=pincode&shop=${SHOP}&pin=560001`)).json.blocked, false);
   assert.equal((await storefront('action=config&shop=evil.com')).json.code, 'invalid_shop');
 });
+
+/* ── order relay: php_backend/cod_checkout.php ──────────────────────────────── */
+
+const relay = (body, headers = {}) => fetch(`${harness.baseUrl}/cod_checkout.php`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+}).then(async (res) => ({ status: res.status, cors: res.headers.get('access-control-allow-origin'), json: await res.json() }));
+
+test('relay: forwards otp/quote/order to the app server with the secret and the shopper IP', async () => {
+  harness.app.requests.length = 0;
+  harness.app.reply = () => ({ status: 200, body: { success: true, quote: { total: 948 } } });
+  const res = await relay({ endpoint: 'quote', shop: SHOP, surface: 'drawer', items: [{ variantId: 11, quantity: 1 }] }, { 'CF-Connecting-IP': '203.0.113.9' });
+  assert.equal(res.status, 200);
+  assert.equal(res.cors, '*');
+  assert.deepEqual(res.json, { success: true, quote: { total: 948 } });
+  const sent = harness.app.requests[0];
+  assert.equal(sent.path, '/api/cod/quote');
+  assert.equal(sent.headers['x-forge-secret'], harness.secret);
+  assert.equal(sent.headers['x-brix-client-ip'], '203.0.113.9');
+  assert.equal('endpoint' in sent.body, false, 'routing field is not forwarded');
+  assert.equal(sent.body.shop, SHOP);
+});
+
+test('relay: passes the app server\'s errors through unchanged', async () => {
+  harness.app.reply = () => ({ status: 422, body: { success: false, code: 'below_min', error: 'Cash on Delivery is available on orders from ₹299.' } });
+  const res = await relay({ endpoint: 'order', shop: SHOP });
+  assert.equal(res.status, 422);
+  assert.equal(res.json.code, 'below_min');
+});
+
+test('relay: a missing or broken app server becomes a clean shopper message', async () => {
+  harness.app.reply = () => ({ status: 404, body: '<html>404 Not Found</html>' });
+  const res = await relay({ endpoint: 'quote', shop: SHOP });
+  assert.equal(res.status, 503);
+  assert.equal(res.json.code, 'app_unavailable');
+  assert.match(res.json.error, /pay online/);
+});
+
+test('relay: only otp, quote and order can be reached', async () => {
+  harness.app.requests.length = 0;
+  for (const endpoint of ['admin', '../settings', '', 'quote/../../app']) {
+    assert.equal((await relay({ endpoint, shop: SHOP })).json.code, 'invalid_request', endpoint);
+  }
+  assert.equal(harness.app.requests.length, 0);
+});
+
+test('Node trusts the relayed shopper IP only with the Forge secret', () => {
+  const req = (headers) => new Request('https://x.test', { headers });
+  const key = process.env.SHOPIFY_API_KEY;
+  assert.equal(cod.clientIp(req({ 'x-forge-secret': key, 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '203.0.113.9');
+  assert.equal(cod.clientIp(req({ 'x-forge-secret': 'nope', 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
+  assert.equal(cod.clientIp(req({ 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
+});

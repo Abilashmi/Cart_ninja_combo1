@@ -168,6 +168,11 @@ export function rateLimit(key, max, windowMs, now = Date.now()) {
 }
 
 export function clientIp(request) {
+  // Relayed by php_backend/cod_checkout.php: the connection comes from the
+  // PHP server, so use the shopper IP it forwards (trusted only with the secret).
+  const relayed = request.headers.get('x-brix-client-ip');
+  const secret = process.env.SHOPIFY_API_KEY;
+  if (relayed && secret && request.headers.get('x-forge-secret') === secret) return relayed.trim().slice(0, 64);
   return (request.headers.get('fly-client-ip')
     || request.headers.get('cf-connecting-ip')
     || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim()

@@ -10,8 +10,8 @@ import path from 'node:path';
 import os from 'node:os';
 
 const SCRIPT = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cod.js'), 'utf8');
-const API = 'https://api.test';   // BRIX app server: OTP, quote, order
-const PHP = 'https://php.test';   // PHP backend: settings + PIN lookups
+const API = 'https://cartdrawer.fly.dev'; // BRIX app server: the browser must never call it
+const PHP = 'https://php.test';   // PHP backend: settings, PIN lookups, and the relay for OTP/quote/order
 const config = {
   success: true, enabled: true, surfaces: { drawer: true, product: true, combo: true }, otpRequired: true,
   minOrder: 299, maxOrder: 5000, codFee: 49, shippingFee: 0, freeShippingAbove: 0, blockedPincodes: ['744101'],
@@ -30,7 +30,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
 const posted = [];
 const phpReads = [];
-const nodeCalls = [];
+const directAppCalls = [];
+let forceQuoteError = false;
 let cartCleared = false;
 
 await page.route('**/*', async (route) => {
@@ -41,7 +42,7 @@ await page.route('**/*', async (route) => {
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><main>
       <form action="/cart/add" id="product-form"><input type="hidden" name="id" value="11"><input name="quantity" value="2"><input name="properties[Engraving]" value="AR"><button type="submit" name="add">Add to cart</button></form>
       </main><script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'}};window.ShopifyAnalytics={meta:{page:{pageType:'product'}}};</script>
-      <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-api="${API}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
+      <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
   }
   if (url.href === 'https://cdn.test/brix_cod.js') return route.fulfill({ contentType: 'application/javascript', body: SCRIPT });
   if (url.pathname === '/products/undefined.js' || url.pathname.startsWith('/products/')) return json({ tags: ['coffee'] });
@@ -54,10 +55,12 @@ await page.route('**/*', async (route) => {
     const pin = url.searchParams.get('pin');
     return json({ success: true, pincode: pin, found: pin === '560001', city: 'Bangalore', state: 'Karnataka', blocked: false });
   }
-  if (url.origin !== API) return route.fulfill({ status: 404, body: '' });
-  nodeCalls.push(url.pathname);
+  if (url.origin === API) { directAppCalls.push(url.pathname); return route.fulfill({ status: 404, body: '' }); }
+  if (!(url.origin === PHP && url.pathname === '/cod_checkout.php')) return route.fulfill({ status: 404, body: '' });
   if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST' } });
-  if (body) posted.push({ path: url.pathname, body });
+  url.pathname = '/api/cod/' + body.endpoint; // what cod_checkout.php relays to
+  posted.push({ path: url.pathname, body });
+  if (url.pathname === '/api/cod/quote' && forceQuoteError) return json({ success: false, code: 'below_min', error: 'Cash on Delivery is available on orders from ₹299.' }, 422);
   if (url.pathname === '/api/cod/otp') {
     if (body.step === 'send') return json({ success: true, resendAfter: 30 });
     return body.code === '1234' ? json({ success: true, token: 'tok' }) : json({ success: false, code: 'otp_wrong', error: "That code doesn't match. 4 tries left." }, 400);
@@ -80,7 +83,8 @@ check('product page: fee shown on the button', (await productBtn.textContent()).
 
 // Drawer button rendering rules
 await page.evaluate(() => {
-  const slot = document.createElement('div'); slot.id = 'drawer-slot'; document.body.appendChild(slot);
+  const drawer = document.createElement('div'); drawer.id = 'cc-overlay'; drawer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;';
+  const slot = document.createElement('div'); slot.id = 'drawer-slot'; drawer.appendChild(slot); document.body.appendChild(drawer);
   window.BrixCod.mountDrawerButton(slot, { cart: { items: [{ variant_id: 11, quantity: 1, final_line_price: 19900, properties: {} }] }, onPayOnline: () => { window.__paidOnline = true; } });
 });
 const drawerBtn = page.locator('#drawer-slot [data-brix-cod-btn]');
@@ -95,6 +99,12 @@ await drawerBtn.click();
 const sheet = page.locator('[data-brix-cod-sheet]');
 const inSheet = (sel) => sheet.locator(sel);
 await inSheet('#cod-phone').waitFor();
+await page.waitForTimeout(300);
+check('drawer: the COD sheet opens in front of the cart drawer', await page.evaluate(() => {
+  const host = document.querySelector('[data-brix-cod-sheet]');
+  const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 40);
+  return hit === host;
+}));
 check('flow: starts on the phone step when OTP is on', true);
 await inSheet('#cod-phone').fill('98765 43210');
 await inSheet('button[type="submit"]').click();
@@ -131,6 +141,7 @@ const orderPost = posted.filter((p) => p.path === '/api/cod/order').pop().body;
 check('order request: verified token, surface, cart items and address sent', orderPost.token === 'tok' && orderPost.surface === 'drawer' && orderPost.items[0].variantId === 11 && orderPost.address.pincode === '560001' && orderPost.phone === '9876543210' && /^cod/.test(orderPost.idemKey));
 await inSheet('[data-act="close"]').first().click();
 await page.waitForFunction(() => !document.querySelector('[data-brix-cod-sheet]'));
+await page.evaluate(() => document.getElementById('cc-overlay').remove()); // fake drawer closed
 
 // Product page flow sends the form's variant, quantity and properties; returning shoppers skip OTP + address typing
 await productBtn.click();
@@ -142,7 +153,7 @@ await inSheet('[data-act="close"]').first().click();
 await page.waitForFunction(() => !document.querySelector('[data-brix-cod-sheet]'));
 
 // Combo: open with explicit items + Pay online fallback from an error
-await page.route(`${API}/api/cod/quote`, (route) => route.fulfill({ status: 422, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ success: false, code: 'below_min', error: 'Cash on Delivery is available on orders from ₹299.' }) }));
+forceQuoteError = true;
 await page.evaluate(() => window.BrixCod.open({ surface: 'combo', items: [{ variantId: 12, quantity: 1 }], coupon: 'COMBO10', onPayOnline: () => { window.__comboOnline = true; } }));
 await inSheet('.n.er').waitFor();
 check('combo: rule error shown before asking for any details', (await inSheet('.n.er').textContent()).includes('₹299'));
@@ -152,7 +163,8 @@ check('combo: Pay online hands back to the normal checkout', true);
 
 await page.screenshot({ path: path.join(os.tmpdir(), 'brix-cod-last.png') });
 check('settings and PIN lookups come from the PHP backend', phpReads.includes('config') && phpReads.includes('pincode'));
-check('the app server is only used for OTP, pricing and the order', nodeCalls.length > 0 && nodeCalls.every((p) => ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].includes(p)), [...new Set(nodeCalls)].join(', '));
+check('OTP, pricing and the order go through the PHP relay', ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].every((p) => posted.some((x) => x.path === p)));
+check('the browser never calls the app server directly', directAppCalls.length === 0, directAppCalls.join(', '));
 check('no page errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;
