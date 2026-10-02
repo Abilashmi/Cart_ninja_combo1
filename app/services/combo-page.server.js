@@ -222,6 +222,15 @@ async function loadComboPageDataForRow(shop, row) {
     const h = config.collection_handle || config.step_1_collection;
     if (h) allHandles.add(h);
   }
+  // layout3's nav pills are its col_1..col_4 collections (Layout3Preview /
+  // renderLayout3) — without loading them here every pill, and the "all"
+  // view built from them, renders "No products in this category".
+  if (config.layout === 'layout3') {
+    for (let i = 1; i <= 4; i++) {
+      const h = config[`col_${i}`];
+      if (h) allHandles.add(h);
+    }
+  }
 
   const productsByHandle = {};
   for (const handle of allHandles) {

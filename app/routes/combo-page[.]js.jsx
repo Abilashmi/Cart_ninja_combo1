@@ -7,9 +7,9 @@
 // inside a Page body).
 //
 // Renders the combo UI directly into the page (no iframe) — ported from
-// app/routes/preview.$templateId.jsx's Layout1Preview/ProductCard/
-// CdoPreviewBar (layout1 only; layout2/3/4 aren't ported yet, see
-// renderApp's layout guard below). Reasons this replaced the previous
+// app/routes/preview.$templateId.jsx's Layout1-4Preview/ProductCard/
+// CdoPreviewBar (all four layouts; an unknown layout falls back to an
+// iframe, see mountDirect's layout guard below). Reasons this replaced the previous
 // iframe-based approach:
 //   - SEO: content inside an iframe isn't indexed as part of the parent page.
 //   - No cross-origin postMessage plumbing needed for height/viewport sync
@@ -94,6 +94,18 @@ const SCRIPT_BODY = String.raw`
       paddingBottom: get('padding_bottom'), paddingLeft: get('padding_left'),
       marginTop: get('margin_top'), marginRight: get('margin_right'),
       marginBottom: get('margin_bottom'), marginLeft: get('margin_left'),
+    };
+  }
+
+  // container_padding_{side}_desktop/mobile — the outer content wrapper's
+  // padding in the generic (layout2/layout4) render path.
+  function getContainerPadding(config, isMobile) {
+    function side(s) {
+      return isMobile ? config['container_padding_' + s + '_mobile'] : config['container_padding_' + s + '_desktop'];
+    }
+    return {
+      paddingTop: side('top'), paddingRight: side('right'),
+      paddingBottom: side('bottom'), paddingLeft: side('left'),
     };
   }
 
@@ -190,6 +202,11 @@ const SCRIPT_BODY = String.raw`
       pendingVariant: {}, // { [productId]: variantId } — current dropdown/carousel selection before adding
       imgIndex: {}, // { [productId]: index }
       popupOpenProductId: null,
+      activeTab: 'all', // layout2/layout3 collection switcher
+      // layout3 hero: countdown, rotating bundle title, visible banner slide
+      timeLeft: getLayout3TimerSeconds(data.config || {}),
+      bundleIndex: 0,
+      currentSlide: 0,
       cartDrawerOpen: false,
       toast: null,
       toastTimer: null,
@@ -689,7 +706,12 @@ const SCRIPT_BODY = String.raw`
     html += '<div style="' + styleStr({ fontSize: sizing.productPriceSize + 'px', fontWeight: '600', color: primaryColor, marginBottom: '8px' }) + '">'
       + getCurrencySymbol(product.currency) + displayPrice.toFixed(2) + '</div>';
 
-    html += '<div style="' + styleStr({ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 0 0', borderTop: '1px solid #eee', justifyContent: 'space-between' }) + '">';
+    // flexWrap + the Add button's nowrap below: on narrow cards (2 columns on
+    // a phone) the stepper and Add button don't fit on one row, and merchant
+    // themes that set word-break on buttons then squeeze the label to one
+    // letter per line. Wrapping drops the button to its own full-width row
+    // instead; where the row already fits, nothing changes.
+    html += '<div style="' + styleStr({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', padding: '6px 0 0', borderTop: '1px solid #eee', justifyContent: 'space-between' }) + '">';
     if (showQtySelector) {
       html += '<div style="' + styleStr({ display: 'flex', gap: '4px', alignItems: 'center' }) + '">';
       html += '<button type="button" data-combo-action="qty-dec" data-product-id="' + esc(product.id) + '" style="' + styleStr({
@@ -707,7 +729,7 @@ const SCRIPT_BODY = String.raw`
       html += '<button type="button" data-combo-action="card-add" data-product-id="' + esc(product.id) + '" style="' + styleStr({
         flex: '1', background: isAdded ? '#ff4d4d' : btnBg, color: btnTextColor, border: 'none',
         padding: '8px 12px', marginLeft: '4px', borderRadius: btnRadius + 'px', cursor: 'pointer',
-        fontWeight: btnFontWeight, fontSize: btnFontSize + 'px', transition: 'all 0.2s',
+        fontWeight: btnFontWeight, fontSize: btnFontSize + 'px', transition: 'all 0.2s', whiteSpace: 'nowrap',
       }) + '">' + esc(addBtnText) + '</button>';
     }
     html += '</div>'; // actions row
@@ -899,6 +921,546 @@ const SCRIPT_BODY = String.raw`
     }
     html += '</div>'; // steps padding wrapper
     return html;
+  }
+
+  /* === RENDER: LAYOUT4 "Editorial Split" (mirrors Layout4Preview) === */
+
+  // React drops a style property whose value is undefined and appends px to
+  // bare numbers; styleStr does neither, so numeric config values go through
+  // this (null is skipped by styleStr, same end result as React's omission).
+  function px(v) {
+    if (v == null || v === '') return null;
+    return isNaN(Number(v)) ? v : (Number(v) + 'px');
+  }
+
+  // First argument that is not null/undefined — stands in for the React
+  // source's ?? chains (0 is a real value there, so || would be wrong).
+  function firstSet() {
+    for (var i = 0; i < arguments.length; i++) {
+      if (arguments[i] != null) return arguments[i];
+    }
+    return undefined;
+  }
+
+  // Mirrors preview.$templateId.jsx's ProgressBar — the generic (layout2/3/4)
+  // bar, which is a different design from layout1's sticky one above.
+  function renderGenericProgressBar(state) {
+    var config = state.config;
+    if (!config.show_progress_bar) return '';
+    var threshold = parseInt(state.maxProducts) || 5;
+    var percent = Math.min(100, Math.floor((state.totalSelected / threshold) * 100));
+    var isUnlocked = state.totalSelected >= threshold;
+    var remaining = Math.max(0, threshold - state.totalSelected);
+    var barColor = isUnlocked ? (config.progress_success_color || '#22c55e') : (config.progress_bar_color || '#000');
+    var textColor = config.progress_text_color || '#333';
+
+    var html = '<div style="' + styleStr({
+      width: (config.progress_bar_width || 100) + '%', margin: '8px auto 16px', padding: '0 5px', boxSizing: 'border-box',
+    }) + '">';
+    html += '<div style="' + styleStr({ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: '13px', fontWeight: '700', marginBottom: '10px' }) + '"><div>';
+    if (isUnlocked) {
+      html += '<span style="' + styleStr({ fontWeight: '700', color: textColor, textTransform: 'uppercase' }) + '">' + esc(config.discount_unlocked_text || 'DISCOUNT UNLOCKED!') + '</span>';
+    } else {
+      html += '<span style="' + styleStr({ textTransform: 'uppercase', fontWeight: '700', color: textColor, letterSpacing: '0.5px' }) + '">ADD ' + remaining + ' MORE FOR ' + esc(config.discount_text || 'DISCOUNT') + '</span>';
+    }
+    html += '</div><div style="' + styleStr({ color: textColor, fontWeight: '800' }) + '">' + percent + '%</div></div>';
+    html += '<div style="' + styleStr({ height: '12px', borderRadius: '12px', width: '100%', boxSizing: 'border-box', background: '#e0e0e0', overflow: 'hidden', position: 'relative' }) + '">';
+    html += '<div style="' + styleStr({
+      height: '100%', width: percent + '%', background: barColor, borderRadius: '12px',
+      transition: 'width 0.5s ease, background 0.4s', position: 'relative', overflow: 'hidden',
+    }) + '">';
+    html += '<div class="brix-combo-shimmer" style="' + styleStr({ position: 'absolute', top: '0', left: '0', right: '0', bottom: '0', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)', transform: 'translateX(-100%)' }) + '"></div>';
+    html += '</div></div></div>';
+    return html;
+  }
+
+  // Mirrors preview.$templateId.jsx's GenericProductGrid: one flat list of
+  // products (no steps), as a responsive grid or a horizontal slider with
+  // fixed-style arrows. The arrows are divs rather than the React source's
+  // buttons so the merchant theme's own button styles can't restyle them.
+  function renderGenericProductGrid(state, products, isMobile) {
+    var config = state.config;
+    var gridColumns = isMobile ? (config.mobile_columns || 2) : (config.desktop_columns || 3);
+    var gridGap = Number(firstSet(config.products_gap, 12));
+    var isSlider = config.grid_layout_type === 'slider';
+    var cardWidth = isMobile ? '220px' : '280px';
+
+    var html = '<div style="' + styleStr({ width: (config.grid_width || 100) + '%', margin: '0 auto' }) + '">';
+    html += '<div style="position:relative;width:100%;">';
+    if (isSlider) {
+      var dirs = ['left', 'right'];
+      for (var d = 0; d < dirs.length; d++) {
+        var arrowStyle = {
+          position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+          width: '36px', height: '36px', borderRadius: '50%', background: '#fff', border: '1px solid #ddd', color: '#000',
+          fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          zIndex: '10', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', boxSizing: 'border-box',
+        };
+        arrowStyle[dirs[d]] = '10px';
+        html += '<div role="button" data-combo-action="slider-scroll" data-step="grid" data-dir="' + dirs[d] + '" data-amount="300" style="' + styleStr(arrowStyle) + '">'
+          + (dirs[d] === 'left' ? ICON_CHEVRON_LEFT : ICON_CHEVRON_RIGHT) + '</div>';
+      }
+    }
+    html += '<div class="brix-combo-slider-track" data-step="grid" style="' + styleStr({
+      display: isSlider ? 'flex' : 'grid',
+      gridTemplateColumns: isSlider ? 'none' : ('repeat(' + gridColumns + ', minmax(0, 1fr))'),
+      flexDirection: isSlider ? 'row' : 'column', flexWrap: 'nowrap', gap: gridGap + 'px',
+      width: '100%', boxSizing: 'border-box', alignItems: 'stretch',
+      overflowX: isSlider ? 'auto' : 'visible', overflowY: 'hidden',
+      WebkitOverflowScrolling: 'touch', scrollSnapType: isSlider ? 'x mandatory' : 'none',
+      paddingLeft: isSlider ? '20px' : '0', paddingRight: isSlider ? '20px' : '0',
+    }) + '">';
+    for (var i = 0; i < products.length; i++) {
+      html += '<div style="' + styleStr({
+        minWidth: isSlider ? cardWidth : 'auto', width: isSlider ? cardWidth : 'auto',
+        flexShrink: '0', scrollSnapAlign: 'start',
+      }) + '">' + renderProductCard(state, products[i], isMobile) + '</div>';
+    }
+    html += '</div></div></div>';
+    return html;
+  }
+
+  // Products of the given collections, in order, each product only once.
+  function uniqueProducts(state, handles) {
+    var seen = {};
+    var out = [];
+    for (var h = 0; h < handles.length; h++) {
+      var prods = state.productsByHandle[handles[h]] || [];
+      for (var i = 0; i < prods.length; i++) {
+        if (seen[prods[i].id]) continue;
+        seen[prods[i].id] = true;
+        out.push(prods[i]);
+      }
+    }
+    return out;
+  }
+
+  // Banner first, then price/progress, title, and every product from every
+  // collection in one de-duplicated grid; the preview bar sits outside the
+  // card so the card's overflow:hidden can't clip its sticky positioning.
+  function renderLayout4(state, isMobile) {
+    var config = state.config;
+    var headingSize = isMobile ? firstSet(config.heading_size_mobile, config.heading_size, 22) : firstSet(config.heading_size, 32);
+    var descriptionSize = isMobile ? firstSet(config.description_size_mobile, config.description_size, 13) : firstSet(config.description_size, 16);
+    var headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
+    var descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+    var titleBox = getBoxSpacing(config, 'title_container', isMobile);
+    var descBox = getBoxSpacing(config, 'description_container', isMobile);
+    var pad = getContainerPadding(config, isMobile);
+    var padLeft = Number(pad.paddingLeft) || 0;
+    var padRight = Number(pad.paddingRight) || 0;
+    var sizing = getBannerSizing(config, isMobile);
+    var headingStyle = getHeadingStyleObj(config);
+
+    var allProducts = uniqueProducts(state, Object.keys(state.productsByHandle));
+
+    var html = '<div style="' + styleStr({ background: '#eef1f5', padding: '16px', boxSizing: 'border-box' }) + '">';
+    html += '<div style="' + styleStr({
+      fontFamily: 'inherit', color: config.text_color || '#1a1a1a',
+      paddingTop: px(pad.paddingTop), paddingRight: px(pad.paddingRight),
+      paddingBottom: px(pad.paddingBottom), paddingLeft: px(pad.paddingLeft),
+      background: config.bg_color || '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+      border: '1px solid #e5e5e5', borderRadius: '12px', boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+      position: 'relative', overflow: 'hidden', boxSizing: 'border-box',
+    }) + '">';
+
+    if (config.show_banner !== false && sizing.bannerUrl) {
+      html += '<div style="' + styleStr({
+        width: config.banner_full_width ? ('calc(100% + ' + (padLeft + padRight) + 'px)') : (sizing.bannerWidth + '%'),
+        height: sizing.finalBannerHeight,
+        paddingTop: px(config.banner_padding_top), paddingBottom: px(config.banner_padding_bottom),
+        margin: config.banner_full_width ? ('0 -' + padLeft + 'px') : '0 auto',
+        overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }) + '">';
+      html += '<img src="' + esc(sizing.bannerUrl) + '" alt="Banner" style="' + styleStr({
+        width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%', objectFit: sizing.bannerObjectFit, display: 'block',
+      }) + '" /></div>';
+    }
+
+    html += '<div style="padding:20px;">' + renderPriceSummary(state) + renderGenericProgressBar(state) + '</div>';
+
+    if (config.show_title_description !== false) {
+      // Unlike layout1's title block, the React source passes no isMobile to
+      // getTitleWidthStyle here, so the desktop width rule applies on mobile too.
+      var titleWrapStyle = getTitleWidthStyleObj(config, false);
+      titleWrapStyle.margin = '0 auto';
+      titleWrapStyle.padding = '0 20px 20px';
+      titleWrapStyle.boxSizing = 'border-box';
+      html += '<div style="' + styleStr(titleWrapStyle) + '">';
+      html += '<div style="' + styleStr({
+        textAlign: headingAlign,
+        paddingTop: px(titleBox.paddingTop), paddingRight: px(titleBox.paddingRight),
+        paddingBottom: px(titleBox.paddingBottom), paddingLeft: px(titleBox.paddingLeft),
+        marginTop: px(titleBox.marginTop), marginRight: px(titleBox.marginRight),
+        marginBottom: px(titleBox.marginBottom), marginLeft: px(titleBox.marginLeft),
+      }) + '">';
+      html += '<h1 style="' + styleStr({
+        margin: '0', fontSize: headingSize + 'px', color: config.heading_color || '#333',
+        fontWeight: config.heading_font_weight || '700', textAlign: headingAlign,
+        fontFamily: headingStyle.fontFamily, letterSpacing: headingStyle.letterSpacing,
+        lineHeight: headingStyle.lineHeight, textTransform: headingStyle.textTransform,
+      }) + '">' + esc(config.collection_title || 'Create Your Combo') + '</h1></div>';
+      if (config.collection_description) {
+        html += '<div style="' + styleStr({
+          textAlign: descriptionAlign,
+          paddingTop: px(descBox.paddingTop), paddingRight: px(descBox.paddingRight),
+          paddingBottom: px(descBox.paddingBottom), paddingLeft: px(descBox.paddingLeft),
+          marginTop: px(descBox.marginTop), marginRight: px(descBox.marginRight),
+          marginBottom: px(descBox.marginBottom), marginLeft: px(descBox.marginLeft),
+        }) + '">';
+        html += '<p style="' + styleStr({
+          margin: '0', fontSize: descriptionSize + 'px', color: config.description_color || '#666',
+          fontWeight: config.description_font_weight || '400', textAlign: descriptionAlign, lineHeight: '1.5',
+        }) + '">' + esc(config.collection_description) + '</p></div>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div style="padding:0 20px 20px;">';
+    if (allProducts.length === 0) {
+      html += '<div style="padding:32px 16px;text-align:center;background:#f9fafb;border-radius:8px;border:2px dashed #e1e3e5;color:#8c9196;font-size:13px;">No products in this combo yet.</div>';
+    } else {
+      html += renderGenericProductGrid(state, allProducts, isMobile);
+    }
+    html += '</div>';
+
+    html += '</div>'; // card wrapper
+    html += renderPreviewBar(state, isMobile);
+    html += '</div>';
+    return html;
+  }
+
+  /* === RENDER: LAYOUT2 "Velocity Stream" + LAYOUT3 (mirror Layout2Preview / Layout3Preview) === */
+
+  // Collection switcher tabs: an optional "all" tab plus one per configured
+  // col_N collection. titleKey is the config key holding a tab's fallback
+  // label, with # standing for N ('step_#_title' / 'title_#').
+  function getCollectionTabs(state, maxCols, allLabel, titleKey) {
+    var config = state.config;
+    var tabs = [];
+    if (config.show_tab_all !== false) tabs.push({ label: allLabel, value: 'all' });
+    for (var i = 1; i <= maxCols; i++) {
+      var handle = config['col_' + i];
+      if (!handle) continue;
+      tabs.push({ label: state.collectionNameMap[handle] || config[titleKey.replace('#', i)] || handle, value: handle });
+    }
+    return tabs;
+  }
+
+  // Products for the active tab. "all" is every tab collection de-duplicated.
+  // fallbackToAll covers layout3 templates set up with only a base
+  // collection (collection_handle) and no col_N tabs — without it their
+  // grid would always be empty.
+  function getTabProducts(state, tabs, fallbackToAll) {
+    if (state.activeTab !== 'all') return state.productsByHandle[state.activeTab] || [];
+    var handles = [];
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].value !== 'all') handles.push(tabs[i].value);
+    }
+    if (handles.length === 0 && fallbackToAll) handles = Object.keys(state.productsByHandle);
+    return uniqueProducts(state, handles);
+  }
+
+  function renderLayout2(state, isMobile) {
+    var config = state.config;
+    var tabs = getCollectionTabs(state, config.tab_count || 8, config.tab_all_label || 'Collections', 'step_#_title');
+    var activeBg = config.tab_active_bg_color || config.selection_highlight_color || '#5e1c5f';
+    var headingSize = isMobile ? firstSet(config.heading_size_mobile, config.heading_size, 22) : firstSet(config.heading_size, 32);
+    var descriptionSize = isMobile ? firstSet(config.description_size_mobile, config.description_size, 13) : firstSet(config.description_size, 16);
+    var headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
+    var descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+    var titleBox = getBoxSpacing(config, 'title_container', isMobile);
+    var descBox = getBoxSpacing(config, 'description_container', isMobile);
+    var pad = getContainerPadding(config, isMobile);
+    var sizing = getBannerSizing(config, isMobile);
+    var headingStyle = getHeadingStyleObj(config);
+    var activeProducts = getTabProducts(state, tabs, false);
+
+    var html = '<div style="' + styleStr({ background: '#eef1f5', padding: '16px', boxSizing: 'border-box' }) + '">';
+    html += '<div style="' + styleStr({
+      fontFamily: 'inherit', color: config.text_color || '#1a1a1a',
+      paddingTop: px(pad.paddingTop), paddingRight: px(pad.paddingRight),
+      paddingBottom: px(pad.paddingBottom), paddingLeft: px(pad.paddingLeft),
+      background: config.bg_color || '#f9f9f9', maxWidth: '100%', margin: '0 auto',
+      border: '1px solid #e5e5e5', borderRadius: '12px', boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+      position: 'relative', overflow: 'hidden', boxSizing: 'border-box',
+    }) + '">';
+
+    if (config.show_banner !== false && sizing.bannerUrl) {
+      html += '<div style="' + styleStr({ position: 'relative', width: sizing.bannerWidth + '%', margin: '0 auto', height: sizing.finalBannerHeight, overflow: 'hidden' }) + '">';
+      html += '<img src="' + esc(sizing.bannerUrl) + '" alt="Banner" style="' + styleStr({
+        width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '100%', objectFit: sizing.bannerObjectFit,
+      }) + '" /></div>';
+    }
+
+    if (config.show_title_description !== false) {
+      var titleWrapStyle = getTitleWidthStyleObj(config, false);
+      titleWrapStyle.margin = '0 auto';
+      html += '<div style="' + styleStr(titleWrapStyle) + '">';
+      html += '<div style="' + styleStr({
+        textAlign: headingAlign,
+        paddingTop: px(titleBox.paddingTop), paddingRight: px(titleBox.paddingRight),
+        paddingBottom: px(titleBox.paddingBottom), paddingLeft: px(titleBox.paddingLeft),
+        marginTop: px(titleBox.marginTop), marginRight: px(titleBox.marginRight),
+        marginBottom: px(titleBox.marginBottom), marginLeft: px(titleBox.marginLeft),
+      }) + '">';
+      html += '<h1 style="' + styleStr({
+        fontSize: headingSize + 'px', margin: '0 0 4px', color: config.heading_color || '#333',
+        fontWeight: config.heading_font_weight || '700', textAlign: headingAlign,
+        fontFamily: headingStyle.fontFamily, letterSpacing: headingStyle.letterSpacing,
+        lineHeight: headingStyle.lineHeight, textTransform: headingStyle.textTransform,
+      }) + '">' + esc(config.collection_title || 'Create Your Combo') + '</h1></div>';
+      if (config.collection_description) {
+        html += '<div style="' + styleStr({
+          textAlign: descriptionAlign,
+          paddingTop: px(descBox.paddingTop), paddingRight: px(descBox.paddingRight),
+          paddingBottom: px(descBox.paddingBottom), paddingLeft: px(descBox.paddingLeft),
+          marginTop: px(descBox.marginTop), marginRight: px(descBox.marginRight),
+          marginBottom: px(descBox.marginBottom), marginLeft: px(descBox.marginLeft),
+        }) + '">';
+        // margin:0 matches the admin preview, where Polaris resets <p> margins.
+        html += '<p style="' + styleStr({
+          margin: '0', fontSize: descriptionSize + 'px', color: config.description_color || '#666',
+          fontWeight: config.description_font_weight || '400', textAlign: descriptionAlign,
+        }) + '">' + esc(config.collection_description) + '</p></div>';
+      }
+      html += '</div>';
+    }
+
+    if (tabs.length > 0) {
+      html += '<div style="' + styleStr({
+        width: (config.tabs_width || 100) + '%', margin: '0 auto',
+        marginTop: firstSet(config.tab_margin_top, 0) + 'px', marginBottom: firstSet(config.tab_margin_bottom, 24) + 'px',
+      }) + '">';
+      html += '<div style="' + styleStr({
+        padding: '12px 20px', display: 'flex', justifyContent: config.tab_alignment || 'left',
+        gap: '10px', overflowX: 'auto', borderBottom: '1px solid #eee', background: '#fff', scrollbarWidth: 'thin',
+      }) + '">';
+      for (var t = 0; t < tabs.length; t++) {
+        var isActive = tabs[t].value === state.activeTab;
+        // A div, not the React source's <button>, so the merchant theme's
+        // own button styles can't restyle the tabs.
+        html += '<div role="button" data-combo-action="tab-pick" data-tab="' + esc(tabs[t].value) + '" style="' + styleStr({
+          padding: (config.tab_padding_vertical || 8) + 'px ' + (config.tab_padding_horizontal || 18) + 'px',
+          borderRadius: firstSet(config.tab_border_radius, 25) + 'px',
+          border: '1px solid ' + (isActive ? activeBg : (config.tab_border_color || '#eee')),
+          background: isActive ? activeBg : (config.tab_bg_color || '#fff'),
+          color: isActive ? (config.tab_active_text_color || '#fff') : (config.tab_text_color || '#444'),
+          fontSize: (config.tab_font_size || 13) + 'px', fontWeight: '600', lineHeight: '1.2',
+          cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.3s ease', flexShrink: '0',
+        }) + '">' + esc(tabs[t].label) + '</div>';
+      }
+      html += '</div></div>';
+    }
+
+    html += '<div style="padding:20px;">' + renderPriceSummary(state) + renderGenericProgressBar(state);
+    if (activeProducts.length === 0) {
+      html += '<div style="padding:32px 16px;text-align:center;background:#f9fafb;border-radius:8px;border:2px dashed #e1e3e5;color:#8c9196;font-size:13px;">';
+      html += '<div style="margin-bottom:8px;display:flex;justify-content:center;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.35-4.35"></path></svg></div>';
+      html += '<div style="font-weight:600;margin-bottom:4px;">No products in this tab</div></div>';
+    } else {
+      html += renderGenericProductGrid(state, activeProducts, isMobile);
+    }
+    html += '</div>';
+
+    html += '</div>'; // card wrapper
+    html += renderPreviewBar(state, isMobile);
+    html += '</div>';
+    return html;
+  }
+
+  function splitList(str) {
+    var parts = String(str || '').split(',');
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var s = parts[i].trim();
+      if (s) out.push(s);
+    }
+    return out;
+  }
+
+  function getLayout3Banners(config) {
+    var banners = [];
+    for (var i = 1; i <= 3; i++) {
+      if (config['banner_' + i + '_image']) {
+        banners.push({ image: config['banner_' + i + '_image'], title: config['banner_' + i + '_title'], subtitle: config['banner_' + i + '_subtitle'] });
+      }
+    }
+    return banners;
+  }
+
+  function getLayout3TimerSeconds(config) {
+    return Number(config.timer_hours || 0) * 3600 + Number(config.timer_minutes || 0) * 60 + Number(config.timer_seconds || 0);
+  }
+
+  function formatCountdown(seconds) {
+    var s = Math.max(0, seconds || 0);
+    function two(n) { return (n < 10 ? '0' : '') + n; }
+    return { h: two(Math.floor(s / 3600)), m: two(Math.floor((s % 3600) / 60)), s: two(s % 60) };
+  }
+
+  // "App style" layout: hero card (deal badge, banner or rotating banners,
+  // title/price, countdown), progress bar, collection pills, two-column grid.
+  // The countdown digits and the visible banner slide are updated in place
+  // by startLayout3Timers, never by re-rendering, so a tick can't reset
+  // scroll position or image carousels; state.timeLeft/currentSlide/
+  // bundleIndex make any full re-render come out at the current values.
+  function renderLayout3(state, isMobile) {
+    var config = state.config;
+    var primaryColor = config.primary_color || '#20D060';
+    var highlight = config.selection_highlight_color || primaryColor;
+    var bannerObjectFit = config.banner_fit_mode === 'contain' ? 'contain' : 'cover';
+    var tabs = getCollectionTabs(state, 4, config.title_1 || 'All Packs', 'title_#');
+    var activeProducts = getTabProducts(state, tabs, true);
+    var banners = getLayout3Banners(config);
+    var titles = splitList(config.bundle_titles);
+    var subtitles = splitList(config.bundle_subtitles);
+    var subtitle = subtitles[state.bundleIndex] || config.hero_subtitle;
+
+    var html = '<div style="' + styleStr({ maxWidth: '480px', margin: '24px auto', padding: '0 16px', boxSizing: 'border-box' }) + '">';
+    html += '<div style="' + styleStr({
+      background: config.bg_color || '#eef2f7', fontFamily: 'inherit', color: config.text_color || '#111',
+      borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    }) + '">';
+    html += '<div style="padding-bottom:24px;">';
+
+    if (config.show_hero !== false) {
+      html += '<div style="padding:16px 20px;">';
+      html += '<div style="background:#fff;border-radius:20px;padding:16px;box-shadow:0 4px 15px rgba(0,0,0,0.03);">';
+      html += '<div style="' + styleStr({
+        background: primaryColor, color: '#000', fontSize: '10px', fontWeight: '800', padding: '4px 10px',
+        borderRadius: '20px', display: 'inline-block', marginBottom: '12px', textTransform: 'uppercase',
+      }) + '">DEAL OF THE DAY</div>';
+      // The slides are absolutely positioned, so they can't give an
+      // auto-height box any height — "adapt" only applies to the single image.
+      var sliderOn = !!config.enable_banner_slider && banners.length > 1;
+      html += '<div style="' + styleStr({
+        width: '100%', height: (config.banner_fit_mode === 'adapt' && !sliderOn) ? 'auto' : '160px', background: '#f9f9f9',
+        borderRadius: '12px', marginBottom: '16px', overflow: 'hidden', position: 'relative',
+      }) + '">';
+      if (sliderOn) {
+        html += '<div style="width:100%;height:100%;position:relative;">';
+        for (var b = 0; b < banners.length; b++) {
+          var on = state.currentSlide === b;
+          html += '<div data-brix-slide="' + b + '" style="' + styleStr({
+            position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+            opacity: on ? '1' : '0', transition: 'opacity 0.8s ease-in-out', zIndex: on ? '1' : '0',
+          }) + '">';
+          html += '<img src="' + esc(banners[b].image) + '" alt="' + esc(banners[b].title || '') + '" style="' + styleStr({ width: '100%', height: '100%', objectFit: bannerObjectFit, display: 'block' }) + '" />';
+          html += '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent, rgba(0,0,0,0.7));padding:10px 15px;color:white;">';
+          html += '<div style="font-weight:bold;font-size:14px;">' + esc(banners[b].title) + '</div>';
+          html += '<div style="font-size:12px;opacity:0.9;">' + esc(banners[b].subtitle) + '</div></div></div>';
+        }
+        html += '</div>';
+      } else if (config.hero_image_url) {
+        html += '<img src="' + esc(config.hero_image_url) + '" alt="Hero" style="' + styleStr({ width: '100%', height: '100%', objectFit: bannerObjectFit, display: 'block' }) + '" />';
+      }
+      html += '</div>';
+
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">';
+      html += '<div style="font-size:18px;font-weight:800;line-height:1.2;flex:1;">' + esc(titles[state.bundleIndex] || config.hero_title || 'Combo Bundle') + '</div>';
+      if (config.hero_price) {
+        html += '<div style="' + styleStr({ fontSize: '18px', fontWeight: '800', color: primaryColor, marginLeft: '12px' }) + '">' + esc(config.hero_price) + '</div>';
+      }
+      html += '</div>';
+      if (config.hero_compare_price) {
+        html += '<div style="font-size:12px;text-decoration:line-through;color:#bbb;text-align:right;margin-top:-4px;margin-bottom:8px;">' + esc(config.hero_compare_price) + '</div>';
+      }
+      if (subtitle) {
+        html += '<div style="font-size:12px;color:#888;margin-bottom:16px;">' + esc(subtitle) + '</div>';
+      }
+      if (config.timer_hours || config.timer_minutes || config.timer_seconds) {
+        var time = formatCountdown(state.timeLeft);
+        var units = ['h', 'm', 's'];
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:11px;color:#888;font-weight:600;">ENDS IN:';
+        for (var u = 0; u < units.length; u++) {
+          html += '<span data-brix-timer="' + units[u] + '" style="' + styleStr({ background: '#eafff2', color: primaryColor, padding: '4px 8px', borderRadius: '6px', fontWeight: '700', fontSize: '13px' }) + '">' + time[units[u]] + '</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+
+    if (config.show_progress_bar) {
+      html += '<div style="padding:0 20px;">' + renderGenericProgressBar(state) + '</div>';
+    }
+
+    if (tabs.length > 0) {
+      html += '<div class="brix-combo-slider-track" style="display:flex;gap:10px;overflow-x:auto;padding:8px 20px 20px;">';
+      for (var t = 0; t < tabs.length; t++) {
+        var isActive = tabs[t].value === state.activeTab;
+        html += '<div role="button" data-combo-action="tab-pick" data-tab="' + esc(tabs[t].value) + '" style="' + styleStr({
+          whiteSpace: 'nowrap', padding: '8px 20px', borderRadius: '20px',
+          backgroundColor: isActive ? highlight : '#fff', border: '1px solid ' + (isActive ? highlight : '#eee'),
+          fontSize: '12px', fontWeight: '600', color: isActive ? '#fff' : '#333', cursor: 'pointer',
+          transition: 'all 0.2s ease', boxShadow: isActive ? '0 4px 10px rgba(0,0,0,0.1)' : 'none', flexShrink: '0',
+        }) + '">' + esc(tabs[t].label) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:0 20px 12px;"><div style="font-size:16px;font-weight:700;">Curated For You</div></div>';
+
+    if (activeProducts.length === 0) {
+      html += '<div style="margin:0 20px;padding:32px 16px;text-align:center;background:#f9fafb;border-radius:8px;border:2px dashed #e1e3e5;color:#8c9196;font-size:13px;">No products in this category</div>';
+    } else {
+      html += '<div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:12px;padding:0 20px;">';
+      for (var p = 0; p < activeProducts.length; p++) {
+        html += renderProductCard(state, activeProducts[p], isMobile);
+      }
+      html += '</div>';
+    }
+
+    html += '</div>'; // padding-bottom wrapper
+    html += '</div>'; // card wrapper
+    html += renderPreviewBar(state, isMobile);
+    html += '</div>';
+    return html;
+  }
+
+  // Layout3's banner rotation and countdown. Started once per root, after
+  // its first render; both stop themselves if the root leaves the page.
+  function startLayout3Timers(root, state) {
+    var config = state.config;
+    var banners = getLayout3Banners(config);
+    if (config.enable_banner_slider && banners.length > 1) {
+      var slideTimer = setInterval(function () {
+        if (!document.contains(root)) { clearInterval(slideTimer); return; }
+        state.currentSlide = (state.currentSlide + 1) % banners.length;
+        var slides = root.querySelectorAll('[data-brix-slide]');
+        for (var i = 0; i < slides.length; i++) {
+          var on = Number(slides[i].getAttribute('data-brix-slide')) === state.currentSlide;
+          slides[i].style.opacity = on ? '1' : '0';
+          slides[i].style.zIndex = on ? '1' : '0';
+        }
+      }, (Number(config.slider_speed) || 5) * 1000);
+    }
+
+    var initialSeconds = getLayout3TimerSeconds(config);
+    if (!(initialSeconds > 0)) return;
+    var titles = splitList(config.bundle_titles);
+    var countdown = setInterval(function () {
+      if (!document.contains(root)) { clearInterval(countdown); return; }
+      if (state.timeLeft <= 0) {
+        if (!config.auto_reset_timer) { clearInterval(countdown); return; }
+        state.timeLeft = initialSeconds;
+        if (config.change_bundle_on_timer_end && titles.length > 0) {
+          // The hero title/subtitle change with the bundle, so this one case
+          // does need a full re-render.
+          state.bundleIndex = (state.bundleIndex + 1) % titles.length;
+          render(root);
+          return;
+        }
+      } else {
+        state.timeLeft -= 1;
+      }
+      var time = formatCountdown(state.timeLeft);
+      var units = ['h', 'm', 's'];
+      for (var u = 0; u < units.length; u++) {
+        var el = root.querySelector('[data-brix-timer="' + units[u] + '"]');
+        if (el) el.textContent = time[units[u]];
+      }
+    }, 1000);
   }
 
   /* === RENDER: PREVIEW BAR (mirrors app/components/CdoPreviewBar.jsx) === */
@@ -1107,18 +1669,27 @@ const SCRIPT_BODY = String.raw`
     var isMobile = state.isMobile;
     var config = state.config;
 
-    var html = '<div style="' + styleStr({ maxWidth: '100%', margin: '24px auto', padding: '0 16px', boxSizing: 'border-box' }) + '">';
-    html += '<div style="' + styleStr({
-      background: config.bg_color || '#fff', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-      overflow: 'hidden', fontFamily: 'inherit', color: config.text_color || '#1a1a1a', position: 'relative',
-    }) + '">';
-    html += renderProgressBar(state);
-    html += renderBanner(state, isMobile);
-    html += renderTitleDescription(state, isMobile);
-    html += renderSteps(state, isMobile);
-    html += '</div>'; // close card wrapper before the preview bar so its sticky positioning is not clipped by the overflow:hidden ancestor
-    html += renderPreviewBar(state, isMobile);
-    html += '</div>';
+    var html;
+    if (config.layout === 'layout4') {
+      html = renderLayout4(state, isMobile);
+    } else if (config.layout === 'layout2') {
+      html = renderLayout2(state, isMobile);
+    } else if (config.layout === 'layout3') {
+      html = renderLayout3(state, isMobile);
+    } else {
+      html = '<div style="' + styleStr({ maxWidth: '100%', margin: '24px auto', padding: '0 16px', boxSizing: 'border-box' }) + '">';
+      html += '<div style="' + styleStr({
+        background: config.bg_color || '#fff', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        overflow: 'hidden', fontFamily: 'inherit', color: config.text_color || '#1a1a1a', position: 'relative',
+      }) + '">';
+      html += renderProgressBar(state);
+      html += renderBanner(state, isMobile);
+      html += renderTitleDescription(state, isMobile);
+      html += renderSteps(state, isMobile);
+      html += '</div>'; // close card wrapper before the preview bar so its sticky positioning is not clipped by the overflow:hidden ancestor
+      html += renderPreviewBar(state, isMobile);
+      html += '</div>';
+    }
     html += renderToast(state);
     html += renderLightbox(state);
     if (config.custom_css) html += '<style>' + config.custom_css + '</style>';
@@ -1181,6 +1752,7 @@ const SCRIPT_BODY = String.raw`
       if (action === 'qty-inc' && product) { onCardInc(root, state, product); return; }
       if (action === 'qty-dec' && product) { onCardDec(root, state, product); return; }
       if (action === 'popup-close') { state.popupOpenProductId = null; render(root); return; }
+      if (action === 'tab-pick') { state.activeTab = el.getAttribute('data-tab') || 'all'; render(root); return; }
       if (action === 'popup-pick' && product) {
         var vId = el.getAttribute('data-variant-id');
         state.pendingVariant[productId] = vId;
@@ -1237,7 +1809,8 @@ const SCRIPT_BODY = String.raw`
         var step = el.getAttribute('data-step');
         var dir = el.getAttribute('data-dir');
         var track = root.querySelector('.brix-combo-slider-track[data-step="' + step + '"]');
-        if (track) track.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
+        var amount = parseInt(el.getAttribute('data-amount'), 10) || 250;
+        if (track) track.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
         return;
       }
       if (action === 'checkout') { onCheckout(root, state); return; }
@@ -1272,12 +1845,14 @@ const SCRIPT_BODY = String.raw`
 
   /* === MOUNT === */
 
-  // Fallback for layouts the direct renderer above doesn't cover yet
-  // (layout2 "Velocity Stream", layout3, layout4 "Editorial Split" — only
-  // layout1 "Guided Architect" has been ported to vanilla JS so far). Keeps
-  // those templates working exactly as before rather than rendering a
-  // broken/empty page: embeds the full React preview route in an iframe,
-  // same as this file's previous (pre-direct-render) approach.
+  // Fallback for a layout value the direct renderer above doesn't know.
+  // Layouts 1-4 are all rendered directly, so this only runs for a layout
+  // added to the builder later and not yet ported here. It embeds the full
+  // React preview route in an iframe (this file's pre-direct-render
+  // approach) rather than rendering a broken/empty page. The frame only
+  // loads where the preview route's frame-ancestors header allows the
+  // storefront's domain, which excludes custom domains today — so port a
+  // new layout here rather than relying on this.
   function mountIframe(root, shop, templateId) {
     root.innerHTML = '';
     var iframe = document.createElement('iframe');
@@ -1309,7 +1884,7 @@ const SCRIPT_BODY = String.raw`
         }
       } else if (e.data.type === 'brix-combo-ready') {
         postViewport();
-        // Layouts 2-4 render inside this iframe, but the COD sheet lives on
+        // The layout renders inside this iframe, but the COD sheet lives on
         // this (parent) page — tell the frame to show its COD button.
         whenCodAvailable(function () {
           try { iframe.contentWindow.postMessage({ type: 'brix-combo-cod-available' }, '*'); } catch (err) {}
@@ -1409,7 +1984,7 @@ const SCRIPT_BODY = String.raw`
       widenAncestorContainers(root);
 
       var layout = json.data.config && json.data.config.layout;
-      if (layout && layout !== 'layout1') {
+      if (layout && !/^layout[1-4]$/.test(layout)) {
         mountIframe(root, shop, json.data.templateId || templateId);
         return;
       }
@@ -1421,6 +1996,7 @@ const SCRIPT_BODY = String.raw`
       wireEvents(root);
       loadGoogleFont(state.config.heading_font_family);
       render(root);
+      if (layout === 'layout3') startLayout3Timers(root, state);
       trackEvent(state, 'view');
       if (state.config.show_cod_button !== false) {
         whenCodAvailable(function () { state.codAvailable = true; render(root); });

@@ -910,12 +910,16 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
   let activeProducts = [];
   if (activeTab === 'all') {
     const seen = new Set();
-    tabs.forEach((t) => {
-      if (t.value !== 'all') {
-        (productsByHandle[t.value] || []).forEach((p) => {
-          if (!seen.has(p.id)) { seen.add(p.id); activeProducts.push(p); }
-        });
-      }
+    // A template set up with only a base collection (collection_handle) has
+    // no col_N pills — fall back to every loaded collection, or its grid
+    // would always be empty (kept in sync with combo-page[.]js.jsx's
+    // getTabProducts).
+    const collectionTabs = tabs.filter((t) => t.value !== 'all').map((t) => t.value);
+    const handles = collectionTabs.length > 0 ? collectionTabs : Object.keys(productsByHandle);
+    handles.forEach((handle) => {
+      (productsByHandle[handle] || []).forEach((p) => {
+        if (!seen.has(p.id)) { seen.add(p.id); activeProducts.push(p); }
+      });
     });
   } else {
     activeProducts = productsByHandle[activeTab] || [];
@@ -983,8 +987,9 @@ function Layout3Preview({ config, productsByHandle, collectionNameMap, templateN
                 }}>
                   DEAL OF THE DAY
                 </div>
+                {/* The slides are absolutely positioned, so "adapt" (auto height) only applies to the single image. */}
                 <div style={{
-                  width: '100%', height: config.banner_fit_mode === 'adapt' ? 'auto' : '160px',
+                  width: '100%', height: (config.banner_fit_mode === 'adapt' && !(config.enable_banner_slider && banners.length > 1)) ? 'auto' : '160px',
                   background: '#f9f9f9', borderRadius: '12px', marginBottom: '16px',
                   overflow: 'hidden', position: 'relative',
                 }}>
