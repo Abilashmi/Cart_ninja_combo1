@@ -165,6 +165,22 @@ const SCRIPT_BODY = String.raw`
     return fetchJson(API_ORIGIN + '/api/combo-page-data?shop=' + encodeURIComponent(shop) + '&handle=' + encodeURIComponent(handle));
   }
 
+  // AI picks for "Enable AI Suggestions for Customers" (config.ai_mode):
+  // { [productId]: [productId, ...] }, generated once per template version
+  // on the server (api.combo-ai-suggestions.jsx). Loaded after the page has
+  // rendered, so a slow AI call never delays the combo itself.
+  function loadAiSuggestions(root, state) {
+    fetchJson(API_ORIGIN + '/api/combo-ai-suggestions?shop=' + encodeURIComponent(state.shop) + '&templateId=' + encodeURIComponent(state.templateId))
+      .then(function (json) {
+        if (!json || !json.success || !json.data || !json.data.pairs) return;
+        state.aiPairs = json.data.pairs;
+        // The row only shows once something is selected; re-rendering an
+        // untouched page would just reset slider scroll positions.
+        if (state.totalSelected > 0) render(root);
+      })
+      .catch(function () {});
+  }
+
   /* === STATE === */
 
   function buildState(shop, data) {
@@ -196,6 +212,7 @@ const SCRIPT_BODY = String.raw`
       // Internal per-shop switch (php_backend/integrations_admin.php) — see onCheckout.
       shiprocketEnabled: data.shiprocketEnabled === true,
       codAvailable: false, // set once brix_cod.js confirms COD is on (see whenCodAvailable)
+      aiPairs: null, // set by loadAiSuggestions when config.ai_mode is on
       productMap: productMap,
       variantPriceMap: variantPriceMap,
       selectedMap: {}, // { [variantId]: { productId, qty } }
@@ -1125,6 +1142,7 @@ const SCRIPT_BODY = String.raw`
     html += '</div>';
 
     html += '</div>'; // card wrapper
+    html += renderAiSuggestions(state, isMobile);
     html += renderPreviewBar(state, isMobile);
     html += '</div>';
     return html;
@@ -1264,6 +1282,7 @@ const SCRIPT_BODY = String.raw`
     html += '</div>';
 
     html += '</div>'; // card wrapper
+    html += renderAiSuggestions(state, isMobile);
     html += renderPreviewBar(state, isMobile);
     html += '</div>';
     return html;
@@ -1413,6 +1432,7 @@ const SCRIPT_BODY = String.raw`
 
     html += '</div>'; // padding-bottom wrapper
     html += '</div>'; // card wrapper
+    html += renderAiSuggestions(state, isMobile);
     html += renderPreviewBar(state, isMobile);
     html += '</div>';
     return html;
@@ -1461,6 +1481,126 @@ const SCRIPT_BODY = String.raw`
         if (el) el.textContent = time[units[u]];
       }
     }, 1000);
+  }
+
+  /* === RENDER: AI SUGGESTIONS ("Enable AI Suggestions for Customers") === */
+
+  var AI_SUGGESTION_LIMIT = 4;
+
+  // Products the AI paired with what the shopper has picked, newest pick
+  // first, round-robin so every pick contributes its best match before any
+  // pick's second-best. Never repeats a product already in the combo, and
+  // hides once the combo is full (nothing more can be added).
+  function getAiSuggestions(state) {
+    if (!state.config.ai_mode || !state.aiPairs) return [];
+    if (state.totalSelected === 0 || state.totalSelected >= state.maxProducts) return [];
+    var selected = {};
+    var order = [];
+    for (var vid in state.selectedMap) {
+      var pid = state.selectedMap[vid].productId;
+      if (!selected[pid]) { selected[pid] = true; order.push(pid); }
+    }
+    var out = [];
+    var seen = {};
+    for (var rank = 0; rank < 3 && out.length < AI_SUGGESTION_LIMIT; rank++) {
+      for (var i = order.length - 1; i >= 0 && out.length < AI_SUGGESTION_LIMIT; i--) {
+        var picks = state.aiPairs[order[i]] || [];
+        var id = picks[rank];
+        if (!id || selected[id] || seen[id] || !state.productMap[id]) continue;
+        seen[id] = true;
+        out.push(state.productMap[id]);
+      }
+    }
+    return out;
+  }
+
+  var ICON_SPARKLE = '<svg width="1em" height="1em" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M7 1.5l1.2 3.3 3.3 1.2-3.3 1.2L7 10.5 5.8 7.2 2.5 6l3.3-1.2L7 1.5z"></path><path d="M11.5 9.5v3M10 11h3"></path></svg>';
+
+  function renderAiSuggestions(state, isMobile) {
+    var products = getAiSuggestions(state);
+    if (products.length === 0) return '';
+    var config = state.config;
+    var textColor = config.text_color || '#1a1a1a';
+    var btnBg = config.add_btn_bg || config.product_add_btn_color || '#000';
+    var btnTextColor = config.add_btn_text_color || config.product_add_btn_text_color || '#fff';
+    var btnRadius = config.add_btn_border_radius == null ? 8 : config.add_btn_border_radius;
+    var symbol = getBarCurrencySymbol(state);
+    var cardWidth = isMobile ? 132 : 156;
+
+    var html = '<div class="brix-combo-ai" style="' + styleStr({
+      width: (config.preview_bar_width || 100) + '%', margin: '24px auto 0', padding: isMobile ? '14px' : '16px 18px',
+      background: '#fff', border: '1px solid #eee', borderRadius: (config.preview_border_radius || 12) + 'px',
+      boxSizing: 'border-box', color: textColor, boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+    }) + '">';
+    html += '<div style="' + styleStr({ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '15px', fontWeight: '700', marginBottom: '12px' }) + '">'
+      + '<span style="display:flex;font-size:15px;">' + ICON_SPARKLE + '</span>'
+      + '<span>' + esc(config.ai_suggestions_title || 'Pairs well with your picks') + '</span></div>';
+    html += '<div class="brix-combo-ai-track" style="' + styleStr({ display: 'flex', gap: '12px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }) + '">';
+    for (var i = 0; i < products.length; i++) {
+      var p = products[i];
+      var hasVariants = (p.variants || []).length > 1;
+      var price = state.variantPriceMap[getActiveVariantId(state, p)];
+      if (price == null || isNaN(price)) price = parseFloat(p.price || 0);
+      var img = p.image || (p.images && p.images[0]);
+      html += '<div style="' + styleStr({
+        width: cardWidth + 'px', minWidth: cardWidth + 'px', flexShrink: '0', display: 'flex', flexDirection: 'column',
+        border: '1px solid #eee', borderRadius: (config.card_border_radius || 12) + 'px', overflow: 'hidden', background: '#fff',
+      }) + '">';
+      html += '<div style="width:100%;aspect-ratio:1/1;background:#f6f6f6;">'
+        + (img ? '<img src="' + esc(img.url) + '" alt="' + esc(img.altText || p.title) + '" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;" />' : '')
+        + '</div>';
+      html += '<div style="padding:8px 10px 10px;display:flex;flex-direction:column;gap:4px;flex:1;">';
+      html += '<div style="' + styleStr({
+        fontSize: '13px', fontWeight: '600', lineHeight: '1.3', color: textColor, overflow: 'hidden',
+        display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', minHeight: '34px',
+      }) + '">' + esc(p.title) + '</div>';
+      html += '<div style="font-size:13px;font-weight:700;color:' + esc(textColor) + ';">' + (hasVariants ? 'From ' : '') + symbol + price.toFixed(2) + '</div>';
+      html += '<button type="button" data-combo-action="ai-pick" data-product-id="' + esc(p.id) + '" style="' + styleStr({
+        marginTop: 'auto', width: '100%', padding: '8px 10px', border: 'none', borderRadius: btnRadius + 'px',
+        background: btnBg, color: btnTextColor, fontSize: '13px', fontWeight: '700', cursor: 'pointer',
+      }) + '">' + esc(hasVariants ? 'Choose' : (config.add_btn_text || config.product_add_btn_text || 'Add')) + '</button>';
+      html += '</div></div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function findProductCard(root, productId) {
+    var id = window.CSS && CSS.escape ? CSS.escape(productId) : String(productId).replace(/"/g, '\\"');
+    return root.querySelector('.brix-combo-card[data-product-id="' + id + '"]');
+  }
+
+  // A product with several variants is chosen on its own card (variant
+  // picker, popup, etc. all live there), so the suggestion scrolls to that
+  // card instead of guessing a variant. Layouts with collection tabs may not
+  // have the card on screen; switch to a tab that holds it first.
+  function onAiPick(root, state, product) {
+    if ((product.variants || []).length <= 1) {
+      onAdd(root, state, product, getActiveVariantId(state, product), 1);
+      return;
+    }
+    var card = findProductCard(root, product.id);
+    if (!card && (state.config.layout === 'layout2' || state.config.layout === 'layout3')) {
+      var tab = 'all';
+      for (var n = 1; n <= 8; n++) {
+        var handle = state.config['col_' + n];
+        var prods = handle ? (state.productsByHandle[handle] || []) : [];
+        var found = false;
+        for (var i = 0; i < prods.length; i++) { if (prods[i].id === product.id) { found = true; break; } }
+        if (found) { tab = handle; break; }
+      }
+      state.activeTab = tab;
+      render(root);
+      card = findProductCard(root, product.id);
+    }
+    if (!card) {
+      onAdd(root, state, product, getActiveVariantId(state, product), 1);
+      return;
+    }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('brix-combo-ai-flash');
+    void card.offsetWidth;
+    card.classList.add('brix-combo-ai-flash');
   }
 
   /* === RENDER: PREVIEW BAR (mirrors app/components/CdoPreviewBar.jsx) === */
@@ -1687,6 +1827,7 @@ const SCRIPT_BODY = String.raw`
       html += renderTitleDescription(state, isMobile);
       html += renderSteps(state, isMobile);
       html += '</div>'; // close card wrapper before the preview bar so its sticky positioning is not clipped by the overflow:hidden ancestor
+      html += renderAiSuggestions(state, isMobile);
       html += renderPreviewBar(state, isMobile);
       html += '</div>';
     }
@@ -1721,7 +1862,10 @@ const SCRIPT_BODY = String.raw`
       '.brix-combo-slider-track { scrollbar-width: none; -ms-overflow-style: none; }' +
       '.brix-combo-slider-track::-webkit-scrollbar { display: none; }' +
       '.brix-combo-slider-track.show-scrollbar { scrollbar-width: auto; -ms-overflow-style: auto; }' +
-      '.brix-combo-slider-track.show-scrollbar::-webkit-scrollbar { display: block; height: 4px; }';
+      '.brix-combo-slider-track.show-scrollbar::-webkit-scrollbar { display: block; height: 4px; }' +
+      '.brix-combo-ai-track { scrollbar-width: thin; }' +
+      '@keyframes brix-combo-ai-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } 30%, 70% { box-shadow: 0 0 0 4px rgba(0,0,0,0.35); } }' +
+      '.brix-combo-ai-flash { animation: brix-combo-ai-flash 1.6s ease-in-out; }';
     document.head.appendChild(style);
   }
 
@@ -1749,6 +1893,7 @@ const SCRIPT_BODY = String.raw`
       var product = productId ? state.productMap[productId] : null;
 
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
+      if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
       if (action === 'qty-inc' && product) { onCardInc(root, state, product); return; }
       if (action === 'qty-dec' && product) { onCardDec(root, state, product); return; }
       if (action === 'popup-close') { state.popupOpenProductId = null; render(root); return; }
@@ -1998,6 +2143,7 @@ const SCRIPT_BODY = String.raw`
       render(root);
       if (layout === 'layout3') startLayout3Timers(root, state);
       trackEvent(state, 'view');
+      if (state.config.ai_mode) loadAiSuggestions(root, state);
       if (state.config.show_cod_button !== false) {
         whenCodAvailable(function () { state.codAvailable = true; render(root); });
       }

@@ -177,7 +177,7 @@ export async function loadComboPageDataByHandle(shop, handle) {
   return loadComboPageDataForRow(shop, row);
 }
 
-async function loadComboPageDataForRow(shop, row) {
+export async function loadComboPageDataForRow(shop, row) {
   if (!row) throw new Response('Template not found', { status: 404 });
 
   const config = (() => { try { return JSON.parse(row.customization_data || '{}'); } catch { return {}; } })();

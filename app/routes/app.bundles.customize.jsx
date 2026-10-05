@@ -1342,6 +1342,7 @@ const DEFAULT_COMBO_CONFIG = {
   text_color: '#1a1a1a',
   discount_percentage: 10,
   ai_mode: false,
+  ai_suggestions_title: 'Pairs well with your picks',
   preview_font_size: 16,
   preview_font_weight: 600,
   preview_align_items: 'center',
@@ -4676,6 +4677,190 @@ function ComboPreview({
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [cardQtys, setCardQtys] = useState({}); // {productId: qty}
 
+  // --- AI Suggestions (config.ai_mode) ---
+  // Mirrors the live page's "Pairs well with your picks" row
+  // (combo-page[.]js.jsx renderAiSuggestions) for the unsaved setup: the
+  // products this preview shows, each with the `source` its card uses, so
+  // adding one from the row counts toward the same step/tab.
+  // The products a Guided Architect step shows in this preview. Shared by
+  // the step renderer and the AI suggestion candidates, so the AI always
+  // sees exactly the products on screen — including the fallback to store
+  // products when the step's collection returns none.
+  const getStepViewProducts = (stepColl) => {
+    let list = allStepProducts[stepColl] || [];
+    // If we don't have dynamic products for this step yet, try to find them in the loader data
+    if (list.length === 0 && stepColl) {
+      list = (products || []).filter((p) =>
+        (p.collections || []).some((c) => c.handle === stepColl)
+      );
+    }
+    if (list.length > 0) {
+      const stockFiltered = filterPreviewProductsByStock(list, config);
+      return (stockFiltered.length > 0 ? stockFiltered : list).slice(0, 12);
+    }
+    if (stepColl && (products || []).length > 0) {
+      // collection configured but no matching products yet — show all store products as fallback
+      return products.slice(0, 12);
+    }
+    return [];
+  };
+
+  // The products the grid layouts (Velocity Stream / Editorial Split) show
+  // in this preview — shared by renderProductsGrid and the AI candidates.
+  const getGridViewProducts = () => {
+    let list = filterPreviewProductsByStock(products || [], config);
+
+    // Resolve which collection handle should filter the preview grid.
+    // layout2 "All" tab → use first configured collection (fetch already used it).
+    // layout2 specific tab → use that tab's handle.
+    // Other layouts → use config.collection_handle / step_1_collection.
+    let handle = '';
+    if (config.layout === 'layout2') {
+      handle =
+        activeTab !== 'all'
+          ? activeTab
+          : config.col_1 ||
+          config.col_2 ||
+          config.col_3 ||
+          config.col_4 ||
+          config.col_5 ||
+          config.col_6 ||
+          config.col_7 ||
+          config.col_8 ||
+          '';
+    } else {
+      handle = config.collection_handle || config.step_1_collection || '';
+    }
+
+    if (handle) {
+      const collectionFiltered = list.filter((p) =>
+        (p.collections || []).some((c) => c.handle === handle)
+      );
+      // If products carry the collections field (from the server-side loader),
+      // use the filtered list; otherwise the server already filtered by handle,
+      // so all fetched products belong to the right collection.
+      if (collectionFiltered.length > 0) {
+        list = collectionFiltered;
+      }
+    }
+
+    // Fall back to unfiltered real products, then demo products only when no real products exist at all.
+    if (list.length === 0) {
+      if ((products || []).length > 0) {
+        // Show all real products ignoring stock/collection filter so preview is never blank
+        return { list: products, handle, usingDemo: false };
+      }
+      return { list: DEMO_PRODUCTS, handle, usingDemo: true };
+    }
+    return { list, handle, usingDemo: false };
+  };
+
+  // --- AI Suggestions (config.ai_mode) ---
+  // Mirrors the live page's "Pairs well with your picks" row
+  // (combo-page[.]js.jsx renderAiSuggestions) for the unsaved setup: the
+  // products this preview shows, each with the `source` its card uses, so
+  // adding one from the row counts toward the same step/tab.
+  const aiCandidates = useMemo(() => {
+    if (!config.ai_mode) return [];
+    const out = [];
+    const seen = new Set();
+    const push = (p, source, handle) => {
+      if (!p?.id || !p.title || seen.has(String(p.id))) return;
+      seen.add(String(p.id));
+      out.push({ product: p, source, handle });
+    };
+    if (config.layout === 'layout1') {
+      for (let step = 1; step <= 5; step++) {
+        const h = config[`step_${step}_collection`];
+        if (!h) continue;
+        getStepViewProducts(h).forEach((p) => push(p, `step_${step}`, h));
+      }
+    } else {
+      const { list, handle } = getGridViewProducts();
+      const source = config.layout === 'layout2' ? activeTab : 'all';
+      list.forEach((p) => push(p, source, p.collections?.[0]?.handle || handle));
+    }
+    return out.slice(0, 60);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, products, allStepProducts, activeTab]);
+
+  const [aiPairs, setAiPairs] = useState(null);
+  // 'loading' | 'ready' | 'error' — shown to the merchant in the row's spot
+  // (renderAiSuggestions) so a failure is never silent in the builder.
+  const [aiStatus, setAiStatus] = useState({ state: 'loading', error: '' });
+  // Card "Choose" points at; kept in state because ProductCardItem's DOM is
+  // re-created on every preview render (e.g. the timer tick).
+  const [aiFlashId, setAiFlashId] = useState(null);
+  const aiFlashTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(aiFlashTimerRef.current), []);
+  const aiCandidatesKey = aiCandidates.map((c) => c.product.id).join('|');
+  useEffect(() => {
+    // TEMP DEBUG [BRIX COMBO AI] — remove after diagnosis
+    console.log('[BRIX COMBO AI] effect run', { enabled: !!config.ai_mode, layout: config.layout, candidates: aiCandidates.length, candidateTitles: aiCandidates.map((c) => c.product.title) });
+    if (!config.ai_mode || aiCandidates.length < 2) { console.log('[BRIX COMBO AI] early return: no request', { enabled: !!config.ai_mode, candidates: aiCandidates.length }); setAiPairs(null); return undefined; }
+    let cancelled = false;
+    setAiStatus({ state: 'loading', error: '' });
+    const timer = setTimeout(() => {
+      console.log('[BRIX COMBO AI] timer fired: sending POST /api/combo-ai-suggestions', { products: aiCandidates.length });
+      fetch('/api/combo-ai-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateName: config.collection_title || '',
+          products: aiCandidates.map((c) => ({
+            id: c.product.id,
+            title: c.product.title,
+            collection: collections.find((col) => col.handle === c.handle)?.title || c.handle || '',
+            price: c.product.variants?.[0]?.price ?? c.product.price ?? '',
+          })),
+        }),
+      })
+        .then(async (r) => {
+          const json = await r.json().catch(() => null);
+          console.log('[BRIX COMBO AI] response', { status: r.status, success: json?.success, ok: json?.data?.ok, reason: json?.data?.reason, pairKeys: Object.keys(json?.data?.pairs || {}).length, samplePairs: Object.entries(json?.data?.pairs || {}).slice(0, 3) });
+          if (cancelled) return;
+          if (!r.ok || !json) {
+            setAiStatus({ state: 'error', error: `The app server didn't answer (HTTP ${r.status}). Reload the page and try again.` });
+          } else if (!json.success) {
+            setAiStatus({ state: 'error', error: json.error || 'The app server returned an error.' });
+          } else if (json.data?.ok === false) {
+            setAiPairs({});
+            setAiStatus({ state: 'error', error: json.data.reason || 'The AI did not return suggestions.' });
+          } else {
+            setAiPairs(json.data?.pairs || {});
+            setAiStatus({ state: 'ready', error: '' });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setAiStatus({ state: 'error', error: `Couldn't reach the app server: ${err.message}` });
+        });
+    }, 600);
+    return () => { console.log('[BRIX COMBO AI] effect cleanup (timer cancelled if it had not fired)'); cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.ai_mode, aiCandidatesKey]);
+
+  // Same order as the live page: newest pick first, round-robin, never a
+  // product already picked, hidden once the combo is full.
+  const aiSuggestions = useMemo(() => {
+    const picked = selectedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+    if (config.ai_mode && picked > 0) console.log('[BRIX COMBO AI] selection', { picked, selectedIds: selectedProducts.map((p) => String(p.id)), pairsLoaded: !!aiPairs, pairsForSelected: selectedProducts.map((p) => aiPairs?.[String(p.id)] || null), candidateIds: aiCandidates.length, max: parseInt(config.max_products) || 5 });
+    if (!config.ai_mode || !aiPairs || picked === 0 || picked >= (parseInt(config.max_products) || 5)) return [];
+    const byId = new Map(aiCandidates.map((c) => [String(c.product.id), c]));
+    const order = [...new Set(selectedProducts.map((p) => String(p.id)))];
+    const selected = new Set(order);
+    const out = [];
+    const seen = new Set();
+    for (let rank = 0; rank < 3 && out.length < 4; rank++) {
+      for (let i = order.length - 1; i >= 0 && out.length < 4; i--) {
+        const id = String(aiPairs[order[i]]?.[rank] ?? '');
+        if (!id || selected.has(id) || seen.has(id) || !byId.has(id)) continue;
+        seen.add(id);
+        out.push(byId.get(id));
+      }
+    }
+    return out;
+  }, [config.ai_mode, config.max_products, aiPairs, aiCandidates, selectedProducts]);
+
   // --- Banner Slider Logic ---
   const [currentSlide, setCurrentSlide] = useState(0);
   const banners = useMemo(
@@ -5285,7 +5470,128 @@ function ComboPreview({
     );
   };
 
+  // A product with several variants is chosen on its own card, so "Choose"
+  // scrolls to and highlights that card instead of guessing a variant.
+  const onAiSuggestionClick = (e, { product, source }) => {
+    e.stopPropagation();
+    const variants = product.variants || [];
+    if (variants.length > 1) {
+      const selector = `[data-cdo-product-id="${CSS.escape(String(product.id))}"]`;
+      let scope = e.currentTarget.parentElement;
+      let card = null;
+      for (let i = 0; scope && !card && i < 20; i++, scope = scope.parentElement) card = scope.querySelector(selector);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setAiFlashId(String(product.id));
+        clearTimeout(aiFlashTimerRef.current);
+        aiFlashTimerRef.current = setTimeout(() => setAiFlashId(null), 1800);
+        return;
+      }
+    }
+    const variant = variants.find((v) => String(v.id) === String(selectedVariants[product.id])) || variants[0] || null;
+    handleAddProduct(product, 1, variant, source);
+  };
+
+  // Builder only (never on the live page): when the row has nothing to
+  // show, say why in its place, so the merchant knows where it appears and
+  // what it is waiting for.
+  const getAiSuggestionsNotice = () => {
+    if (!config.ai_mode) return null;
+    if (aiCandidates.length < 2) return 'AI suggestions need at least 2 products in this combo.';
+    if (aiStatus.state === 'error') return `AI suggestions couldn't load: ${aiStatus.error}`;
+    if (aiStatus.state === 'loading' || !aiPairs) return 'AI is finding products that pair well…';
+    const picked = selectedProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+    if (picked === 0) return 'Add a product above to see AI suggestions here. Shoppers see this row on the live page as they pick items.';
+    if (picked >= (parseInt(config.max_products) || 5)) return 'The combo is full, so AI suggestions are hidden.';
+    return 'AI found no other products to suggest for these picks.';
+  };
+
+  const renderAiSuggestions = () => {
+    if (aiSuggestions.length === 0) {
+      const notice = getAiSuggestionsNotice();
+      if (!notice) return null;
+      return (
+        <div
+          data-cdo-ai-notice
+          style={{
+            width: `${config.preview_bar_width || 100}%`, margin: '24px auto 0', padding: '12px 16px',
+            border: `1px dashed ${aiStatus.state === 'error' ? '#e5484d' : '#c9cccf'}`, borderRadius: 10,
+            background: aiStatus.state === 'error' ? '#fff5f5' : '#fafafa', boxSizing: 'border-box',
+            color: aiStatus.state === 'error' ? '#b42318' : '#6d7175', fontSize: 13, lineHeight: 1.45,
+          }}
+        >
+          <strong style={{ color: aiStatus.state === 'error' ? '#b42318' : '#303030' }}>AI suggestions</strong> — {notice}
+        </div>
+      );
+    }
+    const textColor = config.text_color || '#1a1a1a';
+    const cardWidth = isMobile ? 132 : 156;
+    return (
+      <div
+        data-cdo-ai-suggestions
+        style={{
+          width: `${config.preview_bar_width || 100}%`, margin: '24px auto 0', padding: isMobile ? 14 : '16px 18px',
+          background: '#fff', border: '1px solid #eee', borderRadius: config.preview_border_radius || 12,
+          boxSizing: 'border-box', color: textColor, boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 700, marginBottom: 12 }}>
+          <svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7 1.5l1.2 3.3 3.3 1.2-3.3 1.2L7 10.5 5.8 7.2 2.5 6l3.3-1.2L7 1.5z" />
+            <path d="M11.5 9.5v3M10 11h3" />
+          </svg>
+          <span>{config.ai_suggestions_title || 'Pairs well with your picks'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+          {aiSuggestions.map((c) => {
+            const p = c.product;
+            const hasVariants = (p.variants || []).length > 1;
+            const variant = (p.variants || []).find((v) => String(v.id) === String(selectedVariants[p.id])) || p.variants?.[0];
+            const price = parseFloat(variant?.price ?? p.price ?? 0) || 0;
+            const img = p.image?.src || p.image?.url || p.featuredMedia?.preview?.image?.url || p.images?.nodes?.[0]?.url;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  width: cardWidth, minWidth: cardWidth, flexShrink: 0, display: 'flex', flexDirection: 'column',
+                  border: '1px solid #eee', borderRadius: config.card_border_radius || 12, overflow: 'hidden', background: '#fff',
+                }}
+              >
+                <div style={{ width: '100%', aspectRatio: '1 / 1', background: '#f6f6f6' }}>
+                  {img && <img src={img} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                </div>
+                <div style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 34 }}>
+                    {p.title}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    {hasVariants ? 'From ' : ''}{currencySymbol}{price.toFixed(2)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => onAiSuggestionClick(e, c)}
+                    style={{
+                      marginTop: 'auto', width: '100%', padding: '8px 10px', border: 'none',
+                      borderRadius: config.add_btn_border_radius == null ? 8 : config.add_btn_border_radius,
+                      background: config.add_btn_bg || config.product_add_btn_color || '#000',
+                      color: config.add_btn_text_color || config.product_add_btn_text_color || '#fff',
+                      fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    {hasVariants ? 'Choose' : (config.add_btn_text || config.product_add_btn_text || 'Add')}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderPreviewBar = () => (
+    <>
+    {renderAiSuggestions()}
     <div
       style={{ outline: inspectActive === 'previewBar' ? '2px solid #1a9de0' : inspectHover === 'previewBar' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
       onMouseEnter={() => setInspectHover('previewBar')}
@@ -5303,6 +5609,7 @@ function ComboPreview({
         />
       </ComboCodContext.Provider>
     </div>
+    </>
   );
 
   const handleVariantChange = (productId, variantId) => {
@@ -5370,6 +5677,8 @@ function ComboPreview({
 
     return (
       <div
+        data-cdo-product-id={product.id}
+        data-cdo-ai-flash={aiFlashId === String(product.id) ? '' : undefined}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={onAddClick}
@@ -5394,9 +5703,11 @@ function ComboPreview({
           transform:
             isHovered && !isMobile ? 'translateY(-6px)' : 'translateY(0)',
           boxShadow:
-            isHovered && !isMobile
-              ? '0 10px 20px rgba(0,0,0,0.1)'
-              : '0 2px 4px rgba(0,0,0,0.05)',
+            aiFlashId === String(product.id)
+              ? '0 0 0 4px rgba(0,0,0,0.35)'
+              : isHovered && !isMobile
+                ? '0 10px 20px rgba(0,0,0,0.1)'
+                : '0 2px 4px rgba(0,0,0,0.05)',
         }}
       >
         {/* Variant Selection Popup Overlay */}
@@ -5949,54 +6260,7 @@ function ComboPreview({
     }
 
     const isSlider = config.grid_layout_type === 'slider';
-    let filteredProducts = filterPreviewProductsByStock(products || [], config);
-
-    // Resolve which collection handle should filter the preview grid.
-    // layout2 "All" tab → use first configured collection (fetch already used it).
-    // layout2 specific tab → use that tab's handle.
-    // Other layouts → use config.collection_handle / step_1_collection.
-    let currentHandle = '';
-    if (config.layout === 'layout2') {
-      currentHandle =
-        activeTab !== 'all'
-          ? activeTab
-          : config.col_1 ||
-          config.col_2 ||
-          config.col_3 ||
-          config.col_4 ||
-          config.col_5 ||
-          config.col_6 ||
-          config.col_7 ||
-          config.col_8 ||
-          '';
-    } else {
-      currentHandle = config.collection_handle || config.step_1_collection || '';
-    }
-
-    if (currentHandle) {
-      const collectionFiltered = filteredProducts.filter((p) =>
-        (p.collections || []).some((c) => c.handle === currentHandle)
-      );
-      // If products carry the collections field (from the server-side loader),
-      // use the filtered list; otherwise the server already filtered by handle,
-      // so all fetched products belong to the right collection.
-      if (collectionFiltered.length > 0) {
-        filteredProducts = collectionFiltered;
-      }
-    }
-
-    // Fall back to unfiltered real products, then demo products only when no real products exist at all.
-    const hasRealProducts = (products || []).length > 0;
-    let usingDemo = false;
-    if (filteredProducts.length === 0) {
-      if (hasRealProducts) {
-        // Show all real products ignoring stock/collection filter so preview is never blank
-        filteredProducts = products;
-      } else {
-        usingDemo = true;
-        filteredProducts = DEMO_PRODUCTS;
-      }
-    }
+    const { list: filteredProducts, usingDemo } = getGridViewProducts();
 
     return (
       <div style={{ width: `${config.grid_width || 100}%`, margin: '0 auto' }}>
@@ -7153,24 +7417,7 @@ function ComboPreview({
             const isCompleted = selectedProducts.length > index;
 
             const stepColl = config[`step_${step}_collection`];
-            let stepViewProducts = allStepProducts[stepColl] || [];
-
-            // If we don't have dynamic products for this step yet, try to find them in the loader data
-            if (stepViewProducts.length === 0 && stepColl) {
-              stepViewProducts = products.filter((p) =>
-                (p.collections || []).some((c) => c.handle === stepColl)
-              );
-            }
-
-            if (stepViewProducts.length > 0) {
-              const stockFiltered = filterPreviewProductsByStock(stepViewProducts, config);
-              stepViewProducts = (stockFiltered.length > 0 ? stockFiltered : stepViewProducts).slice(0, 12);
-            } else if (!stepColl) {
-              // no collection configured — keep empty
-            } else if ((products || []).length > 0) {
-              // collection configured but no matching products yet — show all store products as fallback
-              stepViewProducts = products.slice(0, 12);
-            }
+            const stepViewProducts = getStepViewProducts(stepColl);
 
             if (!stepColl) return null;
 

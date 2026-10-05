@@ -82,8 +82,17 @@ function AdvancedSectionComponent({
             label="Enable AI Suggestions for Customers"
             checked={!!config.ai_mode}
             onChange={(v) => updateConfig('ai_mode', v)}
-            helpText="When enabled, AI will suggest products and collections to customers on the storefront"
+            helpText="As shoppers pick items, the live combo page shows a row of other products from this combo that AI picked as the best matches for their choices. Try it here by adding products in the preview; the live page uses it after you save."
           />
+          {config.ai_mode && (
+            <TextField
+              label="Suggestions heading"
+              value={config.ai_suggestions_title ?? ''}
+              placeholder="Pairs well with your picks"
+              onChange={(v) => updateConfig('ai_suggestions_title', v)}
+              autoComplete="off"
+            />
+          )}
         </FormLayout>
       </SectionCard>
 
