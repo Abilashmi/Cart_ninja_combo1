@@ -214,7 +214,9 @@
     host.setAttribute('data-brix-cod-sheet', '');
     // Same top layer as the BRIX cart drawer (#cc-overlay, z-index 2147483647);
     // appended after it, so the sheet always opens in front of the drawer.
-    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;';
+    // display is forced because the host has no light-DOM children, so theme
+    // rules like Dawn's `div:empty{display:none}` would otherwise hide it.
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:block !important;';
     var shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     shadow.innerHTML = '<style>' + CSS + '</style><div class="ov" part="overlay"><div class="sh" role="dialog" aria-modal="true" aria-label="Cash on Delivery checkout"></div></div>';
     this.host = host;

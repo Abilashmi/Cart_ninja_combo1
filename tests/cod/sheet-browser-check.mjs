@@ -83,6 +83,9 @@ check('product page: fee shown on the button', (await productBtn.textContent()).
 
 // Drawer button rendering rules
 await page.evaluate(() => {
+  // Dawn's base.css hides empty elements; the sheet host only has a shadow
+  // root, so it must still show with this rule on the page.
+  const themeCss = document.createElement('style'); themeCss.textContent = 'a:empty,div:empty,section:empty{display:none}'; document.head.appendChild(themeCss);
   const drawer = document.createElement('div'); drawer.id = 'cc-overlay'; drawer.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#fff;';
   const slot = document.createElement('div'); slot.id = 'drawer-slot'; drawer.appendChild(slot); document.body.appendChild(drawer);
   window.BrixCod.mountDrawerButton(slot, { cart: { items: [{ variant_id: 11, quantity: 1, final_line_price: 19900, properties: {} }] }, onPayOnline: () => { window.__paidOnline = true; } });
