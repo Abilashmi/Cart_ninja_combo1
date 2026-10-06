@@ -20,7 +20,10 @@
  * templates (customization.design.preset):
  *   slots       Horizontal Select    one slot per item, a dropdown per Shopify option
  *   quick_add   Quick Add Picker     grid of variant cards with a top-right "+"
- *   image_slots Image Variant Select one photo card per item + its option dropdowns
+ *   image_slots Image Variant Select packs as rows; per item its photo and a
+ *               dropdown per Shopify option side by side, like slots — an
+ *               option whose values have their own variant photos gets a
+ *               photo dropdown. Nothing is pre-selected.
  * Option names/values come from Shopify (never assumed to be Size/Color); a
  * combination that isn't a real variant is never swapped for another one.
  * Add to cart sends one line per real variant with the units picked, marked
@@ -313,10 +316,29 @@
     return { variant: variant, problem: null, missing: missing };
   }
 
+  // Whether option `index` is shown with photos in the Image Variant Select:
+  // any of its values has a variant photo. Each value then shows the photo of
+  // its variant that best matches the item's other choices; a product
+  // without variant photos keeps plain dropdowns.
+  function optionHasImages(variants, index) {
+    for (var i = 0; i < variants.length; i += 1) if (variants[i].image && variants[i].optionValues[index]) return true;
+    return false;
+  }
+
   // Same Variant Packs: one variant for every item. Mix & Match: any variant
   // per item, repeats allowed. (No separate merchant setting exists.)
   function packSelectionRules(pack) {
     return { sameVariant: !pack || pack.packType !== 'mix_match', allowDuplicates: true };
+  }
+
+  // Horizontal Select and Image Variant Select always give every item of the
+  // chosen pack its own selection (Buy 2 -> Item 1 + Item 2), whatever the
+  // Pack type; only the Quick Add Picker keeps one pick for a Same Variant
+  // Pack. The checkout discount allows any of the Pack's variants per line.
+  function widgetSelectionRules(pack, layout) {
+    var rules = packSelectionRules(pack);
+    if (layout !== 'quick_add') rules.sameVariant = false;
+    return rules;
   }
 
   function pickBlockReason(picks, variant, rules) {
@@ -415,7 +437,8 @@
     '.brix-packs-slot-main{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}',
     '.brix-packs-slot-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px}',
     /* ── Template 3 · Image Variant Select: packs as rows; the chosen row opens
-       one photo dropdown per item, listing whole variants. */
+       per item its photo and a dropdown per option, side by side (a photo
+       dropdown when the option's values have their own variant photos). */
     '.brix-packs-stack{margin-top:4px;background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
     '.brix-packs-stack-item:first-child{border-radius:var(--brix-packs-radius) var(--brix-packs-radius) 0 0}.brix-packs-stack-item:last-child{border-radius:0 0 var(--brix-packs-radius) var(--brix-packs-radius)}.brix-packs-stack-item:only-child{border-radius:var(--brix-packs-radius)}',
     '.brix-packs-stack-item + .brix-packs-stack-item{border-top:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border)}',
@@ -436,26 +459,31 @@
     '.brix-packs-price strong{display:block;font-size:var(--brix-packs-priceSize);font-weight:var(--brix-packs-weight)}',
     '.brix-packs-price .brix-packs-was{display:block}',
     '.brix-packs-expand{padding:0 var(--brix-packs-card-pad) var(--brix-packs-card-pad)}',
-    '.brix-packs-dds{display:flex;flex-direction:column;gap:8px}',
-    '.brix-packs-dd{position:relative}',
-    '.brix-packs-dd-trigger{width:100%;display:flex;align-items:center;gap:10px;margin:0;padding:8px 10px;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);font:inherit;text-align:left;cursor:pointer}',
-    '.brix-packs-dd-trigger.is-static{cursor:default}',
-    '.brix-packs-dd-trigger:not(.is-static):hover,.brix-packs-dd-trigger[aria-expanded="true"]{border-color:var(--brix-packs-primary)}',
-    '.brix-packs-dd-trigger:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
-    '.brix-packs-dd-trigger[aria-invalid="true"]{border-color:#b42318}',
-    '.brix-packs-dd img,.brix-packs-dd-noimg{display:block;width:44px;height:44px;flex-shrink:0;object-fit:cover;border-radius:calc(var(--brix-packs-radius) / 2);background:#f1f2f4}',
-    '.brix-packs-dd-text{flex:1;min-width:0;display:flex;flex-direction:column}',
-    '.brix-packs-dd-label{font-size:11px;opacity:.7}',
-    '.brix-packs-dd-value{font-weight:600;overflow-wrap:anywhere}',
-    '.brix-packs-dd-price{font-size:var(--brix-packs-desc);opacity:.8;white-space:nowrap}',
-    '.brix-packs-dd-note{font-size:11px;font-weight:600;text-transform:uppercase;opacity:.7;white-space:nowrap}',
-    '.brix-packs-dd-caret{opacity:.6}',
-    '.brix-packs-dd-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:280px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 2);box-shadow:0 8px 24px rgba(0,0,0,.14)}',
-    '.brix-packs-dd-option{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer}',
-    '.brix-packs-dd-option .brix-packs-dd-value{flex:1}',
-    '.brix-packs-dd-option:hover,.brix-packs-dd-option:focus{background:var(--brix-packs-selected);outline:none}',
-    '.brix-packs-dd-option[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--brix-packs-primary)}',
-    '.brix-packs-dd-option[aria-disabled="true"]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-islots{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}',
+    '.brix-packs-islot{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.5)}',
+    '.brix-packs-islot[data-state="done"]{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-islot[data-state="problem"]{border-color:#b42318}',
+    '.brix-packs-islot-photo{flex-shrink:0;width:64px;height:64px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4;border:1px solid rgba(0,0,0,.06)}',
+    '.brix-packs-islot-photo img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-islot-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}',
+    '.brix-packs-pdd{position:relative}',
+    '.brix-packs-pdd-trigger{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;margin:0;padding:4px 10px 4px 5px;font:inherit;font-size:14px;color:var(--brix-packs-text);background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.5);text-align:left;cursor:pointer}',
+    '.brix-packs-pdd-trigger[data-empty="1"]{padding-left:10px}',
+    '.brix-packs-pdd-trigger:hover,.brix-packs-pdd-trigger[aria-expanded="true"]{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-pdd-trigger:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:1px}',
+    '.brix-packs-pdd-trigger[aria-invalid="true"]{border-color:#b42318;box-shadow:inset 0 0 0 1px #b42318}',
+    '.brix-packs-pdd-thumb{flex-shrink:0;display:block;width:30px;height:30px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 2.5);background:#f3f3f4}',
+    '.brix-packs-pdd-thumb img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-pdd-value{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.brix-packs-pdd-caret{flex-shrink:0;width:7px;height:7px;margin:-4px 3px 0 0;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg);opacity:.6}',
+    '.brix-packs-pdd-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:264px;overflow:auto;margin:0;padding:4px;list-style:none;background:var(--brix-packs-card);color:var(--brix-packs-text);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.5);box-shadow:0 8px 24px rgba(0,0,0,.14)}',
+    '.brix-packs-pdd-option{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:14px;cursor:pointer}',
+    '.brix-packs-pdd-option .brix-packs-pdd-thumb{width:36px;height:36px}',
+    '.brix-packs-pdd-option .brix-packs-pdd-value{white-space:normal;overflow-wrap:anywhere}',
+    '.brix-packs-pdd-option:hover,.brix-packs-pdd-option:focus{background:var(--brix-packs-selected);outline:none}',
+    '.brix-packs-pdd-option[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--brix-packs-primary);font-weight:600}',
+    '.brix-packs-pdd-option[aria-disabled="true"]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-pdd-note{font-size:11px;font-weight:600;text-transform:uppercase;opacity:.75;white-space:nowrap}',
     /* ── Template 2 · Quick Add Picker: variant cards with a top-right "+". */
     // A scroll box of about two rows; the third row peeks in so it's clear the list scrolls.
     '.brix-packs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:var(--brix-packs-gap);max-height:min(470px,70vh);margin:0;padding:3px 6px 3px 3px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;list-style:none}',
@@ -500,7 +528,7 @@
     '.brix-packs-add[disabled],.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
     '.brix-packs-actions{display:flex;flex-direction:var(--brix-packs-btn-dir);gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
-    '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}}',
+    '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}.brix-packs-islot{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px 10px;padding:10px}.brix-packs-islot .brix-packs-slot-main{display:contents}.brix-packs-islot .brix-packs-fields,.brix-packs-islot .brix-packs-problem,.brix-packs-islot-name{grid-column:1/-1}.brix-packs-islot .brix-packs-fields{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}.brix-packs-islot-photo{width:36px;height:36px}}',
   ].join('\n');
 
   function injectStyle() {
@@ -579,12 +607,12 @@
     //   Same Variant Packs keep one slot that stands for every item.
     // picks: variant ids chosen in the Quick Add Picker, one per item.
     // open: a pack card was chosen; the Quick Add Picker shows its grid only then.
-    // openPicker: item slot whose Image Variant Select dropdown is open, or null.
+    // openPicker: '<slot>-<option index>' of the open Image Variant Select photo dropdown, or null.
     var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null };
     // A click anywhere outside the open dropdown closes it.
     function onDocumentClick(event) {
       if (state.openPicker === null) return;
-      var open = root.querySelector('.brix-packs-dd[data-open="1"]');
+      var open = root.querySelector('.brix-packs-pdd[data-open="1"]');
       if (open && open.contains(event.target)) return;
       state.openPicker = null;
       render();
@@ -603,7 +631,8 @@
       var inStock = list.filter(forSale);
       if (inStock.length) list = inStock;
       var normalized = normalizeOptionData(pack.productOptions, list.map(function (variant) { return shallow(variant, { id: String(variant.id) }); }));
-      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: packSelectionRules(pack) } };
+      var imageOptions = normalized.options.map(function (option, index) { return optionHasImages(normalized.variants, index); });
+      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: widgetSelectionRules(pack, layoutFor(pack)), imageOptions: imageOptions } };
       return cache.model;
     }
 
@@ -640,12 +669,17 @@
       return count + ' item' + (count === 1 ? '' : 's');
     }
 
-    // Seed selections for a Same Variant Pack with the shopper's current variant.
+    // A Same Variant Pack in the Quick Add Picker starts on the shopper's
+    // current variant; elsewhere the shopper chooses every item themselves.
+    function seedsFromTheme(pack) {
+      return model(pack).rules.sameVariant;
+    }
+
     function seed(pack) {
       state.slots = [];
       state.picks = [];
       var m = model(pack);
-      if (!m.rules.sameVariant) return;
+      if (!seedsFromTheme(pack)) return;
       var variant = defaultVariant(m);
       if (!variant) return;
       state.slots = [variant.optionValues.slice()];
@@ -658,18 +692,10 @@
       if (!tier) return;
       var m = model(pack);
       var count = m.rules.sameVariant ? 1 : tier.quantity;
-      // Image Variant Select starts every item on the shopper's variant (as far
-      // as its stock allows), like the old photo-dropdown design.
-      var prefill = layoutFor(pack) === 'image_slots' ? defaultVariant(m) : null;
-      if (prefill && !forSale(prefill)) prefill = null;
-      var prefilled = 0;
       var slots = [];
       for (var i = 0; i < count; i += 1) {
         var existing = state.slots[i];
-        if (existing && existing.length === m.options.length) { slots.push(existing); continue; }
-        var fits = prefill && (!hasStockCap(prefill) || prefilled < Number(prefill.maxQuantity));
-        if (fits) prefilled += 1;
-        slots.push(fits ? prefill.optionValues.slice() : emptySelection(m.options));
+        slots.push(existing && existing.length === m.options.length ? existing : emptySelection(m.options));
       }
       state.slots = slots;
       if (m.rules.sameVariant) {
@@ -722,6 +748,9 @@
         variant = variant || defaultVariant(m);
         if (variant && variant.price !== null && variant.price !== undefined) return Number(variant.price);
       }
+      // Items not picked yet are priced like the variant selected on the page.
+      var onPage = themeVariant ? variantById(m, themeVariant) : null;
+      if (onPage && forSale(onPage) && onPage.price !== null && onPage.price !== undefined) return Number(onPage.price);
       return Number(pack.basePrice) || 0;
     }
 
@@ -891,100 +920,115 @@
       return list;
     }
 
-    // Template 3 · Image Variant Select: one photo dropdown per item (one for
-    // a Same Variant Pack). Every entry is a whole variant — its own photo,
-    // name and price — not one box per Shopify option.
-    function renderVariantDropdowns(pack, tier, items) {
+    // Template 3 · Image Variant Select: per item (one for a Same Variant
+    // Pack) its photo and one dropdown per Shopify option, side by side like
+    // the Horizontal Select. An option whose values have their own variant
+    // photos (usually Color) gets a photo dropdown; one without (usually
+    // Size) the plain one. Nothing is pre-selected.
+    function renderImageSlots(pack, tier, items) {
       var m = model(pack);
-      var list = el('div', { class: 'brix-packs-dds' });
+      var list = el('ol', { class: 'brix-packs-islots' });
       var count = m.rules.sameVariant ? 1 : tier.quantity;
       for (var slot = 0; slot < count; slot += 1) {
         var item = slotItem(m, items, slot);
-        var problem = problemText(pack, item, m);
+        var label = slotLabel(m, tier, slot);
         var msgId = uid + '-m' + slot;
-        list.appendChild(el('div', { class: 'brix-packs-dd-item', 'data-state': slotTone(item) }, [
-          variantDropdown(pack, tier, slot, slotLabel(m, tier, slot), item, problem ? msgId : null),
-          problem ? el('p', { class: 'brix-packs-problem', id: msgId, text: problem }) : null,
+        var problem = problemText(pack, item, m);
+        var src = slotImage(pack, state.slots[slot], item);
+        var fields = m.options.length ? el('div', { class: 'brix-packs-fields' }, m.options.map(photoOrPlainField(pack, slot, label, item, msgId))) : null;
+        list.appendChild(el('li', { class: 'brix-packs-islot', 'data-state': slotTone(item) }, [
+          src ? el('span', { class: 'brix-packs-islot-photo' }, [photo(src, '')]) : null,
+          el('div', { class: 'brix-packs-slot-main' }, [
+            el('div', { class: 'brix-packs-slot-head' }, [el('span', { class: 'brix-packs-label', text: label }), stateTag(pack, item)]),
+            fields || el('span', { class: 'brix-packs-islot-name', text: variantName(pack, item.variant) }),
+            problem ? el('p', { class: 'brix-packs-problem', id: msgId, text: problem }) : null,
+          ]),
         ]));
       }
       return list;
     }
 
-    // Why `variant` can't be chosen for `slot` right now ('' = it can).
-    function variantBlock(m, tier, slot, variant) {
-      if (!forSale(variant)) return 'Sold out';
-      if (!hasStockCap(variant)) return '';
-      var max = Number(variant.maxQuantity);
-      if (m.rules.sameVariant) return max < tier.quantity ? 'Only ' + max + ' left' : '';
-      var used = 0;
-      state.slots.forEach(function (values, index) {
-        if (index === slot) return;
-        var other = resolveVariant(m.variants, m.options, values);
-        if (other && other.id === variant.id) used += 1;
-      });
-      return used >= max ? 'Only ' + max + ' left' : '';
+    function photoOrPlainField(pack, slot, label, item, msgId) {
+      var m = model(pack);
+      return function (option, index) {
+        var photos = m.imageOptions[index] && option.values.length > 1;
+        return (photos ? photoOptionField : optionField)(pack, slot, index, label, item, msgId);
+      };
     }
 
-    function variantDropdown(pack, tier, slot, label, item, msgId) {
+    // Like optionField, but every value is listed with its variant photo.
+    // Values cascade from the options before it in the same way.
+    function photoOptionField(pack, slot, index, slotText, item, msgId) {
       var m = model(pack);
-      var chosen = item.variant;
-      var open = state.openPicker === slot;
-      var name = chosen ? variantName(pack, chosen) : 'Choose an item';
-      var face = [
-        ddPhoto(chosen ? chosen.image || pack.productImage : pack.productImage),
-        el('span', { class: 'brix-packs-dd-text' }, [el('span', { class: 'brix-packs-dd-label', text: label }), el('span', { class: 'brix-packs-dd-value', text: name })]),
-        chosen && !money.hidden ? el('span', { class: 'brix-packs-dd-price', text: money.format(chosen.price) }) : null,
-      ];
-      // A product with one variant has nothing to choose: show it, don't ask.
-      if (m.variants.length < 2) return el('div', { class: 'brix-packs-dd', 'data-key': slot }, [el('div', { class: 'brix-packs-dd-trigger is-static' }, face)]);
+      var option = m.options[index];
+      var values = state.slots[slot];
+      var current = values[index] || '';
+      var key = slot + '-' + index;
+      var open = state.openPicker === key;
+      var choices = optionChoices(m.variants, m.options, values, index);
+      var invalid = Boolean(current) && (item.problem === 'unavailable' || item.problem === 'sold_out' || item.problem === 'stock') && index === lastChosenIndex(values);
+      function thumb(value) { return el('span', { class: 'brix-packs-pdd-thumb' }, [photo(valueImage(m, values, index, value), '')]); }
       function focusTrigger() {
-        var node = root.querySelector('[data-fk="dd-' + slot + '"]');
+        var node = root.querySelector('[data-fk="pdd-' + key + '"]');
         if (node) node.focus();
       }
-      function pick(variant) {
-        state.slots[slot] = variant.optionValues.slice();
-        state.openPicker = null;
-        state.message = null;
-        render();
-        focusTrigger();
-      }
+      function close() { state.openPicker = null; render(); focusTrigger(); }
+      function pick(value) { state.openPicker = null; chooseOption(slot, index, value); focusTrigger(); }
       var trigger = el('button', {
-        type: 'button', class: 'brix-packs-dd-trigger', 'data-fk': 'dd-' + slot, 'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false',
-        'aria-label': label + ': ' + name, 'aria-invalid': msgId ? 'true' : null, 'aria-describedby': msgId,
-        onclick: function (event) { event.stopPropagation(); state.openPicker = open ? null : slot; render(); },
-        onkeydown: function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); state.openPicker = slot; render(); } },
-      }, face.concat([el('span', { class: 'brix-packs-dd-caret', 'aria-hidden': 'true', text: '\u25be' })]));
+        type: 'button', class: 'brix-packs-pdd-trigger', 'data-fk': 'pdd-' + key, 'data-empty': current ? null : '1',
+        'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false', 'aria-label': slotText + ' ' + option.name + ': ' + (current || 'not chosen'),
+        'aria-invalid': invalid ? 'true' : null, 'aria-describedby': invalid ? msgId : null,
+        onclick: function (event) { event.stopPropagation(); state.openPicker = open ? null : key; render(); },
+        onkeydown: function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); state.openPicker = key; render(); } },
+      }, [
+        current ? thumb(current) : null,
+        el('span', { class: 'brix-packs-pdd-value', text: current || 'Select ' + option.name }),
+        el('span', { class: 'brix-packs-pdd-caret', 'aria-hidden': 'true' }),
+      ]);
       var children = [trigger];
       if (open) {
-        children.push(el('ul', { class: 'brix-packs-dd-list', role: 'listbox', 'aria-label': label }, m.variants.map(function (variant, index) {
-          var why = variantBlock(m, tier, slot, variant);
+        children.push(el('ul', { class: 'brix-packs-pdd-list', role: 'listbox', 'aria-label': slotText + ' ' + option.name }, choices.map(function (choice, position) {
+          var note = choice.available ? '' : (choice.exists ? 'Sold out' : 'Unavailable');
           return el('li', {
-            role: 'option', class: 'brix-packs-dd-option', tabindex: '-1', 'data-variant-id': variant.id,
-            'aria-selected': chosen && chosen.id === variant.id ? 'true' : 'false', 'aria-disabled': why ? 'true' : null,
-            onclick: function (event) { event.stopPropagation(); if (!why) pick(variant); },
+            role: 'option', class: 'brix-packs-pdd-option', tabindex: '-1', 'data-value': choice.value,
+            'aria-selected': choice.value === current ? 'true' : 'false', 'aria-disabled': note ? 'true' : null,
+            onclick: function (event) { event.stopPropagation(); if (!note) pick(choice.value); },
             onkeydown: function (event) {
-              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!why) pick(variant); return; }
-              if (event.key === 'Escape') { event.preventDefault(); state.openPicker = null; render(); focusTrigger(); return; }
+              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!note) pick(choice.value); return; }
+              if (event.key === 'Escape') { event.preventDefault(); close(); return; }
               if (event.key === 'Tab') { state.openPicker = null; render(); return; }
               var step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
               if (!step) return;
               event.preventDefault();
-              var next = event.currentTarget.parentNode.children[(index + step + m.variants.length) % m.variants.length];
+              var next = event.currentTarget.parentNode.children[(position + step + choices.length) % choices.length];
               if (next) next.focus();
             },
           }, [
-            ddPhoto(variant.image || pack.productImage),
-            el('span', { class: 'brix-packs-dd-value', text: variantName(pack, variant) }),
-            why ? el('span', { class: 'brix-packs-dd-note', text: why }) : null,
-            money.hidden ? null : el('span', { class: 'brix-packs-dd-price', text: money.format(variant.price) }),
+            thumb(choice.value),
+            el('span', { class: 'brix-packs-pdd-value', text: choice.value }),
+            note ? el('span', { class: 'brix-packs-pdd-note', text: note }) : null,
           ]);
         })));
       }
-      return el('div', { class: 'brix-packs-dd', 'data-key': slot, 'data-open': open ? '1' : null }, children);
+      return el('div', { class: 'brix-packs-field' }, [
+        el('span', { class: 'brix-packs-field-label' }, [el('span', { class: 'brix-packs-sr', text: slotText + ' ' }), option.name]),
+        el('div', { class: 'brix-packs-pdd', 'data-open': open ? '1' : null }, children),
+      ]);
     }
 
-    function ddPhoto(src) {
-      return src ? el('img', { src: src, alt: '', loading: 'lazy', decoding: 'async' }) : el('span', { class: 'brix-packs-dd-noimg', 'aria-hidden': 'true' });
+    // Photo for one option value: the variant with that value that best
+    // matches the item's other choices, else any variant with that value.
+    function valueImage(m, values, index, value) {
+      var fallback = '';
+      for (var i = 0; i < m.variants.length; i += 1) {
+        var variant = m.variants[i];
+        if (!variant.image || variant.optionValues[index] !== value) continue;
+        var matches = true;
+        for (var j = 0; j < m.options.length; j += 1) if (j !== index && values && values[j] && variant.optionValues[j] !== values[j]) { matches = false; break; }
+        if (matches) return variant.image;
+        if (!fallback) fallback = variant.image;
+      }
+      return fallback;
     }
 
     function blockText(reason, pack, variant) {
@@ -1130,7 +1174,7 @@
               ]),
             ]),
           ]);
-          if (selected) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': 'Choose your items' }, [renderVariantDropdowns(pack, t, itemsFor(pack, t))]));
+          if (selected) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': 'Choose your items' }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
           cards.appendChild(row);
           return;
         }
@@ -1197,9 +1241,9 @@
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
       restoreFocus(focusKey);
-      // Keep keyboard focus inside an open variant dropdown after re-rendering.
+      // Keep keyboard focus inside an open photo dropdown after re-rendering.
       if (state.openPicker !== null) {
-        var list = root.querySelector('.brix-packs-dd[data-open="1"] .brix-packs-dd-list');
+        var list = root.querySelector('.brix-packs-pdd[data-open="1"] .brix-packs-pdd-list');
         var option = list && (list.querySelector('[aria-selected="true"]') || list.querySelector('[role="option"]'));
         if (option) option.focus();
       }
@@ -1422,7 +1466,7 @@
           // A new variant picked in the theme takes over a Same Variant Pack;
           // a Pack switched between Same Variant and Mix & Match starts over.
           var same = model(pack).rules.sameVariant;
-          if ((variantChanged && same) || wasSame !== same) seed(pack);
+          if ((variantChanged && seedsFromTheme(pack)) || wasSame !== same) seed(pack);
         } else {
           state.pack = pack;
           state.tierIndex = firstEnabledTier(pack);
@@ -1485,6 +1529,7 @@
   var widget = null;
   var current = null;
   var lastVariant = null;
+  var pageVariantIds = []; // every variant of the page's product (PHP data path)
 
   function currentVariantId() {
     var form = productForm();
@@ -1586,21 +1631,50 @@
     else if (node.getAttribute('data-brix-packs-hidden')) { node.removeAttribute('data-brix-packs-hidden'); node.style.display = ''; }
   }
 
+  // Theme variant pickers (Dawn and other Online Store 2.0 themes, then older ones).
+  var PICKER_SELECTORS = ['variant-selects', 'variant-radios', 'variant-picker', '.product-form__variants', '.product__variants', '.variant-picker', '.product-options', '.product-variants', '.selector-wrapper', '.swatch', '[data-variant-picker]', '[data-product-options]'];
+  var QUANTITY_SELECTORS = ['quantity-input', '.product-form__quantity', '.product-form__input--quantity', '.product__quantity', '.quantity-selector', '.quantity'];
+  var PRODUCT_INFO_SELECTORS = 'product-info, .product__info-container, .product__info-wrapper, .product-single__meta, .product__info, .product-info, [data-product-info]';
+
+  // The block that holds the product's price, options and buy buttons.
+  function productInfo(form) {
+    return form.closest(PRODUCT_INFO_SELECTORS) || form.closest('.shopify-section') || form.parentElement || form;
+  }
+
+  // Every variant of the product can be bought through this Pack, so the
+  // theme's own variant picker isn't needed while it shows.
+  function coversAllVariants(pack) {
+    if (!pack) return false;
+    if (pack.variantScope === 'all') return true;
+    if (!pageVariantIds.length) return false;
+    var covered = (pack.variants || []).map(function (variant) { return String(variant.id); });
+    return pageVariantIds.every(function (id) { return covered.indexOf(id) >= 0; });
+  }
+
   // While a Pack is shown for the selected variant, the Pack's own button adds
   // it to the cart with the Pack's quantity, so the theme's quantity selector
   // and Add to cart button are hidden (and restored when no Pack applies).
-  function setThemeControlsHidden(hidden, hidePayment) {
+  // The theme's variant picker goes too when the Pack offers every variant
+  // (hidePicker) — the shopper picks their variants inside the Pack.
+  function setThemeControlsHidden(hidden, hidePayment, hidePicker) {
     var form = productForm();
     if (!form) return;
+    var info = productInfo(form);
+    function outside(node) { return !root.contains(node) && !node.contains(root) && !node.contains(form); }
     // getAttribute, not form.id: the form contains <input name="id">, which
     // shadows the form's `id` property.
     var formId = form.getAttribute('id');
-    var inputs = Array.prototype.slice.call(form.querySelectorAll('input[name="quantity"]'));
+    var inputs = Array.prototype.slice.call(info.querySelectorAll('input[name="quantity"]')).concat(Array.prototype.slice.call(form.querySelectorAll('input[name="quantity"]')));
     if (formId) inputs = inputs.concat(Array.prototype.slice.call(document.querySelectorAll('input[name="quantity"][form="' + formId + '"]')));
     inputs.forEach(function (input) {
-      var box = input.closest('quantity-input, .quantity, .product-form__quantity, .product-form__input--quantity') || input.parentElement;
+      if (root.contains(input)) return;
+      var box = input.closest(QUANTITY_SELECTORS.join(',')) || input.parentElement;
       if (!box) return;
-      setHidden(box.closest('.product-form__input') || box, hidden);
+      box = box.closest('.product-form__input') || box;
+      if (outside(box)) setHidden(box, hidden);
+    });
+    Array.prototype.forEach.call(info.querySelectorAll(QUANTITY_SELECTORS.join(',')), function (box) {
+      if (outside(box)) setHidden(box.closest('.product-form__input') || box, hidden);
     });
     var buttons = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
     if (formId) buttons = buttons.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
@@ -1613,11 +1687,21 @@
     Array.prototype.forEach.call(form.querySelectorAll('.shopify-payment-button, [data-shopify="payment-button"]'), function (node) {
       if (!root.contains(node)) setHidden(node, hidden && Boolean(hidePayment));
     });
+    // Variant picker: the theme's picker elements, plus any visible option
+    // control the theme keeps inside the form. The hidden <input name="id">
+    // stays, so the page still knows its variant.
+    var pickers = Array.prototype.slice.call(info.querySelectorAll(PICKER_SELECTORS.join(',')));
+    Array.prototype.forEach.call(form.querySelectorAll('select[name="id"], select[name^="options["], input[type="radio"][name^="options["]'), function (control) {
+      pickers.push(control.closest('fieldset, .product-form__input, .selector-wrapper') || control);
+    });
+    pickers.forEach(function (node) {
+      if (outside(node)) setHidden(node, hidden && Boolean(hidePicker));
+    });
   }
 
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
-    setThemeControlsHidden(Boolean(next), buyNowOn(next));
+    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next));
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
@@ -1643,6 +1727,7 @@
       if (data.pricing === 'client' && data.packs && data.packs.length) {
         var product = readPageProduct();
         if (!product) { fail('the product data from Packs.liquid is missing.'); return; }
+        pageVariantIds = (product.variants || []).map(function (variant) { return String(variant.id); });
         data = priceOnPage(data, product);
         if (!data.packs.length) data.reason = 'price_unverified';
       }
@@ -1659,7 +1744,7 @@
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
-          setThemeControlsHidden(Boolean(current), buyNowOn(current)); // a theme re-render can bring them back
+          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current)); // a theme re-render can bring them back
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);

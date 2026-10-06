@@ -914,7 +914,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     image: (
       <BlockStack gap="400">
-        <Toggle label="Show product photos" helpText="Horizontal Select: a small variant photo next to each item. Image Variant Select: the product photo on each pack row (its item dropdowns always show variant photos). Quick Add Picker is photo-based and always shows them." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
+        <Toggle label="Show product photos" helpText="Horizontal Select: a small variant photo next to each item. Image Variant Select: the product photo on each pack row (each item's photo and the variant photos in its dropdowns always show). Quick Add Picker is photo-based and always shows them." checked={form.customization.images.enabled} onChange={(value) => updateCustom('images', 'enabled', value)} />
         <FieldGroup title="Placement">
           <Segmented label="Image size" options={['small', 'medium', 'large'].map((value) => [value, capitalize(value)])} value={form.customization.images.size} onChange={(value) => updateCustom('images', 'size', value)} />
         </FieldGroup>

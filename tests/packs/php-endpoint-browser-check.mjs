@@ -47,6 +47,7 @@ const dawnMain = (variantInput, slot) => `<section id="recs-top"><div class="pri
   <h1>Tee</h1>
   <div id="price-template--1__main"><div class="price">$80</div></div>
   <form id="product-form-installment" class="installment" action="/cart/add"><input type="hidden" name="id" value="${variantInput}"></form>
+  <variant-selects id="theme-picker"><fieldset class="product-form__input"><legend>Size</legend><input type="radio" name="Size" value="M" checked><label>M</label></fieldset></variant-selects>
   <div class="product-form__input product-form__quantity"><quantity-input><input class="quantity__input" name="quantity" value="1" form="product-form-main"></quantity-input></div>
   <product-form><form id="product-form-main" action="/cart/add"><input type="hidden" name="id" value="${variantInput}">
     <div class="product-form__buttons"><button type="submit" name="add" id="theme-add">Add to cart</button><div class="shopify-payment-button"><button id="buy-now" type="button">Buy it now</button></div></div>
@@ -165,6 +166,22 @@ await check('Dawn: theme Add to cart, quantity and Buy it now hidden (the Pack h
   assert.equal(await page.locator('#theme-add').isVisible(), false, 'add');
   assert.equal(await page.locator('.product-form__quantity').isVisible(), false, 'qty');
   assert.equal(await page.locator('#buy-now').isVisible(), false, 'buynow');
+  assert.equal(await page.locator('#theme-picker').isVisible(), true, 'this Pack covers only M, so the theme picker stays to switch variants');
+  await context.close();
+});
+
+await check('Dawn: a Pack that offers every variant also hides the theme variant picker; shown again when no Pack applies', async () => {
+  for (const body of [phpBody([pack({ variantScope: 'all', allowedVariantIds: [] })]), phpBody([pack({ packType: 'mix_match', template: 'choose_each_item', variantScope: 'all', allowedVariantIds: [] })])]) {
+    const { page, context } = await open({ body, dawn: true });
+    await page.waitForSelector('.brix-packs-widget');
+    assert.equal(await page.locator('#theme-picker').isVisible(), false, 'picker');
+    assert.equal(await page.locator('.product-form__quantity').isVisible(), false, 'qty');
+    assert.equal(await page.locator('#theme-add').isVisible(), false, 'add');
+    await context.close();
+  }
+  const { page, context } = await open({ body: phpBody([]), dawn: true });
+  await page.waitForTimeout(800);
+  assert.equal(await page.locator('#theme-picker').isVisible(), true);
   await context.close();
 });
 
@@ -245,13 +262,29 @@ const shoot = (page, name) => page.locator('.brix-packs-widget').screenshot({ pa
 const widgetText = (page) => page.locator('.brix-packs-widget').innerText();
 // Pack choices: cards (Horizontal Select / Quick Add) or rows (Image Variant Select).
 const card = (page, index) => page.locator('.brix-packs-card, .brix-packs-tier').nth(index);
-const slot = (page, index) => page.locator('.brix-packs-slot, .brix-packs-dd-item').nth(index);
-// Image Variant Select: open item N's photo dropdown and pick a whole variant.
-const pickVariant = async (page, label, name) => {
-  await page.getByRole('button', { name: new RegExp(`^${label}:`) }).click();
-  await page.getByRole('option', { name: new RegExp(`^${name.replace(/\//g, '\\/')}\\b`) }).click();
+const slot = (page, index) => page.locator('.brix-packs-slot, .brix-packs-islot').nth(index);
+// Image Variant Select: item N's row of buttons for one option, and one value in it.
+// Image Variant Select: a plain <select> for an option without its own photos,
+// a photo dropdown (button + listbox) for one with them.
+const photoTrigger = (page, label, option) => page.getByRole('button', { name: new RegExp(`^${label} ${option}:`) });
+const chooseValue = async (page, label, option, value) => {
+  const trigger = photoTrigger(page, label, option);
+  if (await trigger.count()) {
+    await trigger.click();
+    await page.getByRole('listbox', { name: `${label} ${option}` }).getByRole('option', { name: new RegExp(`^${value}\\b`) }).click();
+  } else await page.getByLabel(`${label} ${option}`, { exact: true }).selectOption(value);
 };
-const ddOptions = (page) => page.locator('.brix-packs-dd-list [role="option"]').evaluateAll((els) => els.map((e) => [e.querySelector('.brix-packs-dd-value').textContent, e.getAttribute('aria-disabled') === 'true']));
+// A photo dropdown's choices: [value, disabled, photo src].
+const photoChoices = async (page, label, option) => {
+  await photoTrigger(page, label, option).click();
+  const list = await page.getByRole('listbox', { name: `${label} ${option}` }).locator('[role="option"]').evaluateAll((els) => els.map((e) => [e.dataset.value, e.getAttribute('aria-disabled') === 'true', e.querySelector('img') ? e.querySelector('img').getAttribute('src') : '']));
+  await page.keyboard.press('Escape');
+  return list;
+};
+const selectValues = (page, label, option) => page.getByLabel(`${label} ${option}`, { exact: true }).locator('option').evaluateAll((els) => els.filter((o) => o.value).map((o) => [o.value, o.disabled]));
+const itemPhoto = (page, index) => page.locator('.brix-packs-islot').nth(index).locator('.brix-packs-islot-photo img').getAttribute('src');
+// Photos that change with Color only: every size of a colour shares its photo.
+const colorPhotoShirt = () => { const p = shirtProduct(); const photos = { Black: swatch('#111111'), Blue: swatch('#0000ff'), Red: swatch('#ff0000') }; return { ...p, variants: p.variants.map((x) => ({ ...x, image: photos[x.options[1]] || '' })) }; };
 // Visible option names (the label also holds a screen-reader-only "Item N").
 const fieldNames = (locator) => locator.locator('.brix-packs-field-label').evaluateAll((els) => els.map((e) => e.lastChild.textContent));
 const lines = (call) => call.items.map((item) => [item.id, item.quantity]);
@@ -273,7 +306,7 @@ await check('Horizontal Select + Quick Add: pack cards sit side by side with nam
   }
 });
 
-await check('Image Variant Select: packs as rows (old design); only the chosen row opens, with one photo dropdown per item', async () => {
+await check('Image Variant Select: packs as rows (old design); only the chosen row opens, with one item card per item', async () => {
   const { page, context } = await open({ body: phpBody([mix('image_slots')]), pageProduct: shirtProduct(), dawn: true });
   await page.waitForSelector('.brix-packs-widget[data-layout="image_slots"]');
   assert.equal(await page.locator('.brix-packs-card').count(), 0, 'no pack cards');
@@ -284,9 +317,9 @@ await check('Image Variant Select: packs as rows (old design); only the chosen r
   assert.equal(await page.locator('.brix-packs-tier[aria-checked="true"]').count(), 1);
   assert.equal(await page.locator('.brix-packs-expand').count(), 1, 'only the chosen row is open');
   await card(page, 2).click();
-  assert.equal(await page.locator('.brix-packs-dd').count(), 3, 'Pack 3 -> three item dropdowns');
-  assert.equal(await page.locator('.brix-packs-stack-item[data-selected="1"] .brix-packs-dd').count(), 3, 'inside the chosen row');
-  assert.equal(await page.locator('.brix-packs-widget select').count(), 0, 'no per-option selects');
+  assert.equal(await page.locator('.brix-packs-islot').count(), 3, 'Pack 3 -> three item cards');
+  assert.equal(await page.locator('.brix-packs-stack-item[data-selected="1"] .brix-packs-islot').count(), 3, 'inside the chosen row');
+  assert.equal(await page.locator('.brix-packs-islot[data-state="done"]').count(), 0, 'nothing is chosen for the shopper');
   await context.close();
 });
 
@@ -353,7 +386,7 @@ await check('option values cascade from real variants: Color = Red -> L is unava
   await context.close();
 });
 
-await check('three options (Size, Color, Material): three dropdowns in Horizontal Select; one whole-variant choice in Image Variant Select', async () => {
+await check('three options (Size, Color, Material): three dropdowns in Horizontal Select; three rows of buttons in Image Variant Select', async () => {
   {
     const { page, context, cartCalls } = await open({ body: phpBody([mix('slots', { pack: { variantId: '400' } })]), pageProduct: threeOptions(), dawn: true });
     await page.waitForSelector('.brix-packs-widget[data-layout="slots"]');
@@ -367,59 +400,88 @@ await check('three options (Size, Color, Material): three dropdowns in Horizonta
   }
   const { page, context, cartCalls } = await open({ body: phpBody([mix('image_slots', { pack: { variantId: '400' } })]), pageProduct: threeOptions(), dawn: true });
   await page.waitForSelector('.brix-packs-widget[data-layout="image_slots"]');
-  await page.getByRole('button', { name: /^Item 1:/ }).click();
-  assert.deepEqual((await ddOptions(page)).map(([name]) => name), ['500ml / Black / Steel', '1L / Black / Steel', '1L / Green / Glass']);
-  await page.getByRole('option', { name: /^1L \/ Green \/ Glass/ }).click();
+  for (const option of ['Size', 'Color', 'Material']) assert.equal(await photoTrigger(page, 'Item 1', option).count(), 1, option + ': every value has its own photo -> photo dropdown');
+  await chooseValue(page, 'Item 1', 'Size', '1L');
+  await chooseValue(page, 'Item 1', 'Color', 'Green');
+  await chooseValue(page, 'Item 1', 'Material', 'Glass');
   await addPack(page);
   assert.deepEqual(lines(cartCalls[0]), [[402, 1]]);
   await context.close();
 });
 
-await check('Image Variant Select: each item is a photo dropdown of whole variants (photo, name, price); sold out / stock are blocked', async () => {
-  const { page, context, cartCalls } = await open({ body: phpBody([mix('image_slots')]), pageProduct: shirtProduct(), dawn: true });
+await check('Image Variant Select: Size and Color side by side like Horizontal Select, both with variant photos; nothing pre-selected', async () => {
+  const { page, context, cartCalls } = await open({ body: phpBody([mix('image_slots')]), pageProduct: colorPhotoShirt(), dawn: true });
   await page.waitForSelector('.brix-packs-widget[data-layout="image_slots"]');
   await card(page, 1).click();
-  assert.equal(await page.locator('.brix-packs-dd').count(), 2, 'Buy 2 -> two item dropdowns');
-  const trigger = (n) => page.getByRole('button', { name: new RegExp(`^Item ${n}:`) });
-  const photoOf = (n) => trigger(n).locator('img').getAttribute('src');
-  // Starts on the theme's variant, like the old design.
-  assert.match(await trigger(1).innerText(), /Item 1[\s\S]*M \/ Black[\s\S]*₹80\.00/);
-  assert.match(await photoOf(1), /111111/);
-  await trigger(1).click();
-  assert.equal(await trigger(1).getAttribute('aria-expanded'), 'true');
-  const options = await ddOptions(page);
-  assert.deepEqual(options.map(([name]) => name), ['M / Black', 'L / Black', 'M / Blue', 'L / Blue', 'S / Red', 'M / Red', 'S / Black'], 'every in-stock variant is its own entry; sold-out L / White is left out');
-  assert.equal(await page.locator('.brix-packs-dd-list img').count(), 7, 'a photo on every entry');
-  assert.match(await page.getByRole('option', { name: /^L \/ Blue/ }).locator('img').getAttribute('src'), /0000ff/, 'its own photo');
-  assert.match(await page.getByRole('option', { name: /^M \/ Blue/ }).locator('img').getAttribute('src'), /cccccc/, 'no photo of its own -> product photo');
-  await page.getByRole('option', { name: /^L \/ Blue/ }).click();
-  assert.equal(await page.locator('.brix-packs-dd-list').count(), 0, 'closes after choosing');
-  assert.match(await trigger(1).innerText(), /L \/ Blue[\s\S]*₹90\.00/);
-  assert.match(await photoOf(1), /0000ff/, 'the chosen variant photo');
+  assert.equal(await page.locator('.brix-packs-islot').count(), 2, 'Buy 2 -> two item cards');
+  // Not auto-selected: the shopper picks every item.
+  assert.match(await photoTrigger(page, 'Item 1', 'Size').getAttribute('aria-label'), /not chosen/);
+  assert.match(await photoTrigger(page, 'Item 1', 'Color').getAttribute('aria-label'), /not chosen/);
+  assert.equal(await page.locator('.brix-packs-add').isDisabled(), true);
+  // Side by side: Size | Color on one line.
+  const [size, color] = await page.locator('.brix-packs-islot').first().locator('.brix-packs-field').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+  assert.ok(Math.abs(size.top - color.top) < 2 && size.left < color.left, 'Size and Color sit next to each other');
+  const colors = await photoChoices(page, 'Item 1', 'Color');
+  assert.deepEqual(colors.map(([value, disabled]) => [value, disabled]), [['Black', false], ['Blue', false], ['Red', false]], 'sold-out-only White is left out');
+  assert.ok(/111111/.test(colors[0][2]) && /0000ff/.test(colors[1][2]) && /ff0000/.test(colors[2][2]), 'each colour with its photo');
+  assert.deepEqual((await photoChoices(page, 'Item 1', 'Size')).map(([value]) => value), ['M', 'L', 'S']);
+  await chooseValue(page, 'Item 1', 'Color', 'Blue');
+  // Size photos follow the chosen colour (variant M / Blue, L / Blue).
+  const sizes = await photoChoices(page, 'Item 1', 'Size');
+  assert.ok(/0000ff/.test(sizes[0][2]) && /0000ff/.test(sizes[1][2]), 'sizes show the photo of their variant in the chosen colour');
+  await chooseValue(page, 'Item 1', 'Size', 'L');
+  assert.match(await photoTrigger(page, 'Item 1', 'Color').locator('img').getAttribute('src'), /0000ff/, 'the chosen colour shows its photo');
+  assert.match(await itemPhoto(page, 0), /0000ff/, 'the item photo follows the chosen variant');
+  // Colours cascade from the size: there is no S / Blue.
+  await chooseValue(page, 'Item 2', 'Size', 'S');
+  assert.deepEqual((await photoChoices(page, 'Item 2', 'Color')).map(([value, disabled]) => [value, disabled]), [['Black', false], ['Blue', true], ['Red', false]]);
+  // An impossible combination is flagged, never swapped for another variant.
+  await chooseValue(page, 'Item 2', 'Size', 'M');
+  await chooseValue(page, 'Item 2', 'Color', 'Blue');
+  await chooseValue(page, 'Item 2', 'Size', 'S');
+  assert.match(await slot(page, 1).innerText(), /isn’t available/);
+  assert.equal(await photoTrigger(page, 'Item 2', 'Color').getAttribute('aria-invalid'), 'true');
+  assert.equal(await page.locator('.brix-packs-add').isDisabled(), true);
+  await chooseValue(page, 'Item 2', 'Color', 'Red');
+  assert.equal(await slot(page, 1).getAttribute('data-state'), 'done');
   assert.match(await card(page, 1).innerText(), /₹161\.50/); // (90 + 80) x 0.95
-  await pickVariant(page, 'Item 2', 'M / Blue');
-  assert.match(await photoOf(2), /cccccc/, 'M / Blue has no photo -> product photo');
   await shoot(page, 'template-image-slots.png');
-  // Escape and a click outside both close an open dropdown.
-  await trigger(2).click();
+  // Escape and a click outside both close an open dropdown; focus returns to it.
+  await photoTrigger(page, 'Item 2', 'Color').click();
   await page.keyboard.press('Escape');
-  assert.equal(await page.locator('.brix-packs-dd-list').count(), 0);
-  await trigger(2).click();
+  assert.equal(await page.locator('.brix-packs-pdd-list').count(), 0);
+  assert.match(await page.evaluate(() => document.activeElement.getAttribute('data-fk')), /^pdd-1-1$/);
+  await photoTrigger(page, 'Item 2', 'Color').click();
   await page.locator('.brix-packs-heading').click();
-  assert.equal(await page.locator('.brix-packs-dd-list').count(), 0);
+  assert.equal(await page.locator('.brix-packs-pdd-list').count(), 0);
   await addPack(page);
-  assert.deepEqual(lines(cartCalls[0]), [[303, 1], [302, 1]]);
+  assert.deepEqual(lines(cartCalls[0]), [[303, 1], [304, 1]]);
+  await context.close();
+});
+
+await check('Image Variant Select: every value has its own photo -> photo dropdowns for both; no photos at all -> plain dropdowns', async () => {
+  {
+    const { page, context } = await open({ body: phpBody([mix('image_slots')]), pageProduct: shirtProduct(), dawn: true });
+    await page.waitForSelector('.brix-packs-islot');
+    assert.equal(await photoTrigger(page, 'Item 1', 'Size').count(), 1, 'size photos');
+    assert.equal(await photoTrigger(page, 'Item 1', 'Color').count(), 1, 'colour photos');
+    await context.close();
+  }
+  const bare = () => { const p = shirtProduct(); return { ...p, image: '', variants: p.variants.map((x) => ({ ...x, image: '' })) }; };
+  const { page, context } = await open({ body: phpBody([mix('image_slots')]), pageProduct: bare(), dawn: true });
+  await page.waitForSelector('.brix-packs-islot');
+  assert.equal(await page.locator('.brix-packs-widget img, .brix-packs-pdd').count(), 0, 'no photo boxes, no photo dropdowns');
+  assert.deepEqual((await selectValues(page, 'Item 1', 'Size')).map(([value]) => value), ['M', 'L', 'S']);
   await context.close();
 });
 
 await check('Image Variant Select: a variant with 1 left can only fill one item', async () => {
-  const { page, context } = await open({ body: phpBody([mix('image_slots')]), pageProduct: shirtProduct(), dawn: true });
+  const { page, context } = await open({ body: phpBody([mix('image_slots')]), pageProduct: colorPhotoShirt(), dawn: true });
   await page.waitForSelector('.brix-packs-widget[data-layout="image_slots"]');
   await card(page, 1).click();
-  await pickVariant(page, 'Item 1', 'S / Black');
-  await page.getByRole('button', { name: /^Item 2:/ }).click();
-  assert.deepEqual((await ddOptions(page)).find(([name]) => name === 'S / Black'), ['S / Black', true]);
-  assert.match(await page.locator('.brix-packs-dd-list').innerText(), /S \/ Black[\s\S]*Only 1 left/i);
+  for (const item of ['Item 1', 'Item 2']) { await chooseValue(page, item, 'Size', 'S'); await chooseValue(page, item, 'Color', 'Black'); }
+  assert.match(await slot(page, 1).innerText(), /Only 1 of S \/ Black left in stock/);
+  assert.equal(await page.locator('.brix-packs-add').isDisabled(), true);
   await context.close();
 });
 
@@ -448,9 +510,10 @@ await check('all variants, 3 of 6 sold out (incl. the saved first one): the Pack
       await page.getByRole('button', { name: 'Add M / Black to your pack' }).click();
       await page.getByRole('button', { name: /Add another M \/ Black/ }).click();
     } else {
-      await page.getByRole('button', { name: /^Item 1:/ }).click();
-      assert.deepEqual((await ddOptions(page)).map(([name]) => name), ['M / Black', 'S / Blue', 'L / Blue']);
-      await page.keyboard.press('Escape');
+      assert.deepEqual((await selectValues(page, 'Item 1', 'Size')).map(([value]) => value), ['M', 'S', 'L'], 'only sizes that are in stock somewhere');
+      await page.getByLabel('Item 1 Size', { exact: true }).selectOption('M');
+      assert.deepEqual((await selectValues(page, 'Item 1', 'Color')).filter(([, disabled]) => !disabled).map(([value]) => value), ['Black'], 'M is only in stock in Black');
+      for (const n of [1, 2]) { await page.getByLabel(`Item ${n} Size`, { exact: true }).selectOption('M'); await page.getByLabel(`Item ${n} Color`, { exact: true }).selectOption('Black'); }
     }
     await addPack(page);
     assert.deepEqual(lines(cartCalls[0]), [[501, 2]], preset);
@@ -511,27 +574,32 @@ await check('stock: two slots on a variant with 1 in stock is flagged and cannot
   await context.close();
 });
 
-await check('Same Variant Pack: one selection for every item, started from the theme variant; cart gets N of it', async () => {
-  for (const preset of ['slots', 'image_slots', 'quick_add']) {
+await check('Same Variant Pack: Horizontal Select / Image Variant Select give Buy 2 two separate selections (nothing pre-selected); Quick Add keeps one pick for all', async () => {
+  for (const preset of ['slots', 'image_slots']) {
     const { page, context, cartCalls } = await open({ body: phpBody([designed(preset)]), pageProduct: shirtProduct(), dawn: true, variantInput: '303' });
-    await page.waitForSelector(`.brix-packs-widget[data-layout="${preset}"][data-mode="same"]`);
+    await page.waitForSelector(`.brix-packs-widget[data-layout="${preset}"]`);
     await card(page, 1).click();
-    if (preset === 'image_slots') {
-      assert.equal(await page.locator('.brix-packs-dd').count(), 1, 'one dropdown for every item');
-      assert.match(await page.getByRole('button', { name: /^All 2 items:/ }).innerText(), /All 2 items[\s\S]*L \/ Blue/, 'started from the theme variant');
-    } else assert.match(await widgetText(page), /2 \/ 2/, preset);
-    if (preset === 'slots') {
-      assert.equal(await page.locator('.brix-packs-slot').count(), 1, `${preset}: one selection`);
-      assert.match(await slot(page, 0).innerText(), /all 2 items/i);
-      assert.equal(await slot(page, 0).getAttribute('data-state'), 'done', `${preset}: started from the theme variant`);
-      assert.equal(await slot(page, 0).locator('.brix-packs-state').count(), 0, `${preset}: no "✓ name" label once chosen`);
-    } else if (preset === 'quick_add') {
-      await page.getByRole('button', { name: 'Choose M / Black for all 2 items' }).click();
-    }
+    assert.equal(await page.locator('.brix-packs-slot, .brix-packs-islot').count(), 2, `${preset}: Buy 2 -> Item 1 + Item 2`);
+    assert.match(await widgetText(page), /Item 1[\s\S]*Item 2/, preset);
+    assert.equal(await page.locator('.brix-packs-add').isDisabled(), true, `${preset}: not pre-selected from the theme variant`);
+    assert.match(await card(page, 1).innerText(), /₹171\.00/, `${preset}: unpicked items priced like the page variant (L / Blue ₹90)`);
+    await chooseValue(page, 'Item 1', 'Size', 'L');
+    await chooseValue(page, 'Item 1', 'Color', 'Blue');
+    await chooseValue(page, 'Item 2', 'Size', 'M');
+    await chooseValue(page, 'Item 2', 'Color', 'Black');
     await addPack(page);
-    assert.deepEqual(lines(cartCalls[0]), [[preset === 'quick_add' ? 300 : 303, 2]], preset);
+    assert.deepEqual(lines(cartCalls[0]), [[303, 1], [300, 1]], preset);
+    assert.equal(new Set(cartCalls[0].items.map((item) => item.properties._brix_pack_group)).size, 1, `${preset}: one Pack group for the discount`);
     await context.close();
   }
+  const { page, context, cartCalls } = await open({ body: phpBody([designed('quick_add')]), pageProduct: shirtProduct(), dawn: true, variantInput: '303' });
+  await page.waitForSelector('.brix-packs-widget[data-layout="quick_add"][data-mode="same"]');
+  await card(page, 1).click();
+  assert.match(await widgetText(page), /2 \/ 2/);
+  await page.getByRole('button', { name: 'Choose M / Black for all 2 items' }).click();
+  await addPack(page);
+  assert.deepEqual(lines(cartCalls[0]), [[300, 2]]);
+  await context.close();
 });
 
 await check('product with no options: nothing to choose, its photo is shown, the real variant is added', async () => {
@@ -581,8 +649,8 @@ await check('mobile (375px): every template fits without page-level horizontal s
     if (preset === 'image_slots') {
       const rows = await page.locator('.brix-packs-tier').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
       assert.equal(new Set(rows).size, 1, 'pack rows stack');
-      const dds = await page.locator('.brix-packs-dd').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
-      assert.ok(dds.length === 3 && dds.every((box) => box.right <= 375 - 16 + 1), 'item dropdowns fit the screen');
+      const boxes = await page.locator('.brix-packs-islot, .brix-packs-field').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+      assert.ok(boxes.length > 3 && boxes.every((box) => box.right <= 375 - 16 + 1), 'item cards and their dropdowns fit the screen');
       await page.locator('.brix-packs-widget').screenshot({ path: path.join(shotDir, `mobile-${preset}.png`) });
       await context.close();
       continue;

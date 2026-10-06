@@ -84,16 +84,20 @@ await check('Quick Add Picker: variant cards with +, selected count, blocked whe
   await page.close();
 });
 
-await check('Image Variant Select: packs as rows; a photo dropdown of whole variants per item', async () => {
+await check('Image Variant Select: packs as rows; per item a photo and Size / Color photo dropdowns side by side', async () => {
   const { page, errors } = await open(props('image_slots'));
   await page.getByRole('radio', { name: /Buy 2/ }).click();
   assert.equal(await page.locator('#preview .brix-packs-tier').count(), 3, 'packs as rows');
-  assert.equal(await page.locator('#preview .brix-packs-dd').count(), 2);
-  assert.equal(await page.locator('#preview select').count(), 0, 'no per-option selects');
-  await page.getByRole('button', { name: /^Item 2:/ }).click();
-  await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-image-slots-open.png') });
-  await page.getByRole('option', { name: /^L \/ White/ }).click();
-  assert.match(await page.getByRole('button', { name: /^Item 2:/ }).locator('img').getAttribute('src'), /eeeeee/);
+  assert.equal(await page.locator('#preview .brix-packs-islot').count(), 2);
+  for (const [option, value] of [['Size', 'L'], ['Color', 'White']]) {
+    await page.getByRole('button', { name: new RegExp('^Item 2 ' + option + ':') }).click();
+    await page.getByRole('listbox', { name: 'Item 2 ' + option }).getByRole('option', { name: new RegExp('^' + value + '\\b') }).click();
+  }
+  assert.match(await page.locator('#preview .brix-packs-islot').nth(1).locator('.brix-packs-islot-photo img').getAttribute('src'), /eeeeee/);
+  for (const option of ['Size', 'Color']) {
+    await page.getByRole('button', { name: new RegExp('^Item 1 ' + option + ':') }).click();
+    await page.getByRole('listbox', { name: 'Item 1 ' + option }).getByRole('option').first().click();
+  }
   assert.match(await text(page), /₹171\.00/); // (80 + 100) x 0.95
   await page.locator('#preview').screenshot({ path: path.join(shotDir, 'preview-image-slots.png') });
   assert.deepEqual(errors, []);
@@ -108,11 +112,12 @@ await check('thumbnail (demo): second pack chosen with one item already picked',
   await page.close();
 });
 
-await check('Same Variant Pack, single-variant product: one selection, no dropdowns, product name instead of Default Title', async () => {
+await check('Same Variant Pack, single-variant product: one entry per item, no dropdowns, ready to add, no Default Title', async () => {
   const { page, errors } = await open(props('slots', { packType: 'same_variant', template: 'same_variant', productOptions: ['Title'], variants: [{ id: '300', title: 'Default Title', options: ['Default Title'], price: 80, availableForSale: true, image: swatch('#3366cc') }] }));
   await page.getByRole('radio', { name: /Buy 3/ }).click();
   assert.equal(await page.locator('#preview select').count(), 0);
-  assert.match(await text(page), /all 3 items/i);
+  assert.equal(await page.locator('#preview .brix-packs-slot').count(), 3, 'Buy 3 -> three items');
+  assert.equal(await page.locator('#preview .brix-packs-add').isDisabled(), false, 'nothing to choose');
   assert.doesNotMatch(await text(page), /Default Title/);
   assert.deepEqual(errors, []);
   await page.close();

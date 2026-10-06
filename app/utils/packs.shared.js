@@ -24,7 +24,7 @@ export const PACK_TEMPLATES = [
 // belongs to a *product* on — same_variant vs mix_match — and always keeps
 // `template` in sync: mix_match forces template='choose_each_item'.
 export const PACK_TYPES = [
-  { id: 'same_variant', name: 'Same Variant', templates: ['same_variant', 'visual_offer'], defaultTemplate: 'same_variant', description: 'Customer buys multiple quantities of the same selected variant.', example: 'Black / Medium × 3' },
+  { id: 'same_variant', name: 'Same Variant', templates: ['same_variant', 'visual_offer'], defaultTemplate: 'same_variant', description: 'Customer buys multiple quantities. With Horizontal Select or Image Variant Select each item is still chosen separately; Quick Add Picker uses one variant for all.', example: 'Black / Medium × 3' },
   { id: 'mix_match', name: 'Mix & Match', templates: ['choose_each_item'], defaultTemplate: 'choose_each_item', description: 'Customer can combine different variants in one Pack.', example: 'Black / Medium + White / Small + Blue / Medium' },
 ];
 export const VALID_PACK_TYPES = new Set(PACK_TYPES.map((type) => type.id));
@@ -416,16 +416,18 @@ export const DEFAULT_CUSTOMIZATION = {
 // are rendered by packs_widget.js (the admin PackPreview mounts that same
 // widget): 'slots' = one compact slot per item with a dropdown per Shopify
 // option, 'quick_add' = a grid of variant cards with a top-right "+" button,
-// 'image_slots' = the packs as rows instead; the chosen row opens one photo
-// dropdown per item listing whole variants. `style` only nudges shape/spacing — never colors, so switching
+// 'image_slots' = the packs as rows instead; the chosen row shows each item's
+// photo with a dropdown per option side by side, like 'slots' (a photo
+// dropdown for an option whose values have their own variant photos, e.g.
+// Color). Nothing is pre-selected. `style` only nudges shape/spacing — never colors, so switching
 // keeps the merchant's palette (content, savings and Pack behaviour too).
 export const PACK_DESIGNS = [
   { id: 'slots', name: 'Horizontal Select', description: 'Pack cards in a row. Each item gets its own slot with a dropdown for every product option.',
     highlights: ['Horizontal packs', 'One slot per item', 'Option dropdowns'], style: { borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 10 } } },
   { id: 'quick_add', name: 'Quick Add Picker', description: 'Pack cards in a row over a grid of variant photos. Shoppers tap + to add each item.',
     highlights: ['Horizontal packs', 'Variant photo grid', '+ quick add', 'Selected count'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 10 } } },
-  { id: 'image_slots', name: 'Image Variant Select', description: 'Packs as rows. The chosen pack opens a photo dropdown per item listing every variant with its photo and price.',
-    highlights: ['Stacked packs', 'Photo dropdown per item', 'Whole-variant choices'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
+  { id: 'image_slots', name: 'Image Variant Select', description: 'Packs as rows. Each item shows its photo and a dropdown per option (size, color…) side by side — with variant photos for options that have them.',
+    highlights: ['Stacked packs', 'Option dropdowns', 'Variant photos'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
