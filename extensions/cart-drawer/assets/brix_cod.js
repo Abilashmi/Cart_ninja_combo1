@@ -1491,26 +1491,53 @@
     return /\/products\/[^/?#]+/.test(window.location.pathname);
   }
 
-  function findProductForm() {
+  // Never the product's own form: drawers, quick-add popups, recommendations.
+  var FOREIGN_FORM = '[data-cart-ninja-drawer], cart-drawer, .quick-add-modal, product-recommendations';
+  // Product cards (other products). Dawn-style themes also put the main
+  // product column in a .grid__item, so that one doesn't count as a card.
+  var CARD_FORM = '.card, .product-card, .card-wrapper, .grid__item:not(.product__info-wrapper)';
+
+  function isShown(el) {
+    return Boolean(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+
+  // The Add to Cart form of the product on this page. Themes often have
+  // several /cart/add forms here (a hidden installment form, a sticky bar
+  // that's hidden until scroll, upsell cards), so the best one is: a form with
+  // an Add to Cart button, holding one of this product's variants, visible.
+  // Without the product's variant list it falls back to any non-card form.
+  function findProductForm(variantIds) {
     var scope = document.querySelector('main') || document;
     var forms = scope.querySelectorAll('form[action*="/cart/add"]');
+    var best = null;
+    var bestScore = -1;
     for (var i = 0; i < forms.length; i++) {
       var f = forms[i];
-      if (!f.querySelector('[name="id"]')) continue;
-      if (f.closest('[data-cart-ninja-drawer], cart-drawer, .quick-add-modal, product-recommendations, .card, .product-card, .grid__item')) continue;
-      return f;
+      var idEl = f.querySelector('[name="id"]');
+      if (!idEl || !submitButtonFor(f) || f.closest(FOREIGN_FORM)) continue;
+      var ours = variantIds.length > 0 && variantIds.indexOf(String(idEl.value)) !== -1;
+      if (variantIds.length > 0 ? !ours : f.closest(CARD_FORM)) continue;
+      var score = (isShown(f) ? 2 : 0) + (f.closest(CARD_FORM) ? 0 : 1);
+      if (score > bestScore) { best = f; bestScore = score; }
     }
-    return null;
+    return best;
+  }
+
+  // form.id is shadowed by an <input name="id">, which every product form has.
+  function formIdOf(form) {
+    return form.getAttribute('id') || '';
   }
 
   function submitButtonFor(form) {
+    var id = formIdOf(form);
     return form.querySelector('[type="submit"][name="add"], button[name="add"], [type="submit"]')
-      || (form.id ? document.querySelector('[type="submit"][form="' + form.id + '"]') : null);
+      || (id ? document.querySelector('[type="submit"][form="' + id + '"]') : null);
   }
 
   function formSelection(form) {
     var idEl = form.querySelector('[name="id"]');
-    var qtyEl = form.querySelector('[name="quantity"]') || (form.id ? document.querySelector('[name="quantity"][form="' + form.id + '"]') : null);
+    var id = formIdOf(form);
+    var qtyEl = form.querySelector('[name="quantity"]') || (id ? document.querySelector('[name="quantity"][form="' + id + '"]') : null);
     var properties = {};
     try {
       var fd = new FormData(form);
@@ -1526,23 +1553,34 @@
     };
   }
 
-  function productTags() {
+  // Tags (for excluded tags) and variant ids (to find the right form) of the
+  // product on this page.
+  function productInfo() {
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+    var metaIds = meta && Array.isArray(meta.variants) ? meta.variants.map(function (v) { return String(v.id); }) : [];
     var m = /\/products\/([^/?#]+)/.exec(window.location.pathname);
-    if (!m) return Promise.resolve([]);
+    if (!m) return Promise.resolve({ tags: [], variantIds: metaIds });
     return window.fetch(ROOT + 'products/' + m[1] + '.js', { headers: { Accept: 'application/json' } })
       .then(function (r) { return r.json(); })
-      .then(function (p) { return Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(','); })
-      .catch(function () { return []; });
+      .then(function (p) {
+        var ids = Array.isArray(p.variants) ? p.variants.map(function (v) { return String(v.id); }) : [];
+        return {
+          tags: Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(','),
+          variantIds: metaIds.length ? metaIds : ids,
+        };
+      })
+      .catch(function () { return { tags: [], variantIds: metaIds }; });
   }
 
   function initProductButton() {
     if (!isProductPage()) return;
     loadConfig().then(function (cfg) {
       if (!cfg || cfg.surfaces.product === false) return;
-      var form = findProductForm();
-      var slot = document.querySelector('[data-brix-cod-slot]');
-      if (!form) return;
-      productTags().then(function (tags) {
+      productInfo().then(function (info) {
+        var form = findProductForm(info.variantIds);
+        var slot = document.querySelector('[data-brix-cod-slot]');
+        if (!form) return;
+        var tags = info.tags;
         var excluded = (cfg.excludedProductTags || []).map(function (t) { return String(t).toLowerCase(); });
         if (excluded.length && tags.some(function (t) { return excluded.indexOf(String(t).trim().toLowerCase()) !== -1; })) return;
         var addBtn = submitButtonFor(form);

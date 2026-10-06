@@ -63,6 +63,20 @@ const handler = async (route) => {
   const body = route.request().postData() ? JSON.parse(route.request().postData()) : null;
   const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data), headers: { 'Access-Control-Allow-Origin': '*' } });
   if (url.hostname === 'www.googletagmanager.com' || url.hostname === 'connect.facebook.net') { tagLoads.push(url.href); return route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }); }
+  // A Dawn-based theme like House of KO's: several /cart/add forms before the
+  // real one, which sits in a .product__info-wrapper.grid__item column.
+  if (url.origin === 'https://shop.test' && url.pathname === '/dawn') {
+    return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><main>
+      <div class="hidden" style="display:none"><form action="/cart/add" id="sticky-form"><input type="hidden" name="id" value="21"><button type="submit" name="add">Add</button></form></div>
+      <div class="upsell"><form action="/cart/add" id="upsell-form"><input type="hidden" name="id" value="99"><button type="submit" name="add">Add upsell</button></form></div>
+      <div class="product__info-wrapper grid__item">
+        <form action="/cart/add" id="product-form-installment"><input type="hidden" name="id" value="21"></form>
+        <form action="/cart/add" id="product-form-main"><input type="hidden" name="id" value="21" disabled><button type="submit" name="add">Add to cart</button></form>
+      </div>
+      <div class="grid__item"><div class="card"><form action="/cart/add" id="card-form"><input type="hidden" name="id" value="22"><button type="submit" name="add">Add</button></form></div></div>
+      </main><script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'}};window.ShopifyAnalytics={meta:{page:{pageType:'product'},product:{variants:[{id:21},{id:22}]}}};</script>
+      <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
+  }
   if (url.origin === 'https://shop.test' && url.pathname === '/') {
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body style="font-family:Arial,sans-serif"><main>
       <form action="/cart/add" id="product-form"><input type="hidden" name="id" value="11"><input name="quantity" value="2"><input name="properties[Engraving]" value="AR"><button type="submit" name="add">Add to cart</button></form>
@@ -323,6 +337,17 @@ check('no tags: GA4 configured without a page view, pixel initialised once', awa
   return cfg.length === 1 && cfg[0][1] === 'G-TEST123' && cfg[0][2].send_page_view === false && inits.length === 1 && inits[0][1] === '123456789012345';
 }));
 await page2.close();
+
+// Dawn-style product page: the button goes on the visible main form, not the
+// hidden installment / sticky forms or another product's upsell card.
+const page3 = await browser.newPage();
+await page3.route('**/*', handler);
+await page3.goto('https://shop.test/dawn');
+const dawnBtn = page3.locator('[data-brix-cod-btn]');
+await dawnBtn.first().waitFor({ timeout: 5000 }).catch(() => {});
+const dawn = await page3.evaluate(() => [...document.querySelectorAll('[data-brix-cod-btn]')].map((b) => ({ form: b.closest('form') && b.closest('form').getAttribute('id'), shown: b.getBoundingClientRect().height > 0 })));
+check('product page (Dawn layout): one visible button, on the main Add to cart form', dawn.length === 1 && dawn[0].form === 'product-form-main' && dawn[0].shown, JSON.stringify(dawn));
+await page3.close();
 check('settings and PIN lookups come from the PHP backend', phpReads.includes('config') && phpReads.includes('pincode'));
 check('OTP, pricing and the order go through the PHP relay', ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].every((p) => posted.some((x) => x.path === p)));
 check('the browser never calls the app server directly', directAppCalls.length === 0, directAppCalls.join(', '));
