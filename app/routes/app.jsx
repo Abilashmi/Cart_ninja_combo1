@@ -34,6 +34,9 @@ export const loader = async ({ request }) => {
     };
 };
 
+// Stores that see COD Checkout in the nav while it's hidden for everyone else.
+const COD_NAV_SHOPS = ['house-of-ko-4.myshopify.com'];
+
 // s-app-nav / s-link are Shopify App Bridge native web components. Plain
 // text content always renders; nested React icon components (e.g.
 // @shopify/polaris-icons SVGs) do not, and s-badge doesn't pick up Polaris
@@ -79,7 +82,9 @@ export default function App() {
                             <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/packs">Packs</s-link>
                             {/* COD Checkout is hidden from the nav until it's ready for
-                                merchants; the page still works at /app/cod. */}
+                                merchants, except for the stores in COD_NAV_SHOPS; the
+                                page still works at /app/cod. */}
+                            {COD_NAV_SHOPS.includes(shop) && <s-link href="/app/cod">COD Checkout</s-link>}
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
