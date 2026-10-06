@@ -31,8 +31,9 @@
   var PHP_API = ((script && script.getAttribute('data-php')) || 'https://int.thebrix.io').replace(/\/$/, '');
   var SHOP = (script && script.getAttribute('data-shop')) || (window.Shopify && window.Shopify.shop) || '';
   var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
+  var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v2';
+  var CONFIG_KEY = 'brix_cod_config_v4'; // bump when the config shape changes (v4: GA4 / Meta Pixel IDs)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -92,6 +93,180 @@
     }, function () { return { success: false, code: 'network' }; });
   }
 
+  /* ---------- tracking: GA4 + Meta Pixel ---------- */
+
+  // COD orders skip Shopify checkout, so the store's own Google / Meta setup
+  // never sees them. The popup fires the funnel itself, to the IDs the
+  // merchant set in the BRIX admin (cfg.tracking). The server sends its own
+  // copy of the Purchase (cod-tracking.server.js) with the same ids
+  // (transaction_id = order name, eventID = brixcod_<order id>), so each
+  // order is counted once. Nothing fires without the shopper's consent from
+  // Shopify's Customer Privacy API; tags load only when the popup is used.
+  var FBC_KEY = 'brix_cod_fbc_v1';
+  try {
+    var fbclid = new URLSearchParams(window.location.search).get('fbclid');
+    if (fbclid && /^[\w.-]{1,200}$/.test(fbclid)) writeStore('sessionStorage', FBC_KEY, 'fb.1.' + Date.now() + '.' + fbclid);
+  } catch (e) { /* old browsers */ }
+
+  var Track = (function () {
+    var gaReady = {}, fbReady = {};
+
+    function consent() {
+      var p = window.Shopify && window.Shopify.customerPrivacy;
+      function ask(fn) {
+        try { return p && typeof p[fn] === 'function' ? p[fn]() !== false : true; } catch (e) { return true; }
+      }
+      // No privacy API on the page = no consent banner configured: Shopify's own default is allowed.
+      return { analytics: ask('analyticsProcessingAllowed'), marketing: ask('marketingAllowed') };
+    }
+
+    function cookie(name) {
+      var m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.$?*|{}()[\]\\/+^]/g, '\\$&') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function loadScript(src) {
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = src;
+      (document.head || document.documentElement).appendChild(s);
+    }
+
+    function ensureGtag(id) {
+      if (gaReady[id]) return;
+      if (typeof window.gtag !== 'function') {
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { window.dataLayer.push(arguments); };
+        window.gtag('js', new Date());
+        loadScript('https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id));
+      }
+      window.gtag('config', id, { send_page_view: false });
+      gaReady[id] = true;
+    }
+
+    function ensureFbq(id) {
+      if (fbReady[id]) return;
+      if (typeof window.fbq !== 'function') {
+        var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!window._fbq) window._fbq = n;
+        n.push = n; n.loaded = true; n.version = '2.0'; n.queue = [];
+        loadScript('https://connect.facebook.net/en_US/fbevents.js');
+      }
+      var state = null;
+      try { state = typeof window.fbq.getState === 'function' ? window.fbq.getState() : null; } catch (e) { state = null; }
+      var known = state && state.pixels && state.pixels.some(function (p) { return String(p.id) === id; });
+      if (!known) {
+        window.fbq('set', 'autoConfig', false, id); // no automatic button-click events from our init
+        window.fbq('init', id);
+      }
+      fbReady[id] = true;
+    }
+
+    // Mirrors catalogItemId in app/services/cod-tracking.server.js.
+    function itemId(line, format) {
+      if (format === 'sku' && line.sku) return line.sku;
+      if (format === 'shopify' && line.productId && line.variantId) return 'shopify_IN_' + line.productId + '_' + line.variantId;
+      return String(line.variantId || line.sku || line.title || '');
+    }
+
+    function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+    // GA4 names / Meta names for each funnel step (custom ones use trackSingleCustom).
+    var EVENTS = {
+      begin_checkout: { ga: 'begin_checkout', meta: 'InitiateCheckout' },
+      otp_verified: { ga: 'cod_otp_verified', meta: 'CodOtpVerified', custom: true },
+      add_shipping_info: { ga: 'add_shipping_info', meta: 'CodAddressAdded', custom: true },
+      add_payment_info: { ga: 'add_payment_info', meta: 'AddPaymentInfo' },
+      purchase: { ga: 'purchase', meta: 'Purchase' },
+    };
+
+    /** name: a key of EVENTS. quote: the latest quote. order: the placed order (purchase only). */
+    function send(cfg, name, quote, order) {
+      var ev = EVENTS[name];
+      if (!ev || !quote) return;
+      var t = (cfg && cfg.tracking) || {};
+      var c = consent();
+      var lines = quote.lines || [];
+      var coupon = quote.coupon && quote.coupon.applied ? quote.coupon.code : '';
+      var currency = (order && order.currency) || quote.currency;
+      var value = round2(order ? order.total : quote.total);
+      var ga = {
+        currency: currency,
+        value: value,
+        items: lines.map(function (l) {
+          var item = { item_id: itemId(l, t.metaContentId), item_name: l.title, price: round2(l.unitPrice != null ? l.unitPrice : l.total / (l.quantity || 1)), quantity: l.quantity };
+          if (l.variantTitle) item.item_variant = l.variantTitle;
+          return item;
+        }),
+      };
+      if (coupon) ga.coupon = coupon;
+      if (name === 'add_payment_info') ga.payment_type = 'Cash on Delivery';
+      if (order) {
+        ga.transaction_id = order.orderName;
+        ga.tax = round2(quote.tax);
+        ga.shipping = round2((quote.shipping || 0) + (quote.codFee || 0));
+        ga.payment_type = 'Cash on Delivery';
+      }
+      var meta = {
+        currency: currency,
+        value: value,
+        content_type: 'product',
+        content_ids: lines.map(function (l) { return itemId(l, t.metaContentId); }),
+        contents: lines.map(function (l) { return { id: itemId(l, t.metaContentId), quantity: l.quantity }; }),
+        num_items: lines.reduce(function (n, l) { return n + (Number(l.quantity) || 0); }, 0),
+      };
+      if (coupon) meta.coupon = coupon;
+      if (order) meta.order_id = order.orderName;
+
+      try {
+        if (t.ga4Id && c.analytics) {
+          ensureGtag(t.ga4Id);
+          window.gtag('event', ev.ga, Object.assign({ send_to: t.ga4Id }, ga));
+        }
+      } catch (e) { /* never break the popup */ }
+      try {
+        if (t.metaPixelId && c.marketing) {
+          ensureFbq(t.metaPixelId);
+          var opts = order ? { eventID: 'brixcod_' + String(order.orderId || '').split('/').pop() } : undefined;
+          window.fbq(ev.custom ? 'trackSingleCustom' : 'trackSingle', t.metaPixelId, ev.meta, meta, opts);
+        }
+      } catch (e) { /* never break the popup */ }
+      try {
+        // GTM: the store's own container decides what to do with these (and checks consent itself).
+        if (t.dataLayer !== false && Array.isArray(window.dataLayer)) {
+          window.dataLayer.push({ ecommerce: null });
+          window.dataLayer.push({ event: 'brix_cod_' + name, ecommerce: ga });
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        document.dispatchEvent(new CustomEvent('brix:cod:track', { detail: { name: name, ga4: ga, meta: meta, consent: c } }));
+      } catch (e) { /* old browsers */ }
+    }
+
+    /** What the server needs for its own copy of the Purchase (checked again there). */
+    function context() {
+      var ga = cookie('_ga').split('.');
+      var gaClientId = ga.length >= 4 ? ga[ga.length - 2] + '.' + ga[ga.length - 1] : '';
+      var t = (configValue && configValue.tracking) || {};
+      var gaSessionId = '';
+      if (t.ga4Id) {
+        var s = cookie('_ga_' + t.ga4Id.replace(/^G-/, ''));
+        var m = /^GS1\.\d+\.(\d+)\./.exec(s) || /(?:^|[.$])s(\d+)/.exec(s);
+        if (m) gaSessionId = m[1];
+      }
+      return {
+        gaClientId: gaClientId,
+        gaSessionId: gaSessionId,
+        fbp: cookie('_fbp'),
+        fbc: cookie('_fbc') || readStore('sessionStorage', FBC_KEY) || '',
+        consent: consent(),
+        pageUrl: String(window.location.href).slice(0, 500),
+      };
+    }
+
+    return { send: send, context: context };
+  })();
+
   /* ---------- config ---------- */
 
   var configPromise = null;
@@ -137,59 +312,280 @@
 
   /* ---------- sheet UI ---------- */
 
+  // --cod-bg / --cod-fg are the merchant's button colours; --tint is a light
+  // wash of --cod-bg for accents (plain grey where color-mix is missing).
   var CSS = [
     ':host{all:initial}',
     '*{box-sizing:border-box;font-family:inherit}',
-    '.ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483647;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .2s}',
+    '.ov{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2147483647;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .22s;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}',
     '.ov.on{opacity:1}',
-    '.sh{background:#fff;color:#111827;width:100%;max-width:460px;max-height:92vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;transform:translateY(24px);transition:transform .22s;font-size:15px;line-height:1.45;box-shadow:0 -10px 40px rgba(0,0,0,.2)}',
+    '.sh{--tint:#f3f4f6;--tint:color-mix(in srgb,var(--cod-bg,#111827) 9%,#fff);--ring:color-mix(in srgb,var(--cod-bg,#111827) 35%,transparent);background:#fff;color:#111827;width:100%;max-width:460px;max-height:92vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;transform:translateY(40px);transition:transform .28s cubic-bezier(.2,.9,.3,1.15);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.45;box-shadow:0 -12px 48px rgba(0,0,0,.22);overflow:hidden;position:relative}',
     '.ov.on .sh{transform:none}',
-    '@media (min-width:640px){.ov{align-items:center}.sh{border-radius:16px}}',
-    '.hd{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid #eef0f3}',
-    '.hd .t{flex:1;font-weight:700;font-size:16px}',
-    '.ib{background:none;border:0;cursor:pointer;color:#111827;font-size:20px;line-height:1;padding:4px 6px;border-radius:8px}',
-    '.ib:focus-visible,.b:focus-visible,input:focus-visible,select:focus-visible,.lk:focus-visible{outline:2px solid #2563eb;outline-offset:2px}',
-    '.tag{font-size:11px;font-weight:700;letter-spacing:.04em;background:#ecfdf3;color:#067647;padding:3px 8px;border-radius:99px}',
-    '.steps{display:flex;gap:6px;padding:12px 18px 0}',
-    '.steps i{flex:1;height:4px;border-radius:4px;background:#e5e7eb}',
-    '.steps i.on{background:var(--cod-bg,#111827)}',
-    '.bd{padding:16px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}',
-    '.ft{padding:14px 18px 18px;border-top:1px solid #eef0f3;display:flex;flex-direction:column;gap:8px}',
+    '.sh.drag{transition:none}',
+    '@media (min-width:640px){.ov{align-items:center}.sh{border-radius:20px}.grab{display:none}}',
+    '.grab{width:40px;height:5px;border-radius:5px;background:#d1d5db;margin:8px auto 0;flex:none}',
+    '.hd{display:flex;align-items:center;gap:8px;padding:10px 14px 10px 16px;touch-action:none}',
+    '.hd .t{flex:1;font-weight:750;font-size:17px;letter-spacing:-.01em}',
+    '.ib{background:none;border:0;cursor:pointer;color:#374151;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;transition:background .15s}',
+    '.ib:hover{background:#f3f4f6}',
+    '.ib:focus-visible,.b:focus-visible,input:focus-visible,select:focus-visible,.lk:focus-visible,.sum-h:focus-visible{outline:2px solid var(--cod-bg,#2563eb);outline-offset:2px}',
+    '.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:750;letter-spacing:.04em;background:#ecfdf3;color:#067647;padding:4px 9px;border-radius:99px}',
+    /* stepper */
+    '.stp{display:flex;align-items:flex-start;padding:2px 18px 12px;gap:0}',
+    '.stp .s{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;width:64px;font-size:11.5px;font-weight:600;color:#9ca3af}',
+    '.stp .s b{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;background:#f3f4f6;color:#6b7280;transition:background .25s,color .25s,box-shadow .25s}',
+    '.stp .s.cur{color:#111827}.stp .s.cur b{background:var(--cod-bg,#111827);color:var(--cod-fg,#fff);box-shadow:0 0 0 4px var(--tint)}',
+    '.stp .s.dn{color:#374151}.stp .s.dn b{background:var(--tint);color:var(--cod-bg,#111827)}',
+    '.stp .ln{flex:1;height:3px;border-radius:3px;background:#eef0f3;margin-top:12px;position:relative;overflow:hidden}',
+    '.stp .ln:after{content:"";position:absolute;inset:0;background:var(--cod-bg,#111827);transform:scaleX(0);transform-origin:left;transition:transform .4s ease}',
+    '.stp .ln.on:after{transform:scaleX(1)}',
+    /* layout */
+    '.bd{padding:4px 18px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;overscroll-behavior:contain}',
+    '.bd.fw{animation:inR .28s ease both}.bd.bw{animation:inL .28s ease both}',
+    '@keyframes inR{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}',
+    '@keyframes inL{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}',
+    '.ft{padding:12px 18px 18px;border-top:1px solid #eef0f3;display:flex;flex-direction:column;gap:8px;background:#fff}',
+    '.ftot{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:#4b5563}',
+    '.ftot b{font-size:20px;color:#111827;font-weight:800}',
+    /* fields */
     '.f{display:flex;flex-direction:column;gap:5px}',
-    '.f label{font-size:12.5px;font-weight:600;color:#4b5563}',
-    'input,select{font:inherit;font-size:16px;color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:10px;padding:11px 12px;width:100%}',
-    '.pre{display:flex;border:1px solid #d1d5db;border-radius:10px;overflow:hidden}',
-    '.pre span{padding:11px 10px;background:#f3f4f6;font-size:15px;display:flex;align-items:center;color:#374151}',
-    '.pre input{border:0;border-radius:0}',
+    '.f label{font-size:12.5px;font-weight:650;color:#4b5563}',
+    'input,select{font:inherit;font-size:16px;color:#111827;background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:12px 13px;width:100%;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none}',
+    'select{background-image:linear-gradient(45deg,transparent 50%,#6b7280 50%),linear-gradient(135deg,#6b7280 50%,transparent 50%);background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}',
+    'input:focus,select:focus{outline:none;border-color:var(--cod-bg,#2563eb);box-shadow:0 0 0 4px var(--ring,rgba(37,99,235,.2))}',
+    '[aria-invalid="true"],.pre.bad{border-color:#f04438 !important;box-shadow:0 0 0 4px rgba(240,68,56,.14) !important}',
+    '.pre{display:flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s}',
+    '.pre:focus-within{border-color:var(--cod-bg,#2563eb);box-shadow:0 0 0 4px var(--ring,rgba(37,99,235,.2))}',
+    '.pre>span{padding:12px 4px 12px 13px;font-size:16px;font-weight:600;display:flex;align-items:center;gap:6px;color:#374151}',
+    '.pre input{border:0;border-radius:0;box-shadow:none !important;padding-left:8px}',
+    '.pre .okc{margin-right:12px;color:#12b76a;opacity:0;transform:scale(.5);transition:opacity .2s,transform .25s cubic-bezier(.2,.9,.3,1.5)}',
+    '.pre.valid .okc{opacity:1;transform:none}',
     '.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
-    '.otp{font-size:24px;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums}',
-    '.b{font:inherit;font-weight:700;font-size:15px;border-radius:12px;padding:14px 16px;border:1px solid transparent;cursor:pointer;width:100%;display:flex;justify-content:center;align-items:center;gap:8px}',
-    '.b.p{background:var(--cod-bg,#111827);color:var(--cod-fg,#fff)}',
-    '.b.s{background:#fff;color:#111827;border-color:#d1d5db}',
-    '.b:disabled{opacity:.5;cursor:not-allowed}',
-    '.lk{background:none;border:0;padding:0;font:inherit;color:#2563eb;font-weight:600;cursor:pointer;text-decoration:underline}',
-    '.n{font-size:13px;padding:10px 12px;border-radius:10px;line-height:1.4}',
+    '[data-alt]{display:flex;flex-direction:column}[data-alt][hidden]{display:none}',
+    'a.b{text-decoration:none}',
+    /* trust badges */
+    '.trust{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}',
+    '.trust div{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;font-size:11.5px;font-weight:600;color:#4b5563;padding:10px 4px;border:1px solid #f0f1f3;border-radius:12px}',
+    '.trust svg{color:var(--cod-bg,#111827)}',
+    /* order summary strip */
+    '.sum{border:1px solid #eef0f3;border-radius:14px;background:#fafafa;overflow:hidden}',
+    '.sum-h{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}',
+    '.thumbs{display:flex;flex:none}',
+    '.thumbs img,.thumbs .ph{width:34px;height:34px;border-radius:9px;object-fit:cover;background:#eef0f3;border:2px solid #fafafa;margin-left:-10px}',
+    '.thumbs>:first-child{margin-left:0}',
+    '.sum-t{flex:1;display:flex;flex-direction:column;font-size:13.5px;line-height:1.3}',
+    '.sum-p{font-weight:750}',
+    '.chev{transition:transform .25s;color:#6b7280}',
+    '.sum.open .chev{transform:rotate(180deg)}',
+    '.sum-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s ease}',
+    '.sum.open .sum-b{grid-template-rows:1fr}',
+    '.sum-b>div{overflow:hidden}',
+    '.sum-b .in{padding:2px 12px 12px;display:flex;flex-direction:column;gap:10px}',
+    /* buttons */
+    '.b{font:inherit;font-weight:750;font-size:15.5px;border-radius:14px;padding:15px 16px;border:1.5px solid transparent;cursor:pointer;width:100%;display:flex;justify-content:center;align-items:center;gap:8px;transition:transform .12s,filter .15s,opacity .15s;-webkit-tap-highlight-color:transparent}',
+    '.b:active:not(:disabled){transform:scale(.98)}',
+    '.b.p{background:var(--cod-bg,#111827);color:var(--cod-fg,#fff);box-shadow:0 6px 18px -6px var(--ring,rgba(0,0,0,.3))}',
+    '.b.p:hover:not(:disabled){filter:brightness(1.06)}',
+    '.b.s{background:#fff;color:#111827;border-color:#e5e7eb}',
+    '.b.s:hover{background:#f9fafb}',
+    '.b:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}',
+    '.lk{background:none;border:0;padding:0;font:inherit;color:var(--cod-bg,#2563eb);font-weight:650;cursor:pointer;text-decoration:underline;text-underline-offset:2px}',
+    /* notes */
+    '.n{font-size:13px;padding:10px 12px;border-radius:12px;line-height:1.4;display:flex;gap:8px;align-items:flex-start}',
+    '.n>svg{flex:none;margin-top:1px}',
     '.n.ok{background:#ecfdf3;color:#067647}',
-    '.n.er{background:#fef3f2;color:#b42318}',
+    '.n.er{background:#fef3f2;color:#b42318;animation:pop .25s ease}',
     '.n.in{background:#eff6ff;color:#1e40af}',
     '.n.wa{background:#fffaeb;color:#93370d}',
+    '@keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}',
     '.mu{color:#6b7280;font-size:13px}',
-    '.li{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center}',
-    '.li img,.li .ph{width:44px;height:44px;border-radius:8px;object-fit:cover;background:#f3f4f6}',
-    '.li .nm{font-weight:600;font-size:14px}',
-    '.rows{display:flex;flex-direction:column;gap:6px;font-size:14px}',
+    '.pst{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#6b7280;min-height:18px}',
+    '.pst.ok{color:#067647}',
+    /* OTP boxes: one real input (autofill/paste friendly) over four painted boxes */
+    '.otpw{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:100%;max-width:280px;margin:4px auto 0;align-self:center}',
+    '.otpw i{font-style:normal;height:58px;border:1.5px solid #e5e7eb;border-radius:14px;display:grid;place-items:center;font-size:26px;font-weight:750;font-variant-numeric:tabular-nums;background:#fff;transition:border-color .15s,box-shadow .15s,transform .15s}',
+    '.otpw i.fi{border-color:#9ca3af;animation:popin .18s ease}',
+    '.otpw.foc i.ac{border-color:var(--cod-bg,#2563eb);box-shadow:0 0 0 4px var(--ring,rgba(37,99,235,.2))}',
+    '.otpw.foc i.ac:after{content:"";width:2px;height:26px;background:var(--cod-bg,#111827);animation:blink 1s step-end infinite}',
+    '.otpw.bad i{border-color:#f04438;color:#b42318}',
+    '.otpw.good i{border-color:#12b76a;background:#ecfdf3;color:#067647}',
+    '.otpw.shake{animation:shake .4s ease}',
+    '.otpw .otp{position:absolute;inset:0;width:100%;height:100%;opacity:.01;color:transparent;caret-color:transparent;background:transparent;border:0;box-shadow:none;font-size:16px;letter-spacing:2em;padding:0 0 0 1em}',
+    '@keyframes shake{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}',
+    '@keyframes popin{from{transform:scale(.88)}to{transform:none}}',
+    '@keyframes blink{50%{opacity:0}}',
+    '.rs{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;color:#6b7280}',
+    '.ring{width:18px;height:18px;transform:rotate(-90deg)}',
+    '.ring circle{fill:none;stroke-width:3}',
+    /* address card */
+    '.card{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1.5px solid var(--cod-bg,#111827);border-radius:16px;background:var(--tint);font-size:14px}',
+    '.card .ic{flex:none;color:var(--cod-bg,#111827);margin-top:1px}',
+    '.card .cb{flex:1;min-width:0}',
+    '.card .cb b{display:block;font-size:14.5px;margin-bottom:2px}',
+    '.card.plain{border:1px solid #eef0f3;background:#fff}',
+    '.ttl{font-size:12px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin:2px 0 -6px}',
+    '.fm{display:flex;flex-direction:column;gap:12px}',
+    '.fm[hidden]{display:none}',
+    /* review */
+    '.li{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center}',
+    '.li .im{position:relative;width:52px;height:52px}',
+    '.li img,.li .ph{width:52px;height:52px;border-radius:12px;object-fit:cover;background:#f3f4f6;display:block}',
+    '.li .q{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#374151;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid #fff}',
+    '.li .nm{font-weight:650;font-size:14px;line-height:1.3}',
+    '.rows{display:flex;flex-direction:column;gap:7px;font-size:14px;padding:12px 14px;border-radius:14px;background:#fafafa}',
     '.rows div{display:flex;justify-content:space-between;gap:12px}',
-    '.rows .tot{font-weight:800;font-size:16px;border-top:1px dashed #d1d5db;padding-top:8px;margin-top:2px}',
+    '.rows .tot{font-weight:800;font-size:16px;border-top:1px dashed #d1d5db;padding-top:9px;margin-top:2px}',
+    '.save{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13.5px;font-weight:700;color:#067647;background:#ecfdf3;border-radius:12px;padding:9px 12px}',
+    '.pay{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid #eef0f3}',
+    '.pay .ic{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--cod-bg,#111827)}',
+    '.pay .cb{flex:1;font-size:13px;color:#6b7280}.pay .cb b{display:block;font-size:14.5px;color:#111827}',
+    '.nud{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);color:#1e3a8a;font-size:13px}',
+    '.nud .cb{flex:1}',
+    '.nud .b{width:auto;padding:8px 12px;font-size:13px;border-radius:10px;background:#fff;color:#1e3a8a;border-color:#c7d2fe;flex:none}',
     '.num{font-variant-numeric:tabular-nums;white-space:nowrap}',
     '.st{text-decoration:line-through;color:#9ca3af;font-weight:400;margin-right:6px}',
-    '.done{align-items:center;text-align:center;padding:28px 18px}',
-    '.tick{width:60px;height:60px;border-radius:50%;background:#16a34a;color:#fff;display:grid;place-items:center;font-size:30px;font-weight:700}',
-    '.big{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}',
-    '.sp{width:22px;height:22px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:var(--cod-bg,#111827);animation:r .7s linear infinite}',
-    '.ld{padding:48px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;color:#6b7280}',
+    /* done */
+    '.done{align-items:center;text-align:center;padding:26px 18px 18px;position:relative}',
+    '.tick{width:76px;height:76px;border-radius:50%;background:#12b76a;color:#fff;display:grid;place-items:center;box-shadow:0 0 0 10px #ecfdf3;animation:popin .45s cubic-bezier(.2,.9,.3,1.5) both}',
+    '.tick path{stroke-dasharray:30;stroke-dashoffset:30;animation:draw .45s .25s ease forwards}',
+    '@keyframes draw{to{stroke-dashoffset:0}}',
+    '.oid{display:inline-flex;align-items:center;gap:6px;font-weight:700;background:#f3f4f6;border-radius:99px;padding:5px 6px 5px 12px;font-size:14px}',
+    '.oid button{all:unset;cursor:pointer;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:#fff;color:#374151;display:inline-flex;gap:4px;align-items:center}',
+    '.amt{width:100%;border-radius:16px;background:var(--tint);padding:14px}',
+    '.big{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}',
+    '.tl{width:100%;text-align:left;display:flex;flex-direction:column;gap:0;margin-top:4px}',
+    '.tl div{display:flex;gap:12px;align-items:flex-start;position:relative;padding-bottom:14px;font-size:13.5px}',
+    '.tl div:last-child{padding-bottom:0}',
+    '.tl div:not(:last-child):before{content:"";position:absolute;left:11px;top:24px;bottom:2px;width:2px;background:#eef0f3}',
+    '.tl i{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#f3f4f6;color:#9ca3af}',
+    '.tl .on i{background:#12b76a;color:#fff}',
+    '.tl b{display:block;font-size:14px}.tl .mu{display:block}',
+    '.cf{position:absolute;inset:0;pointer-events:none;overflow:hidden}',
+    '.cf i{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;opacity:0;animation:fall 1.6s ease-in forwards}',
+    '@keyframes fall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(340px) rotate(540deg)}}',
+    /* loading */
+    '.sp{width:22px;height:22px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:var(--cod-bg,#111827);animation:r .7s linear infinite;flex:none}',
+    '.ld{padding:44px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;color:#6b7280}',
+    '.sk{display:flex;flex-direction:column;gap:12px;padding:6px 18px 22px}',
+    '.sk i{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,#f3f4f6 25%,#e9eaee 50%,#f3f4f6 75%);background-size:200% 100%;animation:shim 1.2s linear infinite}',
+    '.sk .bx{height:52px;border-radius:12px}',
+    '@keyframes shim{to{background-position:-200% 0}}',
+    '.fail{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:10px 0 4px}',
+    '.fail .ic{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:#fef3f2;color:#d92d20}',
     '@keyframes r{to{transform:rotate(360deg)}}',
-    '@media (prefers-reduced-motion:reduce){.ov,.sh{transition:none}.sp{animation-duration:2s}}'
+    /* store logo + body title */
+    '.hd .t{min-width:0;display:flex;align-items:center}',
+    '.lg{display:block;max-width:160px;object-fit:contain;object-position:left center}',
+    '.lg.sm{height:22px}.lg.md{height:30px}.lg.lg{height:38px}',
+    '.bt{margin:0;font-size:18px;font-weight:750;letter-spacing:-.01em}',
+    /* Powered by BRIX */
+    '.pw{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 18px 12px;font-size:11px;color:#9ca3af;background:#fff;flex:none}',
+    '.ft+.pw,.ft~.pw{margin-top:-8px}',
+    '.pw img{height:14px;width:auto;display:block;opacity:.85}',
+    '.pw .bx,.bl .bx{font-weight:800;letter-spacing:.06em;color:#4b5563}',
+    /* BRIX loader */
+    '.bl{padding:46px 18px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;color:#6b7280;font-size:14px}',
+    '.bl-m{position:relative;display:grid;place-items:center;padding:14px 18px;border-radius:18px;animation:blp 1.6s ease-in-out infinite}',
+    '.bl-m:before{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(closest-side,rgba(99,102,241,.18),transparent);animation:blg 1.6s ease-in-out infinite}',
+    '.bl-m img{height:40px;width:auto;display:block;position:relative}',
+    '.bl-m .bx{font-size:28px;position:relative}',
+    '.bl-bar{width:140px;height:4px;border-radius:4px;background:#eef0f3;overflow:hidden}',
+    '.bl-bar i{display:block;width:40%;height:100%;border-radius:4px;background:var(--cod-bg,#4f46e5);animation:blb 1.1s ease-in-out infinite}',
+    '@keyframes blp{50%{transform:scale(1.05)}}',
+    '@keyframes blg{50%{transform:scale(1.25);opacity:.4}}',
+    '@keyframes blb{from{transform:translateX(-100%)}to{transform:translateX(250%)}}',
+    /* coupon */
+    '.cpn-add{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;border:1.5px dashed #d1d5db;border-radius:14px;font-size:14px;color:#374151;transition:border-color .15s,background .15s}',
+    '.cpn-add:hover{border-color:var(--cod-bg,#111827);background:var(--tint)}',
+    '.cpn-add:focus-visible{outline:2px solid var(--cod-bg,#2563eb);outline-offset:2px}',
+    '.cpn-add svg{color:var(--cod-bg,#111827)}',
+    '.cpn-add span{flex:1}.cpn-add b{color:var(--cod-bg,#111827);font-size:13px}',
+    '.cpn-form{display:block}',
+    '.cpn-in{display:flex;align-items:center;gap:8px;border:1.5px solid #e5e7eb;border-radius:12px;padding:0 4px 0 12px;background:#fff;transition:border-color .15s,box-shadow .15s}',
+    '.cpn-in:focus-within{border-color:var(--cod-bg,#2563eb);box-shadow:0 0 0 4px var(--ring,rgba(37,99,235,.2))}',
+    '.cpn-in svg{color:#9ca3af;flex:none}',
+    '.cpn-in input{border:0;box-shadow:none !important;padding:13px 0;font-weight:600;letter-spacing:.04em;text-transform:uppercase;min-width:0;flex:1;background:transparent}',
+    '.cpn-in input::placeholder{font-weight:400;letter-spacing:0;text-transform:none;color:#9ca3af}',
+    '.cpn-paste{all:unset;cursor:pointer;font-size:12px;font-weight:700;color:var(--cod-bg,#111827);padding:5px 9px;border-radius:7px;background:var(--tint)}',
+    '.cpn-in:has(input:not(:placeholder-shown)) .cpn-paste{display:none}',
+    '.cpn-go{all:unset;cursor:pointer;flex:none;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--cod-bg,#111827);padding:9px 10px;border-radius:8px;display:inline-flex;align-items:center}',
+    '.cpn-go:hover{background:var(--tint)}',
+    '.cpn-in:has(input:placeholder-shown) .cpn-go{color:#9ca3af;pointer-events:none}',
+    '.cpn-paste:focus-visible,.cpn-go:focus-visible{outline:2px solid var(--cod-bg,#2563eb)}',
+    '.cpn-form.bad .cpn-in{border-color:#f04438;animation:shake .4s ease}',
+    '.cpn-err{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:#b42318;margin-top:-6px}',
+    '.cpn-err svg{flex:none;margin-top:2px}',
+    '.cpn{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;font-size:14px}',
+    '.cpn.ok{background:#ecfdf3;color:#067647;border:1.5px dashed #6ce9a6}',
+    '.cpn svg{flex:none}',
+    '.cpn .cb{flex:1;display:flex;flex-direction:column;line-height:1.35}.cpn .cb span{font-size:12.5px}',
+    '.cpn .lk{color:#067647}',
+    '.cpn.pop{animation:popin .45s cubic-bezier(.2,.9,.3,1.5)}',
+    '.rows .tot.flash .num{display:inline-block;animation:flash 1.1s ease}',
+    '@keyframes flash{0%{color:#067647;transform:scale(1.14)}100%{transform:none}}',
+    '.ofrs{display:flex;flex-direction:column;gap:10px;margin-top:-2px}',
+    '.ofrs-t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280}',
+    '.ofrs-t span{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--tint);color:var(--cod-bg,#111827);display:grid;place-items:center;font-size:11px;letter-spacing:0}',
+    '.ofr{display:flex;border-radius:12px;background:#fff;box-shadow:0 0 0 1px #eef0f3,0 2px 6px -3px rgba(15,23,42,.12);overflow:hidden;position:relative;animation:pop .25s ease both}',
+    '.ofr-l{flex:none;width:36px;background:var(--cod-bg,#111827);color:var(--cod-fg,#fff);display:flex;align-items:center;justify-content:center;position:relative}',
+    '.ofr-l span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10.5px;font-weight:800;letter-spacing:.08em;white-space:nowrap;padding:10px 0}',
+    '.ofr-l:before,.ofr-l:after{content:"";position:absolute;right:-6px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #eef0f3}',
+    '.ofr-l:before{top:-6px}.ofr-l:after{bottom:-6px}',
+    '.ofr-r{flex:1;min-width:0;padding:10px 6px 10px 14px}',
+    '.ofr-h{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.ofr-c{font-size:14px;font-weight:800;letter-spacing:.05em;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ofr-b{all:unset;cursor:pointer;flex:none;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--cod-bg,#111827);padding:6px 8px;border-radius:8px;display:inline-flex;align-items:center}',
+    '.ofr-b:hover{background:var(--tint)}',
+    '.ofr-b:focus-visible{outline:2px solid var(--cod-bg,#2563eb)}',
+    '.ofr-t{margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:12.5px;color:#4b5563;line-height:1.4}',
+    '.r-soft .cpn,.r-soft .cpn-add,.r-soft .cpn-in,.r-soft .ofr{border-radius:8px}.r-sharp .cpn,.r-sharp .cpn-add,.r-sharp .cpn-in,.r-sharp .ofr{border-radius:3px}',
+    /* corner styles */
+    '.sh.r-soft{border-radius:14px 14px 0 0}.sh.r-sharp{border-radius:6px 6px 0 0}',
+    '@media (min-width:640px){.sh.r-soft{border-radius:14px}.sh.r-sharp{border-radius:6px}}',
+    '.r-soft input,.r-soft select,.r-soft .pre,.r-soft .b,.r-soft .otpw i,.r-soft .card,.r-soft .rows,.r-soft .pay,.r-soft .nud,.r-soft .sum,.r-soft .trust div,.r-soft .n,.r-soft .amt,.r-soft .save{border-radius:8px}',
+    '.r-sharp input,.r-sharp select,.r-sharp .pre,.r-sharp .b,.r-sharp .otpw i,.r-sharp .card,.r-sharp .rows,.r-sharp .pay,.r-sharp .nud,.r-sharp .sum,.r-sharp .trust div,.r-sharp .n,.r-sharp .amt,.r-sharp .save,.r-sharp .hero .ic,.r-sharp .pay .ic{border-radius:3px}',
+    '@media (prefers-reduced-motion:reduce){.ov,.sh,.stp .ln:after,.sum-b{transition:none}.bd.fw,.bd.bw,.otpw.shake,.tick,.n.er{animation:none}.tick path{animation:none;stroke-dashoffset:0}.cf{display:none}.sp{animation-duration:2s}.bl-m,.bl-m:before,.cpn.pop,.cpn-form.bad .cpn-in,.rows .tot.flash .num{animation:none}.bl-bar i{animation-duration:2.5s}.sk i{animation:none}}'
   ].join('');
+
+  // Inline icons (stroke = currentColor), so the sheet needs no extra requests.
+  var ICONS = {
+    cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+    truck: '<path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+    home: '<path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+    pin: '<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    phone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    checkCircle: '<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/>',
+    card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+    box: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  };
+  function icon(name, size, extra) {
+    var s = size || 18;
+    return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"' + (extra || '') + '>' + ICONS[name] + '</svg>';
+  }
+  function prettyPhone(p) { return p && p.length === 10 ? p.slice(0, 5) + ' ' + p.slice(5) : (p || ''); }
+  // Popup look set by the merchant in BRIX (settings.sheet); defaults match the original sheet.
+  var LOOK_DEFAULTS = {
+    logo: '', logoSize: 'md', accent: '', radius: 'rounded', showSummary: true, showTrust: true, thankYouText: '',
+    showCoupon: true, couponLabel: 'Have a coupon code?', couponOpen: false, offers: [],
+  };
+  var HEX = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
+  var SAFE_LOGO = /^(https:\/\/|data:image\/(png|jpeg|webp|gif);base64,)/;
+  // Black or white text, whichever reads better on the given colour.
+  function readableOn(hex) {
+    var h = hex.length === 4 ? hex.replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3') : hex;
+    var c = [1, 3, 5].map(function (i) { var v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] > 0.4 ? '#111827' : '#ffffff';
+  }
+  function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* unsupported */ } }
 
   var sheet = null; // the one open sheet
 
@@ -206,6 +602,7 @@
     this.idem = idemKey();
     this.busy = false;
     this.pin = null; // last PIN lookup result
+    this.tracked = {}; // funnel events already sent from this popup
     this.build();
   }
 
@@ -225,6 +622,18 @@
     this.sh = shadow.querySelector('.sh');
     this.sh.style.setProperty('--cod-bg', this.cfg.buttons.bg);
     this.sh.style.setProperty('--cod-fg', this.cfg.buttons.color);
+    var look = Object.assign({}, LOOK_DEFAULTS, this.cfg.sheet || {});
+    if (!SAFE_LOGO.test(look.logo || '')) look.logo = '';
+    if (HEX.test(look.accent || '')) {
+      this.sh.style.setProperty('--cod-bg', look.accent);
+      this.sh.style.setProperty('--cod-fg', readableOn(look.accent));
+    }
+    this.sh.classList.add('r-' + (['rounded', 'soft', 'sharp'].indexOf(look.radius) !== -1 ? look.radius : 'rounded'));
+    if (!Array.isArray(look.offers)) look.offers = [];
+    this.look = look;
+    this.couponOpen = Boolean(look.couponOpen);
+    // :host{all:initial} drops the theme font; borrow the storefront's own.
+    try { var font = window.getComputedStyle(document.body).fontFamily; if (font) this.sh.style.fontFamily = font; } catch (e) { /* keep the system stack */ }
     document.body.appendChild(host);
     this.prevOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
@@ -235,7 +644,33 @@
     this.sh.addEventListener('click', function (e) { self.onClick(e); });
     this.sh.addEventListener('submit', function (e) { e.preventDefault(); self.onSubmit(e); });
     this.sh.addEventListener('input', function (e) { self.onInput(e); });
+    this.sh.addEventListener('focusin', function (e) { if (e.target.name === 'code') self.paintOtp(true); });
+    this.sh.addEventListener('focusout', function (e) { if (e.target.name === 'code') self.paintOtp(false); });
+    this.bindSwipe();
     requestAnimationFrame(function () { requestAnimationFrame(function () { self.ov.classList.add('on'); }); });
+  };
+
+  // Mobile: drag the header down to dismiss, like a native bottom sheet.
+  Sheet.prototype.bindSwipe = function () {
+    var self = this, startY = null, dy = 0;
+    this.sh.addEventListener('touchstart', function (e) {
+      if (self.busy || !e.target.closest || !e.target.closest('.hd,.grab') || e.target.closest('button')) return;
+      startY = e.touches[0].clientY; dy = 0;
+      self.sh.classList.add('drag');
+    }, { passive: true });
+    this.sh.addEventListener('touchmove', function (e) {
+      if (startY === null) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      self.sh.style.transform = 'translateY(' + dy + 'px)';
+    }, { passive: true });
+    function end() {
+      if (startY === null) return;
+      startY = null;
+      self.sh.classList.remove('drag');
+      if (dy > 110) { self.sh.style.transform = 'translateY(100%)'; self.close(); } else self.sh.style.transform = '';
+    }
+    this.sh.addEventListener('touchend', end);
+    this.sh.addEventListener('touchcancel', end);
   };
 
   Sheet.prototype.close = function () {
@@ -250,52 +685,141 @@
     }
   };
 
+  // Each funnel event once per popup (Track above; consent is checked there).
+  Sheet.prototype.track = function (name, order) {
+    if (this.tracked[name]) return;
+    this.tracked[name] = true;
+    Track.send(this.cfg, name, this.quote, order);
+  };
+
   Sheet.prototype.otpFlow = function () { return Boolean(this.cfg.otpRequired); };
 
-  Sheet.prototype.frame = function (title, back, step, body, foot) {
-    var total = this.otpFlow() ? 3 : 2;
-    var current = this.otpFlow() ? step : Math.max(1, step - 1);
-    var steps = '';
-    if (step) { steps = '<div class="steps" aria-hidden="true">'; for (var i = 1; i <= total; i++) steps += '<i class="' + (i <= current ? 'on' : '') + '"></i>'; steps += '</div>'; }
-    this.sh.innerHTML =
-      '<div class="hd">' + (back ? '<button type="button" class="ib" data-go="' + back + '" aria-label="Back">&#8592;</button>' : '') +
-      '<div class="t">' + esc(title) + '</div><span class="tag">COD</span>' +
-      '<button type="button" class="ib" data-act="close" aria-label="Close">&#10005;</button></div>' + steps +
-      '<form novalidate style="display:contents"><div class="bd">' + body + '</div>' + (foot ? '<div class="ft">' + foot + '</div>' : '') + '</form>';
+  var STAGE_LABEL = { phone: 'Phone', address: 'Address', review: 'Review' };
+  var VIEW_ORDER = { phone: 0, otp: 1, address: 2, review: 3 };
+
+  Sheet.prototype.stages = function () { return this.otpFlow() ? ['phone', 'address', 'review'] : ['address', 'review']; };
+
+  // With a store logo the header shows the logo and the step title moves into the body.
+  Sheet.prototype.head = function (title, back) {
+    var logo = this.look.logo;
+    return '<div class="grab" aria-hidden="true"></div><div class="hd">' +
+      (back ? '<button type="button" class="ib" data-go="' + back + '" aria-label="Back">' + icon('back', 20) + '</button>' : '') +
+      '<div class="t">' + (logo ? '<img class="lg ' + esc(this.look.logoSize) + '" src="' + esc(logo) + '" alt="Store logo">' : esc(title)) + '</div>' +
+      '<span class="tag">' + icon('cash', 13) + 'COD</span>' +
+      '<button type="button" class="ib" data-act="close" aria-label="Close">' + icon('close', 20) + '</button></div>';
+  };
+
+  // stage: 'phone' | 'address' | 'review' (labelled stepper), or null for none.
+  Sheet.prototype.frame = function (title, back, stage, body, foot) {
+    var stages = this.stages(), idx = stages.indexOf(stage), bar = '';
+    if (idx !== -1) {
+      bar = '<div class="stp" role="img" aria-label="Step ' + (idx + 1) + ' of ' + stages.length + ': ' + STAGE_LABEL[stage] + '">';
+      for (var i = 0; i < stages.length; i++) {
+        if (i) bar += '<span class="ln' + (i <= idx ? ' on' : '') + '"></span>';
+        bar += '<span class="s' + (i < idx ? ' dn' : i === idx ? ' cur' : '') + '"><b>' + (i < idx ? icon('check', 14) : i + 1) + '</b>' + STAGE_LABEL[stages[i]] + '</span>';
+      }
+      bar += '</div>';
+    }
+    // Slide forwards or backwards between steps.
+    var order = VIEW_ORDER[this.view], dir = '';
+    if (order != null && this.lastOrder != null && order !== this.lastOrder) dir = order > this.lastOrder ? ' fw' : ' bw';
+    if (order != null) this.lastOrder = order;
+    this.sh.innerHTML = this.head(title, back) + bar +
+      '<form novalidate style="display:contents"><div class="bd' + dir + '">' + (this.look.logo ? '<h2 class="bt">' + esc(title) + '</h2>' : '') + body + '</div>' +
+      (foot ? '<div class="ft">' + foot + '</div>' : '') + '</form>' + this.powered();
     var first = this.sh.querySelector('[data-autofocus]');
     if (first && window.innerWidth >= 640) { try { first.focus(); } catch (e) { /* ignore */ } }
   };
 
+  function brixMark() {
+    return BRIX_LOGO ? '<img src="' + esc(BRIX_LOGO) + '" alt="BRIX">' : '<b class="bx">BRIX</b>';
+  }
+
+  Sheet.prototype.powered = function () {
+    return '<div class="pw">' + icon('shield', 12) + '<span>Secured &amp; powered by</span>' + brixMark() + '</div>';
+  };
+
+  // BRIX-branded loader, shown first while COD is checked for this cart.
   Sheet.prototype.loading = function (text) {
-    this.sh.innerHTML = '<div class="hd"><div class="t">Cash on Delivery</div><span class="tag">COD</span><button type="button" class="ib" data-act="close" aria-label="Close">&#10005;</button></div>' +
-      '<div class="ld" role="status"><div class="sp"></div><div>' + esc(text || 'Loading\u2026') + '</div></div>';
+    if (!this.loadingSince) this.loadingSince = Date.now();
+    this.sh.innerHTML = this.head('Cash on Delivery') +
+      '<div class="bl" role="status" aria-live="polite"><div class="bl-m">' + brixMark() + '</div>' +
+      '<div class="bl-bar" aria-hidden="true"><i></i></div><div class="bl-t">' + esc(text || 'Loading\u2026') + '</div></div>';
+  };
+
+  // Keeps the BRIX loader up long enough to be seen, never longer than needed.
+  Sheet.prototype.afterLoader = function (fn) {
+    var wait = Math.max(0, 700 - (Date.now() - (this.loadingSince || 0)));
+    if (wait) setTimeout(fn, wait); else fn();
   };
 
   Sheet.prototype.payOnlineButton = function (label) {
     return typeof this.opts.onPayOnline === 'function'
-      ? '<button type="button" class="b s" data-act="online">' + esc(label || 'Pay online instead') + '</button>'
+      ? '<button type="button" class="b s" data-act="online">' + icon('card', 18) + esc(label || 'Pay online instead') + '</button>'
       : '';
   };
 
   Sheet.prototype.fail = function (message) {
-    this.frame('Cash on Delivery', null, 0,
-      '<div class="n er" role="alert">' + esc(message || 'Something went wrong. Please try again.') + '</div>',
+    this.frame('Cash on Delivery', null, null,
+      '<div class="fail"><div class="ic">' + icon('alert', 28) + '</div>' +
+      '<div class="n er" role="alert">' + esc(message || 'Something went wrong. Please try again.') + '</div></div>',
       this.payOnlineButton('Pay online') + '<button type="button" class="b s" data-act="close">Close</button>');
   };
 
   Sheet.prototype.setError = function (message) {
     var slot = this.sh.querySelector('[data-err]');
-    if (slot) slot.innerHTML = message ? '<div class="n er" role="alert">' + esc(message) + '</div>' : '';
+    if (slot) slot.innerHTML = message ? '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(message) + '</span></div>' : '';
   };
 
   Sheet.prototype.setBusy = function (busy, label) {
     this.busy = busy;
     var btn = this.sh.querySelector('button[type="submit"]');
     if (btn) {
-      if (busy) { btn.setAttribute('data-label', btn.innerHTML); btn.innerHTML = '<span class="sp" style="width:18px;height:18px;border-width:2px;border-top-color:currentColor"></span> ' + esc(label || 'Please wait\u2026'); }
+      if (busy) { btn.setAttribute('data-label', btn.innerHTML); btn.innerHTML = '<span class="sp" style="width:18px;height:18px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:currentColor"></span> ' + esc(label || 'Please wait\u2026'); }
       else if (btn.getAttribute('data-label')) btn.innerHTML = btn.getAttribute('data-label');
       btn.disabled = busy;
     }
+  };
+
+  /* --- shared pieces --- */
+
+  Sheet.prototype.lineList = function (q) {
+    var fmt = this.fmt;
+    return q.lines.map(function (li) {
+      var price = li.total < li.originalTotal ? '<span class="st">' + fmt(li.originalTotal) + '</span>' + fmt(li.total) : fmt(li.total);
+      return '<div class="li"><div class="im">' + (li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<div class="ph"></div>') +
+        '<span class="q" aria-label="Quantity ' + li.quantity + '">' + li.quantity + '</span></div>' +
+        '<div><div class="nm">' + esc(li.title) + '</div><div class="mu">' + (li.variantTitle ? esc(li.variantTitle) + ' \u00b7 ' : '') + 'Qty ' + li.quantity + '</div></div>' +
+        '<div class="num" style="font-weight:650">' + price + '</div></div>';
+    }).join('');
+  };
+
+  // Collapsible "what you're buying" strip for the steps before review.
+  Sheet.prototype.summary = function () {
+    var q = this.quote;
+    if (!this.look.showSummary || !q || !q.lines || !q.lines.length) return '';
+    var count = q.lines.reduce(function (n, li) { return n + (Number(li.quantity) || 0); }, 0);
+    var thumbs = q.lines.slice(0, 3).map(function (li) { return li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<span class="ph"></span>'; }).join('');
+    var open = Boolean(this.summaryOpen);
+    var extra = 'Shipping' + (this.cfg.codFee > 0 ? ' and the COD fee are' : ' is') + ' added at review.';
+    return '<div class="sum' + (open ? ' open' : '') + '"><button type="button" class="sum-h" data-act="summary" aria-expanded="' + open + '">' +
+      '<span class="thumbs">' + thumbs + '</span><span class="sum-t"><b>' + count + (count === 1 ? ' item' : ' items') + '</b><span class="mu">Order summary</span></span>' +
+      '<span class="num sum-p">' + this.fmt(q.subtotal) + '</span>' + icon('chevron', 18, ' class="chev"') + '</button>' +
+      '<div class="sum-b"><div><div class="in">' + this.lineList(q) + '<div class="mu">' + extra + '</div></div></div></div></div>';
+  };
+
+  Sheet.prototype.phoneInput = function (id, autofocus) {
+    return '<div class="pre' + (normalizePhone(this.phone) ? ' valid' : '') + '"><span>' + icon('phone', 16) + '+91</span>' +
+      '<input id="' + id + '" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="' + esc(this.phone) + '"' + (autofocus ? ' data-autofocus' : '') + '>' +
+      icon('checkCircle', 20, ' class="okc"') + '</div>';
+  };
+
+  Sheet.prototype.trust = function () {
+    if (!this.look.showTrust) return '';
+    return '<div class="trust">' +
+      '<div>' + icon('cash', 20) + 'No advance payment</div>' +
+      '<div>' + icon('truck', 20) + 'Pay at your doorstep</div>' +
+      '<div>' + icon('shield', 20) + (this.otpFlow() ? 'Verified by OTP' : 'Secure checkout') + '</div></div>';
   };
 
   /* --- start: a first quote without address fails fast on min/max, sold out, excluded products --- */
@@ -303,9 +827,12 @@
     var self = this;
     this.loading('Checking Cash on Delivery\u2026');
     api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon }).then(function (json) {
-      if (!json.success) { self.fail(json.error); return; }
-      self.quote = json.quote;
-      self.go(self.otpFlow() && !self.validToken() ? 'phone' : 'address');
+      self.afterLoader(function () {
+        if (!json.success) { self.fail(json.error); return; }
+        self.quote = json.quote;
+        self.track('begin_checkout');
+        self.go(self.otpFlow() && !self.validToken() ? 'phone' : 'address');
+      });
     });
   };
 
@@ -322,66 +849,119 @@
   };
 
   Sheet.prototype.viewPhone = function () {
-    this.frame('Confirm your phone', null, 1,
-      '<p style="margin:0">We\'ll send a 4-digit code by SMS to confirm this Cash on Delivery order.</p>' +
-      '<div class="f"><label for="cod-phone">Mobile number</label><div class="pre"><span>+91</span>' +
-      '<input id="cod-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" value="' + esc(this.phone) + '" data-autofocus></div></div>' +
-      '<div data-err></div>',
+    this.frame('Confirm your phone', null, 'phone',
+      this.summary() +
+      '<div class="f"><label for="cod-phone">Mobile number</label>' + this.phoneInput('cod-phone', true) + '</div>' +
+      '<p class="mu" style="margin:-6px 0 0">We\'ll text you a 4-digit code to confirm this Cash on Delivery order.</p>' +
+      '<div data-err></div>' + this.trust(),
       '<button type="submit" class="b p">Send code</button>' + this.payOnlineButton());
     this.submitAction = 'send';
   };
 
   Sheet.prototype.viewOtp = function () {
-    this.frame('Enter the code', 'phone', 2,
-      '<p style="margin:0">Sent to +91 ' + esc(this.phone) + '. <button type="button" class="lk" data-go="phone">Change</button></p>' +
-      '<div class="f"><label for="cod-otp">4-digit code</label><input id="cod-otp" name="code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="4" data-autofocus></div>' +
-      '<div data-err></div><p class="mu" style="margin:0" data-resend></p>',
+    this.frame('Enter the code', 'phone', 'phone',
+      '<p style="margin:4px 0 0;text-align:center">Enter the 4-digit code sent to<br><b>+91 ' + esc(prettyPhone(this.phone)) + '</b> <button type="button" class="lk" data-go="phone">Change</button></p>' +
+      '<div class="otpw" data-otp><input id="cod-otp" name="code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code" data-autofocus>' +
+      '<i></i><i></i><i></i><i></i></div>' +
+      '<div data-err></div><div class="rs" data-resend aria-live="polite"></div>',
       '<button type="submit" class="b p">Verify</button>');
     this.submitAction = 'verify';
+    this.paintOtp(false);
     this.startResendTimer();
+  };
+
+  // Paints the four boxes from the one real input.
+  Sheet.prototype.paintOtp = function (focused) {
+    var w = this.sh.querySelector('[data-otp]');
+    if (!w) return;
+    var v = w.querySelector('input').value;
+    if (focused != null) w.classList.toggle('foc', focused);
+    var boxes = w.querySelectorAll('i');
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].textContent = v.charAt(i);
+      boxes[i].className = (v.charAt(i) ? 'fi' : '') + (i === v.length ? ' ac' : '');
+    }
   };
 
   Sheet.prototype.startResendTimer = function () {
     var self = this;
-    var left = this.resendAfter || 30;
+    var total = this.resendAfter || 30;
+    var left = total;
     clearInterval(this.resendTimer);
     function paint() {
       var el = self.sh.querySelector('[data-resend]');
       if (!el) { clearInterval(self.resendTimer); return; }
-      el.innerHTML = left > 0 ? 'Didn\'t get it? You can ask again in ' + left + 's.' : 'Didn\'t get it? <button type="button" class="lk" data-act="resend">Send a new code</button>';
+      var dash = 44, off = dash * (1 - left / total);
+      el.innerHTML = left > 0
+        ? '<svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" stroke="#e5e7eb"/><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-dasharray="' + dash + '" stroke-dashoffset="' + off.toFixed(1) + '" style="transition:stroke-dashoffset 1s linear"/></svg>' +
+          '<span>Resend code in 0:' + (left < 10 ? '0' : '') + left + '</span>'
+        : '<span>Didn\'t get it?</span> <button type="button" class="lk" data-act="resend">Send a new code</button>';
     }
     paint();
     this.resendTimer = setInterval(function () { left -= 1; paint(); if (left <= 0) clearInterval(self.resendTimer); }, 1000);
   };
 
+  Sheet.prototype.addrComplete = function (a) {
+    return Boolean(a.name && a.address1 && /^[1-9]\d{5}$/.test(a.pincode || '') && a.city && a.state && (this.otpFlow() || normalizePhone(this.phone)));
+  };
+
   Sheet.prototype.viewAddress = function () {
     var a = this.addr;
+    // Returning shoppers see their saved address as a card; the form stays
+    // in the DOM (hidden) so it's what we read and submit either way.
+    if (this.editAddr == null) this.editAddr = !this.addrComplete(a);
+    var editing = this.editAddr;
     var stateOptions = '<option value="">Select state</option>' + STATES.map(function (s) {
       return '<option' + (a.state === s ? ' selected' : '') + '>' + esc(s) + '</option>';
     }).join('');
     var phoneBlock = this.otpFlow()
-      ? '<div class="n ok">Phone verified \u00b7 +91 ' + esc(this.phone) + ' <button type="button" class="lk" data-go="phone" style="margin-left:6px">Change</button></div>'
-      : '<div class="f"><label for="cod-phone2">Mobile number</label><div class="pre"><span>+91</span><input id="cod-phone2" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" value="' + esc(this.phone) + '"></div></div>';
-    this.frame('Delivery address', this.otpFlow() ? 'phone' : null, 3,
-      phoneBlock +
-      '<div class="f"><label for="cod-name">Full name</label><input id="cod-name" name="name" autocomplete="name" value="' + esc(a.name || '') + '" data-autofocus></div>' +
+      ? '<div class="n ok">' + icon('checkCircle', 16) + '<span style="flex:1">Phone verified \u00b7 +91 ' + esc(prettyPhone(this.phone)) + '</span><button type="button" class="lk" data-go="phone">Change</button></div>'
+      : '<div class="f"><label for="cod-phone2">Mobile number</label>' + this.phoneInput('cod-phone2', false) + '</div>';
+    var card = editing ? '' :
+      '<div class="card" data-card>' + icon('home', 20, ' class="ic"') + '<div class="cb"><b>' + esc(a.name) + '</b>' +
+      esc(a.address1) + (a.address2 ? ', ' + esc(a.address2) : '') + '<br>' + esc(a.city) + ', ' + esc(a.state) + ' ' + esc(a.pincode) +
+      (this.otpFlow() ? '' : '<br>+91 ' + esc(prettyPhone(this.phone))) + '</div>' +
+      '<button type="button" class="lk" data-act="edit-addr">Change</button></div>';
+    var pinSlot = '<div data-pin></div>';
+    this.frame('Delivery address', this.otpFlow() ? 'phone' : null, 'address',
+      this.summary() + (this.otpFlow() ? phoneBlock : '') +
+      '<div class="ttl">Deliver to</div>' + card + (editing ? '' : pinSlot) +
+      '<div class="fm"' + (editing ? '' : ' hidden') + '>' + (this.otpFlow() ? '' : phoneBlock) +
+      '<div class="f"><label for="cod-name">Full name</label><input id="cod-name" name="name" autocomplete="name" value="' + esc(a.name || '') + '"' + (editing ? ' data-autofocus' : '') + '></div>' +
       '<div class="f"><label for="cod-a1">House no., building, street, area</label><input id="cod-a1" name="address1" autocomplete="address-line1" value="' + esc(a.address1 || '') + '"></div>' +
-      '<div class="f"><label for="cod-a2">Landmark (optional)</label><input id="cod-a2" name="address2" autocomplete="address-line2" value="' + esc(a.address2 || '') + '"></div>' +
-      '<div class="two"><div class="f"><label for="cod-pin">PIN code</label><input id="cod-pin" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" value="' + esc(a.pincode || '') + '"></div>' +
+      '<div class="f"><label for="cod-a2">Landmark (optional)</label><input id="cod-a2" name="address2" autocomplete="address-line2" placeholder="e.g. Near City Mall" value="' + esc(a.address2 || '') + '"></div>' +
+      '<div class="two" data-pinrow><div class="f"><label for="cod-pin">PIN code</label><input id="cod-pin" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" placeholder="6 digits" value="' + esc(a.pincode || '') + '"></div>' +
       '<div class="f"><label for="cod-city">City</label><input id="cod-city" name="city" autocomplete="address-level2" value="' + esc(a.city || '') + '"></div></div>' +
+      (editing ? pinSlot : '') +
       '<div class="f"><label for="cod-state">State</label><select id="cod-state" name="state" autocomplete="address-level1">' + stateOptions + '</select></div>' +
       '<div class="f"><label for="cod-email">Email (optional, for order updates)</label><input id="cod-email" name="email" type="email" autocomplete="email" value="' + esc(a.email || '') + '"></div>' +
-      '<div data-pin></div><div data-err></div>',
-      '<button type="submit" class="b p">Continue</button>' + '<span data-alt hidden>' + this.payOnlineButton() + '</span>');
+      '</div><div data-err></div>',
+      '<button type="submit" class="b p">' + (editing ? 'Continue' : 'Deliver here') + '</button>' + '<span data-alt hidden>' + this.payOnlineButton() + '</span>');
     this.submitAction = 'address';
     if (a.pincode && /^[1-9]\d{5}$/.test(a.pincode)) this.lookupPin(a.pincode, true);
+  };
+
+  // Switches the saved-address card to the editable form.
+  Sheet.prototype.editAddress = function () {
+    var card = this.sh.querySelector('[data-card]');
+    var fm = this.sh.querySelector('.fm');
+    var slot = this.sh.querySelector('[data-pin]');
+    var row = this.sh.querySelector('[data-pinrow]');
+    this.editAddr = true;
+    if (card) card.parentNode.removeChild(card);
+    if (slot && row) row.parentNode.insertBefore(slot, row.nextSibling);
+    if (fm) fm.hidden = false;
+    var btn = this.sh.querySelector('button[type="submit"]');
+    if (btn && !this.busy) btn.textContent = 'Continue';
+    var name = this.sh.querySelector('#cod-name');
+    if (name) { try { name.focus(); } catch (e) { /* ignore */ } }
   };
 
   Sheet.prototype.lookupPin = function (pin, keepFilled) {
     var self = this;
     var note = this.sh.querySelector('[data-pin]');
     if ((this.cfg.blockedPincodes || []).indexOf(pin) !== -1) { this.showPinBlocked(pin); return; }
-    if (note) note.innerHTML = '';
+    if (note) note.innerHTML = '<div class="pst"><span class="sp" style="width:14px;height:14px;border-width:2px"></span>Checking PIN code\u2026</div>';
     phpGet('pincode', '&pin=' + encodeURIComponent(pin)).then(function (json) {
       if (self.view !== 'address') return;
       var pinInput = self.sh.querySelector('#cod-pin');
@@ -389,21 +969,24 @@
       self.pin = json.success ? json : null;
       if (json.success && json.blocked) { self.showPinBlocked(pin); return; }
       self.togglePinBlocked(false);
+      var slot = self.sh.querySelector('[data-pin]');
       if (json.success && json.found) {
         var city = self.sh.querySelector('#cod-city');
         var state = self.sh.querySelector('#cod-state');
-        if (city && (!keepFilled || !city.value)) city.value = json.city;
+        if (city && (!keepFilled || !city.value)) { city.value = json.city; city.removeAttribute('aria-invalid'); }
         if (state && (!keepFilled || !state.value)) {
           var match = STATES.filter(function (s) { return s.toLowerCase() === String(json.state).toLowerCase(); })[0];
-          if (match) state.value = match;
+          if (match) { state.value = match; state.removeAttribute('aria-invalid'); }
         }
-      }
+        // In card mode the card already shows the place; only confirm it while editing.
+        if (slot) slot.innerHTML = self.editAddr ? '<div class="pst ok">' + icon('checkCircle', 16) + 'Delivering to ' + esc(json.city) + ', ' + esc(json.state) + '</div>' : '';
+      } else if (slot) slot.innerHTML = '';
     });
   };
 
   Sheet.prototype.showPinBlocked = function (pin) {
     var note = this.sh.querySelector('[data-pin]');
-    if (note) note.innerHTML = '<div class="n er" role="alert">Cash on Delivery isn\'t available for PIN code ' + esc(pin) + '. You can still pay online.</div>';
+    if (note) note.innerHTML = '<div class="n er" role="alert">' + icon('alert', 16) + '<span>Cash on Delivery isn\'t available for PIN code ' + esc(pin) + '. You can still pay online.</span></div>';
     this.togglePinBlocked(true);
   };
 
@@ -420,58 +1003,192 @@
     return { name: get('name'), address1: get('address1'), address2: get('address2'), pincode: get('pincode'), city: get('city'), state: get('state'), email: get('email'), phone: get('phone') };
   };
 
+  // Points at the field that needs fixing (opening the form if it's folded into the card).
+  Sheet.prototype.markInvalid = function (name) {
+    var el = this.sh.querySelector('[name="' + name + '"]');
+    if (!el) return;
+    if (el.closest('.fm[hidden]')) this.editAddress();
+    if (name === 'phone' && el.parentNode.classList.contains('pre')) el.parentNode.classList.add('bad');
+    else el.setAttribute('aria-invalid', 'true');
+    try { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { /* ignore */ }
+  };
+
   Sheet.prototype.viewReview = function () {
     var self = this;
-    this.loading('Getting your total\u2026');
+    this.frame('Review your order', 'address', 'review',
+      '<div class="sk" role="status" aria-label="Getting your total" style="padding:6px 0"><i class="bx"></i><i style="width:70%"></i><i style="width:45%"></i><i class="bx" style="height:96px"></i><i class="bx" style="height:72px"></i></div>', '');
     api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode }).then(function (json) {
       if (self.view !== 'review') return;
       if (!json.success) {
-        self.frame('Review your order', 'address', 3, '<div class="n er" role="alert">' + esc(json.error) + '</div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
+        self.frame('Review your order', 'address', 'review', '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(json.error) + '</span></div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
         return;
       }
       self.quote = json.quote;
+      self.track('add_payment_info');
+      if (json.quote.coupon && !json.quote.coupon.applied) {
+        self.couponDraft = json.quote.coupon.code;
+        self.couponError = json.quote.coupon.code + ' can\'t be used on this order, so it was left off.';
+        self.coupon = null;
+      }
       self.renderReview();
     });
   };
 
-  Sheet.prototype.renderReview = function () {
+  /* --- coupon code (review step). Shopify checks the code when it prices the order. --- */
+
+  Sheet.prototype.couponBlock = function () {
+    if (!this.cfg.allowCoupons) return '';
+    var q = this.quote;
+    var applied = q.coupon && q.coupon.applied;
+    if (!applied && !this.look.showCoupon && !this.couponError) return '';
+    if (applied) {
+      return '<div class="cpn ok' + (this.couponJustApplied ? ' pop' : '') + '" role="status">' + icon('tag', 18) +
+        '<div class="cb"><b>' + esc(q.coupon.code) + ' applied</b><span>You save ' + this.fmt(q.discounts) + ' on this order</span></div>' +
+        '<button type="button" class="lk" data-act="coupon-remove">Remove</button></div>';
+    }
+    var offers = this.look.showCoupon ? this.offersList() : '';
+    if (!this.couponOpen && !this.couponError) {
+      return '<button type="button" class="cpn-add" data-act="coupon-open">' + icon('tag', 16) + '<span>' + esc(this.look.couponLabel || 'Have a coupon code?') + '</span><b>Add</b></button>' + offers;
+    }
+    var canPaste = Boolean(navigator.clipboard && navigator.clipboard.readText);
+    return '<div class="cpn-form' + (this.couponError ? ' bad' : '') + '"><div class="cpn-in">' + icon('tag', 16) +
+      '<input name="coupon" aria-label="Coupon code" placeholder="Enter coupon code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="60" value="' + esc(this.couponDraft || '') + '">' +
+      (canPaste ? '<button type="button" class="cpn-paste" data-act="coupon-paste">Paste</button>' : '') +
+      '<button type="button" class="cpn-go" data-act="coupon-apply">APPLY</button></div></div>' +
+      (this.couponError ? '<div class="cpn-err" role="alert">' + icon('alert', 14) + '<span>' + esc(this.couponError) + '</span></div>' : '') + offers;
+  };
+
+  // The merchant's suggested codes, tap to apply. Shopify still checks each one.
+  Sheet.prototype.offersList = function () {
+    var offers = this.look.offers || [];
+    if (!offers.length) return '';
+    return '<div class="ofrs"><div class="ofrs-t">Available offers<span>' + offers.length + '</span></div>' + offers.map(function (o) {
+      return '<div class="ofr"><div class="ofr-l" aria-hidden="true"><span>' + esc(offerBadge(o.text)) + '</span></div>' +
+        '<div class="ofr-r"><div class="ofr-h"><b class="ofr-c">' + esc(o.code) + '</b>' +
+        '<button type="button" class="ofr-b" data-act="coupon-offer" data-code="' + esc(o.code) + '" aria-label="Apply ' + esc(o.code) + '">APPLY</button></div>' +
+        (o.text ? '<div class="ofr-t">' + esc(o.text) + '</div>' : '') + '</div></div>';
+    }).join('') + '</div>';
+  };
+
+  // Short deal label for the ticket strip, read from the merchant's offer text.
+  function offerBadge(text) {
+    var t = String(text || '');
+    var m = /(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
+    if (m) return m[1] + '% OFF';
+    m = /(\u20b9|rs\.?|inr|\$|\u20ac|\u00a3)\s?([\d,]+(?:\.\d+)?)/i.exec(t);
+    if (m) return (/^(rs|inr)/i.test(m[1]) ? '\u20b9' : m[1]) + m[2].replace(/\.0+$/, '') + ' OFF';
+    if (/free\s*ship/i.test(t)) return 'FREE SHIP';
+    return 'OFFER';
+  }
+
+  // Re-prices the order with a coupon (code) or without one (null).
+  Sheet.prototype.requote = function (code, done) {
+    var self = this;
+    this.busy = true;
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: code, pincode: this.addr.pincode }).then(function (json) {
+      self.busy = false;
+      if (self.view !== 'review') return;
+      done(json);
+    });
+  };
+
+  Sheet.prototype.applyCoupon = function (raw) {
+    var self = this;
+    var input = this.sh.querySelector('[name="coupon"]');
+    var code = String(raw != null ? raw : (input ? input.value : '')).trim();
+    this.couponDraft = code;
+    var bad = !code ? 'Enter a coupon code.' : !/^[\w-]{1,60}$/.test(code) ? 'Coupon codes only use letters, numbers, - and _.' : '';
+    if (bad) { this.couponError = bad; this.renderReview(true); return; }
+    var btn = this.sh.querySelector('[data-act="coupon-apply"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="sp" style="width:16px;height:16px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:currentColor"></span>'; }
+    this.requote(code, function (json) {
+      if (!json.success) {
+        self.couponError = json.error || 'We couldn\'t check that code. Please try again.';
+      } else if (json.quote.coupon && json.quote.coupon.applied) {
+        self.quote = json.quote;
+        self.coupon = code;
+        self.couponError = '';
+        self.couponDraft = '';
+        self.couponOpen = false;
+        self.couponJustApplied = true;
+      } else {
+        // Keep the current prices (and any code already applied).
+        self.couponError = code + ' isn\'t valid for this order. Check the code, or the order may not meet its conditions.';
+      }
+      self.renderReview(Boolean(self.couponError));
+      self.couponJustApplied = false;
+    });
+  };
+
+  Sheet.prototype.removeCoupon = function () {
+    var self = this;
+    var btn = this.sh.querySelector('[data-act="coupon-remove"]');
+    if (btn) btn.textContent = 'Removing\u2026';
+    this.requote(null, function (json) {
+      if (json.success) { self.quote = json.quote; self.coupon = null; self.couponOpen = false; }
+      self.renderReview();
+    });
+  };
+
+  Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
-    var lines = q.lines.map(function (li) {
-      var price = li.total < li.originalTotal ? '<span class="st">' + fmt(li.originalTotal) + '</span>' + fmt(li.total) : fmt(li.total);
-      return '<div class="li">' + (li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<div class="ph"></div>') +
-        '<div><div class="nm">' + esc(li.title) + '</div><div class="mu">' + (li.variantTitle ? esc(li.variantTitle) + ' \u00b7 ' : '') + 'Qty ' + li.quantity + '</div></div>' +
-        '<div class="num" style="font-weight:600">' + price + '</div></div>';
-    }).join('');
+    var prevBody = this.sh.querySelector('.bd');
+    var scrollTop = prevBody ? prevBody.scrollTop : 0;
     var rows = '<div class="rows">' +
       '<div><span>Items</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       (q.discounts > 0 ? '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>' : '') +
-      '<div><span>Shipping</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : 'Free') + '</span></div>' +
+      '<div><span>Shipping</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : '<b style="color:#067647">Free</b>') + '</span></div>' +
       (q.codFee > 0 ? '<div><span>COD fee</span><span class="num">' + fmt(q.codFee) + '</span></div>' : '') +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>Taxes</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
-      '<div class="tot"><span>Pay on delivery</span><span class="num">' + fmt(q.total) + '</span></div>' +
+      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>Pay on delivery</span><span class="num">' + fmt(q.total) + '</span></div>' +
       (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>Includes ' + fmt(q.tax) + ' in taxes</span></div>' : '') +
       '</div>';
-    var couponNote = q.coupon && !q.coupon.applied
-      ? '<div class="n wa">Coupon ' + esc(q.coupon.code) + ' can\'t be used on this order, so it was left off.</div>' : '';
+    // The coupon card already shows its saving; this banner is for automatic discounts.
+    var save = q.discounts > 0 && !(q.coupon && q.coupon.applied) ? '<div class="save">' + icon('tag', 16) + 'You\'re saving ' + fmt(q.discounts) + ' on this order</div>' : '';
     var nudge = this.cfg.prepaidNudgeText && typeof this.opts.onPayOnline === 'function'
-      ? '<div class="n in">' + esc(this.cfg.prepaidNudgeText) + ' <button type="button" class="lk" data-act="online">Pay online</button></div>' : '';
-    var ship = '<div class="n in"><b>' + esc(a.name) + '</b><br>' + esc(a.address1) + (a.address2 ? ', ' + esc(a.address2) : '') + '<br>' +
-      esc(a.city) + ', ' + esc(a.state) + ' ' + esc(a.pincode) + '<br>+91 ' + esc(this.phone) +
-      ' <button type="button" class="lk" data-go="address" style="margin-left:6px">Edit</button></div>';
-    this.frame('Review your order', 'address', 3, lines + rows + couponNote + ship + nudge + '<div data-err></div>',
+      ? '<div class="nud">' + icon('card', 22) + '<div class="cb">' + esc(this.cfg.prepaidNudgeText) + '</div><button type="button" class="b" data-act="online">Pay online</button></div>' : '';
+    var ship = '<div class="card plain">' + icon('pin', 20, ' class="ic"') + '<div class="cb"><b>' + esc(a.name) + '</b>' +
+      esc(a.address1) + (a.address2 ? ', ' + esc(a.address2) : '') + '<br>' + esc(a.city) + ', ' + esc(a.state) + ' ' + esc(a.pincode) +
+      '<br>+91 ' + esc(prettyPhone(this.phone)) + '</div><button type="button" class="lk" data-go="address">Edit</button></div>';
+    var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>Cash on Delivery</b>Pay ' + fmt(q.total) + ' when your order arrives</div>' +
+      icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
+    this.frame('Review your order', 'address', 'review',
+      this.lineList(q) + this.couponBlock() + save + rows +
+      '<div class="ttl">Deliver to</div>' + ship +
+      '<div class="ttl">Payment</div>' + pay + nudge + '<div data-err></div>',
       '<button type="submit" class="b p">Place COD order \u00b7 ' + fmt(q.total) + '</button>');
     this.submitAction = 'place';
+    var body = this.sh.querySelector('.bd');
+    if (body) body.scrollTop = scrollTop;
+    if (couponFailed) {
+      vibrate(50);
+      var field = this.sh.querySelector('[name="coupon"]');
+      if (field) { try { field.focus(); field.select(); } catch (e) { /* ignore */ } }
+    }
   };
 
   Sheet.prototype.viewDone = function (order) {
     var fmt = this.fmt;
-    this.sh.innerHTML = '<div class="hd"><div class="t">Order placed</div><button type="button" class="ib" data-act="close" aria-label="Close">&#10005;</button></div>' +
-      '<div class="bd done"><div class="tick" aria-hidden="true">&#10003;</div>' +
-      '<div style="font-weight:700">Order ' + esc(order.orderName) + ' confirmed</div>' +
-      '<div class="big">' + fmt(order.total) + '</div>' +
-      '<p style="margin:0">Keep this amount ready when your order is delivered.</p>' +
-      (order.statusPageUrl ? '<a href="' + esc(order.statusPageUrl) + '" class="lk" style="display:inline-block">View order status</a>' : '') +
-      '</div><div class="ft"><button type="button" class="b p" data-act="close">Continue shopping</button></div>';
+    var colors = [this.cfg.buttons.bg || '#111827', '#12b76a', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6'];
+    var confetti = '';
+    for (var i = 0; i < 24; i++) {
+      confetti += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;background:' + esc(colors[i % colors.length]) +
+        ';animation-delay:' + (Math.random() * 0.5).toFixed(2) + 's;width:' + (6 + Math.round(Math.random() * 5)) + 'px"></i>';
+    }
+    this.sh.innerHTML = this.head('Order placed') +
+      '<div class="bd done"><div class="cf" aria-hidden="true">' + confetti + '</div>' +
+      '<div class="tick" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>' +
+      '<div style="font-weight:800;font-size:21px;margin-top:8px">Order confirmed!</div>' +
+      (this.look.thankYouText ? '<p class="mu" style="margin:-6px 0 0;font-size:14px">' + esc(this.look.thankYouText) + '</p>' : '') +
+      '<div class="oid">Order ' + esc(order.orderName) + ' <button type="button" data-act="copy" data-copy="' + esc(order.orderName) + '">' + icon('copy', 12) + '<span>Copy</span></button></div>' +
+      '<div class="amt"><div class="mu">Keep this amount ready at delivery</div><div class="big">' + fmt(order.total) + '</div></div>' +
+      '<div class="tl">' +
+      '<div class="on"><i>' + icon('check', 14) + '</i><span><b>Order placed</b><span class="mu">The store has your order.</span></span></div>' +
+      '<div><i>' + icon('box', 14) + '</i><span><b>Packed and shipped</b><span class="mu">The store prepares and sends it to you.</span></span></div>' +
+      '<div><i>' + icon('cash', 14) + '</i><span><b>Pay on delivery</b><span class="mu">Pay ' + fmt(order.total) + ' when it arrives.</span></span></div>' +
+      '</div></div><div class="ft">' +
+      (order.statusPageUrl ? '<a href="' + esc(order.statusPageUrl) + '" class="b s">View order status</a>' : '') +
+      '<button type="button" class="b p" data-act="close">Continue shopping</button></div>' + this.powered();
   };
 
   /* --- events --- */
@@ -481,7 +1198,13 @@
     if (!t || this.busy) return;
     var go = t.getAttribute('data-go');
     var act = t.getAttribute('data-act');
-    if (go) { e.preventDefault(); if (this.view === 'address') this.addr = Object.assign(this.addr, this.readAddress()); this.go(go); return; }
+    if (go) {
+      e.preventDefault();
+      if (this.view === 'address') this.addr = Object.assign(this.addr, this.readAddress());
+      if (this.view === 'review' && go === 'address') this.editAddr = true; // "Edit" means show the form
+      this.go(go);
+      return;
+    }
     if (act === 'close') { this.close(); return; }
     if (act === 'online') {
       var cb = this.opts.onPayOnline;
@@ -490,10 +1213,63 @@
       return;
     }
     if (act === 'resend') { this.sendCode(true); return; }
+    if (act === 'summary') {
+      var box = t.closest('.sum');
+      this.summaryOpen = !box.classList.contains('open');
+      box.classList.toggle('open', this.summaryOpen);
+      t.setAttribute('aria-expanded', String(this.summaryOpen));
+      return;
+    }
+    if (act === 'edit-addr') { this.editAddress(); return; }
+    if (act === 'coupon-open') {
+      this.couponOpen = true;
+      this.renderReview();
+      var field = this.sh.querySelector('[name="coupon"]');
+      if (field) { try { field.focus(); } catch (err) { /* ignore */ } }
+      return;
+    }
+    if (act === 'coupon-apply') { this.applyCoupon(); return; }
+    if (act === 'coupon-offer') {
+      t.innerHTML = '<span class="sp" style="width:14px;height:14px;border-width:2px;border-top-color:currentColor"></span>';
+      this.applyCoupon(t.getAttribute('data-code'));
+      return;
+    }
+    if (act === 'coupon-remove') { this.removeCoupon(); return; }
+    if (act === 'coupon-paste') {
+      // Paste and claim in one tap.
+      var self = this;
+      navigator.clipboard.readText().then(function (text) {
+        var code = String(text || '').trim().slice(0, 60);
+        var el = self.sh.querySelector('[name="coupon"]');
+        if (el) el.value = code;
+        if (code) self.applyCoupon(code);
+      }, function () {
+        var el = self.sh.querySelector('[name="coupon"]');
+        if (el) { try { el.focus(); } catch (err) { /* ignore */ } }
+      });
+      return;
+    }
+    if (act === 'copy') {
+      var label = t.querySelector('span');
+      var text = t.getAttribute('data-copy');
+      var done = function () { if (label) label.textContent = 'Copied'; };
+      try { navigator.clipboard.writeText(text).then(done, function () { /* blocked */ }); } catch (err) { /* no clipboard */ }
+    }
   };
 
   Sheet.prototype.onInput = function (e) {
     var el = e.target;
+    if (el.getAttribute('aria-invalid')) el.removeAttribute('aria-invalid');
+    if (el.name !== 'code' && el.name !== 'coupon') this.setError(''); // the code step clears it when the new code is checked
+    if (el.name === 'coupon') {
+      this.couponDraft = el.value;
+      var form = el.closest('.cpn-form');
+      if (form) form.classList.remove('bad');
+    }
+    if (el.name === 'phone' && el.parentNode.classList.contains('pre')) {
+      el.parentNode.classList.remove('bad');
+      el.parentNode.classList.toggle('valid', Boolean(normalizePhone(el.value)));
+    }
     if (el.name === 'pincode') {
       el.value = el.value.replace(/\D/g, '').slice(0, 6);
       if (el.value.length === 6) this.lookupPin(el.value, false);
@@ -501,6 +1277,8 @@
     }
     if (el.name === 'code') {
       el.value = el.value.replace(/\D/g, '').slice(0, 4);
+      if (el.parentNode) el.parentNode.classList.remove('bad', 'shake');
+      this.paintOtp();
       if (el.value.length === 4 && !this.busy) this.verifyCode(el.value);
     }
   };
@@ -513,7 +1291,11 @@
       return this.verifyCode(code ? code.value : '');
     }
     if (this.submitAction === 'address') return this.submitAddress();
-    if (this.submitAction === 'place') return this.placeOrder();
+    if (this.submitAction === 'place') {
+      var active = (this.shadow && this.shadow.activeElement) || document.activeElement;
+      if (active && active.name === 'coupon') return this.applyCoupon();
+      return this.placeOrder();
+    }
   };
 
   Sheet.prototype.sendCode = function (isResend) {
@@ -521,7 +1303,7 @@
     if (!isResend) {
       var input = this.sh.querySelector('[name="phone"]');
       var phone = normalizePhone(input && input.value);
-      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); return; }
+      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); this.markInvalid('phone'); return; }
       this.phone = phone;
     }
     this.setError('');
@@ -544,11 +1326,28 @@
     this.setBusy(true, 'Checking\u2026');
     api('otp', { step: 'verify', phone: this.phone, code: code }).then(function (json) {
       self.setBusy(false);
-      if (!json.success) { self.setError(json.error); var el = self.sh.querySelector('[name="code"]'); if (el) { el.value = ''; try { el.focus(); } catch (e) { /* ignore */ } } return; }
+      var w = self.sh.querySelector('[data-otp]');
+      if (!json.success) {
+        self.setError(json.error);
+        vibrate(60);
+        if (w) { w.classList.remove('shake'); void w.offsetWidth; w.classList.add('bad', 'shake'); }
+        // Leave the wrong digits on screen while the boxes shake, then clear them.
+        setTimeout(function () {
+          var el = self.sh.querySelector('[name="code"]');
+          if (!el || el.value !== code) return;
+          el.value = '';
+          self.paintOtp();
+          try { el.focus(); } catch (e) { /* ignore */ }
+        }, 450);
+        return;
+      }
       self.token = { shop: SHOP, phone: self.phone, token: json.token, expiresAt: Date.now() + 25 * 60000 };
       writeStore('sessionStorage', TOKEN_KEY, self.token);
+      self.track('otp_verified');
       clearInterval(self.resendTimer);
-      self.go('address');
+      if (w) w.classList.add('good');
+      self.busy = true; // hold briefly on the green boxes
+      setTimeout(function () { self.busy = false; if (self.view === 'otp') self.go('address'); }, 350);
     });
   };
 
@@ -556,21 +1355,22 @@
     var a = this.readAddress();
     if (!this.otpFlow()) {
       var phone = normalizePhone(a.phone);
-      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); return; }
+      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); this.markInvalid('phone'); return; }
       this.phone = phone;
     }
-    var err = null;
-    if (a.name.length < 2) err = 'Enter your full name.';
-    else if (a.address1.length < 5) err = 'Enter your house number, street and area.';
-    else if (!/^[1-9]\d{5}$/.test(a.pincode)) err = 'Enter a valid 6-digit PIN code.';
-    else if (a.city.length < 2) err = 'Enter your city.';
-    else if (!a.state) err = 'Choose your state.';
-    else if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) err = 'Enter a valid email address, or leave it empty.';
-    else if ((this.cfg.blockedPincodes || []).indexOf(a.pincode) !== -1 || (this.pin && this.pin.pincode === a.pincode && this.pin.blocked)) err = 'Cash on Delivery isn\'t available for PIN code ' + a.pincode + '.';
-    if (err) { this.setError(err); return; }
+    var err = null, field = null;
+    if (a.name.length < 2) { err = 'Enter your full name.'; field = 'name'; }
+    else if (a.address1.length < 5) { err = 'Enter your house number, street and area.'; field = 'address1'; }
+    else if (!/^[1-9]\d{5}$/.test(a.pincode)) { err = 'Enter a valid 6-digit PIN code.'; field = 'pincode'; }
+    else if (a.city.length < 2) { err = 'Enter your city.'; field = 'city'; }
+    else if (!a.state) { err = 'Choose your state.'; field = 'state'; }
+    else if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) { err = 'Enter a valid email address, or leave it empty.'; field = 'email'; }
+    else if ((this.cfg.blockedPincodes || []).indexOf(a.pincode) !== -1 || (this.pin && this.pin.pincode === a.pincode && this.pin.blocked)) { err = 'Cash on Delivery isn\'t available for PIN code ' + a.pincode + '.'; field = 'pincode'; }
+    if (err) { this.setError(err); this.markInvalid(field); return; }
     delete a.phone;
     this.addr = a;
     writeStore('localStorage', ADDRESS_KEY, Object.assign({}, a, { phone: this.phone }));
+    this.track('add_shipping_info');
     this.go('review');
   };
 
@@ -587,6 +1387,7 @@
       phone: this.phone,
       token: this.otpFlow() && this.token ? this.token.token : null,
       address: this.addr,
+      track: Track.context(),
     }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
@@ -596,6 +1397,8 @@
         return;
       }
       self.placed = json.order;
+      // Also on a repeated tap (the first answer may have been lost): same ids, so GA4 / Meta count it once.
+      self.track('purchase', json.order);
       self.viewDone(json.order);
       var after = self.opts.useCart
         ? window.fetch(ROOT + 'cart/clear.js', { method: 'POST', headers: { Accept: 'application/json' }, credentials: 'same-origin' }).catch(function () { return null; })
@@ -644,7 +1447,8 @@
       ' style="width:100%;padding:14px 16px;margin:0 0 10px 0;background:' + esc(cfg.buttons.bg) + ';color:' + esc(cfg.buttons.color) +
       ';border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') +
       ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:inherit;line-height:1.25;">' +
-      '<span>' + esc(label) + '</span>' + (sub ? '<span style="font-size:11.5px;font-weight:500;opacity:.85;">' + esc(sub) + '</span>' : '') + '</button>';
+      '<span style="display:inline-flex;align-items:center;gap:8px;">' + icon('cash', 18) + esc(label) + '</span>' +
+      (sub ? '<span style="font-size:11.5px;font-weight:500;opacity:.85;">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
   function feeHint(cfg, fmt) {

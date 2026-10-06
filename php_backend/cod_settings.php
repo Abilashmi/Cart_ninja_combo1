@@ -7,6 +7,9 @@ require_once __DIR__ . '/cod_helpers.php';
  *
  *   POST { action: 'get',  shop }            → { settings: object|null }
  *   POST { action: 'save', shop, settings }  → { settings }
+ *   POST { action: 'secrets_get',  shop }    → { secrets: { ga4ApiSecret, metaCapiToken, metaTestCode } }
+ *   POST { action: 'secrets_save', shop, secrets: { ga4ApiSecret?, metaCapiToken?, metaTestCode? } } → {}
+ *        a key that is missing keeps its stored value; '' or null clears it
  *
  * Node (app/services/cod.server.js) validates and merges the settings before
  * saving (sanitizeCodSettings in app/utils/cod.shared.js), so a field omitted
@@ -37,6 +40,48 @@ if ($action === 'save') {
         $stmt = $pdo->prepare('INSERT INTO cod_settings (shop, settings_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json)');
         $stmt->execute([$shop, $json]);
         cod_ok(['settings' => $settings]);
+    });
+}
+
+const COD_SECRET_FIELDS = [
+    // body key => [column, max length, allowed characters]
+    'ga4ApiSecret'  => ['ga4_api_secret', 128, '/^[A-Za-z0-9_-]+$/'],
+    'metaCapiToken' => ['meta_capi_token', 512, '/^[A-Za-z0-9_-]+$/'],
+    'metaTestCode'  => ['meta_test_code', 64, '/^[A-Za-z0-9_-]+$/'],
+];
+
+if ($action === 'secrets_get') {
+    cod_db($pdo, function ($pdo) use ($shop) {
+        $stmt = $pdo->prepare('SELECT ga4_api_secret, meta_capi_token, meta_test_code FROM cod_secrets WHERE shop = ? LIMIT 1');
+        $stmt->execute([$shop]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        cod_ok(['secrets' => [
+            'ga4ApiSecret' => $row['ga4_api_secret'] ?? '',
+            'metaCapiToken' => $row['meta_capi_token'] ?? '',
+            'metaTestCode' => $row['meta_test_code'] ?? '',
+        ]]);
+    });
+}
+
+if ($action === 'secrets_save') {
+    $input = $body['secrets'] ?? null;
+    if (!is_array($input)) cod_fail(400, 'invalid_secrets', 'secrets must be an object');
+    $set = [];
+    foreach (COD_SECRET_FIELDS as $key => [$column, $max, $re]) {
+        if (!array_key_exists($key, $input)) continue;
+        $value = trim((string)($input[$key] ?? ''));
+        if ($value !== '' && (strlen($value) > $max || !preg_match($re, $value))) {
+            cod_fail(400, 'invalid_' . $key, $key . ' does not look right');
+        }
+        $set[$column] = $value === '' ? null : $value;
+    }
+    if (!$set) cod_ok();
+    cod_db($pdo, function ($pdo) use ($shop, $set) {
+        $columns = array_keys($set);
+        $sql = 'INSERT INTO cod_secrets (shop, ' . implode(', ', $columns) . ') VALUES (?' . str_repeat(', ?', count($columns)) . ')'
+            . ' ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(fn($c) => "$c = VALUES($c)", $columns));
+        $pdo->prepare($sql)->execute(array_merge([$shop], array_values($set)));
+        cod_ok();
     });
 }
 

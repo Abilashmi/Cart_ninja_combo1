@@ -1,15 +1,16 @@
-import { CodError, codErrorResponse, placeCodOrder, rateLimit, readPhoneToken } from '../services/cod.server';
+import { CodError, clientIp, clientUa, codErrorResponse, placeCodOrder, rateLimit, readPhoneToken } from '../services/cod.server';
 import {
   COD_CORS_HEADERS, assertLive, corsPreflight, limitByIp, loadCodContext, ok, parseShop, parseSurface, readJson,
 } from '../services/cod-storefront.server';
-import { normalizeIndianPhone, normalizeLines, validateAddress } from '../utils/cod.shared.js';
+import { normalizeIndianPhone, normalizeLines, sanitizeCodTrack, validateAddress } from '../utils/cod.shared.js';
 
 /**
  * POST /api/cod/order
  *   { shop, surface, items, coupon?, attributes?, idemKey,
  *     phone, token?,            // token from /api/cod/otp when the store requires OTP
- *     address: { name, address1, address2, city, state, pincode, email } }
- * → { order: { orderName, statusPageUrl, total, currency } }
+ *     address: { name, address1, address2, city, state, pincode, email },
+ *     track?: { gaClientId, gaSessionId, fbp, fbc, consent: { analytics, marketing }, pageUrl } }
+ * → { order: { orderName, orderId, statusPageUrl, total, currency, repeated? } }
  *
  * Creates a real Shopify order with payment pending, tagged COD + BRIX-COD.
  */
@@ -53,6 +54,10 @@ export async function action({ request }) {
       attributes: body.attributes,
       idemKey: body.idemKey,
       currencyCode: ctx.currencyCode,
+      // Server-side GA4 / Meta Purchase (cod-tracking.server.js); consent comes from the browser.
+      track: sanitizeCodTrack(body.track),
+      clientIp: clientIp(request),
+      userAgent: clientUa(request),
     });
     return ok({ order });
   } catch (error) {

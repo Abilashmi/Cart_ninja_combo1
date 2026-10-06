@@ -30,7 +30,56 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     bg: '#111827',
     color: '#ffffff',
   },
+  // Look of the shopper's COD checkout popup (extensions/cart-drawer/assets/brix_cod.js).
+  sheet: {
+    logo: '', // '' | https URL | small data:image/... URL (resized in the admin)
+    logoSize: 'md', // sm | md | lg
+    accent: '', // '' = use the button colours
+    radius: 'rounded', // rounded | soft | sharp
+    showSummary: true,
+    showTrust: true,
+    thankYouText: '',
+    // Coupon field on the review step (only when allowCoupons is on).
+    showCoupon: true,
+    couponLabel: 'Have a coupon code?',
+    couponOpen: false, // show the code box open instead of the "Add" row
+    offers: [], // [{ code, text }] suggested codes, tap to apply (max 5)
+  },
+  // GA4 / Meta Pixel for the popup. Public IDs only; the GA4 API secret and the
+  // Meta Conversions API token live in the separate cod_secrets table.
+  tracking: {
+    ga4Id: '', // G-XXXXXXX
+    metaPixelId: '',
+    metaContentId: 'shopify', // shopify (shopify_IN_<product>_<variant>) | variant | sku
+    dataLayer: true, // also push brix_cod_* events to GTM's dataLayer when present
+  },
 });
+
+export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
+export const META_PIXEL_RE = /^\d{10,20}$/;
+export const META_CONTENT_ID_FORMATS = ['shopify', 'variant', 'sku'];
+
+const COUPON_CODE_RE = /^[\w-]{1,60}$/;
+
+/** Suggested offers for the popup: valid, unique codes with a short line of text, max 5. */
+export function parseCodOffers(value) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((o) => ({ code: String(o?.code ?? '').trim(), text: String(o?.text ?? '').trim().slice(0, 80) }))
+    .filter((o) => COUPON_CODE_RE.test(o.code) && !seen.has(o.code.toLowerCase()) && seen.add(o.code.toLowerCase()))
+    .slice(0, 5);
+}
+
+export const COD_LOGO_MAX_CHARS = 40000;
+const LOGO_URL_RE = /^https:\/\/[^\s"'<>()\\]{1,500}$/;
+const LOGO_DATA_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/** A logo the storefront may put in an <img src>: https URL or a small raster data URL. */
+export function isValidCodLogo(value) {
+  if (typeof value !== 'string' || !value) return false;
+  if (value.startsWith('data:')) return value.length <= COD_LOGO_MAX_CHARS && LOGO_DATA_RE.test(value);
+  return LOGO_URL_RE.test(value);
+}
 
 const HEX_RE = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
 const PIN_RE = /^[1-9]\d{5}$/;
@@ -86,6 +135,35 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     if (HEX_RE.test(p.buttons.bg || '')) buttons.bg = p.buttons.bg;
     if (HEX_RE.test(p.buttons.color || '')) buttons.color = p.buttons.color;
   }
+  const sheet = { ...DEFAULT_COD_SETTINGS.sheet, ...(b.sheet || {}) };
+  if (p.sheet && typeof p.sheet === 'object') {
+    const q = p.sheet;
+    if ('logo' in q) sheet.logo = isValidCodLogo(q.logo) ? q.logo : '';
+    if (['sm', 'md', 'lg'].includes(q.logoSize)) sheet.logoSize = q.logoSize;
+    if ('accent' in q) sheet.accent = HEX_RE.test(q.accent || '') ? q.accent : '';
+    if (['rounded', 'soft', 'sharp'].includes(q.radius)) sheet.radius = q.radius;
+    if ('showSummary' in q) sheet.showSummary = Boolean(q.showSummary);
+    if ('showTrust' in q) sheet.showTrust = Boolean(q.showTrust);
+    if ('thankYouText' in q) sheet.thankYouText = typeof q.thankYouText === 'string' ? q.thankYouText.trim().slice(0, 120) : '';
+    if ('showCoupon' in q) sheet.showCoupon = Boolean(q.showCoupon);
+    if ('couponLabel' in q) sheet.couponLabel = text(q.couponLabel, DEFAULT_COD_SETTINGS.sheet.couponLabel, 40);
+    if ('couponOpen' in q) sheet.couponOpen = Boolean(q.couponOpen);
+    if ('offers' in q) sheet.offers = parseCodOffers(q.offers);
+  }
+  const tracking = { ...DEFAULT_COD_SETTINGS.tracking, ...(b.tracking || {}) };
+  if (p.tracking && typeof p.tracking === 'object') {
+    const t = p.tracking;
+    if ('ga4Id' in t) {
+      const id = String(t.ga4Id || '').trim().toUpperCase();
+      tracking.ga4Id = GA4_ID_RE.test(id) ? id : '';
+    }
+    if ('metaPixelId' in t) {
+      const id = String(t.metaPixelId || '').trim();
+      tracking.metaPixelId = META_PIXEL_RE.test(id) ? id : '';
+    }
+    if (META_CONTENT_ID_FORMATS.includes(t.metaContentId)) tracking.metaContentId = t.metaContentId;
+    if ('dataLayer' in t) tracking.dataLayer = Boolean(t.dataLayer);
+  }
   const has = (key) => Object.prototype.hasOwnProperty.call(p, key);
   const out = {
     enabled: has('enabled') ? Boolean(p.enabled) : Boolean(b.enabled),
@@ -103,8 +181,42 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     prepaidNudgeText: has('prepaidNudgeText') ? (typeof p.prepaidNudgeText === 'string' ? p.prepaidNudgeText.trim().slice(0, 140) : '') : String(b.prepaidNudgeText || ''),
     orderTags: parseTags(has('orderTags') ? p.orderTags : b.orderTags),
     buttons,
+    sheet,
+    tracking,
   };
   return out;
+}
+
+const GA_CLIENT_RE = /^\d{1,20}\.\d{1,20}$/;
+const GA_SESSION_RE = /^\d{1,20}$/;
+const FB_COOKIE_RE = /^fb\.\d\.\d{1,20}\.[\w.-]{1,200}$/;
+
+/**
+ * The shopper's analytics context sent with a COD order (from brix_cod.js):
+ * GA client/session ids, Meta _fbp/_fbc cookies, consent flags and the page URL.
+ * Untrusted input — anything that doesn't look right is dropped. Missing consent = false.
+ */
+export function sanitizeCodTrack(input) {
+  const t = input && typeof input === 'object' ? input : {};
+  const pick = (value, re) => (typeof value === 'string' && re.test(value) ? value : '');
+  let pageUrl = '';
+  if (typeof t.pageUrl === 'string' && t.pageUrl.length <= 500) {
+    try {
+      const u = new URL(t.pageUrl);
+      if (u.protocol === 'https:' || u.protocol === 'http:') pageUrl = u.href;
+    } catch { /* ignore */ }
+  }
+  return {
+    gaClientId: pick(t.gaClientId, GA_CLIENT_RE),
+    gaSessionId: pick(t.gaSessionId, GA_SESSION_RE),
+    fbp: pick(t.fbp, FB_COOKIE_RE),
+    fbc: pick(t.fbc, FB_COOKIE_RE),
+    consent: {
+      analytics: t.consent?.analytics === true,
+      marketing: t.consent?.marketing === true,
+    },
+    pageUrl,
+  };
 }
 
 /** "+91 98765 43210", "09876543210", "919876543210" → "9876543210", else null. */

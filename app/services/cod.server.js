@@ -17,6 +17,7 @@
 import crypto from 'node:crypto';
 import { BASE_PHP_URL } from '../utils/api-helpers';
 import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
+import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
   maskPhone, splitName, provinceCodeFor, moneyFormatter,
@@ -109,6 +110,44 @@ export async function syncCodRuntime(shop) {
   await php('cod_settings.php', { action: 'save', shop, settings: { ...settings, _runtime: facts } });
 }
 
+/* ───────────────────────── tracking secrets ───────────────────────── */
+
+// GA4 Measurement Protocol secret, Meta Conversions API token and Meta test
+// event code. Kept in their own table (php_backend/cod_settings.php
+// secrets_*), never in the settings blob the storefront reads. Only this
+// server reads the values; the admin page sees getCodSecretsStatus().
+const SECRET_KEYS = ['ga4ApiSecret', 'metaCapiToken', 'metaTestCode'];
+const SECRET_RE = /^[A-Za-z0-9_-]{1,512}$/;
+
+export async function getCodSecrets(shop) {
+  const { secrets } = await php('cod_settings.php', { action: 'secrets_get', shop });
+  return { ga4ApiSecret: secrets?.ga4ApiSecret || '', metaCapiToken: secrets?.metaCapiToken || '', metaTestCode: secrets?.metaTestCode || '' };
+}
+
+export async function getCodSecretsStatus(shop) {
+  const s = await getCodSecrets(shop);
+  const status = (v) => ({ set: Boolean(v), last4: v ? v.slice(-4) : '' });
+  return { ga4ApiSecret: status(s.ga4ApiSecret), metaCapiToken: status(s.metaCapiToken), metaTestCode: status(s.metaTestCode) };
+}
+
+/**
+ * `patch` keys that are missing or '' keep the saved value; null removes it.
+ * Throws a CodError naming the field when a value doesn't look like a key.
+ */
+export async function saveCodSecrets(shop, patch = {}) {
+  const secrets = {};
+  for (const key of SECRET_KEYS) {
+    if (!(key in (patch || {}))) continue;
+    const value = patch[key];
+    if (value === null) { secrets[key] = ''; continue; }
+    const v = String(value ?? '').trim();
+    if (!v) continue;
+    if (!SECRET_RE.test(v)) throw new CodError(`invalid_${key}`, `${key} does not look right. Paste it again without spaces.`);
+    secrets[key] = v;
+  }
+  if (Object.keys(secrets).length) await php('cod_settings.php', { action: 'secrets_save', shop, secrets });
+}
+
 /* ───────────────────────── secrets / hashing ───────────────────────── */
 
 function secret() {
@@ -177,6 +216,14 @@ export function clientIp(request) {
     || request.headers.get('cf-connecting-ip')
     || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim()
     || 'unknown');
+}
+
+/** The shopper's User-Agent, forwarded by the PHP relay (trusted only with the secret, like clientIp). */
+export function clientUa(request) {
+  const secret = process.env.SHOPIFY_API_KEY;
+  const relayed = request.headers.get('x-brix-client-ua');
+  if (relayed && secret && request.headers.get('x-forge-secret') === secret) return relayed.slice(0, 400);
+  return (request.headers.get('user-agent') || '').slice(0, 400);
 }
 
 /* ───────────────────────── OTP ───────────────────────── */
@@ -277,7 +324,9 @@ const CALCULATE = `#graphql
         taxesIncluded
         discountCodes
         lineItems {
-          name title variantTitle quantity
+          name title variantTitle quantity sku
+          variant { id }
+          product { id }
           image { url(transform: { maxWidth: 160 }) }
           originalTotalSet { shopMoney { amount } }
           discountedTotalSet { shopMoney { amount } }
@@ -356,6 +405,11 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
       image: li.image?.url || null,
       originalTotal: amountOf(li.originalTotalSet),
       total: amountOf(li.discountedTotalSet),
+      // For GA4 items / Meta content_ids (catalogItemId in cod-tracking.server.js).
+      unitPrice: li.quantity ? Math.round((amountOf(li.discountedTotalSet) / li.quantity) * 100) / 100 : 0,
+      variantId: li.variant?.id ? String(li.variant.id).split('/').pop() : null,
+      productId: li.product?.id ? String(li.product.id).split('/').pop() : null,
+      sku: li.sku || null,
     })),
     itemsTotal: amountOf(calc.lineItemsSubtotalPrice),
     subtotal: amountOf(calc.subtotalPriceSet),
@@ -424,11 +478,32 @@ function addressInput(address, phone, withProvince = true) {
 }
 
 /**
+ * Server-side GA4 / Meta Purchase for a placed order, then records what
+ * happened on the cod_orders row. Called without await: it never throws and
+ * never delays or fails the shopper's order.
+ */
+async function trackPlacedOrder({ shop, settings, idemKey, order, quote, phone, address, track, clientIp, userAgent }) {
+  const t = settings.tracking || {};
+  if (!t.ga4Id && !t.metaPixelId) return;
+  try {
+    const secrets = await getCodSecrets(shop);
+    const result = await sendCodPurchaseEvents({ settings, secrets, order, quote, phone, address, track, clientIp, userAgent });
+    await php('cod_orders.php', { action: 'tracking', shop, idem_key: idemKey, ga4_status: result.ga4, meta_status: result.meta });
+  } catch (error) {
+    console.warn('[cod] server-side tracking failed for', order.orderName, String(error?.message || error).slice(0, 200));
+  }
+}
+
+/**
  * Create the COD order. Idempotent per (shop, idemKey): a retried tap returns
  * the order already placed instead of creating a second one.
+ *
+ * `track` (sanitizeCodTrack), `clientIp` and `userAgent` are only used for the
+ * server-side GA4 / Meta Purchase sent after the order exists.
  */
 export async function placeCodOrder(admin, {
   shop, settings, lines, coupon, address, phone, phoneVerified, surface, attributes = {}, idemKey, currencyCode,
+  track = null, clientIp: ip = null, userAgent = null,
 }) {
   if (!/^[\w-]{8,64}$/.test(String(idemKey || ''))) throw new CodError('invalid_request', 'Refresh the page and try again.');
   const hash = phoneHash(shop, phone);
@@ -511,11 +586,73 @@ export async function placeCodOrder(admin, {
       action: 'complete', shop, idem_key: idemKey, draft_order_id: draftId, order_id: order.id, order_name: order.name, total, currency,
     }).catch((error) => console.error('[cod] order placed but tracking row update failed:', order.name, error?.message));
 
-    return { orderName: order.name, orderId: order.id, statusPageUrl: order.statusPageUrl || null, total, currency };
+    const placed = { orderName: order.name, orderId: order.id, statusPageUrl: order.statusPageUrl || null, total, currency };
+    // Not awaited and never throws, so it can't delay the shopper or reach the catch below.
+    if (track) trackPlacedOrder({ shop, settings, idemKey, order: placed, quote, phone, address, track, clientIp: ip, userAgent });
+    return placed;
   } catch (error) {
     if (draftId) await deleteDraft(admin, draftId);
     await clearAttempt();
     throw error;
+  }
+}
+
+/* ───────────────────────── Shopify order webhooks ───────────────────────── */
+
+const isBrixCodOrder = (payload) => String(payload?.tags || '').split(',').some((t) => t.trim().toLowerCase() === 'brix-cod');
+
+/** All successful refunds on an order so far (REST order payload). */
+function refundedTotal(payload) {
+  let sum = 0;
+  for (const refund of payload?.refunds || []) {
+    for (const tx of refund?.transactions || []) {
+      if (tx?.kind === 'refund' && tx?.status === 'success') sum += Number(tx.amount) || 0;
+    }
+  }
+  return Math.round(sum * 100) / 100;
+}
+
+/** Shipment status of the most recently updated fulfillment (delivered / failure / in_transit …). */
+function latestShipmentStatus(payload) {
+  const list = (payload?.fulfillments || []).filter((f) => f?.status !== 'cancelled');
+  list.sort((a, b) => String(a.updated_at || '').localeCompare(String(b.updated_at || '')));
+  return list.length ? (list[list.length - 1].shipment_status || null) : null;
+}
+
+/**
+ * Keeps a BRIX COD order's lifecycle (shipped / delivered / paid / RTO /
+ * cancelled / refunded) in step with Shopify, from the orders/updated,
+ * orders/paid and orders/cancelled webhooks. orders/updated fires on every
+ * refund too and carries all refunds so far, so refunds/create isn't needed.
+ * When an order becomes cancelled or refunded, GA4 gets a refund event (once,
+ * on the transition). Never throws; non-BRIX orders are skipped without a call.
+ */
+export async function syncCodOrderFromWebhook(shop, payload) {
+  if (!payload?.id || !isBrixCodOrder(payload)) return null;
+  try {
+    const result = await php('cod_orders.php', {
+      action: 'sync',
+      shop,
+      order_id: String(payload.id),
+      financial_status: payload.financial_status || null,
+      fulfillment_status: payload.fulfillment_status || null,
+      shipment_status: latestShipmentStatus(payload),
+      cancelled_at: payload.cancelled_at || null,
+      refunded_total: refundedTotal(payload),
+    });
+    const ended = ['cancelled', 'refunded'];
+    if (result.matched && ended.includes(result.lifecycle) && !ended.includes(result.previous)) {
+      const settings = await getCodSettings(shop);
+      if (settings.tracking?.ga4Id) {
+        const secrets = await getCodSecrets(shop);
+        const value = result.lifecycle === 'refunded' && result.refunded_total > 0 ? result.refunded_total : result.total;
+        await sendCodRefundEvent({ settings, secrets, orderName: result.order_name, value, currency: result.currency });
+      }
+    }
+    return result;
+  } catch (error) {
+    console.warn('[cod] webhook sync failed for order', payload.id, String(error?.message || error).slice(0, 200));
+    return null;
   }
 }
 
@@ -557,6 +694,8 @@ export async function listCodOrders(admin, shop, limit = 50) {
       total: Number(r.total || 0),
       currency: r.currency,
       createdAt: r.created_at || null,
+      lifecycle: r.lifecycle || 'placed',
+      tracking: { ga4: r.ga4_status || null, meta: r.meta_status || null },
       status,
       fulfillment: node?.displayFulfillmentStatus || null,
     };
@@ -575,5 +714,6 @@ export function summarizeCodOrders(orders) {
     paidCount: paid.length,
     cancelledCount: cancelled.length,
     cancelRate: orders.length ? Math.round((cancelled.length / orders.length) * 100) : 0,
+    rtoCount: orders.filter((o) => o.lifecycle === 'rto').length,
   };
 }

@@ -75,6 +75,7 @@ $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charse
 
   return {
     baseUrl: `http://127.0.0.1:${PHP_PORT}`,
+    appUrl: `http://127.0.0.1:${APP_PORT}`, // also stands in for GA4 / Meta in tracking tests
     secret: SECRET,
     db,
     app,

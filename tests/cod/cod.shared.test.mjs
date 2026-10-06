@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, normalizeIndianPhone, checkCodRules, codCharges, normalizeLines,
   validateAddress, provinceCodeFor, isCheckoutOnlyLine, maskPhone, splitName, parsePincodes, moneyFormatter,
+  isValidCodLogo, parseCodOffers, sanitizeCodTrack,
 } from '../../app/utils/cod.shared.js';
 
 const on = (patch = {}) => sanitizeCodSettings({ enabled: true, ...patch });
@@ -119,4 +120,63 @@ test('misc helpers', () => {
   assert.deepEqual(splitName('Ananya Rao'), { firstName: 'Ananya', lastName: 'Rao' });
   assert.deepEqual(splitName('Cher'), { firstName: 'Cher', lastName: '' });
   assert.deepEqual(parsePincodes('560001\n400001, 560001'), ['560001', '400001']);
+});
+
+test('popup look (sheet): only safe logos, known options, merged on later saves', () => {
+  assert.equal(isValidCodLogo('https://cdn.shopify.com/s/files/logo.png'), true);
+  assert.equal(isValidCodLogo('data:image/webp;base64,UklGRg=='), true);
+  assert.equal(isValidCodLogo('data:image/svg+xml;base64,PHN2Zz4='), false, 'no SVG (could carry script)');
+  assert.equal(isValidCodLogo('http://example.com/logo.png'), false, 'https only');
+  assert.equal(isValidCodLogo('https://x.com/a.png" onerror="alert(1)'), false);
+  assert.equal(isValidCodLogo('data:image/png;base64,' + 'A'.repeat(50000)), false, 'too big');
+  const s = sanitizeCodSettings({ sheet: { logo: 'javascript:alert(1)', radius: 'blob', logoSize: 'lg', accent: 'red', thankYouText: 'x'.repeat(200) } });
+  assert.equal(s.sheet.logo, '');
+  assert.equal(s.sheet.radius, 'rounded');
+  assert.equal(s.sheet.logoSize, 'lg');
+  assert.equal(s.sheet.accent, '');
+  assert.equal(s.sheet.thankYouText.length, 120);
+  const saved = sanitizeCodSettings({ sheet: { logo: 'https://cdn.shopify.com/a.png', showTrust: false } });
+  const next = sanitizeCodSettings({ codFee: 10 }, saved);
+  assert.equal(next.sheet.logo, 'https://cdn.shopify.com/a.png');
+  assert.equal(next.sheet.showTrust, false);
+});
+
+test('popup coupon options: valid unique codes, short text, at most 5', () => {
+  const offers = parseCodOffers([
+    { code: ' SAVE10 ', text: '10% off' }, { code: 'save10', text: 'dupe' }, { code: 'NO SPACES', text: 'x' },
+    { code: 'A1' }, { code: 'B2', text: 'y'.repeat(100) }, { code: 'C3' }, { code: 'D4' }, { code: 'E5' },
+  ]);
+  assert.deepEqual(offers.map((o) => o.code), ['SAVE10', 'A1', 'B2', 'C3', 'D4']);
+  assert.equal(offers[2].text.length, 80);
+  const s = sanitizeCodSettings({ sheet: { couponLabel: '   ', couponOpen: 1, showCoupon: false } });
+  assert.equal(s.sheet.couponLabel, 'Have a coupon code?', 'blank label falls back');
+  assert.equal(s.sheet.couponOpen, true);
+  assert.equal(s.sheet.showCoupon, false);
+});
+
+test('tracking IDs: only real GA4 / Meta Pixel IDs, merged on later saves', () => {
+  assert.deepEqual(sanitizeCodSettings({}).tracking, { ga4Id: '', metaPixelId: '', metaContentId: 'shopify', dataLayer: true });
+  const s = sanitizeCodSettings({ tracking: { ga4Id: ' g-abc123xyz ', metaPixelId: '123456789012345', metaContentId: 'sku', dataLayer: false, apiSecret: 'leak' } });
+  assert.deepEqual(s.tracking, { ga4Id: 'G-ABC123XYZ', metaPixelId: '123456789012345', metaContentId: 'sku', dataLayer: false }, 'unknown keys dropped');
+  const bad = sanitizeCodSettings({ tracking: { ga4Id: 'UA-1234-1', metaPixelId: '12ab', metaContentId: 'title' } });
+  assert.equal(bad.tracking.ga4Id, '');
+  assert.equal(bad.tracking.metaPixelId, '');
+  assert.equal(bad.tracking.metaContentId, 'shopify');
+  const next = sanitizeCodSettings({ codFee: 10 }, s);
+  assert.equal(next.tracking.ga4Id, 'G-ABC123XYZ', 'other saves keep the IDs');
+  assert.equal(sanitizeCodSettings({ tracking: { ga4Id: '' } }, s).tracking.ga4Id, '', 'can be cleared');
+});
+
+test('shopper tracking context: well-formed cookies only, consent defaults to no', () => {
+  const t = sanitizeCodTrack({
+    gaClientId: '1234567890.1700000000', gaSessionId: '1700000123', fbp: 'fb.1.1700000000000.987654321',
+    fbc: 'fb.1.1700000000000.IwAR0abc', consent: { analytics: true, marketing: 'yes' }, pageUrl: 'https://demo.myshopify.com/products/kit?x=1',
+  });
+  assert.equal(t.gaClientId, '1234567890.1700000000');
+  assert.equal(t.fbc, 'fb.1.1700000000000.IwAR0abc');
+  assert.deepEqual(t.consent, { analytics: true, marketing: false }, 'only a real true counts');
+  assert.equal(t.pageUrl, 'https://demo.myshopify.com/products/kit?x=1');
+  const junk = sanitizeCodTrack({ gaClientId: '<script>', fbp: 'x', pageUrl: 'javascript:alert(1)' });
+  assert.deepEqual(junk, { gaClientId: '', gaSessionId: '', fbp: '', fbc: '', consent: { analytics: false, marketing: false }, pageUrl: '' });
+  assert.deepEqual(sanitizeCodTrack(null).consent, { analytics: false, marketing: false });
 });

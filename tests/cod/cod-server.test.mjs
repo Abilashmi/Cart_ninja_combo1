@@ -8,6 +8,7 @@
 // Nothing touches the shared production database, an SMS provider or a store.
 import test, { after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { harnessAvailable, startHarness } from './php-harness.mjs';
 
 if (!harnessAvailable()) {
@@ -21,6 +22,9 @@ process.env.SHOPIFY_API_KEY = harness.secret;
 process.env.SHOPIFY_API_SECRET = 'test-secret';
 process.env.COD_OTP_DEV_LOG = '1';
 delete process.env.MSG91_AUTH_KEY;
+// GA4 / Meta server-side events go to the harness's fake app server.
+process.env.COD_GA4_MP_URL = harness.appUrl;
+process.env.COD_META_GRAPH_URL = harness.appUrl;
 
 const SHOP = 'demo.myshopify.com';
 const sql = (q, p = []) => harness.db.query(q, p).then(([rows]) => rows);
@@ -30,7 +34,7 @@ const ageOrders = (hours) => sql(`UPDATE cod_orders SET created_at = created_at 
 const orderRows = () => sql('SELECT * FROM cod_orders ORDER BY id');
 
 async function resetDb() {
-  for (const t of ['cod_settings', 'cod_otp', 'cod_orders']) await sql(`DELETE FROM ${t}`).catch(() => {});
+  for (const t of ['cod_settings', 'cod_otp', 'cod_orders', 'cod_secrets']) await sql(`DELETE FROM ${t}`).catch(() => {});
 }
 after(() => harness.stop());
 
@@ -62,6 +66,7 @@ function fakeAdmin(opts = {}) {
         data = { draftOrderCalculate: { userErrors: [], calculatedDraftOrder: {
           currencyCode: 'INR', taxesIncluded: true, discountCodes: input.discountCodes || [],
           lineItems: input.lineItems.map((li) => ({ name: variants[li.variantId].title, title: variants[li.variantId].title, variantTitle: 'Default Title', quantity: li.quantity, image: null,
+            sku: `SKU-${li.variantId.split('/').pop()}`, variant: { id: li.variantId }, product: { id: 'gid://shopify/Product/1' },
             originalTotalSet: money(variants[li.variantId].price * li.quantity), discountedTotalSet: money(variants[li.variantId].price * li.quantity) })),
           lineItemsSubtotalPrice: money(items), subtotalPriceSet: money(items - discount), totalDiscountsSet: money(discount),
           totalShippingPriceSet: money(shipping), totalTaxSet: money(0), totalPriceSet: money(items - discount + shipping),
@@ -170,6 +175,11 @@ test('quote: priced by Shopify, COD fee added as the shipping line, rules applie
   assert.equal(input.shippingLine.priceWithCurrency.amount, '49.00');
   assert.equal(input.shippingLine.priceWithCurrency.currencyCode, 'INR');
   assert.deepEqual(input.lineItems[0].customAttributes, [{ key: 'Engraving', value: 'AR' }], '_brix* properties are dropped');
+  assert.deepEqual(
+    { variantId: quote.lines[0].variantId, productId: quote.lines[0].productId, sku: quote.lines[0].sku, unitPrice: quote.lines[0].unitPrice },
+    { variantId: '11', productId: '1', sku: 'SKU-11', unitPrice: 899 },
+    'lines carry the ids GA4 / Meta need',
+  );
 
   await assert.rejects(
     cod.quoteCod(fakeAdmin(), { settings: settingsOn({ minOrder: 2000 }), lines, surface: 'drawer' }),
@@ -279,7 +289,186 @@ test('admin list reads live payment status and summarizes', async () => {
   assert.equal(orders.length, 1);
   assert.equal(orders[0].status, 'pending');
   assert.equal(orders[0].orderNumericId, '1047');
-  assert.deepEqual(cod.summarizeCodOrders(orders), { count: 1, toCollect: 1847, collected: 0, paidCount: 0, cancelledCount: 0, cancelRate: 0 });
+  assert.equal(orders[0].lifecycle, 'placed');
+  assert.deepEqual(cod.summarizeCodOrders(orders), { count: 1, toCollect: 1847, collected: 0, paidCount: 0, cancelledCount: 0, cancelRate: 0, rtoCount: 0 });
+});
+
+/* ── ads & analytics: GA4 Measurement Protocol + Meta Conversions API ──────── */
+
+const sha256 = (v) => crypto.createHash('sha256').update(v).digest('hex');
+const waitUntil = async (fn, label, ms = 5000) => {
+  const start = Date.now();
+  while (Date.now() - start < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)); }
+  throw new Error(`timed out waiting for ${label}`);
+};
+const trackingOn = (patch = {}) => settingsOn({ tracking: { ga4Id: 'G-TEST123', metaPixelId: '123456789012345' }, ...patch });
+const shopperTrack = (consent = { analytics: true, marketing: true }) => ({
+  gaClientId: '111.222', gaSessionId: '1700000123', fbp: 'fb.1.1700000000000.42', fbc: '', consent, pageUrl: 'https://demo.myshopify.com/cart',
+});
+const adsRequests = () => harness.app.requests.filter((r) => r.path.startsWith('/mp/') || r.path.includes('/events'));
+const okAds = () => { harness.app.requests.length = 0; harness.app.reply = () => ({ status: 200, body: {} }); };
+
+test('secrets: saved separately, kept when blank, removed with null; admin only sees the last 4', async () => {
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4-secret-ABCD', metaCapiToken: 'EAAGtoken1234' });
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: '', metaTestCode: 'TEST999' });
+  assert.deepEqual(await cod.getCodSecrets(SHOP), { ga4ApiSecret: 'ga4-secret-ABCD', metaCapiToken: 'EAAGtoken1234', metaTestCode: 'TEST999' });
+  const status = await cod.getCodSecretsStatus(SHOP);
+  assert.deepEqual(status.ga4ApiSecret, { set: true, last4: 'ABCD' });
+  assert.ok(!JSON.stringify(status).includes('ga4-secret'), 'status never carries the secret');
+  await cod.saveCodSecrets(SHOP, { metaTestCode: null });
+  assert.equal((await cod.getCodSecrets(SHOP)).metaTestCode, '');
+  await assert.rejects(cod.saveCodSecrets(SHOP, { metaCapiToken: 'has spaces in it' }), (e) => e.code === 'invalid_metaCapiToken');
+  assert.equal((await cod.getCodSettings(SHOP)).tracking.ga4Id, '', 'secrets are not in the settings blob');
+});
+
+test('order: server-side GA4 purchase + Meta Purchase with the browser ids, hashed customer data', async () => {
+  okAds();
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4secret', metaCapiToken: 'metatoken' });
+  const order = await place(fakeAdmin(), {
+    settings: trackingOn(), track: shopperTrack(), clientIp: '203.0.113.9', userAgent: 'Mozilla/5.0 test',
+    address: { ...address, email: 'Ananya@Example.com' },
+  });
+  assert.equal(order.orderName, '#1047');
+  await waitUntil(async () => (await orderRows())[0]?.meta_status, 'tracking status');
+
+  const [ga] = adsRequests().filter((r) => r.path.startsWith('/mp/collect'));
+  assert.match(ga.path, /measurement_id=G-TEST123/);
+  assert.match(ga.path, /api_secret=ga4secret/);
+  assert.equal(ga.body.client_id, '111.222');
+  const p = ga.body.events[0].params;
+  assert.equal(ga.body.events[0].name, 'purchase');
+  assert.equal(p.transaction_id, '#1047', 'same transaction_id as the browser purchase');
+  assert.equal(p.value, 1847);
+  assert.equal(p.session_id, '1700000123');
+  assert.deepEqual(p.items.map((i) => i.item_id), ['shopify_IN_1_11', 'shopify_IN_1_12']);
+
+  const [meta] = adsRequests().filter((r) => r.path.includes('/123456789012345/events'));
+  assert.match(meta.path, /access_token=metatoken/);
+  const ev = meta.body.data[0];
+  assert.equal(ev.event_name, 'Purchase');
+  assert.equal(ev.event_id, 'brixcod_1047', 'same eventID as the browser pixel');
+  assert.equal(ev.user_data.ph[0], sha256('919876543210'));
+  assert.equal(ev.user_data.em[0], sha256('ananya@example.com'));
+  assert.equal(ev.user_data.st[0], sha256('ka'));
+  assert.equal(ev.user_data.client_ip_address, '203.0.113.9');
+  assert.equal(ev.user_data.client_user_agent, 'Mozilla/5.0 test');
+  assert.equal(ev.user_data.fbp, 'fb.1.1700000000000.42');
+  assert.ok(!JSON.stringify(meta.body).includes('9876543210'), 'raw phone never sent');
+  assert.ok(!JSON.stringify(meta.body).toLowerCase().includes('ananya@'), 'raw email never sent');
+
+  const [row] = await orderRows();
+  assert.equal(row.ga4_status, 'sent');
+  assert.equal(row.meta_status, 'sent');
+
+  // A repeated tap returns the first order and sends nothing again.
+  const before = adsRequests().length;
+  await place(fakeAdmin(), { settings: trackingOn(), track: shopperTrack() });
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(adsRequests().length, before);
+});
+
+test('order: no consent, no GA client id, or no keys → nothing sent, recorded why', async () => {
+  okAds();
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4secret', metaCapiToken: 'metatoken' });
+  await place(fakeAdmin(), { settings: trackingOn(), track: shopperTrack({ analytics: false, marketing: false }) });
+  await waitUntil(async () => (await orderRows())[0]?.meta_status, 'tracking status');
+  let [row] = await orderRows();
+  assert.equal(row.ga4_status, 'no_consent');
+  assert.equal(row.meta_status, 'no_consent');
+
+  await place(fakeAdmin(), { settings: trackingOn(), idemKey: 'idem-key-0002', track: { ...shopperTrack(), gaClientId: '' } });
+  await waitUntil(async () => (await orderRows())[1]?.meta_status, 'tracking status');
+  row = (await orderRows())[1];
+  assert.equal(row.ga4_status, 'no_client_id', 'GA4 needs the browser client id');
+  assert.equal(row.meta_status, 'sent');
+
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: null, metaCapiToken: null });
+  await place(fakeAdmin(), { settings: trackingOn(), idemKey: 'idem-key-0003', track: shopperTrack() });
+  await waitUntil(async () => (await orderRows())[2]?.meta_status, 'tracking status');
+  row = (await orderRows())[2];
+  assert.equal(row.ga4_status, 'off');
+  assert.equal(row.meta_status, 'off');
+  assert.equal(adsRequests().filter((r) => r.path.startsWith('/mp/')).length, 0);
+});
+
+test('order: GA4 / Meta being down never fails the order', async () => {
+  harness.app.requests.length = 0;
+  harness.app.reply = () => ({ status: 500, body: { error: { message: 'boom' } } });
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4secret', metaCapiToken: 'metatoken' });
+  const order = await place(fakeAdmin(), { settings: trackingOn(), track: shopperTrack() });
+  assert.equal(order.orderName, '#1047');
+  await waitUntil(async () => (await orderRows())[0]?.meta_status, 'tracking status');
+  const [row] = await orderRows();
+  assert.equal(row.status, 'placed');
+  assert.equal(row.ga4_status, 'rejected');
+  assert.equal(row.meta_status, 'rejected');
+});
+
+/* ── Shopify order webhooks → COD lifecycle ─────────────────────────────────── */
+
+const orderPayload = (patch = {}) => ({
+  id: 1047, tags: 'COD, BRIX-COD, brix-src-drawer', financial_status: 'pending', fulfillment_status: null,
+  cancelled_at: null, fulfillments: [], refunds: [], ...patch,
+});
+
+test('webhooks: shipped → delivered → cash collected, from Shopify order payloads', async () => {
+  await place(fakeAdmin());
+  const shipped = await cod.syncCodOrderFromWebhook(SHOP, orderPayload({
+    fulfillment_status: 'fulfilled', fulfillments: [{ status: 'success', shipment_status: 'in_transit', updated_at: '2026-10-06T10:00:00Z' }],
+  }));
+  assert.equal(shipped.lifecycle, 'shipped');
+  const delivered = await cod.syncCodOrderFromWebhook(SHOP, orderPayload({
+    fulfillment_status: 'fulfilled',
+    fulfillments: [
+      { status: 'success', shipment_status: 'in_transit', updated_at: '2026-10-06T10:00:00Z' },
+      { status: 'success', shipment_status: 'delivered', updated_at: '2026-10-07T10:00:00Z' },
+    ],
+  }));
+  assert.equal(delivered.lifecycle, 'delivered', 'latest fulfillment wins');
+  const paid = await cod.syncCodOrderFromWebhook(SHOP, orderPayload({ financial_status: 'paid', fulfillment_status: 'fulfilled' }));
+  assert.equal(paid.lifecycle, 'paid');
+  const [row] = await orderRows();
+  assert.equal(row.lifecycle, 'paid');
+  assert.equal(row.financial_status, 'paid');
+  const failed = await cod.syncCodOrderFromWebhook(SHOP, orderPayload({ financial_status: 'pending', fulfillments: [{ status: 'success', shipment_status: 'failure' }] }));
+  assert.equal(failed.lifecycle, 'rto');
+});
+
+test('webhooks: only BRIX COD orders are touched; unknown ids match nothing', async () => {
+  await place(fakeAdmin());
+  assert.equal(await cod.syncCodOrderFromWebhook(SHOP, orderPayload({ tags: 'wholesale' })), null, 'non-COD order: no call');
+  assert.equal((await cod.syncCodOrderFromWebhook(SHOP, orderPayload({ id: 999 }))).matched, false);
+  assert.equal((await cod.syncCodOrderFromWebhook('other.myshopify.com', orderPayload())).matched, false, 'other shops never match');
+  assert.equal((await orderRows())[0].lifecycle, 'placed');
+});
+
+test('webhooks: cancelled / refunded orders send one GA4 refund, even when two webhooks arrive', async () => {
+  okAds();
+  await cod.saveCodSettings(SHOP, { enabled: true, tracking: { ga4Id: 'G-TEST123' } });
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4secret' });
+  await place(fakeAdmin());
+  const cancelled = orderPayload({ cancelled_at: '2026-10-06T12:00:00+05:30', financial_status: 'voided' });
+  // orders/cancelled and orders/updated arrive together for one cancellation.
+  const [a, b] = await Promise.all([cod.syncCodOrderFromWebhook(SHOP, cancelled), cod.syncCodOrderFromWebhook(SHOP, cancelled)]);
+  assert.deepEqual([a.lifecycle, b.lifecycle], ['cancelled', 'cancelled']);
+  const refunds = adsRequests().filter((r) => r.body?.events?.[0]?.name === 'refund');
+  assert.equal(refunds.length, 1, 'refund sent once');
+  assert.equal(refunds[0].body.events[0].params.transaction_id, '#1047');
+  assert.equal(refunds[0].body.events[0].params.value, 1847);
+  await cod.syncCodOrderFromWebhook(SHOP, cancelled);
+  assert.equal(adsRequests().filter((r) => r.body?.events?.[0]?.name === 'refund').length, 1, 'retried webhook: still once');
+});
+
+test('webhooks: a full refund on a paid COD order', async () => {
+  okAds();
+  await place(fakeAdmin());
+  const refunded = await cod.syncCodOrderFromWebhook(SHOP, orderPayload({
+    financial_status: 'refunded',
+    refunds: [{ transactions: [{ kind: 'refund', status: 'success', amount: '1847.00' }, { kind: 'refund', status: 'failure', amount: '5.00' }] }],
+  }));
+  assert.equal(refunded.lifecycle, 'refunded');
+  assert.equal(Number((await orderRows())[0].refunded_total), 1847);
+  assert.equal(adsRequests().length, 0, 'no GA4 set up → no refund event');
 });
 
 test('rate limiter', () => {
@@ -357,6 +546,8 @@ test('storefront config: returns display settings only, OTP only when Node has S
   await cod.saveCodSettings(SHOP, {
     enabled: true, codFee: 49, minOrder: 299, blockedPincodes: '744101', requireOtp: true,
     surfaces: { combo: false }, buttons: { drawerText: 'Pay cash on delivery', bg: '#0d6b4c' },
+    sheet: { logo: 'data:image/png;base64,iVBORw0KGgo=', radius: 'soft', accent: '#7c3aed', showTrust: false, thankYouText: 'Thank you for shopping with us!',
+      couponLabel: 'Got a code?', couponOpen: true, offers: [{ code: 'SAVE10', text: '10% off above ₹999' }, { code: 'bad code!', text: 'x' }] },
   });
   const { json } = await storefront(`action=config&shop=${SHOP}`);
   assert.equal(json.codFee, 49);
@@ -367,6 +558,17 @@ test('storefront config: returns display settings only, OTP only when Node has S
   assert.equal(json.otpRequired, true, 'COD_OTP_DEV_LOG counts as an SMS provider in tests');
   assert.equal('_runtime' in json, false);
   assert.equal('orderTags' in json, false, 'merchant-only fields are not exposed');
+  assert.deepEqual(json.tracking, { ga4Id: '', metaPixelId: '', metaContentId: 'shopify', dataLayer: true });
+  assert.deepEqual(json.sheet, {
+    logo: 'data:image/png;base64,iVBORw0KGgo=', logoSize: 'md', accent: '#7c3aed', radius: 'soft',
+    showSummary: true, showTrust: false, thankYouText: 'Thank you for shopping with us!',
+    showCoupon: true, couponLabel: 'Got a code?', couponOpen: true, offers: [{ code: 'SAVE10', text: '10% off above ₹999' }],
+  }, 'popup look + coupon options reach the storefront (bad offer codes dropped)');
+  // A bad logo that somehow got into storage never reaches the shopper's <img src>.
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify({ ...stored, sheet: { ...stored.sheet, logo: 'javascript:alert(1)' } }), SHOP]);
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.sheet.logo, '', 'PHP re-checks the logo');
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify(stored), SHOP]);
 
   process.env.COD_OTP_DEV_LOG = '0';
   try {
@@ -376,6 +578,23 @@ test('storefront config: returns display settings only, OTP only when Node has S
     process.env.COD_OTP_DEV_LOG = '1';
     await cod.syncCodRuntime(SHOP);
   }
+});
+
+test('storefront config: GA4 / Meta Pixel IDs reach the popup, the API secret and token never do', async () => {
+  await setPlan('pro');
+  await sql('UPDATE shops SET plan_key = ? WHERE shop_domain = ?', ['pro', SHOP]);
+  await cod.saveCodSettings(SHOP, { enabled: true, tracking: { ga4Id: 'G-TEST123', metaPixelId: '123456789012345', metaContentId: 'variant' } });
+  await cod.saveCodSecrets(SHOP, { ga4ApiSecret: 'ga4secretVALUE', metaCapiToken: 'metatokenVALUE', metaTestCode: 'XTESTCODE9' });
+  const res = await storefront(`action=config&shop=${SHOP}`);
+  assert.deepEqual(res.json.tracking, { ga4Id: 'G-TEST123', metaPixelId: '123456789012345', metaContentId: 'variant', dataLayer: true });
+  const text = JSON.stringify(res.json);
+  assert.ok(!/secretVALUE|tokenVALUE|XTESTCODE9/.test(text), 'no secret in the public config');
+  // A bad ID that somehow got into storage is dropped by PHP too.
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify({ ...stored, tracking: { ga4Id: '"><script>', metaPixelId: 'abc' } }), SHOP]);
+  const again = (await storefront(`action=config&shop=${SHOP}`)).json.tracking;
+  assert.equal(again.ga4Id, '');
+  assert.equal(again.metaPixelId, '');
 });
 
 test('storefront pincode: validates, reports blocked PINs', async () => {
@@ -397,7 +616,7 @@ const relay = (body, headers = {}) => fetch(`${harness.baseUrl}/cod_checkout.php
 test('relay: forwards otp/quote/order to the app server with the secret and the shopper IP', async () => {
   harness.app.requests.length = 0;
   harness.app.reply = () => ({ status: 200, body: { success: true, quote: { total: 948 } } });
-  const res = await relay({ endpoint: 'quote', shop: SHOP, surface: 'drawer', items: [{ variantId: 11, quantity: 1 }] }, { 'CF-Connecting-IP': '203.0.113.9' });
+  const res = await relay({ endpoint: 'quote', shop: SHOP, surface: 'drawer', items: [{ variantId: 11, quantity: 1 }] }, { 'CF-Connecting-IP': '203.0.113.9', 'User-Agent': 'Mozilla/5.0 (shopper phone)' });
   assert.equal(res.status, 200);
   assert.equal(res.cors, '*');
   assert.deepEqual(res.json, { success: true, quote: { total: 948 } });
@@ -405,6 +624,7 @@ test('relay: forwards otp/quote/order to the app server with the secret and the 
   assert.equal(sent.path, '/api/cod/quote');
   assert.equal(sent.headers['x-forge-secret'], harness.secret);
   assert.equal(sent.headers['x-brix-client-ip'], '203.0.113.9');
+  assert.equal(sent.headers['x-brix-client-ua'], 'Mozilla/5.0 (shopper phone)', 'User-Agent forwarded for Meta CAPI');
   assert.equal('endpoint' in sent.body, false, 'routing field is not forwarded');
   assert.equal(sent.body.shop, SHOP);
 });
@@ -438,4 +658,17 @@ test('Node trusts the relayed shopper IP only with the Forge secret', () => {
   assert.equal(cod.clientIp(req({ 'x-forge-secret': key, 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '203.0.113.9');
   assert.equal(cod.clientIp(req({ 'x-forge-secret': 'nope', 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
   assert.equal(cod.clientIp(req({ 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
+});
+
+test('Node trusts the relayed shopper User-Agent only with the Forge secret', () => {
+  const req = (headers) => new Request('https://x.test', { headers });
+  const key = process.env.SHOPIFY_API_KEY;
+  assert.equal(cod.clientUa(req({ 'x-forge-secret': key, 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'Shopper UA');
+  assert.equal(cod.clientUa(req({ 'x-forge-secret': 'nope', 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'PHP curl');
+});
+
+test('PHP: tracking secrets need the Forge secret and look like keys', async () => {
+  assert.equal((await callPhp('cod_settings.php', { action: 'secrets_get', shop: SHOP }, 'wrong')).status, 403);
+  assert.equal((await callPhp('cod_settings.php', { action: 'secrets_save', shop: SHOP, secrets: { metaCapiToken: 'a b' } })).json.code, 'invalid_metaCapiToken');
+  assert.equal((await callPhp('cod_orders.php', { action: 'sync', shop: SHOP, order_id: 'gid://x' })).json.code, 'invalid_order_id');
 });

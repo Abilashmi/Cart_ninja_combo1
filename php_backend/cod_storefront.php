@@ -55,6 +55,59 @@ function cods_str_list($value) {
     return array_values(array_filter(array_map('strval', is_array($value) ? $value : []), 'strlen'));
 }
 
+// Look of the shopper's COD popup. Mirrors sanitizeCodSettings' "sheet" rules
+// (app/utils/cod.shared.js): the logo must be an https URL or a small raster
+// data URL, since brix_cod.js puts it straight into an <img src>.
+function cods_sheet($sheet) {
+    $q = is_array($sheet) ? $sheet : [];
+    $logo = (string)($q['logo'] ?? '');
+    $logoOk = (strlen($logo) <= 40000 && preg_match('#^data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$#', $logo))
+        || preg_match('#^https://[^\s"\'<>()\\\\]{1,500}$#', $logo);
+    $accent = (string)($q['accent'] ?? '');
+    return [
+        'logo' => $logoOk ? $logo : '',
+        'logoSize' => in_array($q['logoSize'] ?? '', ['sm', 'md', 'lg'], true) ? $q['logoSize'] : 'md',
+        'accent' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $accent) ? $accent : '',
+        'radius' => in_array($q['radius'] ?? '', ['rounded', 'soft', 'sharp'], true) ? $q['radius'] : 'rounded',
+        'showSummary' => ($q['showSummary'] ?? true) !== false,
+        'showTrust' => ($q['showTrust'] ?? true) !== false,
+        'thankYouText' => mb_substr((string)($q['thankYouText'] ?? ''), 0, 120),
+        'showCoupon' => ($q['showCoupon'] ?? true) !== false,
+        'couponLabel' => mb_substr(trim((string)($q['couponLabel'] ?? '')), 0, 40) ?: 'Have a coupon code?',
+        'couponOpen' => !empty($q['couponOpen']),
+        'offers' => cods_offers($q['offers'] ?? []),
+    ];
+}
+
+function cods_offers($offers) {
+    $out = [];
+    $seen = [];
+    foreach (is_array($offers) ? $offers : [] as $o) {
+        if (!is_array($o)) continue;
+        $code = trim((string)($o['code'] ?? ''));
+        if (!preg_match('/^[\w-]{1,60}$/', $code) || isset($seen[strtolower($code)])) continue;
+        $seen[strtolower($code)] = true;
+        $out[] = ['code' => $code, 'text' => mb_substr(trim((string)($o['text'] ?? '')), 0, 80)];
+        if (count($out) >= 5) break;
+    }
+    return $out;
+}
+
+// GA4 / Meta Pixel IDs for the popup's browser events. Public IDs only — the
+// GA4 API secret and Meta Conversions API token live in cod_secrets and are
+// never read by this file. Mirrors sanitizeCodSettings' "tracking" rules.
+function cods_tracking($tracking) {
+    $t = is_array($tracking) ? $tracking : [];
+    $ga4 = strtoupper(trim((string)($t['ga4Id'] ?? '')));
+    $pixel = trim((string)($t['metaPixelId'] ?? ''));
+    return [
+        'ga4Id' => preg_match('/^G-[A-Z0-9]{4,12}$/', $ga4) ? $ga4 : '',
+        'metaPixelId' => preg_match('/^\d{10,20}$/', $pixel) ? $pixel : '',
+        'metaContentId' => in_array($t['metaContentId'] ?? '', ['shopify', 'variant', 'sku'], true) ? $t['metaContentId'] : 'shopify',
+        'dataLayer' => ($t['dataLayer'] ?? true) !== false,
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') cods_fail(405, 'method_not_allowed', 'GET only');
 
@@ -101,6 +154,8 @@ if ($action === 'config') {
             'bg' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['bg'] ?? '') ? $buttons['bg'] : '#111827',
             'color' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['color'] ?? '') ? $buttons['color'] : '#ffffff',
         ],
+        'sheet' => cods_sheet($s['sheet'] ?? null),
+        'tracking' => cods_tracking($s['tracking'] ?? null),
     ], 30);
 }
 

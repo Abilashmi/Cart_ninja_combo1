@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
+import { syncCodOrderFromWebhook } from "../services/cod.server";
 
 // Refreshes totals/status/line items on edit. Does not apply a rollup delta
 // directly (an edited total could move revenue up or down after it was
@@ -17,6 +18,10 @@ export const action = async ({ request }) => {
   } catch (error) {
     console.error("[Webhook orders/updated] Failed to upsert order:", error.message);
   }
+
+  // BRIX COD orders: shipped / delivered / paid / cancelled / refunded status.
+  // Not awaited (Shopify wants a reply within 5 s); never throws, safe on retries.
+  syncCodOrderFromWebhook(shop, payload);
 
   return new Response();
 };

@@ -11,7 +11,11 @@
  * Tables (created on first request):
  *   cod_settings  one JSON settings blob per shop
  *   cod_otp       hashed one-time codes
- *   cod_orders    one row per COD order attempt (idempotency, daily limits, admin list)
+ *   cod_orders    one row per COD order attempt (idempotency, daily limits, admin list),
+ *                 plus its later Shopify lifecycle (shipped / delivered / cancelled …) and
+ *                 whether the GA4 / Meta server-side Purchase was sent
+ *   cod_secrets   per-shop GA4 Measurement Protocol secret + Meta Conversions API token
+ *                 (never served to the storefront; the admin only sees "set / last 4")
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -107,6 +111,40 @@ function cod_ensure_tables($pdo) {
             KEY idx_cod_orders_shop (shop, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS cod_secrets (
+            shop             VARCHAR(255) NOT NULL,
+            ga4_api_secret   VARCHAR(128) NULL,
+            meta_capi_token  VARCHAR(512) NULL,
+            meta_test_code   VARCHAR(64) NULL,
+            updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (shop)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    cod_ensure_order_columns($pdo);
+}
+
+/** Columns added after cod_orders first shipped. SHOW COLUMNS works on MySQL and MariaDB alike. */
+function cod_ensure_order_columns($pdo) {
+    $have = array_column($pdo->query('SHOW COLUMNS FROM cod_orders')->fetchAll(PDO::FETCH_ASSOC), 'Field');
+    $add = [
+        'lifecycle'          => "VARCHAR(16) NOT NULL DEFAULT 'placed'",
+        'financial_status'   => 'VARCHAR(32) NULL',
+        'fulfillment_status' => 'VARCHAR(32) NULL',
+        'shipment_status'    => 'VARCHAR(32) NULL',
+        'refunded_total'     => 'DECIMAL(12,2) NOT NULL DEFAULT 0',
+        'cancelled_at'       => 'DATETIME NULL',
+        'ga4_status'         => 'VARCHAR(24) NULL',
+        'meta_status'        => 'VARCHAR(24) NULL',
+    ];
+    $missing = array_diff_key($add, array_flip($have));
+    foreach ($missing as $column => $definition) {
+        $pdo->exec("ALTER TABLE cod_orders ADD COLUMN $column $definition");
+    }
+    if ($missing) {
+        $keys = array_column($pdo->query("SHOW INDEX FROM cod_orders WHERE Key_name = 'idx_cod_orders_order'")->fetchAll(PDO::FETCH_ASSOC), 'Key_name');
+        if (!$keys) $pdo->exec('ALTER TABLE cod_orders ADD KEY idx_cod_orders_order (shop, order_id)');
+    }
 }
 
 /** Runs $fn with the PDO handle; any DB failure becomes a clean 503 (details only in the server log). */

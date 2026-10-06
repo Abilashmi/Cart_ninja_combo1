@@ -14,7 +14,8 @@ require_once __DIR__ . '/config.php';
  * <BRIX_APP_URL>/api/cod/<endpoint> and returns its answer unchanged. It adds
  * X-Forge-Secret plus the shopper's real IP (X-Brix-Client-Ip), so the app
  * server's per-shopper rate limits still apply to each shopper instead of
- * to this server.
+ * to this server, and the shopper's User-Agent (X-Brix-Client-Ua), which the
+ * Meta Conversions API Purchase event needs.
  *
  * BRIX_APP_URL (env, e.g. in .htaccess) defaults to https://cartdrawer.fly.dev.
  */
@@ -50,6 +51,7 @@ if (!$secret) {
 }
 
 $clientIp = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? ($_SERVER['REMOTE_ADDR'] ?? '');
+$clientUa = substr(preg_replace('/[\x00-\x1f\x7f]/', '', (string)($_SERVER['HTTP_USER_AGENT'] ?? '')), 0, 400);
 $appUrl = rtrim(getenv('BRIX_APP_URL') ?: 'https://cartdrawer.fly.dev', '/');
 
 $ch = curl_init($appUrl . '/api/cod/' . $endpoint);
@@ -64,6 +66,7 @@ curl_setopt_array($ch, [
         'Accept: application/json',
         'X-Forge-Secret: ' . $secret,
         'X-Brix-Client-Ip: ' . $clientIp,
+        'X-Brix-Client-Ua: ' . $clientUa,
         'ngrok-skip-browser-warning: 1', // lets BRIX_APP_URL point at a dev tunnel
     ],
 ]);

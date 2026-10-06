@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
+import { syncCodOrderFromWebhook } from "../services/cod.server";
 import { applyOrderDelta } from "../services/analytics-aggregator.server";
 
 // Reverses the revenue counted at orders/paid when a previously-paid order is
@@ -34,6 +35,10 @@ export const action = async ({ request }) => {
   } catch (error) {
     console.error("[Webhook orders/cancelled] Failed to record cancellation:", error.message);
   }
+
+  // BRIX COD orders: shipped / delivered / paid / cancelled / refunded status.
+  // Not awaited (Shopify wants a reply within 5 s); never throws, safe on retries.
+  syncCodOrderFromWebhook(shop, payload);
 
   return new Response();
 };
