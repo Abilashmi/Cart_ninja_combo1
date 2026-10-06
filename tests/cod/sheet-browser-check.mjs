@@ -67,10 +67,10 @@ const handler = async (route) => {
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body style="font-family:Arial,sans-serif"><main>
       <form action="/cart/add" id="product-form"><input type="hidden" name="id" value="11"><input name="quantity" value="2"><input name="properties[Engraving]" value="AR"><button type="submit" name="add">Add to cart</button></form>
       </main><script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'}};window.ShopifyAnalytics={meta:{page:{pageType:'product'}}};${url.searchParams.has('notags') ? '' : THEME_TAGS}</script>
-      <script src="https://cdn.test/brix_cod.js" data-brix-logo="https://cdn.test/brix_logo.svg" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
+      <script src="https://cdn.test/brix_cod.js" data-brix-logo="https://cdn.test/brix_logo.png" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>` });
   }
   if (url.href === 'https://cdn.test/brix_cod.js') return route.fulfill({ contentType: 'application/javascript', body: SCRIPT });
-  if (url.href === 'https://cdn.test/brix_logo.svg') return route.fulfill({ contentType: 'image/svg+xml', body: fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_logo.svg')) });
+  if (url.href === 'https://cdn.test/brix_logo.png') return route.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_logo.png')) });
   if (url.pathname === '/api/cod/quote' || (url.origin === PHP && url.pathname === '/cod_checkout.php' && body && body.endpoint === 'quote')) await new Promise((r) => setTimeout(r, 250));
   if (url.pathname === '/products/undefined.js' || url.pathname.startsWith('/products/')) return json({ tags: ['coffee'] });
   if (url.pathname === '/cart.js') return json({ items: [{ variant_id: 11, quantity: 1, properties: {}, final_line_price: 89900 }] });

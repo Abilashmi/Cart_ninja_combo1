@@ -104,7 +104,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style><style>body{background:#f1f1f1;margin:0}</style></head><body><div id="root"></div><script>window.__DATA__=${JSON.stringify(data)}</script><script>${js}</script></body></html>`;
 await page.route('https://admin.test/**', (route) => {
   const p = new URL(route.request().url()).pathname;
-  if (p === '/brix-logo.svg') return route.fulfill({ contentType: 'image/svg+xml', body: fs.readFileSync(path.join(ROOT, 'public/brix-logo.svg')) });
+  if (p === '/brix-logo.png') return route.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.join(ROOT, 'public/brix-logo.png')) });
   return route.fulfill({ contentType: 'text/html', body: html });
 });
 await page.goto('https://admin.test/app/cod');

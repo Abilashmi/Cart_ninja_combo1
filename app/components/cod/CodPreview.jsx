@@ -50,7 +50,7 @@ function offerBadge(text) {
 }
 
 function BrixMark({ height }) {
-  return <img src="/brix-logo.svg" alt="BRIX" style={{ height, width: 'auto', display: 'block' }} />;
+  return <img src="/brix-logo.png" alt="BRIX" style={{ height, width: 'auto', display: 'block' }} />;
 }
 
 function suggestedValue(s) {

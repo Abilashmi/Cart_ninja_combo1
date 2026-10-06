@@ -864,7 +864,7 @@ export default function CodCheckoutPage() {
           autoComplete="off"
         />
         <div className="cod-brixnote">
-          <img src="/brix-logo.svg" alt="BRIX" />
+          <img src="/brix-logo.png" alt="BRIX" />
           <Text as="p" variant="bodySm" tone="subdued">The popup opens with the BRIX loader and ends with &quot;Secured &amp; powered by BRIX&quot;.</Text>
         </div>
       </BlockStack>
