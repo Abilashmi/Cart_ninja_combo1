@@ -574,7 +574,7 @@ await check('stock: two slots on a variant with 1 in stock is flagged and cannot
   await context.close();
 });
 
-await check('Same Variant Pack: Horizontal Select / Image Variant Select give Buy 2 two separate selections (nothing pre-selected); Quick Add keeps one pick for all', async () => {
+await check('Same Variant Pack: Horizontal Select / Image Variant Select give Buy 2 two separate selections (nothing pre-selected); Quick Add lets each item be a different variant', async () => {
   for (const preset of ['slots', 'image_slots']) {
     const { page, context, cartCalls } = await open({ body: phpBody([designed(preset)]), pageProduct: shirtProduct(), dawn: true, variantInput: '303' });
     await page.waitForSelector(`.brix-packs-widget[data-layout="${preset}"]`);
@@ -593,12 +593,15 @@ await check('Same Variant Pack: Horizontal Select / Image Variant Select give Bu
     await context.close();
   }
   const { page, context, cartCalls } = await open({ body: phpBody([designed('quick_add')]), pageProduct: shirtProduct(), dawn: true, variantInput: '303' });
-  await page.waitForSelector('.brix-packs-widget[data-layout="quick_add"][data-mode="same"]');
+  await page.waitForSelector('.brix-packs-widget[data-layout="quick_add"][data-mode="mix"]');
   await card(page, 1).click();
-  assert.match(await widgetText(page), /2 \/ 2/);
-  await page.getByRole('button', { name: 'Choose M / Black for all 2 items' }).click();
+  assert.match(await widgetText(page), /Selected: 0 \/ 2/, 'not pre-filled from the theme variant');
+  await page.getByRole('button', { name: 'Add M / Black to your pack' }).click();
+  await page.getByRole('button', { name: 'Add L / Blue to your pack' }).click();
+  assert.match(await widgetText(page), /Selected: 2 \/ 2/);
   await addPack(page);
-  assert.deepEqual(lines(cartCalls[0]), [[300, 2]]);
+  assert.deepEqual(lines(cartCalls[0]), [[300, 1], [303, 1]]);
+  assert.equal(new Set(cartCalls[0].items.map((item) => item.properties._brix_pack_group)).size, 1, 'one Pack group for the discount');
   await context.close();
 });
 

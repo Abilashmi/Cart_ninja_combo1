@@ -331,13 +331,13 @@
     return { sameVariant: !pack || pack.packType !== 'mix_match', allowDuplicates: true };
   }
 
-  // Horizontal Select and Image Variant Select always give every item of the
-  // chosen pack its own selection (Buy 2 -> Item 1 + Item 2), whatever the
-  // Pack type; only the Quick Add Picker keeps one pick for a Same Variant
-  // Pack. The checkout discount allows any of the Pack's variants per line.
-  function widgetSelectionRules(pack, layout) {
+  // Every template gives every item of the chosen pack its own selection
+  // (Buy 2 -> 1 x S + 1 x M, or 2 x S), whatever the Pack type, and nothing is
+  // pre-selected. The checkout discount allows any of the Pack's variants per
+  // line, so a Same Variant Pack mixed this way still gets its discount.
+  function widgetSelectionRules(pack) {
     var rules = packSelectionRules(pack);
-    if (layout !== 'quick_add') rules.sameVariant = false;
+    rules.sameVariant = false;
     return rules;
   }
 
@@ -632,7 +632,7 @@
       if (inStock.length) list = inStock;
       var normalized = normalizeOptionData(pack.productOptions, list.map(function (variant) { return shallow(variant, { id: String(variant.id) }); }));
       var imageOptions = normalized.options.map(function (option, index) { return optionHasImages(normalized.variants, index); });
-      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: widgetSelectionRules(pack, layoutFor(pack)), imageOptions: imageOptions } };
+      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: widgetSelectionRules(pack), imageOptions: imageOptions } };
       return cache.model;
     }
 
