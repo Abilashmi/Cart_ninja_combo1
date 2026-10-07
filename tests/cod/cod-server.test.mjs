@@ -546,6 +546,7 @@ test('storefront config: returns display settings only, OTP only when Node has S
   await cod.saveCodSettings(SHOP, {
     enabled: true, codFee: 49, minOrder: 299, blockedPincodes: '744101', requireOtp: true,
     surfaces: { combo: false }, buttons: { drawerText: 'Pay cash on delivery', bg: '#0d6b4c' },
+    productButton: { replaceBuyNow: false, marginTop: 4, paddingY: 18, radius: 0 },
     sheet: { logo: 'data:image/png;base64,iVBORw0KGgo=', radius: 'soft', accent: '#7c3aed', showTrust: false, thankYouText: 'Thank you for shopping with us!',
       couponLabel: 'Got a code?', couponOpen: true, offers: [{ code: 'SAVE10', text: '10% off above ₹999' }, { code: 'bad code!', text: 'x' }] },
   });
@@ -555,6 +556,7 @@ test('storefront config: returns display settings only, OTP only when Node has S
   assert.deepEqual(json.blockedPincodes, ['744101']);
   assert.deepEqual(json.surfaces, { drawer: true, product: true, combo: false });
   assert.equal(json.buttons.drawerText, 'Pay cash on delivery');
+  assert.deepEqual(json.productButton, { replaceBuyNow: false, marginTop: 4, marginBottom: 0, paddingY: 18, paddingX: 16, radius: 0 });
   assert.equal(json.otpRequired, true, 'COD_OTP_DEV_LOG counts as an SMS provider in tests');
   assert.equal('_runtime' in json, false);
   assert.equal('orderTags' in json, false, 'merchant-only fields are not exposed');

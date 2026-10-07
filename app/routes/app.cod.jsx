@@ -24,7 +24,9 @@ import {
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, isValidCodLogo, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE } from '../utils/cod.shared';
+import {
+  sanitizeCodSettings, isValidCodLogo, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, GA4_ID_RE, META_PIXEL_RE,
+} from '../utils/cod.shared';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
 import CodPreview from '../components/cod/CodPreview';
@@ -114,6 +116,18 @@ function sheetForm(sheet) {
   };
 }
 
+function productButtonForm(pb) {
+  const b = { ...DEFAULT_COD_SETTINGS.productButton, ...(pb || {}) };
+  return {
+    pbReplaceBuyNow: b.replaceBuyNow,
+    pbMarginTop: b.marginTop,
+    pbMarginBottom: b.marginBottom,
+    pbPaddingY: b.paddingY,
+    pbPaddingX: b.paddingX,
+    pbRadius: b.radius,
+  };
+}
+
 function toForm(s) {
   return {
     enabled: s.enabled,
@@ -136,6 +150,7 @@ function toForm(s) {
     productText: s.buttons.productText,
     bg: s.buttons.bg,
     color: s.buttons.color,
+    ...productButtonForm(s.productButton),
     ...sheetForm(s.sheet),
     ga4Id: s.tracking?.ga4Id || '',
     metaPixelId: s.tracking?.metaPixelId || '',
@@ -174,6 +189,14 @@ function toSettings(f) {
     prepaidNudgeText: f.prepaidNudgeText,
     orderTags: f.orderTags,
     buttons: { drawerText: f.drawerText, productText: f.productText, bg: f.bg, color: f.color },
+    productButton: {
+      replaceBuyNow: f.pbReplaceBuyNow,
+      marginTop: f.pbMarginTop,
+      marginBottom: f.pbMarginBottom,
+      paddingY: f.pbPaddingY,
+      paddingX: f.pbPaddingX,
+      radius: f.pbRadius,
+    },
     sheet: {
       logo: f.sheetLogo,
       logoSize: f.sheetLogoSize,
@@ -243,6 +266,9 @@ const TABS = [
   { id: 'tracking', content: 'Ads & analytics', icon: ChartVerticalIcon, fields: ['ga4Id', 'metaPixelId', 'ga4ApiSecret', 'metaCapiToken', 'metaTestCode'] },
 ];
 
+// Preview screen to show while a settings tab is open.
+const PREVIEW_FOCUS = { popup: 'sheet', coupons: 'sheet', look: 'product' };
+
 // Where a COD order stands after it's placed (Shopify order webhooks → cod_orders.lifecycle).
 const LIFECYCLE = {
   placed: { tone: undefined, label: 'Not shipped' },
@@ -290,6 +316,15 @@ function Avatar({ name }) {
 }
 
 // Ready-made button colour pairs, all readable (contrast 4.5:1 or more).
+// Product page button sizes (settings.productButton), in the order they're shown.
+const PB_SIZES = [
+  { key: 'marginTop', field: 'pbMarginTop', label: 'Space above', help: 'Gap between Add to Cart and the COD button.' },
+  { key: 'marginBottom', field: 'pbMarginBottom', label: 'Space below', help: 'Gap under the COD button.' },
+  { key: 'paddingY', field: 'pbPaddingY', label: 'Padding top and bottom', help: 'Makes the button taller or shorter.' },
+  { key: 'paddingX', field: 'pbPaddingX', label: 'Padding left and right', help: 'Room beside the text on narrow screens.' },
+  { key: 'radius', field: 'pbRadius', label: 'Corner rounding', help: '0 for square corners.' },
+];
+
 const STYLE_PRESETS = [
   { name: 'Midnight', bg: '#111827', color: '#ffffff' },
   { name: 'Forest', bg: '#0c7a43', color: '#ffffff' },
@@ -591,10 +626,21 @@ export default function CodCheckoutPage() {
         <Text as="p" tone="subdued">Choose where shoppers see the Cash on Delivery button. Pay online always goes to your normal checkout.</Text>
         <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
           <PlaceTile id="drawer" title="Cart drawer" description="Above the checkout button in the BRIX cart drawer." checked={form.drawer} onChange={set('drawer')} bg={form.bg} />
-          <PlaceTile id="product" title="Product pages" description="Under Add to Cart. Buys just that product." checked={form.product} onChange={set('product')} bg={form.bg} />
+          <PlaceTile id="product" title="Product pages" description={form.pbReplaceBuyNow ? 'In place of Buy it now. Buys just that product.' : 'Under Add to Cart. Buys just that product.'} checked={form.product} onChange={set('product')} bg={form.bg} />
           <PlaceTile id="combo" title="Combo pages" description="Next to Checkout on Build a Combo pages." checked={form.combo} onChange={set('combo')} bg={form.bg} />
         </InlineGrid>
         {!surfacesOn.length && <Banner tone="warning">Pick at least one place, or shoppers won&apos;t see Cash on Delivery anywhere.</Banner>}
+        {form.product && (
+          <ToggleRow
+            icon={ProductIcon}
+            title="Replace the Buy it now button"
+            description={form.pbReplaceBuyNow
+              ? "On product pages, Shopify's Buy it now button is hidden and the COD button takes its place. Themes without Buy it now get the COD button under Add to Cart."
+              : 'Buy it now stays, and the COD button goes between Add to Cart and Buy it now.'}
+            checked={form.pbReplaceBuyNow}
+            onChange={set('pbReplaceBuyNow')}
+          />
+        )}
         <Text as="p" variant="bodySm" tone="subdued">Combo templates can each hide the button in the combo builder. Everything here needs the Custom Cart Drawer app embed turned on in your theme.</Text>
       </BlockStack>
     );
@@ -702,6 +748,32 @@ export default function CodCheckoutPage() {
             <TextField label="Cart drawer" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} showCharacterCount autoComplete="off" />
             <TextField label="Product page" value={form.productText} onChange={set('productText')} error={errors.productText} maxLength={60} showCharacterCount autoComplete="off" />
           </InlineGrid>
+        </BlockStack>
+        <BlockStack gap="200">
+          <InlineStack align="space-between" blockAlign="center" gap="200">
+            <Text as="h3" variant="headingSm">Product page button size and spacing</Text>
+            {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
+              <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow }) }))}>Reset</Button>
+            )}
+          </InlineStack>
+          <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
+            {PB_SIZES.map(({ key, field, label, help }) => {
+              const [min, max] = COD_PRODUCT_BUTTON_LIMITS[key];
+              return (
+                <RangeSlider
+                  key={key}
+                  label={label}
+                  helpText={help}
+                  min={min}
+                  max={max}
+                  value={form[field]}
+                  onChange={(v) => set(field)(v)}
+                  suffix={<div style={{ minWidth: 40, textAlign: 'right' }}><Text as="span" fontWeight="semibold">{form[field]} px</Text></div>}
+                />
+              );
+            })}
+          </InlineGrid>
+          <Text as="p" variant="bodySm" tone="subdued">If you placed the COD button block in your theme, its own &quot;Space above&quot; adds to the space above set here.</Text>
         </BlockStack>
         <Text as="p" variant="bodySm" tone="subdued">These colours are also used in the COD checkout sheet. Combo page buttons are styled per template in the combo builder.</Text>
       </BlockStack>
@@ -1211,7 +1283,7 @@ export default function CodCheckoutPage() {
                 <Box padding="400">{tabBody}</Box>
               </Card>
               <div className="cod-sticky">
-                <CodPreview settings={preview} money={money} focus={['popup', 'coupons'].includes(TABS[tab].id) ? 'sheet' : null} />
+                <CodPreview settings={preview} money={money} focus={PREVIEW_FOCUS[TABS[tab].id] || null} />
               </div>
             </InlineGrid>
           )}

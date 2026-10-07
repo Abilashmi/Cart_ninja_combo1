@@ -133,6 +133,23 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Product page' }).click();
   await page.waitForTimeout(300);
   await shot('look');
+  // Product page button: spacing sliders drive the preview (drawn at 80%), Buy it now replaced by default.
+  await page.getByRole('slider', { name: 'Space above' }).focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  await shot('look-spacing', { fullPage: true });
+  const pvReplace = await page.evaluate(() => ({
+    marginTop: getComputedStyle(document.querySelector('.cod-stage .cod-pv-btn')).marginTop,
+    buyNow: Boolean(document.querySelector('.cod-stage .cod-scr-bin')),
+  }));
+  await page.getByRole('tab', { name: /Placement/ }).click();
+  await page.getByRole('switch', { name: 'Replace the Buy it now button' }).click();
+  await page.locator('.cod-sticky').getByRole('button', { name: 'Product page' }).click();
+  await page.waitForTimeout(200);
+  await shot('placement-keep-buy-now');
+  const pvKeep = await page.evaluate(() => Boolean(document.querySelector('.cod-stage .cod-scr-bin')));
+  console.log('product button preview:', JSON.stringify({ ...pvReplace, buyNowWhenKept: pvKeep }));
+  await page.getByRole('switch', { name: 'Replace the Buy it now button' }).click();
   await page.getByRole('tab', { name: /Placement/ }).click();
   await page.locator('.cod-sticky').getByRole('button', { name: 'Cart drawer' }).click();
   await page.locator('.cod-sticky input[type=number]').fill('199');
@@ -203,6 +220,7 @@ if (scenario === 'live') {
   const submitted = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
   const sent = submitted.settings?.sheet;
   console.log('saved sheet:', JSON.stringify({ ...sent, logo: (sent?.logo || '').slice(0, 22) + '… (' + (sent?.logo || '').length + ' chars)' }));
+  console.log('saved productButton:', JSON.stringify(submitted.settings?.productButton));
   console.log('saved tracking:', JSON.stringify(submitted.settings?.tracking), 'secrets:', JSON.stringify(submitted.secrets));
   await page.getByRole('tab', { name: /^Orders/ }).click();
   await page.getByRole('tab', { name: /^All/ }).click();

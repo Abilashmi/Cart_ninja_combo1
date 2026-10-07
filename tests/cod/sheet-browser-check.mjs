@@ -25,6 +25,13 @@ const quote = {
   itemsTotal: 899, subtotal: 899, discounts: 0, shipping: 0, codFee: 49, tax: 0, taxesIncluded: true, total: 948, coupon: null,
 };
 
+// Dawn's product form buttons: Add to cart, then Shopify's Buy it now, with
+// theme CSS that would restyle any <button> and space the buttons out.
+const DAWN_BUTTONS = `<style>button{text-transform:uppercase;letter-spacing:3px;min-height:60px;padding:0 30px;border-radius:0}
+  .product-form__buttons>*:not(:last-child){margin-bottom:10px}</style>
+  <div class="product-form__buttons"><button type="submit" name="add">Add to cart</button>
+  <div data-shopify="payment-button" class="shopify-payment-button"><shopify-accelerated-checkout><button type="button" class="shopify-payment-button__button">Buy it now</button></shopify-accelerated-checkout></div></div>`;
+
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 
@@ -49,6 +56,7 @@ const posted = [];
 const phpReads = [];
 const directAppCalls = [];
 let forceQuoteError = false;
+let productButton = null; // productButton settings served with the config (null = not sent)
 let cartCleared = false;
 const tagLoads = []; // gtag.js / fbevents.js requests
 
@@ -71,7 +79,7 @@ const handler = async (route) => {
       <div class="upsell"><form action="/cart/add" id="upsell-form"><input type="hidden" name="id" value="99"><button type="submit" name="add">Add upsell</button></form></div>
       <div class="product__info-wrapper grid__item">
         <form action="/cart/add" id="product-form-installment"><input type="hidden" name="id" value="21"></form>
-        <form action="/cart/add" id="product-form-main"><input type="hidden" name="id" value="21" disabled><button type="submit" name="add">Add to cart</button></form>
+        <form action="/cart/add" id="product-form-main"><input type="hidden" name="id" value="21" disabled>${DAWN_BUTTONS}</form>
       </div>
       <div class="grid__item"><div class="card"><form action="/cart/add" id="card-form"><input type="hidden" name="id" value="22"><button type="submit" name="add">Add</button></form></div></div>
       </main><script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'}};window.ShopifyAnalytics={meta:{page:{pageType:'product'},product:{variants:[{id:21},{id:22}]}}};</script>
@@ -92,7 +100,7 @@ const handler = async (route) => {
   if (url.origin === PHP && url.pathname === '/cod_storefront.php') {
     phpReads.push(url.searchParams.get('action'));
     if (route.request().method() !== 'GET') return json({ success: false }, 405);
-    if (url.searchParams.get('action') === 'config') return json(config);
+    if (url.searchParams.get('action') === 'config') return json(productButton ? { ...config, productButton } : config);
     const pin = url.searchParams.get('pin');
     return json({ success: true, pincode: pin, found: pin === '560001', city: 'Bangalore', state: 'Karnataka', blocked: false });
   }
@@ -347,7 +355,52 @@ const dawnBtn = page3.locator('[data-brix-cod-btn]');
 await dawnBtn.first().waitFor({ timeout: 5000 }).catch(() => {});
 const dawn = await page3.evaluate(() => [...document.querySelectorAll('[data-brix-cod-btn]')].map((b) => ({ form: b.closest('form') && b.closest('form').getAttribute('id'), shown: b.getBoundingClientRect().height > 0 })));
 check('product page (Dawn layout): one visible button, on the main Add to cart form', dawn.length === 1 && dawn[0].form === 'product-form-main' && dawn[0].shown, JSON.stringify(dawn));
+const dawnLayout = () => page3.evaluate(() => {
+  const slot = document.querySelector('[data-brix-cod-slot]');
+  const bin = document.querySelector('.shopify-payment-button');
+  const btn = slot && slot.querySelector('[data-brix-cod-btn]');
+  const cs = btn && getComputedStyle(btn);
+  return {
+    buttons: document.querySelectorAll('[data-brix-cod-btn]').length,
+    beforeBuyNow: Boolean(slot && bin && slot.nextElementSibling === bin),
+    buyNowHidden: bin ? getComputedStyle(bin).display === 'none' : null,
+    slotMargin: slot && getComputedStyle(slot).marginBottom,
+    style: cs && [cs.textTransform, cs.letterSpacing, cs.paddingTop, cs.paddingLeft, cs.borderRadius, cs.minHeight, cs.marginTop].join(' '),
+  };
+});
+const replaced = await dawnLayout();
+await shot(page3, '8-product-replaces-buy-now');
+check('product page: COD button takes the place of Buy it now, which is hidden', replaced.beforeBuyNow && replaced.buyNowHidden === true, JSON.stringify(replaced));
+check('product page: theme button CSS does not change the COD button', replaced.style === 'none normal 14px 16px 12px 0px 10px' && replaced.slotMargin === '0px', replaced.style);
+// Themes redraw the product form on variant change; the button must come back, once.
+await page3.evaluate(() => { const f = document.getElementById('product-form-main'); f.outerHTML = f.outerHTML.replace(/<div data-brix-cod-slot[^]*?<\/button><\/div>/, ''); });
+await page3.waitForFunction(() => document.querySelector('#product-form-main [data-brix-cod-btn]'), null, { timeout: 3000 }).catch(() => {});
+const redrawn = await dawnLayout();
+check('product page: button comes back after the theme redraws the form', redrawn.buttons === 1 && redrawn.beforeBuyNow && redrawn.buyNowHidden === true, JSON.stringify(redrawn));
 await page3.close();
+
+// Merchant keeps Buy it now and changes the spacing.
+productButton = { replaceBuyNow: false, marginTop: 4, marginBottom: 6, paddingY: 20, paddingX: 24, radius: 0 };
+const page4 = await browser.newPage();
+await page4.route('**/*', handler);
+await page4.goto('https://shop.test/dawn');
+await page4.locator('[data-brix-cod-btn]').first().waitFor({ timeout: 5000 }).catch(() => {});
+const kept = await page4.evaluate(() => {
+  const slot = document.querySelector('[data-brix-cod-slot]');
+  const btn = slot && slot.querySelector('[data-brix-cod-btn]');
+  const cs = btn && getComputedStyle(btn);
+  const bin = document.querySelector('.shopify-payment-button');
+  return {
+    afterAddToCart: Boolean(slot && slot.previousElementSibling && slot.previousElementSibling.name === 'add'),
+    buyNowShown: getComputedStyle(bin).display !== 'none',
+    style: cs && [cs.marginTop, cs.marginBottom, cs.paddingTop, cs.paddingLeft, cs.borderRadius].join(' '),
+  };
+});
+check('product page: Buy it now kept when replacing is off, COD button under Add to cart', kept.afterAddToCart && kept.buyNowShown, JSON.stringify(kept));
+await shot(page4, '9-product-keeps-buy-now');
+check('product page: merchant spacing applied', kept.style === '4px 6px 20px 24px 0px', kept.style);
+await page4.close();
+productButton = null;
 check('settings and PIN lookups come from the PHP backend', phpReads.includes('config') && phpReads.includes('pincode'));
 check('OTP, pricing and the order go through the PHP relay', ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].every((p) => posted.some((x) => x.path === p)));
 check('the browser never calls the app server directly', directAppCalls.length === 0, directAppCalls.join(', '));

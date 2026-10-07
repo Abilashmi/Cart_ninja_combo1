@@ -30,6 +30,15 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     bg: '#111827',
     color: '#ffffff',
   },
+  // The product page COD button (brix_cod.js initProductButton). Sizes in px.
+  productButton: {
+    replaceBuyNow: true, // take the place of Shopify's "Buy it now" button and hide it
+    marginTop: 10,
+    marginBottom: 0,
+    paddingY: 14,
+    paddingX: 16,
+    radius: 12,
+  },
   // Look of the shopper's COD checkout popup (extensions/cart-drawer/assets/brix_cod.js).
   sheet: {
     logo: '', // '' | https URL | small data:image/... URL (resized in the admin)
@@ -58,6 +67,15 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
 export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
 export const META_PIXEL_RE = /^\d{10,20}$/;
 export const META_CONTENT_ID_FORMATS = ['shopify', 'variant', 'sku'];
+
+// Allowed range for each productButton size: [min, max].
+export const COD_PRODUCT_BUTTON_LIMITS = Object.freeze({
+  marginTop: [0, 60],
+  marginBottom: [0, 60],
+  paddingY: [4, 32],
+  paddingX: [4, 48],
+  radius: [0, 40],
+});
 
 const COUPON_CODE_RE = /^[\w-]{1,60}$/;
 
@@ -135,6 +153,14 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     if (HEX_RE.test(p.buttons.bg || '')) buttons.bg = p.buttons.bg;
     if (HEX_RE.test(p.buttons.color || '')) buttons.color = p.buttons.color;
   }
+  const productButton = { ...DEFAULT_COD_SETTINGS.productButton, ...(b.productButton || {}) };
+  if (p.productButton && typeof p.productButton === 'object') {
+    const q = p.productButton;
+    if ('replaceBuyNow' in q) productButton.replaceBuyNow = Boolean(q.replaceBuyNow);
+    for (const [key, [min, max]] of Object.entries(COD_PRODUCT_BUTTON_LIMITS)) {
+      if (key in q) productButton[key] = int(q[key], productButton[key], min, max);
+    }
+  }
   const sheet = { ...DEFAULT_COD_SETTINGS.sheet, ...(b.sheet || {}) };
   if (p.sheet && typeof p.sheet === 'object') {
     const q = p.sheet;
@@ -181,6 +207,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     prepaidNudgeText: has('prepaidNudgeText') ? (typeof p.prepaidNudgeText === 'string' ? p.prepaidNudgeText.trim().slice(0, 140) : '') : String(b.prepaidNudgeText || ''),
     orderTags: parseTags(has('orderTags') ? p.orderTags : b.orderTags),
     buttons,
+    productButton,
     sheet,
     tracking,
   };

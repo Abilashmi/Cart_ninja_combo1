@@ -1442,13 +1442,29 @@
 
   /* ---------- cart drawer button ---------- */
 
-  function buttonHtml(cfg, label, sub, disabled) {
-    return '<button type="button" data-brix-cod-btn' + (disabled ? ' disabled' : '') +
-      ' style="width:100%;padding:14px 16px;margin:0 0 10px 0;background:' + esc(cfg.buttons.bg) + ';color:' + esc(cfg.buttons.color) +
-      ';border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') +
-      ';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:inherit;line-height:1.25;">' +
-      '<span style="display:inline-flex;align-items:center;gap:8px;">' + icon('cash', 18) + esc(label) + '</span>' +
-      (sub ? '<span style="font-size:11.5px;font-weight:500;opacity:.85;">' + esc(sub) + '</span>' : '') + '</button>';
+  // Inline declarations, all !important: theme CSS for `button` (uppercase,
+  // letter-spacing, min-height, shadows, hover colours) must not change the
+  // button from what the merchant sees in the BRIX preview.
+  function important(rules) {
+    return rules.split(';').filter(Boolean).map(function (r) { return r + ' !important;'; }).join('');
+  }
+
+  // size: { marginTop, marginBottom, paddingY, paddingX, radius } in px.
+  var DRAWER_BUTTON_SIZE = { marginTop: 0, marginBottom: 10, paddingY: 14, paddingX: 16, radius: 12 };
+
+  function buttonHtml(cfg, label, sub, disabled, size) {
+    var z = size || DRAWER_BUTTON_SIZE;
+    return '<button type="button" data-brix-cod-btn' + (disabled ? ' disabled' : '') + ' style="' + important(
+      'box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;' +
+      'margin:' + z.marginTop + 'px 0 ' + z.marginBottom + 'px 0;padding:' + z.paddingY + 'px ' + z.paddingX + 'px;' +
+      'background:' + esc(cfg.buttons.bg) + ';color:' + esc(cfg.buttons.color) + ';border:none;border-radius:' + z.radius + 'px;' +
+      'box-shadow:none;text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
+      'font-family:inherit;font-size:15px;font-weight:700;line-height:1.25;text-transform:none;letter-spacing:normal;text-decoration:none;text-align:center;' +
+      'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
+      '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit') + '">' +
+      icon('cash', 18, ' style="flex:none;width:18px;height:18px"') + esc(label) + '</span>' +
+      (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit') + '">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
   function feeHint(cfg, fmt) {
@@ -1572,53 +1588,96 @@
       .catch(function () { return { tags: [], variantIds: metaIds }; });
   }
 
+  // Shopify's "Buy it now" (dynamic checkout) button. The payment_button filter
+  // renders its container inside the product form; the button itself loads later.
+  var BUY_NOW = '.shopify-payment-button, [data-shopify="payment-button"], shopify-buy-it-now-button, shopify-accelerated-checkout';
+
+  // Hidden with a stylesheet, not inline, so a Buy it now button the theme
+  // draws again later (variant change) is hidden too.
+  function hideBuyNow(scope) {
+    if (!document.getElementById('brix-cod-hide-buy-now')) {
+      var style = document.createElement('style');
+      style.id = 'brix-cod-hide-buy-now';
+      style.textContent = BUY_NOW.split(',').map(function (s) { return '[data-brix-cod-hide-buy-now] ' + s.trim(); }).join(',') + '{display:none !important}';
+      document.head.appendChild(style);
+    }
+    scope.setAttribute('data-brix-cod-hide-buy-now', '');
+  }
+
+  var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
+
+  var productMount = null; // { form, slot, addBtn } of the button on the page
+
+  // Puts the COD button on the product form: where Buy it now was (and hides
+  // it) when the merchant chose to replace it, else under Add to Cart. A
+  // [data-brix-cod-slot] block placed in the theme wins over both.
+  function mountProductButton(cfg, info) {
+    var m = productMount;
+    if (m && m.form.isConnected && m.slot.isConnected && (!m.addBtn || m.addBtn.isConnected)) return;
+    var form = findProductForm(info.variantIds);
+    if (!form) return;
+    if (m && m.slot.getAttribute('data-brix-cod-slot') === 'auto' && m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
+    var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, cfg.productButton || {});
+    var addBtn = submitButtonFor(form);
+    var buyNow = look.replaceBuyNow ? form.querySelector(BUY_NOW) : null;
+    var slot = document.querySelector('[data-brix-cod-slot]:not([data-brix-cod-slot="auto"])');
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.setAttribute('data-brix-cod-slot', 'auto');
+      // The theme's spacing rules for its buttons must not add to the merchant's.
+      slot.style.cssText = important('display:block;width:100%;margin:0;padding:0');
+      var anchor = addBtn && addBtn.parentNode && form.contains(addBtn) ? addBtn : null;
+      if (buyNow) buyNow.parentNode.insertBefore(slot, buyNow);
+      else if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
+      else form.appendChild(slot);
+    }
+    if (look.replaceBuyNow) hideBuyNow(form.closest('.shopify-section') || form);
+    productMount = { form: form, slot: slot, addBtn: addBtn };
+
+    var fmt = moneyFormatter(cfg.currency);
+    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, feeHint(cfg, fmt), false, look);
+    var btn = slot.querySelector('[data-brix-cod-btn]');
+    function syncDisabled() {
+      var soldOut = Boolean(addBtn && (addBtn.disabled || addBtn.getAttribute('aria-disabled') === 'true'));
+      btn.disabled = soldOut;
+      btn.style.setProperty('opacity', soldOut ? '0.5' : '1', 'important');
+      btn.style.setProperty('cursor', soldOut ? 'not-allowed' : 'pointer', 'important');
+    }
+    syncDisabled();
+    if (addBtn && window.MutationObserver) {
+      new MutationObserver(syncDisabled).observe(addBtn, { attributes: true, attributeFilter: ['disabled', 'aria-disabled'] });
+    }
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var sel = formSelection(form);
+      if (!/^\d+$/.test(sel.variantId)) return;
+      open({
+        surface: 'product',
+        items: [sel],
+        onPayOnline: function () {
+          window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity;
+        },
+      });
+    });
+  }
+
   function initProductButton() {
     if (!isProductPage()) return;
     loadConfig().then(function (cfg) {
       if (!cfg || cfg.surfaces.product === false) return;
       productInfo().then(function (info) {
-        var form = findProductForm(info.variantIds);
-        var slot = document.querySelector('[data-brix-cod-slot]');
-        if (!form) return;
-        var tags = info.tags;
         var excluded = (cfg.excludedProductTags || []).map(function (t) { return String(t).toLowerCase(); });
-        if (excluded.length && tags.some(function (t) { return excluded.indexOf(String(t).trim().toLowerCase()) !== -1; })) return;
-        var addBtn = submitButtonFor(form);
-        if (!slot) {
-          slot = document.createElement('div');
-          slot.setAttribute('data-brix-cod-slot', 'auto');
-          slot.style.cssText = 'margin-top:10px;width:100%;';
-          var anchor = addBtn && addBtn.parentNode && form.contains(addBtn) ? addBtn : null;
-          if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
-          else form.appendChild(slot);
-        }
-        var fmt = moneyFormatter(cfg.currency);
-        slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, feeHint(cfg, fmt), false);
-        var btn = slot.querySelector('[data-brix-cod-btn]');
-        btn.style.margin = '0';
-        function syncDisabled() {
-          var soldOut = Boolean(addBtn && (addBtn.disabled || addBtn.getAttribute('aria-disabled') === 'true'));
-          btn.disabled = soldOut;
-          btn.style.opacity = soldOut ? '0.5' : '1';
-          btn.style.cursor = soldOut ? 'not-allowed' : 'pointer';
-        }
-        syncDisabled();
-        if (addBtn && window.MutationObserver) {
-          new MutationObserver(syncDisabled).observe(addBtn, { attributes: true, attributeFilter: ['disabled', 'aria-disabled'] });
-        }
-        btn.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var sel = formSelection(form);
-          if (!/^\d+$/.test(sel.variantId)) return;
-          open({
-            surface: 'product',
-            items: [sel],
-            onPayOnline: function () {
-              window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity;
-            },
-          });
-        });
+        if (excluded.length && info.tags.some(function (t) { return excluded.indexOf(String(t).trim().toLowerCase()) !== -1; })) return;
+        mountProductButton(cfg, info);
+        // Many themes redraw the product form or its buttons when a variant is
+        // picked, which removes the COD button; put it back when that happens.
+        if (!window.MutationObserver) return;
+        var timer = null;
+        new MutationObserver(function () {
+          clearTimeout(timer);
+          timer = setTimeout(function () { mountProductButton(cfg, info); }, 120);
+        }).observe(document.querySelector('main') || document.body, { childList: true, subtree: true });
       });
     });
   }

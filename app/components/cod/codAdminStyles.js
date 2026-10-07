@@ -170,6 +170,9 @@ export const COD_ADMIN_CSS = `
 .cod-scr-sizes span{min-width:26px;height:22px;padding:0 6px;border-radius:6px;border:1px solid #e5e7eb;display:grid;place-items:center;font-size:10.5px;font-weight:600}
 .cod-scr-sizes span.on{border-color:#111827;background:#111827;color:#fff}
 .cod-scr-atc{border:1.5px solid #111827;border-radius:10px;padding:9px;text-align:center;font-weight:700}
+.cod-scr-buys{display:flex;flex-direction:column}
+.cod-scr-buys .cod-pv-hidden,.cod-scr-bin{margin-top:8px}
+.cod-scr-bin{border-radius:10px;padding:10px;text-align:center;font-weight:700;background:#111827;color:#fff}
 .cod-scr-sheet{background:#f3f4f6;display:flex;flex-direction:column}
 .cod-scr-dim{height:46px;background:rgba(15,23,42,.45)}
 .cod-scr-sheet .cod-pv-panel{position:static;border-radius:16px 16px 0 0;margin-top:-14px}

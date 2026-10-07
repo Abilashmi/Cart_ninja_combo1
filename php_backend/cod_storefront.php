@@ -79,6 +79,23 @@ function cods_sheet($sheet) {
     ];
 }
 
+// The product page button: replace "Buy it now" + spacing in px. Mirrors
+// sanitizeCodSettings' "productButton" rules (COD_PRODUCT_BUTTON_LIMITS).
+function cods_product_button($pb) {
+    $q = is_array($pb) ? $pb : [];
+    $size = function ($key, $default, $min, $max) use ($q) {
+        return is_numeric($q[$key] ?? null) ? max($min, min($max, (int)$q[$key])) : $default;
+    };
+    return [
+        'replaceBuyNow' => ($q['replaceBuyNow'] ?? true) !== false,
+        'marginTop' => $size('marginTop', 10, 0, 60),
+        'marginBottom' => $size('marginBottom', 0, 0, 60),
+        'paddingY' => $size('paddingY', 14, 4, 32),
+        'paddingX' => $size('paddingX', 16, 4, 48),
+        'radius' => $size('radius', 12, 0, 40),
+    ];
+}
+
 function cods_offers($offers) {
     $out = [];
     $seen = [];
@@ -154,6 +171,7 @@ if ($action === 'config') {
             'bg' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['bg'] ?? '') ? $buttons['bg'] : '#111827',
             'color' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['color'] ?? '') ? $buttons['color'] : '#ffffff',
         ],
+        'productButton' => cods_product_button($s['productButton'] ?? null),
         'sheet' => cods_sheet($s['sheet'] ?? null),
         'tracking' => cods_tracking($s['tracking'] ?? null),
     ], 30);

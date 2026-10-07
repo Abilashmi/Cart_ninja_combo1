@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useState } from 'react';
 import { BlockStack, Box, ButtonGroup, Button, Card, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
-import { checkCodRules, codCharges } from '../../utils/cod.shared';
+import { checkCodRules, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
 
 const SURFACES = [
   { id: 'drawer', label: 'Cart drawer' },
@@ -17,12 +17,24 @@ function CashIcon({ size = 16 }) {
   );
 }
 
-// The storefront COD button, drawn the way brix_cod.js draws it.
-function CodButton({ settings, label, sub, disabled }) {
+// The product page mock is a ~360px phone shown at 80%, so storefront px
+// sizes (brix_cod.js buttonHtml) are drawn at this scale.
+const PHONE_SCALE = 0.8;
+
+// The storefront COD button, drawn the way brix_cod.js draws it. With `size`
+// (settings.productButton) it uses the storefront's exact sizes, scaled.
+function CodButton({ settings, label, sub, disabled, size }) {
+  const px = (n) => `${Math.round(n * PHONE_SCALE * 10) / 10}px`;
+  const sized = size ? {
+    margin: `${px(size.marginTop)} 0 ${px(size.marginBottom)}`,
+    padding: `${px(size.paddingY)} ${px(size.paddingX)}`,
+    borderRadius: px(size.radius),
+    fontSize: px(15),
+  } : null;
   return (
-    <div className="cod-pv-btn" style={{ background: settings.buttons.bg, color: settings.buttons.color, opacity: disabled ? 0.5 : 1 }}>
-      <span className="cod-pv-btn-l"><CashIcon />{label}</span>
-      {sub ? <span className="cod-pv-btn-s">{sub}</span> : null}
+    <div className="cod-pv-btn" style={{ background: settings.buttons.bg, color: settings.buttons.color, opacity: disabled ? 0.5 : 1, ...sized }}>
+      <span className="cod-pv-btn-l"><CashIcon size={size ? 18 * PHONE_SCALE : 16} />{label}</span>
+      {sub ? <span className="cod-pv-btn-s" style={size ? { fontSize: px(11.5) } : undefined}>{sub}</span> : null}
     </div>
   );
 }
@@ -125,6 +137,8 @@ export default function CodPreview({ settings, money, focus }) {
       </div>
     );
   } else if (surface === 'product') {
+    const pb = { ...DEFAULT_COD_SETTINGS.productButton, ...(settings.productButton || {}) };
+    const codHidden = !settings.enabled || surfaceOff;
     screen = (
       <div className="cod-scr">
         <div className="cod-scr-img"><span /></div>
@@ -132,9 +146,13 @@ export default function CodPreview({ settings, money, focus }) {
           <b className="cod-scr-title">Classic Cotton Tee</b>
           <b className="cod-scr-price">{money(cart)}</b>
           <div className="cod-scr-sizes" aria-hidden="true"><span>S</span><span className="on">M</span><span>L</span><span>XL</span></div>
-          <div className="cod-scr-atc">Add to cart</div>
-          {!settings.enabled || surfaceOff ? <Hidden>COD button hidden: {settings.enabled ? 'product pages are turned off' : 'COD is off'}</Hidden>
-            : <CodButton settings={settings} label={settings.buttons.productText} sub={feeHint} />}
+          <div className="cod-scr-buys">
+            <div className="cod-scr-atc">Add to cart</div>
+            {codHidden ? <Hidden>COD button hidden: {settings.enabled ? 'product pages are turned off' : 'COD is off'}</Hidden>
+              : <CodButton settings={settings} label={settings.buttons.productText} sub={feeHint} size={pb} />}
+            {/* Buy it now is only hidden while the COD button shows, as on the storefront. */}
+            {(codHidden || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
+          </div>
         </div>
       </div>
     );

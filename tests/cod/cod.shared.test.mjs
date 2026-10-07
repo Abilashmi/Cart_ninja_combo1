@@ -44,6 +44,15 @@ test('sanitize rejects bad values', () => {
   assert.equal('unknownKey' in s, false);
 });
 
+test('product page button: replace Buy it now by default, sizes clamped, partial patches keep the rest', () => {
+  assert.deepEqual(sanitizeCodSettings({}).productButton, DEFAULT_COD_SETTINGS.productButton);
+  assert.equal(DEFAULT_COD_SETTINGS.productButton.replaceBuyNow, true);
+  const s = sanitizeCodSettings({ productButton: { replaceBuyNow: false, marginTop: 999, paddingY: -3, paddingX: '20', radius: 'x', bogus: 1 } });
+  assert.deepEqual(s.productButton, { replaceBuyNow: false, marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
+  const next = sanitizeCodSettings({ productButton: { radius: 0 } }, s);
+  assert.deepEqual(next.productButton, { ...s.productButton, radius: 0 });
+});
+
 test('Indian phone numbers normalize to 10 digits', () => {
   assert.equal(normalizeIndianPhone('+91 98765 43210'), '9876543210');
   assert.equal(normalizeIndianPhone('09876543210'), '9876543210');
