@@ -132,6 +132,14 @@ export const defaultCartEditorState = {
       couponCode: 'FLASH20',
       couponMode: 'manual',
     },
+    // Cart Image Banner: placement values / rules in utils/cart-banner.shared.js.
+    imageBanner: {
+      enabled: false,
+      desktopImage: '',
+      mobileImage: '',
+      placement: 'above_progress',
+      alt: '',
+    },
     emptyCart: {
       message: 'Your cart is empty',
       showContinueShopping: true,
@@ -169,6 +177,7 @@ export const SECTION_GROUPS = [
     title: 'Body',
     items: [
       { id: 'announcements', label: 'Announcements', icon: 'megaphone', toggleable: true, enabledKey: 'announcements' },
+      { id: 'imageBanner', label: 'Image Banner', icon: 'image', toggleable: true, enabledKey: 'imageBanner' },
       { id: 'progressBar', label: 'Progress Bar', icon: 'chart', toggleable: true, enabledKey: 'progressBar' },
       { id: 'couponSlider', label: 'Coupon Slider', icon: 'discount', toggleable: true, enabledKey: 'couponSlider' },
       { id: 'upsellProducts', label: 'Upsell Products', icon: 'product', toggleable: true, enabledKey: 'upsellProducts' },

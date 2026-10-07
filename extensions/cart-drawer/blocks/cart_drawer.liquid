@@ -2,6 +2,7 @@
   <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"></div>
 
   {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
+  {{ 'brix_cart_ui.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
   <!-- BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
        product pages and combo pages. Shows nothing unless the merchant turned

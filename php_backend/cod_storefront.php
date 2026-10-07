@@ -96,6 +96,19 @@ function cods_product_button($pb) {
     ];
 }
 
+// One of the allowed values, else the default. Mirrors sanitizeCodSettings' pick().
+function cods_enum($value, $allowed, $default) {
+    return in_array($value, $allowed, true) ? $value : $default;
+}
+
+// Theme drawer Checkout button selector (advanced). Same character set as
+// isValidDrawerSelector in app/utils/cod.shared.js; brix_cod.js only ever
+// passes it to querySelectorAll.
+function cods_selector($value) {
+    $v = trim((string)$value);
+    return preg_match('#^[\w\s\-.:\[\]="\'>~+*(),^$|/\#]{1,200}$#', $v) ? $v : '';
+}
+
 function cods_offers($offers) {
     $out = [];
     $seen = [];
@@ -146,6 +159,9 @@ if ($action === 'config') {
 
     $surfaces = is_array($s['surfaces'] ?? null) ? $s['surfaces'] : [];
     $buttons = is_array($s['buttons'] ?? null) ? $s['buttons'] : [];
+    // Settings saved before the fee switch existed charged codFee whenever it was set.
+    $feeOn = array_key_exists('codFeeEnabled', $s) ? !empty($s['codFeeEnabled']) : true;
+    $feeLabel = mb_substr(trim((string)($s['codFeeLabel'] ?? '')), 0, 40);
     cods_ok([
         'enabled' => true,
         'surfaces' => [
@@ -158,11 +174,17 @@ if ($action === 'config') {
         'otpRequired' => !empty($s['requireOtp']) && !empty($s['_runtime']['otpAvailable']),
         'minOrder' => cods_num($s['minOrder'] ?? 0),
         'maxOrder' => cods_num($s['maxOrder'] ?? 0),
-        'codFee' => cods_num($s['codFee'] ?? 0),
+        'drawerPlacement' => cods_enum($s['drawerPlacement'] ?? '', ['replace', 'above', 'below'], 'above'),
+        'drawerSelector' => cods_selector($s['drawerSelector'] ?? ''),
+        // The fee actually charged (0 while the fee switch is off).
+        'codFee' => $feeOn ? cods_num($s['codFee'] ?? 0) : 0,
+        'showCodFee' => ($s['showCodFee'] ?? true) !== false,
+        'codFeeLabel' => $feeLabel !== '' ? $feeLabel : 'Cash on Delivery Fee',
         'shippingFee' => cods_num($s['shippingFee'] ?? 0),
         'freeShippingAbove' => cods_num($s['freeShippingAbove'] ?? 0),
         'blockedPincodes' => cods_str_list($s['blockedPincodes'] ?? []),
         'excludedProductTags' => cods_str_list($s['excludedProductTags'] ?? []),
+        'excludedBehavior' => cods_enum($s['excludedBehavior'] ?? '', ['unavailable', 'hide'], 'unavailable'),
         'allowCoupons' => ($s['allowCoupons'] ?? true) !== false,
         'prepaidNudgeText' => (string)($s['prepaidNudgeText'] ?? ''),
         'buttons' => [
@@ -170,6 +192,8 @@ if ($action === 'config') {
             'productText' => (string)($buttons['productText'] ?? 'Buy with Cash on Delivery'),
             'bg' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['bg'] ?? '') ? $buttons['bg'] : '#111827',
             'color' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['color'] ?? '') ? $buttons['color'] : '#ffffff',
+            'style' => cods_enum($buttons['style'] ?? '', ['filled', 'outline', 'minimal'], 'filled'),
+            'radius' => is_numeric($buttons['radius'] ?? null) ? max(0, min(40, (int)$buttons['radius'])) : 12,
         ],
         'productButton' => cods_product_button($s['productButton'] ?? null),
         'sheet' => cods_sheet($s['sheet'] ?? null),

@@ -1,13 +1,20 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useState } from 'react';
-import { BlockStack, Box, ButtonGroup, Button, Card, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
+import { BlockStack, Box, ButtonGroup, Button, Card, Checkbox, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
 import { checkCodRules, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
+import { codButtonColors, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
 
 const SURFACES = [
   { id: 'drawer', label: 'Cart drawer' },
   { id: 'product', label: 'Product page' },
   { id: 'sheet', label: 'COD checkout' },
 ];
+
+const PLACEMENT_NOTE = {
+  replace: 'Checkout is hidden while Cash on Delivery can be used. Shoppers can still pay online from the COD popup, and Checkout comes back for carts that can\'t use COD.',
+  above: 'Cash on Delivery sits above your drawer\'s Checkout button.',
+  below: 'Cash on Delivery sits below your drawer\'s Checkout button.',
+};
 
 function CashIcon({ size = 16 }) {
   return (
@@ -18,13 +25,14 @@ function CashIcon({ size = 16 }) {
 }
 
 // The product page mock is a ~360px phone shown at 80%, so storefront px
-// sizes (brix_cod.js buttonHtml) are drawn at this scale.
+// sizes (brix_cod.js buttonHtml) are drawn at this scale. The cart drawer
+// preview is drawn at real size.
 const PHONE_SCALE = 0.8;
 
 // The storefront COD button, drawn the way brix_cod.js draws it. With `size`
-// (settings.productButton) it uses the storefront's exact sizes, scaled.
-function CodButton({ settings, label, sub, disabled, size }) {
-  const px = (n) => `${Math.round(n * PHONE_SCALE * 10) / 10}px`;
+// it uses the storefront's exact sizes, at `scale`.
+export function CodButton({ settings, label, sub, disabled, size, scale = PHONE_SCALE }) {
+  const px = (n) => `${Math.round(n * scale * 10) / 10}px`;
   const sized = size ? {
     margin: `${px(size.marginTop)} 0 ${px(size.marginBottom)}`,
     padding: `${px(size.paddingY)} ${px(size.paddingX)}`,
@@ -32,8 +40,8 @@ function CodButton({ settings, label, sub, disabled, size }) {
     fontSize: px(15),
   } : null;
   return (
-    <div className="cod-pv-btn" style={{ background: settings.buttons.bg, color: settings.buttons.color, opacity: disabled ? 0.5 : 1, ...sized }}>
-      <span className="cod-pv-btn-l"><CashIcon size={size ? 18 * PHONE_SCALE : 16} />{label}</span>
+    <div className="cod-pv-btn" style={{ ...codButtonColors(settings.buttons), opacity: disabled ? 0.5 : 1, ...sized }}>
+      <span className="cod-pv-btn-l"><CashIcon size={size ? 18 * scale : 16} />{label}</span>
       {sub ? <span className="cod-pv-btn-s" style={size ? { fontSize: px(11.5) } : undefined}>{sub}</span> : null}
     </div>
   );
@@ -65,41 +73,97 @@ function BrixMark({ height }) {
   return <img src="/brix-logo.png" alt="BRIX" style={{ height, width: 'auto', display: 'block' }} />;
 }
 
-function suggestedValue(s) {
-  if (s.minOrder > 0) return Math.ceil(s.minOrder * 1.6 / 50) * 50;
-  return 999;
+// Example cart value: ₹1,299 (the order summary's example), unless that's outside the merchant's limits.
+export function suggestedValue(s) {
+  let v = 1299;
+  if (s.minOrder > 0 && v < s.minOrder) v = Math.ceil(s.minOrder * 1.6 / 50) * 50;
+  if (s.maxOrder > 0 && v > s.maxOrder) v = Math.floor(s.maxOrder / 50) * 50;
+  return v;
 }
 
-// Live phone preview + "try a cart value" simulator. Uses the same rule and
-// charge functions the server applies to real orders (utils/cod.shared.js).
-export default function CodPreview({ settings, money, focus }) {
-  const [surface, setSurface] = useState('drawer');
-  const [loader, setLoader] = useState(false);
-  // Opening the COD checkout replays the BRIX loader first, as shoppers see it.
-  const playLoader = () => setLoader(true);
-  useEffect(() => {
-    if (!loader) return undefined;
-    const t = setTimeout(() => setLoader(false), 1100);
-    return () => clearTimeout(t);
-  }, [loader]);
-  const pick = (id) => { setSurface(id); if (id === 'sheet') playLoader(); };
-  useEffect(() => { if (focus) pick(focus); }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [cart, setCart] = useState(() => suggestedValue(settings));
-  const [touched, setTouched] = useState(false);
+// Two sample items that always add up to the cart value being tried.
+function sampleItems(cart) {
+  const second = cart >= 600 ? 300 : Math.round(cart * 0.4);
+  return [
+    { name: 'Classic Cotton Tee', variant: 'Black / M', tint: 'linear-gradient(135deg,#c7d2fe,#eef2ff)', price: cart - second },
+    { name: 'Canvas Tote Bag', variant: 'Natural', tint: 'linear-gradient(135deg,#fde68a,#fffbeb)', price: second },
+  ];
+}
 
-  // Until the merchant moves the slider, keep the example inside their rules.
-  useEffect(() => { if (!touched) setCart(suggestedValue(settings)); }, [settings.minOrder, touched]); // eslint-disable-line react-hooks/exhaustive-deps
+// A theme cart drawer (Dawn-like) sliding over the storefront, with the COD
+// button where the merchant put it.
+function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
+  const placement = settings.drawerPlacement || 'above';
+  const { where, showCheckout, codFirst } = codDrawerLayout(placement, codState);
+  const cod = codState ? (
+    <CodButton
+      key="cod"
+      settings={settings}
+      label={settings.buttons.drawerText}
+      sub={codState.reason || codState.sub}
+      disabled={Boolean(codState.reason)}
+      size={codDrawerSize(settings, where)}
+      scale={1}
+    />
+  ) : null;
+  const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">Check out</div> : null;
+  const items = sampleItems(cart);
+  return (
+    <div className="bcod-dr-stage" data-placement={placement}>
+      <div className="bcod-dr-store" aria-hidden="true">
+        <i className="bcod-dr-store-h" />
+        <i className="bcod-dr-store-hero" />
+        <span className="bcod-dr-store-grid"><i /><i /></span>
+      </div>
+      <div className="bcod-dr" role="img" aria-label={`Cart drawer preview, Cash on Delivery ${codState ? (placement === 'replace' && showCheckout ? 'above Checkout' : `${placement} Checkout`) : 'hidden'}`}>
+        <div className="bcod-dr-h">
+          <b>Your cart</b>
+          <span className="bcod-dr-count">2</span>
+          <span className="bcod-dr-x" aria-hidden="true">✕</span>
+        </div>
+        <div className="bcod-dr-items">
+          {items.map((it) => (
+            <div key={it.name} className="bcod-dr-item">
+              <span className="bcod-dr-thumb" style={{ background: it.tint }} />
+              <span className="bcod-dr-meta">
+                <b>{it.name}</b>
+                <span>{it.variant}</span>
+                <span className="bcod-dr-qty" aria-hidden="true"><i>−</i>1<i>+</i></span>
+              </span>
+              <b className="bcod-dr-num">{money(it.price)}</b>
+            </div>
+          ))}
+        </div>
+        <div className="bcod-dr-foot">
+          <div className="bcod-dr-sub"><span>Subtotal</span><b>{money(cart)}</b></div>
+          <p className="bcod-dr-note">Taxes and shipping calculated at checkout</p>
+          <div className="bcod-dr-btns">{codFirst ? [cod, checkout] : [checkout, cod]}</div>
+          {!codState && hiddenWhy ? <span className="bcod-dr-hidden">COD hidden · {hiddenWhy}</span> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const sliderMax = Math.max(5000, Math.ceil(Math.max(settings.maxOrder * 1.3, settings.minOrder * 2, settings.freeShippingAbove * 1.5) / 500) * 500);
+/**
+ * The preview screen for one surface (drawer | product | sheet), plus what the
+ * simulator needs. Plain function so the COD customizer can frame it its own way.
+ */
+export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false }) {
+  const hasTags = settings.excludedProductTags.length > 0;
+  const excluded = hasTags && excludedOn;
   const ruleSurface = surface === 'sheet' ? 'drawer' : surface;
-  const rule = checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money });
+  const rule = excluded
+    ? checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money, productTags: [settings.excludedProductTags[0]] })
+    : checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money });
   const charges = codCharges(settings, cart);
   const total = cart + charges.total;
   const surfaceOff = settings.surfaces[ruleSurface] === false;
   const minMaxReason = rule && (rule.code === 'below_min' || rule.code === 'above_max')
     ? (rule.code === 'below_min' ? `Available on orders from ${money(settings.minOrder)}` : `Available on orders up to ${money(settings.maxOrder)}`)
     : '';
-  const feeHint = settings.codFee > 0 ? `+${money(settings.codFee)} COD fee` : '';
+  const feeHint = codFeeHint(settings, money);
+  const feeShown = settings.showCodFee !== false;
   const toFreeShipping = settings.shippingFee > 0 && settings.freeShippingAbove > 0 && cart < settings.freeShippingAbove
     ? settings.freeShippingAbove - cart : 0;
 
@@ -107,38 +171,26 @@ export default function CodPreview({ settings, money, focus }) {
   const accent = look.accent || settings.buttons.bg;
   const accentFg = look.accent ? readableOn(look.accent) : settings.buttons.color;
 
-  // Sample items that always add up to the cart value being tried.
-  const first = Math.round(cart * 0.6);
-  const sampleItems = [
-    { name: 'Classic Cotton Tee', variant: 'Black / M', tint: 'linear-gradient(135deg,#c7d2fe,#eef2ff)', price: first },
-    { name: 'Canvas Tote Bag', variant: 'Natural', tint: 'linear-gradient(135deg,#fde68a,#fffbeb)', price: cart - first },
-  ];
-
   let screen;
+  let caption = null;
   if (surface === 'drawer') {
-    screen = (
-      <div className="cod-scr">
-        <div className="cod-scr-h"><b>Your cart</b><span className="cod-scr-mu">2 items</span><span className="cod-scr-x" aria-hidden="true">✕</span></div>
-        <div className="cod-scr-items">
-          {sampleItems.map((it) => (
-            <div key={it.name} className="cod-scr-item">
-              <span className="cod-scr-thumb" style={{ background: it.tint }} />
-              <span className="cod-scr-meta"><b>{it.name}</b><span>{it.variant} · Qty 1</span></span>
-              <b className="cod-scr-num">{money(it.price)}</b>
-            </div>
-          ))}
-        </div>
-        <div className="cod-scr-foot">
-          <div className="cod-scr-sub"><span>Subtotal</span><b>{money(cart)}</b></div>
-          {!settings.enabled || surfaceOff ? <Hidden>COD button hidden: {settings.enabled ? 'cart drawer is turned off' : 'COD is off'}</Hidden>
-            : <CodButton settings={settings} label={settings.buttons.drawerText} sub={minMaxReason || feeHint} disabled={Boolean(minMaxReason)} />}
-          <div className="cod-scr-checkout">Checkout</div>
-        </div>
-      </div>
-    );
+    let codState = null;
+    let hiddenWhy = '';
+    if (!settings.enabled) hiddenWhy = 'COD is off';
+    else if (surfaceOff) hiddenWhy = 'cart drawer is turned off';
+    else if (excluded && settings.excludedBehavior === 'hide') hiddenWhy = 'cart has an excluded product';
+    else if (excluded) codState = { reason: 'Not available for some items in your cart' };
+    else if (minMaxReason) codState = { reason: minMaxReason };
+    else codState = { sub: feeHint };
+    screen = <DrawerScreen settings={settings} money={money} cart={cart} codState={codState} hiddenWhy={hiddenWhy} />;
+    caption = codState ? PLACEMENT_NOTE[settings.drawerPlacement || 'above'] : null;
+    if (codState?.reason && settings.drawerPlacement === 'replace') caption = 'COD can\'t be used for this cart, so Checkout stays and COD shows as unavailable above it.';
   } else if (surface === 'product') {
     const pb = { ...DEFAULT_COD_SETTINGS.productButton, ...(settings.productButton || {}) };
-    const codHidden = !settings.enabled || surfaceOff;
+    const hideForTag = excluded && settings.excludedBehavior === 'hide';
+    const codHidden = !settings.enabled || surfaceOff || hideForTag;
+    let why = settings.enabled ? 'product pages are turned off' : 'COD is off';
+    if (settings.enabled && !surfaceOff && hideForTag) why = 'excluded product';
     screen = (
       <div className="cod-scr">
         <div className="cod-scr-img"><span /></div>
@@ -148,10 +200,10 @@ export default function CodPreview({ settings, money, focus }) {
           <div className="cod-scr-sizes" aria-hidden="true"><span>S</span><span className="on">M</span><span>L</span><span>XL</span></div>
           <div className="cod-scr-buys">
             <div className="cod-scr-atc">Add to cart</div>
-            {codHidden ? <Hidden>COD button hidden: {settings.enabled ? 'product pages are turned off' : 'COD is off'}</Hidden>
-              : <CodButton settings={settings} label={settings.buttons.productText} sub={feeHint} size={pb} />}
-            {/* Buy it now is only hidden while the COD button shows, as on the storefront. */}
-            {(codHidden || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
+            {codHidden ? <Hidden>COD button hidden: {why}</Hidden>
+              : <CodButton settings={settings} label={settings.buttons.productText} sub={excluded ? 'Not available for this product' : feeHint} disabled={excluded} size={pb} />}
+            {/* Buy it now is only hidden while a usable COD button shows, as on the storefront. */}
+            {(codHidden || excluded || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
           </div>
         </div>
       </div>
@@ -198,8 +250,14 @@ export default function CodPreview({ settings, money, focus }) {
                   ))}
                   <div className="cod-pv-rows">
                     <div><span>Items</span><span>{money(cart)}</span></div>
-                    <div><span>Shipping</span><span>{charges.shipping > 0 ? money(charges.shipping) : <b className="cod-pv-free">Free</b>}</span></div>
-                    {charges.codFee > 0 && <div><span>COD fee</span><span>{money(charges.codFee)}</span></div>}
+                    {!feeShown && charges.codFee > 0 ? (
+                      <div><span>Delivery charges</span><span>{money(charges.total)}</span></div>
+                    ) : (
+                      <>
+                        <div><span>Shipping</span><span>{charges.shipping > 0 ? money(charges.shipping) : <b className="cod-pv-free">Free</b>}</span></div>
+                        {charges.codFee > 0 && <div><span>{codFeeLabel(settings)}</span><span>{money(charges.codFee)}</span></div>}
+                      </>
+                    )}
                     <div className="cod-pv-tot"><span>Pay on delivery</span><span>{money(total)}</span></div>
                   </div>
                   {settings.prepaidNudgeText ? <div className="cod-pv-nudge">{settings.prepaidNudgeText} <u>Pay online</u></div> : null}
@@ -214,9 +272,41 @@ export default function CodPreview({ settings, money, focus }) {
     );
   }
 
+  return { screen, caption, rule, charges, total, toFreeShipping, hasTags };
+}
+
+export function cartSliderMax(settings) {
+  return Math.max(5000, Math.ceil(Math.max(settings.maxOrder * 1.3, settings.minOrder * 2, settings.freeShippingAbove * 1.5) / 500) * 500);
+}
+
+// Live preview + "try a cart value" simulator. Uses the same rule and
+// charge functions the server applies to real orders (utils/cod.shared.js).
+export default function CodPreview({ settings, money, focus }) {
+  const [surface, setSurface] = useState('drawer');
+  const [loader, setLoader] = useState(false);
+  const [excludedOn, setExcludedOn] = useState(false);
+  // Opening the COD checkout replays the BRIX loader first, as shoppers see it.
+  const playLoader = () => setLoader(true);
+  useEffect(() => {
+    if (!loader) return undefined;
+    const t = setTimeout(() => setLoader(false), 1100);
+    return () => clearTimeout(t);
+  }, [loader]);
+  const pick = (id) => { setSurface(id); if (id === 'sheet') playLoader(); };
+  // focus: { surface, n } from the settings page; a new n switches the screen again.
+  useEffect(() => { if (focus?.surface) pick(focus.surface); }, [focus?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [cart, setCart] = useState(() => suggestedValue(settings));
+  const [touched, setTouched] = useState(false);
+
+  // Until the merchant moves the slider, keep the example inside their rules.
+  useEffect(() => { if (!touched) setCart(suggestedValue(settings)); }, [settings.minOrder, touched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { screen, caption, rule, charges, total, toFreeShipping, hasTags } = buildCodScreen({ settings, money, surface, cart, excludedOn, loader });
+  const sliderMax = cartSliderMax(settings);
+
   return (
     <Card>
-      <BlockStack gap="400">
+      <BlockStack gap="300">
         <InlineStack align="space-between" blockAlign="center">
           <Text as="h2" variant="headingMd">Live preview</Text>
           <span className="cod-live-dot">Updates as you type</span>
@@ -226,9 +316,18 @@ export default function CodPreview({ settings, money, focus }) {
             <Button key={s.id} pressed={surface === s.id} onClick={() => pick(s.id)} size="slim">{s.label}</Button>
           ))}
         </ButtonGroup>
-        <div className="cod-stage">{screen}</div>
+        <div className={surface === 'drawer' ? 'bcod-pv-stage' : 'cod-stage'}>{screen}</div>
+        {caption ? <Text as="p" variant="bodySm" tone="subdued">{caption}</Text> : null}
         {surface === 'sheet' && !loader && (
           <InlineStack align="center"><Button variant="plain" onClick={playLoader}>Replay BRIX loader</Button></InlineStack>
+        )}
+        {surface !== 'sheet' && hasTags && (
+          <Checkbox
+            label="Cart has an excluded product"
+            helpText={`Preview a cart with a product tagged ${settings.excludedProductTags[0]}.`}
+            checked={excludedOn}
+            onChange={setExcludedOn}
+          />
         )}
 
         <Box padding="300" background="bg-surface-secondary" borderRadius="300">
@@ -250,7 +349,7 @@ export default function CodPreview({ settings, money, focus }) {
                 <span>
                   {money(cart)} items
                   {charges.shipping > 0 ? ` + ${money(charges.shipping)} shipping` : ' + free shipping'}
-                  {charges.codFee > 0 ? ` + ${money(charges.codFee)} COD fee` : ''}
+                  {charges.codFee > 0 ? ` + ${money(charges.codFee)} ${codFeeLabel(settings)}` : ''}
                 </span>
                 {toFreeShipping > 0 && <span>{money(toFreeShipping)} more for free shipping.</span>}
               </div>

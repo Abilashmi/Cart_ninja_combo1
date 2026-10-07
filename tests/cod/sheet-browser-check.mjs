@@ -15,7 +15,7 @@ const API = 'https://cartdrawer.fly.dev'; // BRIX app server: the browser must n
 const PHP = 'https://php.test';   // PHP backend: settings, PIN lookups, and the relay for OTP/quote/order
 const config = {
   success: true, enabled: true, surfaces: { drawer: true, product: true, combo: true }, otpRequired: true,
-  minOrder: 299, maxOrder: 5000, codFee: 49, shippingFee: 0, freeShippingAbove: 0, blockedPincodes: ['744101'],
+  minOrder: 299, maxOrder: 5000, codFee: 49, codFeeLabel: 'Cash on Delivery Fee', showCodFee: true, shippingFee: 0, freeShippingAbove: 0, blockedPincodes: ['744101'],
   excludedProductTags: ['no-cod'], allowCoupons: true, prepaidNudgeText: 'Pay online and get 5% off with code PREPAID5.',
   buttons: { drawerText: 'Cash on Delivery', productText: 'Buy with Cash on Delivery', bg: '#0d6b4c', color: '#ffffff' },
   tracking: { ga4Id: 'G-TEST123', metaPixelId: '123456789012345', metaContentId: 'variant', dataLayer: true },
@@ -219,7 +219,7 @@ await inSheet('.tot').waitFor();
 await page.waitForTimeout(300);
 await shot(page, '4-review');
 const reviewText = await inSheet('.bd').textContent();
-check('review: shows COD fee, total and the prepaid message', reviewText.includes('COD fee') && reviewText.includes('948') && reviewText.includes('PREPAID5'));
+check('review: shows the COD fee under its title, total and the prepaid message', reviewText.includes('Cash on Delivery Fee') && reviewText.includes('948') && reviewText.includes('PREPAID5'));
 
 // Coupon: wrong code, then a real one, then paste-and-claim after removing it
 await inSheet('[data-act="coupon-open"]').click();

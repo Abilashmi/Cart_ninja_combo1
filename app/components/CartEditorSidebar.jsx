@@ -9,7 +9,7 @@ import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
   ArrowLeftIcon, ChevronDownIcon, ColorIcon, SettingsIcon,
   LayoutHeaderIcon, MegaphoneIcon, ChartVerticalIcon,
-  DiscountCodeIcon, ProductIcon, CartIcon, CashDollarIcon, CodeIcon,
+  DiscountCodeIcon, ProductIcon, CartIcon, CashDollarIcon, CodeIcon, ImageIcon,
 } from '@shopify/polaris-icons';
 import { Icon, Modal, Text } from '@shopify/polaris';
 import { DesignSection } from './sections/DesignSection';
@@ -20,18 +20,19 @@ import { CouponSliderSection } from './sections/CouponSliderSection';
 import { UpsellSection } from './sections/UpsellSection';
 import { CountdownTimerSection } from './sections/CountdownTimerSection';
 import { EmptyCartSection } from './sections/EmptyCartSection';
+import { ImageBannerSection } from './sections/ImageBannerSection';
 import { CheckoutSection } from './sections/CheckoutSection';
 import { CustomCSSSection } from './sections/CustomCSSSection';
 
 const ICON_MAP = {
   color: ColorIcon, settings: SettingsIcon, 'layout-header': LayoutHeaderIcon,
   megaphone: MegaphoneIcon, chart: ChartVerticalIcon, discount: DiscountCodeIcon,
-  product: ProductIcon, cart: CartIcon, cash: CashDollarIcon, code: CodeIcon,
+  product: ProductIcon, cart: CartIcon, cash: CashDollarIcon, code: CodeIcon, image: ImageIcon,
 };
 
 const SECTION_COMPONENT_MAP = {
   design: DesignSection, header: HeaderSection,
-  announcements: AnnouncementsSection, progressBar: ProgressBarSection,
+  announcements: AnnouncementsSection, imageBanner: ImageBannerSection, progressBar: ProgressBarSection,
   couponSlider: CouponSliderSection, upsellProducts: UpsellSection,
   countdownTimer: CountdownTimerSection,
   emptyCart: EmptyCartSection, checkoutButton: CheckoutSection, customCSS: CustomCSSSection,
@@ -108,6 +109,7 @@ export function CartEditorSidebar({ onDiscard }) {
 
   const getEnabled = (key) => {
     if (key === 'announcements') return body.announcements.enabled;
+    if (key === 'imageBanner') return body.imageBanner.enabled;
     if (key === 'progressBar') return body.progressBar.enabled;
     if (key === 'couponSlider') return body.couponSlider.enabled;
     if (key === 'upsellProducts') return body.upsellProducts.enabled;

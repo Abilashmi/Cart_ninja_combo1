@@ -817,35 +817,51 @@ body:has([aria-modal="true"][role="dialog"]) .ktt10-btn {
    app.jsx's useNavigation hookup) — without it, a slow child-route loader
    leaves the previous page frozen on screen with no feedback until it
    snaps to the new page, which reads as a glitch. */
-.route-progress-bar {
+/* Page-loading indicator (app.jsx): a round black spinner on a small white
+   circle in the middle of the screen. Clicks pass through it, and the short
+   delay keeps instant page switches from flashing it. */
+.route-loader {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
+  top: 50%;
+  left: 50%;
   z-index: 10001;
-  overflow: hidden;
-  background: rgba(26, 157, 224, 0.15);
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #e3e3e3, 0 10px 30px -10px rgba(0, 0, 0, 0.3);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  animation: route-loader-in 0.2s ease-out 0.15s forwards;
 }
 
-.route-progress-bar::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -30%;
-  width: 30%;
-  height: 100%;
-  background: var(--brand-gradient);
-  animation: route-progress-slide 1s ease-in-out infinite;
+.route-loader-ring {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #ececec;
+  border-top-color: #1a1a1a;
+  animation: route-loader-spin 0.8s linear infinite;
 }
 
-@keyframes route-progress-slide {
-  0% {
-    left: -30%;
+@keyframes route-loader-spin {
+  to {
+    transform: rotate(360deg);
   }
+}
 
-  100% {
-    left: 100%;
+@keyframes route-loader-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-loader-ring {
+    animation-duration: 1.6s;
   }
 }
 

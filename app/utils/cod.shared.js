@@ -9,10 +9,25 @@
 export const COD_SURFACES = ['drawer', 'product', 'combo'];
 export const COD_SOURCES = COD_SURFACES; // where an order was placed from
 
+// Where the COD button goes in a cart drawer (the theme's own drawer or the
+// BRIX Cart Drawer), relative to that drawer's Checkout button.
+export const COD_DRAWER_PLACEMENTS = ['replace', 'above', 'below'];
+// What shoppers see when the cart (or product) has an excluded product tag.
+export const COD_EXCLUDED_BEHAVIORS = ['unavailable', 'hide'];
+export const COD_BUTTON_STYLES = ['filled', 'outline', 'minimal'];
+export const COD_FEE_LABEL_DEFAULT = 'Cash on Delivery Fee';
+
 export const DEFAULT_COD_SETTINGS = Object.freeze({
   enabled: false,
   surfaces: { drawer: true, product: true, combo: true },
+  drawerPlacement: 'above',
+  // Advanced: CSS selector for the theme drawer's Checkout button, for themes
+  // brix_cod.js doesn't recognise on its own. '' = find it automatically.
+  drawerSelector: '',
+  codFeeEnabled: false, // codFee is charged only while this is on
   codFee: 0,
+  showCodFee: true, // false = fee is still charged, but folded into one "Delivery charges" line
+  codFeeLabel: COD_FEE_LABEL_DEFAULT,
   shippingFee: 0,
   freeShippingAbove: 0, // 0 = shippingFee always applies
   minOrder: 0, // 0 = no minimum
@@ -21,6 +36,7 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   dailyLimitPerPhone: 3,
   blockedPincodes: [],
   excludedProductTags: [],
+  excludedBehavior: 'unavailable',
   allowCoupons: true,
   prepaidNudgeText: '',
   orderTags: ['COD'],
@@ -29,6 +45,8 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     productText: 'Buy with Cash on Delivery',
     bg: '#111827',
     color: '#ffffff',
+    style: 'filled', // filled | outline | minimal (outline/minimal use bg for text and border)
+    radius: 12, // cart drawer button corners, px (product page has productButton.radius)
   },
   // The product page COD button (brix_cod.js initProductButton). Sizes in px.
   productButton: {
@@ -100,6 +118,12 @@ export function isValidCodLogo(value) {
 }
 
 const HEX_RE = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
+// A CSS selector, nothing that could end a style block or an HTML attribute.
+const SELECTOR_RE = /^[\w\s\-#.:[\]="'>~+*(),^$|/]{1,200}$/;
+
+export function isValidDrawerSelector(value) {
+  return typeof value === 'string' && SELECTOR_RE.test(value.trim());
+}
 const PIN_RE = /^[1-9]\d{5}$/;
 const TAG_RE = /^[\w\- .:/]{1,40}$/;
 
@@ -152,7 +176,11 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     buttons.productText = text(p.buttons.productText, buttons.productText, 60);
     if (HEX_RE.test(p.buttons.bg || '')) buttons.bg = p.buttons.bg;
     if (HEX_RE.test(p.buttons.color || '')) buttons.color = p.buttons.color;
+    if (COD_BUTTON_STYLES.includes(p.buttons.style)) buttons.style = p.buttons.style;
+    if ('radius' in p.buttons) buttons.radius = int(p.buttons.radius, buttons.radius, 0, 40);
   }
+  if (!COD_BUTTON_STYLES.includes(buttons.style)) buttons.style = 'filled';
+  buttons.radius = int(buttons.radius, 12, 0, 40);
   const productButton = { ...DEFAULT_COD_SETTINGS.productButton, ...(b.productButton || {}) };
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;
@@ -191,10 +219,23 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     if ('dataLayer' in t) tracking.dataLayer = Boolean(t.dataLayer);
   }
   const has = (key) => Object.prototype.hasOwnProperty.call(p, key);
+  const pick = (key, allowed) => (has(key) && allowed.includes(p[key]) ? p[key] : allowed.includes(b[key]) ? b[key] : DEFAULT_COD_SETTINGS[key]);
+  const codFee = has('codFee') ? money(p.codFee, b.codFee) : money(b.codFee);
+  // Before the fee switch existed, codFee itself was the switch (charged
+  // whenever above 0). So a patch or stored settings with an amount but no
+  // switch mean "on when there's an amount".
+  const baseFeeFlag = base !== DEFAULT_COD_SETTINGS && typeof base?.codFeeEnabled === 'boolean' ? base.codFeeEnabled : null;
+  let drawerSelector = has('drawerSelector') ? String(p.drawerSelector ?? '').trim() : String(b.drawerSelector || '').trim();
+  if (drawerSelector && !isValidDrawerSelector(drawerSelector)) drawerSelector = has('drawerSelector') ? String(b.drawerSelector || '') : '';
   const out = {
     enabled: has('enabled') ? Boolean(p.enabled) : Boolean(b.enabled),
     surfaces,
-    codFee: has('codFee') ? money(p.codFee, b.codFee) : money(b.codFee),
+    drawerPlacement: pick('drawerPlacement', COD_DRAWER_PLACEMENTS),
+    drawerSelector,
+    codFeeEnabled: has('codFeeEnabled') ? Boolean(p.codFeeEnabled) : has('codFee') ? codFee > 0 : baseFeeFlag ?? codFee > 0,
+    codFee,
+    showCodFee: has('showCodFee') ? Boolean(p.showCodFee) : b.showCodFee !== false,
+    codFeeLabel: text(has('codFeeLabel') ? p.codFeeLabel : b.codFeeLabel, COD_FEE_LABEL_DEFAULT, 40),
     shippingFee: has('shippingFee') ? money(p.shippingFee, b.shippingFee) : money(b.shippingFee),
     freeShippingAbove: has('freeShippingAbove') ? money(p.freeShippingAbove, b.freeShippingAbove) : money(b.freeShippingAbove),
     minOrder: has('minOrder') ? money(p.minOrder, b.minOrder) : money(b.minOrder),
@@ -203,6 +244,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     dailyLimitPerPhone: int(has('dailyLimitPerPhone') ? p.dailyLimitPerPhone : b.dailyLimitPerPhone, 3, 1, 50),
     blockedPincodes: parsePincodes(has('blockedPincodes') ? p.blockedPincodes : b.blockedPincodes),
     excludedProductTags: parseTags(has('excludedProductTags') ? p.excludedProductTags : b.excludedProductTags),
+    excludedBehavior: pick('excludedBehavior', COD_EXCLUDED_BEHAVIORS),
     allowCoupons: has('allowCoupons') ? Boolean(p.allowCoupons) : b.allowCoupons !== false,
     prepaidNudgeText: has('prepaidNudgeText') ? (typeof p.prepaidNudgeText === 'string' ? p.prepaidNudgeText.trim().slice(0, 140) : '') : String(b.prepaidNudgeText || ''),
     orderTags: parseTags(has('orderTags') ? p.orderTags : b.orderTags),
@@ -276,12 +318,18 @@ export function isCheckoutOnlyLine(properties) {
   return props._brixReward === 'true' || props._brixReward === true;
 }
 
+/** The COD fee actually charged: the amount, while the fee switch is on. */
+export function codFeeOf(settings) {
+  return settings.codFeeEnabled === false ? 0 : money(settings.codFee);
+}
+
 /** Shipping + COD fee charged as the order's shipping line. */
 export function codCharges(settings, subtotal) {
   const shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
     ? settings.shippingFee
     : 0;
-  return { shipping, codFee: settings.codFee, total: money(shipping + settings.codFee) };
+  const codFee = codFeeOf(settings);
+  return { shipping, codFee, total: money(shipping + codFee) };
 }
 
 /**

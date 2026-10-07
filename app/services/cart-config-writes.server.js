@@ -16,6 +16,7 @@ import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
 import { withTimeout } from '../utils/with-timeout';
+import { cleanBannerImage, cleanBannerPlacement, DEFAULT_BANNER_PLACEMENT } from '../utils/cart-banner.shared';
 
 // Ceiling for a single Shopify Admin API call made from a save path.
 const SHOPIFY_CALL_TIMEOUT_MS = 20_000;
@@ -122,11 +123,33 @@ export async function ensureCountdownTimerColumns(db) {
   ]);
 }
 
+// Cart Image Banner (Cart Editor "Image Banner" section). Images are https
+// URLs or browser-compressed data URLs, so MEDIUMTEXT; the storefront never
+// receives the data itself (save_cart_drawer.php hands it a cart_banner_image.php URL).
+export async function ensureBannerColumns(db) {
+  await ensureColumns(db, 'cart_drawer_config.banner', 'cart_drawer_config', [
+    { name: 'banner_enabled', ddl: '`banner_enabled` TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'banner_desktop_image', ddl: '`banner_desktop_image` MEDIUMTEXT NULL' },
+    { name: 'banner_mobile_image', ddl: '`banner_mobile_image` MEDIUMTEXT NULL' },
+    { name: 'banner_placement', ddl: "`banner_placement` VARCHAR(20) NOT NULL DEFAULT 'above_progress'" },
+    { name: 'banner_alt', ddl: '`banner_alt` VARCHAR(160) NULL' },
+  ]);
+}
+
+// A banner image from a patch: undefined = not supplied (keep what's stored),
+// '' / null = remove it, anything else must be a valid image or it's dropped.
+function pickBannerImage(v, exVal) {
+  if (v === undefined) return exVal ?? null;
+  if (v === null || v === '') return null;
+  return cleanBannerImage(v) ?? exVal ?? null;
+}
+
 // ── Cart Drawer Config (design/general/header/announcements/emptyCart/checkoutButton/customCSS) ──
 
 export async function saveCartDrawerConfig(shop, planKey, patch) {
   const db = getDb();
   await ensureAnnouncementStyleColumns(db);
+  await ensureBannerColumns(db);
 
   const [exRows] = await db.execute(
     'SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]
@@ -150,8 +173,9 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       open_on_add, open_on_icon_click, position,
       header_title, header_close_style, header_bg_color, header_text_color, header_border_bottom,
       design_width, design_border_radius, design_shadow, design_animation,
-      empty_cart_message, empty_cart_show_continue_shopping, empty_cart_show_recommendations
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      empty_cart_message, empty_cart_show_continue_shopping, empty_cart_show_recommendations,
+      banner_enabled, banner_desktop_image, banner_mobile_image, banner_placement, banner_alt
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
       is_enabled                        = VALUES(is_enabled),
       checkout_button_text              = VALUES(checkout_button_text),
@@ -183,6 +207,11 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       empty_cart_message                = VALUES(empty_cart_message),
       empty_cart_show_continue_shopping = VALUES(empty_cart_show_continue_shopping),
       empty_cart_show_recommendations   = VALUES(empty_cart_show_recommendations),
+      banner_enabled                    = VALUES(banner_enabled),
+      banner_desktop_image              = VALUES(banner_desktop_image),
+      banner_mobile_image               = VALUES(banner_mobile_image),
+      banner_placement                  = VALUES(banner_placement),
+      banner_alt                        = VALUES(banner_alt),
       updated_at                        = CURRENT_TIMESTAMP(3)
   `, [
     shop,
@@ -216,6 +245,11 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
     pick(patch.empty_cart_message, ex.empty_cart_message, 'Your cart is empty'),
     pickFlag(patch.empty_cart_show_continue_shopping, ex.empty_cart_show_continue_shopping, 1),
     pickFlag(patch.empty_cart_show_recommendations, ex.empty_cart_show_recommendations, 1),
+    pickFlag(patch.banner_enabled, ex.banner_enabled, 0),
+    pickBannerImage(patch.banner_desktop_image, ex.banner_desktop_image),
+    pickBannerImage(patch.banner_mobile_image, ex.banner_mobile_image),
+    cleanBannerPlacement(pick(patch.banner_placement, ex.banner_placement, DEFAULT_BANNER_PLACEMENT)),
+    patch.banner_alt !== undefined ? (String(patch.banner_alt || '').trim().slice(0, 160) || null) : (ex.banner_alt ?? null),
   ]);
 
   const [rows] = await db.execute(

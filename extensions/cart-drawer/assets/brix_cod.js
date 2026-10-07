@@ -1,7 +1,9 @@
 /* BRIX COD Checkout - storefront sheet (see CLAUDE.md, "BRIX COD Checkout").
  *
  * One Cash-on-Delivery flow shared by three entry points:
- *   - cart drawer   (cart_drawer_inline.js -> BrixCod.mountDrawerButton)
+ *   - cart drawer   (BRIX Cart Drawer: cart_drawer_inline.js -> BrixCod.mountDrawerButton;
+ *                    or, when that drawer is off, the theme's own cart drawer:
+ *                    initThemeDrawer adds the button next to its Checkout)
  *   - product page  (auto-injected under Add to Cart, or into the
  *                    "COD button" app block's [data-brix-cod-slot])
  *   - combo pages   (combo-page.js / preview iframe -> BrixCod.open)
@@ -33,7 +35,7 @@
   var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
   var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v4'; // bump when the config shape changes (v4: GA4 / Meta Pixel IDs)
+  var CONFIG_KEY = 'brix_cod_config_v5'; // bump when the config shape changes (v5: drawer placement, button style, fee label)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -801,7 +803,9 @@
     var count = q.lines.reduce(function (n, li) { return n + (Number(li.quantity) || 0); }, 0);
     var thumbs = q.lines.slice(0, 3).map(function (li) { return li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<span class="ph"></span>'; }).join('');
     var open = Boolean(this.summaryOpen);
-    var extra = 'Shipping' + (this.cfg.codFee > 0 ? ' and the COD fee are' : ' is') + ' added at review.';
+    var extra = !(this.cfg.codFee > 0) ? 'Shipping is added at review.'
+      : this.cfg.showCodFee === false ? 'Delivery charges are added at review.'
+        : 'Shipping and the ' + feeLabel(this.cfg) + ' are added at review.';
     return '<div class="sum' + (open ? ' open' : '') + '"><button type="button" class="sum-h" data-act="summary" aria-expanded="' + open + '">' +
       '<span class="thumbs">' + thumbs + '</span><span class="sum-t"><b>' + count + (count === 1 ? ' item' : ' items') + '</b><span class="mu">Order summary</span></span>' +
       '<span class="num sum-p">' + this.fmt(q.subtotal) + '</span>' + icon('chevron', 18, ' class="chev"') + '</button>' +
@@ -1130,6 +1134,19 @@
     });
   };
 
+  function feeLabel(cfg) { return cfg.codFeeLabel || 'Cash on Delivery Fee'; }
+
+  // Shipping and the COD fee on the review step. With "Show fee to customers"
+  // off the fee is still charged, shown inside one "Delivery charges" line.
+  function chargeRows(cfg, q, fmt) {
+    var free = '<b style="color:#067647">Free</b>';
+    if (cfg.showCodFee === false && q.codFee > 0) {
+      return '<div><span>Delivery charges</span><span class="num">' + fmt((q.shipping || 0) + q.codFee) + '</span></div>';
+    }
+    return '<div><span>Shipping</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : free) + '</span></div>' +
+      (q.codFee > 0 ? '<div><span>' + esc(feeLabel(cfg)) + '</span><span class="num">' + fmt(q.codFee) + '</span></div>' : '');
+  }
+
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
     var prevBody = this.sh.querySelector('.bd');
@@ -1137,8 +1154,7 @@
     var rows = '<div class="rows">' +
       '<div><span>Items</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       (q.discounts > 0 ? '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>' : '') +
-      '<div><span>Shipping</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : '<b style="color:#067647">Free</b>') + '</span></div>' +
-      (q.codFee > 0 ? '<div><span>COD fee</span><span class="num">' + fmt(q.codFee) + '</span></div>' : '') +
+      chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>Taxes</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
       '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>Pay on delivery</span><span class="num">' + fmt(q.total) + '</span></div>' +
       (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>Includes ' + fmt(q.tax) + ' in taxes</span></div>' : '') +
@@ -1449,16 +1465,27 @@
     return rules.split(';').filter(Boolean).map(function (r) { return r + ' !important;'; }).join('');
   }
 
-  // size: { marginTop, marginBottom, paddingY, paddingX, radius } in px.
-  var DRAWER_BUTTON_SIZE = { marginTop: 0, marginBottom: 10, paddingY: 14, paddingX: 16, radius: 12 };
+  var BUTTON_STYLES = ['filled', 'outline', 'minimal'];
 
+  // Colours for the merchant's button style (settings.buttons.style). Outline
+  // and Minimal draw the text in the button colour. The outline is an inset
+  // shadow, so all three styles are exactly the same size.
+  function buttonPaint(cfg) {
+    var b = cfg.buttons;
+    var style = BUTTON_STYLES.indexOf(b.style) !== -1 ? b.style : 'filled';
+    if (style === 'outline') return 'background:transparent;color:' + esc(b.bg) + ';box-shadow:inset 0 0 0 1.5px ' + esc(b.bg) + ';';
+    if (style === 'minimal') return 'background:transparent;color:' + esc(b.bg) + ';box-shadow:none;';
+    return 'background:' + esc(b.bg) + ';color:' + esc(b.color) + ';box-shadow:none;';
+  }
+
+  // size: { marginTop, marginBottom, paddingY, paddingX, radius } in px.
   function buttonHtml(cfg, label, sub, disabled, size) {
-    var z = size || DRAWER_BUTTON_SIZE;
+    var z = size;
     return '<button type="button" data-brix-cod-btn' + (disabled ? ' disabled' : '') + ' style="' + important(
       'box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;' +
       'margin:' + z.marginTop + 'px 0 ' + z.marginBottom + 'px 0;padding:' + z.paddingY + 'px ' + z.paddingX + 'px;' +
-      'background:' + esc(cfg.buttons.bg) + ';color:' + esc(cfg.buttons.color) + ';border:none;border-radius:' + z.radius + 'px;' +
-      'box-shadow:none;text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
+      buttonPaint(cfg) + 'border:none;border-radius:' + z.radius + 'px;' +
+      'text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
       'font-family:inherit;font-size:15px;font-weight:700;line-height:1.25;text-transform:none;letter-spacing:normal;text-decoration:none;text-align:center;' +
       'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
@@ -1467,36 +1494,334 @@
       (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit') + '">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
+  // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides the fee.
   function feeHint(cfg, fmt) {
-    return cfg.codFee > 0 ? '+' + fmt(cfg.codFee) + ' COD fee' : '';
+    return cfg.codFee > 0 && cfg.showCodFee !== false ? '+' + fmt(cfg.codFee) + ' ' + feeLabel(cfg) : '';
+  }
+
+  var PLACEMENTS = ['replace', 'above', 'below'];
+  function placementOf(cfg) { return PLACEMENTS.indexOf(cfg.drawerPlacement) !== -1 ? cfg.drawerPlacement : 'above'; }
+
+  // Drawer button sizes; the gap is on the side that faces Checkout.
+  function drawerSize(cfg, where) {
+    var r = Math.round(Number(cfg.buttons.radius));
+    return {
+      marginTop: where === 'below' ? 10 : 0,
+      marginBottom: where === 'above' ? 10 : 0,
+      paddingY: 14,
+      paddingX: 16,
+      radius: isFinite(r) ? Math.max(0, Math.min(40, r)) : 12,
+    };
+  }
+
+  /* --- excluded product tags --- */
+
+  var tagCache = {};
+  // Tags of a product, from the storefront's own /products/<handle>.js (cached per page).
+  function tagsOf(handle) {
+    if (!tagCache[handle]) {
+      tagCache[handle] = window.fetch(ROOT + 'products/' + encodeURIComponent(handle) + '.js', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (p) { return p ? (Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(',')) : []; })
+        .catch(function () { return []; });
+    }
+    return tagCache[handle];
+  }
+
+  function excludedTags(cfg) {
+    return (cfg.excludedProductTags || []).map(function (t) { return String(t).trim().toLowerCase(); }).filter(Boolean);
+  }
+
+  function hasExcludedTag(tags, excluded) {
+    return (tags || []).some(function (t) { return excluded.indexOf(String(t).trim().toLowerCase()) !== -1; });
+  }
+
+  // Does any product in the cart carry one of the merchant's excluded tags?
+  // Only a display hint: the server checks the real tags again for every quote.
+  function cartHasExcluded(cfg, cart) {
+    var excluded = excludedTags(cfg);
+    var handles = [];
+    ((cart && cart.items) || []).forEach(function (it) { if (it.handle && handles.indexOf(it.handle) === -1) handles.push(it.handle); });
+    if (!excluded.length || !handles.length) return Promise.resolve(false);
+    return Promise.all(handles.map(tagsOf)).then(function (lists) {
+      return lists.some(function (tags) { return hasExcludedTag(tags, excluded); });
+    });
+  }
+
+  /* --- one drawer button, shared by the BRIX drawer and theme drawers --- */
+
+  // What the drawer's COD button shows for this cart: null = no button,
+  // { reason } = shown but unavailable, else { sub } = usable.
+  function drawerState(cfg, cart, excluded, fmt) {
+    var items = (cart && cart.items) || [];
+    if (!items.length) return null;
+    if (excluded) return cfg.excludedBehavior === 'hide' ? null : { reason: 'Not available for some items in your cart' };
+    var subtotal = items.reduce(function (sum, it) {
+      var p = it.properties || {};
+      return p._brixReward === 'true' ? sum : sum + (Number(it.final_line_price) || 0);
+    }, 0) / 100;
+    var reason = '';
+    if (cartHasCheckoutOnlyLines(cart)) reason = 'Not available with Packs or free gifts';
+    else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
+    else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
+    return reason ? { reason: reason } : { sub: feeHint(cfg, fmt) };
+  }
+
+  // "Replace Checkout" hides the drawer's Checkout with a stylesheet rule, so
+  // it comes back the moment the attribute is removed.
+  var REPLACED = 'data-brix-cod-replaced';
+  function setReplaced(el, on) {
+    if (!el) return;
+    if (!on) { if (el.hasAttribute(REPLACED)) el.removeAttribute(REPLACED); return; }
+    if (!document.getElementById('brix-cod-replaced-style')) {
+      var style = document.createElement('style');
+      style.id = 'brix-cod-replaced-style';
+      style.textContent = '[' + REPLACED + ']{display:none !important}';
+      document.head.appendChild(style);
+    }
+    el.setAttribute(REPLACED, '');
+  }
+
+  // Draws the COD button into `slot` next to a drawer's Checkout, where the
+  // merchant chose. `place` = { anchor, checkout }: the slot goes before or
+  // after `anchor`; `checkout` is what "Replace Checkout" hides. Checkout is
+  // only hidden while a usable COD button shows: when COD can't be used for
+  // this cart, shoppers always keep their normal Checkout.
+  function paintDrawerSlot(slot, cfg, state, place, onOpen) {
+    var where = placementOf(cfg);
+    var replace = where === 'replace' && Boolean(state && !state.reason && place);
+    if (place && place.anchor && place.anchor.parentNode) {
+      var a = place.anchor;
+      if (where === 'below') { if (a.nextSibling !== slot) a.parentNode.insertBefore(slot, a.nextSibling); }
+      else if (slot.nextSibling !== a) a.parentNode.insertBefore(slot, a);
+    }
+    if (!state) {
+      slot.innerHTML = '';
+      setReplaced(place && place.checkout, false);
+      return;
+    }
+    var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
+    slot.innerHTML = buttonHtml(cfg, cfg.buttons.drawerText, state.reason || state.sub, Boolean(state.reason), size);
+    setReplaced(place && place.checkout, replace);
+    var btn = slot.querySelector('[data-brix-cod-btn]');
+    if (btn && !state.reason) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpen();
+      });
+    }
   }
 
   // Renders the COD button into `slot` inside the BRIX cart drawer.
-  // opts: { cart, coupon, onPayOnline, onSuccess }
+  // opts: { cart, coupon, checkout, onPayOnline, onSuccess }; `checkout` is
+  // the element holding the BRIX drawer's Checkout button.
   function mountDrawerButton(slot, opts) {
     if (!slot) return;
-    function paint(cfg) {
+    var checkout = opts.checkout || null;
+    function paint(cfg, excluded) {
       if (!slot.isConnected) return;
-      if (!cfg || cfg.surfaces.drawer === false || !opts.cart || !(opts.cart.items || []).length) { slot.innerHTML = ''; return; }
-      var fmt = moneyFormatter(cfg.currency);
-      var subtotal = (opts.cart.items || []).reduce(function (sum, it) {
-        var p = it.properties || {};
-        return p._brixReward === 'true' ? sum : sum + (Number(it.final_line_price) || 0);
-      }, 0) / 100;
-      var reason = '';
-      if (cartHasCheckoutOnlyLines(opts.cart)) reason = 'Not available with Packs or free gifts';
-      else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
-      else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
-      slot.innerHTML = buttonHtml(cfg, cfg.buttons.drawerText, reason || feeHint(cfg, fmt), Boolean(reason));
-      var btn = slot.querySelector('[data-brix-cod-btn]');
-      if (btn && !reason) {
-        btn.addEventListener('click', function () {
-          open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
-        });
-      }
+      if (!cfg || cfg.surfaces.drawer === false) { slot.innerHTML = ''; setReplaced(checkout, false); return; }
+      var state = drawerState(cfg, opts.cart, excluded, moneyFormatter(cfg.currency));
+      paintDrawerSlot(slot, cfg, state, checkout ? { anchor: checkout, checkout: checkout } : null, function () {
+        open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
+      });
     }
-    if (configValue !== undefined) paint(configValue);
-    else loadConfig().then(paint);
+    function run(cfg) {
+      if (!cfg || cfg.surfaces.drawer === false || !excludedTags(cfg).length) { paint(cfg, false); return; }
+      cartHasExcluded(cfg, opts.cart).then(function (ex) { paint(cfg, ex); });
+    }
+    if (configValue !== undefined) run(configValue);
+    else loadConfig().then(run);
+  }
+
+  /* ---------- the theme's own cart drawer ---------- */
+
+  // COD works without the BRIX Cart Drawer: when that drawer is off, the
+  // button is added to the theme's own drawer, next to its Checkout button.
+  //
+  // Cart drawers of Shopify themes, by element, id or class: Dawn and the
+  // other free themes (<cart-drawer>, #CartDrawer), Horizon, Impulse,
+  // Prestige, Impact, Focal, Broadcast, Symmetry, Turbo and most others.
+  // Only Checkout buttons inside one of these get a COD button, so the cart
+  // page and other forms are left alone. A merchant whose theme isn't found
+  // can give the Checkout button's selector in BRIX (cfg.drawerSelector).
+  var THEME_DRAWER = [
+    'cart-drawer', 'cart-drawer-component', 'side-cart', 'mini-cart', 'sidebar-cart',
+    '#CartDrawer', '#mini-cart', '#sidebar-cart', '#side-cart', '#CartSidebar',
+    '[data-cart-drawer]', '.drawer--cart', '.ajax-cart',
+    '[id*="cart-drawer" i]', '[id*="CartDrawer"]', '[class*="cart-drawer"]', '[class*="mini-cart"]', '[class*="minicart"]',
+    '[class*="cart-sidebar"]', '[class*="side-cart"]', '[class*="sidecart"]',
+  ].join(',');
+  var THEME_CHECKOUT = [
+    'button[name="checkout"]', 'input[type="submit"][name="checkout"]', '#CartDrawer-Checkout', '.cart__checkout-button',
+    'a[href$="/checkout"]', 'a[href*="/checkout?"]',
+  ].join(',');
+  // Shop Pay / Google Pay buttons and BRIX's own UI are never a "Checkout".
+  var NOT_CHECKOUT = '.additional-checkout-buttons, .dynamic-checkout__content, .shopify-payment-button, shopify-accelerated-checkout-cart, shopify-accelerated-checkout, [data-shopify-buttoncontainer]';
+  var BRIX_UI = '#cc-root, #cc-overlay, [data-cart-ninja-drawer], [data-brix-cod-sheet], [data-brix-cod-drawer]';
+  var LAYOUT = /^(HTML|BODY|MAIN)$/;
+
+  // The outermost drawer around `el` (page-level wrappers never count, in
+  // case a theme puts a class like "side-cart-enabled" on <body>).
+  function themeDrawerOf(el) {
+    var d = el.closest(THEME_DRAWER);
+    if (!d || LAYOUT.test(d.tagName)) return null;
+    var up = d.parentElement && d.parentElement.closest(THEME_DRAWER);
+    while (up && !LAYOUT.test(up.tagName)) {
+      d = up;
+      up = d.parentElement && d.parentElement.closest(THEME_DRAWER);
+    }
+    return d;
+  }
+
+  // One Checkout button per drawer, in page order.
+  function findThemeCheckouts(cfg) {
+    var custom = cfg.drawerSelector || '';
+    var nodes;
+    try { nodes = document.querySelectorAll(custom || THEME_CHECKOUT); } catch (e) { nodes = []; }
+    var found = [];
+    var drawers = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.closest(BRIX_UI)) continue;
+      if (!custom) {
+        if (el.closest(NOT_CHECKOUT)) continue;
+        var drawer = themeDrawerOf(el);
+        if (!drawer || drawers.indexOf(drawer) !== -1) continue;
+        drawers.push(drawer);
+      }
+      found.push(el);
+    }
+    return found;
+  }
+
+  // Where the slot goes: next to the Checkout button, or next to its row
+  // when Checkout shares a side-by-side row (flex/grid) with other buttons,
+  // so the COD button gets its own full-width line instead of squeezing in.
+  function anchorFor(btn) {
+    var drawer = themeDrawerOf(btn); // never climb out of the drawer itself
+    var el = btn;
+    for (var i = 0; i < 3; i++) {
+      var p = el.parentElement;
+      if (!p || p === drawer || LAYOUT.test(p.tagName) || p.tagName === 'FORM') break;
+      var cs = window.getComputedStyle(p);
+      var row = /flex/.test(cs.display) && cs.flexDirection.indexOf('row') === 0 && cs.flexWrap === 'nowrap';
+      var grid = /grid/.test(cs.display) && cs.gridTemplateColumns.trim().split(/\s+/).length > 1;
+      if (!row && !grid) break;
+      el = p;
+    }
+    return el;
+  }
+
+  var themeMounts = []; // [{ checkout, anchor, slot }]
+  var themeCart = null;
+  var themeExcluded = false;
+  var themeSeq = 0;
+
+  function newThemeSlot() {
+    var slot = document.createElement('div');
+    slot.setAttribute('data-brix-cod-drawer', '');
+    slot.style.cssText = important('display:block;width:100%;margin:0;padding:0;flex:1 0 100%');
+    return slot;
+  }
+
+  function unmountTheme(m) {
+    if (m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
+    setReplaced(m.checkout, false);
+  }
+
+  // "Pay online" goes through the theme's own Checkout button, so anything
+  // the theme or another app does on checkout (notes, terms box, checkout
+  // apps) still happens. Clicking works while it's hidden by "Replace".
+  function themeCheckout(btn) {
+    if (btn && btn.isConnected && !btn.disabled) { btn.click(); return; }
+    window.location.href = ROOT + 'checkout';
+  }
+
+  function paintTheme(cfg) {
+    var fmt = moneyFormatter(cfg.currency);
+    themeMounts.forEach(function (m) {
+      if (!m.checkout.isConnected) return;
+      paintDrawerSlot(m.slot, cfg, drawerState(cfg, themeCart, themeExcluded, fmt), m, function () {
+        open({
+          surface: 'drawer',
+          useCart: true,
+          onPayOnline: function () { themeCheckout(m.checkout); },
+          // The cart was emptied; reload so the theme's drawer and cart count show it.
+          onClosedAfterOrder: function () { window.location.reload(); },
+        });
+      });
+    });
+  }
+
+  // Finds theme drawer Checkout buttons, adds/removes COD slots to match,
+  // and (re)reads the cart when asked or when it was never read.
+  function refreshTheme(cfg, refetch) {
+    if (window.__brixCartDrawerActive === true) {
+      // The BRIX Cart Drawer is on and replaces the theme's drawer; COD lives in it.
+      themeMounts.forEach(unmountTheme);
+      themeMounts = [];
+      return;
+    }
+    var buttons = findThemeCheckouts(cfg);
+    themeMounts = themeMounts.filter(function (m) {
+      if (m.checkout.isConnected && buttons.indexOf(m.checkout) !== -1) return true;
+      unmountTheme(m);
+      return false;
+    });
+    buttons.forEach(function (btn) {
+      var m = themeMounts.filter(function (x) { return x.checkout === btn; })[0];
+      if (!m) themeMounts.push({ checkout: btn, anchor: anchorFor(btn), slot: newThemeSlot() });
+      else if (!m.slot.isConnected) { m.anchor = anchorFor(btn); m.slot = newThemeSlot(); }
+    });
+    if (!themeMounts.length) return;
+    if (!refetch && themeCart) { paintTheme(cfg); return; }
+    var seq = ++themeSeq;
+    fetchCart().then(function (cart) {
+      return cartHasExcluded(cfg, cart).then(function (ex) {
+        if (seq !== themeSeq) return;
+        themeCart = cart;
+        themeExcluded = ex;
+        paintTheme(cfg);
+      });
+    }).catch(function () { /* cart unreadable: leave the theme's drawer as it is */ });
+  }
+
+  function initThemeDrawer() {
+    loadConfig().then(function (cfg) {
+      if (!cfg || cfg.surfaces.drawer === false) return;
+      refreshTheme(cfg, true);
+      document.addEventListener('brix:drawer:ready', function () { refreshTheme(cfg, false); });
+      if (!window.MutationObserver) return;
+      // Themes redraw their drawer when the cart changes (Dawn re-renders it
+      // from the server after every add, remove or quantity change), which
+      // removes the COD button and may change the cart: put it back and
+      // re-read the cart. Changes made by BRIX itself are ignored.
+      var timer = null;
+      var custom = cfg.drawerSelector || '';
+      var ours = function (n) { return n.nodeType === 1 && Boolean(n.closest && n.closest(BRIX_UI)); };
+      var bringsCheckout = function (n) {
+        if (n.nodeType !== 1) return false;
+        try { return Boolean((n.matches && n.matches(custom || THEME_CHECKOUT)) || n.querySelector(custom || THEME_CHECKOUT)); } catch (e) { return false; }
+      };
+      new MutationObserver(function (records) {
+        var hit = false;
+        for (var i = 0; i < records.length && !hit; i++) {
+          var r = records[i];
+          var target = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+          if (!target || ours(target)) continue;
+          var nodes = [].slice.call(r.addedNodes).concat([].slice.call(r.removedNodes));
+          if (nodes.length && nodes.every(ours)) continue;
+          hit = custom
+            ? nodes.some(bringsCheckout) || themeMounts.some(function (m) { return !m.checkout.isConnected; })
+            : Boolean(themeDrawerOf(target)) || nodes.some(bringsCheckout);
+        }
+        if (!hit) return;
+        clearTimeout(timer);
+        timer = setTimeout(function () { refreshTheme(cfg, true); }, 250);
+      }).observe(document.body, { childList: true, subtree: true });
+    });
   }
 
   /* ---------- product page button ---------- */
@@ -1611,7 +1936,9 @@
   // Puts the COD button on the product form: where Buy it now was (and hides
   // it) when the merchant chose to replace it, else under Add to Cart. A
   // [data-brix-cod-slot] block placed in the theme wins over both.
-  function mountProductButton(cfg, info) {
+  // `excluded`: the product has an excluded tag, so the button shows as
+  // unavailable under Add to Cart and Buy it now is left alone.
+  function mountProductButton(cfg, info, excluded) {
     var m = productMount;
     if (m && m.form.isConnected && m.slot.isConnected && (!m.addBtn || m.addBtn.isConnected)) return;
     var form = findProductForm(info.variantIds);
@@ -1619,7 +1946,7 @@
     if (m && m.slot.getAttribute('data-brix-cod-slot') === 'auto' && m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
     var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, cfg.productButton || {});
     var addBtn = submitButtonFor(form);
-    var buyNow = look.replaceBuyNow ? form.querySelector(BUY_NOW) : null;
+    var buyNow = look.replaceBuyNow && !excluded ? form.querySelector(BUY_NOW) : null;
     var slot = document.querySelector('[data-brix-cod-slot]:not([data-brix-cod-slot="auto"])');
     if (!slot) {
       slot = document.createElement('div');
@@ -1631,12 +1958,13 @@
       else if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
       else form.appendChild(slot);
     }
-    if (look.replaceBuyNow) hideBuyNow(form.closest('.shopify-section') || form);
+    if (look.replaceBuyNow && !excluded) hideBuyNow(form.closest('.shopify-section') || form);
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
     var fmt = moneyFormatter(cfg.currency);
-    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, feeHint(cfg, fmt), false, look);
+    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, excluded ? 'Not available for this product' : feeHint(cfg, fmt), Boolean(excluded), look);
     var btn = slot.querySelector('[data-brix-cod-btn]');
+    if (excluded) return;
     function syncDisabled() {
       var soldOut = Boolean(addBtn && (addBtn.disabled || addBtn.getAttribute('aria-disabled') === 'true'));
       btn.disabled = soldOut;
@@ -1667,16 +1995,16 @@
     loadConfig().then(function (cfg) {
       if (!cfg || cfg.surfaces.product === false) return;
       productInfo().then(function (info) {
-        var excluded = (cfg.excludedProductTags || []).map(function (t) { return String(t).toLowerCase(); });
-        if (excluded.length && info.tags.some(function (t) { return excluded.indexOf(String(t).trim().toLowerCase()) !== -1; })) return;
-        mountProductButton(cfg, info);
+        var excluded = hasExcludedTag(info.tags, excludedTags(cfg));
+        if (excluded && cfg.excludedBehavior === 'hide') return;
+        mountProductButton(cfg, info, excluded);
         // Many themes redraw the product form or its buttons when a variant is
         // picked, which removes the COD button; put it back when that happens.
         if (!window.MutationObserver) return;
         var timer = null;
         new MutationObserver(function () {
           clearTimeout(timer);
-          timer = setTimeout(function () { mountProductButton(cfg, info); }, 120);
+          timer = setTimeout(function () { mountProductButton(cfg, info, excluded); }, 120);
         }).observe(document.querySelector('main') || document.body, { childList: true, subtree: true });
       });
     });
@@ -1689,6 +2017,11 @@
     mountDrawerButton: mountDrawerButton,
   };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initProductButton);
-  else initProductButton();
+  function init() {
+    initProductButton();
+    initThemeDrawer();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

@@ -54,6 +54,66 @@ function ensureAnnouncementStyleColumns($pdo) {
     $ensured = true;
 }
 
+// Cart Image Banner columns (written by the Node app's saveCartDrawerConfig,
+// which adds them too); added here as well so this GET never selects a
+// column that doesn't exist yet.
+function ensureBannerColumns($pdo) {
+    static $ensured = false;
+    if ($ensured) return;
+    $existingCols = array_column(
+        $pdo->query("SHOW COLUMNS FROM cart_drawer_config")->fetchAll(PDO::FETCH_ASSOC),
+        'Field'
+    );
+    $defs = [
+        'banner_enabled' => "`banner_enabled` TINYINT(1) NOT NULL DEFAULT 0",
+        'banner_desktop_image' => "`banner_desktop_image` MEDIUMTEXT NULL",
+        'banner_mobile_image' => "`banner_mobile_image` MEDIUMTEXT NULL",
+        'banner_placement' => "`banner_placement` VARCHAR(20) NOT NULL DEFAULT 'above_progress'",
+        'banner_alt' => "`banner_alt` VARCHAR(160) NULL",
+    ];
+    foreach ($defs as $col => $ddl) {
+        if (!in_array($col, $existingCols)) $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN $ddl");
+    }
+    $ensured = true;
+}
+
+/**
+ * The banner image as the storefront should load it: an https URL as-is, or,
+ * for an image uploaded in BRIX (stored as a data URL), a long-cached URL to
+ * cart_banner_image.php, versioned by the image's hash so a new upload is
+ * fetched fresh. The image data itself never goes into this JSON.
+ * Same rules as isValidBannerImage in app/utils/cart-banner.shared.js.
+ */
+function bannerImageSrc($value, $shopDomain, $slot) {
+    $v = (string)$value;
+    if ($v === '') return '';
+    if (preg_match('#^https://[^\s"\'<>()\\\\]{1,1000}$#', $v)) return $v;
+    if (!preg_match('#^data:image/(png|jpeg|webp|gif);base64,#', $v)) return '';
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    $host = $_SERVER['HTTP_HOST'] ?? 'int.thebrix.io';
+    $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    return ($https ? 'https' : 'http') . '://' . $host . $dir . '/cart_banner_image.php?shop=' . rawurlencode($shopDomain)
+        . '&slot=' . $slot . '&v=' . substr(md5($v), 0, 12);
+}
+
+/** Replaces the raw banner columns in the GET result with what the storefront needs. */
+function shapeBanner($result, $shopDomain) {
+    $placements = ['above_progress', 'below_progress', 'above_products', 'below_products', 'above_checkout'];
+    $result['banner_desktop_src'] = bannerImageSrc($result['banner_desktop_image'] ?? '', $shopDomain, 'desktop');
+    $result['banner_mobile_src'] = bannerImageSrc($result['banner_mobile_image'] ?? '', $shopDomain, 'mobile');
+    $result['banner_placement'] = in_array($result['banner_placement'] ?? '', $placements, true) ? $result['banner_placement'] : 'above_progress';
+    $result['banner_enabled'] = !empty($result['banner_enabled']) ? 1 : 0;
+    $result['banner_alt'] = mb_substr((string)($result['banner_alt'] ?? ''), 0, 160);
+    // Drop the raw image data, including PDO's numbered copies of the columns
+    // (FETCH_BOTH, if config.php doesn't set a named-only fetch mode).
+    $raw = array_filter([$result['banner_desktop_image'] ?? '', $result['banner_mobile_image'] ?? ''], 'strlen');
+    foreach ($result as $k => $v) {
+        if (is_int($k) && is_string($v) && in_array($v, $raw, true)) unset($result[$k]);
+    }
+    unset($result['banner_desktop_image'], $result['banner_mobile_image']);
+    return $result;
+}
+
 /**
  * Resolves whether the "Powered by BRIX" watermark should render on the
  * storefront. Purely plan-based, automatic, no merchant control: Free always
@@ -204,6 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         ensureWatermarkColumn($pdo);
         ensureAnnouncementStyleColumns($pdo);
         ensureCountdownColumns($pdo);
+        ensureBannerColumns($pdo);
         $stmt = $pdo->prepare("
             SELECT cd.*,
               cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
@@ -211,7 +272,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
               cdc.announcement_bold, cdc.announcement_italic, cdc.announcement_text_align,
               cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
               cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width,
-              cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations
+              cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations,
+              cdc.banner_enabled, cdc.banner_desktop_image, cdc.banner_mobile_image, cdc.banner_placement, cdc.banner_alt
             FROM cart_drawer cd
             LEFT JOIN cart_drawer_config cdc ON cdc.shop_domain = cd.shop COLLATE utf8mb4_unicode_ci
             WHERE cd.shop = :shop
@@ -230,6 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
 
         $result = mergeUpsellWidgetSettings($pdo, $shopDomain, $result);
+        $result = shapeBanner($result, $shopDomain);
 
         $planKey = resolve_plan_key($pdo, $shopDomain);
         $result = applyPlanGatingToCartDrawerResult($result, $planKey, $pdo, $shopDomain);

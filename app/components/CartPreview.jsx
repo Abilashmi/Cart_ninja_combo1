@@ -10,6 +10,12 @@ import { PreviewLockBadge } from './plan/PlanGate';
 import PreviewCartItems from './PreviewCartItems';
 import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
+import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
+// The storefront drawer's own stylesheet for item rows, pricing summary and the
+// image banner, so the preview draws them exactly like the live drawer. Linked
+// from the app's /brix_cart_ui.css route, never imported from extensions/
+// (see app/routes/brix_cart_ui[.]css.jsx for why).
+const CART_UI_STYLESHEET = '/brix_cart_ui.css';
 
 
 const SECTION_LABELS = {
@@ -17,6 +23,7 @@ const SECTION_LABELS = {
   general: 'General',
   header: 'Header',
   announcements: 'Announcements',
+  imageBanner: 'Image Banner',
   progressBar: 'Progress Bar',
   couponSlider: 'Coupon Slider',
   upsellProducts: 'Upsell Products',
@@ -619,6 +626,28 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   );
 }
 
+// Cart Image Banner in the preview. Same markup and stylesheet as the
+// storefront (cart_drawer_inline.js renderBannerHtml); the preview has no real
+// screen size, so the device switch picks the desktop or mobile image.
+function PreviewImageBanner({ banner, device, editing }) {
+  const src = bannerVisible(banner) ? bannerSources(banner.desktopImage, banner.mobileImage) : null;
+  if (!src) {
+    if (!editing) return null;
+    return (
+      <div style={{ margin: '8px 10px', padding: '18px 12px', border: '1.5px dashed #c9cccf', borderRadius: 12, textAlign: 'center', fontSize: 12, color: '#6d7175', background: '#fafbfb' }}>
+        {banner.enabled ? 'Add an image to show the banner here' : 'Image banner is off'}
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: '8px 10px' }}>
+      <div className="bxcd-banner">
+        <img src={device === 'mobile' ? src.mobile : src.desktop} alt={banner.alt || ''} />
+      </div>
+    </div>
+  );
+}
+
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
   const { symbol: currencySymbol, formatMoney } = useCurrency();
@@ -654,6 +683,17 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const showProgressBar = pb.enabled && (!isEmpty || pb.showWhenEmpty);
   const showCouponSlider = cs.enabled && (!isEmpty || cs.showWhenEmpty);
   const showUpsell = up.enabled && (!isEmpty || up.showWhenEmpty);
+
+  // Image banner: rendered once, in the slot its placement resolves to (the
+  // same rule the storefront uses, utils/cart-banner.shared.js).
+  const banner = body.imageBanner;
+  const bannerAt = bannerSlot(banner.placement, { progressShown: showProgressBar, progressPosition: pb.position });
+  const bannerEditing = activeSection === 'imageBanner';
+  const renderBanner = (slot) => (slot === bannerAt && (bannerVisible(banner) || bannerEditing) ? (
+    <HighlightZone sectionId="imageBanner" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+      <PreviewImageBanner banner={banner} device={previewDevice} editing={bannerEditing} />
+    </HighlightZone>
+  ) : null);
 
   // Live preview cart: the sample product plus whatever the merchant "adds"
   // from the upsell / recommended lists. The progress bar reads THIS cart, and
@@ -705,6 +745,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
   return (
     <div ref={previewRootRef} style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden', background: '#f0f1f3' }}>
+      <link rel="stylesheet" href={CART_UI_STYLESHEET} />
 
       {/* ── Preview header ── */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', background: '#f0f1f3', borderBottom: '1px solid #e1e3e5', gap: 8 }}>
@@ -769,7 +810,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
               <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px)', opacity: 0.4 }} />
 
               {/* Cart Drawer */}
-              <div key={animKey} className={animClass} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+              <div key={animKey} className={`${animClass} bxcd-root ${isDesktop ? 'bxcd-root--desktop' : 'bxcd-root--mobile'}`} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
 
                 {/* Design/CSS global overlay */}
                 {['design', 'customCSS'].includes(activeSection) && (
@@ -815,12 +856,16 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                     </HighlightZone>
                   )}
 
+                  {renderBanner('top')}
+
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
+
+                  {renderBanner('afterTopBar')}
 
                   {/* Coupon Slider — TOP */}
                   {showCouponSlider && cs.position === 'top' && (
@@ -835,6 +880,8 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
+
+                  {renderBanner('beforeProducts')}
 
                   {/* Empty state OR Cart items */}
                   {isEmpty ? (
@@ -858,6 +905,8 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       onReset={resetPreviewCart}
                     />
                   )}
+
+                  {renderBanner('afterProducts')}
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
@@ -889,6 +938,8 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                     </div>
                   )}
 
+                  {renderBanner('beforeBottomBar')}
+
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
@@ -896,33 +947,35 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                     </HighlightZone>
                   )}
 
+                  {renderBanner('afterBottomBar')}
+
                   {/* Coupon Slider — BOTTOM */}
                   {showCouponSlider && cs.position === 'bottom' && (
                     <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
                   )}
+
+                  {renderBanner('end')}
                 </div>
 
                 {/* ── FOOTER ── */}
                 {!isEmpty && (
                   <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                     <div style={{ padding: '12px 18px', borderTop: '1px solid #e1e3e5', flexShrink: 0, background: drawerBg }}>
-                      {/* Subtotal */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, color: '#6d7175' }}>Subtotal</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(subtotal)}</span>
-                      </div>
-                      {rewards.some((r) => r.pricing === 'free' && r.product) && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 600 }}>Free gift savings</span>
-                          <span style={{ fontSize: 12, color: '#047857', fontWeight: 700 }}>{formatMoney(rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0))} saved</span>
-                        </div>
-                      )}
-                      {/* Total */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
-                        <span style={{ fontSize: 14, fontWeight: 700 }}>{formatMoney(subtotal)}</span>
+                      {/* Pricing summary: labels left, amounts right (brix_cart_ui.css, same as the storefront) */}
+                      <div className="bxcd-summary" style={{ marginBottom: 12 }}>
+                        <span className="bxcd-summary__label">Subtotal</span>
+                        <span className="bxcd-summary__value">{formatMoney(subtotal)}</span>
+                        {rewards.some((r) => r.pricing === 'free' && r.product) && (
+                          <>
+                            <span className="bxcd-summary__label bxcd-summary__label--saving">Free gift savings</span>
+                            <span className="bxcd-summary__value bxcd-summary__value--saving">{formatMoney(rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0))} saved</span>
+                          </>
+                        )}
+                        <span className="bxcd-summary__divider" aria-hidden="true" />
+                        <span className="bxcd-summary__label bxcd-summary__label--total">Total</span>
+                        <span className="bxcd-summary__value bxcd-summary__value--total">{formatMoney(subtotal)}</span>
                       </div>
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (

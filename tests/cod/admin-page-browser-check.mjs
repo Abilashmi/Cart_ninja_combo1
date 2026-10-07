@@ -1,5 +1,5 @@
 /* eslint-env node */
-// Browser check for the COD admin page (app/routes/app.cod.jsx), outside Shopify:
+// Browser check for the COD dashboard (app/routes/app.cod.jsx), outside Shopify:
 // server modules are stubbed and loader data is mocked, then Playwright renders it.
 // Run from the repo root: node tests/cod/admin-page-browser-check.mjs [live|warn|off|empty]
 import { build } from 'esbuild';
@@ -7,6 +7,7 @@ import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { sanitizeCodSettings } from '../../app/utils/cod.shared.js';
 
 const ROOT = process.cwd();
 const OUT = path.join(os.tmpdir(), 'brix-cod-admin-check');
@@ -19,6 +20,7 @@ const STUBS = {
   'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{};',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
   'cod-sms.server': 'export const smsProviderStatus = () => {};',
+  'discounts.server': 'export const listActiveDiscounts = async () => [];',
 };
 
 const stubPlugin = {
@@ -31,6 +33,8 @@ const stubPlugin = {
       contents: `import { useState } from 'react';
         export const useLoaderData = () => window.__DATA__;
         export const useRouteError = () => null;
+        export const useNavigate = () => (to) => { window.__NAV__ = to; };
+        export const useSearchParams = () => [new URLSearchParams(window.__SEARCH__ || '')];
         export const useFetcher = () => { const [s] = useState({ state: 'idle', data: null, submit: (b) => { window.__SUBMITTED__ = b; } }); return s; };`,
       loader: 'js', resolveDir: ROOT,
     }));
@@ -80,7 +84,8 @@ const settings = {
   tracking: { ga4Id: '', metaPixelId: '123456789012345', metaContentId: 'shopify', dataLayer: true },
 };
 const data = {
-  shop: 'demo.myshopify.com', settings, orders: scenario === 'empty' ? [] : orders,
+  // As the loader sends it: getCodSettings() always returns sanitized settings.
+  shop: 'demo.myshopify.com', settings: sanitizeCodSettings(settings), orders: scenario === 'empty' ? [] : orders,
   stats: scenario === 'empty' ? { count: 0, toCollect: 0, collected: 0, paidCount: 0, cancelledCount: 0, cancelRate: 0 } : {
     count: orders.length, toCollect: sum(orders.filter((o) => o.status === 'pending')), collected: sum(orders.filter((o) => o.status === 'paid')),
     paidCount: orders.filter((o) => o.status === 'paid').length, cancelledCount: orders.filter((o) => o.status === 'cancelled').length,
@@ -94,6 +99,9 @@ const data = {
     { code: 'WELCOME50', title: 'Welcome ₹50', summary: '₹50.00 off entire order • For first order' },
   ],
 };
+
+const results = [];
+const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 
 const browser = await chromium.launch();
 const width = Number(process.env.W || 1400);
@@ -112,121 +120,33 @@ await page.waitForSelector('.cod-status');
 await page.waitForTimeout(500);
 const shot = (n, opts = {}) => page.screenshot({ path: path.join(os.tmpdir(), `cod-admin-${scenario}-${n}.png`), ...opts });
 await shot('full', { fullPage: true });
-await page.getByRole('tab', { name: /^Settings/ }).click();
-await page.waitForTimeout(300);
-await shot('settings', { fullPage: true });
+check('dashboard: Overview and Orders only; customizing is on its own page', JSON.stringify(await page.locator('.cod-views [role=tab]').allTextContents()).includes('Overview') && !(await page.locator('.cod-views [role=tab]').allTextContents()).some((t) => /Settings/.test(t)));
+await page.getByRole('button', { name: 'Customize', exact: true }).first().click();
+check('dashboard: Customize button opens /app/cod/customize', await page.evaluate(() => window.__NAV__) === '/app/cod/customize');
+if (await page.getByRole('button', { name: /Customize COD/ }).count()) {
+  await page.getByRole('button', { name: /Customize COD/ }).click();
+  check('dashboard: the "Customize COD" card opens the customizer', await page.evaluate(() => window.__NAV__) === '/app/cod/customize');
+}
+if (scenario === 'off') {
+  await page.getByRole('button', { name: 'Turn on' }).click();
+  check('checklist: Turn on opens the customizer at COD status', await page.evaluate(() => window.__NAV__) === '/app/cod/customize?section=status');
+}
+check(`dashboard at ${width}px: no sideways scroll`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
 await page.getByRole('tab', { name: /^Orders/ }).click();
 await page.waitForTimeout(300);
 await shot('orders');
-await page.getByRole('tab', { name: /^Settings/ }).click();
-
 if (scenario === 'live') {
-  // Interactions: tabs, preview surfaces, simulator, chips, contrast
-  await page.getByRole('tab', { name: /Rules/ }).click();
-  await page.getByPlaceholder('Type or paste PIN codes, e.g. 744101').fill('110001, 12345 ');
-  await page.waitForTimeout(200);
-  await page.getByRole('button', { name: 'COD checkout' }).click();
-  await page.waitForTimeout(400);
-  await shot('rules');
-  await page.getByRole('tab', { name: /Button style/ }).click();
-  await page.getByRole('textbox', { name: 'Text colour', exact: true }).fill('#a7f3d0');
-  await page.getByRole('button', { name: 'Product page' }).click();
-  await page.waitForTimeout(300);
-  await shot('look');
-  // Product page button: spacing sliders drive the preview (drawn at 80%), Buy it now replaced by default.
-  await page.getByRole('slider', { name: 'Space above' }).focus();
-  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(200);
-  await shot('look-spacing', { fullPage: true });
-  const pvReplace = await page.evaluate(() => ({
-    marginTop: getComputedStyle(document.querySelector('.cod-stage .cod-pv-btn')).marginTop,
-    buyNow: Boolean(document.querySelector('.cod-stage .cod-scr-bin')),
-  }));
-  await page.getByRole('tab', { name: /Placement/ }).click();
-  await page.getByRole('switch', { name: 'Replace the Buy it now button' }).click();
-  await page.locator('.cod-sticky').getByRole('button', { name: 'Product page' }).click();
-  await page.waitForTimeout(200);
-  await shot('placement-keep-buy-now');
-  const pvKeep = await page.evaluate(() => Boolean(document.querySelector('.cod-stage .cod-scr-bin')));
-  console.log('product button preview:', JSON.stringify({ ...pvReplace, buyNowWhenKept: pvKeep }));
-  await page.getByRole('switch', { name: 'Replace the Buy it now button' }).click();
-  await page.getByRole('tab', { name: /Placement/ }).click();
-  await page.locator('.cod-sticky').getByRole('button', { name: 'Cart drawer' }).click();
-  await page.locator('.cod-sticky input[type=number]').fill('199');
-  await page.waitForTimeout(300);
-  await shot('placement');
-  const hits = await page.evaluate(() => ({
-    chips: [...document.querySelectorAll('.cod-chip')].map((c) => c.textContent.replace('×', '')),
-    badChips: [...document.querySelectorAll('.cod-chip.bad')].map((c) => c.textContent.replace('×', '')),
-    sim: document.querySelector('.cod-sim')?.textContent,
-    contrast: document.querySelector('.cod-contrast')?.textContent,
-  }));
-  console.log(JSON.stringify(hits, null, 1));
-  await page.getByRole('tab', { name: /^Orders/ }).click();
   await page.getByRole('tab', { name: /Payment pending/ }).click();
   await page.waitForTimeout(200);
-  console.log('pending rows:', await page.locator('.Polaris-IndexTable__TableRow').count());
-
-  // Checkout popup section: upload a logo through the real drop zone (SVG gets drawn to a bitmap).
-  await page.getByRole('tab', { name: /^Settings/ }).click();
-  await page.getByRole('tab', { name: /Checkout popup/ }).click();
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="90"><circle cx="45" cy="45" r="36" fill="#e11d48"/><text x="96" y="58" font-family="Arial" font-weight="700" font-size="40" fill="#111827">Acme Store</text></svg>';
-  await page.locator('.cod-logo-drop input[type=file]').setInputFiles({ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
-  await page.waitForSelector('.cod-logo-img img');
-  await page.getByRole('button', { name: 'Soft' }).click();
-  await page.waitForTimeout(1400); // let the BRIX loader finish in the preview
-  await shot('popup', { fullPage: true });
-  const popup = await page.evaluate(() => ({
-    storedLogo: (document.querySelector('.cod-logo-img img')?.getAttribute('src') || '').slice(0, 22),
-    previewLogo: Boolean(document.querySelector('.cod-scr-sheet .cod-pv-logo')),
-    powered: Boolean(document.querySelector('.cod-pv-pw img[alt=BRIX]')),
-    soft: Boolean(document.querySelector('.cod-scr-sheet.rad-soft')),
-  }));
-  console.log('popup:', JSON.stringify(popup));
-  await page.getByRole('button', { name: 'Replay BRIX loader' }).click();
-  await page.waitForTimeout(200);
-  await shot('popup-loader');
-  console.log('loader visible:', await page.locator('.cod-pv-loader').count());
-  // Coupons section: pick a Shopify code, type another, open the field by default
-  await page.getByRole('tab', { name: /^Coupons/ }).click();
-  await page.getByLabel('Add one of your Shopify codes').selectOption('SAVE10');
-  await page.getByLabel('Or type a code').fill('FESTIVE20');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.getByLabel('Offer text for FESTIVE20').fill('20% off this festive week');
-  await page.getByLabel('Field text').fill('Got a coupon?');
-  await page.waitForTimeout(1400);
-  await shot('coupons', { fullPage: true });
-  console.log('coupons:', JSON.stringify(await page.evaluate(() => ({
-    offerRows: [...document.querySelectorAll('.cod-offer-code')].map((e) => e.textContent),
-    notInShopify: document.querySelectorAll('.cod-offer .Polaris-Badge').length,
-    previewOffers: [...document.querySelectorAll('.cod-pv-ofr-c')].map((e) => e.textContent),
-    previewLabel: document.querySelector('.cod-pv-cpn span')?.textContent,
-  }))));
-  // Ads & analytics: IDs validated, keys write-only (saved token shows only its last 4)
-  await page.getByRole('tab', { name: /Ads & analytics/ }).click();
-  await page.getByLabel('Measurement ID').fill('UA-123');
-  await page.waitForTimeout(150);
-  const badId = await page.locator('.Polaris-InlineError').first().textContent().catch(() => '');
-  await page.getByLabel('Measurement ID').fill('g-abc123xyz');
-  await page.getByLabel('Measurement Protocol API secret (recommended)').fill('ga4-secret-123');
-  const tokenRow = await page.locator('.cod-secret').first().textContent();
-  await page.waitForTimeout(200);
-  await shot('tracking', { fullPage: true });
-  console.log('tracking:', JSON.stringify({ badId, tokenRow, testDisabled: await page.getByRole('button', { name: 'Send test events' }).isDisabled() }));
-
-  await page.getByRole('tab', { name: /Rules/ }).click();
-  await page.getByRole('button', { name: 'Remove 12345' }).click();
-  await page.getByRole('button', { name: 'Save' }).click();
-  const submitted = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
-  const sent = submitted.settings?.sheet;
-  console.log('saved sheet:', JSON.stringify({ ...sent, logo: (sent?.logo || '').slice(0, 22) + '… (' + (sent?.logo || '').length + ' chars)' }));
-  console.log('saved productButton:', JSON.stringify(submitted.settings?.productButton));
-  console.log('saved tracking:', JSON.stringify(submitted.settings?.tracking), 'secrets:', JSON.stringify(submitted.secrets));
-  await page.getByRole('tab', { name: /^Orders/ }).click();
+  check('orders: payment filter works', (await page.locator('.Polaris-IndexTable__TableRow').count()) === orders.filter((o) => o.status === 'pending').length);
   await page.getByRole('tab', { name: /^All/ }).click();
   await page.waitForTimeout(200);
   await shot('orders-lifecycle');
   console.log('order row:', await page.locator('.Polaris-IndexTable__TableRow').first().textContent());
 }
 console.log('errors:', errors.length ? errors.join('\n') : 'none');
+check('no page or console errors', errors.length === 0);
 await browser.close();
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} passed`);
+process.exit(failed.length ? 1 : 0);

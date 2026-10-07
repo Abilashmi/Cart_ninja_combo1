@@ -552,6 +552,13 @@ test('storefront config: returns display settings only, OTP only when Node has S
   });
   const { json } = await storefront(`action=config&shop=${SHOP}`);
   assert.equal(json.codFee, 49);
+  assert.equal(json.showCodFee, true);
+  assert.equal(json.codFeeLabel, 'Cash on Delivery Fee');
+  assert.equal(json.drawerPlacement, 'above');
+  assert.equal(json.drawerSelector, '');
+  assert.equal(json.excludedBehavior, 'unavailable');
+  assert.equal(json.buttons.style, 'filled');
+  assert.equal(json.buttons.radius, 12);
   assert.equal(json.minOrder, 299);
   assert.deepEqual(json.blockedPincodes, ['744101']);
   assert.deepEqual(json.surfaces, { drawer: true, product: true, combo: false });
@@ -580,6 +587,48 @@ test('storefront config: returns display settings only, OTP only when Node has S
     process.env.COD_OTP_DEV_LOG = '1';
     await cod.syncCodRuntime(SHOP);
   }
+});
+
+test('storefront config: drawer placement, button style, fee switch / title / visibility and excluded behaviour', async () => {
+  await setPlan('pro');
+  await cod.saveCodSettings(SHOP, {
+    enabled: true, codFeeEnabled: true, codFee: 40, codFeeLabel: 'Handling fee', showCodFee: false,
+    drawerPlacement: 'replace', drawerSelector: '#CartDrawer-Checkout', excludedBehavior: 'hide',
+    excludedProductTags: ['no-cod', 'pre-order'], buttons: { style: 'minimal', radius: 4 },
+  });
+  let { json } = await storefront(`action=config&shop=${SHOP}`);
+  assert.equal(json.codFee, 40);
+  assert.equal(json.codFeeLabel, 'Handling fee');
+  assert.equal(json.showCodFee, false);
+  assert.equal(json.drawerPlacement, 'replace');
+  assert.equal(json.drawerSelector, '#CartDrawer-Checkout');
+  assert.equal(json.excludedBehavior, 'hide');
+  assert.deepEqual(json.excludedProductTags, ['no-cod', 'pre-order']);
+  assert.equal(json.buttons.style, 'minimal');
+  assert.equal(json.buttons.radius, 4);
+
+  await cod.saveCodSettings(SHOP, { codFeeEnabled: false });
+  ({ json } = await storefront(`action=config&shop=${SHOP}`));
+  assert.equal(json.codFee, 0, 'fee switched off: nothing is charged or shown');
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  assert.equal(stored.codFee, 40, 'the amount is kept for when it is turned back on');
+
+  // Settings saved before the switch existed (codFee only) keep charging the fee,
+  // and junk in the new fields never reaches the storefront.
+  const legacy = { ...stored, codFee: 49, buttons: { ...stored.buttons, style: 'neon', radius: 'x' }, drawerPlacement: 'sideways', drawerSelector: '<script>' };
+  delete legacy.codFeeEnabled;
+  delete legacy.codFeeLabel;
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify(legacy), SHOP]);
+  ({ json } = await storefront(`action=config&shop=${SHOP}`));
+  assert.equal(json.codFee, 49);
+  assert.equal(json.codFeeLabel, 'Cash on Delivery Fee');
+  assert.equal(json.buttons.style, 'filled');
+  assert.equal(json.buttons.radius, 12);
+  assert.equal(json.drawerPlacement, 'above');
+  assert.equal(json.drawerSelector, '');
+  assert.equal((await cod.getCodSettings(SHOP)).codFeeEnabled, true, 'Node reads the legacy fee as on too');
+
+  await cod.saveCodSettings(SHOP, { codFeeEnabled: false, codFee: 0, codFeeLabel: '', showCodFee: true, drawerPlacement: 'above', drawerSelector: '', excludedBehavior: 'unavailable', excludedProductTags: [], buttons: { style: 'filled', radius: 12 } });
 });
 
 test('storefront config: GA4 / Meta Pixel IDs reach the popup, the API secret and token never do', async () => {

@@ -373,6 +373,7 @@
             showRecommendations: d.empty_cart_show_recommendations != null ? isEnabled(d.empty_cart_show_recommendations) : true,
           },
           countdown: parseCountdownData(d),
+          banner: parseBannerData(d),
         };
         _ccActive = true;
 
@@ -2121,8 +2122,10 @@
 
   // BRIX COD Checkout (brix_cod.js): fills #cc-cod-slot with the Cash on
   // Delivery button when the merchant has COD on, and draws nothing
-  // otherwise. "Pay online" inside the COD sheet goes through ccGoToCheckout,
-  // so prepaid keeps using Shopify (or Shiprocket) checkout exactly as before.
+  // otherwise. brix_cod.js moves the slot above/below #cc-checkout-wrap, or
+  // hides that wrap for "Replace Checkout", as set in the BRIX COD page.
+  // "Pay online" inside the COD sheet goes through ccGoToCheckout, so prepaid
+  // keeps using Shopify (or Shiprocket) checkout exactly as before.
   function initCodButton(cart) {
     const slot = document.getElementById('cc-cod-slot');
     if (!slot || !window.BrixCod) return;
@@ -2131,6 +2134,7 @@
       : '/checkout';
     window.BrixCod.mountDrawerButton(slot, {
       cart,
+      checkout: document.getElementById('cc-checkout-wrap'),
       coupon: appliedCouponCodes[0] || null,
       onPayOnline: () => ccGoToCheckout(href),
       onSuccess: () => closeDrawer(),
@@ -2291,6 +2295,118 @@
 
   /* =================== RENDER =================== */
 
+  /* =================== CART IMAGE BANNER =================== */
+  // Mirrors app/utils/cart-banner.shared.js (bannerSources / bannerSlot) used by
+  // the Cart Editor preview; keep them in step.
+
+  function parseBannerData(d) {
+    var placements = ['above_progress', 'below_progress', 'above_products', 'below_products', 'above_checkout'];
+    var safe = function (src) { return /^(https:\/\/|http:\/\/)[^\s"'<>()\\]+$/.test(src || '') ? src : ''; };
+    var desktop = safe(d.banner_desktop_src);
+    var mobile = safe(d.banner_mobile_src);
+    return {
+      enabled: isEnabled(d.banner_enabled),
+      // A missing image falls back to the other one.
+      desktop: desktop || mobile,
+      mobile: mobile || desktop,
+      placement: placements.indexOf(d.banner_placement) !== -1 ? d.banner_placement : 'above_progress',
+      alt: d.banner_alt || '',
+    };
+  }
+
+  // The banner's CSS order inside #cc-drawer-body (a flex column). The body's
+  // sections keep their own order values: top progress bar -20, top coupons
+  // -10, everything else 0 in page order, bottom progress bar 980, bottom
+  // coupons 990. "Above / Below Progress Bar" follow the bar; with no bar
+  // showing the banner goes to the top. Products placements use page order (0).
+  var CC_BANNER_ORDER = { top: -30, afterTopBar: -15, beforeProducts: 0, afterProducts: 0, beforeBottomBar: 975, afterBottomBar: 985, end: 1000 };
+  function ccBannerSlot(placement, progressShown, progressPosition) {
+    if (placement === 'above_products') return 'beforeProducts';
+    if (placement === 'below_products') return 'afterProducts';
+    if (placement === 'above_checkout') return 'end';
+    if (!progressShown) return 'top';
+    var bottom = progressPosition === 'bottom';
+    if (placement === 'below_progress') return bottom ? 'afterBottomBar' : 'afterTopBar';
+    return bottom ? 'beforeBottomBar' : 'top';
+  }
+
+  // <picture> so the browser downloads only the image for its screen size.
+  function renderBannerHtml(banner, order) {
+    if (!banner || !banner.enabled || !banner.desktop) return '';
+    var alt = escapeHtml(banner.alt || '');
+    var source = banner.mobile && banner.mobile !== banner.desktop
+      ? '<source media="(max-width: 480px)" srcset="' + escapeHtml(banner.mobile) + '">'
+      : '';
+    return '<div class="bxcd-banner" id="cc-image-banner" style="order:' + order + ';"><picture>' + source +
+      '<img src="' + escapeHtml(banner.desktop) + '" alt="' + alt + '" loading="lazy" decoding="async"' + (alt ? '' : ' role="presentation"') + '></picture></div>';
+  }
+
+  var CC_ICON_X = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>';
+  var CC_ICON_MINUS = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 10h12"/></svg>';
+  var CC_ICON_PLUS = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>';
+  var CC_ICON_GIFT = '<svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 011-1h12a1 1 0 011 1v2H3V8zm0 3h6v6H5a2 2 0 01-2-2v-4zm8 0h6v4a2 2 0 01-2 2h-4v-6zM10 7V5.5A2.5 2.5 0 107.5 8H10zm0 0h2.5A2.5 2.5 0 1010 5.5V7z"/></svg>';
+
+  // One cart line (brix_cart_ui.css .bxcd-item): image | title, variant, price,
+  // quantity | remove (top right) and line total (bottom right).
+  function renderCartItemHtml(item, opts) {
+    var isGift = opts.isGift;
+    var isFreeGift = isGift && item.final_line_price === 0;
+    var noStepper = opts.isRewardItem || opts.packLine;
+    var title = escapeHtml(item.product_title);
+    var variant = item.variant_title && item.variant_title !== 'Default Title' && !item.product_has_only_default_variant ? escapeHtml(item.variant_title) : '';
+    var unit = (typeof item.final_price === 'number' ? item.final_price : item.original_price) / 100;
+    var original = item.original_price / 100;
+    var originalLine = (item.original_line_price || item.original_price * item.quantity) / 100;
+    var key = String(item.key).replace(/'/g, '');
+
+    var price = isFreeGift
+      ? '<span class="bxcd-item__note">Added for reaching your milestone</span>'
+      : '<span class="bxcd-item__unit">' + formatMoney(unit) + '</span>' +
+        (original > unit ? '<span class="bxcd-item__compare">' + formatMoney(original) + '</span>' : '');
+
+    var qty;
+    if (opts.packLine) {
+      qty = '<span class="bxcd-item__pack">Pack' + (opts.packLine._brix_pack_quantity ? ' of ' + escapeHtml(opts.packLine._brix_pack_quantity) : '') + '</span>';
+    } else if (noStepper) {
+      qty = '';
+    } else {
+      qty = '<div class="bxcd-qty" role="group" aria-label="Quantity">' +
+        '<button type="button" class="bxcd-qty__btn" aria-label="Decrease quantity"' + (item.quantity <= 1 ? ' disabled' : '') + ' onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity - 1) + ')">' + CC_ICON_MINUS + '</button>' +
+        '<span class="bxcd-qty__val" aria-live="polite">' + item.quantity + '</span>' +
+        '<button type="button" class="bxcd-qty__btn" aria-label="Increase quantity" onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity + 1) + ')">' + CC_ICON_PLUS + '</button>' +
+        '</div>';
+    }
+
+    var total = isFreeGift
+      ? '<span class="bxcd-item__free">FREE</span><span class="bxcd-item__was">' + formatMoney(originalLine) + '</span>'
+      : formatMoney(item.final_line_price / 100);
+
+    return '<div class="bxcd-item' + (isGift ? ' bxcd-item--gift' : '') + '" data-item-key="' + escapeHtml(key) + '"' + (isGift ? ' style="animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;"' : '') + '>' +
+      (isGift ? '<span class="bxcd-item__badge' + (isFreeGift ? ' bxcd-item__badge--free' : '') + '">' + CC_ICON_GIFT + (isFreeGift ? 'FREE GIFT' : 'REWARD') + '</span>' : '') +
+      '<div class="bxcd-item__media">' + (item.image
+        ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
+        : '<span style="font-size:28px;" aria-hidden="true">📦</span>') + '</div>' +
+      '<p class="bxcd-item__title">' + title + '</p>' +
+      '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\')">' + CC_ICON_X + '</button>' +
+      (variant ? '<p class="bxcd-item__variant">' + variant + '</p>' : '') +
+      '<div class="bxcd-item__price">' + price + '</div>' +
+      (qty ? '<div class="bxcd-item__qty">' + qty + '</div>' : '') +
+      '<div class="bxcd-item__total">' + total + '</div>' +
+      '</div>';
+  }
+
+  // Subtotal / discounts / total: labels left, amounts right (brix_cart_ui.css .bxcd-summary).
+  function renderSummaryHtml(subtotal, totalDiscount, finalTotal) {
+    return '<div class="bxcd-summary">' +
+      '<span class="bxcd-summary__label">Subtotal</span><span class="bxcd-summary__value">' + formatMoney(subtotal) + '</span>' +
+      (totalDiscount > 0
+        ? '<span class="bxcd-summary__label bxcd-summary__label--saving">Discounts</span><span class="bxcd-summary__value bxcd-summary__value--saving">-' + formatMoney(totalDiscount) + '</span>'
+        : '') +
+      '<span class="bxcd-summary__divider" aria-hidden="true"></span>' +
+      '<span class="bxcd-summary__label bxcd-summary__label--total">Total</span><span class="bxcd-summary__value bxcd-summary__value--total">' + formatMoney(finalTotal) + '</span>' +
+      '</div>';
+  }
+
   async function renderDrawer() {
     if (!document.getElementById('cc-drawer-styles')) {
       const style = document.createElement('style');
@@ -2330,7 +2446,11 @@
     const giftQty = cart.items.filter(isGiftLine).reduce((sum, it) => sum + it.quantity, 0);
     const cartTotal = (cart.total_price - giftValue) / 100;
     const cartQty = cart.item_count - giftQty;
-    const isEmpty = cart.items.length === 0;
+    // The cart's own lines (fresh from /cart.js on every render) decide whether
+    // there is anything to check out: the items list, the pricing summary and
+    // the checkout footer all follow this one flag.
+    const hasCartItems = Array.isArray(cart.items) && cart.items.length > 0;
+    const isEmpty = !hasCartItems;
 
     const root = document.getElementById('cc-root');
     let overlay = document.getElementById('cc-overlay');
@@ -2437,7 +2557,7 @@
       }
       const celebratingTier = _ccCelebratingTierId ? pInfo.tiers.find((t) => t.id === _ccCelebratingTierId) : null;
 
-      let pbHtml = `<div style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -2 : 998};">`;
+      let pbHtml = `<div data-cc-section="progress" style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -20 : 980};">`;
       // Header info
       pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
       if (celebratingTier) {
@@ -2596,6 +2716,13 @@
       }
     }
 
+    /* ---- CART IMAGE BANNER ---- */
+    // Rendered once, at the slot the merchant picked (see ccBannerSlot).
+    const progressShown = Boolean(progress.enabled && (progress.showOnEmpty || !isEmpty));
+    const bannerSlot = ccBannerSlot((CONFIG.banner || {}).placement, progressShown, progress.placement);
+    const bannerHtml = renderBannerHtml(CONFIG.banner, CC_BANNER_ORDER[bannerSlot]);
+    if (bannerSlot !== 'beforeProducts' && bannerSlot !== 'afterProducts') topBodyHtml += bannerHtml;
+
     /* ---- COUPON SECTION ---- */
     const coupon = CONFIG.coupon;
     if (coupon.enabled && coupon.selectedActiveCoupons.length > 0) {
@@ -2606,6 +2733,7 @@
     drawerHtml += topBodyHtml;
 
     /* ---- EMPTY STATE ---- */
+    if (isEmpty && bannerSlot === 'beforeProducts') drawerHtml += bannerHtml;
     if (isEmpty) {
       const ec = CONFIG.emptyCart || {};
       drawerHtml += `
@@ -2616,6 +2744,7 @@
     ${ec.showContinueShopping !== false ? `<button onclick="window.location.href=((window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/')+'collections/all';" style="margin-top:4px;padding:8px 18px;border:1px solid #c9cccf;border-radius:7px;background:#fff;font-size:13px;cursor:pointer;color:#202223;">Continue shopping</button>` : ''}
   </div>
 `;
+      if (bannerSlot === 'afterProducts') drawerHtml += bannerHtml;
     }
 
     /* ---- UPSELL (TOP POSITION) ---- */
@@ -2641,9 +2770,10 @@
     }
 
     /* ---- CART ITEMS ---- */
-    if (!isEmpty) {
+    if (hasCartItems) {
+      if (bannerSlot === 'beforeProducts') drawerHtml += bannerHtml;
       drawerHtml += `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
     <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
     <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
       <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.items.length} ITEMS</span>
@@ -2662,64 +2792,18 @@
         });
       });
 
+      let itemsHtml = '';
       cart.items.forEach((item) => {
-        const price = item.final_line_price / 100;
-        const unitPrice = item.original_price / 100;
-        const lineTotal = price;
         const isGift = isGiftLine(item);
-        const isRewardItem = isGift || rewardProductIds.has(String(item.product_id));
-        // BRIX Pack lines: the Pack fixes the quantity, so no stepper (remove still works).
-        const packLine = !isGift && item.properties && item.properties._brix_pack_id ? item.properties : null;
-        // FREE only when the cart line really is at 0 (the checkout discount is
-        // applied) — never claimed from the property alone.
-        const isFreeGift = isGift && item.final_line_price === 0;
-        const originalLine = (item.original_line_price || item.original_price * item.quantity) / 100;
-
-        drawerHtml += `
-    <div style="display:flex;gap:12px;padding:${isGift ? '16px 12px 12px' : '12px'};${isGift ? 'margin-top:8px;background:linear-gradient(135deg,#ecfdf5 0%,#f0fdf4 60%,#ffffff 100%);border:1.5px dashed #34d399;box-shadow:0 6px 16px rgba(5,150,105,0.14);animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;' : 'background:#fff;border:1px solid #f1f5f9;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);'}border-radius:16px;transition:all .3s ease;position:relative;">
-      ${isGift ? `<span style="position:absolute;top:-9px;left:14px;display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;background:${isFreeGift ? '#059669' : '#4f46e5'};color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;"><svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 8a1 1 0 011-1h12a1 1 0 011 1v2H3V8zm0 3h6v6H5a2 2 0 01-2-2v-4zm8 0h6v4a2 2 0 01-2 2h-4v-6zM10 7V5.5A2.5 2.5 0 107.5 8H10zm0 0h2.5A2.5 2.5 0 1010 5.5V7z"/></svg>${isFreeGift ? 'FREE GIFT' : 'REWARD'}</span>` : ''}
-      <div style="width:70px;height:70px;background:#fff;border-radius:12px;flex-shrink:0;border:1px solid #f1f5f9;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-        ${item.image
-            ? `<img src="${item.image}" alt="${escapeHtml(
-              item.product_title
-            )}" style="width:100%;height:100%;object-fit:contain;">`
-            : `<span style="font-size:32px;">📦</span>`
-          }
-      </div>
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;white-space:normal;overflow-wrap:anywhere;word-break:break-word;flex:1;">${escapeHtml(
-            item.product_title
-          )}</p>
-          <button onclick="ccRemoveItem('${item.key}')"
-            style="background:none;border:none;padding:4px;cursor:pointer;color:#94a3b8;font-size:16px;transition:color .2s;" title="Remove item">✕</button>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
-          <div style="display:flex;flex-direction:column;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              ${isFreeGift ? `<span style="font-size:12px;color:#047857;font-weight:600;">Added for reaching your milestone</span>` : `<span style="font-size:14px;font-weight:700;color:#0f172a;">${formatMoney(unitPrice)}</span>`}
-              ${isRewardItem ? '' : `<span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${formatMoney(unitPrice)})</span>`}
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;">
-            ${packLine ? `<span style="padding:4px 10px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700;white-space:nowrap;">Pack${packLine._brix_pack_quantity ? ' of ' + escapeHtml(packLine._brix_pack_quantity) : ''}</span>` : isRewardItem ? '' : `<div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
-              <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity - 1})">−</button>
-              <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity
-          }</span>
-              <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
-            </div>`}
-            <div style="text-align:right;min-width:60px;">
-              ${isFreeGift
-                ? `<span style="display:inline-block;padding:2px 10px;border-radius:7px;background:#059669;color:#fff;font-weight:800;font-size:12px;letter-spacing:.06em;">FREE</span><div style="font-size:12px;color:#6b7280;text-decoration:line-through;margin-top:2px;">${formatMoney(originalLine)}</div>`
-                : `<span style="font-weight:800;font-size:15px;color:#0f172a;">${formatMoney(lineTotal)}</span>`}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+        itemsHtml += renderCartItemHtml(item, {
+          isGift,
+          isRewardItem: isGift || rewardProductIds.has(String(item.product_id)),
+          // BRIX Pack lines: the Pack fixes the quantity, so no stepper (remove still works).
+          packLine: !isGift && item.properties && item.properties._brix_pack_id ? item.properties : null,
+        });
       });
-
+      drawerHtml += `<div class="bxcd-items">${itemsHtml}</div>`;
+      if (bannerSlot === 'afterProducts') drawerHtml += bannerHtml;
     }
 
     /* ---- UPSELL (BOTTOM POSITION) ---- */
@@ -2731,64 +2815,46 @@
     drawerHtml += `</div>`; // end body
 
     /* -------- FOOTER -------- */
-    const subtotal = cart.total_price / 100; // what the cart really totals (gifts included)
-    let totalDiscount = 0;
+    // Pricing summary + checkout exist only when the cart has items. An empty
+    // cart shows the empty state above and no checkout at all.
+    if (hasCartItems) {
+      const subtotal = cart.total_price / 100; // what the cart really totals (gifts included)
+      let totalDiscount = 0;
 
-    // Calculate coupon discounts — check both API data (COUPONS) and saved details (allCouponDetails)
-    const allDetails = (CONFIG.coupon && CONFIG.coupon.allCouponDetails) || [];
-    appliedCouponCodes.forEach((code) => {
-      // 1. Try COUPONS from API
-      const apiMatch = COUPONS.find((c) => c.code === code);
-      // 2. Try allCouponDetails from saved config
-      const savedMatch = allDetails.find((c) => c.code === code);
+      // Calculate coupon discounts — check both API data (COUPONS) and saved details (allCouponDetails)
+      const allDetails = (CONFIG.coupon && CONFIG.coupon.allCouponDetails) || [];
+      appliedCouponCodes.forEach((code) => {
+        // 1. Try COUPONS from API
+        const apiMatch = COUPONS.find((c) => c.code === code);
+        // 2. Try allCouponDetails from saved config
+        const savedMatch = allDetails.find((c) => c.code === code);
 
-      let val = 0;
-      let isPercentage = false;
+        let val = 0;
+        let isPercentage = false;
 
-      if (apiMatch && (apiMatch.value || apiMatch.discountValue)) {
-        val = parseFloat(apiMatch.value || apiMatch.discountValue || 0);
-        isPercentage = apiMatch.valueType === 'percentage' || apiMatch.discountType === 'percentage';
-      } else if (savedMatch && savedMatch.discountValue) {
-        val = parseFloat(savedMatch.discountValue || 0);
-        isPercentage = savedMatch.discountType === 'percentage';
-      }
-
-      if (val > 0) {
-        if (isPercentage) {
-          totalDiscount += subtotal * (val / 100);
-        } else {
-          totalDiscount += val;
+        if (apiMatch && (apiMatch.value || apiMatch.discountValue)) {
+          val = parseFloat(apiMatch.value || apiMatch.discountValue || 0);
+          isPercentage = apiMatch.valueType === 'percentage' || apiMatch.discountType === 'percentage';
+        } else if (savedMatch && savedMatch.discountValue) {
+          val = parseFloat(savedMatch.discountValue || 0);
+          isPercentage = savedMatch.discountType === 'percentage';
         }
-      }
-    });
-    const finalTotal = Math.max(0, subtotal - totalDiscount);
 
-    drawerHtml += `
-<div style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
-  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span>
-      <span style="font-size:14px;color:#0f172a;font-weight:700;">${formatMoney(subtotal)}</span>
-    </div>
-`;
+        if (val > 0) {
+          if (isPercentage) {
+            totalDiscount += subtotal * (val / 100);
+          } else {
+            totalDiscount += val;
+          }
+        }
+      });
+      const finalTotal = Math.max(0, subtotal - totalDiscount);
 
-    if (totalDiscount > 0) {
       drawerHtml += `
-    <div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;">
-      <span style="font-size:14px;font-weight:500;">Discounts</span>
-      <span style="font-size:14px;font-weight:700;">-${formatMoney(totalDiscount)}</span>
-    </div>
-`;
-    }
-
-    drawerHtml += `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;">
-      <span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span>
-      <span style="font-size:18px;color:#0f172a;font-weight:900;">${formatMoney(finalTotal)}</span>
-    </div>
-  </div>
+<div id="cc-drawer-footer" style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
+  ${renderSummaryHtml(subtotal, totalDiscount, finalTotal)}
   <div id="cc-cod-slot"></div>
-  ${renderCheckoutButton(appliedCouponCodes)}
+  <div id="cc-checkout-wrap">${renderCheckoutButton(appliedCouponCodes)}</div>
   <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
@@ -2798,12 +2864,13 @@
   </p>` : ''}
 </div>
 `;
+    }
 
     // ---- SMOOTH DOM UPDATE ----
     if (isFirstOpen) {
       // First open: build full overlay with backdrop + drawer
       const drawerAnim = (CONFIG.design && CONFIG.design.animation) || 'slide';
-      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" data-animation="${drawerAnim}">${drawerHtml}</div>`;
+      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" class="bxcd-root" data-animation="${drawerAnim}">${drawerHtml}</div>`;
       root.appendChild(overlay);
       // Force a synchronous layout flush so the browser paints the closed
       // (translateX/opacity) state before we flip to .active — otherwise
@@ -3096,7 +3163,7 @@
       : 'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
 
     let html = `
-<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
+<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -10 : 990};">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
     <p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p>
     <div style="display:flex;gap:6px;">
@@ -3668,7 +3735,12 @@
   // Load config immediately on page load so CONFIG is ready the moment
   // the user clicks Add to Cart. Without this, the first click always
   // finds CONFIG = null and the drawer never opens.
-  loadConfig();
+  // Then tell BRIX COD (brix_cod.js) whether this drawer is on: when it's
+  // off, COD adds its button to the theme's own cart drawer instead.
+  loadConfig().finally(() => {
+    window.__brixCartDrawerActive = _ccActive;
+    try { document.dispatchEvent(new CustomEvent('brix:drawer:ready', { detail: { active: _ccActive } })); } catch (e) { /* old browsers */ }
+  });
 
   /* =================== SUPPRESS THEME CART =================== */
 

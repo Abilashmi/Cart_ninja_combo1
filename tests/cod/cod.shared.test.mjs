@@ -189,3 +189,60 @@ test('shopper tracking context: well-formed cookies only, consent defaults to no
   assert.deepEqual(junk, { gaClientId: '', gaSessionId: '', fbp: '', fbc: '', consent: { analytics: false, marketing: false }, pageUrl: '' });
   assert.deepEqual(sanitizeCodTrack(null).consent, { analytics: false, marketing: false });
 });
+
+test('drawer placement, excluded behaviour and button style: defaults, allowed values only, kept on other saves', () => {
+  const d = sanitizeCodSettings({});
+  assert.equal(d.drawerPlacement, 'above', 'existing stores keep COD above Checkout');
+  assert.equal(d.excludedBehavior, 'unavailable');
+  assert.equal(d.buttons.style, 'filled');
+  assert.equal(d.buttons.radius, 12);
+  assert.equal(d.drawerSelector, '');
+  const s = sanitizeCodSettings({ drawerPlacement: 'replace', excludedBehavior: 'hide', buttons: { style: 'outline', radius: 99 } });
+  assert.equal(s.drawerPlacement, 'replace');
+  assert.equal(s.excludedBehavior, 'hide');
+  assert.equal(s.buttons.style, 'outline');
+  assert.equal(s.buttons.radius, 40, 'radius clamped to 0..40');
+  const bad = sanitizeCodSettings({ drawerPlacement: 'sideways', excludedBehavior: 'show', buttons: { style: 'neon' } }, s);
+  assert.equal(bad.drawerPlacement, 'replace', 'unknown values keep the saved one');
+  assert.equal(bad.excludedBehavior, 'hide');
+  assert.equal(bad.buttons.style, 'outline');
+  const next = sanitizeCodSettings({ minOrder: 100 }, s);
+  assert.equal(next.drawerPlacement, 'replace');
+  assert.equal(next.buttons.style, 'outline');
+});
+
+test('drawer selector: CSS selectors only, never markup', () => {
+  assert.equal(sanitizeCodSettings({ drawerSelector: ' #CartDrawer .cart__checkout-button ' }).drawerSelector, '#CartDrawer .cart__checkout-button');
+  assert.equal(sanitizeCodSettings({ drawerSelector: "a[href*='/checkout']" }).drawerSelector, "a[href*='/checkout']");
+  assert.equal(sanitizeCodSettings({ drawerSelector: '</style><script>' }).drawerSelector, '');
+  assert.equal(sanitizeCodSettings({ drawerSelector: 'x{color:red}' }).drawerSelector, '');
+  const saved = sanitizeCodSettings({ drawerSelector: '#ok' });
+  assert.equal(sanitizeCodSettings({ drawerSelector: '<b>' }, saved).drawerSelector, '#ok', 'a bad value keeps the saved one');
+  assert.equal(sanitizeCodSettings({ drawerSelector: '' }, saved).drawerSelector, '', 'can be cleared');
+});
+
+test('COD fee switch: charged only while on; title and visibility; settings from before the switch keep charging', () => {
+  const legacy = sanitizeCodSettings({ codFee: 49 });
+  assert.equal(legacy.codFeeEnabled, true, 'an amount without a switch means on');
+  assert.equal(legacy.codFeeLabel, 'Cash on Delivery Fee');
+  assert.equal(legacy.showCodFee, true);
+  const off = sanitizeCodSettings({ codFeeEnabled: false }, legacy);
+  assert.equal(off.codFee, 49, 'turning it off keeps the amount for later');
+  assert.deepEqual(codCharges({ ...off, shippingFee: 0 }, 500), { shipping: 0, codFee: 0, total: 0 });
+  assert.equal(sanitizeCodSettings({ maxOrder: 900 }, off).codFeeEnabled, false, 'other saves keep it off');
+  const on40 = sanitizeCodSettings({ codFeeEnabled: true, codFee: 40, codFeeLabel: '  Handling fee ', showCodFee: false });
+  assert.equal(on40.codFeeLabel, 'Handling fee');
+  assert.equal(on40.showCodFee, false);
+  assert.deepEqual(codCharges(on40, 1299), { shipping: 0, codFee: 40, total: 40 }, 'hidden fee is still charged');
+  assert.equal(sanitizeCodSettings({ codFeeLabel: '' }, on40).codFeeLabel, 'Cash on Delivery Fee', 'empty title falls back');
+  assert.equal(sanitizeCodSettings({ codFee: 0 }, on40).codFeeEnabled, false, 'old-style codFee: 0 still means no fee');
+});
+
+test('excluded tags: any matching product tag blocks COD, case-insensitive, many tags', () => {
+  const s = on({ excludedProductTags: ['no-cod', 'Pre-Order', 'fragile'] });
+  assert.deepEqual(s.excludedProductTags, ['no-cod', 'Pre-Order', 'fragile']);
+  assert.equal(checkCodRules({ settings: s, subtotal: 500, productTags: ['summer', 'PRE-ORDER'] })?.code, 'product_excluded');
+  assert.equal(checkCodRules({ settings: s, subtotal: 500, productTags: ['fragile'] })?.code, 'product_excluded');
+  assert.equal(checkCodRules({ settings: s, subtotal: 500, productTags: ['summer', 'cod-ok'] }), null, 'tags are exclusions, not a list of COD products');
+  assert.equal(checkCodRules({ settings: on({}), subtotal: 500, productTags: ['no-cod'] }), null);
+});

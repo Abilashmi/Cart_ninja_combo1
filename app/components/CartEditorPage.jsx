@@ -103,6 +103,11 @@ function CartEditorContent() {
           empty_cart_message:                 body.emptyCart?.message               || 'Your cart is empty',
           empty_cart_show_continue_shopping:  body.emptyCart?.showContinueShopping  !== false ? 1 : 0,
           empty_cart_show_recommendations:    body.emptyCart?.showRecommendations   !== false ? 1 : 0,
+          banner_enabled:                     body.imageBanner?.enabled ? 1 : 0,
+          banner_desktop_image:               body.imageBanner?.desktopImage        || '',
+          banner_mobile_image:                body.imageBanner?.mobileImage         || '',
+          banner_placement:                   body.imageBanner?.placement           || 'above_progress',
+          banner_alt:                         body.imageBanner?.alt                 || '',
         }),
 
         postJson('/api/progress-bar', {

@@ -84,6 +84,14 @@ function hydrateFromConfig(cfg, base) {
         ...(cfg.announcement_italic     != null ? { italic:    dbFlag(cfg.announcement_italic) }     : {}),
         ...(cfg.announcement_text_align != null ? { textAlign: cfg.announcement_text_align }         : {}),
       },
+      imageBanner: {
+        ...base.body.imageBanner,
+        ...(cfg.banner_enabled       != null ? { enabled:      dbFlag(cfg.banner_enabled) } : {}),
+        ...(cfg.banner_desktop_image != null ? { desktopImage: cfg.banner_desktop_image }   : {}),
+        ...(cfg.banner_mobile_image  != null ? { mobileImage:  cfg.banner_mobile_image }    : {}),
+        ...(cfg.banner_placement     != null ? { placement:    cfg.banner_placement }       : {}),
+        ...(cfg.banner_alt           != null ? { alt:          cfg.banner_alt }             : {}),
+      },
       emptyCart: {
         ...base.body.emptyCart,
         ...(cfg.empty_cart_message                   != null ? { message:               cfg.empty_cart_message }                                : {}),
@@ -526,6 +534,14 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     }));
   }, []);
 
+  const updateImageBanner = useCallback((data) => {
+    setState(prev => ({
+      ...prev,
+      body: { ...prev.body, imageBanner: { ...prev.body.imageBanner, ...data } },
+      isDirty: true,
+    }));
+  }, []);
+
   const updateEmptyCart = useCallback((data) => {
     setState(prev => ({
       ...prev,
@@ -644,6 +660,7 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     updateUpsellProducts,
     updateCountdownTimer,
     updateEmptyCart,
+    updateImageBanner,
     updateCheckoutButton,
     updateCustomCSS,
     updateWatermark,

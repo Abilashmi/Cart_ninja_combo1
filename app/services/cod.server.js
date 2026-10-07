@@ -354,7 +354,7 @@ async function calculate(admin, input) {
 
 function shippingLine(settings, charges, currencyCode) {
   return {
-    title: settings.codFee > 0 ? 'Cash on Delivery (incl. COD fee)' : 'Cash on Delivery',
+    title: charges.codFee > 0 ? 'Cash on Delivery (incl. COD fee)' : 'Cash on Delivery',
     priceWithCurrency: { amount: charges.total.toFixed(2), currencyCode },
   };
 }

@@ -31,6 +31,10 @@ export const loader = async ({ request }) => {
         currencyLocale: currency.locale,
         planKey,
         shop: session.shop,
+        // Local dev (`npm run dev`) always shows hidden-in-production nav items
+        // like COD Checkout; production (Dockerfile) runs with NODE_ENV=production.
+        // eslint-disable-next-line no-undef
+        isLocalDev: process.env.NODE_ENV !== "production",
     };
 };
 
@@ -65,7 +69,7 @@ function navBadge(featureKey, planKey) {
 }
 
 export default function App() {
-    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop } = useLoaderData();
+    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop, isLocalDev } = useLoaderData();
     const navigation = useNavigation();
     const isNavigating = navigation.state !== "idle";
 
@@ -74,7 +78,12 @@ export default function App() {
             <PolarisAppProvider i18n={enTranslations}>
                 <CurrencyProvider symbol={currencySymbol} code={currencyCode} locale={currencyLocale}>
                     <PlanProvider plan={planKey}>
-                        {isNavigating && <div className="route-progress-bar" />}
+                        {isNavigating && (
+                            // Page-loading indicator: a round spinner in the centre of the screen.
+                            <div className="route-loader" role="progressbar" aria-label="Loading">
+                                <span className="route-loader-ring" />
+                            </div>
+                        )}
                         <s-app-nav>
                             <s-link href="/app">Home</s-link>
                             <s-link href="/app/brix-ai">Brix AI</s-link>
@@ -82,9 +91,9 @@ export default function App() {
                             <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/packs">Packs</s-link>
                             {/* COD Checkout is hidden from the nav until it's ready for
-                                merchants, except for the stores in COD_NAV_SHOPS; the
-                                page still works at /app/cod. */}
-                            {COD_NAV_SHOPS.includes(shop) && <s-link href="/app/cod">COD Checkout</s-link>}
+                                merchants, except for the stores in COD_NAV_SHOPS and in
+                                local dev; the page still works at /app/cod. */}
+                            {(isLocalDev || COD_NAV_SHOPS.includes(shop)) && <s-link href="/app/cod">COD Checkout</s-link>}
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
