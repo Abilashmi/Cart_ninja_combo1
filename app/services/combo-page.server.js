@@ -6,6 +6,8 @@
 // resolve.
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
+import { comboCollectionHandles, isWeightCombo, toGrams } from '../utils/combo-weight.shared.js';
+import { storefrontWeightPricing } from './combo-weight-shopify.server';
 
 // ── Guaranteed combo-page theme template ────────────────────────────────────
 // Shopify Pages render page.body through whatever section layout the
@@ -113,7 +115,7 @@ const PRODUCT_FRAGMENT = `
     descriptionHtml
     featuredImage { url altText width height }
     images(first: 10) { nodes { url altText width height } }
-    variants(first: 25) { nodes { id title price image { url altText } } }
+    variants(first: 25) { nodes { id title price image { url altText } inventoryItem { measurement { weight { value unit } } } } }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
   }
 `;
@@ -200,37 +202,10 @@ export async function loadComboPageDataForRow(shop, row) {
     console.error('[ComboPage] Collection fetch error:', e);
   }
 
-  const allHandles = new Set();
-  if (config.layout === 'layout1' || !config.layout) {
-    const allSteps = [1, 2, 3, 4, 5];
-    const activeSteps = allSteps.filter((step) => {
-      if (step === 1) return true;
-      return config[`step_${step}_collection`] || config[`step_${step}_title`];
-    });
-    activeSteps.forEach((step) => {
-      const h = config[`step_${step}_collection`];
-      if (h) allHandles.add(h);
-    });
-  }
-  if (config.layout === 'layout2') {
-    for (let i = 1; i <= (config.tab_count || 8); i++) {
-      const h = config[`col_${i}`];
-      if (h) allHandles.add(h);
-    }
-  }
-  if (!config.layout || config.layout === 'layout3' || config.layout === 'layout4') {
-    const h = config.collection_handle || config.step_1_collection;
-    if (h) allHandles.add(h);
-  }
-  // layout3's nav pills are its col_1..col_4 collections (Layout3Preview /
-  // renderLayout3) — without loading them here every pill, and the "all"
-  // view built from them, renders "No products in this category".
-  if (config.layout === 'layout3') {
-    for (let i = 1; i <= 4; i++) {
-      const h = config[`col_${i}`];
-      if (h) allHandles.add(h);
-    }
-  }
+  // Includes layout3's col_1..col_4 nav pills — without them every pill, and
+  // the "all" view built from them, renders "No products in this category".
+  // Shared with weight pricing, whose "layout collections" are these same ones.
+  const allHandles = comboCollectionHandles(config);
 
   const productsByHandle = {};
   for (const handle of allHandles) {
@@ -260,6 +235,8 @@ export async function loadComboPageDataForRow(shop, row) {
           title: v.title,
           price: v.price,
           image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
+          // Weight-priced combos: grams per unit, null when the variant has no weight.
+          grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
         })),
         variantId: e.node.variants?.nodes?.[0]?.id || null,
         price: e.node.priceRangeV2?.minVariantPrice?.amount || '0.00',
@@ -330,5 +307,11 @@ export async function loadComboPageDataForRow(shop, row) {
     console.error('[ComboPage] Discount fetch error:', e);
   }
 
-  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, shop, activeDiscounts };
+  // Weight-priced combos: tiers, max weight and which shown products count.
+  // `enabled` only when checkout will really give the box price.
+  const weightPricing = isWeightCombo(config)
+    ? await storefrontWeightPricing({ shop, admin, templateId: row.id, active: Number(row.is_active) === 1 || row.is_active === true, config, productsByHandle })
+    : null;
+
+  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, shop, activeDiscounts, weightPricing };
 }

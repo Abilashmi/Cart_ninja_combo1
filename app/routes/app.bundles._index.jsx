@@ -16,6 +16,7 @@ import CartDrawerEmbedBanner from '../components/bundles/CartDrawerEmbedBanner';
 import ComboSetupTour from '../components/bundles/ComboSetupTour';
 import { readTour, startTour, setTourShop } from '../utils/combo-tour';
 import { getEmbedStatus } from '../services/theme-embed.server';
+import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
 import { CART_DRAWER_EMBED_HANDLE, cartDrawerEmbedEditorUrl } from '../config/theme-extension';
 
 export const loader = async ({ request }) => {
@@ -156,7 +157,7 @@ export const action = async ({ request }) => {
       // returned by pageCreate/pageUpdate, so it can be passed straight to
       // pageDelete. Drafts never published have no page_id and are skipped.
       const [rows] = await db.execute(
-        'SELECT page_id FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        'SELECT page_id, customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?',
         [Number(id), shop]
       );
       const pageId = rows?.[0]?.page_id;
@@ -190,6 +191,8 @@ export const action = async ({ request }) => {
         'DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?',
         [Number(id), shop]
       );
+      // A deleted weight combo must stop being discounted at checkout.
+      await syncComboWeightIfNeeded(admin, shop, rows?.[0]?.customization_data);
       return pageDeleteWarning
         ? { success: true, message: `Template deleted, but the live Shopify page could not be removed automatically (${pageDeleteWarning}) — please delete it from Online Store > Pages.` }
         : { success: true, message: 'Template deleted.' };
@@ -200,7 +203,10 @@ export const action = async ({ request }) => {
         'UPDATE combo_templates SET is_active = ? WHERE id = ? AND shop_domain = ?',
         [active, Number(id), shop]
       );
-      return { success: true, message: active ? 'Template activated.' : 'Template deactivated.' };
+      const [rows] = await db.execute('SELECT customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), shop]);
+      const weightSync = await syncComboWeightIfNeeded(admin, shop, rows?.[0]?.customization_data);
+      const weightNote = weightSync && active && !weightSync.templates?.[Number(id)]?.verified ? ` ${weightSync.templates?.[Number(id)]?.message || weightSync.message}` : '';
+      return { success: true, message: (active ? 'Template activated.' : 'Template deactivated.') + weightNote };
     }
   } catch (e) {
     console.error('[bundles index action]', e.message);

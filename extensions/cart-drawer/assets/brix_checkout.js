@@ -101,17 +101,17 @@
     return Promise.resolve();
   }
 
-  // Pack prices and free reward gifts are applied by our Shopify Functions,
-  // which only run in Shopify's own checkout — Shiprocket would charge those
-  // lines at full price. A cart holding any of them stays on Shopify checkout.
-  // If the cart can't be read, stay on Shopify too.
+  // Pack prices, weight combo box prices and free reward gifts are applied by
+  // our Shopify Functions, which only run in Shopify's own checkout —
+  // Shiprocket would charge those lines at full price. A cart holding any of
+  // them stays on Shopify checkout. If the cart can't be read, stay on Shopify too.
   function cartNeedsShopifyCheckout() {
     return window.fetch(rootUrl() + 'cart.js', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
       .then(function (response) { return response.json(); })
       .then(function (cart) {
         return (cart.items || []).some(function (item) {
           var properties = item.properties || {};
-          if (properties._brix_pack_id) return true;
+          if (properties._brix_pack_id || properties._brix_combo_id) return true;
           return properties._brixReward === 'true' && Number(item.final_line_price) === 0;
         });
       })

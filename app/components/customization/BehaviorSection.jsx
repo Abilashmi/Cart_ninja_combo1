@@ -80,13 +80,11 @@ function BehaviorSectionComponent({
                   onChange={(v) => updateConfig('show_cod_button', v)}
                 />
                 {config.show_cod_button !== false && (
-                  <>
-                    <TextField label="Text" value={config.cod_btn_text || 'Cash on Delivery'} onChange={(v) => updateConfig('cod_btn_text', v)} autoComplete="off" />
-                    <div className="cst-grid-2">
-                      {ColorPickerField && <ColorPickerField label="Background" value={config.cod_btn_bg || '#ffffff'} onChange={(v) => updateConfig('cod_btn_bg', v)} />}
-                      {ColorPickerField && <ColorPickerField label="Text & Border" value={config.cod_btn_text_color || '#111827'} onChange={(v) => updateConfig('cod_btn_text_color', v)} />}
-                    </div>
-                  </>
+                  // Its text and design are set once for every combo page, with
+                  // the cart drawer and product page buttons, in COD → Customize.
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Its text, colours and style are the same on every combo page: <a href="/app/cod/customize?section=combobtn" target="_top">COD → Customize → Combo page button</a>.
+                  </Text>
                 )}
               </div>
               {layout === 'layout4' && (

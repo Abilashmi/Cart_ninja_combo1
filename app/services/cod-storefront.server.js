@@ -80,6 +80,8 @@ export async function loadCodContext(shop, { needAdmin = true } = {}) {
     live: settings.enabled && planState === 'enabled',
     otpRequired: settings.requireOtp && otpAvailable(),
     currencyCode: currency?.code || 'INR',
+    // Weight-priced combo boxes get their box price in COD only on a plan that publishes it.
+    comboWeightLive: getFeatureState(planKey, 'combo_weight_pricing') === 'enabled',
   };
 }
 

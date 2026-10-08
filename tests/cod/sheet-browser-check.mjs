@@ -252,6 +252,15 @@ await inSheet('[data-act="coupon-open"]').click();
 await inSheet('[data-act="coupon-paste"]').click();
 await inSheet('.cpn.ok').waitFor();
 check('coupon: Paste fills and claims the code in one tap', (await inSheet('.tot').textContent()).includes('858'));
+const policy = inSheet('[name="policy"]');
+check('data policy: consent ticked by default, links to the BRIX COD data policy in a new tab',
+  await policy.isChecked() && (await inSheet('.agr a').getAttribute('href')) === 'https://thebrix.io/cod-data-policy' && (await inSheet('.agr a').getAttribute('target')) === '_blank');
+await policy.uncheck();
+await inSheet('button[type="submit"]').click();
+await page.waitForTimeout(150);
+check('data policy: unticked blocks the order with a message',
+  !posted.some((p) => p.path === '/api/cod/order') && (await inSheet('[data-err]').textContent()).includes('agree to the data policy') && (await inSheet('.agr.bad').count()) === 1);
+await policy.check();
 await inSheet('button[type="submit"]').click();
 await inSheet('.done').waitFor();
 check('done: order number and amount to pay shown', (await inSheet('.done').textContent()).includes('#1047'));

@@ -188,12 +188,12 @@ if (scenario === 'live') {
   await page.getByRole('radio', { name: /Below Checkout/ }).click();
   check('Below Checkout: preview shows Checkout, then COD', JSON.stringify((await pv()).order) === '["checkout","cod"]');
 
-  // COD button
-  await openSec('COD button');
+  // Cart drawer button
+  await openSec('Cart drawer button');
   check('Opening a section closes the other (one at a time)', await page.locator('.bcz-row.is-open').count() === 1);
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash on delivery');
   await page.getByRole('button', { name: 'Outline', exact: true }).click();
-  await page.getByRole('spinbutton', { name: 'Border radius' }).fill('4');
+  await page.getByRole('spinbutton', { name: 'Corner rounding' }).fill('4');
   await page.waitForTimeout(400);
   let p = await pv();
   check('COD button: text, Outline style and border radius update the preview', p.codText.includes('Pay cash on delivery') && p.codBg === 'rgba(0, 0, 0, 0)' && p.codRadius === '4px', `${p.codBg} ${p.codRadius}`);
@@ -214,6 +214,57 @@ if (scenario === 'live') {
   await openSec('Product page');
   check('Product page: preview switches to the product page', await page.locator('.bcz-screen .cod-scr-atc').count() === 1);
   await shot('product');
+
+  // Separate button designs: product page and combo page
+  const prodBtn = () => page.evaluate(() => {
+    const b = document.querySelector('.bcz-screen .cod-scr-buys .cod-pv-btn');
+    return b ? { bg: getComputedStyle(b).backgroundColor, size: getComputedStyle(b).fontSize, text: b.textContent } : null;
+  });
+  await openSec('Product page button');
+  check('Product page button: follows the cart drawer button by default', await page.getByLabel('Same design as the cart drawer button').isChecked() && (await prodBtn())?.bg === 'rgb(29, 78, 216)');
+  await page.getByLabel('Same design as the cart drawer button').uncheck();
+  await page.getByRole('textbox', { name: /^Button colour/ }).fill('#be185d');
+  await page.getByRole('spinbutton', { name: 'Font size' }).fill('19');
+  await page.waitForTimeout(400);
+  const pb = await prodBtn();
+  check('Product page button: its own colour and font size', pb?.bg === 'rgb(190, 24, 93)' && pb.size === `${Math.round(19 * 0.8 * 10) / 10}px`, JSON.stringify(pb));
+  await openSec('Cart drawer button');
+  check('…and the cart drawer button keeps its own colour', (await pv()).codBg === 'rgb(29, 78, 216)');
+  const comboBtn = () => page.evaluate(() => {
+    const b = document.querySelector('.bcz-screen .cod-scr-combo .cod-pv-btn');
+    return b ? { bg: getComputedStyle(b).backgroundColor, shadow: getComputedStyle(b).boxShadow, text: b.textContent, icon: Boolean(b.querySelector('svg')) } : null;
+  });
+  // This store has COD off on combo pages: the preview says so, then turn it on.
+  await openSec('Combo pages');
+  check('Combo pages off: the combo preview says the button is hidden', (await page.locator('.bcz-screen .cod-scr-combo .cod-pv-hidden').textContent()).includes('combo pages are turned off'));
+  await page.getByLabel('Show COD on combo pages').check();
+  await page.getByLabel('Button text', { exact: true }).fill('Pay cash for this combo');
+  await page.waitForTimeout(300);
+  check('Combo pages: its own button text', (await comboBtn())?.text.includes('Pay cash for this combo'));
+  await openSec('Combo page button');
+  let cb = await comboBtn();
+  check('Combo page button: the preview switches to a combo page; old outline look kept by default', cb && cb.bg === 'rgba(0, 0, 0, 0)' && /inset/.test(cb.shadow) && !cb.icon, JSON.stringify(cb));
+  await page.getByRole('button', { name: 'Filled', exact: true }).click();
+  await page.getByRole('textbox', { name: /^Button colour/ }).fill('#0c7a43');
+  await page.getByLabel('Show the cash icon').check();
+  await page.waitForTimeout(400);
+  cb = await comboBtn();
+  check('Combo page button: style, colour and icon change only the combo button', cb?.bg === 'rgb(12, 122, 67)' && cb.icon, JSON.stringify(cb));
+  await shot('combo');
+
+  // Turning COD off in the cart drawer leaves the other places on
+  await openSec('Position');
+  await page.getByLabel('Show COD in the cart drawer').uncheck();
+  await page.waitForTimeout(300);
+  await openSec('Combo pages');
+  check('Drawer off: combo page still shows its COD button', (await comboBtn()) !== null);
+  await openSec('Product page');
+  check('Drawer off: product page still shows its COD button', (await prodBtn()) !== null);
+  await page.getByRole('tab', { name: 'COD checkout' }).click();
+  await page.waitForTimeout(1400);
+  check('Drawer off: the COD checkout popup preview is not "unavailable"', (await page.locator('.bcz-screen .cod-pv-err').count()) === 0 && (await page.locator('.bcz-screen .cod-pv-place').count()) === 1);
+  await openSec('Position');
+  await page.getByLabel('Show COD in the cart drawer').check();
 
   // Product page payments: payment options + prepaid discount
   await openSec('Payment options');

@@ -3,10 +3,11 @@ import { boundary } from '@shopify/shopify-app-react-router/server';
 import { authenticate } from '../shopify.server';
 import prisma from '../db.server';
 import TemplateManager from '../components/bundles/TemplateManager';
+import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
 
 /* ─── Action ──────────────────────────────────────────────────────────────── */
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   const contentType = request.headers.get('content-type') || '';
@@ -22,12 +23,19 @@ export const action = async ({ request }) => {
 
   const { intent, id } = data;
 
+  const readConfig = () => prisma.$queryRawUnsafe(
+    `SELECT customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?`,
+    Number(id), shop
+  ).then((rows) => rows?.[0]?.customization_data || null).catch(() => null);
+
   try {
     if (intent === 'delete' && id) {
+      const config = await readConfig();
       await prisma.$queryRawUnsafe(
         `DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?`,
         Number(id), shop
       ).catch(() => {});
+      await syncComboWeightIfNeeded(admin, shop, config);
       return Response.json({ success: true, message: 'Template deleted.' });
     }
     if (intent === 'toggle_active' && id) {
@@ -36,6 +44,7 @@ export const action = async ({ request }) => {
         `UPDATE combo_templates SET is_active = ? WHERE id = ? AND shop_domain = ?`,
         active, Number(id), shop
       ).catch(() => {});
+      await syncComboWeightIfNeeded(admin, shop, await readConfig());
       return Response.json({ success: true, message: active ? 'Template activated.' : 'Template deactivated.' });
     }
   } catch (e) {

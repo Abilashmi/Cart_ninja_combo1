@@ -29,7 +29,7 @@ const SETTINGS_INDEX = [
   { label: 'Variant selector', category: 'style', section: 'variants', kw: 'variant dropdown select' },
   { label: 'Buttons (add / checkout)', category: 'style', section: 'buttons', kw: 'button add to cart checkout buy color reset' },
   { label: 'Progress bar', category: 'advanced', section: 'progressBar', kw: 'progress bar discount threshold motivation' },
-  { label: 'Coupon / discount', category: 'advanced', section: 'discount', kw: 'coupon discount offer' },
+  { label: 'Offer: coupon or weight pricing', category: 'advanced', section: 'discount', kw: 'coupon discount offer weight box kg gram tier price pricing' },
   { label: 'AI suggestions', category: 'advanced', section: 'aiSettings', kw: 'ai suggestion smart' },
   { label: 'Custom CSS', category: 'advanced', section: 'customCss', kw: 'css custom code style' },
 ];
@@ -60,6 +60,8 @@ function BuilderSidebarComponent({
   openSection,
   setAllSections,
   onCreateCoupon,
+  weightStatus,
+  savedWeightHash,
 }) {
   const [search, setSearch] = useState('');
 
@@ -232,22 +234,27 @@ function BuilderSidebarComponent({
               stepFieldAiLoading={stepFieldAiLoading}
               generateStepFieldSuggestion={generateStepFieldSuggestion}
             />
-            <BannerSection
-              config={config}
-              expanded={expandedSections.banner}
-              onToggle={() => toggleSection('banner')}
-              updateConfig={updateConfig}
-              PxField={PxField}
-              ColorPickerField={ColorPickerField}
-            />
-            <ProductsSection
-              config={config}
-              expanded={expandedSections.products}
-              onToggle={() => toggleSection('products')}
-              updateConfig={updateConfig}
-              PxField={PxField}
-              ColorPickerField={ColorPickerField}
-            />
+            {/* The Weight Box (layout5) has its own fixed design: no banner, its own grid. */}
+            {config.layout !== 'layout5' && (
+              <>
+                <BannerSection
+                  config={config}
+                  expanded={expandedSections.banner}
+                  onToggle={() => toggleSection('banner')}
+                  updateConfig={updateConfig}
+                  PxField={PxField}
+                  ColorPickerField={ColorPickerField}
+                />
+                <ProductsSection
+                  config={config}
+                  expanded={expandedSections.products}
+                  onToggle={() => toggleSection('products')}
+                  updateConfig={updateConfig}
+                  PxField={PxField}
+                  ColorPickerField={ColorPickerField}
+                />
+              </>
+            )}
           </>
         )}
 
@@ -318,6 +325,8 @@ function BuilderSidebarComponent({
             ColorPickerField={ColorPickerField}
             localActiveDiscounts={localActiveDiscounts}
             onCreateCoupon={onCreateCoupon}
+            weightStatus={weightStatus}
+            savedWeightHash={savedWeightHash}
           />
         )}
       </div>

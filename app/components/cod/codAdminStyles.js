@@ -173,6 +173,19 @@ export const COD_ADMIN_CSS = `
 .cod-scr-buys{display:flex;flex-direction:column}
 .cod-scr-buys .cod-pv-hidden,.cod-scr-bin{margin-top:8px}
 .cod-scr-bin{border-radius:10px;padding:10px;text-align:center;font-weight:700;background:#111827;color:#fff}
+.cod-scr-combo{display:flex;flex-direction:column;gap:12px;padding:16px;background:#f8fafc}
+.cod-scr-combo-h{display:flex;flex-direction:column;gap:2px}
+.cod-scr-combo-h b{font-size:17px;color:#111827}
+.cod-scr-combo-h span{font-size:12px;color:#6b7280}
+.cod-scr-combo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cod-scr-combo-grid span{aspect-ratio:3/4;border-radius:10px;border:1px solid #e5e7eb;display:block;position:relative}
+.cod-scr-combo-grid i{position:absolute;left:8px;right:8px;bottom:8px;height:8px;border-radius:4px;background:rgba(17,24,39,.15)}
+.cod-scr-combo-bar{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;box-shadow:0 6px 18px rgba(0,0,0,.06)}
+.cod-scr-combo-total{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:#6b7280}
+.cod-scr-combo-total b{font-size:17px;color:#111827}
+.cod-scr-combo-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch}
+.cod-scr-combo-co{border-radius:8px;background:#111827;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;padding:10px;font-size:13px}
+.cod-scr-combo-btns .cod-pv-btn{margin:0;justify-content:center}
 .cod-scr-sheet{background:#f3f4f6;display:flex;flex-direction:column}
 .cod-scr-dim{height:46px;background:rgba(15,23,42,.45)}
 .cod-scr-sheet .cod-pv-panel{position:static;border-radius:16px 16px 0 0;margin-top:-14px}
@@ -193,6 +206,9 @@ export const COD_ADMIN_CSS = `
 .cod-pv-free{color:#067647}
 .cod-pv-nudge{background:linear-gradient(135deg,#eff6ff,#f5f3ff);color:#1e3a8a;border-radius:10px;padding:9px 10px;font-size:11px}
 .cod-pv-place{border-radius:11px;padding:11px;text-align:center;font-weight:700}
+.cod-pv-agr{display:flex;align-items:center;gap:6px;font-size:10.5px;color:#4b5563}
+.cod-pv-agr a{color:var(--acc);font-weight:650;text-decoration:underline}
+.cod-pv-box{width:12px;height:12px;border-radius:3px;display:grid;place-items:center;font-size:9px;line-height:1;background:var(--acc);color:var(--acc-fg);flex:none}
 .cod-pv-err{background:#fef3f2;color:#b42318;border-radius:10px;padding:10px;font-size:11.5px}
 .cod-pv-sec{border:1.5px solid #e5e7eb;border-radius:11px;padding:10px;text-align:center;font-weight:700}
 

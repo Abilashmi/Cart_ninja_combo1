@@ -38,6 +38,7 @@
   var CONFIG_KEY = 'brix_cod_config_v6'; // bump when the config shape changes (v6: product page payment options)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
+  var DATA_POLICY_URL = 'https://thebrix.io/cod-data-policy';
 
   var STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
     'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir',
@@ -412,6 +413,14 @@
     '.b.s{background:#fff;color:#111827;border-color:#e5e7eb}',
     '.b.s:hover{background:#f9fafb}',
     '.b:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}',
+    /* data policy consent (review step) */
+    '.agr{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:1.4;color:#4b5563;cursor:pointer}',
+    // The popup's text-field styles hide the native box, so it's drawn here.
+    '.agr input[type=checkbox]{width:18px;height:18px;padding:0;margin:0;flex:none;border:1.5px solid #d0d5dd;border-radius:5px;background:#fff no-repeat center/12px;cursor:pointer}',
+    '.agr input[type=checkbox]:checked{background-color:var(--cod-bg,#111827);border-color:var(--cod-bg,#111827);background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%273.5%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27M5 12.5l4.5 4.5L19 7.5%27/%3E%3C/svg%3E")}',
+    '.agr.bad input[type=checkbox]{border-color:#d92d20}',
+    '.agr a{color:var(--cod-bg,#2563eb);font-weight:650;text-decoration:underline;text-underline-offset:2px}',
+    '.agr.bad{color:#d92d20}',
     '.lk{background:none;border:0;padding:0;font:inherit;color:var(--cod-bg,#2563eb);font-weight:650;cursor:pointer;text-decoration:underline;text-underline-offset:2px}',
     /* notes */
     '.n{font-size:13px;padding:10px 12px;border-radius:12px;line-height:1.4;display:flex;gap:8px;align-items:flex-start}',
@@ -655,6 +664,7 @@
     if (!Array.isArray(look.offers)) look.offers = [];
     this.look = look;
     this.couponOpen = Boolean(look.couponOpen);
+    this.policyOk = true; // data policy consent, ticked by default
     // :host{all:initial} drops the theme font; borrow the storefront's own.
     try { var font = window.getComputedStyle(document.body).fontFamily; if (font) this.sh.style.fontFamily = font; } catch (e) { /* keep the system stack */ }
     document.body.appendChild(host);
@@ -667,6 +677,11 @@
     this.sh.addEventListener('click', function (e) { self.onClick(e); });
     this.sh.addEventListener('submit', function (e) { e.preventDefault(); self.onSubmit(e); });
     this.sh.addEventListener('input', function (e) { self.onInput(e); });
+    this.sh.addEventListener('change', function (e) {
+      if (e.target.name !== 'policy') return;
+      self.policyOk = e.target.checked;
+      if (self.policyOk) { e.target.parentNode.classList.remove('bad'); self.setError(''); }
+    });
     this.sh.addEventListener('focusin', function (e) { if (e.target.name === 'code') self.paintOtp(true); });
     this.sh.addEventListener('focusout', function (e) { if (e.target.name === 'code') self.paintOtp(false); });
     this.bindSwipe();
@@ -1174,6 +1189,8 @@
     var scrollTop = prevBody ? prevBody.scrollTop : 0;
     var rows = '<div class="rows">' +
       '<div><span>Items</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
+      // Weight combo box price: the same discount Shopify checkout gives (cod.server.js).
+      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>Combo box discount</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
       (q.discounts > 0 ? '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>' : '') +
       chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>Taxes</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
@@ -1181,7 +1198,8 @@
       (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>Includes ' + fmt(q.tax) + ' in taxes</span></div>' : '') +
       '</div>';
     // The coupon card already shows its saving; this banner is for automatic discounts.
-    var save = q.discounts > 0 && !(q.coupon && q.coupon.applied) ? '<div class="save">' + icon('tag', 16) + 'You\'re saving ' + fmt(q.discounts) + ' on this order</div>' : '';
+    var autoSaving = (q.comboDiscount || 0) + (q.coupon && q.coupon.applied ? 0 : q.discounts);
+    var save = autoSaving > 0 ? '<div class="save">' + icon('tag', 16) + 'You\'re saving ' + fmt(autoSaving) + ' on this order</div>' : '';
     var nudge = this.cfg.prepaidNudgeText && typeof this.opts.onPayOnline === 'function'
       ? '<div class="nud">' + icon('card', 22) + '<div class="cb">' + esc(this.cfg.prepaidNudgeText) + '</div><button type="button" class="b" data-act="online">Pay online</button></div>' : '';
     var ship = '<div class="card plain">' + icon('pin', 20, ' class="ic"') + '<div class="cb"><b>' + esc(a.name) + '</b>' +
@@ -1193,6 +1211,8 @@
       this.lineList(q) + this.couponBlock() + save + rows +
       '<div class="ttl">Deliver to</div>' + ship +
       '<div class="ttl">Payment</div>' + pay + nudge + '<div data-err></div>',
+      '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
+      '<span>I agree to the <a href="' + DATA_POLICY_URL + '" target="_blank" rel="noopener">data policy</a></span></label>' +
       '<button type="submit" class="b p">Place COD order \u00b7 ' + fmt(q.total) + '</button>');
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
@@ -1413,6 +1433,13 @@
 
   Sheet.prototype.placeOrder = function () {
     var self = this;
+    var policy = this.sh.querySelector('[name="policy"]');
+    if (policy && !policy.checked) {
+      this.setError('Please agree to the data policy to place your order.');
+      policy.parentNode.classList.add('bad');
+      vibrate(50);
+      return;
+    }
     this.setError('');
     this.setBusy(true, 'Placing your order\u2026');
     api('order', {
@@ -1488,33 +1515,69 @@
 
   var BUTTON_STYLES = ['filled', 'outline', 'minimal'];
 
-  // Colours for the merchant's button style (settings.buttons.style). Outline
-  // and Minimal draw the text in the button colour. The outline is an inset
-  // shadow, so all three styles are exactly the same size.
-  function buttonPaint(cfg) {
-    var b = cfg.buttons;
-    var style = BUTTON_STYLES.indexOf(b.style) !== -1 ? b.style : 'filled';
-    if (style === 'outline') return 'background:transparent;color:' + esc(b.bg) + ';box-shadow:inset 0 0 0 1.5px ' + esc(b.bg) + ';';
-    if (style === 'minimal') return 'background:transparent;color:' + esc(b.bg) + ';box-shadow:none;';
-    return 'background:' + esc(b.bg) + ';color:' + esc(b.color) + ';box-shadow:none;';
+  // The COD button look for one place ('drawer' | 'product' | 'combo'):
+  // { style, bg, color, radius, fontSize, bold, uppercase, icon }, as
+  // resolved by php_backend/cod_storefront.php (buttons.looks). Settings
+  // served before per-place looks existed fall back to the one shared look.
+  function lookOf(cfg, surface) {
+    var b = cfg.buttons || {};
+    var l = b.looks && b.looks[surface];
+    if (l) return l;
+    return { style: b.style, bg: b.bg, color: b.color, radius: b.radius, fontSize: 15, bold: true, uppercase: false, icon: true };
+  }
+
+  // Colours for a button style. Outline and Minimal draw the text in the
+  // button colour. The outline is an inset shadow, so all three styles are
+  // exactly the same size.
+  function buttonPaint(look) {
+    var style = BUTTON_STYLES.indexOf(look.style) !== -1 ? look.style : 'filled';
+    if (style === 'outline') return 'background:transparent;color:' + esc(look.bg) + ';box-shadow:inset 0 0 0 1.5px ' + esc(look.bg) + ';';
+    if (style === 'minimal') return 'background:transparent;color:' + esc(look.bg) + ';box-shadow:none;';
+    return 'background:' + esc(look.bg) + ';color:' + esc(look.color) + ';box-shadow:none;';
+  }
+
+  // Font size, weight and capitals of a look.
+  function buttonType(look) {
+    var size = Math.max(12, Math.min(22, Math.round(Number(look.fontSize)) || 15));
+    return 'font-size:' + size + 'px;font-weight:' + (look.bold === false ? '500' : '700') + ';' +
+      'text-transform:' + (look.uppercase ? 'uppercase' : 'none') + ';letter-spacing:' + (look.uppercase ? '.04em' : 'normal') + ';';
   }
 
   // size: { marginTop, marginBottom, paddingY, paddingX, radius } in px.
-  // opts (payment options' Pay Online button): { paint, icon, attr }.
+  // opts: { look } (the place's look, default the cart drawer's), and for the
+  // payment options' Pay Online button { paint, icon, attr }.
   function buttonHtml(cfg, label, sub, disabled, size, opts) {
     var z = size;
     var o = opts || {};
+    var look = o.look || lookOf(cfg, 'drawer');
+    var iconName = o.icon || (look.icon === false ? '' : 'cash');
     return '<button type="button" ' + (o.attr || 'data-brix-cod-btn') + (disabled ? ' disabled' : '') + ' style="' + important(
       'box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;' +
       'margin:' + z.marginTop + 'px 0 ' + z.marginBottom + 'px 0;padding:' + z.paddingY + 'px ' + z.paddingX + 'px;' +
-      (o.paint || buttonPaint(cfg)) + 'border:none;border-radius:' + z.radius + 'px;' +
+      (o.paint || buttonPaint(look)) + 'border:none;border-radius:' + z.radius + 'px;' +
       'text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
-      'font-family:inherit;font-size:15px;font-weight:700;line-height:1.25;text-transform:none;letter-spacing:normal;text-decoration:none;text-align:center;' +
+      'font-family:inherit;line-height:1.25;text-decoration:none;text-align:center;' + buttonType(look) +
       'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
-      '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit') + '">' +
-      icon(o.icon || 'cash', 18, ' style="flex:none;width:18px;height:18px"') + esc(label) + '</span>' +
-      (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit') + '">' + esc(sub) + '</span>' : '') + '</button>';
+      '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' +
+      (iconName ? icon(iconName, 18, ' style="flex:none;width:18px;height:18px"') : '') + esc(label) + '</span>' +
+      (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit;text-transform:none;letter-spacing:normal') + '">' + esc(sub) + '</span>' : '') + '</button>';
+  }
+
+  // The combo page's COD button, for combo-page.js (it draws its own button
+  // in its own bar): { text, css } — css = colours, corners and type, or
+  // null when COD isn't available.
+  function comboButton() {
+    return loadConfig().then(function (cfg) {
+      if (!cfg || !cfg.enabled || cfg.surfaces.combo === false) return null;
+      var look = lookOf(cfg, 'combo');
+      var r = Math.max(0, Math.min(40, Math.round(Number(look.radius)) || 0));
+      return {
+        text: (cfg.buttons && cfg.buttons.comboText) || 'Cash on Delivery',
+        icon: look.icon !== false ? icon('cash', 16, ' style="flex:none;width:16px;height:16px"') : '',
+        css: buttonPaint(look) + 'border:none;border-radius:' + r + 'px;' + buttonType(look),
+      };
+    });
   }
 
   // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides the fee.
@@ -1527,7 +1590,7 @@
 
   // Drawer button sizes; the gap is on the side that faces Checkout.
   function drawerSize(cfg, where) {
-    var r = Math.round(Number(cfg.buttons.radius));
+    var r = Math.round(Number(lookOf(cfg, 'drawer').radius));
     return {
       marginTop: where === 'below' ? 10 : 0,
       marginBottom: where === 'above' ? 10 : 0,
@@ -1624,7 +1687,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
-    slot.innerHTML = buttonHtml(cfg, cfg.buttons.drawerText, state.reason || state.sub, Boolean(state.reason), size);
+    slot.innerHTML = buttonHtml(cfg, cfg.buttons.drawerText, state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -1987,7 +2050,7 @@
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
     var fmt = moneyFormatter(cfg.currency);
-    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, excluded ? 'Not available for this product' : feeHint(cfg, fmt), Boolean(excluded), look);
+    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, excluded ? 'Not available for this product' : feeHint(cfg, fmt), Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (excluded) return;
     function syncDisabled() {
@@ -2385,11 +2448,11 @@
       // The purchase button for the chosen method.
       var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, (st.cfg && st.cfg.productButton) || {});
       if (v.method === 'cod') {
-        st.cta.innerHTML = buttonHtml(st.cfg, st.cfg.buttons.productText, v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look);
+        st.cta.innerHTML = buttonHtml(st.cfg, st.cfg.buttons.productText, v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
       } else if (v.method === 'online' && !st.buyNow) {
         var bg = st.colors.online;
         st.cta.innerHTML = buttonHtml(st.cfg, onlineLabel(pp.online.buttonText, v.pr, v.prepaid), '', v.soldOut, look, {
-          attr: 'data-brix-pay-online', icon: 'card', paint: 'background:' + bg + ';color:' + readableOn(bg) + ';box-shadow:none;',
+          attr: 'data-brix-pay-online', icon: 'card', look: lookOf(st.cfg, 'product'), paint: 'background:' + bg + ';color:' + readableOn(bg) + ';box-shadow:none;',
         });
       } else {
         st.cta.innerHTML = '';
@@ -2627,6 +2690,7 @@
     open: open,
     isAvailable: isAvailable,
     config: loadConfig,
+    comboButton: comboButton,
     mountDrawerButton: mountDrawerButton,
     paymentSnapshot: Pay.snapshot,
   };

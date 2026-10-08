@@ -20,10 +20,18 @@
 // builder's own "preview" page, so keep both in sync when changing pricing/
 // selection/checkout logic (see computePricing/onCheckout below vs. that
 // file's identically-named logic).
+//
+// Weight-priced combos (config.pricing_mode 'weight') price the box with the
+// shared core from app/utils/combo-weight.shared.js, injected below as source
+// text — the same code the checkout Function and BRIX COD run.
+import { createComboWeightCore } from '../utils/combo-weight.shared.js';
+import { WEIGHT_BOX_CSS } from '../utils/combo-weight-box.css.js';
+
 const SCRIPT_BODY = String.raw`
 (function () {
   var CURRENT_SCRIPT = document.currentScript;
   var API_ORIGIN = CURRENT_SCRIPT ? new URL(CURRENT_SCRIPT.src).origin : '';
+  var WeightCore = (${createComboWeightCore.toString()})();
 
   var instances = new Map(); // root element -> state object
 
@@ -186,6 +194,7 @@ const SCRIPT_BODY = String.raw`
   function buildState(shop, data) {
     var productMap = {};
     var variantPriceMap = {};
+    var variantGramsMap = {};
     var handle;
     for (handle in data.productsByHandle) {
       if (!Object.prototype.hasOwnProperty.call(data.productsByHandle, handle)) continue;
@@ -197,8 +206,15 @@ const SCRIPT_BODY = String.raw`
         for (var j = 0; j < variants.length; j++) {
           var v = variants[j];
           variantPriceMap[v.id] = v.price != null ? parseFloat(v.price) : parseFloat(p.price || 0);
+          variantGramsMap[v.id] = v.grams > 0 ? v.grams : null;
         }
       }
+    }
+    var cfg = data.config || {};
+    var weight = (cfg.pricing_mode === 'weight' || cfg.layout === WeightCore.WEIGHT_BOX_LAYOUT) && data.weightPricing ? data.weightPricing : null;
+    var qualifying = {};
+    if (weight) {
+      for (var q = 0; q < (weight.qualifyingProductIds || []).length; q++) qualifying[weight.qualifyingProductIds[q]] = true;
     }
 
     return {
@@ -215,6 +231,16 @@ const SCRIPT_BODY = String.raw`
       aiPairs: null, // set by loadAiSuggestions when config.ai_mode is on
       productMap: productMap,
       variantPriceMap: variantPriceMap,
+      // Weight pricing: grams per variant (null = no weight, doesn't count),
+      // the tiers etc. from the server, and which products count toward the box.
+      variantGramsMap: variantGramsMap,
+      weightMode: !!weight,
+      weight: weight,
+      qualifying: qualifying,
+      box: null, // WeightCore.computeBox result, recomputed by computePricing()
+      canCheckout: false,
+      checkingOut: false,
+      boxOpen: false, // The Weight Box's bottom sheet on phones
       selectedMap: {}, // { [variantId]: { productId, qty } }
       pendingVariant: {}, // { [productId]: variantId } — current dropdown/carousel selection before adding
       imgIndex: {}, // { [productId]: index }
@@ -237,7 +263,81 @@ const SCRIPT_BODY = String.raw`
 
   /* === PRICING (mirrors preview.$templateId.jsx's ComboPreviewPage) === */
 
+  /* === WEIGHT PRICING (shared core: same rules as checkout and COD) === */
+
+  function shopCurrency(state) {
+    for (var pid in state.productMap) return state.productMap[pid].currency;
+    return null;
+  }
+
+  function weightPricingOf(state) {
+    return { tiers: state.weight.tiers || [], max_grams: state.weight.maxGrams == null ? null : state.weight.maxGrams, unit: state.weight.unit };
+  }
+
+  // The box for a selection ({ [variantId]: { productId, qty } }), priced in
+  // the page's (shop) currency. Checkout converts with Shopify's own rate.
+  function weightBoxFor(state, selectedMap) {
+    var decimals = WeightCore.decimalsFor(shopCurrency(state));
+    var lines = [];
+    for (var vid in selectedMap) {
+      var sel = selectedMap[vid];
+      var qty = sel.qty || 0;
+      lines.push({
+        key: vid,
+        unitGrams: state.variantGramsMap[vid],
+        quantity: qty,
+        subtotalMinor: WeightCore.toMinor((state.variantPriceMap[vid] || 0) * qty, decimals),
+        qualifies: !!state.qualifying[sel.productId],
+      });
+    }
+    var box = WeightCore.computeBox({ pricing: weightPricingOf(state), lines: lines, decimals: decimals, rate: 1 });
+    box.decimals = decimals;
+    return box;
+  }
+
+  function computeWeightPricing(state) {
+    var totalSelected = 0;
+    var totalPrice = 0;
+    for (var vid in state.selectedMap) {
+      var sel = state.selectedMap[vid];
+      totalSelected += (sel.qty || 0);
+      totalPrice += (state.variantPriceMap[vid] || 0) * (sel.qty || 0);
+    }
+    var box = weightBoxFor(state, state.selectedMap);
+    var discount = state.weight.enabled ? box.discountMinor / Math.pow(10, box.decimals) : 0;
+    var tiers = state.weight.tiers || [];
+    state.box = box;
+    state.totalSelected = totalSelected;
+    state.maxProducts = Infinity; // no item-count limit in weight mode
+    state.totalPrice = totalPrice;
+    state.selectedDiscount = null;
+    state.discountApplicable = discount > 0;
+    state.finalPrice = Math.max(0, totalPrice - discount);
+    // A box can be checked out once it weighs at least the first tier, and not over the max.
+    state.canCheckout = totalSelected > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
+  }
+
+  // Would this selection be over the max weight? Shows the merchant's message if so.
+  function blockedByMaxWeight(root, state, nextSelectedMap) {
+    if (!state.weightMode || state.weight.maxGrams == null) return false;
+    var box = weightBoxFor(state, nextSelectedMap);
+    if (!box.overMax) return false;
+    showToast(root, state, WeightCore.fillMessage(state.weight.messages && state.weight.messages.over_max, {
+      max: WeightCore.formatWeight(state.weight.maxGrams, state.weight.unit),
+      weight: WeightCore.formatWeight(box.grams, state.weight.unit),
+    }));
+    return true;
+  }
+
+  function withQty(selectedMap, variantId, productId, qty) {
+    var next = {};
+    for (var vid in selectedMap) next[vid] = selectedMap[vid];
+    next[variantId] = { productId: productId, qty: qty };
+    return next;
+  }
+
   function computePricing(state) {
+    if (state.weightMode) { computeWeightPricing(state); return; }
     var config = state.config;
     var totalSelected = 0;
     var vid;
@@ -338,6 +438,12 @@ const SCRIPT_BODY = String.raw`
   function onAdd(root, state, product, variantId, qty) {
     qty = qty || 1;
     if (state.selectedMap[variantId]) return;
+    if (state.weightMode) {
+      if (blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, product.id, qty))) return;
+      state.selectedMap[variantId] = { productId: product.id, qty: qty };
+      render(root);
+      return;
+    }
     var currentTotalQty = 0;
     for (var vid in state.selectedMap) currentTotalQty += (state.selectedMap[vid].qty || 0);
     var maxProducts = parseInt(state.config.max_products) || 5;
@@ -352,6 +458,13 @@ const SCRIPT_BODY = String.raw`
   function onQtyChange(root, state, variantId, qty) {
     if (!state.selectedMap[variantId]) return;
     if (qty <= 0) { delete state.selectedMap[variantId]; render(root); return; }
+    if (state.weightMode) {
+      var current = state.selectedMap[variantId];
+      if (qty > (current.qty || 0) && blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, current.productId, qty))) return;
+      current.qty = qty;
+      render(root);
+      return;
+    }
     var otherTotalQty = 0;
     for (var vid in state.selectedMap) {
       if (vid === String(variantId)) continue;
@@ -420,13 +533,84 @@ const SCRIPT_BODY = String.raw`
     else onQtyChange(root, state, variantId, qty - 1);
   }
 
+  /* === WEIGHT COMBOS: the box goes into the real cart === */
+
+  function shopRoot() {
+    return (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+  }
+
+  function cartPost(path, body) {
+    return fetch(shopRoot() + path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (json) {
+        if (!r.ok) {
+          var err = new Error((json && (json.description || json.message)) || 'Could not add your box to the cart. Please try again.');
+          err.status = r.status;
+          throw err;
+        }
+        return json;
+      });
+    });
+  }
+
+  // Line properties that tell the checkout Function (and BRIX COD) which box
+  // a line belongs to. Only sent when the box discount is live, so a shopper
+  // is never shown a price checkout won't give.
+  function weightLineProperties(state) {
+    if (!state.weightMode || !state.weight.enabled) return null;
+    if (!state.boxToken) state.boxToken = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return {
+      _brix_combo_id: String(state.templateId),
+      _brix_combo_version: String(state.weight.hash || ''),
+      _brix_combo_group: state.boxToken,
+    };
+  }
+
+  // Puts a box in the shopper's real cart, then opens Shopify checkout. Any
+  // earlier box of the same combo is replaced (one box per combo per cart);
+  // the rest of the cart goes along. Rejects with Shopify's message (e.g. a
+  // 422 for stock) so the page can show it and stay put.
+  // box: { templateId, items: [{ variantId, quantity, properties }], attributes }
+  function addComboToCart(box) {
+    return fetch(shopRoot() + 'cart.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { items: [] }; })
+      .then(function (cart) {
+        var updates = {};
+        var found = false;
+        (cart.items || []).forEach(function (item) {
+          if (item.properties && String(item.properties._brix_combo_id) === String(box.templateId)) { updates[item.key] = 0; found = true; }
+        });
+        return found ? cartPost('cart/update.js', { updates: updates }) : null;
+      })
+      .then(function () {
+        return cartPost('cart/add.js', {
+          items: box.items.map(function (it) {
+            var line = { id: Number(it.variantId), quantity: it.quantity };
+            if (it.properties) line.properties = it.properties;
+            return line;
+          }),
+        });
+      })
+      .then(function () { return box.attributes ? cartPost('cart/update.js', { attributes: box.attributes }) : null; })
+      .then(function () { window.location.href = shopRoot() + 'checkout'; });
+  }
+
   // Items, discount code and combo attributes for the current selection —
   // the same ones onCheckout below sends to Shopify / Shiprocket.
+  // Weight combos carry their box properties and never a discount code.
   function buildComboItems(state) {
     var items = [];
+    var properties = weightLineProperties(state);
     for (var variantId in state.selectedMap) {
       var sel = state.selectedMap[variantId];
-      items.push({ variantId: Number(String(variantId).split('/').pop()), quantity: sel.qty || 1 });
+      var item = { variantId: Number(String(variantId).split('/').pop()), quantity: sel.qty || 1 };
+      if (properties) item.properties = properties;
+      items.push(item);
     }
     return {
       items: items,
@@ -444,6 +628,7 @@ const SCRIPT_BODY = String.raw`
   // falls back to this page's normal checkout (onCheckout).
   function onCod(root, state) {
     if (state.totalSelected === 0 || !window.BrixCod) return;
+    if (state.weightMode && !state.canCheckout) return;
     var co = buildComboItems(state);
     if (co.items.length === 0) return;
     trackEvent(state, 'click', state.finalPrice);
@@ -469,8 +654,25 @@ const SCRIPT_BODY = String.raw`
     })();
   }
 
+  // Weight combos: into the real cart and on to Shopify checkout, where the
+  // Function applies the box price. Never Shiprocket (it can't run our
+  // Function) and never a discount code.
+  function onWeightCheckout(root, state) {
+    if (!state.canCheckout || state.checkingOut) return;
+    var co = buildComboItems(state);
+    if (co.items.length === 0) return;
+    trackEvent(state, 'click', state.finalPrice);
+    state.checkingOut = true;
+    render(root);
+    addComboToCart({ templateId: state.templateId, items: co.items, attributes: co.attributes }).catch(function (err) {
+      state.checkingOut = false;
+      showToast(root, state, (err && err.message) || 'Could not add your box to the cart. Please try again.');
+    });
+  }
+
   function onCheckout(root, state) {
     if (state.totalSelected === 0) return;
+    if (state.weightMode) { onWeightCheckout(root, state); return; }
     var cartLines = [];
     var items = [];
     for (var variantId in state.selectedMap) {
@@ -723,6 +925,16 @@ const SCRIPT_BODY = String.raw`
     html += '<div style="' + styleStr({ fontSize: sizing.productPriceSize + 'px', fontWeight: '600', color: primaryColor, marginBottom: '8px' }) + '">'
       + getCurrencySymbol(product.currency) + displayPrice.toFixed(2) + '</div>';
 
+    // Weight combos: what this item adds to the box, or that it doesn't count.
+    if (state.weightMode) {
+      var unitGrams = state.variantGramsMap[activeVariantId];
+      var counts = !!state.qualifying[product.id] && unitGrams > 0;
+      html += '<div style="' + styleStr({
+        alignSelf: 'flex-start', marginBottom: '8px', padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '600',
+        background: counts ? '#f3f4f6' : '#fef3c7', color: counts ? '#374151' : '#92400e',
+      }) + '">' + (counts ? esc(WeightCore.formatWeight(unitGrams, unitGrams < 1000 ? 'g' : 'kg')) : 'Not counted in box') + '</div>';
+    }
+
     // flexWrap + the Add button's nowrap below: on narrow cards (2 columns on
     // a phone) the stepper and Add button don't fit on one row, and merchant
     // themes that set word-break on buttons then squeeze the label to one
@@ -771,7 +983,67 @@ const SCRIPT_BODY = String.raw`
     return html;
   }
 
+  // What the weight meter says right now (also announced to screen readers).
+  function weightMessage(state) {
+    return WeightCore.boxMessage(state.weight, state.box);
+  }
+
+  // Weight meter: replaces the item-count progress bar for weight combos.
+  // Tier ticks along the bar, the box weight, and what to add next.
+  function renderWeightMeter(state) {
+    var config = state.config;
+    var w = state.weight;
+    var box = state.box;
+    var tiers = w.tiers || [];
+    var unit = w.unit;
+    var top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
+    var scale = w.maxGrams != null ? w.maxGrams : Math.round(top * 1.2);
+    var percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
+    var msg = weightMessage(state);
+    var success = config.progress_success_color || '#16a34a';
+    var barColor = box.overMax ? '#dc2626' : (box.tier && w.enabled ? success : (config.progress_bar_color || '#111827'));
+    var textColor = config.progress_text_color || '#374151';
+    var toneColor = msg.tone === 'error' ? '#b91c1c' : msg.tone === 'success' ? success : textColor;
+
+    var html = '<div class="brix-combo-weight" style="' + styleStr({ padding: '16px 20px', background: '#fff', borderBottom: '1px solid #eee' }) + '">';
+    html += '<div style="' + styleStr({ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', marginBottom: '10px', color: textColor }) + '">';
+    html += '<span style="' + styleStr({ fontSize: '13px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase' }) + '">' + esc(config.progress_text || 'Your box') + '</span>';
+    html += '<span style="' + styleStr({ fontSize: '15px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }) + '">'
+      + esc(WeightCore.formatWeight(box.grams, unit))
+      + (w.maxGrams != null ? '<span style="font-weight:500;color:#6b7280;"> / ' + esc(WeightCore.formatWeight(w.maxGrams, unit)) + ' max</span>' : '')
+      + '</span></div>';
+
+    html += '<div style="position:relative;height:10px;border-radius:10px;background:#e5e7eb;overflow:hidden;" role="progressbar" aria-valuemin="0" aria-valuemax="' + scale + '" aria-valuenow="' + Math.round(box.grams) + '" aria-label="Box weight">';
+    html += '<div style="' + styleStr({ height: '100%', width: percent + '%', background: barColor, borderRadius: '10px', transition: 'width 0.4s ease, background 0.3s' }) + '"></div>';
+    html += '</div>';
+
+    if (w.enabled && tiers.length) {
+      html += '<div style="position:relative;height:30px;margin-top:4px;">';
+      for (var i = 0; i < tiers.length; i++) {
+        var t = tiers[i];
+        var left = scale > 0 ? Math.min(100, (t.min_grams / scale) * 100) : 0;
+        var reached = box.grams >= t.min_grams && !box.overMax;
+        html += '<div style="' + styleStr({
+          position: 'absolute', left: left + '%', top: '0', transform: left > 90 ? 'translateX(-100%)' : (left < 10 ? 'none' : 'translateX(-50%)'),
+          fontSize: '11px', lineHeight: '1.3', whiteSpace: 'nowrap', textAlign: 'center',
+          color: reached ? success : '#6b7280', fontWeight: reached ? '700' : '500',
+        }) + '" title="' + esc(t.label) + '">'
+          + '<div style="width:2px;height:6px;background:currentColor;margin:0 auto 2px;"></div>'
+          + esc(WeightCore.formatWeight(t.min_grams, unit)) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div aria-live="polite" style="' + styleStr({ marginTop: '8px', fontSize: '13px', fontWeight: '600', color: toneColor }) + '">' + esc(msg.text) + '</div>';
+    if (box.unweighedKeys && box.unweighedKeys.length) {
+      html += '<div style="margin-top:4px;font-size:12px;color:#6b7280;">' + box.unweighedKeys.length + ' selected item' + (box.unweighedKeys.length === 1 ? ' has' : 's have') + ' no weight and ' + (box.unweighedKeys.length === 1 ? 'doesn\'t' : 'don\'t') + ' count toward the box.</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderProgressBar(state) {
+    if (state.weightMode) return renderWeightMeter(state);
     var config = state.config;
     if (!config.show_progress_bar) return '';
     var threshold = state.maxProducts;
@@ -962,6 +1234,7 @@ const SCRIPT_BODY = String.raw`
   // Mirrors preview.$templateId.jsx's ProgressBar — the generic (layout2/3/4)
   // bar, which is a different design from layout1's sticky one above.
   function renderGenericProgressBar(state) {
+    if (state.weightMode) return renderWeightMeter(state);
     var config = state.config;
     if (!config.show_progress_bar) return '';
     var threshold = parseInt(state.maxProducts) || 5;
@@ -1400,7 +1673,7 @@ const SCRIPT_BODY = String.raw`
       html += '</div></div>';
     }
 
-    if (config.show_progress_bar) {
+    if (config.show_progress_bar || state.weightMode) {
       html += '<div style="padding:0 20px;">' + renderGenericProgressBar(state) + '</div>';
     }
 
@@ -1621,7 +1894,7 @@ const SCRIPT_BODY = String.raw`
     // "Add N more" messaging below) is actually reached — previously this
     // only checked "at least one item selected", so checkout enabled itself
     // long before the configured condition (e.g. 4 or 5 items) was met.
-    var canOpenDrawer = state.totalSelected >= maxSel;
+    var canOpenDrawer = state.weightMode ? (state.canCheckout && !state.checkingOut) : state.totalSelected >= maxSel;
 
     var html = '<div style="' + styleStr({
       width: (config.preview_bar_width || 100) + '%', margin: '40px auto 10px',
@@ -1650,10 +1923,12 @@ const SCRIPT_BODY = String.raw`
         html += '<div style="' + styleStr({ fontSize: (config.preview_bar_title_size || 16) + 'px', color: config.preview_bar_title_color || config.preview_bar_text_color || '#333', fontWeight: '800', textAlign: isMobile ? 'center' : 'left' }) + '">' + esc(config.preview_bar_title) + '</div>';
       }
       var remaining = Math.max(0, maxSel - state.totalSelected);
-      var isUnlocked = state.totalSelected >= maxSel;
-      var motivationText = isUnlocked
-        ? (config.preview_motivation_unlocked_text || 'Discount Unlocked!')
-        : (config.preview_motivation_text || 'Add {{remaining}} more for discount!').replace('{{remaining}}', remaining);
+      var isUnlocked = state.weightMode ? !!(state.box.tier && state.weight.enabled && !state.box.overMax) : state.totalSelected >= maxSel;
+      var motivationText = state.weightMode
+        ? weightMessage(state).text
+        : isUnlocked
+          ? (config.preview_motivation_unlocked_text || 'Discount Unlocked!')
+          : (config.preview_motivation_text || 'Add {{remaining}} more for discount!').replace('{{remaining}}', remaining);
       html += '<div style="' + styleStr({ fontSize: (config.preview_motivation_size || 13) + 'px', color: config.preview_motivation_color || (isUnlocked ? '#28a745' : '#666'), fontWeight: '600', textAlign: isMobile ? 'center' : 'right' }) + '">' + esc(motivationText) + '</div>';
       html += '</div>';
     }
@@ -1666,7 +1941,9 @@ const SCRIPT_BODY = String.raw`
     for (var fi = 0; fi < selectedProducts.length; fi++) {
       for (var q = 0; q < (selectedProducts[fi].quantity || 0); q++) flattened.push(selectedProducts[fi]);
     }
-    for (var ti = 0; ti < maxSel; ti++) {
+    // Weight combos have no item count: one slot per chosen item, plus an empty one.
+    var slotCount = state.weightMode ? Math.min(flattened.length + 1, 12) : maxSel;
+    for (var ti = 0; ti < slotCount; ti++) {
       var item = flattened[ti];
       var shapeStyle = {
         width: baseSize + 'px', height: baseSize + 'px', borderRadius: previewShape === 'circle' ? '50%' : '8px',
@@ -1718,15 +1995,25 @@ const SCRIPT_BODY = String.raw`
       }) + '">' + esc(config.preview_checkout_btn_text || 'Checkout') + '</button>';
     }
     if (state.codAvailable && config.show_cod_button !== false) {
-      html += '<button type="button" data-combo-action="cod"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
+      // Look and text from COD → Customize → Combo page button (state.codButton,
+      // from BrixCod.comboButton). The template's own colours are only used
+      // until that has loaded.
+      var cb = state.codButton;
+      var codBase = styleStr({
         flex: isMobile ? '1' : 'none', width: isMobile ? '100%' : 'auto',
+        padding: '10px 20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        cursor: canOpenDrawer ? 'pointer' : 'not-allowed', minHeight: isMobile ? '48px' : 'auto',
+        opacity: canOpenDrawer ? '1' : '0.6',
+      });
+      var codLook = cb ? cb.css : styleStr({
         background: config.cod_btn_bg || '#ffffff',
         color: config.cod_btn_text_color || '#111827',
         border: '1.5px solid ' + (config.cod_btn_text_color || '#111827'),
-        padding: '10px 20px', borderRadius: (config.preview_border_radius || 6) + 'px', fontWeight: '700',
-        cursor: canOpenDrawer ? 'pointer' : 'not-allowed', minHeight: isMobile ? '48px' : 'auto',
-        fontSize: isMobile ? '13px' : 'inherit', opacity: canOpenDrawer ? '1' : '0.6',
-      }) + '">' + esc(config.cod_btn_text || 'Cash on Delivery') + '</button>';
+        borderRadius: (config.preview_border_radius || 6) + 'px', fontWeight: '700',
+        fontSize: isMobile ? '13px' : 'inherit',
+      });
+      html += '<button type="button" data-combo-action="cod"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + codBase + codLook + '">'
+        + (cb ? cb.icon : '') + esc(cb ? cb.text : (config.cod_btn_text || 'Cash on Delivery')) + '</button>';
     }
     if (config.show_preview_add_to_cart_btn) {
       html += '<button type="button" data-combo-action="cart-drawer-open"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
@@ -1800,6 +2087,213 @@ const SCRIPT_BODY = String.raw`
     return html;
   }
 
+  /* === RENDER: LAYOUT5 "The Weight Box" (Pro, always weight-priced) === */
+  // Built around the box: a tier ladder up top, collection pills, a product
+  // grid with each item's weight, and a sticky "Your box" panel (a bottom
+  // sheet on phones) with the meter, the items, the price and checkout.
+  // Mirrored by the builder preview (app.bundles.customize.jsx renderWeightBox).
+
+  function weightBoxHandles(config) {
+    var out = [];
+    for (var i = 1; i <= (config.tab_count || 4); i++) {
+      var h = config['col_' + i];
+      if (h && out.indexOf(h) === -1) out.push(h);
+    }
+    return out;
+  }
+
+  function tierOfferText(tier, symbol) {
+    if (tier.type === 'percentage') return tier.value + '% off';
+    if (tier.type === 'fixed_amount') return symbol + tier.value + ' off';
+    return 'Box for ' + symbol + tier.value;
+  }
+
+  function weightBoxVars(config) {
+    return styleStr({
+      '--bxw-accent': config.primary_color || '#1f3a2e',
+      '--bxw-good': config.progress_success_color || '#15803d',
+      '--bxw-bg': config.bg_color || '#faf7f2',
+      '--bxw-text': config.text_color || '#1c1917',
+      '--bxw-bar': config.progress_bar_color || '#1f3a2e',
+    });
+  }
+
+  function renderBoxCard(state, product) {
+    var variants = product.variants || [];
+    var activeVariantId = getActiveVariantId(state, product);
+    var activeVariant = null;
+    for (var i = 0; i < variants.length; i++) { if (String(variants[i].id) === String(activeVariantId)) { activeVariant = variants[i]; break; } }
+    var sel = state.selectedMap[activeVariantId];
+    var qty = sel ? (sel.qty || 0) : 0;
+    var price = activeVariant && activeVariant.price != null ? parseFloat(activeVariant.price) : parseFloat(product.price || 0);
+    var grams = state.variantGramsMap[activeVariantId];
+    var counts = !!state.qualifying[product.id] && grams > 0;
+    var image = (activeVariant && activeVariant.image) || product.image || (product.images && product.images[0]);
+    var inBox = false;
+    for (i = 0; i < variants.length; i++) if (state.selectedMap[variants[i].id]) inBox = true;
+
+    var html = '<div class="brix-combo-card bxw-card' + (inBox ? ' is-in' : '') + '" data-product-id="' + esc(product.id) + '">';
+    html += '<div class="bxw-media" data-combo-action="lightbox-open" data-product-id="' + esc(product.id) + '">';
+    html += image ? '<img src="' + esc(image.url) + '" alt="' + esc(image.altText || product.title) + '" loading="lazy" />' : '<span class="bxw-noimg"></span>';
+    if (inBox) html += '<span class="bxw-tick">' + ICON_CHECK + '</span>';
+    html += '</div><div class="bxw-info">';
+    html += '<div class="bxw-name">' + esc(product.title) + '</div>';
+    if (variants.length > 1) {
+      html += '<select class="bxw-select" data-combo-action="variant-select" data-product-id="' + esc(product.id) + '">';
+      for (i = 0; i < variants.length; i++) {
+        html += '<option value="' + esc(variants[i].id) + '"' + (String(variants[i].id) === String(activeVariantId) ? ' selected' : '') + '>' + esc(variants[i].title) + '</option>';
+      }
+      html += '</select>';
+    }
+    html += '<div class="bxw-meta"><span class="bxw-price">' + getCurrencySymbol(product.currency) + price.toFixed(2) + '</span>';
+    html += '<span class="bxw-chip' + (counts ? '' : ' is-off') + '">' + (counts ? esc(WeightCore.formatWeight(grams, grams < 1000 ? 'g' : 'kg')) : 'Not counted') + '</span></div>';
+    if (qty > 0) {
+      html += '<div class="bxw-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(product.id) + '" aria-label="Remove one">−</button>'
+        + '<span aria-live="polite">' + qty + ' in box</span>'
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '" aria-label="Add one">+</button></div>';
+    } else {
+      html += '<button type="button" class="bxw-add" data-combo-action="card-add" data-product-id="' + esc(product.id) + '">' + esc(state.config.add_btn_text || 'Add to box') + '</button>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  function renderBoxPanel(state, inSheet) {
+    var config = state.config;
+    var w = state.weight;
+    var box = state.box;
+    var symbol = getBarCurrencySymbol(state);
+    var tiers = w.tiers || [];
+    var top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
+    var scale = w.maxGrams != null ? w.maxGrams : Math.round(top * 1.2);
+    var percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
+    var msg = WeightCore.boxMessage(w, box);
+    var items = buildSelectedProducts(state);
+    var discount = state.totalPrice - state.finalPrice;
+
+    var html = '<div class="bxw-panel' + (inSheet ? ' is-sheet' : '') + '">';
+    html += '<div class="bxw-panel-head"><span>' + esc(config.progress_text || 'Your box') + '</span>';
+    if (inSheet) html += '<button type="button" class="bxw-close" data-combo-action="box-close" aria-label="Close">' + ICON_CLOSE + '</button>';
+    else html += '<span class="bxw-count">' + state.totalSelected + ' item' + (state.totalSelected === 1 ? '' : 's') + '</span>';
+    html += '</div>';
+
+    html += '<div class="bxw-scale"><span class="bxw-kg">' + esc(WeightCore.formatWeight(box.grams, w.unit)) + '</span>';
+    if (w.maxGrams != null) html += '<span class="bxw-of">of ' + esc(WeightCore.formatWeight(w.maxGrams, w.unit)) + ' max</span>';
+    html += '</div>';
+    html += '<div class="bxw-track' + (box.overMax ? ' is-over' : '') + (box.tier && w.enabled ? ' is-good' : '') + '" role="progressbar" aria-label="Box weight" aria-valuemin="0" aria-valuemax="' + scale + '" aria-valuenow="' + Math.round(box.grams) + '">';
+    html += '<div class="bxw-fill" style="width:' + percent + '%"></div>';
+    if (w.enabled) {
+      for (var t = 0; t < tiers.length; t++) {
+        var left = scale > 0 ? Math.min(100, (tiers[t].min_grams / scale) * 100) : 0;
+        html += '<span class="bxw-mark' + (box.grams >= tiers[t].min_grams && !box.overMax ? ' is-hit' : '') + '" style="left:' + left + '%"></span>';
+      }
+    }
+    html += '</div>';
+    html += '<p class="bxw-msg is-' + msg.tone + '" aria-live="polite">' + esc(msg.text) + '</p>';
+
+    html += '<div class="bxw-items">';
+    if (!items.length) {
+      html += '<div class="bxw-empty">Your box is empty. Add items to start filling it.</div>';
+    }
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var g = state.variantGramsMap[it.variantId];
+      var counted = !!state.qualifying[it.id] && g > 0;
+      html += '<div class="bxw-item">';
+      html += it.image ? '<img src="' + esc(it.image) + '" alt="" />' : '<span class="bxw-noimg"></span>';
+      html += '<div class="bxw-item-main"><div class="bxw-item-name">' + esc(it.title) + '</div>';
+      html += '<div class="bxw-item-sub">' + (counted ? esc(WeightCore.formatWeight(g * it.quantity, g * it.quantity < 1000 ? 'g' : 'kg')) : 'Not counted') + ' · ' + symbol + (it.price * it.quantity).toFixed(2) + '</div></div>';
+      html += '<div class="bxw-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(it.variantId) + '" aria-label="Remove one">−</button><span>' + it.quantity + '</span>'
+        + '<button type="button" data-combo-action="box-inc" data-variant-id="' + esc(it.variantId) + '" aria-label="Add one">+</button></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="bxw-totals">';
+    html += '<div><span>Items</span><span>' + symbol + state.totalPrice.toFixed(2) + '</span></div>';
+    if (discount > 0.004) html += '<div class="is-good"><span>Box discount</span><span>−' + symbol + discount.toFixed(2) + '</span></div>';
+    html += '<div class="bxw-total"><span>Total</span><span>' + symbol + state.finalPrice.toFixed(2) + '</span></div>';
+    html += '</div>';
+
+    var disabled = !state.canCheckout || state.checkingOut;
+    html += '<button type="button" class="bxw-checkout" data-combo-action="checkout"' + (disabled ? ' disabled' : '') + '>'
+      + esc(state.checkingOut ? 'Adding your box…' : (config.preview_checkout_btn_text || 'Checkout')) + '</button>';
+    if (state.codAvailable && config.show_cod_button !== false) {
+      var cb = state.codButton;
+      html += '<button type="button" class="bxw-cod" data-combo-action="cod"' + (disabled ? ' disabled' : '')
+        + (cb ? ' style="display:flex;align-items:center;justify-content:center;gap:8px;' + cb.css + '"' : '') + '>'
+        + (cb ? cb.icon + esc(cb.text) : esc(config.cod_btn_text || 'Cash on Delivery')) + '</button>';
+    }
+    if (items.length) html += '<button type="button" class="bxw-clear" data-combo-action="reset">Empty the box</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderLayout5(state, isMobile) {
+    if (!state.weightMode) return renderLayout2(state, isMobile);
+    var config = state.config;
+    var w = state.weight;
+    var box = state.box;
+    var symbol = getBarCurrencySymbol(state);
+    var handles = weightBoxHandles(config);
+    if (state.activeTab !== 'all' && handles.indexOf(state.activeTab) === -1) state.activeTab = 'all';
+    var products = state.activeTab === 'all' ? uniqueProducts(state, handles) : (state.productsByHandle[state.activeTab] || []);
+
+    var html = '<div class="bxw' + (isMobile ? ' bxw--mobile' : '') + '" style="' + weightBoxVars(config) + '">';
+    html += '<div class="bxw-main">';
+    html += '<header class="bxw-hero">';
+    html += '<div class="bxw-eyebrow">' + esc(config.weight_box_eyebrow || 'Build your box') + '</div>';
+    html += '<h2 class="bxw-title">' + esc(config.collection_title || state.templateName || 'Build your box') + '</h2>';
+    if (config.collection_description) html += '<p class="bxw-desc">' + esc(config.collection_description) + '</p>';
+    if (w.enabled && (w.tiers || []).length) {
+      html += '<ol class="bxw-ladder">';
+      for (var t = 0; t < w.tiers.length; t++) {
+        var tier = w.tiers[t];
+        var reached = box.grams >= tier.min_grams && !box.overMax;
+        var isNext = box.nextTier && box.nextTier.min_grams === tier.min_grams;
+        html += '<li class="bxw-rung' + (reached ? ' is-hit' : '') + (isNext ? ' is-next' : '') + '">'
+          + '<span class="bxw-rung-w">' + esc(WeightCore.formatWeight(tier.min_grams, w.unit)) + '</span>'
+          + '<span class="bxw-rung-o">' + esc(tierOfferText(tier, symbol)) + '</span></li>';
+      }
+      html += '</ol>';
+    }
+    html += '</header>';
+
+    if (handles.length > 1) {
+      html += '<nav class="bxw-pills" aria-label="Collections">';
+      html += '<button type="button" class="bxw-pill' + (state.activeTab === 'all' ? ' is-on' : '') + '" data-combo-action="tab-pick" data-tab="all">' + esc(config.tab_all_label || 'All') + '</button>';
+      for (var h = 0; h < handles.length; h++) {
+        html += '<button type="button" class="bxw-pill' + (state.activeTab === handles[h] ? ' is-on' : '') + '" data-combo-action="tab-pick" data-tab="' + esc(handles[h]) + '">' + esc(state.collectionNameMap[handles[h]] || handles[h]) + '</button>';
+      }
+      html += '</nav>';
+    }
+
+    if (!products.length) {
+      html += '<div class="bxw-empty">No products in this collection yet.</div>';
+    } else {
+      html += '<div class="bxw-grid">';
+      for (var p = 0; p < products.length; p++) html += renderBoxCard(state, products[p]);
+      html += '</div>';
+    }
+    html += renderAiSuggestions(state, isMobile);
+    html += '</div>'; // main
+
+    if (!isMobile) {
+      html += '<aside class="bxw-aside">' + renderBoxPanel(state, false) + '</aside>';
+    } else {
+      // Phone: a bar with the box weight and price; tap to open the box.
+      html += '<div class="bxw-bar"><div class="bxw-bar-info"><b>' + esc(WeightCore.formatWeight(box.grams, w.unit)) + '</b>'
+        + '<span>' + state.totalSelected + ' item' + (state.totalSelected === 1 ? '' : 's') + ' · ' + symbol + state.finalPrice.toFixed(2) + '</span></div>'
+        + '<button type="button" class="bxw-bar-btn" data-combo-action="box-open">View box</button></div>';
+      if (state.boxOpen) {
+        html += '<div class="bxw-scrim" data-combo-action="box-close"></div>';
+        html += '<div class="bxw-sheet" role="dialog" aria-label="Your box">' + renderBoxPanel(state, true) + '</div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
   /* === RENDER: ROOT === */
 
   function render(root) {
@@ -1810,7 +2304,9 @@ const SCRIPT_BODY = String.raw`
     var config = state.config;
 
     var html;
-    if (config.layout === 'layout4') {
+    if (config.layout === WeightCore.WEIGHT_BOX_LAYOUT) {
+      html = renderLayout5(state, isMobile);
+    } else if (config.layout === 'layout4') {
       html = renderLayout4(state, isMobile);
     } else if (config.layout === 'layout2') {
       html = renderLayout2(state, isMobile);
@@ -1841,6 +2337,10 @@ const SCRIPT_BODY = String.raw`
 
   /* === GLOBAL STYLES (injected once) === */
 
+  // The Weight Box (renderLayout5): app/utils/combo-weight-box.css.js, the
+  // same styles the builder preview uses.
+  var WEIGHT_BOX_CSS = ${JSON.stringify(WEIGHT_BOX_CSS)};
+
   var stylesInjected = false;
   function injectGlobalStyles() {
     if (stylesInjected) return;
@@ -1865,7 +2365,8 @@ const SCRIPT_BODY = String.raw`
       '.brix-combo-slider-track.show-scrollbar::-webkit-scrollbar { display: block; height: 4px; }' +
       '.brix-combo-ai-track { scrollbar-width: thin; }' +
       '@keyframes brix-combo-ai-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } 30%, 70% { box-shadow: 0 0 0 4px rgba(0,0,0,0.35); } }' +
-      '.brix-combo-ai-flash { animation: brix-combo-ai-flash 1.6s ease-in-out; }';
+      '.brix-combo-ai-flash { animation: brix-combo-ai-flash 1.6s ease-in-out; }' +
+      WEIGHT_BOX_CSS;
     document.head.appendChild(style);
   }
 
@@ -1958,6 +2459,18 @@ const SCRIPT_BODY = String.raw`
         if (track) track.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
         return;
       }
+      // The Weight Box's own panel: +/- per item, and the phone bottom sheet.
+      if (action === 'box-inc' || action === 'box-dec') {
+        var boxVariant = el.getAttribute('data-variant-id');
+        var boxSel = state.selectedMap[boxVariant];
+        if (!boxSel) return;
+        if (action === 'box-inc') onQtyChange(root, state, boxVariant, (boxSel.qty || 0) + 1);
+        else if ((boxSel.qty || 0) <= 1) onRemove(root, state, boxVariant);
+        else onQtyChange(root, state, boxVariant, boxSel.qty - 1);
+        return;
+      }
+      if (action === 'box-open') { state.boxOpen = true; render(root); return; }
+      if (action === 'box-close') { state.boxOpen = false; render(root); return; }
       if (action === 'checkout') { onCheckout(root, state); return; }
       if (action === 'cod') { onCod(root, state); return; }
       if (action === 'reset') { onReset(root, state); return; }
@@ -1998,6 +2511,30 @@ const SCRIPT_BODY = String.raw`
   // loads where the preview route's frame-ancestors header allows the
   // storefront's domain, which excludes custom domains today — so port a
   // new layout here rather than relying on this.
+  // A box sent up by the preview frame: only numeric ids, sane quantities,
+  // BRIX box properties and the combo attributes are kept.
+  function boxFromFrame(data) {
+    var items = (Array.isArray(data.items) ? data.items : []).map(function (it) {
+      var props = null;
+      if (it && it.properties && typeof it.properties === 'object') {
+        props = {};
+        ['_brix_combo_id', '_brix_combo_version', '_brix_combo_group'].forEach(function (k) {
+          if (typeof it.properties[k] === 'string' && it.properties[k].length <= 64) props[k] = it.properties[k];
+        });
+        if (!props._brix_combo_id) props = null;
+      }
+      var item = { variantId: Number(it && it.variantId), quantity: Math.floor(Number(it && it.quantity)) };
+      if (props) item.properties = props;
+      return item;
+    }).filter(function (it) { return it.variantId > 0 && it.quantity > 0 && it.quantity <= 100; });
+    var attributes = {};
+    var raw = data.attributes && typeof data.attributes === 'object' ? data.attributes : {};
+    ['combo_source', 'combo_template_id', 'combo_template_name'].forEach(function (k) {
+      if (raw[k] != null) attributes[k] = String(raw[k]).slice(0, 200);
+    });
+    return { templateId: '', items: items, attributes: attributes };
+  }
+
   function mountIframe(root, shop, templateId) {
     root.innerHTML = '';
     var iframe = document.createElement('iframe');
@@ -2034,15 +2571,28 @@ const SCRIPT_BODY = String.raw`
         whenCodAvailable(function () {
           try { iframe.contentWindow.postMessage({ type: 'brix-combo-cod-available' }, '*'); } catch (err) {}
         });
+      } else if (e.data.type === 'brix-combo-checkout') {
+        // Weight combos: the frame runs on the app's origin and can't reach
+        // the shopper's cart, so it hands the box to this page.
+        var box = boxFromFrame(e.data);
+        box.templateId = templateId;
+        if (!box.items.length) return;
+        addComboToCart(box).catch(function (err) {
+          try { iframe.contentWindow.postMessage({ type: 'brix-combo-checkout-failed', message: (err && err.message) || '' }, '*'); } catch (err2) {}
+        });
       } else if (e.data.type === 'brix-combo-cod-open' && window.BrixCod) {
         var fallback = String(e.data.fallbackUrl || '');
         var shopOrigin = 'https://' + String(shop).replace(/^https?:\/\//, '');
+        var codBox = boxFromFrame(e.data);
+        codBox.templateId = templateId;
+        var isWeightBox = codBox.items.some(function (it) { return it.properties && it.properties._brix_combo_id; });
         window.BrixCod.open({
           surface: 'combo',
-          items: Array.isArray(e.data.items) ? e.data.items : [],
+          items: codBox.items,
           coupon: e.data.coupon || null,
           attributes: e.data.attributes || null,
           onPayOnline: function () {
+            if (isWeightBox) { addComboToCart(codBox).catch(function () {}); return; }
             if (fallback.indexOf(shopOrigin + '/') === 0 || fallback.indexOf(window.location.origin + '/') === 0) window.location.href = fallback;
           },
         });
@@ -2129,7 +2679,7 @@ const SCRIPT_BODY = String.raw`
       widenAncestorContainers(root);
 
       var layout = json.data.config && json.data.config.layout;
-      if (layout && !/^layout[1-4]$/.test(layout)) {
+      if (layout && !/^layout[1-5]$/.test(layout)) {
         mountIframe(root, shop, json.data.templateId || templateId);
         return;
       }
@@ -2145,7 +2695,14 @@ const SCRIPT_BODY = String.raw`
       trackEvent(state, 'view');
       if (state.config.ai_mode) loadAiSuggestions(root, state);
       if (state.config.show_cod_button !== false) {
-        whenCodAvailable(function () { state.codAvailable = true; render(root); });
+        whenCodAvailable(function () {
+          state.codAvailable = true;
+          render(root);
+          // The merchant's combo page button look (COD → Customize).
+          if (typeof window.BrixCod.comboButton === 'function') {
+            window.BrixCod.comboButton().then(function (b) { if (b) { state.codButton = b; render(root); } }).catch(function () {});
+          }
+        });
       }
     }).catch(function () {
       root.innerHTML = '';

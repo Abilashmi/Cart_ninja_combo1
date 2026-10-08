@@ -160,7 +160,11 @@ function GeneralSectionComponent({
     );
   }
 
-  if (layout === 'layout2') {
+  // The Weight Box (layout5) uses the same collection list as layout2's
+  // tabs (col_1..col_N), shown as pills; the box's weight, not an item
+  // count, is its rule (Advanced → Offer).
+  if (layout === 'layout2' || layout === 'layout5') {
+    const isWeightBox = layout === 'layout5';
     const tabCount = Number(config.tab_count || 1);
     const addTab = () => updateConfig('tab_count', tabCount + 1);
     const removeTab = (i) => {
@@ -169,36 +173,52 @@ function GeneralSectionComponent({
     };
     return (
       <SectionCard
-        title="Collections (Switching Tabs)"
+        title={isWeightBox ? 'Box Collections' : 'Collections (Switching Tabs)'}
         expanded={expanded}
         onToggle={onToggle}
         badge={`${tabCount} ${tabCount === 1 ? 'collection' : 'collections'}`}
       >
         <FormLayout>
-          <div className="cst-bundle-rule-box">
-            <Text variant="bodyMd" as="p" fontWeight="bold">Bundle Rule</Text>
-            <TextField
-              label="Total Products Customer Can Add"
-              type="number"
-              value={String(config.max_products || 5)}
-              onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }}
-              autoComplete="off"
-              error={maxProductsError}
-            />
-          </div>
-          <div className="cst-inline-group">
-            <Checkbox
-              label="Show 'All' Tab"
-              checked={!!config.show_tab_all}
-              onChange={(v) => updateConfig('show_tab_all', v)}
-            />
-            <TextField
-              label="First Tab Label"
-              value={config.tab_all_label || 'Collections'}
-              onChange={(v) => updateConfig('tab_all_label', v)}
-              autoComplete="off"
-            />
-          </div>
+          {isWeightBox ? (
+            <>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Products from these collections fill the box. With more than one, shoppers switch between them with pills. Weight tiers and the max box weight are under Advanced → Offer.
+              </Text>
+              <TextField
+                label="Label of the “All” pill"
+                value={config.tab_all_label || 'All'}
+                onChange={(v) => updateConfig('tab_all_label', v)}
+                autoComplete="off"
+              />
+            </>
+          ) : (
+            <>
+              <div className="cst-bundle-rule-box">
+                <Text variant="bodyMd" as="p" fontWeight="bold">Bundle Rule</Text>
+                <TextField
+                  label="Total Products Customer Can Add"
+                  type="number"
+                  value={String(config.max_products || 5)}
+                  onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }}
+                  autoComplete="off"
+                  error={maxProductsError}
+                />
+              </div>
+              <div className="cst-inline-group">
+                <Checkbox
+                  label="Show 'All' Tab"
+                  checked={!!config.show_tab_all}
+                  onChange={(v) => updateConfig('show_tab_all', v)}
+                />
+                <TextField
+                  label="First Tab Label"
+                  value={config.tab_all_label || 'Collections'}
+                  onChange={(v) => updateConfig('tab_all_label', v)}
+                  autoComplete="off"
+                />
+              </div>
+            </>
+          )}
           <div className="cst-row cst-row--vertical" style={{ marginTop: 12, gap: 10 }}>
             {[...Array(tabCount)].map((_, index) => {
               const i = index + 1;

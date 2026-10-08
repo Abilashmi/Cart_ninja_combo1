@@ -142,6 +142,7 @@ export default function TemplateManager() {
       layout2: 'combo_design_two',
       layout3: 'combo_design_three',
       layout4: 'combo_design_four',
+      layout5: 'combo_weight_box',
     };
     const templateLayout = template.config?.layout || 'layout1';
     const matchesDesign =

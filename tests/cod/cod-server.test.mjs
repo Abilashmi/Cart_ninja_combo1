@@ -39,6 +39,22 @@ async function resetDb() {
 after(() => harness.stop());
 
 /* ── fake Shopify admin ────────────────────────────────────────────────────── */
+// The trusted config the combo weight Function reads (combo-weight-shopify.server.js).
+const COMBO_CONFIG = { version: 1, currency: 'INR', templates: { 12: {
+  id: 12, hash: 'h1', unit: 'kg', max_grams: 2200, product_ids: [], collection_ids: ['900'],
+  tiers: [
+    { min_grams: 1000, type: 'percentage', value: 10, label: '1 kg box: 10% off' },
+    { min_grams: 2000, type: 'fixed_price', value: 1700, label: '2 kg box for ₹1700' },
+  ],
+} } };
+const BOOKS = {
+  'gid://shopify/ProductVariant/21': { price: 110, title: 'Novel', tags: [], grams: 300, collections: ['gid://shopify/Collection/900'] },
+  'gid://shopify/ProductVariant/22': { price: 120, title: 'Atlas', tags: [], grams: 450, collections: ['gid://shopify/Collection/900'] },
+  'gid://shopify/ProductVariant/23': { price: 100, title: 'Poster', tags: [], grams: null, collections: ['gid://shopify/Collection/900'] },
+  'gid://shopify/ProductVariant/24': { price: 900, title: 'Lamp', tags: [], grams: 2000, collections: ['gid://shopify/Collection/5'] },
+  'gid://shopify/ProductVariant/25': { price: 1000, title: 'Box set', tags: [], grams: 500, collections: ['gid://shopify/Collection/900'] },
+};
+
 function fakeAdmin(opts = {}) {
   const calls = [];
   const variants = opts.variants || {
@@ -60,17 +76,39 @@ function fakeAdmin(opts = {}) {
         } : null)) };
       } else if (op === 'CodCalculate') {
         const input = variables.input;
-        const items = input.lineItems.reduce((sum, li) => sum + variants[li.variantId].price * li.quantity, 0);
+        // A FIXED_AMOUNT line discount, read the way opts.lineDiscountPer says
+        // Shopify reads it ('unit' by default; 'line'; or 'none' = ignored).
+        const round2 = (n) => Math.round(n * 100) / 100;
+        const priced = input.lineItems.map((li) => {
+          const original = variants[li.variantId].price * li.quantity;
+          const d = li.appliedDiscount;
+          const per = opts.lineDiscountPer || 'unit';
+          const off = !d || per === 'none' ? 0 : round2(per === 'line' ? d.value : d.value * li.quantity);
+          return { li, original, off };
+        });
+        const items = round2(priced.reduce((sum, p) => sum + p.original - p.off, 0));
+        const lineOff = round2(priced.reduce((sum, p) => sum + p.off, 0));
         const discount = (input.discountCodes || []).includes('SAVE10') ? Math.round(items * 0.1) : 0;
         const shipping = Number(input.shippingLine?.priceWithCurrency?.amount || 0);
         data = { draftOrderCalculate: { userErrors: [], calculatedDraftOrder: {
           currencyCode: 'INR', taxesIncluded: true, discountCodes: input.discountCodes || [],
-          lineItems: input.lineItems.map((li) => ({ name: variants[li.variantId].title, title: variants[li.variantId].title, variantTitle: 'Default Title', quantity: li.quantity, image: null,
+          lineItems: priced.map(({ li, original, off }) => ({ name: variants[li.variantId].title, title: variants[li.variantId].title, variantTitle: 'Default Title', quantity: li.quantity, image: null,
             sku: `SKU-${li.variantId.split('/').pop()}`, variant: { id: li.variantId }, product: { id: 'gid://shopify/Product/1' },
-            originalTotalSet: money(variants[li.variantId].price * li.quantity), discountedTotalSet: money(variants[li.variantId].price * li.quantity) })),
-          lineItemsSubtotalPrice: money(items), subtotalPriceSet: money(items - discount), totalDiscountsSet: money(discount),
-          totalShippingPriceSet: money(shipping), totalTaxSet: money(0), totalPriceSet: money(items - discount + shipping),
+            originalTotalSet: money(original), discountedTotalSet: money(round2(original - off)) })),
+          lineItemsSubtotalPrice: money(items), subtotalPriceSet: money(items - discount), totalDiscountsSet: money(lineOff + discount),
+          totalShippingPriceSet: money(shipping), totalTaxSet: money(0), totalPriceSet: money(round2(items - discount + shipping)),
         } } };
+      } else if (op === 'CodComboWeight') {
+        data = {
+          shop: { metafield: opts.comboConfig === null ? null : { jsonValue: opts.comboConfig || COMBO_CONFIG } },
+          discountNodes: { nodes: [{ discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Combo Weight', status: opts.comboStatus || 'ACTIVE' } }] },
+        };
+      } else if (op === 'CodComboVariants') {
+        data = { nodes: variables.ids.map((id) => (variants[id] ? {
+          id, price: String(variants[id].price),
+          inventoryItem: { measurement: { weight: variants[id].grams ? { value: variants[id].grams, unit: 'GRAMS' } : null } },
+          product: { id: variants[id].product || 'gid://shopify/Product/1', collections: { nodes: (variants[id].collections || []).map((c) => ({ id: c })) } },
+        } : null)) };
       } else if (op === 'CodCreate') {
         if (opts.rejectProvince && variables.input.shippingAddress.provinceCode) {
           data = { draftOrderCreate: { draftOrder: null, userErrors: [{ field: ['shippingAddress', 'provinceCode'], message: 'Province is invalid' }] } };
@@ -597,6 +635,44 @@ test('storefront config: returns display settings only, OTP only when Node has S
   }
 });
 
+test('storefront config: each place gets its own button look; turning the drawer off leaves the rest on', async () => {
+  await setPlan('pro');
+  await cod.saveCodSettings(SHOP, {
+    enabled: true, surfaces: { drawer: false, product: true, combo: true },
+    buttons: {
+      bg: '#0c7a43', style: 'filled', radius: 20, fontSize: 17,
+      product: { same: false, style: 'outline', bg: '#1d4ed8', icon: false },
+      combo: { same: false, style: 'minimal', bg: '#be185d', radius: 4, uppercase: true },
+      comboText: 'Pay cash',
+    },
+    productButton: { radius: 6 },
+  });
+  const { json } = await storefront(`action=config&shop=${SHOP}`);
+  assert.deepEqual(json.surfaces, { drawer: false, product: true, combo: true }, 'only the drawer is off');
+  assert.equal(json.enabled, true);
+  const { looks } = json.buttons;
+  assert.deepEqual(looks.drawer, { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 17, bold: true, uppercase: false, icon: true, radius: 20 });
+  assert.deepEqual([looks.product.style, looks.product.bg, looks.product.icon, looks.product.radius], ['outline', '#1d4ed8', false, 6]);
+  assert.deepEqual([looks.combo.style, looks.combo.bg, looks.combo.radius, looks.combo.uppercase], ['minimal', '#be185d', 4, true]);
+  assert.equal(json.buttons.comboText, 'Pay cash');
+
+  // A look stored by anything else is re-checked by PHP.
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  stored.buttons.combo = { same: false, style: '<b>', bg: 'red;x', fontSize: 400 };
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify(stored), SHOP]);
+  const again = (await storefront(`action=config&shop=${SHOP}`)).json.buttons.looks.combo;
+  assert.deepEqual([again.style, again.bg, again.fontSize], ['outline', '#111827', 22]);
+
+  // Settings saved before per-place looks: combo keeps its old look, product follows the drawer.
+  delete stored.buttons.combo;
+  delete stored.buttons.product;
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify(stored), SHOP]);
+  const old = (await storefront(`action=config&shop=${SHOP}`)).json.buttons.looks;
+  assert.deepEqual([old.combo.style, old.combo.icon, old.combo.radius], ['outline', false, 8]);
+  assert.equal(old.product.bg, '#0c7a43');
+  await cod.saveCodSettings(SHOP, { surfaces: { drawer: true }, buttons: { product: { same: true }, combo: { same: true } } });
+});
+
 test('storefront config: drawer placement, button style, fee switch / title / visibility and excluded behaviour', async () => {
   await setPlan('pro');
   await cod.saveCodSettings(SHOP, {
@@ -777,6 +853,95 @@ test('settings: the prepaid sync result is kept in _runtime, and survives later 
   }
   const { runtime: rt } = await cod.getCodSettingsWithRuntime(SHOP);
   assert.equal(rt.prepaid.verified, true);
+});
+
+/* ── weight combo boxes: COD charges what Shopify checkout charges ──────────── */
+
+const boxLine = (variantId, quantity, extra = {}) => ({ variantId, quantity, properties: { _brix_combo_id: '12', _brix_combo_group: 'box-1', _brix_combo_version: 'h1', ...extra } });
+const boxAdmin = (opts = {}) => fakeAdmin({ variants: BOOKS, ...opts });
+const boxQuote = (admin, lines, extra = {}) => cod.quoteCod(admin, { settings: settingsOn(), lines, surface: 'combo', comboWeightLive: true, ...extra });
+
+test('combo box: the 10% tier as a line discount; markers stripped; other automatic discounts off', async () => {
+  const admin = boxAdmin();
+  const { quote, input } = await boxQuote(admin, [boxLine('21', 4)]); // 1.2 kg of ₹110 books
+  assert.equal(quote.itemsTotal, 440);
+  assert.equal(quote.comboDiscount, 44);
+  assert.deepEqual(quote.comboDiscounts, [{ templateId: '12', title: '1 kg box: 10% off', weight: '1.2 kg', amount: 44 }]);
+  assert.equal(quote.discounts, 0, 'nothing else taken off');
+  assert.equal(quote.total, 440 - 44 + 49);
+  const [li] = input.lineItems;
+  assert.deepEqual(li.appliedDiscount, { valueType: 'FIXED_AMOUNT', value: 11, title: '1 kg box: 10% off', description: 'BRIX combo box' });
+  assert.deepEqual(li.customAttributes, [{ key: '_brixCod', value: 'true' }], '_brix_combo_* never reach the draft, so the Function cannot discount twice');
+  assert.equal(input.acceptAutomaticDiscounts, false);
+});
+
+test('combo box: a fixed box price split exactly across lines (uneven units split the line)', async () => {
+  // 3 × 500 g box sets (₹1000) + 2 × 300 g novels (₹110) = 2.1 kg, ₹3220 → box price ₹1700
+  const { quote, input } = await boxQuote(boxAdmin(), [boxLine('25', 3), boxLine('21', 2)]);
+  assert.equal(quote.comboDiscount, 1520);
+  assert.equal(quote.total, 1700 + 49);
+  const off = input.lineItems.reduce((sum, li) => sum + (li.appliedDiscount ? Math.round(li.appliedDiscount.value * 100) * li.quantity : 0), 0);
+  assert.equal(off, 152000, 'units add up to exactly the box discount');
+  assert.deepEqual(input.lineItems.map((li) => [li.variantId.split('/').pop(), li.quantity]), [['25', 3], ['21', 1], ['21', 1]]);
+});
+
+test('combo box: if Shopify reads line discounts per line, that is detected; if it applies neither way, COD is refused', async () => {
+  const perLine = await boxQuote(boxAdmin({ lineDiscountPer: 'line' }), [boxLine('21', 4)]);
+  assert.equal(perLine.quote.total, 440 - 44 + 49);
+  assert.equal(perLine.input.lineItems[0].appliedDiscount.value, 44);
+  await assert.rejects(boxQuote(boxAdmin({ lineDiscountPer: 'none' }), [boxLine('21', 4)]), (e) => e.code === 'combo_price_mismatch');
+  // back to per-unit
+  const perUnit = await boxQuote(boxAdmin(), [boxLine('21', 4)]);
+  assert.equal(perUnit.quote.total, 440 - 44 + 49);
+});
+
+test('combo box: locked, over the max, not Pro, discount inactive, unknown template → full price', async () => {
+  const fullPrice = async (lines, opts = {}, extra = {}) => {
+    const admin = boxAdmin(opts);
+    const { quote, input } = await boxQuote(admin, lines, extra);
+    assert.equal(quote.comboDiscount, 0);
+    assert.ok(input.lineItems.every((li) => !li.appliedDiscount));
+    assert.equal(input.acceptAutomaticDiscounts, true);
+    return admin;
+  };
+  await fullPrice([boxLine('21', 3)]); // 0.9 kg
+  await fullPrice([boxLine('25', 4), boxLine('21', 1)]); // 2.3 kg > 2.2 kg
+  const notPro = await fullPrice([boxLine('21', 4)], {}, { comboWeightLive: false });
+  assert.ok(!notPro.calls.some((c) => c.op === 'CodComboWeight'), 'no extra Shopify calls when the plan does not have it');
+  await fullPrice([boxLine('21', 4)], { comboStatus: 'EXPIRED' });
+  await fullPrice([boxLine('21', 4, { _brix_combo_id: '99' })]);
+  await fullPrice([boxLine('21', 4)], { comboConfig: null });
+  const plain = await fullPrice([{ variantId: '21', quantity: 4, properties: {} }]);
+  assert.ok(!plain.calls.some((c) => c.op === 'CodComboWeight'), 'ordinary carts make no extra calls');
+});
+
+test('combo box: products that do not qualify or have no weight do not count and are not discounted', async () => {
+  // the 2 kg lamp is outside the combo's collections; the poster has no weight
+  const { quote, input } = await boxQuote(boxAdmin(), [boxLine('21', 2), boxLine('24', 1), boxLine('23', 5)]);
+  assert.equal(quote.comboDiscount, 0, '600 g of books: locked');
+  const unlocked = await boxQuote(boxAdmin(), [boxLine('21', 4), boxLine('24', 1), boxLine('23', 1)]);
+  assert.equal(unlocked.quote.comboDiscount, 44, 'only the novels are discounted');
+  assert.deepEqual(unlocked.input.lineItems.map((li) => Boolean(li.appliedDiscount)), [true, false, false]);
+  assert.equal(input.lineItems.length, 3);
+});
+
+test('combo box: a coupon still goes to Shopify and is shown apart from the box discount', async () => {
+  const { quote } = await boxQuote(boxAdmin(), [boxLine('21', 4)], { coupon: 'SAVE10' });
+  assert.equal(quote.comboDiscount, 44);
+  assert.deepEqual(quote.coupon, { code: 'SAVE10', applied: true });
+  assert.equal(quote.discounts, 40, 'SAVE10 on the ₹396 box');
+  assert.equal(quote.total, 440 - 44 - 40 + 49);
+});
+
+test('combo box order: tagged brix-combo-weight with what was applied; the attribute cannot be forged', async () => {
+  const admin = boxAdmin();
+  await place(admin, { lines: [boxLine('21', 4)], surface: 'combo', comboWeightLive: true, attributes: { brix_combo_weight: 'forged' } });
+  const create = admin.calls.find((c) => c.op === 'CodCreate').variables.input;
+  assert.ok(create.tags.includes('brix-combo-weight'));
+  const attrs = create.customAttributes.filter((a) => a.key === 'brix_combo_weight');
+  assert.deepEqual(attrs, [{ key: 'brix_combo_weight', value: 'combo 12: 1 kg box: 10% off, 1.2 kg, -44.00' }]);
+  assert.equal(create.lineItems[0].appliedDiscount.title, '1 kg box: 10% off');
+  assert.equal(create.acceptAutomaticDiscounts, false);
 });
 
 const paymentOn = (patch = {}) => ({

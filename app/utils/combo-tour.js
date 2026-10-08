@@ -42,7 +42,7 @@ export const COMBO_TOUR_STEPS = [
   {
     id: 'discount', page: 'builder', target: '[data-tour="combo-discount"]', beforeStep: 'discount',
     title: 'Add a discount',
-    body: 'Turn on the coupon to reward shoppers who build a bundle. Pick an existing discount, or create a new one right here.',
+    body: 'Under Offer, turn on the coupon to reward shoppers who build a bundle. Pick an existing discount, or create a new one right here.',
   },
   {
     id: 'save', page: 'builder', target: '[data-tour="combo-save"]',

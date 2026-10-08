@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useState } from 'react';
 import { BlockStack, Box, ButtonGroup, Button, Card, Checkbox, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
-import { checkCodRules, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
-import { codButtonColors, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
+import { checkCodRules, codButtonLook, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
+import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
 import { PaymentOptionsScreen } from './PaymentOptionsPreview';
 
 const SURFACES = [
@@ -30,20 +30,21 @@ function CashIcon({ size = 16 }) {
 // preview is drawn at real size.
 const PHONE_SCALE = 0.8;
 
-// The storefront COD button, drawn the way brix_cod.js draws it. With `size`
-// it uses the storefront's exact sizes, at `scale`.
-export function CodButton({ settings, label, sub, disabled, size, scale = PHONE_SCALE }) {
+// The storefront COD button, drawn the way brix_cod.js draws it, in the look
+// of its place (`look`, from codButtonLook; default the cart drawer's). With
+// `size` it uses the storefront's exact sizes, at `scale`.
+export function CodButton({ settings, look: placeLook, label, sub, disabled, size, scale = PHONE_SCALE }) {
+  const look = placeLook || codButtonLook(settings, 'drawer');
   const px = (n) => `${Math.round(n * scale * 10) / 10}px`;
   const sized = size ? {
     margin: `${px(size.marginTop)} 0 ${px(size.marginBottom)}`,
     padding: `${px(size.paddingY)} ${px(size.paddingX)}`,
     borderRadius: px(size.radius),
-    fontSize: px(15),
   } : null;
   return (
-    <div className="cod-pv-btn" style={{ ...codButtonColors(settings.buttons), opacity: disabled ? 0.5 : 1, ...sized }}>
-      <span className="cod-pv-btn-l"><CashIcon size={size ? 18 * scale : 16} />{label}</span>
-      {sub ? <span className="cod-pv-btn-s" style={size ? { fontSize: px(11.5) } : undefined}>{sub}</span> : null}
+    <div className="cod-pv-btn" style={{ ...codButtonColors(look), ...codButtonType(look, size ? scale : 1), opacity: disabled ? 0.5 : 1, ...sized }}>
+      <span className="cod-pv-btn-l">{look.icon !== false && <CashIcon size={size ? 18 * scale : 16} />}{label}</span>
+      {sub ? <span className="cod-pv-btn-s" style={{ textTransform: 'none', letterSpacing: 'normal', ...(size ? { fontSize: px(11.5) } : null) }}>{sub}</span> : null}
     </div>
   );
 }
@@ -153,8 +154,14 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
 export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false, device = 'desktop' }) {
   const hasTags = settings.excludedProductTags.length > 0;
   const excluded = hasTags && excludedOn;
-  const ruleSurface = surface === 'sheet' ? 'drawer' : surface;
-  const rule = excluded
+  // The popup opens from every place, so its preview isn't tied to one
+  // place's on/off switch (turning the cart drawer off must not make the
+  // popup, or the charges and rules shown in it, look off).
+  const ruleSurface = surface === 'sheet' ? undefined : surface;
+  const anywhere = Object.values(settings.surfaces || {}).some((on) => on !== false);
+  const rule = surface === 'sheet' && settings.enabled && !anywhere
+    ? { code: 'cod_disabled', message: 'COD is turned off on the cart drawer, product pages and combo pages, so shoppers can’t open this.' }
+    : excluded
     ? checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money, productTags: [settings.excludedProductTags[0]] })
     : checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money });
   const charges = codCharges(settings, cart);
@@ -206,13 +213,36 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
           <div className="cod-scr-buys">
             <div className="cod-scr-atc">Add to cart</div>
             {codHidden ? <Hidden>COD button hidden: {why}</Hidden>
-              : <CodButton settings={settings} label={settings.buttons.productText} sub={excluded ? 'Not available for this product' : feeHint} disabled={excluded} size={pb} />}
+              : <CodButton settings={settings} look={codButtonLook(settings, 'product')} label={settings.buttons.productText} sub={excluded ? 'Not available for this product' : feeHint} disabled={excluded} size={pb} />}
             {/* Buy it now is only hidden while a usable COD button shows, as on the storefront. */}
             {(codHidden || excluded || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
           </div>
         </div>
       </div>
     );
+  } else if (surface === 'combo') {
+    // A combo page's bottom bar: Checkout plus the COD button in its own look
+    // (combo-page.js draws it the same way, from BrixCod.comboButton()).
+    const comboLook = codButtonLook(settings, 'combo');
+    const codHidden = !settings.enabled || surfaceOff;
+    screen = (
+      <div className="cod-scr cod-scr-combo">
+        <div className="cod-scr-combo-h"><b>Build your combo</b><span>Pick 3 and save</span></div>
+        <div className="cod-scr-combo-grid" aria-hidden="true">
+          {['#c7d2fe', '#fde68a', '#bbf7d0'].map((c) => <span key={c} style={{ background: `linear-gradient(135deg, ${c}, #fff)` }}><i /></span>)}
+        </div>
+        <div className="cod-scr-combo-bar">
+          <div className="cod-scr-combo-total"><span>Final</span><b>{money(cart)}</b></div>
+          <div className="cod-scr-combo-btns">
+            <div className="cod-scr-combo-co">Checkout</div>
+            {codHidden
+              ? <Hidden>COD button hidden: {settings.enabled ? 'combo pages are turned off' : 'COD is off'}</Hidden>
+              : <CodButton settings={settings} look={comboLook} label={settings.buttons.comboText || 'Cash on Delivery'} size={{ marginTop: 0, marginBottom: 0, paddingY: 12, paddingX: 18, radius: comboLook.radius }} />}
+          </div>
+        </div>
+      </div>
+    );
+    caption = 'Sample combo page. Every layout shows the COD button in this look, next to Checkout.';
   } else {
     const head = (
       <div className="cod-pv-top">
@@ -266,6 +296,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
                     <div className="cod-pv-tot"><span>Pay on delivery</span><span>{money(total)}</span></div>
                   </div>
                   {settings.prepaidNudgeText ? <div className="cod-pv-nudge">{settings.prepaidNudgeText} <u>Pay online</u></div> : null}
+                  <div className="cod-pv-agr"><span className="cod-pv-box" aria-hidden="true">✓</span>I agree to the <a href="https://thebrix.io/cod-data-policy" target="_blank" rel="noopener noreferrer">data policy</a></div>
                   <div className="cod-pv-place">Place COD order · {money(total)}</div>
                 </>
               )}

@@ -71,6 +71,7 @@ const FEATURES = [
     'ai_analytics'             => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
     'advanced_ai_analytics'    => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
     'unlimited_ai_agents'      => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
+    'combo_weight_pricing'     => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
 ];
 
 function plan_is_valid_key($key) {

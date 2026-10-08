@@ -32,8 +32,9 @@ import ChipInput from '../components/cod/ChipInput';
 import { buildCodScreen, cartSliderMax, suggestedValue } from '../components/cod/CodPreview';
 import { CodFlow, PlacementPicker, FeeSummary, ExcludedTagsInput } from '../components/cod/CodSettingsCards';
 import {
-  toForm, toSettings, formErrors, secretsPatch, productButtonForm, PB_SIZES, STYLE_PRESETS, HEX, fullHex, contrastRatio, RADII,
+  toForm, toSettings, formErrors, secretsPatch, productButtonForm, PB_SIZES, HEX, RADII,
 } from '../components/cod/codSettingsForm';
+import ButtonDesignEditor from '../components/cod/ButtonDesignEditor';
 import { ColorField } from '../components/sections/ColorField';
 import { SliderField } from '../components/shared/SliderField';
 import { COD_ADMIN_CSS } from '../components/cod/codAdminStyles';
@@ -193,7 +194,7 @@ const GROUPS = [
     title: 'Cart drawer',
     items: [
       { id: 'position', label: 'Position', icon: CartIcon, preview: 'drawer', fields: [], toggle: 'drawer' },
-      { id: 'button', label: 'COD button', icon: ButtonIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color'] },
+      { id: 'button', label: 'Cart drawer button', icon: ButtonIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color'] },
       { id: 'theme', label: 'Theme compatibility', icon: CodeIcon, preview: 'drawer', fields: ['drawerSelector'] },
     ],
   },
@@ -201,7 +202,9 @@ const GROUPS = [
     title: 'Other pages',
     items: [
       { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText'], toggle: 'product' },
-      { id: 'combo', label: 'Combo pages', icon: CollectionIcon, preview: 'drawer', fields: [], toggle: 'combo' },
+      { id: 'productbtn', label: 'Product page button', icon: ButtonIcon, preview: 'product', fields: ['productBg', 'productColor'] },
+      { id: 'combo', label: 'Combo pages', icon: CollectionIcon, preview: 'combo', fields: ['comboText'], toggle: 'combo' },
+      { id: 'combobtn', label: 'Combo page button', icon: ButtonIcon, preview: 'combo', fields: ['comboBg', 'comboColor'] },
     ],
   },
   {
@@ -240,7 +243,7 @@ const GROUPS = [
   },
 ];
 const SECTIONS = GROUPS.flatMap((g) => g.items);
-const SURFACES = [['drawer', 'Cart drawer'], ['product', 'Product page'], ['sheet', 'COD checkout']];
+const SURFACES = [['drawer', 'Cart drawer'], ['product', 'Product page'], ['combo', 'Combo page'], ['sheet', 'COD checkout']];
 
 // useLayoutEffect warns during server rendering; it only matters in the browser.
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
@@ -272,7 +275,6 @@ function useFitToFrame(outerRef, innerRef, pad, centre, deps) {
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   return fit;
 }
-const BUTTON_STYLES = [['filled', 'Filled'], ['outline', 'Outline'], ['minimal', 'Minimal']];
 
 export default function CodCustomizePage() {
   const data = useLoaderData();
@@ -362,8 +364,18 @@ export default function CodCustomizePage() {
     );
   }
 
-  const textOnWhite = form.btnStyle !== 'filled';
-  const ratio = textOnWhite ? contrastRatio(form.bg, '#ffffff') : contrastRatio(form.bg, form.color);
+  // The cart drawer button's look, edited with ButtonDesignEditor (its form
+  // fields are flat: bg, color, btnStyle, ...).
+  const drawerLook = {
+    style: form.btnStyle, bg: form.bg, color: form.color, radius: form.btnRadius,
+    fontSize: form.btnFontSize, bold: form.btnBold, uppercase: form.btnUppercase, icon: form.btnIcon,
+  };
+  const DRAWER_FIELDS = { style: 'btnStyle', bg: 'bg', color: 'color', radius: 'btnRadius', fontSize: 'btnFontSize', bold: 'btnBold', uppercase: 'btnUppercase', icon: 'btnIcon' };
+  const setDrawerLook = (patch) => setForm((f) => {
+    const next = { ...f };
+    for (const [k, v] of Object.entries(patch)) if (DRAWER_FIELDS[k]) next[DRAWER_FIELDS[k]] = v;
+    return next;
+  });
   const otpOn = form.requireOtp && data.sms.configured;
 
   /* --- section contents (only the open one is built) --- */
@@ -411,54 +423,46 @@ export default function CodCustomizePage() {
     if (id === 'button') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">How the Cash on Delivery button looks. Also used for the product page button.</Text>
+          <Text as="p" tone="subdued">How the Cash on Delivery button looks in the cart drawer. Product pages and combo pages have their own button designs (Other pages).</Text>
           <Card>
-            <FormLayout>
-              <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" />
-              <BlockStack gap="100">
-                <Text as="p">Button style</Text>
-                <ButtonGroup variant="segmented" fullWidth>
-                  {BUTTON_STYLES.map(([s, label]) => (
-                    <Button key={s} pressed={form.btnStyle === s} onClick={() => set('btnStyle')(s)}>{label}</Button>
-                  ))}
-                </ButtonGroup>
-              </BlockStack>
-            </FormLayout>
+            <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" />
           </Card>
+          <ButtonDesignEditor
+            look={drawerLook}
+            onChange={setDrawerLook}
+            errors={{ bg: errors.bg, color: errors.color }}
+          />
+        </BlockStack>
+      );
+    }
+    if (id === 'productbtn' || id === 'combobtn') {
+      const isProduct = id === 'productbtn';
+      const key = isProduct ? 'productLook' : 'comboLook';
+      const lookNow = form[key];
+      const setLook = (patch) => setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
+      const where = isProduct ? 'product pages' : 'combo pages';
+      return (
+        <BlockStack gap="400">
+          <Text as="p" tone="subdued">How the Cash on Delivery button looks on {where}.</Text>
           <Card>
-            <FormLayout>
-              <Text as="h3" variant="headingMd">Colours</Text>
-              <InlineStack gap="400" wrap={false}>
-                <ColorField label="Button colour" value={form.bg} onChange={set('bg')} />
-                {textOnWhite ? (
-                  <div style={{ flex: 1 }}><TextField label="Text colour" value="Button colour" disabled autoComplete="off" /></div>
-                ) : (
-                  <ColorField label="Text colour" value={form.color} onChange={set('color')} />
-                )}
-              </InlineStack>
-              {(errors.bg || errors.color) && <Text as="p" tone="critical" variant="bodySm">{errors.bg || errors.color}</Text>}
-              <div className="cod-swatches" aria-label="Colour presets">
-                {STYLE_PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    title={p.name}
-                    aria-label={`Use ${p.name}`}
-                    className={`cod-swatch${fullHex(form.bg) === p.bg && fullHex(form.color) === p.color ? ' on' : ''}`}
-                    style={{ background: `linear-gradient(135deg, ${p.bg} 60%, ${p.color} 60%)` }}
-                    onClick={() => setForm((f) => ({ ...f, bg: p.bg, color: p.color }))}
-                  />
-                ))}
-              </div>
-              {HEX.test(form.bg) && HEX.test(form.color) && ratio < 4.5 && (
-                <InlineStack gap="200" blockAlign="center">
-                  <Badge tone="warning">{`Hard to read · ${ratio.toFixed(1)}:1`}</Badge>
-                  {!textOnWhite && <Button variant="plain" onClick={() => set('color')(contrastRatio(form.bg, '#ffffff') >= contrastRatio(form.bg, '#111827') ? '#ffffff' : '#111827')}>Fix text colour</Button>}
-                </InlineStack>
-              )}
-              <SliderField label="Border radius" value={Number(form.btnRadius) || 0} min={0} max={40} suffix="px" onChange={set('btnRadius')} />
-            </FormLayout>
+            <Checkbox
+              label="Same design as the cart drawer button"
+              helpText={lookNow.same !== false ? 'Changes to the cart drawer button show here too.' : `${isProduct ? 'Product' : 'Combo'} pages use their own design below.`}
+              checked={lookNow.same !== false}
+              onChange={(v) => setLook(v ? { same: true } : { ...drawerLook, ...(isProduct ? {} : { radius: lookNow.radius ?? drawerLook.radius }), same: false })}
+            />
           </Card>
+          {lookNow.same === false && (
+            <ButtonDesignEditor
+              look={lookNow}
+              onChange={setLook}
+              showRadius={!isProduct}
+              errors={{ bg: errors[isProduct ? 'productBg' : 'comboBg'], color: errors[isProduct ? 'productColor' : 'comboColor'] }}
+            />
+          )}
+          {isProduct && lookNow.same === false && (
+            <Text as="p" variant="bodySm" tone="subdued">Corners and size are under Product page → Size and spacing.</Text>
+          )}
         </BlockStack>
       );
     }
@@ -499,7 +503,7 @@ export default function CodCustomizePage() {
                     checked={form.pbReplaceBuyNow}
                     onChange={set('pbReplaceBuyNow')}
                   />
-                  <TextField label="Button text" value={form.productText} onChange={set('productText')} error={errors.productText} maxLength={60} autoComplete="off" helpText="Style and colours come from COD button." />
+                  <TextField label="Button text" value={form.productText} onChange={set('productText')} error={errors.productText} maxLength={60} autoComplete="off" helpText="Its colours and style are under Product page button." />
                 </>
               )}
             </FormLayout>
@@ -537,7 +541,12 @@ export default function CodCustomizePage() {
         <BlockStack gap="400">
           <Text as="p" tone="subdued">A COD button next to Checkout on Build a Combo pages.</Text>
           <Card>
-            <Checkbox label="Show COD on combo pages" helpText="Each combo template can still hide or style it in the combo builder." checked={form.combo} onChange={set('combo')} />
+            <FormLayout>
+              <Checkbox label="Show COD on combo pages" helpText="A combo template can still hide it (combo builder → Behaviour)." checked={form.combo} onChange={set('combo')} />
+              {form.combo && (
+                <TextField label="Button text" value={form.comboText} onChange={set('comboText')} error={errors.comboText} maxLength={60} autoComplete="off" helpText="Its colours and style are under Combo page button." />
+              )}
+            </FormLayout>
           </Card>
         </BlockStack>
       );

@@ -42,13 +42,24 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   allowCoupons: true,
   prepaidNudgeText: '',
   orderTags: ['COD'],
+  // The COD button's look, per place. The top-level fields are the cart
+  // drawer button; `product` and `combo` either follow it (same: true) or
+  // have their own look. Resolve with codButtonLook(settings, surface).
   buttons: {
     drawerText: 'Cash on Delivery',
     productText: 'Buy with Cash on Delivery',
+    comboText: 'Cash on Delivery',
     bg: '#111827',
     color: '#ffffff',
     style: 'filled', // filled | outline | minimal (outline/minimal use bg for text and border)
     radius: 12, // cart drawer button corners, px (product page has productButton.radius)
+    fontSize: 15,
+    bold: true,
+    uppercase: false,
+    icon: true, // the cash icon before the text
+    product: { same: true, style: 'filled', bg: '#111827', color: '#ffffff', fontSize: 15, bold: true, uppercase: false, icon: true },
+    // Matches how combo pages drew it before it was configurable here.
+    combo: { same: false, style: 'outline', bg: '#111827', color: '#ffffff', radius: 8, fontSize: 15, bold: true, uppercase: false, icon: false },
   },
   // The product page COD button (brix_cod.js initProductButton). Sizes in px.
   productButton: {
@@ -164,6 +175,51 @@ export function parseTags(value) {
   return [...new Set(list(value).map((t) => String(t).trim()).filter((t) => TAG_RE.test(t)))].slice(0, 50);
 }
 
+export const COD_BUTTON_FONT_SIZES = [12, 22];
+
+/**
+ * One COD button look: { style, bg, color, fontSize, bold, uppercase, icon }
+ * (+ radius, + same). Valid fields of `patch` win, the rest keep `base`.
+ */
+function sanitizeButtonLook(patch, base, { radius = false, same = false } = {}) {
+  const q = patch && typeof patch === 'object' ? patch : {};
+  const out = {
+    style: COD_BUTTON_STYLES.includes(q.style) ? q.style : (COD_BUTTON_STYLES.includes(base.style) ? base.style : 'filled'),
+    bg: HEX_RE.test(q.bg || '') ? q.bg : (HEX_RE.test(base.bg || '') ? base.bg : '#111827'),
+    color: HEX_RE.test(q.color || '') ? q.color : (HEX_RE.test(base.color || '') ? base.color : '#ffffff'),
+    fontSize: int('fontSize' in q ? q.fontSize : base.fontSize, 15, ...COD_BUTTON_FONT_SIZES),
+    bold: 'bold' in q ? Boolean(q.bold) : base.bold !== false,
+    uppercase: 'uppercase' in q ? Boolean(q.uppercase) : Boolean(base.uppercase),
+    icon: 'icon' in q ? Boolean(q.icon) : base.icon !== false,
+  };
+  if (radius) out.radius = int('radius' in q ? q.radius : base.radius, 12, 0, 40);
+  if (same) out.same = 'same' in q ? Boolean(q.same) : base.same !== false;
+  return out;
+}
+
+/**
+ * The COD button for one place ('drawer' | 'product' | 'combo'), as drawn:
+ * { text, style, bg, color, radius, fontSize, bold, uppercase, icon }.
+ * Product and combo use the cart drawer look while their `same` is on. The
+ * product page's corners are productButton.radius (with its other sizes).
+ * Mirrored by php_backend/cod_storefront.php cods_button_looks().
+ */
+export function codButtonLook(settings, surface = 'drawer') {
+  const b = { ...DEFAULT_COD_SETTINGS.buttons, ...(settings?.buttons || {}) };
+  const pick = (l) => ({ style: l.style, bg: l.bg, color: l.color, fontSize: l.fontSize ?? 15, bold: l.bold !== false, uppercase: Boolean(l.uppercase), icon: l.icon !== false });
+  const drawer = { ...pick(b), radius: b.radius ?? 12 };
+  if (surface === 'product') {
+    const own = b.product && b.product.same === false ? b.product : b;
+    const pbRadius = settings?.productButton?.radius ?? DEFAULT_COD_SETTINGS.productButton.radius;
+    return { ...pick(own), radius: pbRadius, text: b.productText };
+  }
+  if (surface === 'combo') {
+    const own = b.combo && b.combo.same === false ? b.combo : null;
+    return own ? { ...pick(own), radius: own.radius ?? 8, text: b.comboText } : { ...drawer, text: b.comboText };
+  }
+  return { ...drawer, text: b.drawerText };
+}
+
 /**
  * Merge a (possibly partial / untrusted) settings patch onto `base`, returning
  * a complete, valid settings object. Unknown keys are dropped.
@@ -175,17 +231,17 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
   if (p.surfaces && typeof p.surfaces === 'object') {
     for (const key of COD_SURFACES) if (key in p.surfaces) surfaces[key] = Boolean(p.surfaces[key]);
   }
-  const buttons = { ...DEFAULT_COD_SETTINGS.buttons, ...(b.buttons || {}) };
-  if (p.buttons && typeof p.buttons === 'object') {
-    buttons.drawerText = text(p.buttons.drawerText, buttons.drawerText, 60);
-    buttons.productText = text(p.buttons.productText, buttons.productText, 60);
-    if (HEX_RE.test(p.buttons.bg || '')) buttons.bg = p.buttons.bg;
-    if (HEX_RE.test(p.buttons.color || '')) buttons.color = p.buttons.color;
-    if (COD_BUTTON_STYLES.includes(p.buttons.style)) buttons.style = p.buttons.style;
-    if ('radius' in p.buttons) buttons.radius = int(p.buttons.radius, buttons.radius, 0, 40);
-  }
-  if (!COD_BUTTON_STYLES.includes(buttons.style)) buttons.style = 'filled';
-  buttons.radius = int(buttons.radius, 12, 0, 40);
+  const D = DEFAULT_COD_SETTINGS.buttons;
+  const bb = b.buttons || {};
+  const pb = p.buttons && typeof p.buttons === 'object' ? p.buttons : null;
+  const buttons = {
+    ...sanitizeButtonLook(pb, { ...D, ...bb }, { radius: true }),
+    drawerText: text(pb?.drawerText, bb.drawerText || D.drawerText, 60),
+    productText: text(pb?.productText, bb.productText || D.productText, 60),
+    comboText: text(pb?.comboText, bb.comboText || D.comboText, 60),
+    product: sanitizeButtonLook(pb?.product, { ...D.product, ...(bb.product || {}) }, { same: true }),
+    combo: sanitizeButtonLook(pb?.combo, { ...D.combo, ...(bb.combo || {}) }, { same: true, radius: true }),
+  };
   const productButton = { ...DEFAULT_COD_SETTINGS.productButton, ...(b.productButton || {}) };
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;

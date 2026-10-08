@@ -9,8 +9,8 @@ import { useState } from 'react';
 import {
   productPaymentPricing, fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, PAY_SPACING_PX,
 } from '../../utils/product-payment.shared';
-import { checkCodRules, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
-import { codButtonColors, codFeeLabel } from './codButtonLook';
+import { checkCodRules, codButtonLook, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
+import { codButtonColors, codButtonType, codFeeLabel } from './codButtonLook';
 
 export const SAMPLE_PRODUCT = Object.freeze({
   title: 'Classic Cotton Tee',
@@ -194,9 +194,10 @@ export function PaymentOptionsScreen({ settings, money, phone }) {
   const ctaStyle = { margin: `${px(pbLook.marginTop)} 0 ${px(pbLook.marginBottom)}`, padding: `${px(pbLook.paddingY)} ${px(pbLook.paddingX)}`, borderRadius: px(pbLook.radius), fontSize: px(15) };
   let cta = null;
   if (method === 'cod') {
+    const look = codButtonLook(settings, 'product');
     cta = (
-      <div className="cod-pv-btn" data-pv-cta="cod" style={{ ...codButtonColors(settings.buttons), opacity: codReason ? 0.5 : 1, ...ctaStyle }}>
-        <span className="cod-pv-btn-l"><Svg name="cash" size={14} />{settings.buttons.productText}</span>
+      <div className="cod-pv-btn" data-pv-cta="cod" style={{ ...codButtonColors(look), opacity: codReason ? 0.5 : 1, ...ctaStyle, ...codButtonType(look, SCALE) }}>
+        <span className="cod-pv-btn-l">{look.icon !== false && <Svg name="cash" size={14} />}{settings.buttons.productText}</span>
       </div>
     );
   } else if (method === 'online') {

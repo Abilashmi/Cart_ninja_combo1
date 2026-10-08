@@ -36,6 +36,8 @@ import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import { getCodSettings } from '../services/cod.server';
+import { codButtonLook } from '../utils/cod.shared';
+import { codButtonColors, codButtonType } from '../components/cod/codButtonLook';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
@@ -44,8 +46,14 @@ import CartDrawerEmbedModal from '../components/bundles/CartDrawerEmbedModal';
 import ComboSetupTour from '../components/bundles/ComboSetupTour';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import { checkComboPlanGate } from '../services/combo-templates.server';
+import { getComboWeightDiscountStatus } from '../services/combo-weight-shopify.server';
 import prisma from '../db.server';
 import { useCurrency } from '../components/CurrencyContext';
+import WeightMeter from '../components/customization/WeightMeter';
+import { usePlan } from '../components/PlanContext';
+import { ProBadge } from '../components/plan/PlanGate';
+import { WEIGHT_BOX_CSS, tierOfferText, weightBoxVars } from '../utils/combo-weight-box.css.js';
+import { WEIGHT_BOX_LAYOUT, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -598,7 +606,7 @@ export const loader = async ({ request }) => {
         `#graphql
       query getProducts {
         products(first: 60) {
-          nodes { id title handle vendor totalInventory descriptionHtml images(first: 8) { nodes { url } } featuredMedia { preview { image { url } } } collections(first: 5) { nodes { handle } } variants(first: 10) { nodes { id title price compareAtPrice availableForSale inventoryQuantity image { url } } } }
+          nodes { id title handle vendor totalInventory descriptionHtml images(first: 8) { nodes { url } } featuredMedia { preview { image { url } } } collections(first: 5) { nodes { handle } } variants(first: 10) { nodes { id title price compareAtPrice availableForSale inventoryQuantity image { url } inventoryItem { measurement { weight { value unit } } } } } }
         }
       }`
       )
@@ -622,10 +630,11 @@ export const loader = async ({ request }) => {
           Number(p.totalInventory || 0) > 0 ||
           hasSellableVariant,
         collections: p.collections?.nodes || [],
-        variants: variants.map((v) => ({
+        variants: variants.map(({ inventoryItem, ...v }) => ({
           ...v,
           available:
             v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0,
+          grams: toGrams(inventoryItem?.measurement?.weight?.value, inventoryItem?.measurement?.weight?.unit),
         })),
         secondImageSrc:
           p.images?.nodes?.length > 1 ? p.images.nodes[1].url : null,
@@ -652,9 +661,10 @@ export const loader = async ({ request }) => {
 
   // BRIX COD Checkout: the preview bar shows the Cash on Delivery button
   // only when the merchant has COD on for combo pages (see app.cod.jsx).
-  const codEnabledPromise = getCodSettings(shop)
-    .then((s) => Boolean(s.enabled && s.surfaces.combo))
-    .catch(() => false);
+  // Its look is the combo page button design from COD → Customize.
+  const codPromise = getCodSettings(shop)
+    .then((s) => ({ enabled: Boolean(s.enabled && s.surfaces.combo), look: codButtonLook(s, 'combo') }))
+    .catch(() => ({ enabled: false, look: null }));
 
   // No templateId means this is a brand-new template, not an edit of an
   // existing one. Block Free shops / Starter shops at their cap here too —
@@ -764,6 +774,7 @@ export const loader = async ({ request }) => {
                     availableForSale
                     inventoryQuantity
                     image { url }
+                    inventoryItem { measurement { weight { value unit } } }
                   }
                 }
               }
@@ -805,6 +816,7 @@ export const loader = async ({ request }) => {
               available:
                 v.availableForSale === true || Number(v.inventoryQuantity || 0) > 0,
               image: v.image ? { src: v.image.url } : null,
+              grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
             })),
           };
         });
@@ -876,6 +888,16 @@ export const loader = async ({ request }) => {
 
   const layoutFiles = [];
 
+  // Weight-priced combo: is its box discount really live in Shopify checkout?
+  let weightStatus = null;
+  if (initialTemplate?.id && isWeightCombo(initialTemplate.config)) {
+    const { value } = normalizeWeightPricing(initialTemplate.config.weight_pricing);
+    const status = await getComboWeightDiscountStatus(admin, [{ id: Number(initialTemplate.id), hash: value.hash }]);
+    weightStatus = initialTemplate.active
+      ? { state: status.state, verified: status.verified, message: status.message }
+      : { state: 'inactive', verified: false, message: 'This combo is turned off, so its box discount is not active.' };
+  }
+
   return Response.json({
     initialTemplate,
     shop,
@@ -884,7 +906,8 @@ export const loader = async ({ request }) => {
     existingTemplates: shopTemplates.map((t) => ({ id: t.id, title: t.title })),
     layoutFiles,
     activeDiscounts,
-    codEnabled: await codEnabledPromise,
+    ...(await codPromise.then((c) => ({ codEnabled: c.enabled, codComboLook: c.look }))),
+    weightStatus,
   });
 };
 
@@ -1141,9 +1164,9 @@ const DEMO_PRODUCTS = [
     secondImageSrc: 'https://placehold.co/400x400/eeeeee/555555?text=Back+View',
     collections: [],
     variants: [
-      { id: 'demo-v1', title: 'S', price: '29.99', available: true, inventoryQuantity: 10, image: null },
-      { id: 'demo-v2', title: 'M', price: '29.99', available: true, inventoryQuantity: 15, image: null },
-      { id: 'demo-v3', title: 'L', price: '29.99', available: true, inventoryQuantity: 25, image: null },
+      { id: 'demo-v1', title: 'S', price: '29.99', available: true, inventoryQuantity: 10, image: null, grams: 200 },
+      { id: 'demo-v2', title: 'M', price: '29.99', available: true, inventoryQuantity: 15, image: null, grams: 220 },
+      { id: 'demo-v3', title: 'L', price: '29.99', available: true, inventoryQuantity: 25, image: null, grams: 240 },
     ],
   },
   {
@@ -1157,8 +1180,8 @@ const DEMO_PRODUCTS = [
     secondImageSrc: 'https://placehold.co/400x400/283593/ffffff?text=Back+View',
     collections: [],
     variants: [
-      { id: 'demo-v4', title: 'M', price: '59.99', available: true, inventoryQuantity: 10, image: null },
-      { id: 'demo-v5', title: 'L', price: '59.99', available: true, inventoryQuantity: 20, image: null },
+      { id: 'demo-v4', title: 'M', price: '59.99', available: true, inventoryQuantity: 10, image: null, grams: 600 },
+      { id: 'demo-v5', title: 'L', price: '59.99', available: true, inventoryQuantity: 20, image: null, grams: 650 },
     ],
   },
   {
@@ -1172,9 +1195,9 @@ const DEMO_PRODUCTS = [
     secondImageSrc: 'https://placehold.co/400x400/c8e6c9/1b5e20?text=Side+View',
     collections: [],
     variants: [
-      { id: 'demo-v6', title: '8', price: '79.99', available: true, inventoryQuantity: 5, image: null },
-      { id: 'demo-v7', title: '9', price: '79.99', available: true, inventoryQuantity: 8, image: null },
-      { id: 'demo-v8', title: '10', price: '79.99', available: true, inventoryQuantity: 7, image: null },
+      { id: 'demo-v6', title: '8', price: '79.99', available: true, inventoryQuantity: 5, image: null, grams: 800 },
+      { id: 'demo-v7', title: '9', price: '79.99', available: true, inventoryQuantity: 8, image: null, grams: 820 },
+      { id: 'demo-v8', title: '10', price: '79.99', available: true, inventoryQuantity: 7, image: null, grams: 850 },
     ],
   },
   {
@@ -1188,8 +1211,8 @@ const DEMO_PRODUCTS = [
     secondImageSrc: null,
     collections: [],
     variants: [
-      { id: 'demo-v9', title: 'S/M', price: '39.99', available: true, inventoryQuantity: 20, image: null },
-      { id: 'demo-v10', title: 'L/XL', price: '39.99', available: true, inventoryQuantity: 20, image: null },
+      { id: 'demo-v9', title: 'S/M', price: '39.99', available: true, inventoryQuantity: 20, image: null, grams: 300 },
+      { id: 'demo-v10', title: 'L/XL', price: '39.99', available: true, inventoryQuantity: 20, image: null, grams: 320 },
     ],
   },
   {
@@ -1203,7 +1226,7 @@ const DEMO_PRODUCTS = [
     secondImageSrc: null,
     collections: [],
     variants: [
-      { id: 'demo-v11', title: 'One Size', price: '49.99', available: true, inventoryQuantity: 25, image: null },
+      { id: 'demo-v11', title: 'One Size', price: '49.99', available: true, inventoryQuantity: 25, image: null, grams: 250 },
     ],
   },
   {
@@ -1229,6 +1252,11 @@ const DEMO_PRODUCTS = [
 const SAMPLE_BANNER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI0MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2Y2ZjdmOSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNlOGVhZWUiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9Imdsb3cxIiBjeD0iNTAlIiBjeT0iNTAlIiByPSI1MCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAuOTUiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9Imdsb3cyIiBjeD0iNTAlIiBjeT0iNTAlIiByPSI1MCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmZmZmZmIiBzdG9wLW9wYWNpdHk9IjAuNyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNDAwIiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxjaXJjbGUgY3g9IjE2MCIgY3k9IjMyMCIgcj0iMTkwIiBmaWxsPSJ1cmwoI2dsb3cxKSIvPgogIDxjaXJjbGUgY3g9IjEwNDAiIGN5PSI3MCIgcj0iMjEwIiBmaWxsPSJ1cmwoI2dsb3cyKSIvPgogIDxlbGxpcHNlIGN4PSI2MDAiIGN5PSIyMDUiIHJ4PSIyODAiIHJ5PSI5NSIgZmlsbD0iI2RkZTFlNiIgb3BhY2l0eT0iMC40NSIvPgogIDxjaXJjbGUgY3g9IjQxMCIgY3k9IjE1MCIgcj0iNjYiIGZpbGw9IiNkM2Q4ZGUiIG9wYWNpdHk9IjAuNCIvPgogIDxjaXJjbGUgY3g9Ijc5MCIgY3k9IjI1NSIgcj0iODYiIGZpbGw9IiNkM2Q4ZGUiIG9wYWNpdHk9IjAuMzIiLz4KICA8cmVjdCB4PSI0OTUiIHk9IjE2OCIgd2lkdGg9IjIxMCIgaGVpZ2h0PSI3NCIgcng9IjM3IiBmaWxsPSIjZmZmZmZmIiBvcGFjaXR5PSIwLjU1Ii8+CiAgPGNpcmNsZSBjeD0iMjMwIiBjeT0iMTMwIiByPSI4IiBmaWxsPSIjYzdjZGQ1IiBvcGFjaXR5PSIwLjUiLz4KICA8Y2lyY2xlIGN4PSI5NjAiIGN5PSIzMDAiIHI9IjEwIiBmaWxsPSIjYzdjZGQ1IiBvcGFjaXR5PSIwLjUiLz4KICA8Y2lyY2xlIGN4PSI4ODAiIGN5PSIxMjAiIHI9IjUiIGZpbGw9IiNjN2NkZDUiIG9wYWNpdHk9IjAuNCIvPgo8L3N2Zz4K';
 
 const DEFAULT_COMBO_CONFIG = {
+  // Offer: 'count' = item-count combo with an optional coupon (the classic
+  // combo); 'weight' = weight-tier box pricing (Pro), see OfferSection.jsx
+  // and app/utils/combo-weight.shared.js.
+  pricing_mode: 'count',
+  weight_pricing: defaultWeightPricing(),
   show_tab_all: true,
   show_nav_arrows: true,
   enable_touch_swipe: true,
@@ -1550,6 +1578,34 @@ const LAYOUT_MAP = {
   combo_design_four: 'layout4',
   combo_main: 'layout1',
   custom_bundle_layout: 'layout1',
+  combo_weight_box: WEIGHT_BOX_LAYOUT,
+};
+
+// What a new Weight Box starts with: priced by weight, sample tiers the
+// merchant edits under Advanced → Offer (book-box friendly defaults).
+const WEIGHT_BOX_PRESET = {
+  layout: WEIGHT_BOX_LAYOUT,
+  pricing_mode: 'weight',
+  has_discount_offer: false,
+  selected_discount_id: null,
+  tab_count: 1,
+  tab_all_label: 'All',
+  collection_title: 'Build your box',
+  collection_description: 'Fill your box by weight. The heavier the box, the better the price.',
+  add_btn_text: 'Add to box',
+  primary_color: '#1f3a2e',
+  bg_color: '#faf7f2',
+  text_color: '#1c1917',
+  progress_success_color: '#15803d',
+  progress_bar_color: '#1f3a2e',
+  weight_pricing: {
+    ...defaultWeightPricing(),
+    max_grams: 2500,
+    tiers: [
+      { id: 't1', min_grams: 1000, type: 'percentage', value: 10, label: '' },
+      { id: 't2', min_grams: 2000, type: 'percentage', value: 15, label: '' },
+    ],
+  },
 };
 
 // Template catalogue shown in the picker screen
@@ -1626,11 +1682,38 @@ const TEMPLATE_CATALOGUE = [
       'Hero image is the centrepiece',
     ],
   },
+  {
+    id: 'combo_weight_box',
+    title: 'The Weight Box',
+    description:
+      'Shoppers fill a box by weight. Hit 1 kg, 2 kg… and the price drops, right in Shopify checkout.',
+    img: '/weight-box.svg',
+    fallbackImg: '/weight-box.svg',
+    badge: 'Priced by weight',
+    badgeTone: 'success',
+    blockName: 'combo_weight_box',
+    // Pro only: weight pricing is applied by the BRIX checkout discount.
+    featureKey: 'combo_weight_pricing',
+    howItWorks:
+      'Products show their weight. A live box panel fills up as shoppers add items and unlocks your weight tiers: a % off, an amount off, or a fixed box price.',
+    features: [
+      'Weight tiers: % off, amount off or box price',
+      'Live box panel with weight meter and price',
+      'Max box weight, enforced on the page',
+      'Same price at Shopify checkout and BRIX COD',
+    ],
+    bestFor: 'Books, dry fruits, tea, coffee, anything sold by weight',
+    differentiators: [
+      'Only layout priced by weight',
+      'Discount enforced at checkout, not just shown',
+    ],
+  },
 ];
 
 export default function Customize() {
   const shopify = useAppBridge();
   const { symbol: currencySymbol } = useCurrency();
+  const { canPublishFeature } = usePlan();
   const {
     activeDiscounts = [],
     initialTemplate = null,
@@ -1639,7 +1722,19 @@ export default function Customize() {
     collections: initialCollections = [],
     initialProducts: loaderProducts = [],
     shop,
+    weightStatus: loaderWeightStatus = null,
   } = useLoaderData();
+
+  // Weight-priced combos: whether the box discount is live in checkout (from
+  // the loader, then from each save's response), and the pricing hash that
+  // was last saved, so the Offer section can say when changes aren't saved.
+  const [weightStatus, setWeightStatus] = useState(loaderWeightStatus);
+  const [savedWeightHash, setSavedWeightHash] = useState(() => (
+    isWeightCombo(initialTemplate?.config)
+      ? normalizeWeightPricing(initialTemplate.config.weight_pricing).value.hash
+      : null
+  ));
+  const pendingWeightHashRef = useRef(null);
 
   // Background resource fetching for speed
   const resourceFetcher = useFetcher();
@@ -1716,14 +1811,24 @@ export default function Customize() {
         JSON.stringify(saveFetcher.data)
       );
     }
+    if (saveFetcher.data?.weightPricing) setWeightStatus(saveFetcher.data.weightPricing);
     if (saveFetcher.data?.success) {
       setSaveStatus('saved');
+      setSavedWeightHash(pendingWeightHashRef.current);
       shopify.toast.show(
         saveFetcher.data.message || 'Template saved successfully!'
       );
 
       // Don't navigate when just toggling active status
       if (lastSaveActionRef.current === 'toggle') {
+        return;
+      }
+
+      // An active weight combo whose box discount isn't live: stay here so
+      // the merchant sees why (Offer section status), instead of leaving.
+      const weight = saveFetcher.data.weightPricing;
+      if (weight && weight.active && !weight.verified) {
+        shopify.toast.show(weight.message, { isError: true, duration: 8000 });
         return;
       }
 
@@ -2229,7 +2334,10 @@ export default function Customize() {
     if (lp) {
       const mapped = LAYOUT_MAP[lp] || 'layout1';
       setPickedLayout((prev) => (prev === mapped ? prev : mapped));
-      setConfig((prev) => (prev.layout === mapped ? prev : { ...prev, layout: mapped }));
+      setConfig((prev) => {
+        if (prev.layout === mapped) return prev;
+        return mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : { ...prev, layout: mapped };
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -2242,7 +2350,7 @@ export default function Customize() {
       nextParams.set('layout', blockName);
       navigate(`/app/bundles/customize?${nextParams.toString()}`, { replace: true });
       setPickedLayout(mapped);
-      setConfig((prev) => ({ ...prev, layout: mapped }));
+      setConfig((prev) => (mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : { ...prev, layout: mapped }));
     },
     [navigate, searchParams]
   );
@@ -2254,6 +2362,13 @@ export default function Customize() {
     for (let i = 1; i <= numSteps; i++) {
       const h = config[`step_${i}_collection`];
       if (h && h !== '' && !fetchedHandlesRef.current.has(h)) handles.push(h);
+    }
+    // The Weight Box shows all its collections at once ("All" pill).
+    if (config.layout === WEIGHT_BOX_LAYOUT) {
+      for (let i = 1; i <= Number(config.tab_count || 1); i++) {
+        const h = config[`col_${i}`];
+        if (h && !fetchedHandlesRef.current.has(h) && !handles.includes(h)) handles.push(h);
+      }
     }
 
     if (handles.length > 0 && productFetcher.state === 'idle') {
@@ -2758,6 +2873,7 @@ export default function Customize() {
     const formData = new FormData();
     formData.append('body', JSON.stringify(body));
 
+    pendingWeightHashRef.current = isWeightCombo(config) ? normalizeWeightPricing(config.weight_pricing).value.hash : null;
     lastSaveActionRef.current = 'save';
     embedFetcher.load('/api/theme-embed-status');
     saveFetcher.submit(formData, {
@@ -2790,6 +2906,7 @@ export default function Customize() {
     const formData = new FormData();
     formData.append('body', JSON.stringify(body));
 
+    pendingWeightHashRef.current = savedWeightHash;
     lastSaveActionRef.current = 'toggle';
     saveFetcher.submit(formData, {
       method: 'POST',
@@ -2804,6 +2921,8 @@ export default function Customize() {
       case 'layout3':
       case 'layout4':
         return 'Editorial Split';
+      case 'layout5':
+        return 'Weight Box';
       case 'layout1':
       default:
         return 'Guided Architect';
@@ -3031,7 +3150,9 @@ export default function Customize() {
         <BrixBar size="md" floating />
         <ComboSetupTour page="picker" shop={shop} />
         <style>{`
-.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
+.template-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
+.tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px}
+@media(max-width:1400px){.template-picker-grid{grid-template-columns:repeat(2,1fr)}}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
 .tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
 .tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
@@ -3075,7 +3196,11 @@ export default function Customize() {
                 <div className="tpl-pick-badge">{tpl.badge}</div>
               </div>
               <div className="tpl-pick-body">
-                <Text variant="headingMd" as="h3" fontWeight="bold">{tpl.title}</Text>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <Text variant="headingMd" as="h3" fontWeight="bold">{tpl.title}</Text>
+                  {tpl.featureKey && <ProBadge featureKey={tpl.featureKey} />}
+                  {tpl.featureKey && canPublishFeature(tpl.featureKey) && <span className="tpl-pick-pro">Pro</span>}
+                </div>
                 <Text variant="bodySm" tone="subdued">{tpl.description}</Text>
                 {tpl.howItWorks && (
                   <div className="tpl-pick-how">
@@ -3097,9 +3222,15 @@ export default function Customize() {
                   <div className="tpl-pick-bestfor">Best for: <b>{tpl.bestFor}</b></div>
                 )}
                 <div style={{ marginTop: 6 }}>
-                  <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
-                    Use This Template
-                  </Button>
+                  {tpl.featureKey && !canPublishFeature(tpl.featureKey) ? (
+                    <Button fullWidth onClick={() => navigate('/app/subscribe')}>
+                      Upgrade to Pro to use this template
+                    </Button>
+                  ) : (
+                    <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
+                      Use This Template
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3111,6 +3242,23 @@ export default function Customize() {
 
   // ── Full customisation editor ────────────────────────────────────────────
   const handleSaveClick = () => {
+    // Weight pricing must be valid before it can be saved (the server checks again).
+    if (isWeightCombo(config)) {
+      const { errors: weightErrors } = normalizeWeightPricing(config.weight_pricing);
+      if (weightErrors.length) {
+        setActiveCategory('advanced');
+        setExpandedSections((prev) => ({ ...prev, discount: true }));
+        shopify.toast.show(weightErrors[0].message, { isError: true });
+        return;
+      }
+    }
+    if (config.layout === WEIGHT_BOX_LAYOUT
+      && !Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).some(Boolean)) {
+      setActiveCategory('layout');
+      setExpandedSections((prev) => ({ ...prev, general: true }));
+      shopify.toast.show('Choose at least one collection for the box', { isError: true });
+      return;
+    }
     if (config.layout === 'layout1') {
       const numSteps = Number(config.max_selections || 3);
       const newStepErrors = {};
@@ -3582,6 +3730,8 @@ export default function Customize() {
               )
             }
             onCreateCoupon={() => setCreateDiscountModalOpen(true)}
+            weightStatus={weightStatus}
+            savedWeightHash={savedWeightHash}
           />
         </div>
       </div>
@@ -4248,7 +4398,7 @@ function InlineEdit({ value, configKey, onUpdate, style }) {
 const BUILDER_COD_PREVIEW = { onCod: () => {} };
 
 function ComboPreview({
-  config,
+  config: rawConfig,
   device,
   products,
   collections = [],
@@ -4265,7 +4415,14 @@ function ComboPreview({
   onRequestSection = () => { },
 }) {
   const { symbol: currencySymbol } = useCurrency();
-  const { codEnabled } = useLoaderData() || {};
+  const { codEnabled, codComboLook } = useLoaderData() || {};
+  // The preview bar's COD button, in the combo page button design from COD → Customize.
+  const codPreview = useMemo(() => ({ ...BUILDER_COD_PREVIEW, look: codComboLook || null }), [codComboLook]);
+  // Weight-priced combo: no item-count limit, count progress bar or coupon in
+  // the preview; the box is priced by the shared core and shown with the
+  // weight meter above the preview bar (see weightPreview below).
+  const isWeight = isWeightCombo(rawConfig);
+  const config = isWeight ? { ...rawConfig, show_progress_bar: false, has_discount_offer: false, max_products: 999 } : rawConfig;
   const isMobile = device === 'mobile';
   const sliderRef = useRef(null);
   const tabScrollRef = useRef(null);
@@ -5051,7 +5208,11 @@ function ComboPreview({
     const isSelected = selectedProducts.some(
       (p) => String(p.id) === String(pid) && p.source === source
     );
-    const product = products.find((p) => String(p.id) === String(pid));
+    // Collection products fetched for the preview (and demo products) aren't
+    // always in `products`; the Weight Box adds from all of them.
+    const product = products.find((p) => String(p.id) === String(pid))
+      || Object.values(allStepProducts || {}).flat().find((p) => String(p.id) === String(pid))
+      || DEMO_PRODUCTS.find((p) => String(p.id) === String(pid));
     if (!product) return;
 
     const currentQtyInSource = selectedProducts
@@ -5096,11 +5257,15 @@ function ComboPreview({
       }
       handleAddProduct(product, 1, variant, source);
     } else {
+      const selectedItem = selectedProducts.find((p) => String(p.id) === String(pid) && p.source === source);
+      if (blockedByMaxWeight(pid, selectedItem?.variantId, 1)) return;
       handleQtyChange(pid, (cardQtys[pid] || 0) + 1, source);
 
-      // Motivation/Unlocked Toast Notification
+      // Motivation/Unlocked Toast Notification (weight combos have the meter instead)
       const nextTotal = currentTotalQty + 1;
-      if (nextTotal >= discountThreshold) {
+      if (isWeight) {
+        // nothing
+      } else if (nextTotal >= discountThreshold) {
         shopify.toast.show(
           config.discount_unlocked_text || 'Discount Unlocked!'
         );
@@ -5182,6 +5347,7 @@ function ComboPreview({
       );
       return;
     }
+    if (blockedByMaxWeight(product.id, selectedVariant.id, Number(qty))) return;
 
     const newItem = {
       id: product.id,
@@ -5204,7 +5370,9 @@ function ComboPreview({
 
     // Motivation/Unlocked Toast Notification (only for initial adds, handleInc handles others)
     const nextTotal = currentTotalQty + Number(qty);
-    if (nextTotal >= discountThreshold) {
+    if (isWeight) {
+      // weight combos have the meter instead
+    } else if (nextTotal >= discountThreshold) {
       shopify.toast.show(
         config.discount_unlocked_text || 'Discount Unlocked!'
       );
@@ -5251,7 +5419,49 @@ function ComboPreview({
     String(discountType).toLowerCase() === 'percentage'
       ? totalPrice * (1 - discountVal / 100)
       : Math.max(0, totalPrice - discountVal);
-  const finalPrice = hasDiscount ? discountedPrice : totalPrice;
+  // ── Weight-priced combo: the box, priced like checkout will price it ──
+  const weightPreview = (() => {
+    if (!isWeight) return null;
+    const { value } = normalizeWeightPricing(rawConfig.weight_pricing);
+    const view = { tiers: value.tiers, unit: value.unit, maxGrams: value.max_grams, messages: value.messages, enabled: true };
+    const gramsByVariant = {};
+    [...(products || []), ...Object.values(allStepProducts || {}).flat(), ...DEMO_PRODUCTS].forEach((p) => {
+      (p?.variants || []).forEach((v) => { gramsByVariant[v.id] = v.grams > 0 ? v.grams : null; });
+    });
+    // "Only products I choose" by collection can't be checked here (products
+    // carry collection handles, not ids), so the preview counts those; the
+    // live page and checkout use real membership.
+    const qualifies = (productId) => value.qualify.mode !== 'selected'
+      || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
+    const decimals = decimalsFor(null);
+    const box = computeBox({
+      pricing: { tiers: value.tiers, max_grams: value.max_grams, unit: value.unit },
+      decimals,
+      lines: selectedProducts.map((p, i) => ({
+        key: `${p.source}:${p.variantId}:${i}`,
+        unitGrams: gramsByVariant[p.variantId] ?? null,
+        quantity: Number(p.quantity) || 0,
+        subtotalMinor: toMinor((p.price || 0) * (Number(p.quantity) || 0), decimals),
+        qualifies: qualifies(p.id),
+      })),
+    });
+    return { view, box, decimals, gramsByVariant, qualifies };
+  })();
+  const finalPrice = weightPreview
+    ? Math.max(0, totalPrice - weightPreview.box.discountMinor / 10 ** weightPreview.decimals)
+    : hasDiscount ? discountedPrice : totalPrice;
+
+  // Adding this many of a variant would take the box over its max weight?
+  const blockedByMaxWeight = (productId, variantId, addQty) => {
+    if (!weightPreview || weightPreview.view.maxGrams == null) return false;
+    const grams = weightPreview.qualifies(productId) ? weightPreview.gramsByVariant[variantId] : null;
+    if (!(grams > 0) || weightPreview.box.grams + grams * addQty <= weightPreview.view.maxGrams) return false;
+    shopify.toast.show(fillMessage(weightPreview.view.messages.over_max, {
+      max: formatWeight(weightPreview.view.maxGrams, weightPreview.view.unit),
+      weight: formatWeight(weightPreview.box.grams, weightPreview.view.unit),
+    }), { isError: true });
+    return true;
+  };
 
   const renderTabs = () => {
     if (config.layout !== 'layout2') return null;
@@ -5589,18 +5799,34 @@ function ComboPreview({
     );
   };
 
+  // Weight combos: the bar shows one slot per item and the meter's words.
+  const previewBarConfig = weightPreview
+    ? (() => {
+      const text = boxMessage(weightPreview.view, weightPreview.box).text;
+      return { ...config, max_products: Math.min(totalItems + 1, 12), preview_motivation_text: text, preview_motivation_unlocked_text: text };
+    })()
+    : config;
+
   const renderPreviewBar = () => (
     <>
     {renderAiSuggestions()}
+    {weightPreview && (
+      <div
+        style={{ margin: '16px 0 0', cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #eee' }}
+        onClick={(e) => { e.stopPropagation(); onRequestSection('discount'); }}
+      >
+        <WeightMeter view={weightPreview.view} box={weightPreview.box} config={rawConfig} />
+      </div>
+    )}
     <div
       style={{ outline: inspectActive === 'previewBar' ? '2px solid #1a9de0' : inspectHover === 'previewBar' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
       onMouseEnter={() => setInspectHover('previewBar')}
       onMouseLeave={() => setInspectHover(null)}
       onClick={(e) => { e.stopPropagation(); setInspectActive('previewBar'); onRequestSection('previewBar'); }}
     >
-      <ComboCodContext.Provider value={codEnabled ? BUILDER_COD_PREVIEW : null}>
+      <ComboCodContext.Provider value={codEnabled ? codPreview : null}>
         <CdoPreviewBar
-          config={config}
+          config={previewBarConfig}
           selectedProducts={selectedProducts}
           totalPrice={totalPrice}
           finalPrice={finalPrice}
@@ -6437,6 +6663,170 @@ function ComboPreview({
     // Sticky Preview Bar has been removed per user request
     return null;
   };
+
+  // === The Weight Box (layout5, Pro) ===
+  // Same markup and CSS (WEIGHT_BOX_CSS) as the storefront's renderLayout5 in
+  // combo-page[.]js.jsx, priced by weightPreview (the shared core). In the
+  // phone preview the box panel sits under the grid instead of a sheet.
+  if (config.layout === WEIGHT_BOX_LAYOUT && weightPreview) {
+    const { view, box } = weightPreview;
+    const handles = [...new Set(Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).filter(Boolean))];
+    const tab = activeTab !== 'all' && handles.includes(activeTab) ? activeTab : 'all';
+    const seen = new Set();
+    let list = (tab === 'all' ? handles.flatMap((h) => getStepViewProducts(h)) : getStepViewProducts(tab))
+      .filter((p) => (seen.has(p.id) ? false : seen.add(p.id)));
+    if (!list.length) list = (products || []).length ? products.slice(0, 12) : DEMO_PRODUCTS;
+    const productById = new Map([...list, ...(products || []), ...Object.values(allStepProducts || {}).flat()].map((p) => [String(p.id), p]));
+    const imgOf = (v, p) => v?.image?.src || v?.image?.url || p?.image?.src || p?.image?.url || '';
+    const tiers = view.tiers || [];
+    const top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
+    const scale = view.maxGrams != null ? view.maxGrams : Math.round(top * 1.2);
+    const percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
+    const msg = boxMessage(view, box);
+    const discount = totalPrice - finalPrice;
+    const canCheckout = totalItems > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
+    const weightLabel = (g) => formatWeight(g, g < 1000 ? 'g' : 'kg');
+    const open = (section) => (e) => { e.stopPropagation(); onRequestSection(section); };
+
+    const panel = (
+      <div className="bxw-panel" id="bxw-preview-panel" role="presentation" onClick={open('discount')}>
+        <div className="bxw-panel-head"><span>{config.progress_text || 'Your box'}</span><span className="bxw-count">{totalItems} item{totalItems === 1 ? '' : 's'}</span></div>
+        <div className="bxw-scale">
+          <span className="bxw-kg">{formatWeight(box.grams, view.unit)}</span>
+          {view.maxGrams != null && <span className="bxw-of">of {formatWeight(view.maxGrams, view.unit)} max</span>}
+        </div>
+        <div className={`bxw-track${box.overMax ? ' is-over' : ''}${box.tier ? ' is-good' : ''}`}>
+          <div className="bxw-fill" style={{ width: `${percent}%` }} />
+          {tiers.map((t) => (
+            <span key={t.id || t.min_grams} className={`bxw-mark${box.grams >= t.min_grams && !box.overMax ? ' is-hit' : ''}`} style={{ left: `${Math.min(100, (t.min_grams / scale) * 100)}%` }} />
+          ))}
+        </div>
+        <p className={`bxw-msg is-${msg.tone}`}>{msg.text}</p>
+        <div className="bxw-items">
+          {selectedProducts.length === 0 && <div className="bxw-empty">Your box is empty. Add items to start filling it.</div>}
+          {selectedProducts.map((it) => {
+            const p = productById.get(String(it.id));
+            const g = weightPreview.gramsByVariant[it.variantId];
+            const counted = weightPreview.qualifies(it.id) && g > 0;
+            return (
+              <div key={`${it.source}:${it.id}`} className="bxw-item">
+                {it.image ? <img src={it.image} alt="" /> : <span className="bxw-noimg" />}
+                <div className="bxw-item-main">
+                  <div className="bxw-item-name">{p?.title || 'Product'}</div>
+                  <div className="bxw-item-sub">{counted ? weightLabel(g * it.quantity) : 'Not counted'} · {currencySymbol}{(it.price * it.quantity).toFixed(2)}</div>
+                </div>
+                <div className="bxw-mini">
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDec(it.id, it.source); }} aria-label="Remove one">−</button>
+                  <span>{it.quantity}</span>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleInc(it.id, null, it.source); }} aria-label="Add one">+</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="bxw-totals">
+          <div><span>Items</span><span>{currencySymbol}{totalPrice.toFixed(2)}</span></div>
+          {discount > 0.004 && <div className="is-good"><span>Box discount</span><span>−{currencySymbol}{discount.toFixed(2)}</span></div>}
+          <div className="bxw-total"><span>Total</span><span>{currencySymbol}{finalPrice.toFixed(2)}</span></div>
+        </div>
+        <button
+          type="button" className="bxw-checkout" disabled={!canCheckout}
+          onClick={(e) => { e.stopPropagation(); shopify.toast.show('Checkout works on your live combo page.'); }}
+        >
+          {config.preview_checkout_btn_text || 'Checkout'}
+        </button>
+        {codEnabled && config.show_cod_button !== false && (
+          <button
+            type="button" className="bxw-cod" disabled={!canCheckout}
+            style={codComboLook ? { ...codButtonColors(codComboLook), ...codButtonType(codComboLook), border: 'none', borderRadius: codComboLook.radius } : undefined}
+          >
+            {codComboLook?.text || config.cod_btn_text || 'Cash on Delivery'}
+          </button>
+        )}
+      </div>
+    );
+
+    return (
+      <div style={{ background: '#eef1f5', padding: isMobile ? 0 : 16 }}>
+        <style>{WEIGHT_BOX_CSS}</style>
+        <div className={`bxw${isMobile ? ' bxw--mobile' : ''}`} style={{ ...weightBoxVars(rawConfig), background: '#fff', borderRadius: 12, margin: isMobile ? 0 : '0 auto' }}>
+          <div className="bxw-main">
+            <header className="bxw-hero" role="presentation" onClick={open('content')} style={{ cursor: 'pointer' }}>
+              <div className="bxw-eyebrow">{config.weight_box_eyebrow || 'Build your box'}</div>
+              <h2 className="bxw-title">{config.collection_title || 'Build your box'}</h2>
+              {config.collection_description && <p className="bxw-desc">{config.collection_description}</p>}
+              {tiers.length > 0 && (
+                <ol className="bxw-ladder">
+                  {tiers.map((t) => (
+                    <li key={t.id || t.min_grams} className={`bxw-rung${box.grams >= t.min_grams && !box.overMax ? ' is-hit' : ''}${box.nextTier?.min_grams === t.min_grams ? ' is-next' : ''}`}>
+                      <span className="bxw-rung-w">{formatWeight(t.min_grams, view.unit)}</span>
+                      <span className="bxw-rung-o">{tierOfferText(t, currencySymbol)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </header>
+            {handles.length > 1 && (
+              <nav className="bxw-pills" aria-label="Collections">
+                {['all', ...handles].map((h) => (
+                  <button key={h} type="button" className={`bxw-pill${tab === h ? ' is-on' : ''}`} onClick={() => setActiveTab(h)}>
+                    {h === 'all' ? (config.tab_all_label || 'All') : (collections.find((c) => c.handle === h)?.title || h)}
+                  </button>
+                ))}
+              </nav>
+            )}
+            <div className="bxw-grid">
+              {list.map((p) => {
+                const variants = p.variants || [];
+                const variant = variants.find((v) => String(v.id) === String(selectedVariants[p.id])) || variants[0];
+                const item = selectedProducts.find((s) => String(s.id) === String(p.id) && s.source === 'box');
+                const g = variant ? weightPreview.gramsByVariant[variant.id] : null;
+                const counts = weightPreview.qualifies(p.id) && g > 0;
+                const image = imgOf(variant, p);
+                return (
+                  <div key={p.id} className={`bxw-card${item ? ' is-in' : ''}`} data-cdo-product-id={p.id}>
+                    <div className="bxw-media">
+                      {image ? <img src={image} alt={p.title} /> : <span className="bxw-noimg" />}
+                    </div>
+                    <div className="bxw-info">
+                      <div className="bxw-name">{p.title}</div>
+                      {variants.length > 1 && (
+                        <select className="bxw-select" value={variant?.id || ''} onChange={(e) => handleVariantChange(p.id, e.target.value)}>
+                          {variants.map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}
+                        </select>
+                      )}
+                      <div className="bxw-meta">
+                        <span className="bxw-price">{currencySymbol}{Number(variant?.price ?? p.price ?? 0).toFixed(2)}</span>
+                        <span className={`bxw-chip${counts ? '' : ' is-off'}`}>{counts ? weightLabel(g) : 'Not counted'}</span>
+                      </div>
+                      {item ? (
+                        <div className="bxw-stepper">
+                          <button type="button" onClick={() => handleDec(p.id, 'box')} aria-label="Remove one">−</button>
+                          <span>{item.quantity} in box</span>
+                          <button type="button" onClick={() => handleInc(p.id, variant, 'box')} aria-label="Add one">+</button>
+                        </div>
+                      ) : (
+                        <button type="button" className="bxw-add" onClick={() => handleInc(p.id, variant, 'box')}>{config.add_btn_text || 'Add to box'}</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {renderAiSuggestions()}
+            {isMobile && <div style={{ marginTop: 16 }}>{panel}</div>}
+          </div>
+          {!isMobile && <aside className="bxw-aside">{panel}</aside>}
+          {isMobile && (
+            <div className="bxw-bar is-preview">
+              <div className="bxw-bar-info"><b>{formatWeight(box.grams, view.unit)}</b><span>{totalItems} item{totalItems === 1 ? '' : 's'} · {currencySymbol}{finalPrice.toFixed(2)}</span></div>
+              <button type="button" className="bxw-bar-btn" onClick={() => document.getElementById('bxw-preview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>View box</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // === Layout 3 (FMCG / App Style) Specific Rendering ===
   if (config.layout === 'layout3') {

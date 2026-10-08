@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
 import { confirmPlanFromWebhook } from "../services/plan-permissions.server";
+import { loadWeightTemplates, syncComboWeightDiscount } from "../services/combo-weight-shopify.server";
 
 const PHP_URL = `${BASE_PHP_URL}/update-subscription-status.php`;
 
@@ -17,7 +18,7 @@ export async function action({ request }) {
   }
 
   try {
-    const { shop, payload } = await authenticate.webhook(request);
+    const { shop, payload, admin } = await authenticate.webhook(request);
 
     if (!shop) {
       console.error("[Webhook] No shop found");
@@ -47,6 +48,10 @@ export async function action({ request }) {
       billing_on:           billing_on     || null,
     });
 
+    // Weight-priced combos are Pro only: a plan change turns their checkout
+    // discount on or off. Never throws; skipped for shops without any.
+    await syncWeightCombosForPlan(shop, admin);
+
     return new Response(JSON.stringify({ success: true, plan_key: planKey }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -57,6 +62,17 @@ export async function action({ request }) {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
+  }
+}
+
+async function syncWeightCombosForPlan(shop, admin) {
+  if (!admin) return;
+  try {
+    if (!(await loadWeightTemplates(shop)).length) return;
+    const result = await syncComboWeightDiscount(admin, shop);
+    console.log(`[Webhook] combo weight pricing for ${shop}: ${result.state}`);
+  } catch (err) {
+    console.error("[Webhook] combo weight sync failed:", err.message);
   }
 }
 

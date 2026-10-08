@@ -3,6 +3,8 @@ import { useLoaderData, useParams } from 'react-router';
 import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
+import WeightMeter from '../components/customization/WeightMeter';
+import { boxMessage, computeBox, decimalsFor, fillMessage, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
 // ⚠) — 1em/currentColor so each inherits the calling element's own
@@ -1483,9 +1485,12 @@ function Layout1Preview({ config, productsByHandle, collectionNameMap, templateN
 }
 
 export default function ComboPreviewPage() {
-  const { templateName, config, productsByHandle, collectionNameMap, shop, activeDiscounts, embed } = useLoaderData();
+  const { templateName, config: savedConfig, productsByHandle, collectionNameMap, shop, activeDiscounts, embed, weightPricing } = useLoaderData();
+  // Weight-priced combo: the box is priced by the shared core (the same rules
+  // as checkout and COD); see the WEIGHT blocks below.
+  const weight = isWeightCombo(savedConfig) && weightPricing ? weightPricing : null;
   const { templateId } = useParams();
-  const layout = config.layout || 'layout1';
+  const layout = savedConfig.layout || 'layout1';
   const rootRef = useRef(null);
   const isMobile = useIsMobile(embed);
 
@@ -1511,7 +1516,7 @@ export default function ComboPreviewPage() {
   const toastTimerRef = useRef(null);
 
   const totalSelected = Object.values(selectedMap).reduce((sum, s) => sum + (s.qty || 0), 0);
-  const maxProducts = parseInt(config.max_products) || 5;
+  const maxProducts = parseInt(savedConfig.max_products) || 5;
 
   const showToast = useCallback((message) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -1521,14 +1526,43 @@ export default function ComboPreviewPage() {
 
   const productMap = {};
   const variantPriceMap = {};
+  const variantGramsMap = {};
   Object.values(productsByHandle).forEach((prods) => {
     prods.forEach((p) => {
       productMap[p.id] = p;
       (p.variants || []).forEach((v) => {
         variantPriceMap[v.id] = v.price != null ? parseFloat(v.price) : parseFloat(p.price || 0);
+        variantGramsMap[v.id] = v.grams > 0 ? v.grams : null;
       });
     });
   });
+
+  // ── WEIGHT: price a selection as a box ──
+  const weightDecimals = decimalsFor(Object.values(productMap)[0]?.currency);
+  const weightBoxFor = (map) => computeBox({
+    pricing: { tiers: weight.tiers, max_grams: weight.maxGrams, unit: weight.unit },
+    decimals: weightDecimals,
+    rate: 1,
+    lines: Object.entries(map).map(([variantId, sel]) => ({
+      key: variantId,
+      unitGrams: variantGramsMap[variantId],
+      quantity: sel.qty || 0,
+      subtotalMinor: toMinor((variantPriceMap[variantId] || 0) * (sel.qty || 0), weightDecimals),
+      qualifies: (weight.qualifyingProductIds || []).includes(sel.productId),
+    })),
+  });
+  const overMaxMessage = (box) => fillMessage(weight.messages?.over_max, {
+    max: formatWeight(weight.maxGrams, weight.unit), weight: formatWeight(box.grams, weight.unit),
+  });
+  const box = weight ? weightBoxFor(selectedMap) : null;
+  const canCheckoutBox = Boolean(weight && totalSelected > 0 && !box.overMax && weight.tiers.length && box.grams >= weight.tiers[0].min_grams);
+  // The layouts' own count-based bar is hidden; the preview bar gets the meter's words.
+  const config = weight
+    ? (() => {
+      const text = boxMessage(weight, box).text;
+      return { ...savedConfig, show_progress_bar: false, max_products: Math.min(totalSelected + 1, 12), preview_motivation_text: text, preview_motivation_unlocked_text: text };
+    })()
+    : savedConfig;
 
   const trackEvent = (eventType, revenue) => {
     try {
@@ -1564,18 +1598,27 @@ export default function ComboPreviewPage() {
   const discountVal = selectedDiscount?.value ? parseFloat(selectedDiscount.value) : (parseFloat(config.discount_amount) || 0);
   const hasDiscount = !!discountType && discountVal > 0;
   const isDiscountUnlocked = totalSelected >= (parseInt(config.discount_threshold) || maxProducts);
-  const discountApplicable = hasDiscount && isDiscountUnlocked;
-  const discountedPrice = discountApplicable
-    ? (String(discountType).toLowerCase() === 'percentage'
-        ? totalPrice * (1 - discountVal / 100)
-        : Math.max(0, totalPrice - discountVal))
-    : totalPrice;
+  const weightDiscount = weight?.enabled ? box.discountMinor / 10 ** weightDecimals : 0;
+  const discountApplicable = weight ? weightDiscount > 0 : hasDiscount && isDiscountUnlocked;
+  const discountedPrice = weight
+    ? Math.max(0, totalPrice - weightDiscount)
+    : discountApplicable
+      ? (String(discountType).toLowerCase() === 'percentage'
+          ? totalPrice * (1 - discountVal / 100)
+          : Math.max(0, totalPrice - discountVal))
+      : totalPrice;
   const finalPrice = discountApplicable ? discountedPrice : totalPrice;
   // End price computation
 
   const onAdd = (product, variantId, qty = 1) => {
     setSelectedMap((prev) => {
       if (prev[variantId]) return prev;
+      if (weight) {
+        const next = { ...prev, [variantId]: { productId: product.id, qty } };
+        const nextBox = weightBoxFor(next);
+        if (nextBox.overMax) { showToast(overMaxMessage(nextBox)); return prev; }
+        return next;
+      }
       const currentTotalQty = Object.values(prev).reduce((sum, s) => sum + (s.qty || 0), 0);
       if (currentTotalQty + qty > maxProducts) {
         showToast((config.limit_reached_message || 'Limit reached! You can only select {{limit}} items.').replace('{{limit}}', maxProducts));
@@ -1591,6 +1634,12 @@ export default function ComboPreviewPage() {
       if (qty <= 0) {
         const next = { ...prev };
         delete next[variantId];
+        return next;
+      }
+      if (weight) {
+        const next = { ...prev, [variantId]: { ...prev[variantId], qty } };
+        const nextBox = weightBoxFor(next);
+        if (qty > (prev[variantId].qty || 0) && nextBox.overMax) { showToast(overMaxMessage(nextBox)); return prev; }
         return next;
       }
       const otherTotalQty = Object.entries(prev).reduce(
@@ -1640,8 +1689,40 @@ export default function ComboPreviewPage() {
       : `https://${shopDomain}${cartPath}`;
   };
 
+  // ── WEIGHT: the box goes into the shopper's real cart. This frame runs on
+  // the app's origin and can't reach that cart, so the storefront page does
+  // it (combo-page[.]js.jsx, 'brix-combo-checkout'). Never a discount code.
+  const comboAttributes = { combo_source: 'ComboForge', combo_template_id: String(templateId), combo_template_name: templateName };
+  const boxTokenRef = useRef(null);
+  const weightItems = () => {
+    if (!boxTokenRef.current) boxTokenRef.current = `b${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const properties = weight?.enabled
+      ? { _brix_combo_id: String(templateId), _brix_combo_version: String(weight.hash || ''), _brix_combo_group: boxTokenRef.current }
+      : null;
+    return Object.entries(selectedMap).map(([variantId, sel]) => ({
+      variantId: Number(String(variantId).split('/').pop()),
+      quantity: sel.qty || 1,
+      ...(properties ? { properties } : {}),
+    }));
+  };
+  useEffect(() => {
+    if (!embed || !weight) return undefined;
+    const handler = (e) => {
+      if (e.source === window.parent && e.data?.type === 'brix-combo-checkout-failed') showToast(e.data.message || 'Could not add your box to the cart. Please try again.');
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [embed, weight, showToast]);
+
   const onCheckout = () => {
     if (totalSelected === 0) return;
+    if (weight) {
+      if (!canCheckoutBox) { showToast(boxMessage(weight, box).text); return; }
+      if (!embed) { showToast('Checkout runs on your live combo page.'); return; }
+      trackEvent('click', finalPrice);
+      window.parent.postMessage({ type: 'brix-combo-checkout', items: weightItems(), attributes: comboAttributes }, '*');
+      return;
+    }
     const destination = checkoutDestination();
     if (!destination) return;
     trackEvent('click', finalPrice);
@@ -1667,14 +1748,16 @@ export default function ComboPreviewPage() {
     onCod: () => {
       const destination = checkoutDestination();
       if (totalSelected === 0 || !destination) return;
+      if (weight && !canCheckoutBox) { showToast(boxMessage(weight, box).text); return; }
       trackEvent('click', finalPrice);
       window.parent.postMessage({
         type: 'brix-combo-cod-open',
-        items: Object.entries(selectedMap).map(([variantId, sel]) => ({
+        // Weight boxes carry their box properties so COD prices them like checkout.
+        items: weight ? weightItems() : Object.entries(selectedMap).map(([variantId, sel]) => ({
           variantId: Number(String(variantId).split('/').pop()),
           quantity: sel.qty || 1,
         })),
-        coupon: discountApplicable && selectedDiscount?.code ? selectedDiscount.code : null,
+        coupon: !weight && discountApplicable && selectedDiscount?.code ? selectedDiscount.code : null,
         attributes: {
           combo_source: 'ComboForge',
           combo_template_id: String(templateId),
@@ -1785,6 +1868,8 @@ export default function ComboPreviewPage() {
         </div>
       )}
 
+      {weight && <WeightMeter view={weight} box={box} config={config} />}
+
       {layout === 'layout3' ? (
         <Layout3Preview
           config={config}
@@ -1829,7 +1914,10 @@ export default function ComboPreviewPage() {
           onReset={onReset}
           barCurrencySymbol={barCurrencySymbol}
         />
-      ) : layout === 'layout2' ? (
+      ) : layout === 'layout2' || layout === 'layout5' ? (
+        // The Weight Box's collections are col_1..col_N like layout2's tabs.
+        // This route is only the admin preview / iframe fallback; the live
+        // page draws the Weight Box's own design (combo-page[.]js.jsx).
         <Layout2Preview
           config={config}
           productsByHandle={productsByHandle}

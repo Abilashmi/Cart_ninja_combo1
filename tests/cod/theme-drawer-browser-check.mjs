@@ -370,6 +370,36 @@ const done = async (page, name) => {
   await done(page, '12-phone');
 }
 
+/* 13. Each place's own button look (COD → Customize: cart drawer / product page / combo page) */
+{
+  const looks = {
+    drawer: { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 17, bold: true, uppercase: true, icon: true, radius: 20 },
+    product: { style: 'outline', bg: '#1d4ed8', color: '#ffffff', fontSize: 14, bold: true, uppercase: false, icon: false, radius: 6 },
+    combo: { style: 'minimal', bg: '#be185d', color: '#ffffff', fontSize: 16, bold: false, uppercase: false, icon: true, radius: 4 },
+  };
+  const page = await open('dawn', { cfg: { buttons: { looks, comboText: 'Pay cash' } } });
+  await waitButton(page);
+  const s = await look(page, DAWN_CO);
+  const type = await page.evaluate(() => {
+    const b = document.querySelector('[data-brix-cod-drawer] [data-brix-cod-btn]');
+    return { size: getComputedStyle(b).fontSize, icon: Boolean(b.querySelector('svg')) };
+  });
+  check('looks: the drawer button uses the cart drawer look (colour, corners, size, capitals, icon)',
+    s.bg === 'rgb(12, 122, 67)' && s.radius === '20px' && s.transform === 'uppercase' && type.size === '17px' && type.icon, JSON.stringify({ ...type, bg: s.bg, radius: s.radius, transform: s.transform }));
+  const combo = await page.evaluate(() => window.BrixCod.comboButton());
+  check('looks: combo pages get their own look and text from BrixCod.comboButton()',
+    combo && combo.text === 'Pay cash' && /color:#be185d/.test(combo.css) && /background:transparent/.test(combo.css) && /border-radius:4px/.test(combo.css) && /font-weight:500/.test(combo.css) && /<svg/.test(combo.icon), JSON.stringify(combo && { text: combo.text, css: combo.css }));
+  await page.context().close();
+
+  // Drawer off: the combo page still gets its button.
+  const off = await open('dawn', { cfg: { surfaces: { drawer: false, product: true, combo: true }, buttons: { looks } } });
+  await settle(off, 1200);
+  const offCombo = await off.evaluate(() => window.BrixCod.comboButton());
+  check('looks: with the cart drawer off, combo pages still get their COD button', Boolean(offCombo) && (await look(off, DAWN_CO)).buttons === 0);
+  allErrors.push(...off.errors);
+  await off.context().close();
+}
+
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

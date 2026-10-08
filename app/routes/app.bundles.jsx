@@ -2,6 +2,7 @@ import { Outlet, useRouteError } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
+import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -9,7 +10,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -17,11 +18,17 @@ export const action = async ({ request }) => {
 
   try {
     const db = getDb();
+    const readConfig = async () => {
+      const [rows] = await db.execute('SELECT customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), shop]);
+      return rows?.[0]?.customization_data || null;
+    };
     if (intent === 'delete' && id) {
+      const config = await readConfig();
       await db.execute(
         'DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?',
         [Number(id), shop]
       );
+      await syncComboWeightIfNeeded(admin, shop, config);
       return { success: true, message: 'Template deleted.' };
     }
     if (intent === 'toggle_active' && id) {
@@ -30,6 +37,7 @@ export const action = async ({ request }) => {
         'UPDATE combo_templates SET is_active = ? WHERE id = ? AND shop_domain = ?',
         [active, Number(id), shop]
       );
+      await syncComboWeightIfNeeded(admin, shop, await readConfig());
       return { success: true, message: active ? 'Template activated.' : 'Template deactivated.' };
     }
   } catch (e) {

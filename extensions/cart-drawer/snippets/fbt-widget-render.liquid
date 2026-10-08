@@ -288,8 +288,21 @@
   // fails is left in rather than guessed at. "Live"/published is already
   // guaranteed separately: /products.json never lists an unpublished
   // product, and a per-handle fetch 404s for one.
+  // Live price + compare-at price of the variant the widget will add (the
+  // rule's own variant, else the first available one, as buildVariantLookup
+  // picks). /products.json gives "19.99" strings, /products/<handle>.js cents.
+  function withLivePrice(product,variants,inCents){
+    var wanted=normalizeVariantId(product&&(product.variantId||product.variant_id||(product.variant&&product.variant.id)));
+    var v=(wanted&&variants.find(function(x){return normalizeVariantId(x&&x.id)===wanted;}))||variants.find(function(x){return x&&x.available;})||variants[0];
+    if(!v)return product;
+    var div=inCents?100:1;
+    var price=toPriceNumber(v.price)/div;
+    var compareAt=toPriceNumber(v.compare_at_price)/div;
+    return Object.assign({},product,{price:price,compareAt:compareAt>price?compareAt:0});
+  }
+
   async function filterAvailableFbtProducts(products){
-    var availableById=new Map();
+    var variantsById=new Map();
     try{
       var res=await fetch('/products.json?limit=250');
       if(res.ok){
@@ -297,18 +310,20 @@
         var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
         ajaxProducts.forEach(function(ap){
           var pid=String(ap&&ap.id||'');
-          var variants=Array.isArray(ap&&ap.variants)?ap.variants:[];
-          if(pid)availableById.set(pid,variants.some(function(v){return v&&v.available;}));
+          if(pid)variantsById.set(pid,Array.isArray(ap&&ap.variants)?ap.variants:[]);
         });
       }
     }catch(e){}
+
+    function isAvailable(variants){return variants.some(function(v){return v&&v.available;});}
 
     var out=[];
     for(var i=0;i<(products||[]).length;i++){
       var product=products[i];
       var numId=extractNumericId(product&&product.id);
-      if(availableById.has(numId)){
-        if(availableById.get(numId))out.push(product);
+      if(variantsById.has(numId)){
+        var listed=variantsById.get(numId);
+        if(isAvailable(listed))out.push(withLivePrice(product,listed,false));
         continue;
       }
       var handle=String(product&&product.handle||'').trim();
@@ -318,8 +333,7 @@
         if(!hr.ok){out.push(product);continue;}
         var hj=await hr.json();
         var hvariants=Array.isArray(hj&&hj.variants)?hj.variants:[];
-        var isAvailable=hvariants.some(function(v){return v&&v.available;});
-        if(isAvailable)out.push(product);
+        if(isAvailable(hvariants))out.push(withLivePrice(product,hvariants,true));
       }catch(e){out.push(product);}
     }
     return out;
@@ -460,6 +474,12 @@
        of Layout Alignment. Classic Grid keeps its signature "+" connector as
        a skin flourish, shown only in the carousel arrangement — a true
        2-col grid has no natural slot for an inline connector between cells. */
+    // Price with the compare-at price struck through before it, when higher.
+    function money(n){return currencySymbol+n.toLocaleString('en-IN');}
+    function priceHtml(price,compareAt,strikeSize){
+      return (compareAt>price?'<s class="ps-compare-price" style="color:'+config.textColor+';opacity:.5;font-weight:500;margin-right:4px;'+(strikeSize?'font-size:'+strikeSize+'px;':'')+'">'+money(compareAt)+'</s>':'')+money(price);
+    }
+
     var useCheckboxLeft=config.interactionType==='checkboxQty';
     var isListStyle=useCheckboxLeft||config.layout==='vertical';
     var isGridLayout=!isListStyle&&config.layout==='grid';
@@ -558,7 +578,7 @@
 
       if(config.interactionType==='classic'){
         var btn=document.createElement('button');btn.className='ps-classic-btn';
-        if(isSelected)btn.innerHTML=checkIcon(12,5)+'Added';else btn.textContent='Add';
+        btn.textContent=isSelected?'Added':'Add';
         btn.style.cssText='padding:6px 14px;border-radius:6px;border:none;background:'+(isSelected?'#008060':config.buttonColor)+';color:'+config.buttonTextColor+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;';
         btn.onclick=function(){if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
         actionSlot.appendChild(btn);return;
@@ -614,9 +634,13 @@
     }
 
     function updateFooter(){
-      var total=0;
-      products.forEach(function(p){total+=getProductQuantity(p.id)*toPriceNumber(p.price);});
-      if(totalEl)totalEl.textContent=currencySymbol+total.toLocaleString('en-IN');
+      var total=0,compareTotal=0;
+      products.forEach(function(p){
+        var q=getProductQuantity(p.id),price=toPriceNumber(p.price);
+        total+=q*price;
+        compareTotal+=q*(p.compareAt>price?p.compareAt:price);
+      });
+      if(totalEl)totalEl.innerHTML=priceHtml(total,compareTotal,15);
       var selectedCount=getSelectedCount();
       if(totalLabelEl)totalLabelEl.textContent=selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
       if(addBtn){if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';addBtn.textContent='Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
@@ -629,6 +653,7 @@
       var safeTitle=escapeHtml((product&&(product.title||product.name||product.productTitle||product.product_title))||handleFallback||'Product');
       var imageUrl=String((product&&product.image)||'').replace(/'/g,'%27');
       var price=toPriceNumber(product&&product.price);
+      var compareAt=toPriceNumber(product&&product.compareAt);
       var card=document.createElement('div');
       if(isListStyle){
         card.className='ps-product-row';
@@ -646,7 +671,7 @@
              overflowing — its actual width comes from the grid track. */
           +'<div style="min-width:0;">'
             +'<div class="ps-product-row-title" style="display:block;color:'+config.textColor+';font-size:13px;font-weight:600;line-height:1.35;white-space:normal;word-break:break-word;">'+safeTitle+'</div>'
-            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:flex-end;"></div>';
       }else{
@@ -655,7 +680,7 @@
           '<div class="ps-product-image" style="width:100%;height:64px;background:'+config.borderColor+'22;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
           +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
             +'<div class="ps-product-title" style="color:'+config.textColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
-            +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+currencySymbol+price.toLocaleString('en-IN')+'</div>':'')
+            +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
       }
@@ -707,7 +732,7 @@
           if(!result.addedItems.length)throw new Error('Failed to add selected products to cart.');
           openCartDrawerFast({source:'fbt',items:result.addedItems});
           var totalQty=result.addedItems.reduce(function(s,item){return s+(Number(item.quantity)||0);},0);
-          if(totalQty>1)addBtn.textContent='Added '+totalQty;else addBtn.innerHTML=checkIcon(13,6)+'Added';
+          addBtn.textContent=totalQty>1?'Added '+totalQty:'Added';
           setTimeout(function(){updateFooter();},1200);
         }catch(err){addBtn.textContent=defaultLabel;}
         finally{addBtn.disabled=false;}
