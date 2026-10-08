@@ -187,6 +187,11 @@
 (function(){
   if(customElements.get('ps-fbt-widget'))return;
 
+  // Drawn checkmark (the text glyph renders thin and uneven across fonts).
+  function checkIcon(size,gap){
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="display:inline-block;vertical-align:-0.15em;flex-shrink:0;'+(gap?'margin-right:'+gap+'px;':'')+'"><path d="M3.5 8.4l2.9 2.9 6.1-6.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
   function getCurrencySymbol(code){
     var symbols={USD:'$',EUR:'€',GBP:'£',INR:'₹',JPY:'¥',AUD:'A$',CAD:'C$',CHF:'CHF',CNY:'¥',SEK:'kr',NZD:'NZ$',MXN:'$',SGD:'S$',HKD:'HK$',NOK:'kr',KRW:'₩',TRY:'₺',RUB:'₽',BRL:'R$',ZAR:'R',THB:'฿',MYR:'RM',PHP:'₱',IDR:'Rp',VND:'₫',KES:'KSh',NGN:'₦',PKR:'₨',BDT:'৳',AED:'د.إ',SAR:'﷼',QAR:'﷼'};
     return symbols[code]||code;
@@ -553,7 +558,7 @@
 
       if(config.interactionType==='classic'){
         var btn=document.createElement('button');btn.className='ps-classic-btn';
-        btn.textContent=isSelected?'Added ✓':'Add';
+        if(isSelected)btn.innerHTML=checkIcon(12,5)+'Added';else btn.textContent='Add';
         btn.style.cssText='padding:6px 14px;border-radius:6px;border:none;background:'+(isSelected?'#008060':config.buttonColor)+';color:'+config.buttonTextColor+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;';
         btn.onclick=function(){if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
         actionSlot.appendChild(btn);return;
@@ -563,7 +568,7 @@
         var isRequired=selectedProductIds.has(pid)&&selectedProductIds.size<=1;
         var check=document.createElement('div');check.className='ps-bundle-check';
         check.style.cssText='width:20px;height:20px;border-radius:4px;border:2px solid '+(isRequired?config.buttonColor+'66':config.buttonColor)+';background:'+(isSelected?config.buttonColor:'transparent')+';display:flex;align-items:center;justify-content:center;cursor:'+(isRequired?'not-allowed':'pointer')+';transition:all 0.2s;opacity:'+(isRequired?'0.7':'1')+';color:'+(isSelected?config.buttonTextColor:config.buttonColor)+';';
-        check.textContent=isSelected?'✓':'';
+        check.innerHTML=isSelected?checkIcon(13):'';
         check.onclick=function(){if(isRequired)return;if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
         if(isRequired){var badge=document.createElement('div');badge.className='ps-required';badge.textContent='REQUIRED';badge.style.cssText='position:absolute;top:-8px;right:-4px;padding:2px 6px;border-radius:4px;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:9px;font-weight:700;letter-spacing:0.5px;';entry.card.appendChild(badge);entry.requiredBadge=badge;}
         actionSlot.appendChild(check);return;
@@ -574,7 +579,7 @@
           entry.checkboxSlot.innerHTML='';
           var qCheck=document.createElement('div');qCheck.className='ps-bundle-check';
           qCheck.style.cssText='width:20px;height:20px;border-radius:4px;border:2px solid '+config.buttonColor+';background:'+(isSelected?config.buttonColor:'transparent')+';display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;color:'+(isSelected?config.buttonTextColor:config.buttonColor)+';flex-shrink:0;';
-          qCheck.textContent=isSelected?'✓':'';
+          qCheck.innerHTML=isSelected?checkIcon(13):'';
           qCheck.onclick=function(){productQuantities.set(pid,isSelected?0:1);updateUI();};
           entry.checkboxSlot.appendChild(qCheck);
         }
@@ -702,7 +707,7 @@
           if(!result.addedItems.length)throw new Error('Failed to add selected products to cart.');
           openCartDrawerFast({source:'fbt',items:result.addedItems});
           var totalQty=result.addedItems.reduce(function(s,item){return s+(Number(item.quantity)||0);},0);
-          addBtn.textContent=totalQty>1?'Added '+totalQty:'Added ✓';
+          if(totalQty>1)addBtn.textContent='Added '+totalQty;else addBtn.innerHTML=checkIcon(13,6)+'Added';
           setTimeout(function(){updateFooter();},1200);
         }catch(err){addBtn.textContent=defaultLabel;}
         finally{addBtn.disabled=false;}

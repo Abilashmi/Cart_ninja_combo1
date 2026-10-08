@@ -445,14 +445,30 @@
 }
 
 /* ========== MOBILE ========== */
-@media (max-width: 480px) {
+/* Phones and small tablets (Shopify themes' own mobile breakpoint): the
+   drawer takes the full screen width, matching the admin's phone preview.
+   The header's close button is the way out. */
+@media (max-width: 749px) {
   #cc-drawer {
-    /* Leave a visible strip of backdrop instead of going edge-to-edge —
-       matches the conventional mobile cart-drawer width other cart apps
-       use, and keeps a clear tap-outside-to-close target. */
-    width: 88vw;
-    max-width: 420px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    box-shadow: none;
   }
+}
+
+@media (max-width: 480px) {
+
+  /* Tighter spacing on phones: the drawer's sections are styled inline in
+     cart_drawer_inline.js, so these need !important. */
+  #cc-drawer .cc-drawer-header { padding: 12px 14px !important; }
+  #cc-drawer-body { padding: 10px 12px 12px !important; --cc-gap: 8px !important; }
+  #cc-drawer .cc-progress-section { padding: 2px 4px !important; }
+  #cc-drawer .cc-coupon-section { padding: 2px 0 !important; }
+  #cc-drawer-footer { padding: 12px 14px calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
+  #cc-drawer-footer .bxcd-summary { row-gap: 6px; margin-bottom: 10px; }
+  #cc-drawer .cc-footer-note { margin-top: 8px !important; }
 
   .cc-upsell-card.cc-layout-carousel {
     padding: 14px;

@@ -57,7 +57,9 @@ if (!harnessAvailable()) {
     assert.equal(json.data.banner_mobile_src, '');
     assert.equal(json.data.banner_placement, 'above_progress', 'default placement');
     const [cols] = await db.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = 'cart_drawer_config' AND COLUMN_NAME LIKE 'banner_%'");
-    assert.equal(cols.length, 5);
+    assert.equal(cols.length, 7);
+    assert.equal(json.data.banner_margin_top, 12, 'default space above');
+    assert.equal(json.data.banner_margin_bottom, 12, 'default space below');
   });
 
   test('save: banner settings stored next to the other drawer settings (Node adds columns if missing)', async () => {
@@ -124,6 +126,22 @@ if (!harnessAvailable()) {
     assert.notEqual(afterSrc, before);
     const res = await fetch(local(afterSrc));
     assert.deepEqual(Buffer.from(await res.arrayBuffer()), Buffer.from(OTHER.split(',')[1], 'base64'));
+  });
+
+  test('space above / below: saved, clamped to 0-40, kept by other saves, sent to the storefront', async () => {
+    let row = await saveCartDrawerConfig(SHOP, 'pro', { banner_margin_top: 0, banner_margin_bottom: 6 });
+    assert.equal(Number(row.banner_margin_top), 0, '0 is a real value, not "missing"');
+    assert.equal(Number(row.banner_margin_bottom), 6);
+    row = await saveCartDrawerConfig(SHOP, 'pro', { header_title: 'Cart' });
+    assert.equal(Number(row.banner_margin_bottom), 6, 'a patch without spacing keeps it');
+    row = await saveCartDrawerConfig(SHOP, 'pro', { banner_margin_top: 99, banner_margin_bottom: -5 });
+    assert.equal(Number(row.banner_margin_top), 40);
+    assert.equal(Number(row.banner_margin_bottom), 0);
+    row = await saveCartDrawerConfig(SHOP, 'pro', { banner_margin_top: 'abc', banner_margin_bottom: 8 });
+    assert.equal(Number(row.banner_margin_top), 40, 'junk keeps the stored value');
+    const { data } = await storefront(SHOP);
+    assert.equal(data.banner_margin_top, 40);
+    assert.equal(data.banner_margin_bottom, 8);
   });
 
   test('banner turned off: the storefront gets banner_enabled 0', async () => {

@@ -16,7 +16,7 @@ import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
 import { withTimeout } from '../utils/with-timeout';
-import { cleanBannerImage, cleanBannerPlacement, DEFAULT_BANNER_PLACEMENT } from '../utils/cart-banner.shared';
+import { cleanBannerImage, cleanBannerPlacement, cleanBannerSpacing, DEFAULT_BANNER_PLACEMENT, BANNER_SPACING_DEFAULT } from '../utils/cart-banner.shared';
 
 // Ceiling for a single Shopify Admin API call made from a save path.
 const SHOPIFY_CALL_TIMEOUT_MS = 20_000;
@@ -133,6 +133,8 @@ export async function ensureBannerColumns(db) {
     { name: 'banner_mobile_image', ddl: '`banner_mobile_image` MEDIUMTEXT NULL' },
     { name: 'banner_placement', ddl: "`banner_placement` VARCHAR(20) NOT NULL DEFAULT 'above_progress'" },
     { name: 'banner_alt', ddl: '`banner_alt` VARCHAR(160) NULL' },
+    { name: 'banner_margin_top', ddl: '`banner_margin_top` TINYINT UNSIGNED NOT NULL DEFAULT 12' },
+    { name: 'banner_margin_bottom', ddl: '`banner_margin_bottom` TINYINT UNSIGNED NOT NULL DEFAULT 12' },
   ]);
 }
 
@@ -174,8 +176,9 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       header_title, header_close_style, header_bg_color, header_text_color, header_border_bottom,
       design_width, design_border_radius, design_shadow, design_animation,
       empty_cart_message, empty_cart_show_continue_shopping, empty_cart_show_recommendations,
-      banner_enabled, banner_desktop_image, banner_mobile_image, banner_placement, banner_alt
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      banner_enabled, banner_desktop_image, banner_mobile_image, banner_placement, banner_alt,
+      banner_margin_top, banner_margin_bottom
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
       is_enabled                        = VALUES(is_enabled),
       checkout_button_text              = VALUES(checkout_button_text),
@@ -212,6 +215,8 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       banner_mobile_image               = VALUES(banner_mobile_image),
       banner_placement                  = VALUES(banner_placement),
       banner_alt                        = VALUES(banner_alt),
+      banner_margin_top                 = VALUES(banner_margin_top),
+      banner_margin_bottom              = VALUES(banner_margin_bottom),
       updated_at                        = CURRENT_TIMESTAMP(3)
   `, [
     shop,
@@ -250,6 +255,9 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
     pickBannerImage(patch.banner_mobile_image, ex.banner_mobile_image),
     cleanBannerPlacement(pick(patch.banner_placement, ex.banner_placement, DEFAULT_BANNER_PLACEMENT)),
     patch.banner_alt !== undefined ? (String(patch.banner_alt || '').trim().slice(0, 160) || null) : (ex.banner_alt ?? null),
+    // Missing or junk keeps what's stored (the default for a new row).
+    cleanBannerSpacing(patch.banner_margin_top, cleanBannerSpacing(ex.banner_margin_top, BANNER_SPACING_DEFAULT)),
+    cleanBannerSpacing(patch.banner_margin_bottom, cleanBannerSpacing(ex.banner_margin_bottom, BANNER_SPACING_DEFAULT)),
   ]);
 
   const [rows] = await db.execute(

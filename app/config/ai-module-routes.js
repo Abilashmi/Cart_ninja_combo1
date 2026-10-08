@@ -35,6 +35,12 @@ export const CART_EDITOR_FEATURES = {
     ],
   },
   coupon_slider: { sectionId: 'couponSlider', label: 'Coupon Slider', patterns: [/coupon[\s-]*(?:slider|carousel)/i] },
+  // "mage"/"imag" catch the common typos of "image".
+  image_banner: {
+    sectionId: 'imageBanner',
+    label: 'Image Banner',
+    patterns: [/\b(?:i?mage?|imag|img|picture|photo|pic)[\s-]*banners?\b/i, /\bbanner[\s-]*(?:image|img|picture|photo)s?\b/i, /\bcart[\s-]*banners?\b/i],
+  },
   upsell: { sectionId: 'upsellProducts', label: 'Upsell Products', patterns: [/\bup-?sell(?:s|ing)?\b/i, /\bcross[\s-]*sell(?:s|ing)?\b/i] },
   countdown_timer: { sectionId: 'countdownTimer', label: 'Countdown Timer', patterns: [/count[\s-]*down/i, /\btimers?\b/i] },
   empty_cart: { sectionId: 'emptyCart', label: 'Empty Cart', patterns: [/empty[\s-]*cart/i] },

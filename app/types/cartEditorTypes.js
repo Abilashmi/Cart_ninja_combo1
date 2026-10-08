@@ -139,6 +139,8 @@ export const defaultCartEditorState = {
       mobileImage: '',
       placement: 'above_progress',
       alt: '',
+      marginTop: 12,    // px of space above the banner (0-40)
+      marginBottom: 12, // px of space below the banner (0-40)
     },
     emptyCart: {
       message: 'Your cart is empty',

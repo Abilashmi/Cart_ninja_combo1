@@ -32,6 +32,9 @@ Recommends add-on products inside the cart drawer itself, based on what's alread
 ## Coupon (Coupon Slider widget)
 A rotating carousel of the store's active discount codes, shown in the cart drawer to remind customers a code exists. Settings: on/off, template, title text/color/alignment, card colors/borders/shadow, auto-slide and its interval, layout (grid/list), position, and which existing coupons are selected to display. It only displays codes — creating the actual discount code happens via the Discount Creator / create_discount, not the slider. Example: "turn on the coupon slider, show SAVE20, auto-slide every 4 seconds."
 
+## Image Banner (cart drawer)
+A picture banner inside the cart drawer (Cart Editor → Image Banner) — for example a sale graphic or a brand image. Different from the product-page Coupon Banner and from the text Announcement Bar. Settings: on/off, a desktop image and an optional separate mobile image (each a full https:// image link, or a picture uploaded in the Cart Editor), where it shows (above/below the progress bar, above/below the cart products, or above the checkout button) and alt text. It only appears to shoppers once it is on AND has an image. Example: "turn on the image banner" → it's switched on, then you ask for the image link.
+
 ## Announcement Bar
 A text banner shown just below the cart drawer's header — typically used to call out an active offer (free shipping, a sale, a deadline). Settings: on/off, the text itself, background/text colors, font size, bold/italic, alignment. It's purely presentational: for the announcement to describe something real, the underlying discount must actually be created first (free shipping or an amount-off promotion), then the announcement text is written to match — never the other way around. Example: "announce free shipping over $50" creates the real free-shipping discount first, then writes that announcement text once it succeeds.
 

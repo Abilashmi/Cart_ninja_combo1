@@ -91,6 +91,8 @@ function hydrateFromConfig(cfg, base) {
         ...(cfg.banner_mobile_image  != null ? { mobileImage:  cfg.banner_mobile_image }    : {}),
         ...(cfg.banner_placement     != null ? { placement:    cfg.banner_placement }       : {}),
         ...(cfg.banner_alt           != null ? { alt:          cfg.banner_alt }             : {}),
+        ...(cfg.banner_margin_top    != null ? { marginTop:    Number(cfg.banner_margin_top) }    : {}),
+        ...(cfg.banner_margin_bottom != null ? { marginBottom: Number(cfg.banner_margin_bottom) } : {}),
       },
       emptyCart: {
         ...base.body.emptyCart,

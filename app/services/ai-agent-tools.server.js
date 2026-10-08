@@ -29,6 +29,7 @@ import { fetchCartDrawerRecord, persistCartDrawerRecord } from './cart-drawer-re
 import { getDb } from './db.server';
 import { saveCouponBanner } from './coupon-banner.server';
 import { needsInfo, CHOICES } from '../utils/ai-needs-info';
+import { cleanBannerImage, cleanBannerPlacement, cleanBannerSpacing, BANNER_PLACEMENTS } from '../utils/cart-banner.shared';
 
 function parseJsonSafe(v, fb) {
   if (!v) return fb;
@@ -335,6 +336,40 @@ function sameProductIdSet(a, b) {
   return na.length === nb.length && na.every((id, i) => id === nb[i]);
 }
 
+// The Image Banner's images can be data URLs of hundreds of KB — never hand
+// those to the model. It only needs to know whether each one is set.
+function imageBannerState(row) {
+  const desktop = row.banner_desktop_image || '';
+  const mobile = row.banner_mobile_image || '';
+  const placement = cleanBannerPlacement(row.banner_placement);
+  return {
+    enabled: !!Number(row.banner_enabled),
+    hasImage: !!(desktop || mobile),
+    desktopImage: describeBannerImage(desktop),
+    mobileImage: describeBannerImage(mobile),
+    placement,
+    placementLabel: (BANNER_PLACEMENTS.find((p) => p.value === placement) || {}).label,
+    alt: row.banner_alt || '',
+    spaceAbovePx: cleanBannerSpacing(row.banner_margin_top),
+    spaceBelowPx: cleanBannerSpacing(row.banner_margin_bottom),
+    visibleOnStorefront: !!Number(row.banner_enabled) && !!(desktop || mobile),
+  };
+}
+
+function describeBannerImage(value) {
+  if (!value) return 'none';
+  return value.startsWith('data:') ? 'uploaded image' : value;
+}
+
+function summarizeBannerImages(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    banner_desktop_image: describeBannerImage(row.banner_desktop_image || ''),
+    banner_mobile_image: describeBannerImage(row.banner_mobile_image || ''),
+  };
+}
+
 export const TOOL_EXECUTORS = {
   // ── Reads ──────────────────────────────────────────────────────────────
   async get_current_config(ctx) {
@@ -350,7 +385,8 @@ export const TOOL_EXECUTORS = {
     const [upRows] = await db.execute('SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     const fbt = await fetchFbtConfig(db, ctx.shop);
     return {
-      cartDrawerConfig: cdcRows[0] || null,
+      cartDrawerConfig: summarizeBannerImages(cdcRows[0] || null),
+      imageBanner: cdcRows[0] ? imageBannerState(cdcRows[0]) : null,
       progressBar,
       couponSlider: csRows[0] || null,
       upsellWidget: upRows[0] || null,
@@ -469,6 +505,35 @@ export const TOOL_EXECUTORS = {
     }
     await saveCartDrawerConfig(ctx.shop, ctx.planKey, { custom_css });
     return { success: true };
+  },
+
+  // Cart Image Banner (Cart Editor "Image Banner" section) — a picture inside
+  // the cart drawer. Not the product-page Coupon Banner.
+  async update_image_banner(ctx, { enabled, desktopImageUrl, mobileImageUrl, placement, alt, spaceAbove, spaceBelow } = {}) {
+    const bad = [['desktopImageUrl', desktopImageUrl], ['mobileImageUrl', mobileImageUrl]]
+      .filter(([, v]) => typeof v === 'string' && v.trim() && !cleanBannerImage(v.trim()));
+    if (bad.length) {
+      return {
+        success: false,
+        reason: 'invalid_image_link',
+        message: 'That image link cannot be used. It must be a full https:// link that opens the image itself (PNG, JPG, WebP or GIF). Ask the merchant for a direct image link, or tell them they can upload the picture in Cart Editor → Image Banner.',
+      };
+    }
+    const patch = {};
+    if (typeof enabled === 'boolean') patch.banner_enabled = enabled ? 1 : 0;
+    if (typeof desktopImageUrl === 'string') patch.banner_desktop_image = desktopImageUrl.trim();
+    if (typeof mobileImageUrl === 'string') patch.banner_mobile_image = mobileImageUrl.trim();
+    if (placement !== undefined) patch.banner_placement = cleanBannerPlacement(placement);
+    if (alt !== undefined) patch.banner_alt = alt;
+    if (spaceAbove !== undefined) patch.banner_margin_top = spaceAbove;
+    if (spaceBelow !== undefined) patch.banner_margin_bottom = spaceBelow;
+    const data = await saveCartDrawerConfig(ctx.shop, ctx.planKey, patch);
+    const state = imageBannerState(data || {});
+    const result = { success: true, imageBanner: state };
+    if (state.enabled && !state.hasImage) {
+      result.next_step = 'The Image Banner is now turned on but has no image yet, so shoppers will not see it. Say that it is on, then ask the merchant to send the banner image link (a full https:// image link). They can also upload the picture in Cart Editor → Image Banner. Recommend a wide image (about 3:1). An optional separate mobile image can be added too.';
+    }
+    return result;
   },
 
   async update_countdown_timer(ctx, args) {

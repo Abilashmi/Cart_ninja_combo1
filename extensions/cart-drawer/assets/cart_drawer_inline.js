@@ -213,6 +213,41 @@
   let _ccCelebrationQueue = [];
   let _ccCelebratingTierId = null;
   let _ccCelebrationTimer = null;
+  // Confetti belongs to the moment a milestone is crossed, not to the
+  // message: the last tier's message stays on screen, and the drawer redraws
+  // on every cart change (e.g. removing one item while still past the
+  // milestone), so firing on display re-popped it each time. This holds the
+  // one tier whose crossing still owes its burst.
+  let _ccConfettiTierId = null;
+  let _ccAllUnlockedConfettiShown = false;
+  // Which milestones this cart has already celebrated, kept per cart token so
+  // moving to another page (which reloads this script) doesn't celebrate a
+  // milestone the shopper reached earlier. A new cart gets a fresh token.
+  const CC_CELEBRATED_KEY = 'brix_cc_celebrated';
+  let _ccCelebrationLoadedFor = null;
+
+  function ccLoadCelebrationState(token) {
+    if (!token || _ccCelebrationLoadedFor === token) return;
+    _ccCelebrationLoadedFor = token;
+    try {
+      const saved = JSON.parse(localStorage.getItem(CC_CELEBRATED_KEY) || 'null');
+      if (saved && saved.token === token) {
+        (saved.ids || []).forEach((id) => _ccCelebratedTierIds.add(id));
+        _ccAllUnlockedConfettiShown = !!saved.allDone;
+      }
+    } catch (e) {}
+  }
+
+  function ccSaveCelebrationState(token) {
+    if (!token) return;
+    try {
+      localStorage.setItem(CC_CELEBRATED_KEY, JSON.stringify({
+        token,
+        ids: Array.from(_ccCelebratedTierIds),
+        allDone: _ccAllUnlockedConfettiShown,
+      }));
+    } catch (e) {}
+  }
 
   // Clears the current celebration and forces a fresh render — the render
   // block's own detection logic (below, inside renderDrawer's progress-bar
@@ -279,7 +314,6 @@
           setTimeout(() => {
             if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
           }, 3000);
-          window._ccConfettiShown = false;
         });
       };
 
@@ -580,7 +614,7 @@
     const enabled = isEnabled(d.countdown_status) || isEnabled(d.countdownStatus) || isEnabled(data.enabled);
     return {
       enabled,
-      mode: data.mode === 'fixed' ? 'fixed' : 'session',
+      mode: data.mode === 'fixed' || data.mode === 'loop' ? data.mode : 'session',
       hours: parseInt(data.hours || 0, 10),
       minutes: parseInt(data.minutes || 15, 10),
       label: data.label || 'Offer expires in',
@@ -678,7 +712,6 @@
       position,
       layout: data.layout || 'grid',
       alignment: data.alignment || 'horizontal',
-      singleCouponAlignment: ['left', 'center', 'right'].includes(data.singleCouponAlignment) ? data.singleCouponAlignment : 'left',
       title: {
         // Cart Editor saves sectionTitle; legacy saves titleText; structured saves title.text
         text: title.text || data.sectionTitle || data.titleText || 'Apply Coupon',
@@ -2311,7 +2344,16 @@
       mobile: mobile || desktop,
       placement: placements.indexOf(d.banner_placement) !== -1 ? d.banner_placement : 'above_progress',
       alt: d.banner_alt || '',
+      marginTop: ccBannerSpacing(d.banner_margin_top),
+      marginBottom: ccBannerSpacing(d.banner_margin_bottom),
     };
+  }
+
+  // Space above / below the banner in px, 0-40, default 12 (cleanBannerSpacing).
+  function ccBannerSpacing(v) {
+    var n = Number(v);
+    if (v === null || v === undefined || v === '' || !isFinite(n)) return 12;
+    return Math.min(40, Math.max(0, Math.round(n)));
   }
 
   // The banner's CSS order inside #cc-drawer-body (a flex column). The body's
@@ -2337,7 +2379,9 @@
     var source = banner.mobile && banner.mobile !== banner.desktop
       ? '<source media="(max-width: 480px)" srcset="' + escapeHtml(banner.mobile) + '">'
       : '';
-    return '<div class="bxcd-banner" id="cc-image-banner" style="order:' + order + ';"><picture>' + source +
+    // The spacing replaces the body's section gap (--cc-gap) instead of adding to it.
+    var margin = 'margin:calc(' + banner.marginTop + 'px - var(--cc-gap, 12px)) 0 calc(' + banner.marginBottom + 'px - var(--cc-gap, 12px));';
+    return '<div class="bxcd-banner" id="cc-image-banner" style="order:' + order + ';' + margin + '"><picture>' + source +
       '<img src="' + escapeHtml(banner.desktop) + '" alt="' + alt + '" loading="lazy" decoding="async"' + (alt ? '' : ' role="presentation"') + '></picture></div>';
   }
 
@@ -2485,7 +2529,7 @@
     const hdrTitle = hdr.title || 'Your Cart';
     const hdrBorder = hdr.borderBottom !== false ? 'border-bottom:1px solid #e5e7eb;' : '';
     drawerHtml += `
-<div style="padding:16px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+<div class="cc-drawer-header" style="padding:16px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
   <h3 style="margin:0;font-size:18px;font-weight:600;color:${hdrColor};">${escapeHtml(hdrTitle)}</h3>
   <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
     style="background:none;border:none;font-size:20px;cursor:pointer;color:${hdrColor};padding:4px;">✕</button>
@@ -2510,7 +2554,7 @@
     }
 
     /* -------- BODY -------- */
-    drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
+    drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;--cc-gap:12px;gap:var(--cc-gap);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
 
     /* ---- PROGRESS BAR ---- */
     const progress = CONFIG.progress;
@@ -2519,19 +2563,21 @@
       await syncRewardProducts(cart, pInfo);
 
       const fgColor = progress.barForegroundColor || '#2563eb';
+      ccLoadCelebrationState(cart.token);
 
       // Detect tiers newly crossed since the last render and enqueue their
       // celebration (ascending order, so each tier gets its own turn rather
       // than jumping straight to the highest one when a single cart update
       // crosses several at once). A tier that drops back below its own
       // threshold (item removed) is un-marked so crossing it again later
-      // re-celebrates instead of staying silently suppressed — mirrors the
-      // existing window._ccConfettiShown reset pattern below.
+      // re-celebrates instead of staying silently suppressed — same as the
+      // _ccAllUnlockedConfettiShown reset below.
       _ccCelebratedTierIds.forEach((id) => {
         const t = pInfo.tiers.find((x) => x.id === id);
         if (t && pInfo.currentVal < t.target) {
           _ccCelebratedTierIds.delete(id);
           if (_ccCelebratingTierId === id) _ccCelebratingTierId = null;
+          if (_ccConfettiTierId === id) _ccConfettiTierId = null;
         }
       });
       pInfo.tiers.forEach((t) => {
@@ -2550,6 +2596,7 @@
       // (via the drop-below-threshold cleanup above), not a timeout.
       if (!_ccCelebratingTierId && _ccCelebrationQueue.length > 0) {
         _ccCelebratingTierId = _ccCelebrationQueue.shift();
+        _ccConfettiTierId = _ccCelebratingTierId;
         clearTimeout(_ccCelebrationTimer);
         if (pInfo.upcoming) {
           _ccCelebrationTimer = setTimeout(ccAdvanceCelebrationQueue, CC_TIER_CELEBRATION_DURATION_MS);
@@ -2557,7 +2604,7 @@
       }
       const celebratingTier = _ccCelebratingTierId ? pInfo.tiers.find((t) => t.id === _ccCelebratingTierId) : null;
 
-      let pbHtml = `<div data-cc-section="progress" style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -20 : 980};">`;
+      let pbHtml = `<div data-cc-section="progress" class="cc-progress-section" style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -20 : 980};">`;
       // Header info
       pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
       if (celebratingTier) {
@@ -2568,12 +2615,17 @@
       <span style="font-size:15px;font-weight:700;">${escapeHtml(msg)}</span>
     </div>
   `;
-        if (celebratingTier.confetti) {
-          triggerConfetti();
-          // This tier's own celebration already fired confetti — if it's
-          // the last one, skip the old "all rewards unlocked" confetti
-          // trigger below so it doesn't fire a second time right after.
-          if (!pInfo.upcoming) window._ccConfettiShown = true;
+        // Only on the render where this tier was just crossed — later redraws
+        // keep showing the message but never pop confetti again.
+        if (_ccConfettiTierId === celebratingTier.id) {
+          _ccConfettiTierId = null;
+          if (celebratingTier.confetti) {
+            triggerConfetti();
+            // This tier's own celebration already fired confetti — if it's
+            // the last one, skip the "all rewards unlocked" confetti below
+            // so it doesn't fire a second time right after.
+            if (!pInfo.upcoming) _ccAllUnlockedConfettiShown = true;
+          }
         }
       } else if (pInfo.upcoming) {
         // nextAmount is always strictly positive while a tier is upcoming
@@ -2601,9 +2653,13 @@
     </p>
   `;
       } else {
+        // Every milestone was already reached (e.g. on an earlier page): show
+        // the last tier's own message, as the live celebration would have.
+        const lastTier = pInfo.tiers[pInfo.tiers.length - 1];
+        const doneText = lastTier && lastTier.completionMessage ? escapeHtml(lastTier.completionMessage) : progress.completionText;
         pbHtml += `
     <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
-      <span style="font-size:16px;font-weight:800;">${progress.completionText}</span>
+      <span style="font-size:16px;font-weight:800;">${doneText}</span>
     </div>
   `;
       }
@@ -2705,15 +2761,16 @@
       if (progress.placement === 'bottom') bottomBodyHtml += pbHtml;
       else topBodyHtml += pbHtml;
 
-      // Trigger Confetti "Paper Popup" when fully unlocked
+      // Trigger Confetti "Paper Popup" once, when the last milestone is reached
       if (!pInfo.upcoming) {
-        if (!window._ccConfettiShown && progress.enableConfetti) {
-          window._ccConfettiShown = true;
+        if (!_ccAllUnlockedConfettiShown && progress.enableConfetti) {
+          _ccAllUnlockedConfettiShown = true;
           triggerConfetti();
         }
       } else {
-        window._ccConfettiShown = false; // Reset if cart drops below target
+        _ccAllUnlockedConfettiShown = false; // Reset if cart drops below target
       }
+      ccSaveCelebrationState(cart.token);
     }
 
     /* ---- CART IMAGE BANNER ---- */
@@ -2855,7 +2912,7 @@
   ${renderSummaryHtml(subtotal, totalDiscount, finalTotal)}
   <div id="cc-cod-slot"></div>
   <div id="cc-checkout-wrap">${renderCheckoutButton(appliedCouponCodes)}</div>
-  <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
+  <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
   ${CONFIG.showWatermark !== false ? `
@@ -2922,11 +2979,29 @@
   // 'fixed' mode: the deadline is set once per device and persists across
   // sessions until it actually expires (localStorage) — a true one-shot
   // urgency countdown rather than one that quietly resets on every visit.
+  // 'loop' mode: never expires — when it reaches zero it starts the same
+  // duration again, endlessly. The cycle is anchored to the first time this
+  // device saw it (localStorage), so a page change doesn't restart it.
+  function getCountdownDurationMs(countdown) {
+    return ((countdown.hours || 0) * 3600 + (countdown.minutes || 0) * 60) * 1000;
+  }
+
   function getCountdownDeadline(countdown) {
+    const durationMs = getCountdownDurationMs(countdown);
+    if (durationMs <= 0) return null;
+    if (countdown.mode === 'loop') {
+      const now = Date.now();
+      let anchor = now;
+      try {
+        const key = 'cc_countdown_loop_' + SHOP + '_' + durationMs;
+        const stored = parseInt(window.localStorage.getItem(key) || '0', 10);
+        if (stored && stored <= now) anchor = stored;
+        else window.localStorage.setItem(key, String(now));
+      } catch (e) {}
+      return anchor + durationMs * (Math.floor((now - anchor) / durationMs) + 1);
+    }
     const store = countdown.mode === 'fixed' ? window.localStorage : window.sessionStorage;
     const key = 'cc_countdown_deadline_' + SHOP;
-    const durationMs = ((countdown.hours || 0) * 3600 + (countdown.minutes || 0) * 60) * 1000;
-    if (durationMs <= 0) return null;
     try {
       const stored = parseInt(store.getItem(key) || '0', 10);
       if (stored && stored > Date.now()) return stored;
@@ -2945,14 +3020,21 @@
     }
     const countdown = CONFIG.countdown || {};
     if (!countdown.enabled) return;
-    const deadline = getCountdownDeadline(countdown);
+    let deadline = getCountdownDeadline(countdown);
     if (!deadline) return;
+    const durationMs = getCountdownDurationMs(countdown);
 
     function tick() {
       const textEl = document.getElementById('cc-countdown-text');
       const labelEl = document.getElementById('cc-countdown-label');
       if (!textEl) { clearInterval(_ccCountdownInterval); _ccCountdownInterval = null; return; }
-      const remainingMs = deadline - Date.now();
+      let remainingMs = deadline - Date.now();
+      if (remainingMs <= 0 && countdown.mode === 'loop') {
+        // Start the next round of the same duration (skipping any rounds
+        // that passed while the tab was asleep).
+        deadline += durationMs * (Math.floor(-remainingMs / durationMs) + 1);
+        remainingMs = deadline - Date.now();
+      }
       if (remainingMs <= 0) {
         if (labelEl) labelEl.textContent = countdown.expiredLabel;
         textEl.textContent = '';
@@ -3155,21 +3237,23 @@
 
     if (couponsToShow.length === 0) return '';
 
-    /* -- Coupon list is a horizontal carousel so nav arrows work, unless -- */
-    /* -- there's only one coupon, in which case it's positioned per the -- */
-    /* -- merchant's chosen single-coupon alignment.                     -- */
-    const couponListStyle = couponsToShow.length === 1
-      ? `display:flex;flex-direction:row;gap:12px;justify-content:${{ left: 'flex-start', center: 'center', right: 'flex-end' }[couponConfig.singleCouponAlignment] || 'flex-start'};padding:0 4px 20px 4px;`
+    /* -- Coupon list is a horizontal carousel with nav arrows, unless   -- */
+    /* -- there's only one coupon: then there is nothing to slide, so no  -- */
+    /* -- arrows, and the one coupon fills the full width (wide card).    -- */
+    const isSingleCoupon = couponsToShow.length === 1;
+    const couponListStyle = isSingleCoupon
+      ? 'display:flex;flex-direction:row;padding:0 0 4px 0;'
       : 'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
-
-    let html = `
-<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -10 : 990};">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p>
+    const couponNavHtml = isSingleCoupon ? '' : `
     <div style="display:flex;gap:6px;">
       <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="Previous coupon">←</button>
       <button class="cc-nav-btn" onclick="ccCouponNav('right')" title="Next coupon">→</button>
-    </div>
+    </div>`;
+
+    let html = `
+<div class="cc-coupon-section" style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -10 : 990};">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p>${couponNavHtml}
   </div>
   <div id="cc-coupon-list" class="cc-hide-scrollbar" style="${couponListStyle}">
 `;
@@ -3192,9 +3276,45 @@
       </div>`;
     }
 
+    // One coupon on its own: a full-width card laid out in a row (icon, label
+    // + description, button on the right) in the same style's colours.
+    // Mirrors CartPreview.jsx's SingleCouponCard.
+    function singleCouponHtml(coupon) {
+      const copied = coupon.code === _lastCopiedCode;
+      const isMinimal = style === 'style-1';
+      const bg = coupon.backgroundColor || '#4f46e5';
+      const tc = isMinimal ? '#111827' : (coupon.textColor || '#ffffff');
+      const accent = isMinimal ? bg : tc;
+      const borderR = coupon.borderRadius || 8;
+      const btnLabel = copied ? 'Copied!' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+      const btnStyle = isMinimal
+        ? `border:1px solid ${copied ? '#10b981' : bg};background:${copied ? '#10b981' : 'transparent'};color:${copied ? '#fff' : bg};`
+        : `border:none;background:${copied ? '#10b981' : (coupon.buttonBackgroundColor || '#000000')};color:${copied ? '#fff' : (coupon.buttonTextColor || '#ffffff')};`;
+      const cardStyle = isMinimal
+        ? `background:#fff;border:1px solid #e5e7eb;border-left:3px solid ${bg};`
+        : `background:${bg};${style === 'style-2' ? `box-shadow:0 2px 8px ${bg}55;` : ''}`;
+      return `
+    <div data-coupon-card class="cc-coupon-card cc-coupon-card--single" style="width:100%;min-width:0;box-sizing:border-box;padding:12px 14px;${cardStyle}color:${tc};border-radius:${borderR}px;display:flex;flex-direction:column;gap:8px;">
+      ${couponTimerHtml(coupon)}
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <span style="color:${accent};display:flex;line-height:0;flex-shrink:0;">${ccIconSvg(coupon.iconKey, 22, accent)}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;color:${isMinimal ? bg : tc};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</div>
+          ${coupon.description ? `<div style="font-size:11px;opacity:0.85;line-height:1.35;margin-top:2px;">${escapeHtml(coupon.description)}</div>` : ''}
+        </div>
+        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="flex-shrink:0;padding:7px 14px;border-radius:6px;${btnStyle}font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
+          ${escapeHtml(btnLabel)}
+        </button>
+      </div>
+    </div>
+  `;
+    }
+
     couponsToShow.forEach((coupon) => {
 
-      if (style === 'style-1') {
+      if (isSingleCoupon) {
+        html += singleCouponHtml(coupon);
+      } else if (style === 'style-1') {
         // minimal-card: white bg, colored left border, small svg icon, outline button
         const baseColor = coupon.backgroundColor || '#4f46e5';
         const borderR = coupon.borderRadius || 8;

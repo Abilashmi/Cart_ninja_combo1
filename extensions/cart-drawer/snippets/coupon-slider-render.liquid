@@ -348,13 +348,15 @@ function renderSlider(el,data,ctx){
     return;
   }
 
+  /* One coupon: nothing to slide, so no side arrows and the card fills the row */
+  var single=itemsToRender.length===1;
   el.innerHTML=
-    '<div class="ps-slider">'
+    '<div class="ps-slider'+(single?' ps-slider--single':'')+'">'
       +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
       +'<div class="ps-slider-row">'
-        +'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>'
+        +(single?'':'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>')
         +'<div class="ps-coupon-wrapper"></div>'
-        +'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>'
+        +(single?'':'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>')
       +'</div>'
     +'</div>';
 
@@ -525,6 +527,9 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 }
 .ps-coupon-wrapper::-webkit-scrollbar{display:none}
 .ps-card{scroll-snap-align:start;flex-shrink:0}
+/* Single coupon: full width (beats the cards' fixed inline widths) */
+.ps-slider--single .ps-coupon-wrapper{overflow:visible}
+.ps-slider--single .ps-card{flex:1 1 100% !important;min-width:0 !important;width:100%}
 /* Nav arrows */
 .ps-nav{
   width:34px;height:34px;border-radius:50%;

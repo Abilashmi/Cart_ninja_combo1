@@ -25,7 +25,11 @@ export function CountdownTimerSection() {
             options={[
               { label: 'Per-session (resets each visit)', value: 'session' },
               { label: 'Fixed countdown', value: 'fixed' },
+              { label: 'On loop (restarts when it ends)', value: 'loop' },
             ]}
+            helpText={countdownTimer.mode === 'loop'
+              ? 'When the timer reaches zero it starts again from the full time, without end.'
+              : undefined}
             value={countdownTimer.mode}
             onChange={(v) => updateCountdownTimer({ mode: v })}
           />
@@ -51,12 +55,14 @@ export function CountdownTimerSection() {
             onChange={(v) => updateCountdownTimer({ label: v })}
             autoComplete="off"
           />
-          <TextField
-            label="Expired Label"
-            value={countdownTimer.expiredLabel}
-            onChange={(v) => updateCountdownTimer({ expiredLabel: v })}
-            autoComplete="off"
-          />
+          {countdownTimer.mode !== 'loop' && (
+            <TextField
+              label="Expired Label"
+              value={countdownTimer.expiredLabel}
+              onChange={(v) => updateCountdownTimer({ expiredLabel: v })}
+              autoComplete="off"
+            />
+          )}
         </FormLayout>
       </Card>
       <Card>

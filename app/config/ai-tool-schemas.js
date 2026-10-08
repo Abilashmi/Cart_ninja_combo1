@@ -180,13 +180,30 @@ export const TOOL_REGISTRY = [
     },
   },
   {
+    name: 'update_image_banner',
+    description: 'Turn on/off or change the CART DRAWER IMAGE BANNER (Cart Editor "Image Banner" section): a picture/image banner shown inside the cart drawer. Use this for any "image banner", "img banner", "banner image", "picture banner", "cart banner" or "mage banner" (typo) request — enable, turn on, show, disable, turn off, hide, set or change its image link, move it, change the space above/below it ("reduce the gap/margin around the banner"), or set its alt text. This is NOT the product-page Coupon Banner (update_coupon_banner) and NOT the text Announcement Bar. Send only the fields the merchant mentioned. The banner only shows once it has an image: if the result has next_step, follow it (ask for the image link).',
+    parameters: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', description: 'true = turn the image banner on, false = turn it off' },
+        desktopImageUrl: { type: 'string', description: 'Full https:// link to the banner image (used on desktop, and on phones too unless a mobile image is set). Empty string removes it.' },
+        mobileImageUrl: { type: 'string', description: 'Optional full https:// link to a separate image for phones. Empty string removes it.' },
+        placement: { type: 'string', enum: ['above_progress', 'below_progress', 'above_products', 'below_products', 'above_checkout'], description: 'Where it shows in the drawer: above/below the progress bar, above/below the cart products, or above the checkout button' },
+        alt: { type: 'string', description: 'Short description of the image for screen readers' },
+        spaceAbove: { type: 'number', description: 'Space above the banner in px, 0 to 40 (default 12). 0 = no gap.' },
+        spaceBelow: { type: 'number', description: 'Space below the banner in px, 0 to 40 (default 12). 0 = no gap.' },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'update_countdown_timer',
-    description: 'Update the cart drawer\'s urgency countdown timer: enable/disable, duration (hours/minutes), session vs fixed mode, label text, colors, and an optional linked coupon code.',
+    description: 'Update the cart drawer\'s urgency countdown timer: enable/disable, duration (hours/minutes), session / fixed / loop (endless repeat) mode, label text, colors, and an optional linked coupon code.',
     parameters: {
       type: 'object',
       properties: {
         enabled: { type: 'boolean' },
-        mode: { type: 'string', enum: ['session', 'fixed'], description: 'session = resets each visit, fixed = counts down once per device' },
+        mode: { type: 'string', enum: ['session', 'fixed', 'loop'], description: 'session = resets each visit, fixed = counts down once per device, loop = restarts from the full duration every time it reaches zero (never ends)' },
         hours: { type: 'number' },
         minutes: { type: 'number' },
         label: { type: 'string' },

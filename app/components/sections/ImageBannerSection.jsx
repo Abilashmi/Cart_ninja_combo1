@@ -1,8 +1,9 @@
 import { Card, FormLayout, BlockStack, Text, Select, TextField, Banner } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
+import { SliderField } from '../shared/SliderField';
 import { BannerImageField } from './BannerImageField';
-import { BANNER_PLACEMENTS, bannerSources } from '../../utils/cart-banner.shared';
+import { BANNER_PLACEMENTS, BANNER_SPACING_MAX, bannerSources } from '../../utils/cart-banner.shared';
 
 // Cart Editor section: a promotional image inside the BRIX Cart Drawer.
 export function ImageBannerSection() {
@@ -31,6 +32,22 @@ export function ImageBannerSection() {
             value={banner.placement}
             onChange={(v) => updateImageBanner({ placement: v })}
             helpText="Above and Below Progress Bar follow the bar. Without a progress bar, the banner goes to the top of the cart."
+          />
+          <SliderField
+            label="Space above"
+            value={banner.marginTop ?? 12}
+            min={0}
+            max={BANNER_SPACING_MAX}
+            suffix="px"
+            onChange={(v) => updateImageBanner({ marginTop: v })}
+          />
+          <SliderField
+            label="Space below"
+            value={banner.marginBottom ?? 12}
+            min={0}
+            max={BANNER_SPACING_MAX}
+            suffix="px"
+            onChange={(v) => updateImageBanner({ marginBottom: v })}
           />
         </FormLayout>
       </Card>

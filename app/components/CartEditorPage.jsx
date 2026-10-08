@@ -108,6 +108,8 @@ function CartEditorContent() {
           banner_mobile_image:                body.imageBanner?.mobileImage         || '',
           banner_placement:                   body.imageBanner?.placement           || 'above_progress',
           banner_alt:                         body.imageBanner?.alt                 || '',
+          banner_margin_top:                  body.imageBanner?.marginTop           ?? 12,
+          banner_margin_bottom:               body.imageBanner?.marginBottom        ?? 12,
         }),
 
         postJson('/api/progress-bar', {

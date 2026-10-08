@@ -190,17 +190,19 @@ function CouponTimerDisplay({ coupon }) {
 // Mirrors extensions/cart-drawer/assets/cart_drawer_inline.js's
 // #cc-countdown-bar + startCountdownTicker(): a fixed bar below the
 // announcement, showing hours only once nonzero, ticking down every second.
+// 'loop' mode starts again from the full duration each time it hits zero.
 function CountdownTimerPreview({ countdown }) {
   const totalSeconds = (countdown.hours ?? 0) * 3600 + (countdown.minutes ?? 15) * 60;
+  const isLoop = countdown.mode === 'loop';
   const [remaining, setRemaining] = useState(totalSeconds);
 
-  useEffect(() => { setRemaining(totalSeconds); }, [totalSeconds]);
+  useEffect(() => { setRemaining(totalSeconds); }, [totalSeconds, isLoop]);
 
   useEffect(() => {
     if (remaining <= 0) return;
-    const interval = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1000);
+    const interval = setInterval(() => setRemaining((r) => (r <= 1 && isLoop ? totalSeconds : Math.max(0, r - 1))), 1000);
     return () => clearInterval(interval);
-  }, [remaining]);
+  }, [remaining, isLoop, totalSeconds]);
 
   const h = Math.floor(remaining / 3600);
   const m = Math.floor((remaining % 3600) / 60);
@@ -494,7 +496,36 @@ function CouponCard({ coupon, template, isVertical }) {
   );
 }
 
-const SINGLE_ALIGN_TO_JUSTIFY = { left: 'flex-start', center: 'center', right: 'flex-end' };
+// One coupon on its own fills the full width as a row (icon, label +
+// description, button on the right) in its style's colours — nothing to
+// slide, so no arrows. Mirrors cart_drawer_inline.js's singleCouponHtml.
+function SingleCouponCard({ coupon, template }) {
+  const IconComp = COUPON_ICON_MAP[coupon.icon] ?? DiscountCodeIcon;
+  const isMinimal = template === 'minimal-card';
+  const textColor = isMinimal ? '#111827' : coupon.textColor;
+  const accent = isMinimal ? coupon.bgColor : coupon.textColor;
+  const cardStyle = isMinimal
+    ? { backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderLeft: `3px solid ${coupon.bgColor}` }
+    : { backgroundColor: coupon.bgColor, boxShadow: template === 'bold-vibrant' ? `0 2px 8px ${coupon.bgColor}55` : undefined };
+  const buttonStyle = isMinimal
+    ? { border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor }
+    : { border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor };
+  return (
+    <div style={{ ...cardStyle, color: textColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+      {coupon.timerEnabled ? <CouponTimerDisplay coupon={coupon} /> : null}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <span style={{ color: accent, display: 'flex', lineHeight: 0, flexShrink: 0 }}><IconComp width="18" height="18" fill="currentColor" /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', color: isMinimal ? coupon.bgColor : textColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
+          {coupon.description && <div style={{ fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' }}>{coupon.description}</div>}
+        </div>
+        <button style={{ ...buttonStyle, flexShrink: 0, padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {coupon.buttonText}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function CouponSliderPreview({ cs }) {
   const displayCoupons = cs.selectedCoupons.length > 0 ? cs.selectedCoupons : MOCK_PREVIEW_COUPONS;
@@ -503,7 +534,7 @@ function CouponSliderPreview({ cs }) {
   const isSingle = displayCoupons.length === 1;
 
   const containerStyle = isSingle
-    ? { display: 'flex', gap: '6px', justifyContent: SINGLE_ALIGN_TO_JUSTIFY[cs.singleCouponAlignment] || 'flex-start' }
+    ? { display: 'flex' }
     : isGrid
       ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }
       : { display: 'flex', gap: '6px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' };
@@ -516,8 +547,8 @@ function CouponSliderPreview({ cs }) {
         </div>
       )}
       <div style={containerStyle}>
-        {displayCoupons.map((coupon) => (
-          <div key={coupon.id} style={{ minWidth: 0, width: isSingle ? '140px' : (!isGrid && !isVertical) ? '140px' : (!isGrid && isVertical) ? '86px' : undefined, flexShrink: (isGrid && !isSingle) ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
+        {isSingle ? <SingleCouponCard coupon={displayCoupons[0]} template={cs.template} /> : displayCoupons.map((coupon) => (
+          <div key={coupon.id} style={{ minWidth: 0, width: (!isGrid && !isVertical) ? '140px' : (!isGrid && isVertical) ? '86px' : undefined, flexShrink: isGrid ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
             <CouponCard coupon={coupon} template={cs.template} isVertical={isVertical} />
           </div>
         ))}
@@ -640,7 +671,7 @@ function PreviewImageBanner({ banner, device, editing }) {
     );
   }
   return (
-    <div style={{ padding: '8px 10px' }}>
+    <div style={{ padding: `${banner.marginTop ?? 12}px 10px ${banner.marginBottom ?? 12}px` }}>
       <div className="bxcd-banner">
         <img src={device === 'mobile' ? src.mobile : src.desktop} alt={banner.alt || ''} />
       </div>

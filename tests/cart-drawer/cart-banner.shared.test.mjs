@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BANNER_PLACEMENT_VALUES, DEFAULT_BANNER_PLACEMENT, isValidBannerImage, cleanBannerImage, cleanBannerPlacement,
-  bannerSources, bannerVisible, bannerSlot,
+  bannerSources, bannerVisible, bannerSlot, cleanBannerSpacing, BANNER_SPACING_DEFAULT,
 } from '../../app/utils/cart-banner.shared.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -55,4 +55,17 @@ test('slot: progress-bar placements follow the bar; products / checkout are fixe
     assert.equal(bannerSlot('above_checkout', ctx), 'end');
   }
   assert.equal(bannerSlot('garbage', top), 'top', 'unknown placement → the default');
+});
+
+test('spacing: whole px from 0 to 40, junk / empty falls back', () => {
+  assert.equal(BANNER_SPACING_DEFAULT, 12);
+  assert.equal(cleanBannerSpacing(0), 0);
+  assert.equal(cleanBannerSpacing('8'), 8);
+  assert.equal(cleanBannerSpacing(7.6), 8);
+  assert.equal(cleanBannerSpacing(-3), 0);
+  assert.equal(cleanBannerSpacing(120), 40);
+  assert.equal(cleanBannerSpacing(undefined), 12);
+  assert.equal(cleanBannerSpacing(null, 20), 20);
+  assert.equal(cleanBannerSpacing('', 20), 20);
+  assert.equal(cleanBannerSpacing('abc', 5), 5);
 });

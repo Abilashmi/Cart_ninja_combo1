@@ -37,6 +37,18 @@ export function cleanBannerPlacement(value) {
   return BANNER_PLACEMENT_VALUES.includes(value) ? value : DEFAULT_BANNER_PLACEMENT;
 }
 
+// Space above / below the banner, in px: the gap to the section next to it
+// (the drawer body's own section gap is replaced, not added to).
+export const BANNER_SPACING_DEFAULT = 12;
+export const BANNER_SPACING_MAX = 40;
+
+/** A whole number of px from 0 to BANNER_SPACING_MAX, or the fallback. */
+export function cleanBannerSpacing(value, fallback = BANNER_SPACING_DEFAULT) {
+  const n = Number(value);
+  if (value === null || value === '' || !Number.isFinite(n)) return fallback;
+  return Math.min(BANNER_SPACING_MAX, Math.max(0, Math.round(n)));
+}
+
 /**
  * Which image each device shows. A missing one falls back to the other, so a
  * banner with only a desktop image still shows on phones (and the reverse).

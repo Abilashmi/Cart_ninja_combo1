@@ -70,6 +70,8 @@ function ensureBannerColumns($pdo) {
         'banner_mobile_image' => "`banner_mobile_image` MEDIUMTEXT NULL",
         'banner_placement' => "`banner_placement` VARCHAR(20) NOT NULL DEFAULT 'above_progress'",
         'banner_alt' => "`banner_alt` VARCHAR(160) NULL",
+        'banner_margin_top' => "`banner_margin_top` TINYINT UNSIGNED NOT NULL DEFAULT 12",
+        'banner_margin_bottom' => "`banner_margin_bottom` TINYINT UNSIGNED NOT NULL DEFAULT 12",
     ];
     foreach ($defs as $col => $ddl) {
         if (!in_array($col, $existingCols)) $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN $ddl");
@@ -104,6 +106,10 @@ function shapeBanner($result, $shopDomain) {
     $result['banner_placement'] = in_array($result['banner_placement'] ?? '', $placements, true) ? $result['banner_placement'] : 'above_progress';
     $result['banner_enabled'] = !empty($result['banner_enabled']) ? 1 : 0;
     $result['banner_alt'] = mb_substr((string)($result['banner_alt'] ?? ''), 0, 160);
+    // Space above / below in px, 0-40 (cleanBannerSpacing in cart-banner.shared.js).
+    foreach (['banner_margin_top', 'banner_margin_bottom'] as $k) {
+        $result[$k] = isset($result[$k]) && is_numeric($result[$k]) ? max(0, min(40, (int)$result[$k])) : 12;
+    }
     // Drop the raw image data, including PDO's numbered copies of the columns
     // (FETCH_BOTH, if config.php doesn't set a named-only fetch mode).
     $raw = array_filter([$result['banner_desktop_image'] ?? '', $result['banner_mobile_image'] ?? ''], 'strlen');
@@ -273,7 +279,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
               cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
               cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width,
               cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations,
-              cdc.banner_enabled, cdc.banner_desktop_image, cdc.banner_mobile_image, cdc.banner_placement, cdc.banner_alt
+              cdc.banner_enabled, cdc.banner_desktop_image, cdc.banner_mobile_image, cdc.banner_placement, cdc.banner_alt,
+              cdc.banner_margin_top, cdc.banner_margin_bottom
             FROM cart_drawer cd
             LEFT JOIN cart_drawer_config cdc ON cdc.shop_domain = cd.shop COLLATE utf8mb4_unicode_ci
             WHERE cd.shop = :shop

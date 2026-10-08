@@ -49,6 +49,7 @@ function config({ banner = {}, progress = null } = {}) {
       banner_mobile_src: banner.mobile === undefined ? 'https://img.test/mobile.svg' : banner.mobile,
       banner_placement: banner.placement || 'above_progress',
       banner_alt: 'Free shipping over ₹999',
+      ...(banner.marginTop !== undefined ? { banner_margin_top: banner.marginTop, banner_margin_bottom: banner.marginBottom } : {}),
     },
   };
 }
@@ -271,6 +272,35 @@ for (const [placement, progress, want] of expectations) {
   page = await open({ width: 1280, cfg: config({ banner: { desktop: '' } }) });
   check('only a mobile image: desktops use it', ((await measure(page)).banner?.src || '').endsWith('/mobile.svg'));
   check('banner image has the merchant\'s alt text', (await measure(page)).banner?.alt === 'Free shipping over ₹999');
+  await page.context().close();
+}
+
+/* 5b. Space above / below the banner (Below Progress Bar: bar above, items below) */
+const bannerGaps = (page) => page.evaluate(() => {
+  const banner = document.getElementById('cc-image-banner').getBoundingClientRect();
+  const bar = document.querySelector('#cc-drawer [data-cc-section="progress"]').getBoundingClientRect();
+  const items = document.querySelector('#cc-drawer .bxcd-items').previousElementSibling.getBoundingClientRect();
+  return { above: Math.round(banner.top - bar.bottom), below: Math.round(items.top - banner.bottom) };
+});
+for (const width of [1280, 390]) {
+  for (const [top, bottom] of [[0, 0], [24, 6]]) {
+    const page = await open({ width, cfg: config({ banner: { placement: 'below_progress', marginTop: top, marginBottom: bottom }, progress: 'top' }) });
+    const gaps = await bannerGaps(page);
+    check(`banner spacing ${top}/${bottom}px (${width}px): the gaps match`, gaps.above === top && gaps.below === bottom, JSON.stringify(gaps));
+    await page.context().close();
+  }
+}
+
+/* 5c. Phones: tight body and footer spacing */
+{
+  const page = await open({ width: 390 });
+  const sp = await page.evaluate(() => {
+    const cs = (el) => getComputedStyle(el);
+    const body = cs(document.getElementById('cc-drawer-body'));
+    const footer = cs(document.getElementById('cc-drawer-footer'));
+    return { bodyTop: body.paddingTop, bodyBottom: body.paddingBottom, gap: body.rowGap, footerTop: footer.paddingTop };
+  });
+  check('phone: body and footer padding are tight', sp.bodyTop === '10px' && sp.bodyBottom === '12px' && sp.gap === '8px' && sp.footerTop === '12px', JSON.stringify(sp));
   await page.context().close();
 }
 
