@@ -1,0 +1,24 @@
+query Input {
+  cart {
+    cod: attribute(key: "_brixCod") { value }
+    lines {
+      id
+      cod: attribute(key: "_brixCod") { value }
+      reward: attribute(key: "_brixReward") { value }
+      cost {
+        subtotalAmount {
+          amount
+          currencyCode
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+  shop {
+    metafield(namespace: "$app", key: "prepaid_discount_config") {
+      jsonValue
+    }
+  }
+}

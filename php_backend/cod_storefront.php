@@ -138,6 +138,107 @@ function cods_tracking($tracking) {
     ];
 }
 
+// Merchant text: no control characters, trimmed, at most $max characters.
+function cods_text($value, $default, $max) {
+    if (!is_string($value)) return $default;
+    $t = trim(preg_replace('/\s+/u', ' ', preg_replace('/[\x00-\x1F\x7F]/u', ' ', $value)));
+    $t = mb_substr($t, 0, $max);
+    return $t !== '' ? $t : $default;
+}
+
+function cods_hex($value, $default) {
+    return is_string($value) && preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $value) ? $value : $default;
+}
+
+function cods_bool($value, $default) {
+    return is_bool($value) ? $value : $default;
+}
+
+/**
+ * Product page payment selector (Pay Online / Cash on Delivery). Mirrors
+ * sanitizeProductPayment in app/utils/product-payment.shared.js. null = off.
+ *
+ * The prepaid offer is passed on only when the Node app VERIFIED the BRIX
+ * prepaid discount is active in Shopify (`_runtime.prepaid`, written after it
+ * synced the Function's config), and with the percentage / minimum Shopify
+ * really has, so shoppers are never promised a discount checkout won't give.
+ * The browser never decides the discount: the Discount Function does.
+ */
+function cods_product_payment($s, $codLive) {
+    $p = is_array($s['productPayment'] ?? null) ? $s['productPayment'] : null;
+    if (!$p || ($p['enabled'] ?? false) !== true) return null;
+    $on = is_array($p['online'] ?? null) ? $p['online'] : [];
+    $cd = is_array($p['cod'] ?? null) ? $p['cod'] : [];
+    $pre = is_array($p['prepaid'] ?? null) ? $p['prepaid'] : [];
+    $ly = is_array($p['layout'] ?? null) ? $p['layout'] : [];
+    $ap = is_array($p['appearance'] ?? null) ? $p['appearance'] : [];
+    $surfaces = is_array($s['surfaces'] ?? null) ? $s['surfaces'] : [];
+
+    $onlineOn = cods_bool($on['enabled'] ?? null, true);
+    // Both off: still sent (as both disabled), so brix_cod.js shows nothing at
+    // all instead of falling back to the plain product page COD button.
+    $codOn = $codLive && cods_bool($cd['enabled'] ?? null, true) && ($surfaces['product'] ?? true) !== false;
+
+    $prepaid = null;
+    $rt = is_array($s['_runtime']['prepaid'] ?? null) ? $s['_runtime']['prepaid'] : [];
+    $percent = is_numeric($rt['percent'] ?? null) ? round((float)$rt['percent'], 2) : 0;
+    if ($onlineOn && cods_bool($pre['enabled'] ?? null, false) && ($rt['verified'] ?? false) === true && $percent >= 1 && $percent <= 50) {
+        $prepaid = [
+            'percent' => $percent,
+            'minSubtotal' => cods_num($rt['minSubtotal'] ?? 0),
+            'currency' => is_string($rt['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', $rt['currency']) ? $rt['currency'] : '',
+            'showBadge' => cods_bool($pre['showBadge'] ?? null, true),
+            'showSavingsAmount' => cods_bool($pre['showSavingsAmount'] ?? null, true),
+            'offerTitle' => cods_text($pre['offerTitle'] ?? null, '{percent}% off when you pay online', 80),
+            'offerDescription' => cods_text($pre['offerDescription'] ?? null, '', 120),
+            'minNotMetText' => cods_text($pre['minNotMetText'] ?? null, '', 100),
+        ];
+    }
+
+    $placements = ['below_price', 'below_variants', 'below_quantity', 'before_purchase_buttons', 'above_buy_now', 'below_add_to_cart', 'app_block'];
+    $radius = is_numeric($ly['radius'] ?? null) ? max(0, min(24, (int)round((float)$ly['radius']))) : 8;
+    return [
+        'heading' => array_key_exists('heading', $p) ? cods_text($p['heading'], '', 60) : 'Choose payment method',
+        'defaultMethod' => cods_enum($p['defaultMethod'] ?? '', ['online', 'cod'], 'online'),
+        'relabelBuyNow' => cods_bool($p['relabelBuyNow'] ?? null, true),
+        'online' => [
+            'enabled' => $onlineOn,
+            'label' => cods_text($on['label'] ?? null, 'Pay Online', 40),
+            'description' => cods_text($on['description'] ?? null, '', 80),
+            'buttonText' => cods_text($on['buttonText'] ?? null, 'Buy it now', 60),
+            'showIcon' => cods_bool($on['showIcon'] ?? null, true),
+        ],
+        'cod' => [
+            'enabled' => $codOn,
+            'label' => cods_text($cd['label'] ?? null, 'Cash on Delivery', 40),
+            'description' => cods_text($cd['description'] ?? null, '', 80),
+            'showIcon' => cods_bool($cd['showIcon'] ?? null, true),
+        ],
+        'prepaid' => $prepaid,
+        'layout' => [
+            'placement' => cods_enum($ly['placement'] ?? '', $placements, 'before_purchase_buttons'),
+            'cardLayout' => cods_enum($ly['cardLayout'] ?? '', ['horizontal', 'vertical'], 'horizontal'),
+            'cardStyle' => cods_enum($ly['cardStyle'] ?? '', ['border', 'filled', 'minimal'], 'border'),
+            'selectedStyle' => cods_enum($ly['selectedStyle'] ?? '', ['border', 'background', 'radio_border'], 'radio_border'),
+            'radius' => $radius,
+            'spacing' => cods_enum($ly['spacing'] ?? '', ['small', 'medium', 'large'], 'medium'),
+            'showRadio' => cods_bool($ly['showRadio'] ?? null, true),
+            'showIcons' => cods_bool($ly['showIcons'] ?? null, true),
+            'showBanner' => cods_bool($ly['showBanner'] ?? null, true),
+            'bannerPlacement' => cods_enum($ly['bannerPlacement'] ?? '', ['above_selector', 'in_online_card', 'below_price'], 'above_selector'),
+        ],
+        'appearance' => [
+            'onlineColor' => cods_hex($ap['onlineColor'] ?? null, '#008060'),
+            'codColor' => cods_hex($ap['codColor'] ?? null, '#111827'),
+            'cardBackground' => cods_hex($ap['cardBackground'] ?? null, '#ffffff'),
+            'borderColor' => cods_hex($ap['borderColor'] ?? null, '#d1d5db'),
+            'selectedBackground' => cods_hex($ap['selectedBackground'] ?? null, '#f0fdf4'),
+            'badgeBackground' => cods_hex($ap['badgeBackground'] ?? null, '#008060'),
+            'badgeText' => cods_hex($ap['badgeText'] ?? null, '#ffffff'),
+        ],
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') cods_fail(405, 'method_not_allowed', 'GET only');
 
@@ -147,15 +248,20 @@ $action = $_GET['action'] ?? 'config';
 
 if ($action === 'config') {
     $s = cods_settings($pdo, $shop);
-    $live = false;
-    if ($s && !empty($s['enabled'])) {
+    // The plan publishes COD and the product page payment options (with the
+    // prepaid offer) together: feature `cod_checkout`.
+    $planLive = false;
+    $wanted = $s && (!empty($s['enabled']) || (($s['productPayment']['enabled'] ?? false) === true));
+    if ($wanted) {
         try {
-            $live = plan_get_feature_state(resolve_plan_key($pdo, $shop), 'cod_checkout') === 'enabled';
+            $planLive = plan_get_feature_state(resolve_plan_key($pdo, $shop), 'cod_checkout') === 'enabled';
         } catch (Throwable $e) {
             error_log('[cod_storefront] plan lookup: ' . $e->getMessage());
         }
     }
-    if (!$live) cods_ok(['enabled' => false], 30);
+    $live = $planLive && !empty($s['enabled']);
+    $payment = $planLive ? cods_product_payment($s, $live) : null;
+    if (!$live) cods_ok(array_merge(['enabled' => false], $payment ? ['productPayment' => $payment] : []), 30);
 
     $surfaces = is_array($s['surfaces'] ?? null) ? $s['surfaces'] : [];
     $buttons = is_array($s['buttons'] ?? null) ? $s['buttons'] : [];
@@ -198,6 +304,7 @@ if ($action === 'config') {
         'productButton' => cods_product_button($s['productButton'] ?? null),
         'sheet' => cods_sheet($s['sheet'] ?? null),
         'tracking' => cods_tracking($s['tracking'] ?? null),
+        'productPayment' => $payment,
     ], 30);
 }
 

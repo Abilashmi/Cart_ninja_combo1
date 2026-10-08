@@ -1,0 +1,17 @@
+api_version = "2025-10"
+uid = "09a6f51e-e2ed-7226-bc70-b175876f2a2a83c6438b"
+
+[[extensions]]
+name = "BRIX prepaid discount"
+handle = "brix-prepaid-discount"
+type = "function"
+description = "Gives the merchant's prepaid (pay online) percentage off at Shopify checkout. Never applies to BRIX Cash on Delivery orders."
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

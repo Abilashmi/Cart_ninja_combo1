@@ -3,6 +3,9 @@
 import {
   isValidCodLogo, isValidDrawerSelector, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE,
 } from '../../utils/cod.shared';
+import {
+  DEFAULT_PRODUCT_PAYMENT, parsePrepaidPercent, parseMinSubtotal, PREPAID_PERCENT_MIN, PREPAID_PERCENT_MAX, PAY_HEX_RE,
+} from '../../utils/product-payment.shared';
 
 /* ---------- form state <-> settings ---------- */
 
@@ -36,6 +39,59 @@ export function productButtonForm(pb) {
     pbPaddingX: b.paddingX,
     pbRadius: b.radius,
   };
+}
+
+/**
+ * Product page payment options: the settings object itself, with the two
+ * typed numbers kept as text while editing ('' = empty field).
+ */
+export function paymentForm(pp) {
+  const p = pp || DEFAULT_PRODUCT_PAYMENT;
+  return {
+    ...p,
+    online: { ...p.online },
+    cod: { ...p.cod },
+    prepaid: { ...p.prepaid, percent: String(p.prepaid.percent), minSubtotal: numText(p.prepaid.minSubtotal) },
+    layout: { ...p.layout },
+    appearance: { ...p.appearance },
+  };
+}
+
+export function paymentSettings(pf) {
+  return {
+    ...pf,
+    prepaid: {
+      ...pf.prepaid,
+      percent: parsePrepaidPercent(pf.prepaid.percent) ?? pf.prepaid.percent,
+      minSubtotal: parseMinSubtotal(pf.prepaid.minSubtotal) ?? pf.prepaid.minSubtotal,
+    },
+  };
+}
+
+// Payment options' colour fields and their labels (Appearance section).
+export const PAY_COLORS = [
+  ['onlineColor', 'Pay Online selected'],
+  ['codColor', 'Cash on Delivery selected'],
+  ['cardBackground', 'Card background'],
+  ['borderColor', 'Card border'],
+  ['selectedBackground', 'Selected background'],
+  ['badgeBackground', 'Discount badge'],
+  ['badgeText', 'Discount badge text'],
+];
+
+export function paymentErrors(pf) {
+  const e = {};
+  if (!pf) return e;
+  if (pf.prepaid.enabled && parsePrepaidPercent(pf.prepaid.percent) === null) {
+    e.ppPercent = `Enter a percentage from ${PREPAID_PERCENT_MIN} to ${PREPAID_PERCENT_MAX}.`;
+  }
+  if (parseMinSubtotal(pf.prepaid.minSubtotal) === null) e.ppMinSubtotal = 'Enter an amount of 0 or more, or leave it empty.';
+  if (pf.prepaid.enabled && !String(pf.prepaid.title || '').trim()) e.ppTitle = 'Enter the name shoppers see at checkout.';
+  if (!String(pf.online.label || '').trim()) e.ppOnlineLabel = 'Enter a label.';
+  if (!String(pf.cod.label || '').trim()) e.ppCodLabel = 'Enter a label.';
+  if (!String(pf.online.buttonText || '').trim()) e.ppOnlineButton = 'Enter the button text.';
+  for (const [key] of PAY_COLORS) if (!PAY_HEX_RE.test(pf.appearance[key] || '')) e[`pp_${key}`] = 'Use a hex colour like #008060.';
+  return e;
 }
 
 export function toForm(s) {
@@ -78,6 +134,7 @@ export function toForm(s) {
     ga4ApiSecret: '',
     metaCapiToken: '',
     metaTestCode: '',
+    pp: paymentForm(s.productPayment),
   };
 }
 
@@ -140,6 +197,7 @@ export function toSettings(f) {
       metaContentId: f.metaContentId,
       dataLayer: f.dataLayer,
     },
+    productPayment: paymentSettings(f.pp),
   };
 }
 
@@ -171,6 +229,7 @@ export function formErrors(f) {
   for (const key of SECRET_FIELDS) {
     if (typeof f[key] === 'string' && f[key].trim() && !/^[A-Za-z0-9_-]{1,512}$/.test(f[key].trim())) e[key] = 'Paste it again without spaces.';
   }
+  Object.assign(e, paymentErrors(f.pp));
   return e;
 }
 

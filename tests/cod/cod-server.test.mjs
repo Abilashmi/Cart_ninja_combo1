@@ -174,7 +174,9 @@ test('quote: priced by Shopify, COD fee added as the shipping line, rules applie
   assert.equal(quote.total, 1847);
   assert.equal(input.shippingLine.priceWithCurrency.amount, '49.00');
   assert.equal(input.shippingLine.priceWithCurrency.currencyCode, 'INR');
-  assert.deepEqual(input.lineItems[0].customAttributes, [{ key: 'Engraving', value: 'AR' }], '_brix* properties are dropped');
+  assert.deepEqual(input.lineItems[0].customAttributes, [{ key: 'Engraving', value: 'AR' }, { key: '_brixCod', value: 'true' }], 'shopper _brix* properties are dropped; the server adds the COD marker');
+  assert.deepEqual(input.lineItems[1].customAttributes, [{ key: '_brixCod', value: 'true' }], 'every COD line is marked');
+  assert.deepEqual(input.customAttributes, [{ key: '_brixCod', value: 'true' }], 'the draft is marked while it is priced');
   assert.deepEqual(
     { variantId: quote.lines[0].variantId, productId: quote.lines[0].productId, sku: quote.lines[0].sku, unitPrice: quote.lines[0].unitPrice },
     { variantId: '11', productId: '1', sku: 'SKU-11', unitPrice: 899 },
@@ -237,6 +239,12 @@ test('order: creates a payment-pending Shopify order tagged COD with the address
   assert.match(create.note, /Phone verified by OTP/);
   assert.ok(create.customAttributes.some((a) => a.key === 'combo_source' && a.value === 'ComboForge'));
   assert.ok(!create.customAttributes.some((a) => a.key === 'bad key!'));
+  // The prepaid discount Function refuses any cart carrying _brixCod, so the
+  // order and every line carry it (set by the server, never by the shopper).
+  assert.equal(create.customAttributes.filter((a) => a.key === '_brixCod').length, 1);
+  assert.ok(create.customAttributes.some((a) => a.key === '_brixCod' && a.value === 'true'));
+  assert.ok(create.lineItems.every((li) => li.customAttributes.some((a) => a.key === '_brixCod' && a.value === 'true')));
+  assert.equal(create.acceptAutomaticDiscounts, true, 'other automatic discounts still apply to COD');
   assert.ok(admin.calls.some((c) => c.op === 'CodComplete' && c.variables.id === 'gid://shopify/DraftOrder/9'));
 
   const [row] = await orderRows();
@@ -722,4 +730,145 @@ test('PHP: tracking secrets need the Forge secret and look like keys', async () 
   assert.equal((await callPhp('cod_settings.php', { action: 'secrets_get', shop: SHOP }, 'wrong')).status, 403);
   assert.equal((await callPhp('cod_settings.php', { action: 'secrets_save', shop: SHOP, secrets: { metaCapiToken: 'a b' } })).json.code, 'invalid_metaCapiToken');
   assert.equal((await callPhp('cod_orders.php', { action: 'sync', shop: SHOP, order_id: 'gid://x' })).json.code, 'invalid_order_id');
+});
+
+/* ── product page payment options + prepaid discount ───────────────────────── */
+
+test('order: a shopper cannot remove or fake the COD marker through order attributes', async () => {
+  const admin = fakeAdmin();
+  await place(admin, { attributes: { _brixCod: '', _brixCodX: 'no', note_key: 'kept' } });
+  const create = admin.calls.find((c) => c.op === 'CodCreate').variables.input;
+  assert.deepEqual(create.customAttributes.filter((a) => a.key.startsWith('_brix')), [{ key: '_brixCod', value: 'true' }]);
+  assert.ok(create.customAttributes.some((a) => a.key === 'note_key'));
+});
+
+test('settings: productPayment is saved, sanitized, and old settings get safe defaults (off)', async () => {
+  await cod.saveCodSettings(SHOP, { enabled: true, codFee: 49 });
+  let s = await cod.getCodSettings(SHOP);
+  assert.equal(s.productPayment.enabled, false, 'existing merchants: product pages unchanged');
+  assert.equal(s.codFee, 49, 'existing COD settings unchanged');
+  s = await cod.saveCodSettings(SHOP, { productPayment: { enabled: true, prepaid: { enabled: true, percent: 75 } } });
+  assert.equal(s.productPayment.enabled, true);
+  assert.equal(s.productPayment.prepaid.percent, 10, 'out of range percent keeps the previous valid value');
+  assert.equal(s.enabled, true);
+});
+
+test('settings: the prepaid sync result is kept in _runtime, and survives later saves and syncCodRuntime', async () => {
+  const runtime = { verified: true, percent: 10, minSubtotal: 0, currency: 'INR', state: 'active' };
+  await cod.saveCodSettings(SHOP, { enabled: true, productPayment: { enabled: true, prepaid: { enabled: true } } }, {
+    syncPrepaid: async (next) => {
+      assert.equal(next.productPayment.prepaid.enabled, true, 'sync sees the new settings before they are stored');
+      return runtime;
+    },
+  });
+  const stored = () => sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]).then((r) => JSON.parse(r[0].settings_json));
+  assert.deepEqual((await stored())._runtime.prepaid, runtime);
+  await cod.saveCodSettings(SHOP, { codFee: 20 });
+  assert.deepEqual((await stored())._runtime.prepaid, runtime, 'a save without a sync keeps it');
+  process.env.COD_OTP_DEV_LOG = '0';
+  try {
+    await cod.syncCodRuntime(SHOP);
+    const after = await stored();
+    assert.equal(after._runtime.otpAvailable, false);
+    assert.deepEqual(after._runtime.prepaid, runtime, 'syncCodRuntime keeps it');
+  } finally {
+    process.env.COD_OTP_DEV_LOG = '1';
+    await cod.syncCodRuntime(SHOP);
+  }
+  const { runtime: rt } = await cod.getCodSettingsWithRuntime(SHOP);
+  assert.equal(rt.prepaid.verified, true);
+});
+
+const paymentOn = (patch = {}) => ({
+  enabled: true, codFee: 50, codFeeEnabled: true,
+  productPayment: { enabled: true, prepaid: { enabled: true, percent: 10, minSubtotal: 999 }, ...patch },
+});
+const verified = { verified: true, percent: 10, minSubtotal: 999, currency: 'INR', state: 'active' };
+
+test('storefront config: payment options only when on, on a plan that publishes COD', async () => {
+  await setPlan('pro');
+  await cod.saveCodSettings(SHOP, { enabled: true });
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.productPayment, null, 'off by default');
+
+  await cod.saveCodSettings(SHOP, paymentOn(), { syncPrepaid: async () => verified });
+  const { json } = await storefront(`action=config&shop=${SHOP}`);
+  assert.equal(json.enabled, true);
+  const pp = json.productPayment;
+  assert.equal(pp.online.enabled, true);
+  assert.equal(pp.cod.enabled, true);
+  assert.equal(pp.heading, 'Choose payment method');
+  assert.deepEqual(
+    { percent: pp.prepaid.percent, minSubtotal: pp.prepaid.minSubtotal, currency: pp.prepaid.currency },
+    { percent: 10, minSubtotal: 999, currency: 'INR' },
+  );
+  assert.equal(pp.layout.placement, 'before_purchase_buttons');
+  assert.equal(pp.appearance.onlineColor, '#008060');
+  assert.equal('_runtime' in json, false);
+
+  await setPlan('free');
+  const free = (await storefront(`action=config&shop=${SHOP}`)).json;
+  assert.equal(free.enabled, false);
+  assert.equal(free.productPayment, undefined, 'Free plan = preview only, nothing for shoppers');
+});
+
+test('storefront config: the prepaid offer is sent only when the server verified it, with the numbers Shopify has', async () => {
+  await setPlan('pro');
+  await cod.saveCodSettings(SHOP, paymentOn(), { syncPrepaid: async () => ({ verified: false, state: 'not_deployed' }) });
+  let pp = (await storefront(`action=config&shop=${SHOP}`)).json.productPayment;
+  assert.equal(pp.prepaid, null, 'not verified → no "Save 10%" on the storefront');
+  assert.equal(pp.online.enabled, true, 'Pay Online still offered');
+
+  await cod.saveCodSettings(SHOP, { productPayment: { prepaid: { percent: 15 } } });
+  pp = (await storefront(`action=config&shop=${SHOP}`)).json.productPayment;
+  assert.equal(pp.prepaid, null, 'a save without a successful sync never makes the offer appear');
+
+  await cod.saveCodSettings(SHOP, {}, { syncPrepaid: async () => ({ ...verified, percent: 15 }) });
+  pp = (await storefront(`action=config&shop=${SHOP}`)).json.productPayment;
+  assert.equal(pp.prepaid.percent, 15);
+
+  await cod.saveCodSettings(SHOP, { productPayment: { prepaid: { enabled: false } } }, { syncPrepaid: async () => ({ verified: false, state: 'not_needed' }) });
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.productPayment.prepaid, null, 'prepaid off');
+});
+
+test('storefront config: which payment cards are offered', async () => {
+  await setPlan('pro');
+  const cards = async () => {
+    const { json } = await storefront(`action=config&shop=${SHOP}`);
+    return json.productPayment ? { online: json.productPayment.online.enabled, cod: json.productPayment.cod.enabled } : null;
+  };
+  await cod.saveCodSettings(SHOP, paymentOn(), { syncPrepaid: async () => verified });
+  assert.deepEqual(await cards(), { online: true, cod: true }, 'both');
+  await cod.saveCodSettings(SHOP, { productPayment: { cod: { enabled: false } } });
+  assert.deepEqual(await cards(), { online: true, cod: false }, 'online only');
+  await cod.saveCodSettings(SHOP, { productPayment: { cod: { enabled: true }, online: { enabled: false } } });
+  assert.deepEqual(await cards(), { online: false, cod: true }, 'COD only');
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.productPayment.prepaid, null, 'no Pay Online → no prepaid offer');
+  await cod.saveCodSettings(SHOP, { productPayment: { cod: { enabled: false } } });
+  assert.deepEqual(await cards(), { online: false, cod: false }, 'both off → sent as both off, so the storefront shows nothing (not the plain COD button)');
+
+  await cod.saveCodSettings(SHOP, { productPayment: { online: { enabled: true }, cod: { enabled: true } }, surfaces: { product: false } });
+  assert.deepEqual(await cards(), { online: true, cod: false }, 'COD hidden on product pages → no COD card');
+  await cod.saveCodSettings(SHOP, { enabled: false, surfaces: { product: true } });
+  const off = (await storefront(`action=config&shop=${SHOP}`)).json;
+  assert.equal(off.enabled, false, 'COD off');
+  assert.deepEqual({ online: off.productPayment.online.enabled, cod: off.productPayment.cod.enabled }, { online: true, cod: false }, 'COD off → Pay Online (and its offer) still shown');
+  assert.equal(off.productPayment.prepaid.percent, 10);
+});
+
+test('storefront config: PHP re-checks payment option values stored by anything else', async () => {
+  await setPlan('pro');
+  await cod.saveCodSettings(SHOP, paymentOn(), { syncPrepaid: async () => verified });
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  stored.productPayment.appearance.onlineColor = 'red;background:url(x)';
+  stored.productPayment.layout.placement = '<script>';
+  stored.productPayment.layout.radius = 900;
+  stored.productPayment.online.label = 'x'.repeat(500);
+  stored._runtime.prepaid.percent = 90;
+  await sql('UPDATE cod_settings SET settings_json = ? WHERE shop = ?', [JSON.stringify(stored), SHOP]);
+  const pp = (await storefront(`action=config&shop=${SHOP}`)).json.productPayment;
+  assert.equal(pp.appearance.onlineColor, '#008060');
+  assert.equal(pp.layout.placement, 'before_purchase_buttons');
+  assert.equal(pp.layout.radius, 24);
+  assert.equal(pp.online.label.length, 40);
+  assert.equal(pp.prepaid, null, 'a percentage outside 1–50 is never offered');
 });

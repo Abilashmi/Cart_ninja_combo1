@@ -6,6 +6,8 @@
  * address uses a 6-digit PIN code.
  */
 
+import { DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment } from './product-payment.shared.js';
+
 export const COD_SURFACES = ['drawer', 'product', 'combo'];
 export const COD_SOURCES = COD_SURFACES; // where an order was placed from
 
@@ -80,6 +82,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     metaContentId: 'shopify', // shopify (shopify_IN_<product>_<variant>) | variant | sku
     dataLayer: true, // also push brix_cod_* events to GTM's dataLayer when present
   },
+  // Product page payment selector (Pay Online / Cash on Delivery) and the
+  // prepaid discount it advertises. See utils/product-payment.shared.js.
+  productPayment: DEFAULT_PRODUCT_PAYMENT,
 });
 
 export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
@@ -252,6 +257,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     productButton,
     sheet,
     tracking,
+    productPayment: sanitizeProductPayment(p.productPayment, b.productPayment),
   };
   return out;
 }

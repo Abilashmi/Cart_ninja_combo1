@@ -12,7 +12,7 @@ import {
 import {
   ArrowLeftIcon, ChevronDownIcon, DesktopIcon, MobileIcon, CashRupeeIcon, CartIcon, ButtonIcon, CodeIcon, ProductIcon,
   CollectionIcon, ReceiptIcon, DeliveryIcon, FilterIcon, ShieldCheckMarkIcon, PaintBrushFlatIcon, DiscountIcon,
-  ChartVerticalIcon, OrderIcon, DeleteIcon, SendIcon,
+  ChartVerticalIcon, OrderIcon, DeleteIcon, SendIcon, PaymentIcon, CreditCardPercentIcon, ColorIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getShopPlan } from '../services/plan-permissions.server';
@@ -20,8 +20,9 @@ import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
 import {
-  CodError, getCodSettings, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets,
+  CodError, getCodSettings, getCodSettingsWithRuntime, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets,
 } from '../services/cod.server';
+import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
@@ -38,6 +39,10 @@ import { SliderField } from '../components/shared/SliderField';
 import { COD_ADMIN_CSS } from '../components/cod/codAdminStyles';
 import { COD_SETTINGS_CSS } from '../components/cod/codSettingsStyles';
 import { COD_CUSTOMIZE_CSS } from '../components/cod/codCustomizeStyles';
+import { PAY_PREVIEW_CSS } from '../components/cod/PaymentOptionsPreview';
+import {
+  PaymentOptionsSection, PrepaidSection, PaymentDesignSection, usePaymentSetter,
+} from '../components/cod/PaymentOptionsSections';
 
 export async function loader({ request }) {
   const { admin, session } = await authenticate.admin(request);
@@ -46,9 +51,12 @@ export async function loader({ request }) {
   let settings = null;
   let couponOptions = [];
   let secretsStatus = null;
+  let prepaidStatus = null;
   let loadError = null;
   try {
-    settings = await getCodSettings(shop);
+    const stored = await getCodSettingsWithRuntime(shop);
+    settings = stored.settings;
+    prepaidStatus = stored.runtime.prepaid || null;
     await syncCodRuntime(shop);
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
@@ -71,11 +79,12 @@ export async function loader({ request }) {
     sms: smsProviderStatus(),
     couponOptions,
     secretsStatus,
+    prepaidStatus,
   };
 }
 
 export async function action({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   try {
     const body = await request.json();
     if (body.intent === 'test_tracking') {
@@ -84,8 +93,26 @@ export async function action({ request }) {
       return { success: true, intent: 'test_tracking', result: await sendCodTestEvents({ settings, secrets }) };
     }
     if (body.secrets && typeof body.secrets === 'object') await saveCodSecrets(session.shop, body.secrets);
-    const settings = await saveCodSettings(session.shop, body.settings || {});
-    return { success: true, settings };
+    // The prepaid discount (product page payment options) is brought in line
+    // with Shopify on every save; the storefront offers it only when verified.
+    let prepaid = null;
+    const settings = await saveCodSettings(session.shop, body.settings || {}, {
+      syncPrepaid: async (next) => {
+        let result;
+        try {
+          const [planKey, currency] = await Promise.all([getShopPlan(session.shop, admin), getShopCurrency(admin, session.shop)]);
+          result = await syncPrepaidDiscount(admin, next, { currencyCode: currency?.code ?? null, planLive: getFeatureState(planKey, 'cod_checkout') === 'enabled' });
+        } catch (error) {
+          // Never blocks saving COD settings; the storefront just won't offer the discount.
+          console.error('[app.cod.customize] prepaid sync failed:', String(error?.message || error).slice(0, 300));
+          result = { verified: false, state: 'failed', message: 'Could not set up the prepaid discount in Shopify. Save again to retry.', config: null };
+        }
+        prepaid = prepaidRuntime(result, result.config);
+        prepaid.message = result.message;
+        return prepaid;
+      },
+    });
+    return { success: true, settings, prepaid };
   } catch (error) {
     const message = error instanceof CodError ? error.message : 'Settings could not be saved. Please try again.';
     if (!(error instanceof CodError)) console.error('[app.cod.customize] save failed:', String(error?.message || error).slice(0, 300));
@@ -175,6 +202,17 @@ const GROUPS = [
     items: [
       { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText'], toggle: 'product' },
       { id: 'combo', label: 'Combo pages', icon: CollectionIcon, preview: 'drawer', fields: [], toggle: 'combo' },
+    ],
+  },
+  {
+    title: 'Product page payments',
+    items: [
+      { id: 'payoptions', label: 'Payment options', icon: PaymentIcon, preview: 'product', fields: ['ppOnlineLabel', 'ppCodLabel', 'ppOnlineButton'], toggle: (f) => f.pp.enabled },
+      { id: 'prepaid', label: 'Prepaid discount', icon: CreditCardPercentIcon, preview: 'product', fields: ['ppPercent', 'ppMinSubtotal', 'ppTitle'], toggle: (f) => f.pp.enabled && f.pp.online.enabled && f.pp.prepaid.enabled },
+      {
+        id: 'paydesign', label: 'Payment options design', icon: ColorIcon, preview: 'product',
+        fields: ['pp_onlineColor', 'pp_codColor', 'pp_cardBackground', 'pp_borderColor', 'pp_selectedBackground', 'pp_badgeBackground', 'pp_badgeText'],
+      },
     ],
   },
   {
@@ -287,6 +325,9 @@ export default function CodCustomizePage() {
   const showSurface = (id) => { setSurface(id); if (id === 'sheet') setLoader(true); };
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+  const setPP = usePaymentSetter(setForm);
+  // Latest known state of the prepaid discount in Shopify: from this page's last save, else from the loader.
+  const prepaidStatus = (fetcher.data?.success && fetcher.data.prepaid) || data.prepaidStatus;
   const toggleSection = (id) => {
     const next = open === id ? null : id;
     setOpen(next);
@@ -444,6 +485,9 @@ export default function CodCustomizePage() {
       return (
         <BlockStack gap="400">
           <Text as="p" tone="subdued">A COD button on product pages that buys just that product.</Text>
+          {form.pp.enabled && (
+            <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size from here still apply; Replace the Buy it now button doesn&apos;t.</Banner>
+          )}
           <Card>
             <FormLayout>
               <Checkbox label="Show COD on product pages" checked={form.product} onChange={set('product')} />
@@ -478,6 +522,15 @@ export default function CodCustomizePage() {
           )}
         </BlockStack>
       );
+    }
+    if (id === 'payoptions') {
+      return <PaymentOptionsSection form={form} set={set} setPP={setPP} errors={errors} money={money} />;
+    }
+    if (id === 'prepaid') {
+      return <PrepaidSection form={form} setPP={setPP} errors={errors} currencyCode={data.currencyCode} status={prepaidStatus} dirty={dirty} />;
+    }
+    if (id === 'paydesign') {
+      return <PaymentDesignSection form={form} setPP={setPP} errors={errors} />;
     }
     if (id === 'combo') {
       return (
@@ -751,13 +804,13 @@ export default function CodCustomizePage() {
   }
 
   const isActive = form.enabled;
-  const built = buildCodScreen({ settings: preview, money, surface, cart, excludedOn, loader });
+  const built = buildCodScreen({ settings: preview, money, surface, cart, excludedOn, loader, device });
   const isDesktop = device === 'desktop';
   const sliderMax = cartSliderMax(preview);
 
   return (
     <Frame>
-      <style>{COD_ADMIN_CSS + COD_SETTINGS_CSS + COD_CUSTOMIZE_CSS}</style>
+      <style>{COD_ADMIN_CSS + COD_SETTINGS_CSS + COD_CUSTOMIZE_CSS + PAY_PREVIEW_CSS}</style>
       {toast && <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} />}
       <div className="bcz">
         {/* ── Sidebar ── */}
@@ -779,13 +832,14 @@ export default function CodCustomizePage() {
                 {g.items.map((item) => {
                   const isOpen = open === item.id;
                   const n = item.fields.filter((f) => errors[f]).length;
+                  const toggled = typeof item.toggle === 'function' ? item.toggle(form) : form[item.toggle];
                   return (
                     <div key={item.id} className="bcz-item">
                       <button type="button" className={`bcz-row${isOpen ? ' is-open' : ''}`} aria-expanded={isOpen} onClick={() => toggleSection(item.id)}>
                         <span className="bcz-row-ic"><Icon source={item.icon} /></span>
                         <span className="bcz-row-l">{item.label}</span>
                         {n ? <span className="bcz-badge is-err">{n === 1 ? '1 error' : `${n} errors`}</span>
-                          : item.toggle ? <span className={`bcz-badge${form[item.toggle] ? ' is-on' : ''}`}>{form[item.toggle] ? 'On' : 'Off'}</span> : null}
+                          : item.toggle ? <span className={`bcz-badge${toggled ? ' is-on' : ''}`}>{toggled ? 'On' : 'Off'}</span> : null}
                         <span className="bcz-row-chev"><Icon source={ChevronDownIcon} /></span>
                       </button>
                       {isOpen && <div className="bcz-body">{sectionBody(item.id)}</div>}

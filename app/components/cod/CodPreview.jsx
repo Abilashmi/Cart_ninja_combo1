@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { BlockStack, Box, ButtonGroup, Button, Card, Checkbox, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
 import { checkCodRules, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
 import { codButtonColors, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
+import { PaymentOptionsScreen } from './PaymentOptionsPreview';
 
 const SURFACES = [
   { id: 'drawer', label: 'Cart drawer' },
@@ -149,7 +150,7 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
  * The preview screen for one surface (drawer | product | sheet), plus what the
  * simulator needs. Plain function so the COD customizer can frame it its own way.
  */
-export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false }) {
+export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false, device = 'desktop' }) {
   const hasTags = settings.excludedProductTags.length > 0;
   const excluded = hasTags && excludedOn;
   const ruleSurface = surface === 'sheet' ? 'drawer' : surface;
@@ -185,6 +186,10 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
     screen = <DrawerScreen settings={settings} money={money} cart={cart} codState={codState} hiddenWhy={hiddenWhy} />;
     caption = codState ? PLACEMENT_NOTE[settings.drawerPlacement || 'above'] : null;
     if (codState?.reason && settings.drawerPlacement === 'replace') caption = 'COD can\'t be used for this cart, so Checkout stays and COD shows as unavailable above it.';
+  } else if (surface === 'product' && settings.productPayment?.enabled) {
+    // Payment options on: they replace the plain product page COD button.
+    screen = <PaymentOptionsScreen settings={settings} money={money} phone={device === 'mobile'} />;
+    caption = 'Sample product. Click a card, size or quantity to try it. Shoppers see the prepaid offer only once the discount is active in Shopify.';
   } else if (surface === 'product') {
     const pb = { ...DEFAULT_COD_SETTINGS.productButton, ...(settings.productButton || {}) };
     const hideForTag = excluded && settings.excludedBehavior === 'hide';

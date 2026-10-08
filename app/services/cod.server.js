@@ -77,22 +77,45 @@ async function php(file, body) {
   throw new CodError('database_error', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
 }
 
-export async function getCodSettings(shop) {
+async function loadStoredSettings(shop) {
   const { settings } = await php('cod_settings.php', { action: 'get', shop });
-  return sanitizeCodSettings(settings || {}, DEFAULT_COD_SETTINGS);
+  return settings && typeof settings === 'object' ? settings : null;
+}
+
+export async function getCodSettings(shop) {
+  return sanitizeCodSettings((await loadStoredSettings(shop)) || {}, DEFAULT_COD_SETTINGS);
+}
+
+/** The settings plus the stored runtime facts (e.g. whether the prepaid discount is verified in Shopify). */
+export async function getCodSettingsWithRuntime(shop) {
+  const raw = await loadStoredSettings(shop);
+  return { settings: sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS), runtime: raw?._runtime || {} };
 }
 
 // Facts only this Node server knows, stored next to the settings so the
 // storefront can read everything from php_backend/cod_storefront.php.
-function runtimeFacts() {
-  return { otpAvailable: otpAvailable() };
+// `prepaid` (from prepaid-discount-shopify.server.js) is kept until the next
+// prepaid sync replaces it.
+function runtimeFacts(previous) {
+  const facts = { otpAvailable: otpAvailable() };
+  if (previous?.prepaid && typeof previous.prepaid === 'object') facts.prepaid = previous.prepaid;
+  return facts;
 }
 
-/** Merge `patch` onto the saved settings (omitted fields keep their saved value). */
-export async function saveCodSettings(shop, patch) {
-  const current = await getCodSettings(shop);
+/**
+ * Merge `patch` onto the saved settings (omitted fields keep their saved value).
+ * `syncPrepaid(next)`, when given, brings Shopify's prepaid discount in line
+ * with the new settings before they are stored, and returns the runtime facts
+ * the storefront may rely on ({ verified, percent, ... }); its result is kept
+ * in `_runtime.prepaid`.
+ */
+export async function saveCodSettings(shop, patch, { syncPrepaid } = {}) {
+  const raw = await loadStoredSettings(shop);
+  const current = sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS);
   const next = sanitizeCodSettings(patch, current);
-  await php('cod_settings.php', { action: 'save', shop, settings: { ...next, _runtime: runtimeFacts() } });
+  const runtime = runtimeFacts(raw?._runtime);
+  if (typeof syncPrepaid === 'function') runtime.prepaid = await syncPrepaid(next);
+  await php('cod_settings.php', { action: 'save', shop, settings: { ...next, _runtime: runtime } });
   return next;
 }
 
@@ -102,9 +125,9 @@ export async function saveCodSettings(shop, patch) {
  * matches what /api/cod/otp will actually accept. Called by the admin page.
  */
 export async function syncCodRuntime(shop) {
-  const { settings: raw } = await php('cod_settings.php', { action: 'get', shop });
+  const raw = await loadStoredSettings(shop);
   if (!raw) return;
-  const facts = runtimeFacts();
+  const facts = runtimeFacts(raw._runtime);
   if (JSON.stringify(raw._runtime || null) === JSON.stringify(facts)) return;
   const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
   await php('cod_settings.php', { action: 'save', shop, settings: { ...settings, _runtime: facts } });
@@ -306,13 +329,23 @@ async function loadVariants(admin, lines) {
   return { tags };
 }
 
+// Every COD line (and the order itself, see placeCodOrder) carries this. The
+// BRIX prepaid discount Function (extensions/brix-prepaid-discount) gives
+// nothing to a cart with it, so automatic discounts accepted on the draft
+// (acceptAutomaticDiscounts) can never include the online-payment discount.
+// Set here on the server only; shopper-sent _brix* properties are dropped.
+export const COD_MARKER = Object.freeze({ key: '_brixCod', value: 'true' });
+
 function draftLineItems(lines) {
   return lines.map((line) => ({
     variantId: toVariantGid(line.variantId),
     quantity: line.quantity,
-    customAttributes: Object.entries(line.properties || {})
-      .filter(([key]) => !key.startsWith('_brix'))
-      .map(([key, value]) => ({ key, value })),
+    customAttributes: [
+      ...Object.entries(line.properties || {})
+        .filter(([key]) => !key.startsWith('_brix'))
+        .map(([key, value]) => ({ key, value })),
+      { ...COD_MARKER },
+    ],
   }));
 }
 
@@ -373,6 +406,7 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
   const base = {
     lineItems: draftLineItems(lines),
+    customAttributes: [{ ...COD_MARKER }],
     acceptAutomaticDiscounts: true,
     ...(code ? { discountCodes: [code] } : {}),
     ...(pincode ? { shippingAddress: { countryCode: 'IN', zip: String(pincode) } } : {}),
@@ -535,11 +569,12 @@ export async function placeCodOrder(admin, {
 
   const tags = [...new Set(['COD', 'BRIX-COD', `brix-src-${surface}`, ...settings.orderTags])];
   const customAttributes = [
+    { ...COD_MARKER },
     { key: 'payment_method', value: 'Cash on Delivery' },
     { key: 'brix_cod_source', value: surface },
     { key: 'brix_cod_phone_verified', value: phoneVerified ? 'yes' : 'no' },
     ...Object.entries(attributes || {})
-      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && v != null && String(v).length <= 200)
+      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && !k.startsWith('_brix') && v != null && String(v).length <= 200)
       .slice(0, 10)
       .map(([key, value]) => ({ key, value: String(value) })),
   ];

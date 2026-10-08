@@ -17,7 +17,8 @@ const STUBS = {
   'shopify.server': 'export const authenticate = {};',
   'plan-permissions.server': 'export const getShopPlan = () => {};',
   'currency.server': 'export const getShopCurrency = () => {};',
-  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{};',
+  'prepaid-discount-shopify.server': 'export const syncPrepaidDiscount = () => {}, prepaidRuntime = () => ({});',
+  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{};',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
   'cod-sms.server': 'export const smsProviderStatus = () => {};',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',
@@ -154,8 +155,8 @@ const layout = await page.evaluate(() => {
   };
 });
 check('customizer: titled "Customize COD" with an Active / Inactive pill, like the Cart Editor', layout.title === 'Customize COD' && layout.pill === (scenario === 'off' ? 'Inactive' : 'Active'), `${layout.title} · ${layout.pill}`);
-check('customizer: section groups Get started / Cart drawer / Other pages / Charges & rules / Checkout popup / Advanced',
-  layout.groups.join('|') === 'Get started|Cart drawer|Other pages|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
+check('customizer: section groups Get started / Cart drawer / Other pages / Product page payments / Charges & rules / Checkout popup / Advanced',
+  layout.groups.join('|') === 'Get started|Cart drawer|Other pages|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
 check('customizer: opens on the cart drawer Position section', layout.openRow === 'Position');
 {
   const bars = await page.evaluate(() => ({
@@ -213,6 +214,54 @@ if (scenario === 'live') {
   await openSec('Product page');
   check('Product page: preview switches to the product page', await page.locator('.bcz-screen .cod-scr-atc').count() === 1);
   await shot('product');
+
+  // Product page payments: payment options + prepaid discount
+  await openSec('Payment options');
+  check('Payment options: off by default (badge Off), preview is the plain product page', await badge('Payment options') === 'Off' && await page.locator('.bcz-screen [data-pv-selector]').count() === 0);
+  await page.getByLabel('Show payment options on product pages').check();
+  await page.waitForTimeout(200);
+  check('Payment options: on → preview shows the Pay Online and Cash on Delivery cards, Pay Online selected',
+    await page.locator('.bcz-screen .bxpay-card').count() === 2 && await page.locator('.bcz-screen .bxpay-card[data-pv-selected], .bcz-screen .bxpay-card[aria-checked="true"]').first().textContent().then((t) => t.includes('Pay Online')));
+  check('Payment options: COD card shows the existing COD fee', (await page.locator('.bcz-screen .bxpay-card').nth(1).textContent()).includes('49'));
+  await openSec('Prepaid discount');
+  await page.getByLabel('Give a prepaid discount').check();
+  await page.waitForTimeout(200);
+  const pvText = () => page.locator('.bcz-screen .cod-scr').textContent();
+  let t = await pvText();
+  check('Prepaid 10%: preview shows Save 10%, ₹990 online, ₹1,100 COD, "Buy it now · Save 10%"', t.includes('Save 10%') && t.includes('990') && t.includes('Buy it now · Save 10%') && t.includes('10% off when you pay online'), t.slice(0, 300));
+  check('Prepaid: honest status — not live until saved and verified', (await page.locator('.bcz-body').textContent()).includes('Save to set up'));
+  await page.getByLabel('Discount', { exact: true }).fill('60');
+  await page.waitForTimeout(150);
+  check('Prepaid: 60% refused (1–50)', await badge('Prepaid discount') === '1 error');
+  await page.getByLabel('Discount', { exact: true }).fill('10');
+  await page.getByLabel('Minimum order').fill('1200');
+  await page.waitForTimeout(200);
+  t = await pvText();
+  check('Prepaid minimum ₹1,200 not met by ₹1,100: no false saving, "Get 10% off on orders above ₹1,200"', !t.includes('Save 10%') && t.includes('above ₹1,200') && t.includes('Buy it now') && !t.includes('· Save'), t.slice(0, 300));
+  await page.locator('.bcz-screen .bxpv-chips button', { hasText: 'L' }).click();
+  await page.waitForTimeout(150);
+  t = await pvText();
+  check('Preview variant L (₹1,500): minimum met → ₹1,350 online', t.includes('1,350') && t.includes('Save 10%'), t.slice(0, 300));
+  await page.getByLabel('Minimum order').fill('');
+  await page.locator('.bcz-screen .bxpv-chips button', { hasText: 'M' }).click();
+  await page.getByRole('button', { name: 'Increase quantity' }).click();
+  await page.waitForTimeout(150);
+  t = await pvText();
+  check('Preview quantity 2: ₹1,980 online, ₹2,200 COD', t.includes('1,980') && t.includes('2,200'), t.slice(0, 300));
+  await page.locator('.bcz-screen .bxpay-card', { hasText: 'Cash on Delivery' }).click();
+  await page.waitForTimeout(150);
+  check('Preview: picking COD shows the COD button instead of Buy it now', await page.locator('.bcz-screen [data-pv-cta="cod"]').count() === 1 && await page.locator('.bcz-screen [data-pv-cta="online"]').count() === 0);
+  await shot('payment-options');
+  await openSec('Payment options design');
+  await page.getByRole('button', { name: 'Stacked', exact: true }).click();
+  await page.getByLabel('Position on the product page').selectOption('below_price');
+  await page.waitForTimeout(200);
+  const stacked = await page.evaluate(() => { const c = [...document.querySelectorAll('.bcz-screen .bxpay-card')].map((e) => e.getBoundingClientRect()); return c.length === 2 && c[1].top >= c[0].bottom; });
+  check('Design: Stacked cards in the preview', stacked);
+  await page.getByRole('button', { name: 'Mobile' }).click();
+  await page.waitForTimeout(300);
+  await shot('payment-options-mobile');
+  await page.getByRole('button', { name: 'Desktop' }).click();
 
   // COD fee
   await openSec('COD fee');
@@ -317,7 +366,9 @@ if (scenario === 'live') {
     saved.enabled === true && saved.drawerPlacement === 'below' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'
     && saved.buttons?.drawerText === 'Pay cash on delivery' && saved.codFeeEnabled === true && saved.codFee === 40 && saved.codFeeLabel === 'Handling fee'
     && saved.showCodFee === true && saved.excludedProductTags === 'no-cod, fragile' && saved.excludedBehavior === 'hide'
-    && saved.sheet?.radius === 'soft' && saved.sheet?.offers?.[0]?.code === 'SAVE10' && saved.tracking?.ga4Id === 'G-ABC123XYZ',
+    && saved.sheet?.radius === 'soft' && saved.sheet?.offers?.[0]?.code === 'SAVE10' && saved.tracking?.ga4Id === 'G-ABC123XYZ'
+    && saved.productPayment?.enabled === true && saved.productPayment?.prepaid?.enabled === true && saved.productPayment?.prepaid?.percent === 10
+    && saved.productPayment?.prepaid?.minSubtotal === 0 && saved.productPayment?.layout?.cardLayout === 'vertical' && saved.productPayment?.layout?.placement === 'below_price',
     JSON.stringify({ p: saved.drawerPlacement, b: saved.buttons, fee: [saved.codFeeEnabled, saved.codFee, saved.codFeeLabel] }));
   let asked = '';
   page.once('dialog', (d) => { asked = d.message(); d.accept(); });

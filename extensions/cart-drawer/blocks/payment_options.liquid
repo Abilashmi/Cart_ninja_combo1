@@ -1,0 +1,22 @@
+{% comment %}
+  BRIX product page payment options (Pay Online / Cash on Delivery) — optional block.
+
+  brix_cod.js (loaded by the "Custom Cart Drawer" app embed) adds the payment
+  options to product pages by itself, where the merchant chose in BRIX. Add
+  this block only to put them somewhere else: they then render here instead.
+  It shows nothing unless "Payment options" is on in BRIX (COD → Customize).
+{% endcomment %}
+{% if product %}
+  <div data-brix-pay-slot style="margin: {{ block.settings.margin_top }}px 0 0 0; width: 100%;"></div>
+{% endif %}
+{% schema %}
+{
+  "name": "Payment options",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "paragraph", "content": "Shows the BRIX Pay Online / Cash on Delivery choice here. Turn on Payment options in the BRIX app, and keep the Custom Cart Drawer app embed enabled." },
+    { "type": "range", "id": "margin_top", "label": "Space above", "min": 0, "max": 40, "step": 2, "unit": "px", "default": 0 }
+  ]
+}
+{% endschema %}

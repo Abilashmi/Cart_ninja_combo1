@@ -35,7 +35,7 @@
   var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
   var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v5'; // bump when the config shape changes (v5: drawer placement, button style, fee label)
+  var CONFIG_KEY = 'brix_cod_config_v6'; // bump when the config shape changes (v6: product page payment options)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -266,26 +266,47 @@
       };
     }
 
-    return { send: send, context: context };
+    // Product page payment options (Pay Online / COD): light UI events, no
+    // ecommerce payload. Never loads a tag for these: GTM's dataLayer and an
+    // existing gtag only, with the shopper's analytics consent for gtag.
+    function ui(cfg, name, params) {
+      var t = (cfg && cfg.tracking) || {};
+      var detail = Object.assign({ event: name }, params || {});
+      try {
+        if (t.dataLayer !== false && cfg && Array.isArray(window.dataLayer)) window.dataLayer.push(detail);
+      } catch (e) { /* ignore */ }
+      try {
+        if (t.ga4Id && typeof window.gtag === 'function' && consent().analytics) window.gtag('event', name, Object.assign({ send_to: t.ga4Id }, params || {}));
+      } catch (e) { /* never break the page */ }
+      try { document.dispatchEvent(new CustomEvent('brix:payment:track', { detail: detail })); } catch (e) { /* old browsers */ }
+    }
+
+    return { send: send, context: context, ui: ui };
   })();
 
   /* ---------- config ---------- */
 
   var configPromise = null;
   var configValue;
+  // Product page payment options (null = off). Sent even while COD itself is
+  // off (then without the COD card), so Pay Online + the prepaid offer still work.
+  var paymentValue = null;
 
   function loadConfig() {
     if (configPromise) return configPromise;
     var cached = readStore('sessionStorage', CONFIG_KEY);
     if (cached && cached.shop === SHOP && cached.expiresAt > Date.now()) {
       configValue = cached.config;
+      paymentValue = cached.payment || null;
       configPromise = Promise.resolve(configValue);
       return configPromise;
     }
     if (!SHOP) { configValue = null; configPromise = Promise.resolve(null); return configPromise; }
     configPromise = phpGet('config').then(function (json) {
-      configValue = json && json.success && json.enabled ? Object.assign({ currency: CURRENCY }, json) : null;
-      writeStore('sessionStorage', CONFIG_KEY, { shop: SHOP, config: configValue, expiresAt: Date.now() + 60000 });
+      var ok = Boolean(json && json.success);
+      configValue = ok && json.enabled ? Object.assign({ currency: CURRENCY }, json) : null;
+      paymentValue = ok && json.productPayment && typeof json.productPayment === 'object' ? json.productPayment : null;
+      writeStore('sessionStorage', CONFIG_KEY, { shop: SHOP, config: configValue, payment: paymentValue, expiresAt: Date.now() + 60000 });
       return configValue;
     });
     return configPromise;
@@ -1479,18 +1500,20 @@
   }
 
   // size: { marginTop, marginBottom, paddingY, paddingX, radius } in px.
-  function buttonHtml(cfg, label, sub, disabled, size) {
+  // opts (payment options' Pay Online button): { paint, icon, attr }.
+  function buttonHtml(cfg, label, sub, disabled, size, opts) {
     var z = size;
-    return '<button type="button" data-brix-cod-btn' + (disabled ? ' disabled' : '') + ' style="' + important(
+    var o = opts || {};
+    return '<button type="button" ' + (o.attr || 'data-brix-cod-btn') + (disabled ? ' disabled' : '') + ' style="' + important(
       'box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;' +
       'margin:' + z.marginTop + 'px 0 ' + z.marginBottom + 'px 0;padding:' + z.paddingY + 'px ' + z.paddingX + 'px;' +
-      buttonPaint(cfg) + 'border:none;border-radius:' + z.radius + 'px;' +
+      (o.paint || buttonPaint(cfg)) + 'border:none;border-radius:' + z.radius + 'px;' +
       'text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
       'font-family:inherit;font-size:15px;font-weight:700;line-height:1.25;text-transform:none;letter-spacing:normal;text-decoration:none;text-align:center;' +
       'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
       '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit') + '">' +
-      icon('cash', 18, ' style="flex:none;width:18px;height:18px"') + esc(label) + '</span>' +
+      icon(o.icon || 'cash', 18, ' style="flex:none;width:18px;height:18px"') + esc(label) + '</span>' +
       (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit') + '">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
@@ -1900,7 +1923,7 @@
     var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
     var metaIds = meta && Array.isArray(meta.variants) ? meta.variants.map(function (v) { return String(v.id); }) : [];
     var m = /\/products\/([^/?#]+)/.exec(window.location.pathname);
-    if (!m) return Promise.resolve({ tags: [], variantIds: metaIds });
+    if (!m) return Promise.resolve({ tags: [], variantIds: metaIds, variants: [] });
     return window.fetch(ROOT + 'products/' + m[1] + '.js', { headers: { Accept: 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (p) {
@@ -1908,9 +1931,11 @@
         return {
           tags: Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(','),
           variantIds: metaIds.length ? metaIds : ids,
+          // Prices for the payment options (in the shopper's currency, in cents).
+          variants: Array.isArray(p.variants) ? p.variants.map(function (v) { return { id: String(v.id), price: Number(v.price) }; }) : [],
         };
       })
-      .catch(function () { return { tags: [], variantIds: metaIds }; });
+      .catch(function () { return { tags: [], variantIds: metaIds, variants: [] }; });
   }
 
   // Shopify's "Buy it now" (dynamic checkout) button. The payment_button filter
@@ -1990,9 +2015,597 @@
     });
   }
 
+  /* ---------- product page payment options (Pay Online / Cash on Delivery) ---------- */
+
+  // The shopper picks how to pay before buying: Pay Online (Shopify checkout,
+  // where the BRIX prepaid discount Function gives the merchant's X% off) or
+  // Cash on Delivery (the BRIX COD popup above, never discounted). Settings:
+  // productPayment in the COD settings (app/utils/product-payment.shared.js),
+  // served by cod_storefront.php, which only sends a prepaid offer the server
+  // verified is active in Shopify. Every amount here is a preview: Shopify
+  // checkout and the COD server price the real order.
+  //
+  // Shopify's own Buy it now button is the Pay Online button whenever the
+  // theme shows it (only its text changes, to "Buy it now · Save 10%"); when
+  // COD is picked it's hidden and the BRIX COD button takes its place. Themes
+  // without Buy it now get a BRIX Pay Online button that goes to checkout.
+  var Pay = (function () {
+    var SPACING = { small: 8, medium: 12, large: 16 };
+    var PRICE = '[id^="price-"], .product__price, .product-price, .product-single__price, [data-product-price], .price';
+    var VARIANTS = 'variant-selects, variant-radios, variant-picker, product-variants, .variant-picker, [data-variant-picker], .product-form__input--dropdown, .product-form__input--pill, .selector-wrapper';
+    var QUANTITY = 'quantity-input, .product-form__quantity, .quantity-selector, [data-quantity-selector], .product__quantity';
+    // ASCII-only source (the script may be served without a charset): U+00B7 is " · ".
+    var DOT = String.fromCharCode(0xb7);
+    var SAVE_SUFFIX = new RegExp('\\s*' + DOT + '\\s*Save\\s+[\\d.,]+\\s*%\\s*$', 'i');
+    var st = null; // the one product page's state
+    var seq = 0;
+
+    function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+    // Mirrors productPaymentPricing in app/utils/product-payment.shared.js.
+    function pricing(unitPrice, quantity, prepaid, codFee, currencyMatches) {
+      var qty = Math.max(1, Math.floor(Number(quantity)) || 1);
+      var subtotal = round2((Number(unitPrice) || 0) * qty);
+      var percent = prepaid && Number(prepaid.percent) >= 1 && Number(prepaid.percent) <= 50 ? round2(prepaid.percent) : null;
+      var min = prepaid ? Number(prepaid.minSubtotal) || 0 : 0;
+      var minMet = min > 0 ? Boolean(currencyMatches) && subtotal >= min : true;
+      var qualifies = Boolean(percent) && subtotal > 0 && minMet;
+      var savings = qualifies ? round2(subtotal * percent / 100) : 0;
+      return {
+        subtotal: subtotal, percent: percent, qualifies: qualifies, minMissing: Boolean(percent) && !minMet,
+        savings: savings, online: round2(subtotal - savings), cod: subtotal, codFee: round2(codFee), codTotal: round2(subtotal + (Number(codFee) || 0)),
+      };
+    }
+
+    // Mirrors fillPaymentText.
+    function fill(template, vars) {
+      var pct = vars.percent != null ? String(Number(vars.percent)) : '';
+      return String(template || '')
+        .replace(/\{percent\}/g, pct)
+        .replace(/\{amount\}/g, vars.amount ? vars.amount : pct + '%')
+        .replace(/\{min\}/g, vars.min || '')
+        .replace(/\{price\}/g, vars.price || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    // Mirrors onlineButtonLabel: built from the merchant's text every time, so
+    // a suffix can never stack ("Save 10% · Save 10%").
+    function onlineLabel(base, pr, prepaid) {
+      var b = String(base || 'Buy it now').trim();
+      return pr && pr.qualifies && prepaid && prepaid.showBadge ? b + ' ' + DOT + ' Save ' + Number(pr.percent) + '%' : b;
+    }
+
+    function hex(value, fallback) { return HEX.test(value || '') ? value : fallback; }
+
+    // Like moneyFormatter, but whole amounts without ".00" (990, not 990.00).
+    function shortMoney(code) {
+      var full = moneyFormatter(code);
+      var whole = null;
+      try { whole = new Intl.NumberFormat(document.documentElement.lang || 'en-IN', { style: 'currency', currency: code || 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
+      return function (n) { n = Number(n) || 0; return whole && Math.round(n * 100) % 100 === 0 ? whole.format(n) : full(n); };
+    }
+
+    function ensureStyle() {
+      if (document.getElementById('brix-pay-style')) return;
+      var style = document.createElement('style');
+      style.id = 'brix-pay-style';
+      style.textContent = [
+        '[data-brix-pay-cod] .shopify-payment-button,[data-brix-pay-cod] [data-shopify="payment-button"],[data-brix-pay-cod] shopify-buy-it-now-button,[data-brix-pay-cod] shopify-accelerated-checkout{display:none !important}',
+        '.bxpay{display:block;width:100%;max-width:100%;margin:14px 0;padding:0;font-family:inherit;line-height:1.4;text-align:left;box-sizing:border-box}',
+        '.bxpay *,.bxpay *:before,.bxpay *:after{box-sizing:border-box}',
+        '.bxpay-h{display:block;margin:0 0 8px;font-size:14px;font-weight:600;letter-spacing:normal;text-transform:none}',
+        '.bxpay-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;padding:10px 12px;border-radius:var(--bxpay-r);background:var(--bxpay-sel-bg);color:var(--bxpay-sel-fg);border:1px solid var(--bxpay-online)}',
+        '.bxpay-banner svg{flex:none;color:var(--bxpay-online);margin-top:1px}',
+        '.bxpay-banner b{display:block;font-size:14px;font-weight:700}',
+        '.bxpay-banner span{display:block;font-size:13px;opacity:.85}',
+        '.bxpay-cards{display:grid;gap:var(--bxpay-gap);grid-template-columns:minmax(0,1fr)}',
+        '.bxpay-cards.is-h{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}',
+        '@media (max-width:480px){.bxpay-cards.is-h{grid-template-columns:minmax(0,1fr)}}',
+        '.bxpay-card{position:relative;display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:48px;margin:0;padding:var(--bxpay-pad);border-radius:var(--bxpay-r);background:var(--bxpay-bg);color:var(--bxpay-fg);border:1px solid var(--bxpay-border);box-shadow:none;cursor:pointer;outline:none;user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .15s,background-color .15s,box-shadow .15s}',
+        '.bxpay.cs-filled .bxpay-card{background:var(--bxpay-fill);border-color:transparent}',
+        '.bxpay.cs-minimal .bxpay-card{background:transparent;color:inherit;border-color:transparent}',
+        '.bxpay-card:focus-visible{outline:2px solid var(--c);outline-offset:2px}',
+        '.bxpay-card[aria-checked="true"]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}',
+        '.bxpay.ss-background .bxpay-card[aria-checked="true"]{background:var(--bxpay-sel-bg);color:var(--bxpay-sel-fg);box-shadow:none}',
+        '.bxpay-card[aria-disabled="true"]{cursor:not-allowed;opacity:.6}',
+        '.bxpay-radio{flex:none;display:grid;place-items:center;width:18px;height:18px;margin-top:2px;border-radius:50%;border:2px solid var(--bxpay-border);background:#fff}',
+        '.bxpay-card[aria-checked="true"] .bxpay-radio{border-color:var(--c)}',
+        '.bxpay-card[aria-checked="true"] .bxpay-radio:after{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}',
+        '.bxpay-tick{position:absolute;top:8px;right:8px;display:none;width:18px;height:18px;border-radius:50%;background:var(--c);color:#fff;place-items:center}',
+        '.bxpay.no-radio .bxpay-card[aria-checked="true"] .bxpay-tick{display:grid}',
+        '.bxpay-ic{flex:none;display:inline-flex;margin-top:1px;color:var(--c)}',
+        '.bxpay-main{flex:1;min-width:0;overflow-wrap:anywhere}',
+        '.bxpay.no-radio .bxpay-main{padding-right:20px}',
+        '.bxpay-top{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}',
+        '.bxpay-l{font-size:15px;font-weight:700;line-height:1.3}',
+        '.bxpay-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--bxpay-badge-bg);color:var(--bxpay-badge-fg);font-size:11.5px;font-weight:700;line-height:1.5;white-space:nowrap}',
+        '.bxpay-d,.bxpay-p,.bxpay-o,.bxpay-why{display:block;margin-top:3px}',
+        '.bxpay-d{font-size:13px;opacity:.75}',
+        '.bxpay-p{font-size:14px}',
+        '.bxpay-p s{margin-left:6px;opacity:.6}',
+        '.bxpay-save{color:var(--c);font-weight:600;white-space:nowrap}',
+        '.bxpay-o{font-size:13px;font-weight:600;color:var(--bxpay-online)}',
+        '.bxpay-why{font-size:12.5px;font-weight:600}',
+        '.bxpay-sr{position:absolute !important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);border:0;white-space:nowrap}',
+        '@media (prefers-reduced-motion:reduce){.bxpay-card{transition:none}}',
+      ].join('');
+      document.head.appendChild(style);
+    }
+
+    // The block a placement is measured from: the product's own section.
+    function scopeOf(form) {
+      return form.closest('.shopify-section, product-info, .product, [id^="MainProduct"]') || document.querySelector('main') || document.body;
+    }
+
+    function firstShown(scope, selector, form) {
+      var nodes;
+      try { nodes = scope.querySelectorAll(selector); } catch (e) { return null; }
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.closest('[data-brix-pay], [data-brix-cod-slot]') || el.closest(FOREIGN_FORM)) continue;
+        if (el.closest(CARD_FORM) && !(form && el.closest(CARD_FORM) === form.closest(CARD_FORM))) continue;
+        if (isShown(el)) return el;
+      }
+      return null;
+    }
+
+    function lastShown(scope, selector) {
+      var nodes;
+      try { nodes = scope.querySelectorAll(selector); } catch (e) { return null; }
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        if (!nodes[i].closest('[data-brix-pay]') && !nodes[i].closest(FOREIGN_FORM) && isShown(nodes[i])) return nodes[i];
+      }
+      return null;
+    }
+
+    // The outermost match of `selector` around `el` (e.g. the whole price block, not one amount).
+    function outermost(el, selector) {
+      var top = el;
+      var up = el.parentElement && el.parentElement.closest(selector);
+      while (up && !LAYOUT.test(up.tagName) && up.tagName !== 'FORM') { top = up; up = up.parentElement && up.parentElement.closest(selector); }
+      return top;
+    }
+
+    function buyNowHost(form) {
+      var scope = form.closest('.shopify-section') || form;
+      return form.querySelector(BUY_NOW) || scope.querySelector('.product-form__buttons ' + BUY_NOW.split(',')[0]) || null;
+    }
+
+    // Where the buttons row starts: Dawn-like themes wrap Add to cart and Buy it now together.
+    function buttonsBlock(addBtn, buyNow) {
+      if (!addBtn) return null;
+      var row = addBtn.closest('.product-form__buttons, .product-form__controls-group--submit, .product-form__payment-container');
+      if (row) return row;
+      var p = addBtn.parentNode;
+      if (buyNow && p && p.tagName !== 'FORM' && p.contains(buyNow)) return p;
+      return addBtn;
+    }
+
+    function insertBefore(node, ref) { if (ref && ref.parentNode && node.nextSibling !== ref) ref.parentNode.insertBefore(node, ref); }
+    function insertAfter(node, ref) { if (ref && ref.parentNode && ref.nextSibling !== node) ref.parentNode.insertBefore(node, ref.nextSibling); }
+
+    function newSlot(attr) {
+      var el = document.createElement('div');
+      el.setAttribute(attr, '');
+      el.style.cssText = important('display:block;width:100%;max-width:100%;margin:0;padding:0');
+      return el;
+    }
+
+    /* --- where everything goes --- */
+
+    function place() {
+      var form = st.form;
+      var scope = scopeOf(form);
+      var addBtn = submitButtonFor(form);
+      var buyNow = buyNowHost(form);
+      var buttons = buttonsBlock(addBtn, buyNow);
+      var placement = st.pp.layout.placement;
+
+      // The purchase button: the COD button block if the merchant placed one,
+      // else where Buy it now is, else under Add to cart.
+      var codBlock = document.querySelector('[data-brix-cod-slot]:not([data-brix-cod-slot="auto"])');
+      if (codBlock) { if (st.cta.parentNode !== codBlock) codBlock.appendChild(st.cta); }
+      else if (buyNow) insertBefore(st.cta, buyNow);
+      else if (addBtn && form.contains(addBtn)) insertAfter(st.cta, addBtn);
+      else form.appendChild(st.cta);
+
+      var block = document.querySelector('[data-brix-pay-slot]');
+      var anchor = null;
+      var after = true;
+      if (block) {
+        if (st.box.parentNode !== block) block.appendChild(st.box);
+      } else {
+        if (placement === 'below_price') { var price = firstShown(scope, PRICE, form); if (price) anchor = outermost(price, PRICE); }
+        else if (placement === 'below_variants') { var v = lastShown(scope, VARIANTS); if (v) anchor = outermost(v, VARIANTS); }
+        else if (placement === 'below_quantity') {
+          var q = lastShown(scope, QUANTITY) || (form.querySelector('[name="quantity"]') || null);
+          if (q) anchor = q.matches && q.matches('[name="quantity"]') ? (q.closest('.product-form__input, .quantity, .product-form__quantity') || q) : outermost(q, QUANTITY);
+        } else if (placement === 'above_buy_now' && buyNow) { anchor = st.cta; after = false; }
+        else if (placement === 'below_add_to_cart' && addBtn) { anchor = addBtn; }
+        if (!anchor) { anchor = buttons && buttons !== st.cta ? buttons : st.cta; after = false; }
+        if (after) insertAfter(st.box, anchor); else insertBefore(st.box, anchor);
+      }
+
+      // The offer banner under the product price, when chosen there.
+      if (st.priceBanner) {
+        var p2 = firstShown(scope, PRICE, form);
+        if (p2) insertAfter(st.priceBanner, outermost(p2, PRICE));
+        else insertBefore(st.priceBanner, st.box);
+      }
+      st.addBtn = addBtn;
+      st.buyNow = buyNow;
+    }
+
+    function connected() {
+      return st.form.isConnected && st.box.isConnected && st.cta.isConnected
+        && (!st.priceBanner || st.priceBanner.isConnected) && (!st.addBtn || st.addBtn.isConnected)
+        && st.buyNow === buyNowHost(st.form);
+    }
+
+    /* --- what the shopper sees --- */
+
+    function selection() {
+      var sel = formSelection(st.form);
+      if (!/^\d+$/.test(sel.variantId)) {
+        var m = /[?&]variant=(\d+)/.exec(window.location.search);
+        if (m) sel.variantId = m[1];
+      }
+      return sel;
+    }
+
+    function priceOf(variantId) {
+      for (var i = 0; i < st.info.variants.length; i++) {
+        var v = st.info.variants[i];
+        if (v.id === variantId && isFinite(v.price) && v.price >= 0) return v.price / 100;
+      }
+      return null;
+    }
+
+    // COD on this product, for this amount: { shown, reason }.
+    function codState(subtotal) {
+      var cfg = st.cfg;
+      if (!st.pp.cod.enabled || !cfg) return { shown: false };
+      if (st.excluded) return cfg.excludedBehavior === 'hide' ? { shown: false } : { shown: true, reason: 'Not available for this product' };
+      if (subtotal != null && cfg.minOrder > 0 && subtotal < cfg.minOrder) return { shown: true, reason: 'Available on orders from ' + st.fmt(cfg.minOrder) };
+      if (subtotal != null && cfg.maxOrder > 0 && subtotal > cfg.maxOrder) return { shown: true, reason: 'Available on orders up to ' + st.fmt(cfg.maxOrder) };
+      return { shown: true };
+    }
+
+    function soldOut() {
+      var b = st.addBtn;
+      return Boolean(b && (b.disabled || b.getAttribute('aria-disabled') === 'true'));
+    }
+
+    function view() {
+      var pp = st.pp;
+      var sel = selection();
+      var unit = priceOf(sel.variantId);
+      var prepaid = pp.online.enabled ? pp.prepaid : null;
+      var active = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY;
+      var codFee = st.cfg && st.cfg.codFee > 0 ? st.cfg.codFee : 0;
+      var pr = unit != null
+        ? pricing(unit, sel.quantity, prepaid, codFee, Boolean(prepaid && prepaid.currency && prepaid.currency === active))
+        // Price unknown: promise the percentage only when there's no minimum to check.
+        : { subtotal: null, percent: prepaid ? prepaid.percent : null, qualifies: Boolean(prepaid && !(prepaid.minSubtotal > 0)), minMissing: false, savings: 0, online: null, cod: null, codFee: codFee, codTotal: null };
+      var cod = codState(pr.subtotal);
+      var shown = { online: Boolean(pp.online.enabled), cod: cod.shown };
+      var method = st.method;
+      if (!method || !shown[method] || (method === 'cod' && cod.reason && shown.online)) {
+        method = pp.defaultMethod === 'cod' && shown.cod && !cod.reason ? 'cod' : shown.online ? 'online' : shown.cod ? 'cod' : null;
+      }
+      return { sel: sel, pr: pr, prepaid: prepaid, cod: cod, shown: shown, method: method, soldOut: soldOut() };
+    }
+
+    function offerLine(v) {
+      var p = v.prepaid;
+      if (!p || !st.pp.layout.showBanner) return null;
+      // The minimum is in the shop currency (what the discount Function compares).
+      var vars = { percent: v.pr.percent, amount: v.pr.savings > 0 ? st.fmt(v.pr.savings) : '', min: shortMoney(p.currency || CURRENCY)(p.minSubtotal), price: v.pr.online != null ? st.fmt(v.pr.online) : '' };
+      if (v.pr.qualifies) {
+        var title = fill(p.offerTitle, vars);
+        // {amount} needs a real price: without one, the description isn't shown.
+        var sub = p.offerDescription && (v.pr.savings > 0 || !/\{amount\}|\{price\}/.test(p.offerDescription)) ? fill(p.offerDescription, vars) : '';
+        return title ? { title: title, sub: sub } : null;
+      }
+      if (v.pr.minMissing && p.minNotMetText) return { title: fill(p.minNotMetText, vars), sub: '' };
+      return null;
+    }
+
+    function bannerHtml(line) {
+      return '<div class="bxpay-banner" data-brix-pay-banner>' + icon('tag', 18) + '<div><b>' + esc(line.title) + '</b>' + (line.sub ? '<span>' + esc(line.sub) + '</span>' : '') + '</div></div>';
+    }
+
+    function cardHtml(method, v, line) {
+      var pp = st.pp;
+      var on = v.method === method;
+      var isOnline = method === 'online';
+      var conf = isOnline ? pp.online : pp.cod;
+      var disabled = !isOnline && Boolean(v.cod.reason);
+      var color = isOnline ? st.colors.online : st.colors.cod;
+      var top = '<b class="bxpay-l">' + esc(conf.label) + '</b>';
+      var rest = '';
+      var sr = '';
+      if (isOnline) {
+        if (v.pr.qualifies && v.prepaid && v.prepaid.showBadge) top += '<span class="bxpay-badge">Save ' + esc(Number(v.pr.percent)) + '%</span>';
+        if (conf.description) rest += '<span class="bxpay-d">' + esc(conf.description) + '</span>';
+        if (line && pp.layout.bannerPlacement === 'in_online_card') rest += '<span class="bxpay-o">' + esc(line.title) + '</span>';
+        if (v.pr.online != null) {
+          if (v.pr.qualifies && v.pr.savings > 0) {
+            rest += '<span class="bxpay-p">Get it for <b>' + esc(st.fmt(v.pr.online)) + '</b><s>' + esc(st.fmt(v.pr.subtotal)) + '</s>' +
+              (v.prepaid.showSavingsAmount ? ' <span class="bxpay-save">(save ' + esc(st.fmt(v.pr.savings)) + ')</span>' : '') + '</span>';
+            sr = 'Pay online: ' + st.fmt(v.pr.online) + ' instead of ' + st.fmt(v.pr.subtotal) + '.';
+          } else {
+            rest += '<span class="bxpay-p">Pay <b>' + esc(st.fmt(v.pr.subtotal)) + '</b></span>';
+          }
+        }
+      } else {
+        if (conf.description) rest += '<span class="bxpay-d">' + esc(conf.description) + '</span>';
+        if (disabled) rest += '<span class="bxpay-why">' + esc(v.cod.reason) + '</span>';
+        else if (v.pr.cod != null) {
+          var fee = st.cfg && st.cfg.codFee > 0 && st.cfg.showCodFee !== false ? ' + ' + st.fmt(st.cfg.codFee) + ' ' + feeLabel(st.cfg) : '';
+          rest += '<span class="bxpay-p">Pay <b>' + esc(st.fmt(v.pr.cod)) + '</b>' + esc(fee) + '</span>';
+        }
+      }
+      var showIcon = pp.layout.showIcons && conf.showIcon;
+      return '<div class="bxpay-card" role="radio" data-method="' + method + '" aria-checked="' + (on ? 'true' : 'false') + '"' +
+        (disabled ? ' aria-disabled="true"' : '') + ' tabindex="' + (on ? '0' : '-1') + '" style="--c:' + color + '">' +
+        (pp.layout.showRadio ? '<span class="bxpay-radio" aria-hidden="true"></span>' : '') +
+        (showIcon ? '<span class="bxpay-ic">' + icon(isOnline ? 'card' : 'cash', 22) + '</span>' : '') +
+        '<span class="bxpay-main"><span class="bxpay-top">' + top + '</span>' + rest + (sr ? '<span class="bxpay-sr">' + esc(sr) + '</span>' : '') + '</span>' +
+        '<span class="bxpay-tick" aria-hidden="true">' + icon('check', 12) + '</span></div>';
+    }
+
+    function render(v) {
+      var pp = st.pp;
+      var box = st.box;
+      if (!v.shown.online && !v.shown.cod) {
+        box.innerHTML = '';
+        box.style.setProperty('display', 'none', 'important');
+        st.cta.innerHTML = '';
+        if (st.priceBanner) st.priceBanner.innerHTML = '';
+        return;
+      }
+      box.style.setProperty('display', 'block', 'important');
+      var line = offerLine(v);
+      var where = pp.layout.bannerPlacement;
+      var layout = pp.layout;
+      var classes = 'bxpay cs-' + layout.cardStyle + ' ss-' + (layout.selectedStyle === 'background' ? 'background' : 'border') + (layout.showRadio ? '' : ' no-radio');
+      var headId = 'bxpay-h-' + st.id;
+      var html = '<div class="' + classes + '" style="' + st.vars + '">' +
+        (line && where === 'above_selector' ? bannerHtml(line) : '') +
+        (pp.heading ? '<span class="bxpay-h" id="' + headId + '">' + esc(pp.heading) + '</span>' : '') +
+        '<div class="bxpay-cards' + (layout.cardLayout === 'horizontal' ? ' is-h' : '') + '" role="radiogroup" ' +
+        (pp.heading ? 'aria-labelledby="' + headId + '"' : 'aria-label="Payment method"') + '>' +
+        (v.shown.online ? cardHtml('online', v, line) : '') + (v.shown.cod ? cardHtml('cod', v, line) : '') +
+        '</div></div>';
+      box.innerHTML = html;
+      if (st.priceBanner) st.priceBanner.innerHTML = line && where === 'below_price' ? '<div class="bxpay" style="' + st.vars + ';margin:10px 0">' + bannerHtml(line) + '</div>' : '';
+
+      // The purchase button for the chosen method.
+      var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, (st.cfg && st.cfg.productButton) || {});
+      if (v.method === 'cod') {
+        st.cta.innerHTML = buttonHtml(st.cfg, st.cfg.buttons.productText, v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look);
+      } else if (v.method === 'online' && !st.buyNow) {
+        var bg = st.colors.online;
+        st.cta.innerHTML = buttonHtml(st.cfg, onlineLabel(pp.online.buttonText, v.pr, v.prepaid), '', v.soldOut, look, {
+          attr: 'data-brix-pay-online', icon: 'card', paint: 'background:' + bg + ';color:' + readableOn(bg) + ';box-shadow:none;',
+        });
+      } else {
+        st.cta.innerHTML = '';
+      }
+      if (st.focus) {
+        var card = box.querySelector('.bxpay-card[data-method="' + st.focus + '"]');
+        st.focus = null;
+        if (card) { try { card.focus(); } catch (e) { /* ignore */ } }
+      }
+    }
+
+    // Shopify's Buy it now: hidden while COD is chosen; its text gets the
+    // saving while Pay Online is chosen. Only DOM writes when something differs,
+    // so the page's MutationObserver settles straight away.
+    function nativeButton(host) {
+      if (!host) return null;
+      var pick = function (root) {
+        var b = root.querySelector('.shopify-payment-button__button--unbranded') ||
+          root.querySelector('.shopify-payment-button__button:not(.shopify-payment-button__button--branded)');
+        return b && b.children.length === 0 ? b : null;
+      };
+      var b = pick(host);
+      if (!b) {
+        var inner = host.querySelectorAll('*');
+        if (host.shadowRoot) b = pick(host.shadowRoot);
+        for (var i = 0; !b && i < inner.length; i++) if (inner[i].shadowRoot) b = pick(inner[i].shadowRoot);
+      }
+      return b;
+    }
+
+    function applyNative(v) {
+      var scope = st.form.closest('.shopify-section') || st.form;
+      var hide = v.method === 'cod';
+      if (hide !== scope.hasAttribute('data-brix-pay-cod')) {
+        if (hide) scope.setAttribute('data-brix-pay-cod', ''); else scope.removeAttribute('data-brix-pay-cod');
+      }
+      st.scope = scope;
+      var btn = nativeButton(st.buyNow);
+      if (!btn) return;
+      if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
+      var original = btn.getAttribute('data-brix-pay-orig');
+      var wanted = st.pp.relabelBuyNow && v.pr.qualifies && v.prepaid && v.prepaid.showBadge
+        ? onlineLabel(st.pp.online.buttonText, v.pr, v.prepaid)
+        : original;
+      if (wanted && btn.textContent !== wanted) btn.textContent = wanted;
+    }
+
+    function track(name, params) { Track.ui(st.cfg, name, params); }
+
+    function keyOf(v) {
+      return [v.method, v.sel.variantId, v.sel.quantity, v.pr.subtotal, v.cod.reason || '', v.soldOut, Boolean(st.buyNow)].join('|');
+    }
+
+    function refresh(force) {
+      if (!st) return;
+      if (!connected()) {
+        var form = findProductForm(st.info.variantIds);
+        if (!form) return;
+        st.form = form;
+        place();
+        force = true;
+      }
+      var v = view();
+      var key = keyOf(v);
+      if (force || key !== st.key) {
+        st.key = key;
+        st.method = v.method;
+        render(v);
+        if (!st.viewed && (v.shown.online || v.shown.cod)) {
+          st.viewed = true;
+          track('brix_payment_method_viewed', { methods: [v.shown.online && 'online', v.shown.cod && 'cod'].filter(Boolean).join(','), default_method: v.method || '' });
+        }
+        if (!st.offerViewed && v.pr.qualifies && v.shown.online) {
+          st.offerViewed = true;
+          track('brix_prepaid_offer_viewed', { percent: Number(v.pr.percent) });
+        }
+      }
+      st.last = v;
+      applyNative(v);
+    }
+
+    function choose(method, byKeyboard) {
+      var v = st.last;
+      if (!v || !v.shown[method] || method === v.method) { if (byKeyboard) st.focus = method; return; }
+      if (method === 'cod' && v.cod.reason) return;
+      st.method = method;
+      st.focus = byKeyboard ? method : null;
+      track('brix_payment_method_selected', { payment_method: method });
+      refresh(true);
+    }
+
+    function bindBox(box) {
+      box.addEventListener('click', function (e) {
+        var card = e.target.closest && e.target.closest('.bxpay-card');
+        if (card && box.contains(card)) choose(card.getAttribute('data-method'), false);
+      });
+      box.addEventListener('keydown', function (e) {
+        var card = e.target.closest && e.target.closest('.bxpay-card');
+        if (!card) return;
+        var cards = [].slice.call(box.querySelectorAll('.bxpay-card:not([aria-disabled="true"])'));
+        var i = cards.indexOf(card);
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); choose(card.getAttribute('data-method'), true); return; }
+        var step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+        if (!step || cards.length < 2) return;
+        e.preventDefault();
+        var next = cards[(i + step + cards.length) % cards.length];
+        choose(next.getAttribute('data-method'), true);
+      });
+    }
+
+    function bindCta(cta) {
+      cta.addEventListener('click', function (e) {
+        var cod = e.target.closest && e.target.closest('[data-brix-cod-btn]');
+        var online = e.target.closest && e.target.closest('[data-brix-pay-online]');
+        if (!cod && !online) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var v = st.last;
+        var sel = selection();
+        if (!/^\d+$/.test(sel.variantId) || (cod && cod.disabled) || (online && online.disabled)) return;
+        if (online) {
+          if (v && v.pr.qualifies) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
+          // Buy now: a checkout with just this item, where Shopify applies the prepaid discount.
+          window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity;
+          return;
+        }
+        open({
+          surface: 'product',
+          items: [sel],
+          onPayOnline: function () { window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity; },
+        });
+      });
+    }
+
+    function start(cfg, pp) {
+      if (st || !pp || !pp.online || !pp.cod || !pp.layout || !pp.appearance) return;
+      // Both methods off (or COD unavailable with Pay Online off): nothing on the page.
+      if (!pp.online.enabled && !pp.cod.enabled) return;
+      productInfo().then(function (info) {
+        var form = findProductForm(info.variantIds);
+        if (!form || st) return;
+        ensureStyle();
+        var a = pp.appearance;
+        var colors = {
+          online: hex(a.onlineColor, '#008060'), cod: hex(a.codColor, '#111827'), bg: hex(a.cardBackground, '#ffffff'),
+          border: hex(a.borderColor, '#d1d5db'), selBg: hex(a.selectedBackground, '#f0fdf4'),
+          badgeBg: hex(a.badgeBackground, '#008060'), badgeFg: hex(a.badgeText, '#ffffff'),
+        };
+        var gap = SPACING[pp.layout.spacing] || 12;
+        var radius = Math.max(0, Math.min(24, Math.round(Number(pp.layout.radius)) || 0));
+        st = {
+          id: ++seq,
+          cfg: cfg,
+          pp: pp,
+          info: info,
+          form: form,
+          excluded: Boolean(cfg) && hasExcludedTag(info.tags, excludedTags(cfg)),
+          method: null,
+          colors: colors,
+          fmt: shortMoney((window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY),
+          vars: '--bxpay-online:' + colors.online + ';--bxpay-bg:' + colors.bg + ';--bxpay-fg:' + readableOn(colors.bg) +
+            ';--bxpay-fill:color-mix(in srgb,' + colors.border + ' 30%,' + colors.bg + ');--bxpay-border:' + colors.border +
+            ';--bxpay-sel-bg:' + colors.selBg + ';--bxpay-sel-fg:' + readableOn(colors.selBg) +
+            ';--bxpay-badge-bg:' + colors.badgeBg + ';--bxpay-badge-fg:' + colors.badgeFg +
+            ';--bxpay-r:' + radius + 'px;--bxpay-gap:' + gap + 'px;--bxpay-pad:' + (gap + 2) + 'px ' + (gap + 2) + 'px',
+          box: newSlot('data-brix-pay'),
+          cta: newSlot('data-brix-pay-cta'),
+          priceBanner: pp.layout.bannerPlacement === 'below_price' && pp.layout.showBanner ? newSlot('data-brix-pay-banner-slot') : null,
+          key: '',
+        };
+        bindBox(st.box);
+        bindCta(st.cta);
+        place();
+        refresh(true);
+
+        // A tap on Shopify's Buy it now while Pay Online shows the saving.
+        document.addEventListener('click', function (e) {
+          var v = st.last;
+          if (!v || v.method !== 'online' || !v.pr.qualifies || !st.buyNow) return;
+          if (e.target.closest && e.target.closest(BUY_NOW) === st.buyNow) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
+        }, true);
+
+        // Variant and quantity changes: themes fire change/input, redraw the
+        // form, or set the hidden variant id without any event. All three end
+        // in refresh(), which only touches the page when something changed.
+        var timer = null;
+        var soon = function () { clearTimeout(timer); timer = setTimeout(function () { refresh(false); }, 120); };
+        document.addEventListener('change', soon, true);
+        document.addEventListener('input', soon, true);
+        if (window.MutationObserver) {
+          new MutationObserver(function (records) {
+            for (var i = 0; i < records.length; i++) {
+              var t = records[i].target.nodeType === 1 ? records[i].target : records[i].target.parentElement;
+              if (t && !t.closest('[data-brix-pay], [data-brix-pay-cta], [data-brix-pay-banner-slot]')) { soon(); return; }
+            }
+          }).observe(document.querySelector('main') || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'aria-disabled', 'value'] });
+        }
+        setInterval(function () { if (!document.hidden) refresh(false); }, 600);
+      });
+    }
+
+    // For the browser checks: what the selector currently shows.
+    function snapshot() {
+      if (!st || !st.last) return null;
+      var v = st.last;
+      return { method: v.method, shown: v.shown, pricing: v.pr, variantId: v.sel.variantId, quantity: v.sel.quantity };
+    }
+
+    return { start: start, snapshot: snapshot, pricing: pricing, fill: fill, onlineLabel: onlineLabel };
+  })();
+
   function initProductButton() {
     if (!isProductPage()) return;
     loadConfig().then(function (cfg) {
+      // Payment options on: they own the product page's COD button.
+      if (paymentValue) { Pay.start(cfg, paymentValue); return; }
       if (!cfg || cfg.surfaces.product === false) return;
       productInfo().then(function (info) {
         var excluded = hasExcludedTag(info.tags, excludedTags(cfg));
@@ -2015,6 +2628,7 @@
     isAvailable: isAvailable,
     config: loadConfig,
     mountDrawerButton: mountDrawerButton,
+    paymentSnapshot: Pay.snapshot,
   };
 
   function init() {
