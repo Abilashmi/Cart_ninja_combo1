@@ -366,6 +366,23 @@
     });
   }
 
+  // The discount codes already on the cart (put there by the theme, an app,
+  // a /discount/CODE link or the BRIX drawer) plus `extra` (the BRIX drawer's
+  // own applied code). The server applies them only when the merchant has
+  // "Apply the cart's discounts" on (cod.server.js), and Shopify checks each.
+  function cartDiscountCodes(cart, extra) {
+    var out = [];
+    function add(code) {
+      var c = String(code || '').trim();
+      if (!c || out.length >= 5) return;
+      for (var i = 0; i < out.length; i++) if (out[i].toLowerCase() === c.toLowerCase()) return;
+      out.push(c);
+    }
+    (cart && cart.discount_codes || []).forEach(function (d) { if (d && d.applicable !== false) add(d.code); });
+    if (extra) add(extra);
+    return out;
+  }
+
   /* ---------- sheet UI ---------- */
 
   // --cod-bg / --cod-fg are the merchant's button colours; --tint is a light
@@ -664,7 +681,11 @@
     this.cfg = cfg;
     this.fmt = moneyFormatter(cfg.currency);
     this.items = opts.items || [];
-    this.coupon = cfg.allowCoupons && opts.coupon ? String(opts.coupon) : null;
+    // A code from the cart (useCart) travels as one of the cart's codes, not
+    // as a popup coupon, so the merchant's cart-discount setting decides it.
+    this.coupon = cfg.allowCoupons && opts.coupon && !opts.useCart ? String(opts.coupon) : null;
+    this.cartCodes = [];
+    this.cartAttributes = null;
     this.addr = readStore('localStorage', ADDRESS_KEY) || {};
     this.phone = this.addr.phone || '';
     var saved = readStore('sessionStorage', TOKEN_KEY);
@@ -904,7 +925,7 @@
   Sheet.prototype.start = function () {
     var self = this;
     this.loading('Checking Cash on Delivery\u2026');
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon }).then(function (json) {
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
       self.afterLoader(function () {
         if (!json.success) { self.fail(json.error); return; }
         self.quote = json.quote;
@@ -1095,7 +1116,7 @@
     var self = this;
     this.frame('Review your order', 'address', 'review',
       '<div class="sk" role="status" aria-label="Getting your total" style="padding:6px 0"><i class="bx"></i><i style="width:70%"></i><i style="width:45%"></i><i class="bx" style="height:96px"></i><i class="bx" style="height:72px"></i></div>', '');
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode }).then(function (json) {
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
       if (self.view !== 'review') return;
       if (!json.success) {
         self.frame('Review your order', 'address', 'review', '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(json.error) + '</span></div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
@@ -1163,7 +1184,7 @@
   Sheet.prototype.requote = function (code, done) {
     var self = this;
     this.busy = true;
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: code, pincode: this.addr.pincode }).then(function (json) {
+    api('quote', { surface: this.opts.surface, items: this.items, coupon: code, pincode: this.addr.pincode, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
       self.busy = false;
       if (self.view !== 'review') return;
       done(json);
@@ -1221,6 +1242,29 @@
       (q.codFee > 0 ? '<div><span>' + esc(feeLabel(cfg)) + '</span><span class="num">' + fmt(q.codFee) + '</span></div>' : '');
   }
 
+  // One row per discount Shopify gave (q.discountList, by name), else one
+  // "Discounts" row; then a note for any cart code that didn't apply.
+  function discountRows(q, fmt) {
+    var html = '';
+    var list = q.discountList;
+    if (list && list.length) {
+      var listed = 0;
+      list.forEach(function (d) {
+        listed += d.amount;
+        html += '<div style="color:#067647"><span>' + esc(d.code || d.title) + '</span><span class="num">\u2212' + fmt(d.amount) + '</span></div>';
+      });
+      // Anything Shopify took off that isn't itemised (rounding, older APIs).
+      var rest = Math.round((q.discounts - listed) * 100) / 100;
+      if (rest > 0.009) html += '<div style="color:#067647"><span>Other discounts</span><span class="num">\u2212' + fmt(rest) + '</span></div>';
+    } else if (q.discounts > 0) {
+      html += '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>';
+    }
+    (q.cartCodes || []).forEach(function (c) {
+      if (!c.applied) html += '<div class="mu"><span>' + esc(c.code) + ' doesn\'t apply to this order</span></div>';
+    });
+    return html;
+  }
+
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
     var prevBody = this.sh.querySelector('.bd');
@@ -1229,7 +1273,7 @@
       '<div><span>Items</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       // Weight combo box price: the same discount Shopify checkout gives (cod.server.js).
       (q.comboDiscount > 0 ? '<div style="color:#067647"><span>Combo box discount</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
-      (q.discounts > 0 ? '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>' : '') +
+      discountRows(q, fmt) +
       chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>Taxes</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
       '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>Pay on delivery</span><span class="num">' + fmt(q.total) + '</span></div>' +
@@ -1485,6 +1529,8 @@
       items: this.items,
       coupon: this.quote && this.quote.coupon && this.quote.coupon.applied ? this.quote.coupon.code : null,
       attributes: this.opts.attributes || null,
+      cartCodes: this.cartCodes,
+      cartAttributes: this.cartAttributes,
       idemKey: this.idem,
       phone: this.phone,
       token: this.otpFlow() && this.token ? this.token.token : null,
@@ -1527,7 +1573,7 @@
       var itemsPromise = opts.useCart
         ? fetchCart().then(function (cart) {
           if (cartHasCheckoutOnlyLines(cart)) return { checkoutOnly: true };
-          return { items: cartItems(cart) };
+          return { items: cartItems(cart), cartCodes: cartDiscountCodes(cart, opts.coupon), cartAttributes: cart.attributes || null };
         })
         : Promise.resolve({ items: opts.items || [] });
       sheet = new Sheet(opts, cfg);
@@ -1537,6 +1583,8 @@
         if (res.checkoutOnly) { sheet.fail('This cart has a Pack or free gift that is only available with online payment.'); return; }
         if (!res.items.length) { sheet.fail('Your cart is empty.'); return; }
         sheet.items = res.items;
+        sheet.cartCodes = res.cartCodes || [];
+        sheet.cartAttributes = res.cartAttributes || null;
         sheet.start();
       }, function () { if (sheet) sheet.fail("We couldn't read your cart. Refresh the page and try again."); });
     });

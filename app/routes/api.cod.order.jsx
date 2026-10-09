@@ -55,6 +55,9 @@ export async function action({ request }) {
       idemKey: body.idemKey,
       currencyCode: ctx.currencyCode,
       comboWeightLive: ctx.comboWeightLive,
+      // The cart's discount codes and attributes (used only as the merchant's cart-discount setting allows).
+      cartCodes: body.cartCodes,
+      cartAttributes: body.cartAttributes,
       // Server-side GA4 / Meta Purchase (cod-tracking.server.js); consent comes from the browser.
       track: sanitizeCodTrack(body.track),
       clientIp: clientIp(request),

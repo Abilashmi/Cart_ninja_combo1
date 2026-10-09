@@ -121,6 +121,7 @@ export function toForm(s) {
     excludedProductTags: s.excludedProductTags.join(', '),
     excludedBehavior: s.excludedBehavior,
     allowCoupons: s.allowCoupons,
+    cartDiscounts: s.cartDiscounts !== false,
     prepaidNudgeText: s.prepaidNudgeText,
     orderTags: s.orderTags.join(', '),
     drawerText: s.buttons.drawerText,
@@ -185,6 +186,7 @@ export function toSettings(f) {
     excludedProductTags: f.excludedProductTags,
     excludedBehavior: f.excludedBehavior,
     allowCoupons: f.allowCoupons,
+    cartDiscounts: f.cartDiscounts,
     prepaidNudgeText: f.prepaidNudgeText,
     orderTags: f.orderTags,
     buttons: {

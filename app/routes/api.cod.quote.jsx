@@ -6,7 +6,8 @@ import { isValidPincode, normalizeLines } from '../utils/cod.shared.js';
 
 /**
  * POST /api/cod/quote
- *   { shop, surface: 'drawer'|'product'|'combo', items: [{ variantId, quantity, properties }], coupon?, pincode? }
+ *   { shop, surface: 'drawer'|'product'|'combo', items: [{ variantId, quantity, properties }], coupon?, pincode?,
+ *     cartCodes?: [code] (the cart's discount codes), cartAttributes?: {} (the cart's attributes) }
  * → { quote } priced by Shopify (draftOrderCalculate), with the COD rules applied.
  */
 export async function action({ request }) {
@@ -25,7 +26,7 @@ export async function action({ request }) {
     assertLive(ctx, surface);
     const { quote } = await quoteCod(ctx.admin, {
       settings: ctx.settings, lines, coupon: body.coupon, pincode, surface, currencyCode: ctx.currencyCode,
-      comboWeightLive: ctx.comboWeightLive,
+      comboWeightLive: ctx.comboWeightLive, cartCodes: body.cartCodes, cartAttributes: body.cartAttributes,
     });
     return ok({ quote });
   } catch (error) {

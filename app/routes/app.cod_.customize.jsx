@@ -253,6 +253,7 @@ const GROUPS = [
     title: 'Checkout popup',
     items: [
       { id: 'popup', label: 'Popup design', icon: PaintBrushFlatIcon, preview: 'sheet', fields: ['sheetLogo', 'sheetAccent'] },
+      { id: 'discounts', label: 'Cart discounts', icon: DiscountIcon, preview: 'sheet', fields: [], toggle: 'cartDiscounts' },
       { id: 'coupons', label: 'Coupons', icon: DiscountIcon, preview: 'sheet', fields: [], toggle: 'allowCoupons' },
     ],
   },
@@ -785,6 +786,28 @@ export default function CodCustomizePage() {
                 autoComplete="off"
               />
             </FormLayout>
+          </Card>
+        </BlockStack>
+      );
+    }
+    if (id === 'discounts') {
+      return (
+        <BlockStack gap="400">
+          <Text as="p" tone="subdued">Whether a COD order gets the discounts the shopper&apos;s cart already has, the same way Shopify checkout gives them.</Text>
+          <Card>
+            <BlockStack gap="300">
+              <Checkbox
+                label="Apply the cart's discounts to COD orders"
+                checked={form.cartDiscounts}
+                onChange={set('cartDiscounts')}
+                helpText={form.cartDiscounts
+                  ? 'On: automatic discounts (including ones from discount apps) and discount codes already on the cart are applied. Shopify decides each one, as in checkout.'
+                  : 'Off: COD orders get no automatic discounts and no codes from the cart. Shoppers pay the full price for Cash on Delivery.'}
+              />
+              <Text as="p" variant="bodySm" tone="subdued">
+                Codes shoppers type in the popup follow the Coupons section. The online-payment (prepaid) discount never applies to COD, and combo box prices always do.
+              </Text>
+            </BlockStack>
           </Card>
         </BlockStack>
       );

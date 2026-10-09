@@ -49,6 +49,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   excludedProductTags: [],
   excludedBehavior: 'unavailable',
   allowCoupons: true,
+  // Apply the cart's own discounts (automatic ones, app / Function ones, and
+  // codes already on the cart) to COD orders, as Shopify checkout does.
+  cartDiscounts: true,
   prepaidNudgeText: '',
   orderTags: ['COD'],
   // The COD button's look, per place. The top-level fields are the cart
@@ -337,6 +340,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     excludedProductTags: parseTags(has('excludedProductTags') ? p.excludedProductTags : b.excludedProductTags),
     excludedBehavior: pick('excludedBehavior', COD_EXCLUDED_BEHAVIORS),
     allowCoupons: has('allowCoupons') ? Boolean(p.allowCoupons) : b.allowCoupons !== false,
+    cartDiscounts: has('cartDiscounts') ? Boolean(p.cartDiscounts) : b.cartDiscounts !== false,
     prepaidNudgeText: has('prepaidNudgeText') ? (typeof p.prepaidNudgeText === 'string' ? p.prepaidNudgeText.trim().slice(0, 140) : '') : String(b.prepaidNudgeText || ''),
     orderTags: parseTags(has('orderTags') ? p.orderTags : b.orderTags),
     buttons,
