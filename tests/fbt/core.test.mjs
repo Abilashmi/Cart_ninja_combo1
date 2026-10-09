@@ -75,6 +75,19 @@ test('old settings keep working: rules become v2 rules, old "AI:" rules become p
   assert.deepEqual([c.style, c.theme.bg, c.placement, c.cardsAddAll, c.sources.shopify], ['cards', '#000000', 'above_cart', false, false]);
 });
 
+test('old settings: as many products as the old widget showed', () => {
+  const manual = [
+    { name: 'A', displayScope: 'all', fbtProducts: [ref(2, 'a'), ref(3, 'b'), ref(4, 'c'), ref(5, 'd'), ref(6, 'e')] },
+    { name: 'B', displayScope: 'all', fbtProducts: [ref(7, 'f')] },
+  ];
+  assert.equal(fromLegacy(manual, {}).maxItems, 5, 'every product of the biggest rule');
+  assert.equal(fromLegacy([{ name: 'A', displayScope: 'all', fbtProducts: Array.from({ length: 9 }, (_, i) => ref(i + 2, `p${i}`)) }], {}).maxItems, 6, 'at most 6');
+  const ai = [{ name: 'AI: Tee', triggerProducts: [ref(1, 'tee')], fbtProducts: [ref(2, 'a'), ref(3, 'b')] }];
+  assert.equal(fromLegacy(ai, {}, 4).maxItems, 4, 'old AI mode: its "products per product" number');
+  assert.equal(fromLegacy([], {}).maxItems, 3, 'nothing set up: the default');
+  assert.equal(normalizeConfig({ maxItems: 3 }).maxItems, 3, 'a number the merchant chose is kept as it is');
+});
+
 test('money: Shopify money formats', () => {
   assert.equal(formatMoney(59900, 'Rs. {{amount}}'), 'Rs. 599.00');
   assert.equal(formatMoney(129900, '₹{{amount_no_decimals}}'), '₹1,299');

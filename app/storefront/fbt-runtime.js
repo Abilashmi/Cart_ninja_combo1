@@ -67,7 +67,7 @@
       var v2 = parseMaybe(data.config_v2);
       var value = {
         enabled: data.publishable !== false && data.isEnabled !== false,
-        config: v2 ? FbtCore.normalizeConfig(v2) : FbtCore.fromLegacy(parseMaybe(data.condition) || [], tpl),
+        config: v2 ? FbtCore.normalizeConfig(v2) : FbtCore.fromLegacy(parseMaybe(data.condition) || [], tpl, data.aiProductCount != null ? data.aiProductCount : data.ai_product_count),
         placement: v2 ? FbtCore.normalizeConfig(v2).placement : tpl.widgetPlacement || data.widgetPlacement || 'below_cart',
       };
       try { window.sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), value: value })); } catch (e) { /* ignore */ }

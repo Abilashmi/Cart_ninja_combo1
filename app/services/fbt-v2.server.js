@@ -51,7 +51,7 @@ export async function loadFbtV2(shop) {
   const slot = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[row.selectedTemp] || 'temp1';
   const tpl = parse(row[slot]) || {};
   if (!tpl.widgetPlacement && settings?.[0]?.widget_placement) tpl.widgetPlacement = settings[0].widget_placement;
-  return { config: fromLegacy(parse(row.condition) || [], tpl), saved: false, enabled };
+  return { config: fromLegacy(parse(row.condition) || [], tpl, row.ai_product_count ?? row.aiProductCount), saved: false, enabled };
 }
 
 /**
