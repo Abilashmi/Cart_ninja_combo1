@@ -9,7 +9,7 @@ test.describe("Frequently Bought Together (storefront, live theme extension)", (
     await widget.gotoProduct(TEST_PRODUCT_HANDLE);
 
     await expect(widget.root).toBeVisible();
-    await expect(widget.title).toHaveText(/frequently bought together/i);
+    await expect(widget.title).toHaveText("Frequently Bought Together");
     expect(await widget.productCards.count()).toBeGreaterThan(0);
   });
 });

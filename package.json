@@ -21,8 +21,7 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:report": "playwright show-report",
-    "build:fbt": "node scripts/build-fbt-asset.mjs"
+    "test:e2e:report": "playwright show-report"
   },
   "type": "module",
   "engines": {
