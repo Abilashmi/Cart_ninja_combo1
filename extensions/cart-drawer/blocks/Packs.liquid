@@ -1,7 +1,10 @@
 {%- comment -%}
   BRIX Packs — app embed that shows quantity-pack offers on product pages.
-  The script ships with this extension; the Pack data comes from
-  php_backend/packs_storefront.php through the app proxy (/apps/cart-app).
+  The script ships with this extension; the Pack data comes straight from
+  php_backend/packs_storefront.php on int.thebrix.io (CORS *), like FBT and
+  COD. Not through the app proxy (/apps/cart-app): every shopper's request
+  then reaches Hostinger from Shopify's few proxy IPs, and Hostinger's
+  per-IP limit answers 429, so no Pack shows.
   PHP has no Shopify access, so the widget prices Packs from the live variant
   data below (including the product's real option names and each variant's
   option values, so the Pack's item selectors match the product's options).
@@ -14,8 +17,8 @@
     data-brix-packs-root
     data-shop="{{ shop.permanent_domain }}"
     data-product-id="{{ product.id }}"
-    data-api="/apps/cart-app"
-    data-endpoint="/apps/cart-app/packs_storefront.php"
+    data-api="https://int.thebrix.io"
+    data-endpoint="https://int.thebrix.io/packs_storefront.php"
     style="max-width:560px;margin:16px auto;padding:0 16px;"
   ></div>
   <script type="application/json" data-brix-packs-product>
