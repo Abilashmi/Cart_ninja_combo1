@@ -77,6 +77,39 @@
     return function (n) { n = Number(n) || 0; return nf ? nf.format(n) : (code || '') + ' ' + n.toFixed(2); };
   }
 
+  // Like moneyFormatter, but whole amounts without ".00" (990, not 990.00).
+  function shortMoney(code) {
+    var full = moneyFormatter(code);
+    var whole = null;
+    try { whole = new Intl.NumberFormat(document.documentElement.lang || 'en-IN', { style: 'currency', currency: code || 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
+    return function (n) { n = Number(n) || 0; return whole && Math.round(n * 100) % 100 === 0 ? whole.format(n) : full(n); };
+  }
+
+  // The shopper's currency, as the theme shows prices.
+  function shopperMoney() {
+    return shortMoney((window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY);
+  }
+
+  // Price tags in the merchant's button text ("Buy it for {cod_price} COD"),
+  // {{tag}} too. Mirrors app/utils/price-tags.shared.js fillPriceTags.
+  var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+  function hasPriceTags(text) { return new RegExp(PRICE_TAG.source).test(String(text || '')); }
+  function showsCodFee(text) { return /\{\{?\s*(cod_fee|cod_price)\s*\}?\}/.test(String(text || '')); }
+  function priceTags(text, values, fmt) {
+    return String(text || '').replace(PRICE_TAG, function (all, key) {
+      var n = values ? values[key] : null;
+      return n == null || !isFinite(Number(n)) ? '' : fmt(Number(n));
+    }).replace(/\s+/g, ' ').trim();
+  }
+  // A COD button's text for this price (null = not known yet).
+  function codLabel(cfg, text, price) {
+    if (!hasPriceTags(text)) return text;
+    var fee = cfg && cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var values = price == null || !isFinite(Number(price)) ? { cod_fee: fee }
+      : { price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 };
+    return priceTags(text, values, shopperMoney());
+  }
+
   // OTP, pricing and placing the order: POSTed to php_backend/cod_checkout.php,
   // which relays them to the BRIX app server (the browser never calls it).
   function api(endpoint, body) {
@@ -1560,7 +1593,8 @@
       'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
       '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' +
-      (iconName ? icon(iconName, 18, ' style="flex:none;width:18px;height:18px"') : '') + esc(label) + '</span>' +
+      (iconName ? icon(iconName, 18, ' style="flex:none;width:18px;height:18px"') : '') +
+      '<span data-brix-cod-label style="' + important('color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' + esc(label) + '</span></span>' +
       (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit;text-transform:none;letter-spacing:normal') + '">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
@@ -1572,8 +1606,14 @@
       if (!cfg || !cfg.enabled || cfg.surfaces.combo === false) return null;
       var look = lookOf(cfg, 'combo');
       var r = Math.max(0, Math.min(40, Math.round(Number(look.radius)) || 0));
+      var text = (cfg.buttons && cfg.buttons.comboText) || 'Cash on Delivery';
       return {
-        text: (cfg.buttons && cfg.buttons.comboText) || 'Cash on Delivery',
+        text: text,
+        // The text for the combo's price, with its price tags filled in.
+        label: function (price) { return codLabel(cfg, text, price); },
+        // Where it goes next to the combo's Checkout: replace | above | below.
+        placement: PLACEMENTS.indexOf(cfg.comboPlacement) !== -1 ? cfg.comboPlacement : 'below',
+        codFee: cfg.codFee > 0 ? Number(cfg.codFee) : 0,
         icon: look.icon !== false ? icon('cash', 16, ' style="flex:none;width:16px;height:16px"') : '',
         css: buttonPaint(look) + 'border:none;border-radius:' + r + 'px;' + buttonType(look),
       };
@@ -1650,7 +1690,7 @@
     if (cartHasCheckoutOnlyLines(cart)) reason = 'Not available with Packs or free gifts';
     else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
     else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
-    return reason ? { reason: reason } : { sub: feeHint(cfg, fmt) };
+    return reason ? { reason: reason, subtotal: subtotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal };
   }
 
   // "Replace Checkout" hides the drawer's Checkout with a stylesheet rule, so
@@ -1687,7 +1727,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
-    slot.innerHTML = buttonHtml(cfg, cfg.buttons.drawerText, state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
+    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, state.subtotal), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -2017,6 +2057,19 @@
     scope.setAttribute('data-brix-cod-hide-buy-now', '');
   }
 
+  // The chosen variant's price x quantity on the product form (shopper's
+  // currency), or null while it isn't known.
+  function productPrice(form, info) {
+    var sel = formSelection(form);
+    var id = sel.variantId;
+    if (!/^\d+$/.test(id)) { var m = /[?&]variant=(\d+)/.exec(window.location.search); id = m ? m[1] : id; }
+    for (var i = 0; i < (info.variants || []).length; i++) {
+      var v = info.variants[i];
+      if (v.id === id && isFinite(v.price) && v.price >= 0) return Math.round(v.price * sel.quantity) / 100;
+    }
+    return null;
+  }
+
   var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
 
   var productMount = null; // { form, slot, addBtn } of the button on the page
@@ -2050,9 +2103,17 @@
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
     var fmt = moneyFormatter(cfg.currency);
-    slot.innerHTML = buttonHtml(cfg, cfg.buttons.productText, excluded ? 'Not available for this product' : feeHint(cfg, fmt), Boolean(excluded), look, { look: lookOf(cfg, 'product') });
+    var text = cfg.buttons.productText;
+    var label = codLabel(cfg, text, productPrice(form, info));
+    var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt);
+    slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (excluded) return;
+    productMount.relabel = function () {
+      var el = slot.querySelector('[data-brix-cod-label]');
+      var next = codLabel(cfg, text, productPrice(form, info));
+      if (el && el.textContent !== next) el.textContent = next;
+    };
     function syncDisabled() {
       var soldOut = Boolean(addBtn && (addBtn.disabled || addBtn.getAttribute('aria-disabled') === 'true'));
       btn.disabled = soldOut;
@@ -2133,21 +2194,20 @@
     }
 
     // Mirrors onlineButtonLabel: built from the merchant's text every time, so
-    // a suffix can never stack ("Save 10% · Save 10%").
+    // a suffix can never stack ("Save 10% · Save 10%"). Text with price tags is
+    // filled in and gets no suffix.
     function onlineLabel(base, pr, prepaid) {
       var b = String(base || 'Buy it now').trim();
+      if (hasPriceTags(b)) {
+        var values = pr && pr.subtotal != null
+          ? { price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal }
+          : {};
+        return priceTags(b, values, st ? st.fmt : shopperMoney());
+      }
       return pr && pr.qualifies && prepaid && prepaid.showBadge ? b + ' ' + DOT + ' Save ' + Number(pr.percent) + '%' : b;
     }
 
     function hex(value, fallback) { return HEX.test(value || '') ? value : fallback; }
-
-    // Like moneyFormatter, but whole amounts without ".00" (990, not 990.00).
-    function shortMoney(code) {
-      var full = moneyFormatter(code);
-      var whole = null;
-      try { whole = new Intl.NumberFormat(document.documentElement.lang || 'en-IN', { style: 'currency', currency: code || 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
-      return function (n) { n = Number(n) || 0; return whole && Math.round(n * 100) % 100 === 0 ? whole.format(n) : full(n); };
-    }
 
     function ensureStyle() {
       if (document.getElementById('brix-pay-style')) return;
@@ -2448,7 +2508,7 @@
       // The purchase button for the chosen method.
       var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, (st.cfg && st.cfg.productButton) || {});
       if (v.method === 'cod') {
-        st.cta.innerHTML = buttonHtml(st.cfg, st.cfg.buttons.productText, v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
+        st.cta.innerHTML = buttonHtml(st.cfg, codLabel(st.cfg, st.cfg.buttons.productText, v.pr.subtotal), v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
       } else if (v.method === 'online' && !st.buyNow) {
         var bg = st.colors.online;
         st.cta.innerHTML = buttonHtml(st.cfg, onlineLabel(pp.online.buttonText, v.pr, v.prepaid), '', v.soldOut, look, {
@@ -2494,7 +2554,8 @@
       if (!btn) return;
       if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
       var original = btn.getAttribute('data-brix-pay-orig');
-      var wanted = st.pp.relabelBuyNow && v.pr.qualifies && v.prepaid && v.prepaid.showBadge
+      var tagged = hasPriceTags(st.pp.online.buttonText);
+      var wanted = st.pp.relabelBuyNow && (tagged ? v.pr.subtotal != null : v.pr.qualifies && v.prepaid && v.prepaid.showBadge)
         ? onlineLabel(st.pp.online.buttonText, v.pr, v.prepaid)
         : original;
       if (wanted && btn.textContent !== wanted) btn.textContent = wanted;
@@ -2674,6 +2735,16 @@
         var excluded = hasExcludedTag(info.tags, excludedTags(cfg));
         if (excluded && cfg.excludedBehavior === 'hide') return;
         mountProductButton(cfg, info, excluded);
+        // Price tags in the button text follow the chosen variant and quantity
+        // (themes fire change/input, or set the hidden variant id silently).
+        if (hasPriceTags(cfg.buttons.productText)) {
+          var relabel = function () { if (productMount && productMount.relabel) productMount.relabel(); };
+          var later = null;
+          var soon = function () { clearTimeout(later); later = setTimeout(relabel, 120); };
+          document.addEventListener('change', soon, true);
+          document.addEventListener('input', soon, true);
+          setInterval(function () { if (!document.hidden) relabel(); }, 600);
+        }
         // Many themes redraw the product form or its buttons when a variant is
         // picked, which removes the COD button; put it back when that happens.
         if (!window.MutationObserver) return;

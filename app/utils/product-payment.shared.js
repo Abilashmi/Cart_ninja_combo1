@@ -18,6 +18,8 @@
 // Where the selector goes on the product page. 'app_block' = only inside the
 // "Payment options" theme block ([data-brix-pay-slot]); any placement yields
 // to that block when the merchant added it.
+import { fillPriceTags, hasPriceTags, paymentPriceValues } from './price-tags.shared.js';
+
 export const PAY_PLACEMENTS = [
   'below_price', 'below_variants', 'below_quantity', 'before_purchase_buttons', 'above_buy_now', 'below_add_to_cart', 'app_block',
 ];
@@ -278,10 +280,13 @@ export function savingsBadge(percent) {
 
 /**
  * The online Buy button's text. Never stacks suffixes: always built from the
- * merchant's base text, never from what the button currently says.
+ * merchant's base text, never from what the button currently says. Text with
+ * price tags ("Buy it now {prepaid_price} Prepaid") is filled in with `format`
+ * and gets no "· Save 10%" suffix: the merchant wrote what it says.
  */
-export function onlineButtonLabel(baseText, pricing, prepaid) {
+export function onlineButtonLabel(baseText, pricing, prepaid, format = String) {
   const base = String(baseText || DEFAULT_PRODUCT_PAYMENT.online.buttonText).trim();
+  if (hasPriceTags(base)) return fillPriceTags(base, paymentPriceValues(pricing), format);
   if (!pricing?.qualifies || !prepaid?.showBadge) return base;
   return `${base} · ${savingsBadge(pricing.percent)}`;
 }

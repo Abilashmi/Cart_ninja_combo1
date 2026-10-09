@@ -1735,16 +1735,27 @@ export default function ComboPreviewPage() {
   // (brix_cod.js), so inside the iframe we only show the button once the
   // parent says COD is on, and hand the selection back to it to open.
   const [codAvailable, setCodAvailable] = useState(false);
+  // The COD button's text (with price tags), fee and position, from the parent.
+  const [codButton, setCodButton] = useState(null);
   useEffect(() => {
     if (!embed) return undefined;
     const handler = (e) => {
-      if (e.source === window.parent && e.data && e.data.type === 'brix-combo-cod-available') setCodAvailable(true);
+      if (e.source !== window.parent || !e.data || e.data.type !== 'brix-combo-cod-available') return;
+      setCodAvailable(true);
+      setCodButton({
+        text: typeof e.data.text === 'string' ? e.data.text : null,
+        codFee: Number(e.data.codFee) || 0,
+        placement: ['replace', 'above', 'below'].includes(e.data.placement) ? e.data.placement : 'below',
+      });
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, [embed]);
 
   const codContext = embed && codAvailable ? {
+    text: codButton?.text || null,
+    codFee: codButton?.codFee || 0,
+    placement: codButton?.placement || 'below',
     onCod: () => {
       const destination = checkoutDestination();
       if (totalSelected === 0 || !destination) return;

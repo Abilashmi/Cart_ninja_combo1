@@ -326,6 +326,7 @@ if ($action === 'config') {
         'minOrder' => cods_num($s['minOrder'] ?? 0),
         'maxOrder' => cods_num($s['maxOrder'] ?? 0),
         'drawerPlacement' => cods_enum($s['drawerPlacement'] ?? '', ['replace', 'above', 'below'], 'above'),
+        'comboPlacement' => cods_enum($s['comboPlacement'] ?? '', ['replace', 'above', 'below'], 'below'),
         'drawerSelector' => cods_selector($s['drawerSelector'] ?? ''),
         // The fee actually charged (0 while the fee switch is off).
         'codFee' => $feeOn ? cods_num($s['codFee'] ?? 0) : 0,

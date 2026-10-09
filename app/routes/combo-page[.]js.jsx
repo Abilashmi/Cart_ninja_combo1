@@ -623,6 +623,20 @@ const SCRIPT_BODY = String.raw`
     };
   }
 
+  // The COD button's text, with its price tags ({cod_price} ...) filled in for
+  // this combo's price (BrixCod.comboButton().label).
+  function codText(state) {
+    var cb = state.codButton;
+    if (!cb) return state.config.cod_btn_text || 'Cash on Delivery';
+    return typeof cb.label === 'function' ? cb.label(state.finalPrice) : cb.text;
+  }
+
+  // Where the COD button goes next to Checkout: replace | above | below.
+  function codPlacement(state) {
+    var p = state.codButton && state.codButton.placement;
+    return p === 'replace' || p === 'above' ? p : 'below';
+  }
+
   // BRIX COD Checkout: the Cash on Delivery sheet comes from the cart-drawer
   // app embed (extensions/cart-drawer/assets/brix_cod.js). Its "Pay online"
   // falls back to this page's normal checkout (onCheckout).
@@ -1984,8 +1998,14 @@ const SCRIPT_BODY = String.raw`
         minHeight: isMobile ? '48px' : 'auto', fontSize: isMobile ? '13px' : 'inherit',
       }) + '">' + esc(config.preview_reset_btn_text || 'Reset Combo') + '</button>';
     }
-    if (config.show_preview_checkout_btn !== false) {
-      html += '<button type="button" data-combo-action="checkout"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
+    // COD goes where the merchant put it (COD → Customize → Position in combo
+    // page): replace, above (before) or below (after) Checkout.
+    var codShown = state.codAvailable && config.show_cod_button !== false;
+    var codPlace = codPlacement(state);
+    var checkoutHtml = '';
+    var codHtml = '';
+    if (config.show_preview_checkout_btn !== false && !(codShown && codPlace === 'replace')) {
+      checkoutHtml += '<button type="button" data-combo-action="checkout"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
         flex: isMobile ? '1' : 'none', width: isMobile ? '100%' : 'auto',
         background: config.preview_checkout_btn_bg || config.checkout_btn_bg || '#000',
         color: config.preview_checkout_btn_text_color || config.checkout_btn_text_color || '#fff',
@@ -1994,7 +2014,7 @@ const SCRIPT_BODY = String.raw`
         fontSize: isMobile ? '13px' : 'inherit', opacity: canOpenDrawer ? '1' : '0.6',
       }) + '">' + esc(config.preview_checkout_btn_text || 'Checkout') + '</button>';
     }
-    if (state.codAvailable && config.show_cod_button !== false) {
+    if (codShown) {
       // Look and text from COD → Customize → Combo page button (state.codButton,
       // from BrixCod.comboButton). The template's own colours are only used
       // until that has loaded.
@@ -2012,9 +2032,10 @@ const SCRIPT_BODY = String.raw`
         borderRadius: (config.preview_border_radius || 6) + 'px', fontWeight: '700',
         fontSize: isMobile ? '13px' : 'inherit',
       });
-      html += '<button type="button" data-combo-action="cod"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + codBase + codLook + '">'
-        + (cb ? cb.icon : '') + esc(cb ? cb.text : (config.cod_btn_text || 'Cash on Delivery')) + '</button>';
+      codHtml += '<button type="button" data-combo-action="cod"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + codBase + codLook + '">'
+        + (cb ? cb.icon : '') + esc(codText(state)) + '</button>';
     }
+    html += codPlace === 'below' ? checkoutHtml + codHtml : codHtml + checkoutHtml;
     if (config.show_preview_add_to_cart_btn) {
       html += '<button type="button" data-combo-action="cart-drawer-open"' + (!canOpenDrawer ? ' disabled' : '') + ' style="' + styleStr({
         flex: isMobile ? '1' : 'none', width: isMobile ? '100%' : 'auto', background: config.preview_add_to_cart_btn_bg || '#fff',
@@ -2216,14 +2237,18 @@ const SCRIPT_BODY = String.raw`
     html += '</div>';
 
     var disabled = !state.canCheckout || state.checkingOut;
-    html += '<button type="button" class="bxw-checkout" data-combo-action="checkout"' + (disabled ? ' disabled' : '') + '>'
+    var codShown = state.codAvailable && config.show_cod_button !== false;
+    var codPlace = codPlacement(state);
+    var checkoutBtn = codShown && codPlace === 'replace' ? '' : '<button type="button" class="bxw-checkout" data-combo-action="checkout"' + (disabled ? ' disabled' : '') + '>'
       + esc(state.checkingOut ? 'Adding your box…' : (config.preview_checkout_btn_text || 'Checkout')) + '</button>';
-    if (state.codAvailable && config.show_cod_button !== false) {
+    var codBtn = '';
+    if (codShown) {
       var cb = state.codButton;
-      html += '<button type="button" class="bxw-cod" data-combo-action="cod"' + (disabled ? ' disabled' : '')
+      codBtn = '<button type="button" class="bxw-cod" data-combo-action="cod"' + (disabled ? ' disabled' : '')
         + (cb ? ' style="display:flex;align-items:center;justify-content:center;gap:8px;' + cb.css + '"' : '') + '>'
-        + (cb ? cb.icon + esc(cb.text) : esc(config.cod_btn_text || 'Cash on Delivery')) + '</button>';
+        + (cb ? cb.icon : '') + esc(codText(state)) + '</button>';
     }
+    html += codPlace === 'below' ? checkoutBtn + codBtn : codBtn + checkoutBtn;
     if (items.length) html += '<button type="button" class="bxw-clear" data-combo-action="reset">Empty the box</button>';
     html += '</div>';
     return html;
@@ -2569,7 +2594,18 @@ const SCRIPT_BODY = String.raw`
         // The layout renders inside this iframe, but the COD sheet lives on
         // this (parent) page — tell the frame to show its COD button.
         whenCodAvailable(function () {
-          try { iframe.contentWindow.postMessage({ type: 'brix-combo-cod-available' }, '*'); } catch (err) {}
+          var tell = function (b) {
+            try {
+              iframe.contentWindow.postMessage({
+                type: 'brix-combo-cod-available',
+                // Text (with its price tags), fee and position, so the frame
+                // draws the button as the page's own layouts do.
+                text: b ? b.text : null, codFee: b ? b.codFee : 0, placement: b ? b.placement : 'below',
+              }, '*');
+            } catch (err) {}
+          };
+          if (typeof window.BrixCod.comboButton === 'function') window.BrixCod.comboButton().then(tell).catch(function () { tell(null); });
+          else tell(null);
         });
       } else if (e.data.type === 'brix-combo-checkout') {
         // Weight combos: the frame runs on the app's origin and can't reach

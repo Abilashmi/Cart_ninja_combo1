@@ -400,6 +400,30 @@ const done = async (page, name) => {
   await off.context().close();
 }
 
+/* 14. Price tags in the button texts, and the combo page position */
+{
+  // ₹1,299 cart + ₹40 COD fee
+  const page = await open('dawn', { cfg: { buttons: { drawerText: 'Buy it for {cod_price} COD', comboText: 'Pay {{cod_price}} cash' }, comboPlacement: 'replace' } });
+  await waitButton(page);
+  let s = await look(page, DAWN_CO);
+  check('price tags: drawer button says "Buy it for ₹1,339 COD" (cart + fee), with no separate fee line', s.text === 'Buy it for ₹1,339 COD', s.text);
+  page.state.cart = [line('tee', 999)];
+  await page.evaluate(() => { window.rerender('₹999.00'); document.dispatchEvent(new CustomEvent('cart:updated')); });
+  await settle(page, 1500);
+  s = await look(page, DAWN_CO);
+  check('price tags: follow the cart (₹999 + ₹40)', s.text === 'Buy it for ₹1,039 COD', s.text);
+  const combo = await page.evaluate(() => window.BrixCod.comboButton().then((b) => ({ placement: b.placement, codFee: b.codFee, text: b.text, label: b.label(1500) })));
+  check('combo: BrixCod.comboButton() gives the position, fee and a price-filled text', combo.placement === 'replace' && combo.codFee === 40 && combo.text === 'Pay {{cod_price}} cash' && combo.label === 'Pay ₹1,540 cash', JSON.stringify(combo));
+  await done(page, '14-price-tags');
+
+  const plain = await open('dawn');
+  await waitButton(plain);
+  const def = await plain.evaluate(() => window.BrixCod.comboButton().then((b) => ({ placement: b.placement, label: b.label(1500) })));
+  check('combo: Below Checkout by default; text without tags unchanged', def.placement === 'below' && def.label === 'Cash on Delivery', JSON.stringify(def));
+  allErrors.push(...plain.errors);
+  await plain.context().close();
+}
+
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

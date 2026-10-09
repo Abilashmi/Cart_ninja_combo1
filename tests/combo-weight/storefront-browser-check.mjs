@@ -61,7 +61,7 @@ async function openCombo(config, { wp = weightPricing(), cartItems = [], shiproc
       if (url.pathname === '/pages/box') {
         const stubs = `
           ${shiprocket ? 'window.BrixCheckout = { checkoutItems: function (o) { window.__srCalled(o); }, checkoutCart: function () {} };' : ''}
-          ${cod ? 'window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;box-shadow:none;border:none;border-radius:4px;font-size:16px;font-weight:700;" }); } };' : ''}`;
+          ${cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;box-shadow:none;border:none;border-radius:4px;font-size:16px;font-weight:700;"${cod.placement ? `, placement: ${JSON.stringify(cod.placement)}` : ''}${cod.tags ? ', label: function (p) { return "Pay Rs " + (p + 40) + " cash"; }' : ''} }); } };` : ''}`;
         return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script></head><body><main><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="7"></div></main><script src="${API}/combo-page.js"></script></body></html>` });
       }
       if (url.pathname === '/cart.js') return json({ items: cartItems });
@@ -224,6 +224,33 @@ const checkoutBtn = '[data-combo-action="checkout"]';
   await phone.page.click('.bxw-close');
   check('phone: sheet closes', (await phone.page.$('.bxw-sheet')) === null);
   await phone.page.close();
+}
+
+// ── COD position next to Checkout (COD → Customize → Position in combo page) ──
+{
+  const order = (page, sel) => page.$$eval(sel, (els) => els.map((e) => e.getAttribute('data-combo-action')));
+  const bar = '[data-combo-action="checkout"], [data-combo-action="cod"]';
+  for (const [placement, want] of [[null, 'checkout,cod'], ['above', 'cod,checkout'], ['replace', 'cod'], ['below', 'checkout,cod']]) {
+    const { page } = await openCombo(baseConfig, { cod: { placement, tags: true } });
+    await page.waitForFunction(() => document.querySelector('[data-combo-action="cod"]')?.textContent.includes('cash'), null, { timeout: 3000 }).catch(() => {});
+    const got = (await order(page, bar)).join(',');
+    check(`combo bar, COD ${placement || 'not set (old settings)'}: ${want}`, got === want, got);
+    if (placement === 'above') {
+      await add(page, 1);
+      await page.waitForTimeout(200);
+      const text = await page.textContent('[data-combo-action="cod"]');
+      check('combo bar: COD text gets the combo price filled in (label(finalPrice))', /Pay Rs \d+(\.\d+)? cash/.test(text) && !text.includes('{'), text);
+    }
+    await page.close();
+  }
+  const boxConfig = { layout: 'layout5', col_1: 'books', tab_count: 1, weight_pricing: weight };
+  for (const [placement, want] of [['above', 'cod,checkout'], ['replace', 'cod']]) {
+    const { page } = await openCombo(boxConfig, { cod: { placement } });
+    await page.waitForSelector('.bxw-panel [data-combo-action="cod"]', { timeout: 3000 }).catch(() => {});
+    const got = (await order(page, '.bxw-panel [data-combo-action="checkout"], .bxw-panel [data-combo-action="cod"]')).join(',');
+    check(`Weight Box, COD ${placement}: ${want}`, got === want, got);
+    await page.close();
+  }
 }
 
 // ── classic item-count combos are unchanged: cart permalink + Shiprocket ──

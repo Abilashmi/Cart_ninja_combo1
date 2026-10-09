@@ -399,6 +399,49 @@ s = await state(page);
 check('not a product page: no payment selector', s.boxes === 0);
 await page.close();
 
+/* ── 17. price tags in the button texts ────────────────────────────────────── */
+// ₹1,100 product, ₹50 COD fee, 10% prepaid: "Buy it now ₹990 Prepaid" / "Buy it for ₹1,150 COD".
+config = {
+  ...COD,
+  buttons: { ...COD.buttons, productText: 'Buy it for {cod_price} COD' },
+  productPayment: { ...PAYMENT, online: { ...PAYMENT.online, buttonText: 'Buy it now {prepaid_price} Prepaid' } },
+};
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('price tags: Shopify Buy it now says "Buy it now ₹990 Prepaid" (no "· Save 10%" added)', s.nativeText === 'Buy it now ₹990 Prepaid', s.nativeText);
+await page.locator('.bxpay-card[data-method="cod"]').click();
+await settle(page, 300);
+s = await state(page);
+check('price tags: COD button says "Buy it for ₹1,150 COD" (price + fee)', (s.codBtn || '').includes('Buy it for ₹1,150 COD'), s.codBtn);
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+s = await state(page);
+check('price tags: follow the variant (₹1,500 + ₹50)', (s.codBtn || '').includes('Buy it for ₹1,550 COD'), s.codBtn);
+await page.locator('.bxpay-card[data-method="online"]').click();
+await page.selectOption('#opt', '21');
+await page.click('#plus');
+await settle(page, 1000);
+s = await state(page);
+check('price tags: follow the quantity (2 × ₹1,100 − 10% = ₹1,980)', s.nativeText === 'Buy it now ₹1,980 Prepaid', s.nativeText);
+await shot(page, '17-price-tags');
+await page.close();
+
+// Payment options off: the plain product page COD button, with the price live.
+config = { ...COD, buttons: { ...COD.buttons, productText: 'Buy it for {cod_price} COD' }, productPayment: null };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+const plainBtn = () => page.evaluate(() => document.querySelector('[data-brix-cod-slot] [data-brix-cod-btn]').textContent.replace(/\s+/g, ' ').trim());
+check('product COD button: "Buy it for ₹1,150 COD", and no separate "+₹50" line', await plainBtn() === 'Buy it for ₹1,150 COD', await plainBtn());
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+check('product COD button: follows the variant (₹1,550)', await plainBtn() === 'Buy it for ₹1,550 COD', await plainBtn());
+await page.click('#plus');
+await settle(page, 1000);
+check('product COD button: follows the quantity (2 × ₹1,500 + ₹50 = ₹3,050)', await plainBtn() === 'Buy it for ₹3,050 COD', await plainBtn());
+await page.close();
+
 check('no console errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;

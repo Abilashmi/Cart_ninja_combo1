@@ -26,11 +26,11 @@ import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discoun
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT } from '../utils/cod.shared';
+import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, codButtonLook, hasPriceTags } from '../utils/cod.shared';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
 import { buildCodScreen, cartSliderMax, suggestedValue } from '../components/cod/CodPreview';
-import { CodFlow, PlacementPicker, FeeSummary, ExcludedTagsInput } from '../components/cod/CodSettingsCards';
+import { CodFlow, PlacementPicker, COMBO_PLACEMENT_OPTIONS, FeeSummary, ExcludedTagsInput } from '../components/cod/CodSettingsCards';
 import {
   toForm, toSettings, formErrors, secretsPatch, productButtonForm, PB_SIZES, HEX, RADII,
 } from '../components/cod/codSettingsForm';
@@ -121,6 +121,33 @@ export async function action({ request }) {
   }
 }
 
+// Margins, padding and corners of the product page COD button.
+function ProductButtonSizes({ form, set, setForm }) {
+  return (
+    <Card>
+      <FormLayout>
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h3" variant="headingMd">Size and spacing</Text>
+          {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
+            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow }) }))}>Reset</Button>
+          )}
+        </InlineStack>
+        {PB_SIZES.map(({ key, field, label }) => {
+          const [min, max] = COD_PRODUCT_BUTTON_LIMITS[key];
+          return <SliderField key={key} label={label} value={form[field]} min={min} max={max} suffix="px" onChange={set(field)} />;
+        })}
+      </FormLayout>
+    </Card>
+  );
+}
+
+// Help under a COD button's text field: the price tags it can use.
+function priceTagHelp(text, priceIs) {
+  return hasPriceTags(text)
+    ? `Prices fill in for each shopper. {price} = ${priceIs}, {cod_fee} = COD fee, {cod_price} = both.`
+    : 'Add a price with {price}, {cod_fee} or {cod_price}, e.g. "Buy it for {cod_price} COD".';
+}
+
 function RadiusCard({ option, active, accent, onPick }) {
   return (
     <button type="button" className={`cod-preset${active ? ' on' : ''}`} aria-pressed={active} onClick={onPick}>
@@ -191,20 +218,22 @@ const GROUPS = [
     items: [{ id: 'status', label: 'How COD works', icon: CashRupeeIcon, preview: 'drawer', fields: [] }],
   },
   {
-    title: 'Cart drawer',
+    // Where the COD button shows, one place at a time.
+    title: 'Button positions',
     items: [
-      { id: 'position', label: 'Position', icon: CartIcon, preview: 'drawer', fields: [], toggle: 'drawer' },
-      { id: 'button', label: 'Cart drawer button', icon: ButtonIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color'] },
-      { id: 'theme', label: 'Theme compatibility', icon: CodeIcon, preview: 'drawer', fields: ['drawerSelector'] },
+      { id: 'position', label: 'Position in cart drawer', icon: CartIcon, preview: 'drawer', fields: [], toggle: 'drawer' },
+      { id: 'product', label: 'Position in product page', icon: ProductIcon, preview: 'product', fields: [], toggle: 'product' },
+      { id: 'combo', label: 'Position in combo page', icon: CollectionIcon, preview: 'combo', fields: [], toggle: 'combo' },
     ],
   },
   {
-    title: 'Other pages',
+    // What each place's COD button says and looks like.
+    title: 'Buttons',
     items: [
-      { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText'], toggle: 'product' },
-      { id: 'productbtn', label: 'Product page button', icon: ButtonIcon, preview: 'product', fields: ['productBg', 'productColor'] },
-      { id: 'combo', label: 'Combo pages', icon: CollectionIcon, preview: 'combo', fields: ['comboText'], toggle: 'combo' },
-      { id: 'combobtn', label: 'Combo page button', icon: ButtonIcon, preview: 'combo', fields: ['comboBg', 'comboColor'] },
+      { id: 'button', label: 'Cart drawer button', icon: ButtonIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color'] },
+      { id: 'productbtn', label: 'Product page button', icon: ButtonIcon, preview: 'product', fields: ['productText', 'productBg', 'productColor'] },
+      { id: 'combobtn', label: 'Combo page button', icon: ButtonIcon, preview: 'combo', fields: ['comboText', 'comboBg', 'comboColor'] },
+      { id: 'theme', label: 'Theme compatibility', icon: CodeIcon, preview: 'drawer', fields: ['drawerSelector'] },
     ],
   },
   {
@@ -407,7 +436,7 @@ export default function CodCustomizePage() {
     if (id === 'position') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">Where the COD button goes in your store&apos;s cart drawer, next to its Checkout button.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes in your store&apos;s cart drawer, next to its Checkout button. Its text and look are under Buttons → Cart drawer button.</Text>
           <Card>
             <FormLayout>
               <Checkbox label="Show COD in the cart drawer" checked={form.drawer} onChange={set('drawer')} />
@@ -425,7 +454,7 @@ export default function CodCustomizePage() {
         <BlockStack gap="400">
           <Text as="p" tone="subdued">How the Cash on Delivery button looks in the cart drawer. Product pages and combo pages have their own button designs (Other pages).</Text>
           <Card>
-            <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" />
+            <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" helpText={priceTagHelp(form.drawerText, 'cart total')} />
           </Card>
           <ButtonDesignEditor
             look={drawerLook}
@@ -441,9 +470,21 @@ export default function CodCustomizePage() {
       const lookNow = form[key];
       const setLook = (patch) => setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
       const where = isProduct ? 'product pages' : 'combo pages';
+      const textField = isProduct ? 'productText' : 'comboText';
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">How the Cash on Delivery button looks on {where}.</Text>
+          <Text as="p" tone="subdued">What the Cash on Delivery button says and how it looks on {where}. Where it goes is under Button positions.</Text>
+          <Card>
+            <TextField
+              label="Button text"
+              value={form[textField]}
+              onChange={set(textField)}
+              error={errors[textField]}
+              maxLength={60}
+              autoComplete="off"
+              helpText={priceTagHelp(form[textField], isProduct ? 'product price × quantity' : 'combo total')}
+            />
+          </Card>
           <Card>
             <Checkbox
               label="Same design as the cart drawer button"
@@ -460,9 +501,7 @@ export default function CodCustomizePage() {
               errors={{ bg: errors[isProduct ? 'productBg' : 'comboBg'], color: errors[isProduct ? 'productColor' : 'comboColor'] }}
             />
           )}
-          {isProduct && lookNow.same === false && (
-            <Text as="p" variant="bodySm" tone="subdued">Corners and size are under Product page → Size and spacing.</Text>
-          )}
+          {isProduct && form.product && <ProductButtonSizes form={form} set={set} setForm={setForm} />}
         </BlockStack>
       );
     }
@@ -488,42 +527,23 @@ export default function CodCustomizePage() {
     if (id === 'product') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">A COD button on product pages that buys just that product.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes on product pages. It buys just that product. Its text, look and size are under Buttons → Product page button.</Text>
           {form.pp.enabled && (
-            <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size from here still apply; Replace the Buy it now button doesn&apos;t.</Banner>
+            <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size still apply; Replace the Buy it now button doesn&apos;t.</Banner>
           )}
           <Card>
             <FormLayout>
               <Checkbox label="Show COD on product pages" checked={form.product} onChange={set('product')} />
               {form.product && (
-                <>
-                  <Checkbox
-                    label="Replace the Buy it now button"
-                    helpText={form.pbReplaceBuyNow ? "Shopify's Buy it now is hidden and COD takes its place." : 'Buy it now stays; COD goes between Add to Cart and Buy it now.'}
-                    checked={form.pbReplaceBuyNow}
-                    onChange={set('pbReplaceBuyNow')}
-                  />
-                  <TextField label="Button text" value={form.productText} onChange={set('productText')} error={errors.productText} maxLength={60} autoComplete="off" helpText="Its colours and style are under Product page button." />
-                </>
+                <Checkbox
+                  label="Replace the Buy it now button"
+                  helpText={form.pbReplaceBuyNow ? "Shopify's Buy it now is hidden and COD takes its place." : 'Buy it now stays; COD goes between Add to Cart and Buy it now.'}
+                  checked={form.pbReplaceBuyNow}
+                  onChange={set('pbReplaceBuyNow')}
+                />
               )}
             </FormLayout>
           </Card>
-          {form.product && (
-            <Card>
-              <FormLayout>
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h3" variant="headingMd">Size and spacing</Text>
-                  {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
-                    <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow }) }))}>Reset</Button>
-                  )}
-                </InlineStack>
-                {PB_SIZES.map(({ key, field, label }) => {
-                  const [min, max] = COD_PRODUCT_BUTTON_LIMITS[key];
-                  return <SliderField key={key} label={label} value={form[field]} min={min} max={max} suffix="px" onChange={set(field)} />;
-                })}
-              </FormLayout>
-            </Card>
-          )}
         </BlockStack>
       );
     }
@@ -539,12 +559,21 @@ export default function CodCustomizePage() {
     if (id === 'combo') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">A COD button next to Checkout on Build a Combo pages.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes on Build a Combo pages, next to the combo&apos;s Checkout button. Its text and look are under Buttons → Combo page button.</Text>
           <Card>
             <FormLayout>
               <Checkbox label="Show COD on combo pages" helpText="A combo template can still hide it (combo builder → Behaviour)." checked={form.combo} onChange={set('combo')} />
               {form.combo && (
-                <TextField label="Button text" value={form.comboText} onChange={set('comboText')} error={errors.comboText} maxLength={60} autoComplete="off" helpText="Its colours and style are under Combo page button." />
+                <PlacementPicker
+                  value={form.comboPlacement}
+                  onChange={set('comboPlacement')}
+                  buttons={codButtonLook(preview, 'combo')}
+                  options={COMBO_PLACEMENT_OPTIONS}
+                  where="combo pages"
+                />
+              )}
+              {form.combo && form.comboPlacement === 'replace' && (
+                <Text as="p" variant="bodySm" tone="subdued">Shoppers who want to pay online still can: the COD popup has a Pay online option.</Text>
               )}
             </FormLayout>
           </Card>

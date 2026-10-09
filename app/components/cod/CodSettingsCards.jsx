@@ -52,11 +52,18 @@ function MiniFooter({ placement, buttons }) {
   );
 }
 
-/** Where COD goes in the cart drawer: one option per row, picture on the left. */
-export function PlacementPicker({ value, onChange, buttons, disabled }) {
+// The same three choices on combo pages, next to the combo's Checkout button.
+export const COMBO_PLACEMENT_OPTIONS = [
+  { id: 'replace', title: 'Replace Checkout', text: 'Only the COD button. Shoppers can still pay online from the COD popup.' },
+  { id: 'above', title: 'Above Checkout', text: 'COD first, Checkout after it (on wide screens: COD on the left).' },
+  { id: 'below', title: 'Below Checkout', text: 'Checkout first, COD after it. How combo pages always looked.' },
+];
+
+/** Where COD goes next to Checkout (cart drawer, or `where`): one option per row, picture on the left. */
+export function PlacementPicker({ value, onChange, buttons, disabled, options = PLACEMENT_OPTIONS, where = 'the cart drawer' }) {
   return (
-    <div className="bcod-place" role="radiogroup" aria-label="Where COD appears in the cart drawer">
-      {PLACEMENT_OPTIONS.map((o) => {
+    <div className="bcod-place" role="radiogroup" aria-label={`Where COD appears in ${where}`}>
+      {options.map((o) => {
         const on = value === o.id;
         return (
           <button

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { codButtonColors, codButtonType } from './cod/codButtonLook';
+import { codPriceValues, fillPriceTags } from '../utils/price-tags.shared.js';
 
 // BRIX COD Checkout: when a provider supplies { onCod }, the bar shows a
 // Cash on Delivery button next to Checkout. Provided by the storefront combo
@@ -395,7 +396,19 @@ export const CdoPreviewBar = ({
                     {config.preview_reset_btn_text || 'Reset Combo'}
                   </button>
                 )}
-                {config.show_preview_checkout_btn !== false && (
+                {(() => {
+                  // COD goes where the merchant put it (COD → Customize →
+                  // Position in combo page), as combo-page.js draws it.
+                  const codShown = Boolean(cod) && config.show_cod_button !== false;
+                  const placement = codShown ? cod.placement || 'below' : 'below';
+                  const codText = cod
+                    ? fillPriceTags(
+                      cod.look ? (cod.look.text || 'Cash on Delivery') : (cod.text || config.cod_btn_text || 'Cash on Delivery'),
+                      codPriceValues(finalPrice, cod.codFee || 0),
+                      (n) => `${currencySymbol}${Number.isInteger(n) ? n : n.toFixed(2)}`,
+                    )
+                    : '';
+                  const checkoutBtn = config.show_preview_checkout_btn !== false && !(codShown && placement === 'replace') && (
                   <button
                     type="button"
                     onClick={onCheckoutClick}
@@ -423,8 +436,8 @@ export const CdoPreviewBar = ({
                   >
                     {config.preview_checkout_btn_text || 'Checkout'}
                   </button>
-                )}
-                {cod && config.show_cod_button !== false && (
+                  );
+                  const codBtn = codShown && (
                   <button
                     type="button"
                     onClick={() => { if (!loading && canOpenDrawer) cod.onCod(); }}
@@ -451,9 +464,11 @@ export const CdoPreviewBar = ({
                     }}
                     disabled={loading || !canOpenDrawer}
                   >
-                    {cod.look ? (cod.look.text || 'Cash on Delivery') : (config.cod_btn_text || 'Cash on Delivery')}
+                    {codText}
                   </button>
-                )}
+                  );
+                  return placement === 'below' ? <>{checkoutBtn}{codBtn}</> : <>{codBtn}{checkoutBtn}</>;
+                })()}
                 {config.show_preview_add_to_cart_btn && (
                   <button
                     type="button"

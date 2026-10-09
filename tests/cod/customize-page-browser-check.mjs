@@ -155,9 +155,13 @@ const layout = await page.evaluate(() => {
   };
 });
 check('customizer: titled "Customize COD" with an Active / Inactive pill, like the Cart Editor', layout.title === 'Customize COD' && layout.pill === (scenario === 'off' ? 'Inactive' : 'Active'), `${layout.title} · ${layout.pill}`);
-check('customizer: section groups Get started / Cart drawer / Other pages / Product page payments / Charges & rules / Checkout popup / Advanced',
-  layout.groups.join('|') === 'Get started|Cart drawer|Other pages|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
-check('customizer: opens on the cart drawer Position section', layout.openRow === 'Position');
+check('customizer: section groups Get started / Button positions / Buttons / Product page payments / Charges & rules / Checkout popup / Advanced',
+  layout.groups.join('|') === 'Get started|Button positions|Buttons|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
+check('customizer: opens on Position in cart drawer', layout.openRow === 'Position in cart drawer');
+{
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.bcz-row-l')].map((r) => r.textContent));
+  check('customizer: one position section per place', ['Position in cart drawer', 'Position in product page', 'Position in combo page'].every((r) => rows.includes(r)), rows.join('|'));
+}
 {
   const bars = await page.evaluate(() => ({
     bar: Math.round(document.querySelector('.bcz-bar').getBoundingClientRect().height),
@@ -180,7 +184,7 @@ check(`layout at ${width}px: no sideways scroll`, !layout.overflow);
 
 if (scenario === 'live') {
   // Position
-  check('Position: badge shows the cart drawer is On', await badge('Position') === 'On');
+  check('Position: badge shows the cart drawer is On', await badge('Position in cart drawer') === 'On');
   check('Position: three placement cards; preview Above Checkout by default', await page.locator('.bcod-place-o .bcod-mini').count() === 3 && JSON.stringify((await pv()).order) === '["cod","checkout"]');
   await page.getByRole('radio', { name: /Replace Checkout/ }).click();
   check('Replace Checkout: preview shows only COD', JSON.stringify((await pv()).order) === '["cod"]');
@@ -203,6 +207,36 @@ if (scenario === 'live') {
   check('COD button: colour updates the preview', (await pv()).codBg === 'rgb(29, 78, 216)');
   await shot('button');
 
+  // Price tags: "Buy it for {cod_price} COD" = cart total + COD fee (₹49 here)
+  await page.getByLabel('Button text', { exact: true }).fill('Buy it for {cod_price} COD');
+  await page.waitForTimeout(300);
+  {
+    const t = await page.evaluate(() => ({
+      label: document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn .cod-pv-btn-l')?.textContent || '',
+      sub: document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn .cod-pv-btn-s')?.textContent || '',
+      subtotal: document.querySelector('.bcz-screen .bcod-dr-sub b')?.textContent || '',
+    }));
+    const num = (x) => Number(String(x).replace(/[^\d.]/g, ''));
+    const m = /^Buy it for (.+) COD$/.exec(t.label);
+    check('Price tags: {cod_price} shows the cart total plus the COD fee', Boolean(m) && num(m[1]) === num(t.subtotal) + 49 && !t.label.includes('{'), JSON.stringify(t));
+    check('Price tags: the "+fee" line under the button goes once the text shows the fee', t.sub === '', JSON.stringify(t));
+    check('Price tags: the help text explains the tags', await page.getByText(/\{cod_price\} = both/).count() === 1);
+  }
+  await page.getByLabel('Button text', { exact: true }).fill('Buy it for {price} COD');
+  await page.waitForTimeout(300);
+  {
+    const t = await page.evaluate(() => ({
+      label: document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn .cod-pv-btn-l')?.textContent || '',
+      sub: document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn .cod-pv-btn-s')?.textContent || '',
+      subtotal: document.querySelector('.bcz-screen .bcod-dr-sub b')?.textContent || '',
+    }));
+    const num = (x) => Number(String(x).replace(/[^\d.]/g, ''));
+    const m = /^Buy it for (.+) COD$/.exec(t.label);
+    check('Price tags: {price} shows the cart total, and the fee line stays', Boolean(m) && num(m[1]) === num(t.subtotal) && /49/.test(t.sub), JSON.stringify(t));
+  }
+  await page.getByLabel('Button text', { exact: true }).fill('Pay cash on delivery');
+  await page.waitForTimeout(200);
+
   // Device switch
   await page.getByRole('button', { name: 'Mobile' }).click();
   await page.waitForTimeout(200);
@@ -211,7 +245,8 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Desktop' }).click();
 
   // Product page
-  await openSec('Product page');
+  await openSec('Position in product page');
+  check('Position in product page: show and Replace Buy it now are here, the text is not', await page.getByLabel('Replace the Buy it now button').count() === 1 && await page.getByLabel('Button text', { exact: true }).count() === 0);
   check('Product page: preview switches to the product page', await page.locator('.bcz-screen .cod-scr-atc').count() === 1);
   await shot('product');
 
@@ -221,6 +256,7 @@ if (scenario === 'live') {
     return b ? { bg: getComputedStyle(b).backgroundColor, size: getComputedStyle(b).fontSize, text: b.textContent } : null;
   });
   await openSec('Product page button');
+  check('Product page button: text, design and size and spacing together', await page.getByLabel('Button text', { exact: true }).count() === 1 && await page.getByText('Size and spacing').count() === 1);
   check('Product page button: follows the cart drawer button by default', await page.getByLabel('Same design as the cart drawer button').isChecked() && (await prodBtn())?.bg === 'rgb(29, 78, 216)');
   await page.getByLabel('Same design as the cart drawer button').uncheck();
   await page.getByRole('textbox', { name: /^Button colour/ }).fill('#be185d');
@@ -234,14 +270,26 @@ if (scenario === 'live') {
     const b = document.querySelector('.bcz-screen .cod-scr-combo .cod-pv-btn');
     return b ? { bg: getComputedStyle(b).backgroundColor, shadow: getComputedStyle(b).boxShadow, text: b.textContent, icon: Boolean(b.querySelector('svg')) } : null;
   });
+  const comboOrder = () => page.evaluate(() => [...document.querySelectorAll('.bcz-screen .cod-scr-combo-btns > *')]
+    .map((b) => (b.classList.contains('cod-scr-combo-co') ? 'checkout' : b.classList.contains('cod-pv-btn') ? 'cod' : 'hidden')));
   // This store has COD off on combo pages: the preview says so, then turn it on.
-  await openSec('Combo pages');
+  await openSec('Position in combo page');
   check('Combo pages off: the combo preview says the button is hidden', (await page.locator('.bcz-screen .cod-scr-combo .cod-pv-hidden').textContent()).includes('combo pages are turned off'));
   await page.getByLabel('Show COD on combo pages').check();
+  await page.waitForTimeout(300);
+  check('Position in combo page: Below Checkout by default (where it always was)', await page.getByRole('radio', { name: /Below Checkout/ }).getAttribute('aria-checked') === 'true' && JSON.stringify(await comboOrder()) === '["checkout","cod"]', JSON.stringify(await comboOrder()));
+  await page.getByRole('radio', { name: /Above Checkout/ }).click();
+  await page.waitForTimeout(200);
+  check('Position in combo page: Above Checkout puts COD first', JSON.stringify(await comboOrder()) === '["cod","checkout"]', JSON.stringify(await comboOrder()));
+  await page.getByRole('radio', { name: /Replace Checkout/ }).click();
+  await page.waitForTimeout(200);
+  check('Position in combo page: Replace Checkout shows only COD', JSON.stringify(await comboOrder()) === '["cod"]', JSON.stringify(await comboOrder()));
+  await shot('combo-position');
+  await page.getByRole('radio', { name: /Above Checkout/ }).click();
+  await openSec('Combo page button');
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash for this combo');
   await page.waitForTimeout(300);
   check('Combo pages: its own button text', (await comboBtn())?.text.includes('Pay cash for this combo'));
-  await openSec('Combo page button');
   let cb = await comboBtn();
   check('Combo page button: the preview switches to a combo page; old outline look kept by default', cb && cb.bg === 'rgba(0, 0, 0, 0)' && /inset/.test(cb.shadow) && !cb.icon, JSON.stringify(cb));
   await page.getByRole('button', { name: 'Filled', exact: true }).click();
@@ -253,17 +301,17 @@ if (scenario === 'live') {
   await shot('combo');
 
   // Turning COD off in the cart drawer leaves the other places on
-  await openSec('Position');
+  await openSec('Position in cart drawer');
   await page.getByLabel('Show COD in the cart drawer').uncheck();
   await page.waitForTimeout(300);
-  await openSec('Combo pages');
+  await openSec('Position in combo page');
   check('Drawer off: combo page still shows its COD button', (await comboBtn()) !== null);
-  await openSec('Product page');
+  await openSec('Position in product page');
   check('Drawer off: product page still shows its COD button', (await prodBtn()) !== null);
   await page.getByRole('tab', { name: 'COD checkout' }).click();
   await page.waitForTimeout(1400);
   check('Drawer off: the COD checkout popup preview is not "unavailable"', (await page.locator('.bcz-screen .cod-pv-err').count()) === 0 && (await page.locator('.bcz-screen .cod-pv-place').count()) === 1);
-  await openSec('Position');
+  await openSec('Position in cart drawer');
   await page.getByLabel('Show COD in the cart drawer').check();
 
   // Product page payments: payment options + prepaid discount
@@ -414,13 +462,13 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   const saved = (await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'))).settings || {};
   check('Save: every change is sent',
-    saved.enabled === true && saved.drawerPlacement === 'below' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'
+    saved.enabled === true && saved.drawerPlacement === 'below' && saved.comboPlacement === 'above' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'
     && saved.buttons?.drawerText === 'Pay cash on delivery' && saved.codFeeEnabled === true && saved.codFee === 40 && saved.codFeeLabel === 'Handling fee'
     && saved.showCodFee === true && saved.excludedProductTags === 'no-cod, fragile' && saved.excludedBehavior === 'hide'
     && saved.sheet?.radius === 'soft' && saved.sheet?.offers?.[0]?.code === 'SAVE10' && saved.tracking?.ga4Id === 'G-ABC123XYZ'
     && saved.productPayment?.enabled === true && saved.productPayment?.prepaid?.enabled === true && saved.productPayment?.prepaid?.percent === 10
     && saved.productPayment?.prepaid?.minSubtotal === 0 && saved.productPayment?.layout?.cardLayout === 'vertical' && saved.productPayment?.layout?.placement === 'below_price',
-    JSON.stringify({ p: saved.drawerPlacement, b: saved.buttons, fee: [saved.codFeeEnabled, saved.codFee, saved.codFeeLabel] }));
+    JSON.stringify({ p: saved.drawerPlacement, cp: saved.comboPlacement, b: saved.buttons, fee: [saved.codFeeEnabled, saved.codFee, saved.codFeeLabel] }));
   let asked = '';
   page.once('dialog', (d) => { asked = d.message(); d.accept(); });
   await page.locator('.bcz-back').click();

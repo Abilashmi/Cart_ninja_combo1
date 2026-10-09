@@ -5,6 +5,7 @@
 // rules, PAY_PREVIEW_CSS mirrors its stylesheet) and priced with the same
 // shared helpers (utils/product-payment.shared.js), so what the merchant sees
 // here is what shoppers get.
+import { codPriceValues, fillPriceTags, tagMoney } from '../../utils/price-tags.shared.js';
 import { useState } from 'react';
 import {
   productPaymentPricing, fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, PAY_SPACING_PX,
@@ -197,11 +198,11 @@ export function PaymentOptionsScreen({ settings, money, phone }) {
     const look = codButtonLook(settings, 'product');
     cta = (
       <div className="cod-pv-btn" data-pv-cta="cod" style={{ ...codButtonColors(look), opacity: codReason ? 0.5 : 1, ...ctaStyle, ...codButtonType(look, SCALE) }}>
-        <span className="cod-pv-btn-l">{look.icon !== false && <Svg name="cash" size={14} />}{settings.buttons.productText}</span>
+        <span className="cod-pv-btn-l">{look.icon !== false && <Svg name="cash" size={14} />}{fillPriceTags(settings.buttons.productText, codPriceValues(pr.subtotal, codFee), tagMoney(money))}</span>
       </div>
     );
   } else if (method === 'online') {
-    const label = pp.relabelBuyNow ? onlineButtonLabel(pp.online.buttonText, pr, prepaid) : 'Buy it now';
+    const label = pp.relabelBuyNow ? onlineButtonLabel(pp.online.buttonText, pr, prepaid, tagMoney(money)) : 'Buy it now';
     cta = <div className="bxpv-bin" data-pv-cta="online">{label}</div>;
   }
 

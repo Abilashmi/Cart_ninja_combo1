@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useState } from 'react';
 import { BlockStack, Box, ButtonGroup, Button, Card, Checkbox, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
-import { checkCodRules, codButtonLook, codCharges, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
+import { checkCodRules, codButtonLook, codCharges, codFeeOf, codPriceValues, DEFAULT_COD_SETTINGS, fillPriceTags, showsCodFee } from '../../utils/cod.shared';
+import { tagMoney } from '../../utils/price-tags.shared.js';
 import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
 import { PaymentOptionsScreen } from './PaymentOptionsPreview';
 
@@ -10,6 +11,17 @@ const SURFACES = [
   { id: 'product', label: 'Product page' },
   { id: 'sheet', label: 'COD checkout' },
 ];
+
+// A COD button's text with its price tags filled in for `price`, as the storefront does.
+function codText(settings, text, price, money) {
+  return fillPriceTags(text, codPriceValues(price, codFeeOf(settings)), tagMoney(money));
+}
+
+const COMBO_PLACEMENT_NOTE = {
+  replace: 'Checkout is hidden and COD takes its place. Shoppers can still pay online from the COD popup.',
+  above: 'Cash on Delivery comes before the combo\'s Checkout button.',
+  below: 'Cash on Delivery comes after the combo\'s Checkout button.',
+};
 
 const PLACEMENT_NOTE = {
   replace: 'Checkout is hidden while Cash on Delivery can be used. Shoppers can still pay online from the COD popup, and Checkout comes back for carts that can\'t use COD.',
@@ -101,8 +113,8 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
     <CodButton
       key="cod"
       settings={settings}
-      label={settings.buttons.drawerText}
-      sub={codState.reason || codState.sub}
+      label={codText(settings, settings.buttons.drawerText, cart, money)}
+      sub={codState.reason || (showsCodFee(settings.buttons.drawerText) ? '' : codState.sub)}
       disabled={Boolean(codState.reason)}
       size={codDrawerSize(settings, where)}
       scale={1}
@@ -213,7 +225,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
           <div className="cod-scr-buys">
             <div className="cod-scr-atc">Add to cart</div>
             {codHidden ? <Hidden>COD button hidden: {why}</Hidden>
-              : <CodButton settings={settings} look={codButtonLook(settings, 'product')} label={settings.buttons.productText} sub={excluded ? 'Not available for this product' : feeHint} disabled={excluded} size={pb} />}
+              : <CodButton settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />}
             {/* Buy it now is only hidden while a usable COD button shows, as on the storefront. */}
             {(codHidden || excluded || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
           </div>
@@ -225,6 +237,12 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
     // (combo-page.js draws it the same way, from BrixCod.comboButton()).
     const comboLook = codButtonLook(settings, 'combo');
     const codHidden = !settings.enabled || surfaceOff;
+    // Where COD sits next to the combo's Checkout (COD → Position in combo page).
+    const comboPlace = settings.comboPlacement || 'below';
+    const comboCheckout = codHidden || comboPlace !== 'replace' ? <div key="co" className="cod-scr-combo-co">Checkout</div> : null;
+    const comboCod = codHidden
+      ? <Hidden key="cod">COD button hidden: {settings.enabled ? 'combo pages are turned off' : 'COD is off'}</Hidden>
+      : <CodButton key="cod" settings={settings} look={comboLook} label={codText(settings, settings.buttons.comboText || 'Cash on Delivery', cart, money)} size={{ marginTop: 0, marginBottom: 0, paddingY: 12, paddingX: 18, radius: comboLook.radius }} />;
     screen = (
       <div className="cod-scr cod-scr-combo">
         <div className="cod-scr-combo-h"><b>Build your combo</b><span>Pick 3 and save</span></div>
@@ -234,15 +252,12 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
         <div className="cod-scr-combo-bar">
           <div className="cod-scr-combo-total"><span>Final</span><b>{money(cart)}</b></div>
           <div className="cod-scr-combo-btns">
-            <div className="cod-scr-combo-co">Checkout</div>
-            {codHidden
-              ? <Hidden>COD button hidden: {settings.enabled ? 'combo pages are turned off' : 'COD is off'}</Hidden>
-              : <CodButton settings={settings} look={comboLook} label={settings.buttons.comboText || 'Cash on Delivery'} size={{ marginTop: 0, marginBottom: 0, paddingY: 12, paddingX: 18, radius: comboLook.radius }} />}
+            {comboPlace === 'below' ? [comboCheckout, comboCod] : [comboCod, comboCheckout]}
           </div>
         </div>
       </div>
     );
-    caption = 'Sample combo page. Every layout shows the COD button in this look, next to Checkout.';
+    caption = codHidden ? null : COMBO_PLACEMENT_NOTE[comboPlace];
   } else {
     const head = (
       <div className="cod-pv-top">

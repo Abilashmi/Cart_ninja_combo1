@@ -36,7 +36,7 @@ import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import { getCodSettings } from '../services/cod.server';
-import { codButtonLook } from '../utils/cod.shared';
+import { codButtonLook, codFeeOf, codPriceValues, fillPriceTags } from '../utils/cod.shared';
 import { codButtonColors, codButtonType } from '../components/cod/codButtonLook';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
@@ -663,8 +663,14 @@ export const loader = async ({ request }) => {
   // only when the merchant has COD on for combo pages (see app.cod.jsx).
   // Its look is the combo page button design from COD → Customize.
   const codPromise = getCodSettings(shop)
-    .then((s) => ({ enabled: Boolean(s.enabled && s.surfaces.combo), look: codButtonLook(s, 'combo') }))
-    .catch(() => ({ enabled: false, look: null }));
+    .then((s) => ({
+      enabled: Boolean(s.enabled && s.surfaces.combo),
+      look: codButtonLook(s, 'combo'),
+      // Where COD sits next to Checkout, and the fee its {cod_price} tag adds.
+      placement: s.comboPlacement || 'below',
+      codFee: codFeeOf(s),
+    }))
+    .catch(() => ({ enabled: false, look: null, placement: 'below', codFee: 0 }));
 
   // No templateId means this is a brand-new template, not an edit of an
   // existing one. Block Free shops / Starter shops at their cap here too —
@@ -906,7 +912,7 @@ export const loader = async ({ request }) => {
     existingTemplates: shopTemplates.map((t) => ({ id: t.id, title: t.title })),
     layoutFiles,
     activeDiscounts,
-    ...(await codPromise.then((c) => ({ codEnabled: c.enabled, codComboLook: c.look }))),
+    ...(await codPromise.then((c) => ({ codEnabled: c.enabled, codComboLook: c.look, codPlacement: c.placement, codFee: c.codFee }))),
     weightStatus,
   });
 };
@@ -4415,9 +4421,9 @@ function ComboPreview({
   onRequestSection = () => { },
 }) {
   const { symbol: currencySymbol } = useCurrency();
-  const { codEnabled, codComboLook } = useLoaderData() || {};
+  const { codEnabled, codComboLook, codPlacement = 'below', codFee = 0 } = useLoaderData() || {};
   // The preview bar's COD button, in the combo page button design from COD → Customize.
-  const codPreview = useMemo(() => ({ ...BUILDER_COD_PREVIEW, look: codComboLook || null }), [codComboLook]);
+  const codPreview = useMemo(() => ({ ...BUILDER_COD_PREVIEW, look: codComboLook || null, placement: codPlacement, codFee }), [codComboLook, codPlacement, codFee]);
   // Weight-priced combo: no item-count limit, count progress bar or coupon in
   // the preview; the box is priced by the shared core and shown with the
   // weight meter above the preview bar (see weightPreview below).
@@ -6729,20 +6735,31 @@ function ComboPreview({
           {discount > 0.004 && <div className="is-good"><span>Box discount</span><span>−{currencySymbol}{discount.toFixed(2)}</span></div>}
           <div className="bxw-total"><span>Total</span><span>{currencySymbol}{finalPrice.toFixed(2)}</span></div>
         </div>
-        <button
-          type="button" className="bxw-checkout" disabled={!canCheckout}
-          onClick={(e) => { e.stopPropagation(); shopify.toast.show('Checkout works on your live combo page.'); }}
-        >
-          {config.preview_checkout_btn_text || 'Checkout'}
-        </button>
-        {codEnabled && config.show_cod_button !== false && (
-          <button
-            type="button" className="bxw-cod" disabled={!canCheckout}
-            style={codComboLook ? { ...codButtonColors(codComboLook), ...codButtonType(codComboLook), border: 'none', borderRadius: codComboLook.radius } : undefined}
-          >
-            {codComboLook?.text || config.cod_btn_text || 'Cash on Delivery'}
-          </button>
-        )}
+        {(() => {
+          // COD where the merchant put it (COD → Customize → Position in combo page).
+          const codShown = codEnabled && config.show_cod_button !== false;
+          const checkoutBtn = !(codShown && codPlacement === 'replace') && (
+            <button
+              type="button" className="bxw-checkout" disabled={!canCheckout}
+              onClick={(e) => { e.stopPropagation(); shopify.toast.show('Checkout works on your live combo page.'); }}
+            >
+              {config.preview_checkout_btn_text || 'Checkout'}
+            </button>
+          );
+          const codBtn = codShown && (
+            <button
+              type="button" className="bxw-cod" disabled={!canCheckout}
+              style={codComboLook ? { ...codButtonColors(codComboLook), ...codButtonType(codComboLook), border: 'none', borderRadius: codComboLook.radius } : undefined}
+            >
+              {fillPriceTags(
+                codComboLook?.text || config.cod_btn_text || 'Cash on Delivery',
+                codPriceValues(finalPrice, codFee),
+                (n) => `${currencySymbol}${Number.isInteger(n) ? n : n.toFixed(2)}`,
+              )}
+            </button>
+          );
+          return codPlacement === 'below' ? <>{checkoutBtn}{codBtn}</> : <>{codBtn}{checkoutBtn}</>;
+        })()}
       </div>
     );
 

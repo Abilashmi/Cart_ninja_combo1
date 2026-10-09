@@ -14,6 +14,11 @@ export const COD_SOURCES = COD_SURFACES; // where an order was placed from
 // Where the COD button goes in a cart drawer (the theme's own drawer or the
 // BRIX Cart Drawer), relative to that drawer's Checkout button.
 export const COD_DRAWER_PLACEMENTS = ['replace', 'above', 'below'];
+// Where it goes on a combo page, relative to the combo's Checkout button.
+export const COD_COMBO_PLACEMENTS = COD_DRAWER_PLACEMENTS;
+
+// Price tags in button texts ({price}, {cod_price}, ...): price-tags.shared.js.
+export { COD_PRICE_TAGS, hasPriceTags, showsCodFee, fillPriceTags, codPriceValues, paymentPriceValues } from './price-tags.shared.js';
 // What shoppers see when the cart (or product) has an excluded product tag.
 export const COD_EXCLUDED_BEHAVIORS = ['unavailable', 'hide'];
 export const COD_BUTTON_STYLES = ['filled', 'outline', 'minimal'];
@@ -23,6 +28,7 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   enabled: false,
   surfaces: { drawer: true, product: true, combo: true },
   drawerPlacement: 'above',
+  comboPlacement: 'below', // where combo pages always had it: after Checkout
   // Advanced: CSS selector for the theme drawer's Checkout button, for themes
   // brix_cod.js doesn't recognise on its own. '' = find it automatically.
   drawerSelector: '',
@@ -292,6 +298,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     enabled: has('enabled') ? Boolean(p.enabled) : Boolean(b.enabled),
     surfaces,
     drawerPlacement: pick('drawerPlacement', COD_DRAWER_PLACEMENTS),
+    comboPlacement: pick('comboPlacement', COD_COMBO_PLACEMENTS),
     drawerSelector,
     codFeeEnabled: has('codFeeEnabled') ? Boolean(p.codFeeEnabled) : has('codFee') ? codFee > 0 : baseFeeFlag ?? codFee > 0,
     codFee,

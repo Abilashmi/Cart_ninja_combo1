@@ -3,6 +3,7 @@
 // (Pay Online / Cash on Delivery) and the prepaid discount. Form state is
 // form.pp (codSettingsForm.js paymentForm); everything is saved with the rest
 // of the COD settings, and the prepaid discount is synced to Shopify on save.
+import { hasPriceTags } from '../../utils/price-tags.shared.js';
 import {
   Banner, BlockStack, Button, ButtonGroup, Card, Checkbox, FormLayout, InlineStack, Select, Text, TextField, Badge,
 } from '@shopify/polaris';
@@ -101,14 +102,16 @@ export function PaymentOptionsSection({ form, set, setPP, errors, money }) {
               onChange={setPP(['online', 'buttonText'])}
               maxLength={PAY_TEXT_LIMITS.buttonText}
               error={errors.ppOnlineButton}
-              helpText={'"· Save 10%" is added for you while the prepaid discount applies and the badge is on.'}
+              helpText={hasPriceTags(pp.online.buttonText)
+                ? 'Prices fill in for each shopper: {price} = product price, {prepaid_price} = after the prepaid discount, {saving} = what it saves.'
+                : 'Add a price with {prepaid_price}, {price} or {saving}, e.g. "Buy it now {prepaid_price} Prepaid". Without one, "· Save 10%" is added while the discount applies and the badge is on.'}
               autoComplete="off"
             />
             <Checkbox
-              label="Write the saving on Shopify's Buy it now button"
+              label="Use this text on Shopify's Buy it now button"
               checked={pp.relabelBuyNow}
               onChange={setPP(['relabelBuyNow'])}
-              helpText="Only its text changes; it still opens Shopify checkout. Themes without Buy it now get a BRIX Pay Online button."
+              helpText="Only its text changes; it still opens Shopify checkout. Themes without Buy it now get a BRIX Pay Online button with this text."
             />
             <Checkbox label="Show payment icon" checked={pp.online.showIcon} onChange={setPP(['online', 'showIcon'])} />
           </FormLayout>
@@ -122,7 +125,15 @@ export function PaymentOptionsSection({ form, set, setPP, errors, money }) {
               <TextField label="Label" value={pp.cod.label} onChange={setPP(['cod', 'label'])} maxLength={PAY_TEXT_LIMITS.label} error={errors.ppCodLabel} autoComplete="off" />
               <TextField label="Description" value={pp.cod.description} onChange={setPP(['cod', 'description'])} maxLength={PAY_TEXT_LIMITS.description} placeholder="Pay when your order arrives" autoComplete="off" />
             </FormLayout.Group>
-            <TextField label="Button text" value={form.productText} onChange={set('productText')} error={errors.productText} maxLength={60} helpText="The same text as the product page COD button." autoComplete="off" />
+            <TextField
+              label="Button text"
+              value={form.productText}
+              onChange={set('productText')}
+              error={errors.productText}
+              maxLength={60}
+              helpText='The same text as the product page COD button. Prices: {price}, {cod_fee}, {cod_price} (e.g. "Buy it for {cod_price} COD").'
+              autoComplete="off"
+            />
             <Checkbox label="Show payment icon" checked={pp.cod.showIcon} onChange={setPP(['cod', 'showIcon'])} />
             <Text as="p" variant="bodySm" tone="subdued">
               {form.codFeeEnabled && Number(form.codFee) > 0
