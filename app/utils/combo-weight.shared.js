@@ -120,15 +120,16 @@ export function createComboWeightCore() {
   }
 
   /**
-   * "1.05 kg" / "950 g". Rounds down, so a box is never shown heavier than it
-   * is; roundUp for amounts still to add, so "add 0 kg more" never appears.
+   * "1.05 kg" / "950 g", to the gram (a 1005 g tier is "1.005 kg", never
+   * "1 kg"). Rounds down, so a box is never shown heavier than it is; roundUp
+   * for amounts still to add, so "add 0 kg more" never appears.
    */
   function formatWeight(grams, unit, roundUp) {
     var g = Math.max(0, Number(grams) || 0);
     var step = roundUp ? Math.ceil : Math.floor;
     var nudge = roundUp ? -1e-9 : 1e-9;
     if (unit === 'g') return step(g + nudge) + ' g';
-    var kg = step(g / 10 + nudge) / 100;
+    var kg = step(g + nudge) / 1000;
     return String(kg) + ' kg';
   }
 

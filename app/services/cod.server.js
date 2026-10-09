@@ -376,21 +376,26 @@ async function loadComboWeightContext(admin) {
 }
 
 // Price, weight and collections of the box's variants, straight from Shopify.
-async function loadComboVariants(admin, variantIds) {
+// Membership is asked per collection the boxes count (inCollection), like the
+// Function's inCollections, so a product in many collections is never missed.
+async function loadComboVariants(admin, variantIds, collectionIds = []) {
   const ids = [...new Set(variantIds.map(String))];
+  const collections = [...new Set(collectionIds.map(String))];
+  const declarations = collections.map((_, i) => `, $c${i}: ID!`).join('');
+  const memberships = collections.map((_, i) => `c${i}: inCollection(id: $c${i})`).join(' ');
+  const collectionVars = Object.fromEntries(collections.map((id, i) => [`c${i}`, `gid://shopify/Collection/${id}`]));
   const result = new Map();
-  // 10 per query keeps collections(first: 50) well under the query cost limit.
   for (let start = 0; start < ids.length; start += 10) {
     const data = await gql(admin, `#graphql
-      query CodComboVariants($ids: [ID!]!) {
+      query CodComboVariants($ids: [ID!]!${declarations}) {
         nodes(ids: $ids) {
           ... on ProductVariant {
             id price
             inventoryItem { measurement { weight { value unit } } }
-            product { id collections(first: 50) { nodes { id } } }
+            product { id ${memberships} }
           }
         }
-      }`, { ids: ids.slice(start, start + 10).map(toVariantGid) });
+      }`, { ids: ids.slice(start, start + 10).map(toVariantGid), ...collectionVars });
     for (const node of data?.nodes || []) {
       if (!node?.id) continue;
       const weight = node.inventoryItem?.measurement?.weight;
@@ -398,7 +403,7 @@ async function loadComboVariants(admin, variantIds) {
         price: node.price,
         unitGrams: toGrams(weight?.value, weight?.unit),
         productId: numericOf(node.product?.id),
-        collectionIds: (node.product?.collections?.nodes || []).map((c) => numericOf(c.id)),
+        collectionIds: collections.filter((_, i) => node.product?.[`c${i}`] === true),
       });
     }
   }
@@ -438,7 +443,11 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
   }
   if (!boxes.size) return result;
 
-  const variants = await loadComboVariants(admin, [...boxes.values()].flatMap((b) => b.entries.map((e) => e.line.variantId)));
+  const variants = await loadComboVariants(
+    admin,
+    [...boxes.values()].flatMap((b) => b.entries.map((e) => e.line.variantId)),
+    [...boxes.values()].flatMap((b) => b.template.collection_ids || []),
+  );
   const { decimals } = result;
   for (const { comboId, template, entries } of boxes.values()) {
     const box = computeBox({
@@ -518,6 +527,29 @@ async function comboPricedLineItems(admin, lines, combo) {
   throw new CodError('combo_price_mismatch', "Cash on Delivery can't be used for this box right now. Please pay online.", { status: 422 });
 }
 
+/**
+ * Did Shopify put another discount on a box line? Checkout never does
+ * (combinesWith.productDiscounts: false). Counted per variant, so it doesn't
+ * depend on the order Shopify returns lines in; a variant that is also in the
+ * cart outside the box counts as stacked, the safe side.
+ */
+function boxLinesStacked(calc, lines, combo) {
+  const expected = new Map();
+  lines.forEach((line, index) => {
+    const amount = combo.byLine.get(index);
+    if (amount) expected.set(String(line.variantId), (expected.get(String(line.variantId)) || 0) + amount);
+  });
+  const taken = new Map();
+  const count = new Map();
+  for (const li of calc?.lineItems || []) {
+    const id = numericOf(li.variant?.id);
+    if (!expected.has(id)) continue;
+    taken.set(id, (taken.get(id) || 0) + toMinor(amountOf(li.originalTotalSet), combo.decimals) - toMinor(amountOf(li.discountedTotalSet), combo.decimals));
+    count.set(id, (count.get(id) || 0) + 1);
+  }
+  return [...expected].some(([id, amount]) => (taken.get(id) || 0) > amount + (count.get(id) || 0));
+}
+
 const CALCULATE = `#graphql
   mutation CodCalculate($input: DraftOrderInput!) {
     draftOrderCalculate(input: $input) {
@@ -575,18 +607,23 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
   const hasBoxes = combo.boxes.length > 0;
 
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
-  const base = {
+  let base = {
     lineItems: hasBoxes ? await comboPricedLineItems(admin, lines, combo) : draftLineItems(lines),
     customAttributes: [{ ...COD_MARKER }],
-    // In checkout the box discount doesn't combine with other automatic
-    // product discounts (combinesWith.productDiscounts: false), so COD leaves
-    // them off too; discount codes still go to Shopify.
-    acceptAutomaticDiscounts: !hasBoxes,
+    // Automatic order / shipping discounts and product discounts on the other
+    // items apply as in checkout. Checkout never adds another product discount
+    // to a box line (combinesWith.productDiscounts: false), so if Shopify does
+    // that here, COD leaves automatic discounts off for this order instead.
+    acceptAutomaticDiscounts: true,
     ...(code ? { discountCodes: [code] } : {}),
     ...(pincode ? { shippingAddress: { countryCode: 'IN', zip: String(pincode) } } : {}),
   };
 
   let calc = await calculate(admin, base);
+  if (hasBoxes && boxLinesStacked(calc, lines, combo)) {
+    base = { ...base, acceptAutomaticDiscounts: false };
+    calc = await calculate(admin, base);
+  }
   const subtotal = amountOf(calc.subtotalPriceSet);
   const ruleError = checkCodRules({ settings, subtotal, pincode, productTags: tags, surface, format });
   if (ruleError) throw new CodError(ruleError.code, ruleError.message, { status: 422 });

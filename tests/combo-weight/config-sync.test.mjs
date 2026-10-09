@@ -1,3 +1,4 @@
+/* global globalThis */
 // Run with: node --import ./tests/packs/register.mjs --test tests/combo-weight
 // app/services/combo-weight-shopify.server.js against a fake Admin API and a
 // fake DB proxy (no store, no database). Proves what BRIX writes to Shopify
@@ -172,6 +173,27 @@ test('sync: Function not deployed, discount turned off, and too-large configs ar
   const tooLarge = await sync.syncComboWeightDiscount(big, nextShop());
   assert.equal(tooLarge.state, 'too_large');
   assert.ok(!big.calls.some((c) => c.op === 'ComboWeightMetafields'), 'an oversized config is never written');
+});
+
+test('sync: too large still stops discounting combos that were deleted, turned off or changed', async () => {
+  const many = Array.from({ length: 50 }, (_, i) => `gid://shopify/Product/${1000000000000 + i}`);
+  db.templates = Array.from({ length: 12 }, (_, i) => row(100 + i, { weight: pricing({ qualify: { mode: 'selected', product_ids: many } }) }));
+  const shop = nextShop();
+  const current = sync.buildComboWeightFunctionConfig({ templates: await sync.loadWeightTemplates(shop), planLive: true, currencyCode: 'INR' });
+  const stored = { version: 1, currency: 'INR', templates: {
+    100: current.config.templates[100], // unchanged: stays
+    101: { ...current.config.templates[101], hash: 'old-pricing' }, // changed since: dropped
+    999: { id: 999, hash: 'deleted', tiers: [{ min_grams: 1, type: 'percentage', value: 50 }] }, // deleted: dropped
+  } };
+  const admin = fakeAdmin({ discount: 'ACTIVE', storedConfig: stored });
+  const result = await sync.syncComboWeightDiscount(admin, shop);
+  assert.equal(result.state, 'too_large');
+  assert.deepEqual(Object.keys(admin.state.config.templates), ['100']);
+  assert.deepEqual(admin.state.config.templates[100], current.config.templates[100]);
+
+  const again = fakeAdmin({ discount: 'ACTIVE', storedConfig: admin.state.config });
+  await sync.syncComboWeightDiscount(again, shop);
+  assert.ok(!again.calls.some((c) => c.op === 'ComboWeightMetafields'), 'nothing to drop, no write');
 });
 
 test('sync never throws when Shopify is unreachable', async () => {

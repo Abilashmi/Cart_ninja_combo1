@@ -30,7 +30,7 @@ test('999.99 g stays locked, 1000 g unlocks', () => {
   assert.equal(below.tier, null);
   assert.equal(below.remainingGrams, 1);
   assert.equal(below.discountMinor, 0);
-  assert.equal(formatWeight(below.grams, 'kg'), '0.99 kg', 'never shown as 1 kg');
+  assert.equal(formatWeight(below.grams, 'kg'), '0.999 kg', 'never shown as 1 kg');
 
   const exact = box(pricing, [book('a', 250, 4, 100)]);
   assert.equal(exact.grams, 1000);
@@ -209,5 +209,8 @@ test('layout collection handles and message placeholders', () => {
   assert.equal(fillMessage('Add {{remaining}} more to unlock {{tier}}', { remaining: '200 g', tier: '10% off' }), 'Add 200 g more to unlock 10% off');
   assert.equal(fillMessage('Hi {{unknown}}', {}), 'Hi {{unknown}}');
   assert.equal(formatWeight(1050, 'kg'), '1.05 kg');
+  assert.equal(formatWeight(1005, 'kg'), '1.005 kg', 'shown to the gram, so a 1005 g tier is not called 1 kg');
+  assert.equal(formatWeight(5, 'kg'), '0.005 kg');
+  assert.equal(formatWeight(0.4, 'kg', true), '0.001 kg', 'still to add rounds up');
   assert.equal(formatWeight(1050, 'g'), '1050 g');
 });

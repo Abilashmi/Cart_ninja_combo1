@@ -265,6 +265,7 @@ export function weightPricingLive({ planLive, active, hash, templateId, status }
 // "Selected" collections: their product ids, cached per pricing version
 // (one query per collection otherwise runs on every combo page view).
 const MEMBERS_TTL_MS = 5 * 60_000;
+const MEMBER_PAGES = 20;
 const membersCache = new Map(); // `${shop}:${hash}` -> { at, ids: Set }
 
 async function selectedCollectionProductIds(admin, shop, pricing, now = Date.now()) {
@@ -274,9 +275,18 @@ async function selectedCollectionProductIds(admin, shop, pricing, now = Date.now
   const ids = new Set();
   for (const collectionId of pricing.qualify.collection_ids) {
     try {
-      const data = await gql(admin, `#graphql
-        query ComboWeightMembers($id: ID!) { collection(id: $id) { products(first: 250) { nodes { id } } } }`, { id: collectionId });
-      for (const node of data?.collection?.products?.nodes || []) ids.add(node.id);
+      // Every product, 250 a page (up to 5000 per collection).
+      let after = null;
+      for (let page = 0; page < MEMBER_PAGES; page++) {
+        const data = await gql(admin, `#graphql
+          query ComboWeightMembers($id: ID!, $after: String) {
+            collection(id: $id) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }
+          }`, { id: collectionId, after });
+        const products = data?.collection?.products;
+        for (const node of products?.nodes || []) ids.add(node.id);
+        if (!products?.pageInfo?.hasNextPage || !products.pageInfo.endCursor) break;
+        after = products.pageInfo.endCursor;
+      }
     } catch (error) {
       console.warn('[combo-weight] collection lookup failed:', String(error?.message || error).slice(0, 200));
     }
@@ -356,6 +366,16 @@ export async function syncComboWeightDiscount(admin, shop) {
     };
 
     if (built.bytes > CONFIG_BYTE_LIMIT) {
+      // The new config can't be stored, but a combo that was deleted, turned
+      // off or changed must not keep its old box discount: keep only the
+      // stored entries that are still exactly right. (The storefront reads its
+      // hashes from this config, so a dropped combo stops promising a discount.)
+      const stored = shopData.config?.templates || {};
+      const kept = Object.fromEntries(Object.entries(stored)
+        .filter(([id, entry]) => JSON.stringify(built.config.templates[id] ?? null) === JSON.stringify(entry)));
+      if (Object.keys(kept).length !== Object.keys(stored).length) {
+        await setMetafields(admin, [{ ownerId: shopData.id, namespace: '$app', key: COMBO_WEIGHT_CONFIG_KEY, type: 'json', value: JSON.stringify({ ...built.config, templates: kept }) }]);
+      }
       return done({
         ok: false, verified: false, state: 'too_large',
         message: 'Your weight combos have too many products, collections or tiers for Shopify to hold. Remove some products or collections and save again.',

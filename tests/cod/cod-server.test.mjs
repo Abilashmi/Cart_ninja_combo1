@@ -1,5 +1,4 @@
 /* eslint-env node */
-/* global globalThis */
 // Run with: node --import ./tests/packs/register.mjs --test tests/cod
 // Exercises app/services/cod.server.js against the REAL php_backend/cod_*.php
 // files on a throwaway MariaDB (see php-harness.mjs: XAMPP binaries, a fresh
@@ -83,8 +82,13 @@ function fakeAdmin(opts = {}) {
           const original = variants[li.variantId].price * li.quantity;
           const d = li.appliedDiscount;
           const per = opts.lineDiscountPer || 'unit';
-          const off = !d || per === 'none' ? 0 : round2(per === 'line' ? d.value : d.value * li.quantity);
-          return { li, original, off };
+          const manual = !d || per === 'none' ? 0 : round2(per === 'line' ? d.value : d.value * li.quantity);
+          // opts.autoPercent: an automatic product discount on every line when
+          // automatic discounts are accepted (opts.autoSkipsManual: not on lines
+          // that already carry a manual line discount).
+          const auto = input.acceptAutomaticDiscounts && opts.autoPercent && !(d && opts.autoSkipsManual)
+            ? round2(((original - manual) * opts.autoPercent) / 100) : 0;
+          return { li, original, off: round2(manual + auto) };
         });
         const items = round2(priced.reduce((sum, p) => sum + p.original - p.off, 0));
         const lineOff = round2(priced.reduce((sum, p) => sum + p.off, 0));
@@ -107,7 +111,10 @@ function fakeAdmin(opts = {}) {
         data = { nodes: variables.ids.map((id) => (variants[id] ? {
           id, price: String(variants[id].price),
           inventoryItem: { measurement: { weight: variants[id].grams ? { value: variants[id].grams, unit: 'GRAMS' } : null } },
-          product: { id: variants[id].product || 'gid://shopify/Product/1', collections: { nodes: (variants[id].collections || []).map((c) => ({ id: c })) } },
+          product: {
+            id: variants[id].product || 'gid://shopify/Product/1',
+            ...Object.fromEntries(Object.entries(variables).filter(([k]) => /^c\d+$/.test(k)).map(([k, gid]) => [k, (variants[id].collections || []).includes(gid)])),
+          },
         } : null)) };
       } else if (op === 'CodCreate') {
         if (opts.rejectProvince && variables.input.shippingAddress.provinceCode) {
@@ -861,7 +868,7 @@ const boxLine = (variantId, quantity, extra = {}) => ({ variantId, quantity, pro
 const boxAdmin = (opts = {}) => fakeAdmin({ variants: BOOKS, ...opts });
 const boxQuote = (admin, lines, extra = {}) => cod.quoteCod(admin, { settings: settingsOn(), lines, surface: 'combo', comboWeightLive: true, ...extra });
 
-test('combo box: the 10% tier as a line discount; markers stripped; other automatic discounts off', async () => {
+test('combo box: the 10% tier as a line discount; markers stripped; other automatic discounts still accepted', async () => {
   const admin = boxAdmin();
   const { quote, input } = await boxQuote(admin, [boxLine('21', 4)]); // 1.2 kg of ₹110 books
   assert.equal(quote.itemsTotal, 440);
@@ -872,7 +879,35 @@ test('combo box: the 10% tier as a line discount; markers stripped; other automa
   const [li] = input.lineItems;
   assert.deepEqual(li.appliedDiscount, { valueType: 'FIXED_AMOUNT', value: 11, title: '1 kg box: 10% off', description: 'BRIX combo box' });
   assert.deepEqual(li.customAttributes, [{ key: '_brixCod', value: 'true' }], '_brix_combo_* never reach the draft, so the Function cannot discount twice');
-  assert.equal(input.acceptAutomaticDiscounts, false);
+  assert.equal(input.acceptAutomaticDiscounts, true, 'automatic order/shipping discounts apply, as in checkout');
+});
+
+test('combo box: an automatic discount on the other items applies, as in checkout', async () => {
+  // 1.2 kg box of novels + an Atlas outside the box; automatic 5% that Shopify keeps off manually discounted lines
+  const admin = boxAdmin({ autoPercent: 5, autoSkipsManual: true });
+  const { quote, input } = await boxQuote(admin, [boxLine('21', 4), { variantId: '22', quantity: 1, properties: {} }]);
+  assert.equal(input.acceptAutomaticDiscounts, true);
+  assert.equal(quote.comboDiscount, 44);
+  assert.equal(quote.discounts, 6, '5% of the ₹120 Atlas');
+  assert.equal(quote.total, 440 + 120 - 44 - 6 + 49);
+});
+
+test('combo box: if Shopify stacks an automatic discount on a box line, COD leaves automatic discounts off', async () => {
+  const admin = boxAdmin({ autoPercent: 5 });
+  const { quote, input } = await boxQuote(admin, [boxLine('21', 4)]);
+  assert.equal(input.acceptAutomaticDiscounts, false, 'checkout never stacks a product discount on the box');
+  assert.equal(quote.discounts, 0);
+  assert.equal(quote.total, 440 - 44 + 49);
+  const calcs = admin.calls.filter((c) => c.op === 'CodCalculate').map((c) => c.variables.input.acceptAutomaticDiscounts);
+  // (the box probes run without; then tried with, then without, then again with the COD fee)
+  assert.deepEqual(calcs.slice(calcs.indexOf(true)), [true, false, false], 'tried with automatic discounts, then without');
+});
+
+test('combo box: collection membership is asked per counted collection, not read from a capped list', async () => {
+  const admin = boxAdmin();
+  await boxQuote(admin, [boxLine('21', 4)]);
+  const call = admin.calls.find((c) => c.op === 'CodComboVariants');
+  assert.ok(Object.values(call.variables).includes('gid://shopify/Collection/900'));
 });
 
 test('combo box: a fixed box price split exactly across lines (uneven units split the line)', async () => {
@@ -941,7 +976,7 @@ test('combo box order: tagged brix-combo-weight with what was applied; the attri
   const attrs = create.customAttributes.filter((a) => a.key === 'brix_combo_weight');
   assert.deepEqual(attrs, [{ key: 'brix_combo_weight', value: 'combo 12: 1 kg box: 10% off, 1.2 kg, -44.00' }]);
   assert.equal(create.lineItems[0].appliedDiscount.title, '1 kg box: 10% off');
-  assert.equal(create.acceptAutomaticDiscounts, false);
+  assert.equal(create.acceptAutomaticDiscounts, true);
 });
 
 const paymentOn = (patch = {}) => ({
