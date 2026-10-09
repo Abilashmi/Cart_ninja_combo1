@@ -7,8 +7,8 @@ require_once __DIR__ . '/cod_helpers.php';
  *
  *   POST { action: 'get',  shop }            → { settings: object|null }
  *   POST { action: 'save', shop, settings }  → { settings }
- *   POST { action: 'secrets_get',  shop }    → { secrets: { ga4ApiSecret, metaCapiToken, metaTestCode } }
- *   POST { action: 'secrets_save', shop, secrets: { ga4ApiSecret?, metaCapiToken?, metaTestCode? } } → {}
+ *   POST { action: 'secrets_get',  shop }    → { secrets: { ga4ApiSecret, metaCapiToken, metaTestCode, msg91AuthKey, msg91TemplateId } }
+ *   POST { action: 'secrets_save', shop, secrets: { ga4ApiSecret?, metaCapiToken?, metaTestCode?, msg91AuthKey?, msg91TemplateId? } } → {}
  *        a key that is missing keeps its stored value; '' or null clears it
  *
  * Node (app/services/cod.server.js) validates and merges the settings before
@@ -48,18 +48,19 @@ const COD_SECRET_FIELDS = [
     'ga4ApiSecret'  => ['ga4_api_secret', 128, '/^[A-Za-z0-9_-]+$/'],
     'metaCapiToken' => ['meta_capi_token', 512, '/^[A-Za-z0-9_-]+$/'],
     'metaTestCode'  => ['meta_test_code', 64, '/^[A-Za-z0-9_-]+$/'],
+    // The store's own MSG91 account for OTP SMS (else the BRIX server's, if set).
+    'msg91AuthKey'    => ['msg91_auth_key', 128, '/^[A-Za-z0-9_-]+$/'],
+    'msg91TemplateId' => ['msg91_template_id', 64, '/^[A-Za-z0-9_-]+$/'],
 ];
 
 if ($action === 'secrets_get') {
     cod_db($pdo, function ($pdo) use ($shop) {
-        $stmt = $pdo->prepare('SELECT ga4_api_secret, meta_capi_token, meta_test_code FROM cod_secrets WHERE shop = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT * FROM cod_secrets WHERE shop = ? LIMIT 1');
         $stmt->execute([$shop]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        cod_ok(['secrets' => [
-            'ga4ApiSecret' => $row['ga4_api_secret'] ?? '',
-            'metaCapiToken' => $row['meta_capi_token'] ?? '',
-            'metaTestCode' => $row['meta_test_code'] ?? '',
-        ]]);
+        $secrets = [];
+        foreach (COD_SECRET_FIELDS as $key => [$column]) $secrets[$key] = $row[$column] ?? '';
+        cod_ok(['secrets' => $secrets]);
     });
 }
 

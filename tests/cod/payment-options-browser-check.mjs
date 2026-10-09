@@ -442,6 +442,28 @@ await settle(page, 1000);
 check('product COD button: follows the quantity (2 × ₹1,500 + ₹50 = ₹3,050)', await plainBtn() === 'Buy it for ₹3,050 COD', await plainBtn());
 await page.close();
 
+// Payment options off, COD not replacing Buy it now: the merchant's text on Shopify's Buy it now.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Buy it now {price}' }, productPayment: null };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text: Shopify\'s Buy it now says "Buy it now ₹1,100" and stays shown', s.nativeText === 'Buy it now ₹1,100' && s.nativeShown === true, `${s.nativeText} ${s.nativeShown}`);
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text: follows the variant (₹1,500)', s.nativeText === 'Buy it now ₹1,500', s.nativeText);
+await page.close();
+
+// Replace on: Buy it now is hidden, its text is left alone.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: true, buyNowText: 'Buy it now {price}' }, productPayment: null };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text: not applied while COD replaces Buy it now', s.nativeShown === false && s.nativeText === 'Buy it now', `${s.nativeText} ${s.nativeShown}`);
+await page.close();
+
 check('no console errors', errors.length === 0, errors.join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;

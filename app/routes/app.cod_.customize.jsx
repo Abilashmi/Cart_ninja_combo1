@@ -12,7 +12,7 @@ import {
 import {
   ArrowLeftIcon, ChevronDownIcon, DesktopIcon, MobileIcon, CashRupeeIcon, CartIcon, ButtonIcon, CodeIcon, ProductIcon,
   CollectionIcon, ReceiptIcon, DeliveryIcon, FilterIcon, ShieldCheckMarkIcon, PaintBrushFlatIcon, DiscountIcon,
-  ChartVerticalIcon, OrderIcon, DeleteIcon, SendIcon, PaymentIcon, CreditCardPercentIcon, ColorIcon,
+  ChartVerticalIcon, OrderIcon, DeleteIcon, SendIcon, PaymentIcon, CreditCardPercentIcon, ColorIcon, ChatIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getShopPlan } from '../services/plan-permissions.server';
@@ -20,7 +20,7 @@ import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
 import {
-  CodError, getCodSettings, getCodSettingsWithRuntime, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets,
+  CodError, getCodSettings, getCodSettingsWithRuntime, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets, msg91Creds,
 } from '../services/cod.server';
 import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
@@ -54,6 +54,7 @@ export async function loader({ request }) {
   let secretsStatus = null;
   let prepaidStatus = null;
   let loadError = null;
+  let sms = smsProviderStatus();
   try {
     const stored = await getCodSettingsWithRuntime(shop);
     settings = stored.settings;
@@ -61,6 +62,7 @@ export async function loader({ request }) {
     await syncCodRuntime(shop);
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
+    sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
     couponOptions = (await listActiveDiscounts(admin).catch(() => []))
       .filter((d) => !d.isAutomatic && d.code && d.status === 'ACTIVE')
       .map((d) => ({ code: d.code, title: d.title || '', summary: d.summary || '' }));
@@ -77,7 +79,7 @@ export async function loader({ request }) {
     loadError,
     planState: getFeatureState(planKey, 'cod_checkout'),
     currencyCode: currency.code,
-    sms: smsProviderStatus(),
+    sms,
     couponOptions,
     secretsStatus,
     prepaidStatus,
@@ -129,7 +131,7 @@ function ProductButtonSizes({ form, set, setForm }) {
         <InlineStack align="space-between" blockAlign="center">
           <Text as="h3" variant="headingMd">Size and spacing</Text>
           {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
-            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow }) }))}>Reset</Button>
+            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow, buyNowText: f.pbBuyNowText }) }))}>Reset</Button>
           )}
         </InlineStack>
         {PB_SIZES.map(({ key, field, label }) => {
@@ -221,9 +223,9 @@ const GROUPS = [
     // Where the COD button shows, one place at a time.
     title: 'Button positions',
     items: [
-      { id: 'position', label: 'Position in cart drawer', icon: CartIcon, preview: 'drawer', fields: [], toggle: 'drawer' },
-      { id: 'product', label: 'Position in product page', icon: ProductIcon, preview: 'product', fields: [], toggle: 'product' },
-      { id: 'combo', label: 'Position in combo page', icon: CollectionIcon, preview: 'combo', fields: [], toggle: 'combo' },
+      { id: 'position', label: 'Position in cart drawer', icon: CartIcon, preview: 'drawer', fields: ['drawerText'], toggle: 'drawer' },
+      { id: 'product', label: 'Position in product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton'], toggle: 'product' },
+      { id: 'combo', label: 'Position in combo page', icon: CollectionIcon, preview: 'combo', fields: ['comboText'], toggle: 'combo' },
     ],
   },
   {
@@ -266,6 +268,7 @@ const GROUPS = [
   {
     title: 'Advanced',
     items: [
+      { id: 'sms', label: 'OTP SMS (MSG91)', icon: ChatIcon, preview: 'sheet', fields: ['msg91AuthKey', 'msg91TemplateId'] },
       { id: 'tracking', label: 'Ads & analytics', icon: ChartVerticalIcon, preview: null, fields: ['ga4Id', 'metaPixelId', 'ga4ApiSecret', 'metaCapiToken', 'metaTestCode'] },
       { id: 'orders', label: 'Order settings', icon: OrderIcon, preview: null, fields: [] },
     ],
@@ -421,7 +424,7 @@ export default function CodCustomizePage() {
                 <CodFlow otpOn={otpOn} />
                 {!otpOn && (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {form.requireOtp ? 'Phone verification starts once an SMS provider is connected on the BRIX server.' : 'Phone verification is off (Fraud protection).'}
+                    {form.requireOtp ? 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS (MSG91)).' : 'Phone verification is off (Fraud protection).'}
                   </Text>
                 )}
               </BlockStack>
@@ -436,10 +439,13 @@ export default function CodCustomizePage() {
     if (id === 'position') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">Where the COD button goes in your store&apos;s cart drawer, next to its Checkout button. Its text and look are under Buttons → Cart drawer button.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes in your store&apos;s cart drawer, next to its Checkout button, and what it says. Its colours are under Buttons → Cart drawer button.</Text>
           <Card>
             <FormLayout>
               <Checkbox label="Show COD in the cart drawer" checked={form.drawer} onChange={set('drawer')} />
+              {form.drawer && (
+                <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" helpText={priceTagHelp(form.drawerText, 'cart total')} />
+              )}
               {form.drawer && <PlacementPicker value={form.drawerPlacement} onChange={set('drawerPlacement')} buttons={preview.buttons} />}
               {form.drawer && form.drawerPlacement === 'replace' && (
                 <Text as="p" variant="bodySm" tone="subdued">Checkout is only hidden while COD can be used. For a cart that can&apos;t use COD, your Checkout button stays.</Text>
@@ -527,7 +533,7 @@ export default function CodCustomizePage() {
     if (id === 'product') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">Where the COD button goes on product pages. It buys just that product. Its text, look and size are under Buttons → Product page button.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes on product pages (it buys just that product), what it says, and the text on Shopify&apos;s Buy it now. Colours and size are under Buttons → Product page button.</Text>
           {form.pp.enabled && (
             <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size still apply; Replace the Buy it now button doesn&apos;t.</Banner>
           )}
@@ -535,6 +541,17 @@ export default function CodCustomizePage() {
             <FormLayout>
               <Checkbox label="Show COD on product pages" checked={form.product} onChange={set('product')} />
               {form.product && (
+                <TextField
+                  label="COD button text"
+                  value={form.productText}
+                  onChange={set('productText')}
+                  error={errors.productText}
+                  maxLength={60}
+                  autoComplete="off"
+                  helpText={priceTagHelp(form.productText, 'product price × quantity')}
+                />
+              )}
+              {form.product && !form.pp.enabled && (
                 <Checkbox
                   label="Replace the Buy it now button"
                   helpText={form.pbReplaceBuyNow ? "Shopify's Buy it now is hidden and COD takes its place." : 'Buy it now stays; COD goes between Add to Cart and Buy it now.'}
@@ -544,6 +561,39 @@ export default function CodCustomizePage() {
               )}
             </FormLayout>
           </Card>
+          {form.product && (
+            <Card>
+              <FormLayout>
+                <Text as="h3" variant="headingMd">Buy it now button text</Text>
+                {form.pp.enabled ? (
+                  <>
+                    <TextField
+                      label="Buy it now text"
+                      value={form.pp.online.buttonText}
+                      onChange={setPP(['online', 'buttonText'])}
+                      error={errors.ppOnlineButton}
+                      maxLength={60}
+                      autoComplete="off"
+                      helpText='Payment options are on, so this is the Pay Online button text. Prices: {prepaid_price} (after the prepaid discount), {price}, {saving}. E.g. "Buy it now {prepaid_price} Prepaid".'
+                    />
+                    <Checkbox label="Use this text on Shopify's Buy it now button" checked={form.pp.relabelBuyNow} onChange={setPP(['relabelBuyNow'])} />
+                  </>
+                ) : form.pbReplaceBuyNow ? (
+                  <Text as="p" tone="subdued">Buy it now is hidden while COD replaces it. Turn off &quot;Replace the Buy it now button&quot; to keep it and change its text here.</Text>
+                ) : (
+                  <TextField
+                    label="Buy it now text"
+                    value={form.pbBuyNowText}
+                    onChange={set('pbBuyNowText')}
+                    maxLength={60}
+                    placeholder="Buy it now"
+                    autoComplete="off"
+                    helpText={'Leave empty to keep Shopify\'s own text. Prices: {price} = product price × quantity, {cod_price}, {cod_fee}. For a prepaid price ({prepaid_price}), turn on Payment options with a prepaid discount.'}
+                  />
+                )}
+              </FormLayout>
+            </Card>
+          )}
         </BlockStack>
       );
     }
@@ -559,10 +609,13 @@ export default function CodCustomizePage() {
     if (id === 'combo') {
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">Where the COD button goes on Build a Combo pages, next to the combo&apos;s Checkout button. Its text and look are under Buttons → Combo page button.</Text>
+          <Text as="p" tone="subdued">Where the COD button goes on Build a Combo pages, next to the combo&apos;s Checkout button, and what it says. Its colours are under Buttons → Combo page button.</Text>
           <Card>
             <FormLayout>
               <Checkbox label="Show COD on combo pages" helpText="A combo template can still hide it (combo builder → Behaviour)." checked={form.combo} onChange={set('combo')} />
+              {form.combo && (
+                <TextField label="Button text" value={form.comboText} onChange={set('comboText')} error={errors.comboText} maxLength={60} autoComplete="off" helpText={priceTagHelp(form.comboText, 'combo total')} />
+              )}
               {form.combo && (
                 <PlacementPicker
                   value={form.comboPlacement}
@@ -658,7 +711,7 @@ export default function CodCustomizePage() {
             <FormLayout>
               <Checkbox
                 label="Verify phone with an SMS code (OTP)"
-                helpText={data.sms.configured ? 'Each code is one SMS from your SMS provider.' : 'Starts once an SMS provider (MSG91) is connected on the BRIX server.'}
+                helpText={data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS (MSG91)).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS (MSG91).'}
                 checked={form.requireOtp}
                 onChange={set('requireOtp')}
               />
@@ -710,6 +763,15 @@ export default function CodCustomizePage() {
               <Checkbox label="Show an order summary" checked={form.sheetSummary} onChange={set('sheetSummary')} />
               <Checkbox label="Show trust badges" checked={form.sheetTrust} onChange={set('sheetTrust')} />
               <TextField label="Thank-you message" value={form.sheetThanks} onChange={set('sheetThanks')} maxLength={120} placeholder="Thank you for shopping with us!" helpText="Shown when the order is placed." autoComplete="off" />
+              <TextField
+                label="Terms and conditions link"
+                value={form.sheetTermsUrl}
+                onChange={set('sheetTermsUrl')}
+                error={errors.sheetTermsUrl}
+                placeholder="/policies/terms-of-service"
+                helpText={'Shoppers tick "I agree to the Terms and conditions" before placing a COD order. Leave empty for your store\'s Terms of service page, or use https://… or a page like /pages/terms.'}
+                autoComplete="off"
+              />
             </FormLayout>
           </Card>
         </BlockStack>
@@ -781,6 +843,44 @@ export default function CodCustomizePage() {
               </BlockStack>
             </Card>
           )}
+        </BlockStack>
+      );
+    }
+    if (id === 'sms') {
+      const st = data.secretsStatus || {};
+      const own = st.msg91AuthKey?.set && st.msg91TemplateId?.set;
+      let status;
+      if (own) status = <Banner tone="success">Connected: OTP codes are sent from your MSG91 account.</Banner>;
+      else if (data.sms.source === 'server') status = <Banner tone="info">OTP codes are sent from the BRIX server&apos;s MSG91 account. Add your own keys to send from yours.</Banner>;
+      else status = <Banner tone="warning">No SMS provider yet, so shoppers aren&apos;t asked for an OTP. Add both keys and save.</Banner>;
+      return (
+        <BlockStack gap="400">
+          <Text as="p" tone="subdued">The SMS account that sends the 4-digit code shoppers enter to verify their phone (Fraud protection → Verify phone with an SMS code).</Text>
+          {status}
+          <Card>
+            <FormLayout>
+              <SecretField
+                label="MSG91 auth key"
+                value={form.msg91AuthKey}
+                status={st.msg91AuthKey}
+                onChange={set('msg91AuthKey')}
+                error={errors.msg91AuthKey}
+                helpText="MSG91 → Settings → API keys (Authkey)."
+              />
+              <SecretField
+                label="OTP template ID"
+                value={form.msg91TemplateId}
+                status={st.msg91TemplateId}
+                onChange={set('msg91TemplateId')}
+                error={errors.msg91TemplateId}
+                helpText="A DLT-approved MSG91 OTP template containing ##OTP##."
+              />
+              {!form.requireOtp && (
+                <Text as="p" variant="bodySm" tone="subdued">Phone verification is off, so no codes are sent. Turn it on in Fraud protection.</Text>
+              )}
+            </FormLayout>
+          </Card>
+          <Text as="p" variant="bodySm" tone="subdued">Both keys are kept on the BRIX server and never shown again; you only see the last 4 characters.</Text>
         </BlockStack>
       );
     }

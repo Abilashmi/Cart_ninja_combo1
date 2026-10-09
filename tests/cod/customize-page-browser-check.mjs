@@ -18,7 +18,7 @@ const STUBS = {
   'plan-permissions.server': 'export const getShopPlan = () => {};',
   'currency.server': 'export const getShopCurrency = () => {};',
   'prepaid-discount-shopify.server': 'export const syncPrepaidDiscount = () => {}, prepaidRuntime = () => ({});',
-  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{};',
+  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({});',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
   'cod-sms.server': 'export const smsProviderStatus = () => {};',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',
@@ -93,7 +93,7 @@ const data = {
     cancelRate: Math.round((orders.filter((o) => o.status === 'cancelled').length / orders.length) * 100),
   },
   loadError: null, planState: scenario === 'warn' ? 'preview' : 'enabled', currencyCode: 'INR',
-  sms: { configured: scenario === 'live' }, hasOrderScope: true,
+  sms: { configured: scenario === 'live', source: scenario === 'live' ? 'server' : null }, hasOrderScope: true,
   secretsStatus: { ga4ApiSecret: { set: false, last4: '' }, metaCapiToken: { set: true, last4: 'x9Zq' }, metaTestCode: { set: false, last4: '' } },
   couponOptions: [
     { code: 'SAVE10', title: 'Save 10%', summary: '10% off entire order • Minimum purchase of ₹999.00' },
@@ -120,7 +120,7 @@ await page.goto('https://admin.test/app/cod/customize');
 await page.waitForSelector('.bcz-side');
 await page.waitForTimeout(500);
 const shot = (n, opts = {}) => page.screenshot({ path: path.join(os.tmpdir(), `cod-customize-${scenario}-${width}-${n}.png`), ...opts });
-const row = (label) => page.locator('.bcz-row').filter({ has: page.locator('.bcz-row-l', { hasText: new RegExp(`^${label}$`) }) });
+const row = (label) => page.locator('.bcz-row').filter({ has: page.locator('.bcz-row-l', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
 const openSec = async (label) => {
   const r = row(label);
   if ((await r.getAttribute('aria-expanded')) !== 'true') await r.click();
@@ -314,6 +314,23 @@ if (scenario === 'live') {
   await openSec('Position in cart drawer');
   await page.getByLabel('Show COD in the cart drawer').check();
 
+  // Button text inside each Position section, and Shopify's Buy it now text
+  await openSec('Position in cart drawer');
+  check('Position in cart drawer: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash on delivery');
+  await openSec('Position in combo page');
+  check('Position in combo page: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash for this combo');
+  await openSec('Position in product page');
+  check('Position in product page: COD button text here too', await page.getByLabel('COD button text').inputValue() === 'Buy with Cash on Delivery');
+  check('Buy it now text: explains it is hidden while COD replaces it', (await page.locator('.bcz-row.is-open + * , .bcz-sec').filter({ hasText: 'Buy it now is hidden while COD replaces it' }).count()) > 0 || await page.getByText('Buy it now is hidden while COD replaces it').count() === 1);
+  await page.getByLabel('Replace the Buy it now button').uncheck();
+  await page.getByLabel('Buy it now text').fill('Buy it now {price}');
+  await page.waitForTimeout(300);
+  {
+    const bin = (await page.locator('.bcz-screen .cod-scr-bin').textContent()).trim();
+    check('Buy it now text: preview shows it with the price filled in', /^Buy it now ₹[\d,]+$/.test(bin), bin);
+  }
+  await shot('buy-it-now-text');
+
   // Product page payments: payment options + prepaid discount
   await openSec('Payment options');
   check('Payment options: off by default (badge Off), preview is the plain product page', await badge('Payment options') === 'Off' && await page.locator('.bcz-screen [data-pv-selector]').count() === 0);
@@ -322,6 +339,8 @@ if (scenario === 'live') {
   check('Payment options: on → preview shows the Pay Online and Cash on Delivery cards, Pay Online selected',
     await page.locator('.bcz-screen .bxpay-card').count() === 2 && await page.locator('.bcz-screen .bxpay-card[data-pv-selected], .bcz-screen .bxpay-card[aria-checked="true"]').first().textContent().then((t) => t.includes('Pay Online')));
   check('Payment options: COD card shows the existing COD fee', (await page.locator('.bcz-screen .bxpay-card').nth(1).textContent()).includes('49'));
+  await openSec('Position in product page');
+  check('Payment options on: Position in product page edits the Pay Online / Buy it now text', await page.getByLabel('Buy it now text').inputValue() === 'Buy it now' && await page.getByLabel("Use this text on Shopify's Buy it now button").isChecked());
   await openSec('Prepaid discount');
   await page.getByLabel('Give a prepaid discount').check();
   await page.waitForTimeout(200);
@@ -410,6 +429,18 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Soft' }).click();
   await page.waitForTimeout(1300);
   check('Popup design: preview shows the logo and soft corners', await page.locator('.bcz-screen .cod-scr-sheet.rad-soft .cod-pv-logo').count() === 1);
+  check('Popup: "I agree to the Terms and conditions" (no data policy)', (await page.locator('.bcz-screen .cod-pv-agr').textContent()).includes('Terms and conditions') && !(await page.locator('.bcz-screen').textContent()).includes('data policy'));
+  await page.getByLabel('Terms and conditions link').fill('www.example.com');
+  await page.waitForTimeout(150);
+  check('Terms link: a link without https:// is flagged', await page.getByText('Use a link starting with https://').count() === 1);
+  await page.getByLabel('Terms and conditions link').fill('/pages/terms');
+
+  // OTP SMS (MSG91)
+  await openSec('OTP SMS (MSG91)');
+  check('OTP SMS: says codes go from the BRIX server until the store adds its own keys', await page.getByText("sent from the BRIX server's MSG91 account").count() === 1);
+  await page.getByLabel('MSG91 auth key').fill('authKEY12345');
+  await page.getByLabel('OTP template ID').fill('tmpl6789');
+  await shot('sms');
   await openSec('Coupons');
   await page.getByLabel('Add one of your Shopify codes').selectOption('SAVE10');
   check('Coupons: a Shopify code added as an offer', await page.locator('.cod-offer-code', { hasText: 'SAVE10' }).count() === 1);
@@ -460,7 +491,12 @@ if (scenario === 'live') {
   check('Active pill: switches COD off (saved with Save)', (await page.locator('.bcz-pill').textContent()) === 'Inactive');
   await page.locator('.bcz-pill').click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  const saved = (await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'))).settings || {};
+  const submitted = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
+  const saved = submitted.settings || {};
+  check('Save: the MSG91 keys go as write-only secrets, not in the settings',
+    submitted.secrets?.msg91AuthKey === 'authKEY12345' && submitted.secrets?.msg91TemplateId === 'tmpl6789' && !JSON.stringify(saved).includes('authKEY'), JSON.stringify(submitted.secrets));
+  check('Save: Buy it now text, Replace off and the Terms link are sent',
+    saved.productButton?.buyNowText === 'Buy it now {price}' && saved.productButton?.replaceBuyNow === false && saved.sheet?.termsUrl === '/pages/terms', JSON.stringify({ pb: saved.productButton, terms: saved.sheet?.termsUrl }));
   check('Save: every change is sent',
     saved.enabled === true && saved.drawerPlacement === 'below' && saved.comboPlacement === 'above' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'
     && saved.buttons?.drawerText === 'Pay cash on delivery' && saved.codFeeEnabled === true && saved.codFee === 40 && saved.codFeeLabel === 'Handling fee'

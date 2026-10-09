@@ -70,6 +70,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // The product page COD button (brix_cod.js initProductButton). Sizes in px.
   productButton: {
     replaceBuyNow: true, // take the place of Shopify's "Buy it now" button and hide it
+    // Text for Shopify's own "Buy it now" while it shows (not replaced); may
+    // hold price tags ("Buy it now {prepaid_price} Prepaid"). '' = Shopify's text.
+    buyNowText: '',
     marginTop: 10,
     marginBottom: 0,
     paddingY: 14,
@@ -85,6 +88,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     showSummary: true,
     showTrust: true,
     thankYouText: '',
+    // The "I agree to the Terms and conditions" link: https URL or a store
+    // path. '' = the store's own /policies/terms-of-service.
+    termsUrl: '',
     // Coupon field on the review step (only when allowCoupons is on).
     showCoupon: true,
     couponLabel: 'Have a coupon code?',
@@ -105,6 +111,11 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
 });
 
 export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
+
+/** A Terms and conditions link: an https URL or a path on the store ("/pages/terms"). Mirrored by cod_storefront.php cods_sheet(). */
+export function isValidTermsUrl(value) {
+  return typeof value === 'string' && /^(https:\/\/[^\s"'<>\\]{1,300}|\/[^\s"'<>\\]{0,300})$/.test(value.trim());
+}
 export const META_PIXEL_RE = /^\d{10,20}$/;
 export const META_CONTENT_ID_FORMATS = ['shopify', 'variant', 'sku'];
 
@@ -252,6 +263,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;
     if ('replaceBuyNow' in q) productButton.replaceBuyNow = Boolean(q.replaceBuyNow);
+    if ('buyNowText' in q) productButton.buyNowText = typeof q.buyNowText === 'string' ? q.buyNowText.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
     for (const [key, [min, max]] of Object.entries(COD_PRODUCT_BUTTON_LIMITS)) {
       if (key in q) productButton[key] = int(q[key], productButton[key], min, max);
     }
@@ -266,6 +278,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     if ('showSummary' in q) sheet.showSummary = Boolean(q.showSummary);
     if ('showTrust' in q) sheet.showTrust = Boolean(q.showTrust);
     if ('thankYouText' in q) sheet.thankYouText = typeof q.thankYouText === 'string' ? q.thankYouText.trim().slice(0, 120) : '';
+    if ('termsUrl' in q) sheet.termsUrl = isValidTermsUrl(q.termsUrl) ? String(q.termsUrl).trim() : '';
     if ('showCoupon' in q) sheet.showCoupon = Boolean(q.showCoupon);
     if ('couponLabel' in q) sheet.couponLabel = text(q.couponLabel, DEFAULT_COD_SETTINGS.sheet.couponLabel, 40);
     if ('couponOpen' in q) sheet.couponOpen = Boolean(q.couponOpen);

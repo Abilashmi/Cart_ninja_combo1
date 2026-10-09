@@ -227,7 +227,11 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
             {codHidden ? <Hidden>COD button hidden: {why}</Hidden>
               : <CodButton settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />}
             {/* Buy it now is only hidden while a usable COD button shows, as on the storefront. */}
-            {(codHidden || excluded || !pb.replaceBuyNow) && <div className="cod-scr-bin">Buy it now</div>}
+            {(codHidden || excluded || !pb.replaceBuyNow) && (
+              <div className="cod-scr-bin">
+                {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -311,7 +315,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
                     <div className="cod-pv-tot"><span>Pay on delivery</span><span>{money(total)}</span></div>
                   </div>
                   {settings.prepaidNudgeText ? <div className="cod-pv-nudge">{settings.prepaidNudgeText} <u>Pay online</u></div> : null}
-                  <div className="cod-pv-agr"><span className="cod-pv-box" aria-hidden="true">✓</span>I agree to the <a href="https://thebrix.io/cod-data-policy" target="_blank" rel="noopener noreferrer">data policy</a></div>
+                  <div className="cod-pv-agr"><span className="cod-pv-box" aria-hidden="true">✓</span>I agree to the {/^https:\/\//.test(look.termsUrl || '') ? <a href={look.termsUrl} target="_blank" rel="noopener noreferrer">Terms and conditions</a> : <u>Terms and conditions</u>}</div>
                   <div className="cod-pv-place">Place COD order · {money(total)}</div>
                 </>
               )}

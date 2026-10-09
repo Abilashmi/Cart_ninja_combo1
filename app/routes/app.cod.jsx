@@ -17,7 +17,7 @@ import { getShopPlan } from '../services/plan-permissions.server';
 import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
-import { CodError, getCodSettings, syncCodRuntime, listCodOrders, summarizeCodOrders } from '../services/cod.server';
+import { CodError, getCodSettings, getCodSecrets, msg91Creds, syncCodRuntime, listCodOrders, summarizeCodOrders } from '../services/cod.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import CodOrdersChart from '../components/cod/CodOrdersChart';
 import { COD_ADMIN_CSS } from '../components/cod/codAdminStyles';
@@ -30,9 +30,11 @@ export async function loader({ request }) {
   let settings = null;
   let orders = [];
   let loadError = null;
+  let sms = smsProviderStatus();
   try {
     settings = await getCodSettings(shop);
     await syncCodRuntime(shop);
+    sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
     orders = await listCodOrders(admin, shop, 50);
   } catch (error) {
     if (error instanceof CodError && error.code === 'storage_missing') {
@@ -50,7 +52,7 @@ export async function loader({ request }) {
     loadError,
     planState: getFeatureState(planKey, 'cod_checkout'),
     currencyCode: currency.code,
-    sms: smsProviderStatus(),
+    sms,
     hasOrderScope: scopes.includes('write_draft_orders'),
   };
 }
@@ -251,7 +253,7 @@ export default function CodCheckoutPage() {
     {
       key: 'sms', state: !s.requireOtp ? 'info' : data.sms.configured ? 'done' : 'todo', title: 'Phone verification by SMS (optional)',
       text: !s.requireOtp ? 'OTP is off. Turn it on in Customize, Fraud protection, to cut fake orders.'
-        : "OTP is on, but no SMS provider (MSG91) is connected on the BRIX server, so shoppers aren't asked for a code yet.",
+        : "OTP is on, but no SMS provider is connected, so shoppers aren't asked for a code yet. Add your MSG91 keys in Customize → OTP SMS (MSG91).",
     },
   ];
   const openItems = checklist.filter((c) => c.state !== 'done');

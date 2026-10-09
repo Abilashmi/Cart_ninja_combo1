@@ -98,8 +98,8 @@ export async function getCodSettingsWithRuntime(shop) {
 // storefront can read everything from php_backend/cod_storefront.php.
 // `prepaid` (from prepaid-discount-shopify.server.js) is kept until the next
 // prepaid sync replaces it.
-function runtimeFacts(previous) {
-  const facts = { otpAvailable: otpAvailable() };
+function runtimeFacts(previous, secrets) {
+  const facts = { otpAvailable: otpAvailable(secrets) };
   if (previous?.prepaid && typeof previous.prepaid === 'object') facts.prepaid = previous.prepaid;
   return facts;
 }
@@ -115,7 +115,7 @@ export async function saveCodSettings(shop, patch, { syncPrepaid } = {}) {
   const raw = await loadStoredSettings(shop);
   const current = sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS);
   const next = sanitizeCodSettings(patch, current);
-  const runtime = runtimeFacts(raw?._runtime);
+  const runtime = runtimeFacts(raw?._runtime, await getCodSecrets(shop));
   if (typeof syncPrepaid === 'function') runtime.prepaid = await syncPrepaid(next);
   await php('cod_settings.php', { action: 'save', shop, settings: { ...next, _runtime: runtime } });
   return next;
@@ -129,7 +129,7 @@ export async function saveCodSettings(shop, patch, { syncPrepaid } = {}) {
 export async function syncCodRuntime(shop) {
   const raw = await loadStoredSettings(shop);
   if (!raw) return;
-  const facts = runtimeFacts(raw._runtime);
+  const facts = runtimeFacts(raw._runtime, await getCodSecrets(shop));
   if (JSON.stringify(raw._runtime || null) === JSON.stringify(facts)) return;
   const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
   await php('cod_settings.php', { action: 'save', shop, settings: { ...settings, _runtime: facts } });
@@ -137,22 +137,32 @@ export async function syncCodRuntime(shop) {
 
 /* ───────────────────────── tracking secrets ───────────────────────── */
 
-// GA4 Measurement Protocol secret, Meta Conversions API token and Meta test
-// event code. Kept in their own table (php_backend/cod_settings.php
-// secrets_*), never in the settings blob the storefront reads. Only this
-// server reads the values; the admin page sees getCodSecretsStatus().
-const SECRET_KEYS = ['ga4ApiSecret', 'metaCapiToken', 'metaTestCode'];
+// GA4 Measurement Protocol secret, Meta Conversions API token, Meta test
+// event code and the store's MSG91 keys (OTP SMS). Kept in their own table
+// (php_backend/cod_settings.php secrets_*), never in the settings blob the
+// storefront reads. Only this server reads the values; the admin page sees
+// getCodSecretsStatus().
+const SECRET_KEYS = ['ga4ApiSecret', 'metaCapiToken', 'metaTestCode', 'msg91AuthKey', 'msg91TemplateId'];
 const SECRET_RE = /^[A-Za-z0-9_-]{1,512}$/;
+const SECRET_LABELS = {
+  ga4ApiSecret: 'The GA4 API secret', metaCapiToken: 'The Meta access token', metaTestCode: 'The Meta test code',
+  msg91AuthKey: 'The MSG91 auth key', msg91TemplateId: 'The MSG91 template ID',
+};
 
 export async function getCodSecrets(shop) {
   const { secrets } = await php('cod_settings.php', { action: 'secrets_get', shop });
-  return { ga4ApiSecret: secrets?.ga4ApiSecret || '', metaCapiToken: secrets?.metaCapiToken || '', metaTestCode: secrets?.metaTestCode || '' };
+  return Object.fromEntries(SECRET_KEYS.map((key) => [key, secrets?.[key] || '']));
+}
+
+/** The store's MSG91 keys as cod-sms.server.js takes them. */
+export function msg91Creds(secrets) {
+  return { authKey: secrets?.msg91AuthKey || '', templateId: secrets?.msg91TemplateId || '' };
 }
 
 export async function getCodSecretsStatus(shop) {
   const s = await getCodSecrets(shop);
   const status = (v) => ({ set: Boolean(v), last4: v ? v.slice(-4) : '' });
-  return { ga4ApiSecret: status(s.ga4ApiSecret), metaCapiToken: status(s.metaCapiToken), metaTestCode: status(s.metaTestCode) };
+  return Object.fromEntries(SECRET_KEYS.map((key) => [key, status(s[key])]));
 }
 
 /**
@@ -167,7 +177,7 @@ export async function saveCodSecrets(shop, patch = {}) {
     if (value === null) { secrets[key] = ''; continue; }
     const v = String(value ?? '').trim();
     if (!v) continue;
-    if (!SECRET_RE.test(v)) throw new CodError(`invalid_${key}`, `${key} does not look right. Paste it again without spaces.`);
+    if (!SECRET_RE.test(v)) throw new CodError(`invalid_${key}`, `${SECRET_LABELS[key]} does not look right. Paste it again without spaces.`);
     secrets[key] = v;
   }
   if (Object.keys(secrets).length) await php('cod_settings.php', { action: 'secrets_save', shop, secrets });
@@ -256,8 +266,9 @@ export function clientUa(request) {
 // Limits (30 s between codes, 5 per hour, 10 min expiry, 5 tries) are
 // enforced by php_backend/cod_otp.php.
 
-export function otpAvailable() {
-  return smsProviderStatus().configured;
+/** `secrets` = getCodSecrets(shop): the store's own MSG91 keys, else the server's. */
+export function otpAvailable(secrets) {
+  return smsProviderStatus(msg91Creds(secrets)).configured;
 }
 
 export async function sendCodOtp(shop, phone) {
@@ -265,7 +276,7 @@ export async function sendCodOtp(shop, phone) {
   const { id, resendAfter } = await php('cod_otp.php', {
     action: 'create', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
   });
-  const result = await sendOtpSms(phone, code);
+  const result = await sendOtpSms(phone, code, msg91Creds(await getCodSecrets(shop).catch(() => null)));
   if (!result.sent) {
     await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
     throw new CodError('otp_send_failed', "We couldn't send the code to this number. Check it and try again, or pay online.", { status: 503 });

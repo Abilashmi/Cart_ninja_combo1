@@ -38,7 +38,6 @@
   var CONFIG_KEY = 'brix_cod_config_v6'; // bump when the config shape changes (v6: product page payment options)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
-  var DATA_POLICY_URL = 'https://thebrix.io/cod-data-policy';
 
   var STATES = ['Andaman and Nicobar Islands', 'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chandigarh', 'Chhattisgarh',
     'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jammu and Kashmir',
@@ -446,7 +445,7 @@
     '.b.s{background:#fff;color:#111827;border-color:#e5e7eb}',
     '.b.s:hover{background:#f9fafb}',
     '.b:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}',
-    /* data policy consent (review step) */
+    /* Terms and conditions consent (review step) */
     '.agr{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:1.4;color:#4b5563;cursor:pointer}',
     // The popup's text-field styles hide the native box, so it's drawn here.
     '.agr input[type=checkbox]{width:18px;height:18px;padding:0;margin:0;flex:none;border:1.5px solid #d0d5dd;border-radius:5px;background:#fff no-repeat center/12px;cursor:pointer}',
@@ -654,6 +653,12 @@
 
   var sheet = null; // the one open sheet
 
+  // The merchant's Terms and conditions link, else the store's own terms page.
+  function termsUrl(cfg) {
+    var u = cfg && cfg.sheet && typeof cfg.sheet.termsUrl === 'string' ? cfg.sheet.termsUrl : '';
+    return /^(https:\/\/|\/)/.test(u) ? u : ROOT + 'policies/terms-of-service';
+  }
+
   function Sheet(opts, cfg) {
     this.opts = opts;
     this.cfg = cfg;
@@ -697,7 +702,7 @@
     if (!Array.isArray(look.offers)) look.offers = [];
     this.look = look;
     this.couponOpen = Boolean(look.couponOpen);
-    this.policyOk = true; // data policy consent, ticked by default
+    this.policyOk = true; // Terms and conditions consent, ticked by default
     // :host{all:initial} drops the theme font; borrow the storefront's own.
     try { var font = window.getComputedStyle(document.body).fontFamily; if (font) this.sh.style.fontFamily = font; } catch (e) { /* keep the system stack */ }
     document.body.appendChild(host);
@@ -1245,7 +1250,7 @@
       '<div class="ttl">Deliver to</div>' + ship +
       '<div class="ttl">Payment</div>' + pay + nudge + '<div data-err></div>',
       '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
-      '<span>I agree to the <a href="' + DATA_POLICY_URL + '" target="_blank" rel="noopener">data policy</a></span></label>' +
+      '<span>I agree to the <a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">Terms and conditions</a></span></label>' +
       '<button type="submit" class="b p">Place COD order \u00b7 ' + fmt(q.total) + '</button>');
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
@@ -1468,7 +1473,7 @@
     var self = this;
     var policy = this.sh.querySelector('[name="policy"]');
     if (policy && !policy.checked) {
-      this.setError('Please agree to the data policy to place your order.');
+      this.setError('Please agree to the Terms and conditions to place your order.');
       policy.parentNode.classList.add('bad');
       vibrate(50);
       return;
@@ -2070,6 +2075,40 @@
     return null;
   }
 
+  // The text button inside Shopify's Buy it now (the unbranded one; Shop Pay /
+  // PayPal branded buttons can't be relabelled), also inside shadow roots.
+  function buyNowButton(host) {
+    if (!host) return null;
+    var pick = function (root) {
+      var b = root.querySelector('.shopify-payment-button__button--unbranded') ||
+        root.querySelector('.shopify-payment-button__button:not(.shopify-payment-button__button--branded)');
+      return b && b.children.length === 0 ? b : null;
+    };
+    var b = pick(host);
+    if (!b) {
+      var inner = host.querySelectorAll('*');
+      if (host.shadowRoot) b = pick(host.shadowRoot);
+      for (var i = 0; !b && i < inner.length; i++) if (inner[i].shadowRoot) b = pick(inner[i].shadowRoot);
+    }
+    return b;
+  }
+
+  // The merchant's text on Shopify's Buy it now (COD → Customize → Position
+  // in product page), with price tags for the chosen variant and quantity.
+  // Only while Buy it now shows (COD doesn't replace it). No prepaid offer
+  // here (that's payment options), so {prepaid_price} is the price.
+  function relabelBuyNow(cfg, form, info) {
+    var text = cfg && cfg.productButton && cfg.productButton.buyNowText;
+    if (!text || !form) return;
+    var btn = buyNowButton(form.querySelector(BUY_NOW));
+    if (!btn) return;
+    var price = productPrice(form, info);
+    var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
+    if (next && btn.textContent !== next) btn.textContent = next;
+  }
+
   var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
 
   var productMount = null; // { form, slot, addBtn } of the button on the page
@@ -2108,12 +2147,15 @@
     var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt);
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
-    if (excluded) return;
+    var keepsBuyNow = !look.replaceBuyNow || excluded;
     productMount.relabel = function () {
       var el = slot.querySelector('[data-brix-cod-label]');
       var next = codLabel(cfg, text, productPrice(form, info));
       if (el && el.textContent !== next) el.textContent = next;
+      if (keepsBuyNow) relabelBuyNow(cfg, form, info);
     };
+    productMount.relabel();
+    if (excluded) return;
     function syncDisabled() {
       var soldOut = Boolean(addBtn && (addBtn.disabled || addBtn.getAttribute('aria-disabled') === 'true'));
       btn.disabled = soldOut;
@@ -2527,21 +2569,7 @@
     // Shopify's Buy it now: hidden while COD is chosen; its text gets the
     // saving while Pay Online is chosen. Only DOM writes when something differs,
     // so the page's MutationObserver settles straight away.
-    function nativeButton(host) {
-      if (!host) return null;
-      var pick = function (root) {
-        var b = root.querySelector('.shopify-payment-button__button--unbranded') ||
-          root.querySelector('.shopify-payment-button__button:not(.shopify-payment-button__button--branded)');
-        return b && b.children.length === 0 ? b : null;
-      };
-      var b = pick(host);
-      if (!b) {
-        var inner = host.querySelectorAll('*');
-        if (host.shadowRoot) b = pick(host.shadowRoot);
-        for (var i = 0; !b && i < inner.length; i++) if (inner[i].shadowRoot) b = pick(inner[i].shadowRoot);
-      }
-      return b;
-    }
+    var nativeButton = buyNowButton;
 
     function applyNative(v) {
       var scope = st.form.closest('.shopify-section') || st.form;
@@ -2737,7 +2765,7 @@
         mountProductButton(cfg, info, excluded);
         // Price tags in the button text follow the chosen variant and quantity
         // (themes fire change/input, or set the hidden variant id silently).
-        if (hasPriceTags(cfg.buttons.productText)) {
+        if (hasPriceTags(cfg.buttons.productText) || (cfg.productButton && cfg.productButton.buyNowText)) {
           var relabel = function () { if (productMount && productMount.relabel) productMount.relabel(); };
           var later = null;
           var soon = function () { clearTimeout(later); later = setTimeout(relabel, 120); };

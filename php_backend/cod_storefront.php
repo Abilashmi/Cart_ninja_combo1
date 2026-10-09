@@ -72,6 +72,8 @@ function cods_sheet($sheet) {
         'showSummary' => ($q['showSummary'] ?? true) !== false,
         'showTrust' => ($q['showTrust'] ?? true) !== false,
         'thankYouText' => mb_substr((string)($q['thankYouText'] ?? ''), 0, 120),
+        // '' = the store's own /policies/terms-of-service (brix_cod.js).
+        'termsUrl' => preg_match('#^(https://[^\s"\'<>\\\\]{1,300}|/[^\s"\'<>\\\\]{0,300})$#', trim((string)($q['termsUrl'] ?? ''))) ? trim((string)$q['termsUrl']) : '',
         'showCoupon' => ($q['showCoupon'] ?? true) !== false,
         'couponLabel' => mb_substr(trim((string)($q['couponLabel'] ?? '')), 0, 40) ?: 'Have a coupon code?',
         'couponOpen' => !empty($q['couponOpen']),
@@ -88,6 +90,8 @@ function cods_product_button($pb) {
     };
     return [
         'replaceBuyNow' => ($q['replaceBuyNow'] ?? true) !== false,
+        // Text for Shopify's Buy it now while it shows; may hold price tags. '' = Shopify's own.
+        'buyNowText' => cods_text($q['buyNowText'] ?? '', '', 60),
         'marginTop' => $size('marginTop', 10, 0, 60),
         'marginBottom' => $size('marginBottom', 0, 0, 60),
         'paddingY' => $size('paddingY', 14, 4, 32),

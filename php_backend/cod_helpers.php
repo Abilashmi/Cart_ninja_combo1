@@ -15,6 +15,7 @@
  *                 plus its later Shopify lifecycle (shipped / delivered / cancelled …) and
  *                 whether the GA4 / Meta server-side Purchase was sent
  *   cod_secrets   per-shop GA4 Measurement Protocol secret + Meta Conversions API token
+ *                 + the store's MSG91 auth key and OTP template id (OTP SMS)
  *                 (never served to the storefront; the admin only sees "set / last 4")
  */
 
@@ -117,11 +118,26 @@ function cod_ensure_tables($pdo) {
             ga4_api_secret   VARCHAR(128) NULL,
             meta_capi_token  VARCHAR(512) NULL,
             meta_test_code   VARCHAR(64) NULL,
+            msg91_auth_key   VARCHAR(128) NULL,
+            msg91_template_id VARCHAR(64) NULL,
             updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (shop)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     cod_ensure_order_columns($pdo);
+    cod_ensure_secret_columns($pdo);
+}
+
+/** Columns added to cod_secrets after it first shipped (the store's own MSG91 keys for OTP SMS). */
+function cod_ensure_secret_columns($pdo) {
+    $have = array_column($pdo->query('SHOW COLUMNS FROM cod_secrets')->fetchAll(PDO::FETCH_ASSOC), 'Field');
+    $add = [
+        'msg91_auth_key'    => 'VARCHAR(128) NULL',
+        'msg91_template_id' => 'VARCHAR(64) NULL',
+    ];
+    foreach (array_diff_key($add, array_flip($have)) as $column => $definition) {
+        $pdo->exec("ALTER TABLE cod_secrets ADD COLUMN $column $definition");
+    }
 }
 
 /** Columns added after cod_orders first shipped. SHOW COLUMNS works on MySQL and MariaDB alike. */

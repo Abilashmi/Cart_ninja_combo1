@@ -253,13 +253,15 @@ await inSheet('[data-act="coupon-paste"]').click();
 await inSheet('.cpn.ok').waitFor();
 check('coupon: Paste fills and claims the code in one tap', (await inSheet('.tot').textContent()).includes('858'));
 const policy = inSheet('[name="policy"]');
-check('data policy: consent ticked by default, links to the BRIX COD data policy in a new tab',
-  await policy.isChecked() && (await inSheet('.agr a').getAttribute('href')) === 'https://thebrix.io/cod-data-policy' && (await inSheet('.agr a').getAttribute('target')) === '_blank');
+check('Terms and conditions: consent ticked by default, links to the store\'s terms page in a new tab',
+  await policy.isChecked() && (await inSheet('.agr a').textContent()) === 'Terms and conditions'
+  && (await inSheet('.agr a').getAttribute('href')) === '/policies/terms-of-service' && (await inSheet('.agr a').getAttribute('target')) === '_blank',
+  await inSheet('.agr').textContent());
 await policy.uncheck();
 await inSheet('button[type="submit"]').click();
 await page.waitForTimeout(150);
-check('data policy: unticked blocks the order with a message',
-  !posted.some((p) => p.path === '/api/cod/order') && (await inSheet('[data-err]').textContent()).includes('agree to the data policy') && (await inSheet('.agr.bad').count()) === 1);
+check('Terms and conditions: unticked blocks the order with a message',
+  !posted.some((p) => p.path === '/api/cod/order') && (await inSheet('[data-err]').textContent()).includes('agree to the Terms and conditions') && (await inSheet('.agr.bad').count()) === 1);
 await policy.check();
 await inSheet('button[type="submit"]').click();
 await inSheet('.done').waitFor();

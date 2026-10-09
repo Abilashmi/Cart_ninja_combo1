@@ -1,7 +1,7 @@
 // Form state for the COD customizer (app.cod_.customize.jsx):
 // settings <-> form fields, validation, and the shared constants.
 import {
-  isValidCodLogo, isValidDrawerSelector, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE,
+  isValidCodLogo, isValidDrawerSelector, isValidTermsUrl, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE,
 } from '../../utils/cod.shared';
 import {
   DEFAULT_PRODUCT_PAYMENT, parsePrepaidPercent, parseMinSubtotal, PREPAID_PERCENT_MIN, PREPAID_PERCENT_MAX, PAY_HEX_RE,
@@ -22,6 +22,7 @@ export function sheetForm(sheet) {
     sheetSummary: sh.showSummary,
     sheetTrust: sh.showTrust,
     sheetThanks: sh.thankYouText,
+    sheetTermsUrl: sh.termsUrl || '',
     sheetCoupon: sh.showCoupon,
     sheetCouponLabel: sh.couponLabel,
     sheetCouponOpen: sh.couponOpen,
@@ -33,6 +34,7 @@ export function productButtonForm(pb) {
   const b = { ...DEFAULT_COD_SETTINGS.productButton, ...(pb || {}) };
   return {
     pbReplaceBuyNow: b.replaceBuyNow,
+    pbBuyNowText: b.buyNowText || '',
     pbMarginTop: b.marginTop,
     pbMarginBottom: b.marginBottom,
     pbPaddingY: b.paddingY,
@@ -144,11 +146,13 @@ export function toForm(s) {
     ga4ApiSecret: '',
     metaCapiToken: '',
     metaTestCode: '',
+    msg91AuthKey: '',
+    msg91TemplateId: '',
     pp: paymentForm(s.productPayment),
   };
 }
 
-export const SECRET_FIELDS = ['ga4ApiSecret', 'metaCapiToken', 'metaTestCode'];
+export const SECRET_FIELDS = ['ga4ApiSecret', 'metaCapiToken', 'metaTestCode', 'msg91AuthKey', 'msg91TemplateId'];
 
 /** Only the keys the merchant typed or removed; the rest keep their saved value. */
 export function secretsPatch(f) {
@@ -197,6 +201,7 @@ export function toSettings(f) {
     },
     productButton: {
       replaceBuyNow: f.pbReplaceBuyNow,
+      buyNowText: f.pbBuyNowText,
       marginTop: f.pbMarginTop,
       marginBottom: f.pbMarginBottom,
       paddingY: f.pbPaddingY,
@@ -211,6 +216,7 @@ export function toSettings(f) {
       showSummary: f.sheetSummary,
       showTrust: f.sheetTrust,
       thankYouText: f.sheetThanks,
+      termsUrl: f.sheetTermsUrl.trim(),
       showCoupon: f.sheetCoupon,
       couponLabel: f.sheetCouponLabel,
       couponOpen: f.sheetCouponOpen,
@@ -232,6 +238,7 @@ export function formErrors(f) {
   ['codFee', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder'].forEach(money);
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
+  if (f.sheetTermsUrl.trim() && !isValidTermsUrl(f.sheetTermsUrl)) e.sheetTermsUrl = 'Use a link starting with https:// or a page on your store, like /pages/terms.';
   if (f.codFeeEnabled && !f.codFeeLabel.trim()) e.codFeeLabel = 'Enter the name shoppers see for this fee.';
   const selector = f.drawerSelector.trim();
   if (selector && !isValidDrawerSelector(selector)) e.drawerSelector = 'Use a CSS selector like #CartDrawer-Checkout.';
