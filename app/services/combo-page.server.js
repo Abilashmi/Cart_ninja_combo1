@@ -113,9 +113,13 @@ const PRODUCT_FRAGMENT = `
     title
     handle
     descriptionHtml
+    description(truncateAt: 160)
+    vendor
+    productType
+    tags
     featuredImage { url altText width height }
     images(first: 10) { nodes { url altText width height } }
-    variants(first: 25) { nodes { id title price image { url altText } inventoryItem { measurement { weight { value unit } } } } }
+    variants(first: 25) { nodes { id title price compareAtPrice availableForSale image { url altText } inventoryItem { measurement { weight { value unit } } } } }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
   }
 `;
@@ -225,6 +229,12 @@ export async function loadComboPageDataForRow(shop, row) {
       productsByHandle[handle] = edges.map((e) => ({
         id: e.node.id, title: e.node.title, handle: e.node.handle,
         descriptionHtml: e.node.descriptionHtml || '',
+        // Quick Shop cards and filters: one-line subtitle, Brand / Type
+        // dropdowns, tag chips and badges.
+        summary: e.node.description || '',
+        vendor: e.node.vendor || '',
+        productType: e.node.productType || '',
+        tags: (e.node.tags || []).slice(0, 40),
         secondImageSrc: e.node.images?.nodes?.length > 1 ? e.node.images.nodes[1].url : null,
         image: e.node.featuredImage ? { url: e.node.featuredImage.url, altText: e.node.featuredImage.altText } : null,
         images: (e.node.images?.nodes || []).map((img) => ({
@@ -234,6 +244,8 @@ export async function loadComboPageDataForRow(shop, row) {
           id: v.id,
           title: v.title,
           price: v.price,
+          compareAtPrice: v.compareAtPrice || null,
+          available: v.availableForSale !== false,
           image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
           // Weight-priced combos: grams per unit, null when the variant has no weight.
           grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),

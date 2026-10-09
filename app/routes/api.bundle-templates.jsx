@@ -4,7 +4,7 @@ import { checkComboPlanGate, createComboTemplate } from '../services/combo-templ
 import { ensureComboForgeTemplate } from '../services/combo-page.server';
 import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 import { COMBO_WEIGHT_FEATURE, syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
-import { isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
+import { QUICK_SHOP_LAYOUT, isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
 
 /**
  * Weight-priced combos (pricing_mode 'weight') are Pro only, and their pricing
@@ -18,13 +18,16 @@ async function prepareWeightPricing(shop, customizationData) {
   if (!isWeightCombo(config)) return { customizationData };
   const planKey = await getShopPlan(shop);
   if (!canPublishFeature(planKey, COMBO_WEIGHT_FEATURE)) {
-    return { response: Response.json({ success: false, upgradeRequired: true, feature: COMBO_WEIGHT_FEATURE, error: 'Weight-based pricing is part of the Pro plan. Upgrade, or switch this combo back to item-count pricing to save it.' }, { status: 403 }) };
+    return { response: Response.json({ success: false, upgradeRequired: true, feature: COMBO_WEIGHT_FEATURE, error: 'Weight, quantity and value box pricing are part of the Pro plan. Upgrade, or switch this combo back to coupon pricing to save it.' }, { status: 403 }) };
   }
-  const { value, errors } = normalizeWeightPricing(config.weight_pricing);
+  // Only Quick Shop boxes can be measured by number of items or value; every
+  // other layout (the Weight Box included) is weighed, whatever was sent.
+  const raw = config.layout === QUICK_SHOP_LAYOUT ? config.weight_pricing : { ...(config.weight_pricing || {}), measure: 'weight' };
+  const { value, errors } = normalizeWeightPricing(raw);
   if (errors.length) {
     return { response: Response.json({ success: false, error: errors[0].message, weightErrors: errors }, { status: 422 }) };
   }
-  // The Weight Box template is always weight-priced, whatever the browser sent.
+  // Box-priced templates (Weight Box, Quick Shop) always are, whatever the browser sent.
   return { customizationData: JSON.stringify({ ...config, pricing_mode: 'weight', weight_pricing: value }) };
 }
 

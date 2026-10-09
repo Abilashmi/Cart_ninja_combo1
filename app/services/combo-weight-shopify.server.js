@@ -103,8 +103,10 @@ export function buildComboWeightFunctionConfig({ templates, planLive, currencyCo
       max_grams: pricing.max_grams,
       product_ids: productIds,
       collection_ids: collectionGids.map(numericId).filter(Boolean),
-      tiers: pricing.tiers.map((tier) => ({ min_grams: tier.min_grams, type: tier.type, value: tier.value, label: tierLabel(tier, pricing.unit) })),
+      tiers: pricing.tiers.map((tier) => ({ min_grams: tier.min_grams, type: tier.type, value: tier.value, label: tierLabel(tier, pricing.unit, pricing.measure) })),
     };
+    // Weight boxes leave it out (the Function's default), so their config is byte-for-byte unchanged.
+    if (pricing.measure) entries[String(template.id)].measure = pricing.measure;
     included.push(template.id);
   }
   const config = { version: 1, currency: currencyCode, templates: entries };
@@ -320,9 +322,10 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
     enabled,
     reason: enabled ? null : (!planLive ? 'plan_locked' : 'not_live'),
     hash: pricing.hash,
+    measure: pricing.measure || 'weight',
     unit: pricing.unit,
     maxGrams: pricing.max_grams,
-    tiers: pricing.tiers.map((tier) => ({ ...tier, label: tierLabel(tier, pricing.unit) })),
+    tiers: pricing.tiers.map((tier) => ({ ...tier, label: tierLabel(tier, pricing.unit, pricing.measure) })),
     messages: pricing.messages,
     qualifyingProductIds,
   };
@@ -333,7 +336,7 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
 const TEMPLATE_REASONS = {
   plan_locked: 'Weight-based pricing goes live on the Pro plan.',
   inactive: 'This combo is turned off, so its box discount is not active.',
-  invalid: 'This combo\'s weight pricing has errors. Fix them and save again.',
+  invalid: 'This combo\'s box pricing has errors. Fix them and save again.',
   no_products: 'None of this combo\'s collections could be found in Shopify, so no product would count toward the box.',
 };
 

@@ -2,15 +2,21 @@ import { authenticate } from '../shopify.server';
 import { toGrams } from '../utils/combo-weight.shared.js';
 
 // Variants (with Shopify weights) let the builder preview add real variants
-// and price weight-priced boxes (The Weight Box / weight pricing).
+// and price weight-priced boxes (The Weight Box / weight pricing); summary,
+// vendor, type, tags and compare-at prices feed the Quick Shop preview's
+// cards and filters (same fields as services/combo-page.server.js).
 const PRODUCT_FRAGMENT = `
   fragment ProductInfo on Product {
     id
     title
     handle
+    description(truncateAt: 160)
+    vendor
+    productType
+    tags
     featuredImage { url altText width height }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
-    variants(first: 10) { nodes { id title price availableForSale image { url } inventoryItem { measurement { weight { value unit } } } } }
+    variants(first: 10) { nodes { id title price compareAtPrice availableForSale image { url } inventoryItem { measurement { weight { value unit } } } } }
   }
 `;
 
@@ -88,6 +94,10 @@ function formatProduct(node) {
     id: node.id,
     title: node.title,
     handle: node.handle,
+    summary: node.description || '',
+    vendor: node.vendor || '',
+    productType: node.productType || '',
+    tags: (node.tags || []).slice(0, 40),
     image: node.featuredImage ? {
       url: node.featuredImage.url,
       altText: node.featuredImage.altText,
@@ -100,6 +110,7 @@ function formatProduct(node) {
       id: v.id,
       title: v.title,
       price: v.price,
+      compareAtPrice: v.compareAtPrice || null,
       available: v.availableForSale !== false,
       image: v.image ? { src: v.image.url } : null,
       grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),

@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { FormLayout, Checkbox, Text, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 import { OfferSection } from './OfferSection';
-import { isWeightCombo } from '../../utils/combo-weight.shared.js';
+import { QUICK_SHOP_LAYOUT, isWeightCombo } from '../../utils/combo-weight.shared.js';
 
 function AdvancedSectionComponent({
   config,
@@ -16,10 +16,12 @@ function AdvancedSectionComponent({
   savedWeightHash,
 }) {
   const isWeight = isWeightCombo(config);
+  // Quick Shop has its own Top progress / Bottom bar (Style tab) and no AI row.
+  const isQuickShop = config.layout === QUICK_SHOP_LAYOUT;
 
   return (
     <>
-      <SectionCard title="Progress Bar" expanded={expandedSections?.progressBar} onToggle={() => toggleSection?.('progressBar')}>
+      {!isQuickShop && <SectionCard title="Progress Bar" expanded={expandedSections?.progressBar} onToggle={() => toggleSection?.('progressBar')}>
         <FormLayout>
           {isWeight && (
             <Text as="p" variant="bodySm" tone="subdued">
@@ -43,7 +45,7 @@ function AdvancedSectionComponent({
             </>
           )}
         </FormLayout>
-      </SectionCard>
+      </SectionCard>}
 
       {/* Section key stays "discount": the setup tour and "find a setting" open it by that name. */}
       <div data-tour="combo-discount">
@@ -59,7 +61,7 @@ function AdvancedSectionComponent({
         />
       </div>
 
-      <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
+      {!isQuickShop && <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
         <FormLayout>
           <Checkbox
             label="Enable AI Suggestions for Customers"
@@ -77,7 +79,7 @@ function AdvancedSectionComponent({
             />
           )}
         </FormLayout>
-      </SectionCard>
+      </SectionCard>}
 
       <SectionCard title="Custom CSS" expanded={expandedSections?.customCss} onToggle={() => toggleSection?.('customCss')}>
         <FormLayout>

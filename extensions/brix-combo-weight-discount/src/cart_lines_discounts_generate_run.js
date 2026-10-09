@@ -16,8 +16,11 @@
 // qualify for that template.
 //
 // Config shape: { version: 1, currency, templates: { "<id>": { id, hash, unit,
-//   max_grams, product_ids: ["123"], collection_ids: ["456"],
+//   measure?, max_grams, product_ids: ["123"], collection_ids: ["456"],
 //   tiers: [{ min_grams, type, value, label }] } } }
+// measure (absent = 'weight') says what a box is measured by: Shopify weight,
+// number of items ('quantity') or its subtotal ('value'); min_grams is the
+// threshold in that measure's units (see the shared core).
 // Fixed amounts / prices are in the shop currency and converted with
 // presentmentCurrencyRate.
 //
@@ -90,7 +93,7 @@ export function cartLinesDiscountsGenerateRun(input) {
       })),
     });
     if (!box.tier || box.discountMinor <= 0) continue;
-    const message = core.tierLabel(box.tier, template.unit);
+    const message = core.tierLabel(box.tier, template.unit, template.measure);
 
     if (box.tier.type === 'percentage') {
       const targets = box.countedKeys.map((id) => ({ cartLine: { id, quantity: byId.get(id).quantity } }));

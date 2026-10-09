@@ -21,17 +21,22 @@
 // selection/checkout logic (see computePricing/onCheckout below vs. that
 // file's identically-named logic).
 //
-// Weight-priced combos (config.pricing_mode 'weight') price the box with the
-// shared core from app/utils/combo-weight.shared.js, injected below as source
-// text — the same code the checkout Function and BRIX COD run.
+// Box-priced combos (config.pricing_mode 'weight', measured by weight, number
+// of items or value) price the box with the shared core from
+// app/utils/combo-weight.shared.js, injected below as source text — the same
+// code the checkout Function and BRIX COD run. The Quick Shop template
+// (layout6) is drawn by app/utils/combo-quickshop.shared.js, injected the same
+// way and also used by the builder preview.
 import { createComboWeightCore } from '../utils/combo-weight.shared.js';
 import { WEIGHT_BOX_CSS } from '../utils/combo-weight-box.css.js';
+import { createQuickShopKit, QUICK_SHOP_CSS } from '../utils/combo-quickshop.shared.js';
 
 const SCRIPT_BODY = String.raw`
 (function () {
   var CURRENT_SCRIPT = document.currentScript;
   var API_ORIGIN = CURRENT_SCRIPT ? new URL(CURRENT_SCRIPT.src).origin : '';
   var WeightCore = (${createComboWeightCore.toString()})();
+  var QuickShop = (${createQuickShopKit.toString()})(WeightCore);
 
   var instances = new Map(); // root element -> state object
 
@@ -211,7 +216,7 @@ const SCRIPT_BODY = String.raw`
       }
     }
     var cfg = data.config || {};
-    var weight = (cfg.pricing_mode === 'weight' || cfg.layout === WeightCore.WEIGHT_BOX_LAYOUT) && data.weightPricing ? data.weightPricing : null;
+    var weight = (cfg.pricing_mode === 'weight' || cfg.layout === WeightCore.WEIGHT_BOX_LAYOUT || cfg.layout === WeightCore.QUICK_SHOP_LAYOUT) && data.weightPricing ? data.weightPricing : null;
     var qualifying = {};
     if (weight) {
       for (var q = 0; q < (weight.qualifyingProductIds || []).length; q++) qualifying[weight.qualifyingProductIds[q]] = true;
@@ -241,6 +246,9 @@ const SCRIPT_BODY = String.raw`
       canCheckout: false,
       checkingOut: false,
       boxOpen: false, // The Weight Box's bottom sheet on phones
+      // Quick Shop (layout6): filters, open menu, the bar's item list.
+      qsUi: { chip: 'all', dd: {}, instock: false, menu: null, sheetOpen: false },
+      qsLastTier: null, // the tier shown last render, to celebrate a new one once
       selectedMap: {}, // { [variantId]: { productId, qty } }
       pendingVariant: {}, // { [productId]: variantId } — current dropdown/carousel selection before adding
       imgIndex: {}, // { [productId]: index }
@@ -271,7 +279,7 @@ const SCRIPT_BODY = String.raw`
   }
 
   function weightPricingOf(state) {
-    return { tiers: state.weight.tiers || [], max_grams: state.weight.maxGrams == null ? null : state.weight.maxGrams, unit: state.weight.unit };
+    return { measure: state.weight.measure, tiers: state.weight.tiers || [], max_grams: state.weight.maxGrams == null ? null : state.weight.maxGrams, unit: state.weight.unit };
   }
 
   // The box for a selection ({ [variantId]: { productId, qty } }), priced in
@@ -313,8 +321,12 @@ const SCRIPT_BODY = String.raw`
     state.selectedDiscount = null;
     state.discountApplicable = discount > 0;
     state.finalPrice = Math.max(0, totalPrice - discount);
-    // A box can be checked out once it weighs at least the first tier, and not over the max.
-    state.canCheckout = totalSelected > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
+    // A Weight Box can be checked out once it weighs at least the first tier,
+    // and not over the max; Quick Shop lets any box through unless the
+    // merchant requires the first tier.
+    state.canCheckout = state.config.layout === WeightCore.QUICK_SHOP_LAYOUT
+      ? QuickShop.canCheckout(state.config, box, totalSelected, tiers)
+      : totalSelected > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
   }
 
   // Would this selection be over the max weight? Shows the merchant's message if so.
@@ -322,9 +334,10 @@ const SCRIPT_BODY = String.raw`
     if (!state.weightMode || state.weight.maxGrams == null) return false;
     var box = weightBoxFor(state, nextSelectedMap);
     if (!box.overMax) return false;
+    var byItems = state.weight.measure === 'quantity';
     showToast(root, state, WeightCore.fillMessage(state.weight.messages && state.weight.messages.over_max, {
-      max: WeightCore.formatWeight(state.weight.maxGrams, state.weight.unit),
-      weight: WeightCore.formatWeight(box.grams, state.weight.unit),
+      max: byItems ? WeightCore.formatItems(state.weight.maxGrams) : WeightCore.formatWeight(state.weight.maxGrams, state.weight.unit),
+      weight: byItems ? WeightCore.formatItems(box.amount) : WeightCore.formatWeight(box.grams, state.weight.unit),
     }));
     return true;
   }
@@ -574,7 +587,7 @@ const SCRIPT_BODY = String.raw`
   // earlier box of the same combo is replaced (one box per combo per cart);
   // the rest of the cart goes along. Rejects with Shopify's message (e.g. a
   // 422 for stock) so the page can show it and stay put.
-  // box: { templateId, items: [{ variantId, quantity, properties }], attributes }
+  // box: { templateId, items: [{ variantId, quantity, properties }], attributes, destination: 'checkout' | 'cart' }
   function addComboToCart(box) {
     return fetch(shopRoot() + 'cart.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
       .then(function (r) { return r.json(); })
@@ -597,7 +610,7 @@ const SCRIPT_BODY = String.raw`
         });
       })
       .then(function () { return box.attributes ? cartPost('cart/update.js', { attributes: box.attributes }) : null; })
-      .then(function () { window.location.href = shopRoot() + 'checkout'; });
+      .then(function () { window.location.href = shopRoot() + (box.destination === 'cart' ? 'cart' : 'checkout'); });
   }
 
   // Items, discount code and combo attributes for the current selection —
@@ -678,7 +691,8 @@ const SCRIPT_BODY = String.raw`
     trackEvent(state, 'click', state.finalPrice);
     state.checkingOut = true;
     render(root);
-    addComboToCart({ templateId: state.templateId, items: co.items, attributes: co.attributes }).catch(function (err) {
+    var destination = state.config.layout === WeightCore.QUICK_SHOP_LAYOUT ? QuickShop.opt(state.config, 'qs_btn_action') : 'checkout';
+    addComboToCart({ templateId: state.templateId, items: co.items, attributes: co.attributes, destination: destination }).catch(function (err) {
       state.checkingOut = false;
       showToast(root, state, (err && err.message) || 'Could not add your box to the cart. Please try again.');
     });
@@ -2319,6 +2333,43 @@ const SCRIPT_BODY = String.raw`
     return html;
   }
 
+  /* === RENDER: QUICK SHOP (layout6) — app/utils/combo-quickshop.shared.js === */
+
+  function renderLayout6(state, isMobile) {
+    var config = state.config;
+    var currency = shopCurrency(state);
+    var w = state.weight;
+    var cb = state.codButton;
+    var model = QuickShop.buildModel({
+      config: config,
+      templateName: state.templateName,
+      productsByHandle: state.productsByHandle,
+      handles: weightBoxHandles(config),
+      collectionNames: state.collectionNameMap,
+      selection: state.selectedMap,
+      pending: state.pendingVariant,
+      ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, checkingOut: state.checkingOut },
+      // Not live (plan, inactive, checkout discount not active): no offer is shown.
+      pricing: w ? { measure: w.measure, unit: w.unit, tiers: w.tiers, maxGrams: w.maxGrams, messages: w.messages, enabled: !!w.enabled } : { tiers: [], enabled: false },
+      qualifies: function (productId) { return !w || !!state.qualifying[productId]; },
+      symbol: getCurrencySymbol(currency),
+      decimals: WeightCore.decimalsFor(currency),
+      isMobile: isMobile,
+      cod: {
+        shown: state.codAvailable && config.show_cod_button !== false,
+        placement: codPlacement(state),
+        text: codText(state),
+        css: cb ? 'display:inline-flex;align-items:center;justify-content:center;gap:8px;' + cb.css : '',
+        icon: cb ? cb.icon : '',
+      },
+    });
+    // Celebrate a newly reached tier once (the next render plays nothing).
+    var tierMin = model.box.tier && model.view.enabled ? model.box.tier.min_grams : null;
+    model.bar.celebrate = QuickShop.on(config, 'qs_bar_celebrate') && tierMin !== null && (state.qsLastTier === null || tierMin > state.qsLastTier);
+    state.qsLastTier = tierMin;
+    return QuickShop.render(model);
+  }
+
   /* === RENDER: ROOT === */
 
   function render(root) {
@@ -2329,7 +2380,9 @@ const SCRIPT_BODY = String.raw`
     var config = state.config;
 
     var html;
-    if (config.layout === WeightCore.WEIGHT_BOX_LAYOUT) {
+    if (config.layout === WeightCore.QUICK_SHOP_LAYOUT) {
+      html = renderLayout6(state, isMobile);
+    } else if (config.layout === WeightCore.WEIGHT_BOX_LAYOUT) {
       html = renderLayout5(state, isMobile);
     } else if (config.layout === 'layout4') {
       html = renderLayout4(state, isMobile);
@@ -2365,6 +2418,8 @@ const SCRIPT_BODY = String.raw`
   // The Weight Box (renderLayout5): app/utils/combo-weight-box.css.js, the
   // same styles the builder preview uses.
   var WEIGHT_BOX_CSS = ${JSON.stringify(WEIGHT_BOX_CSS)};
+  // Quick Shop (renderLayout6): app/utils/combo-quickshop.shared.js.
+  var QUICK_SHOP_CSS = ${JSON.stringify(QUICK_SHOP_CSS)};
 
   var stylesInjected = false;
   function injectGlobalStyles() {
@@ -2391,7 +2446,7 @@ const SCRIPT_BODY = String.raw`
       '.brix-combo-ai-track { scrollbar-width: thin; }' +
       '@keyframes brix-combo-ai-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } 30%, 70% { box-shadow: 0 0 0 4px rgba(0,0,0,0.35); } }' +
       '.brix-combo-ai-flash { animation: brix-combo-ai-flash 1.6s ease-in-out; }' +
-      WEIGHT_BOX_CSS;
+      WEIGHT_BOX_CSS + QUICK_SHOP_CSS;
     document.head.appendChild(style);
   }
 
@@ -2417,6 +2472,8 @@ const SCRIPT_BODY = String.raw`
       var action = el.getAttribute('data-combo-action');
       var productId = el.getAttribute('data-product-id');
       var product = productId ? state.productMap[productId] : null;
+      // Quick Shop filters, menus and the bar's item list.
+      if (state.config.layout === WeightCore.QUICK_SHOP_LAYOUT && QuickShop.applyUiAction(state.qsUi, action, el)) { render(root); return; }
 
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
       if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
@@ -2715,7 +2772,7 @@ const SCRIPT_BODY = String.raw`
       widenAncestorContainers(root);
 
       var layout = json.data.config && json.data.config.layout;
-      if (layout && !/^layout[1-5]$/.test(layout)) {
+      if (layout && !/^layout[1-6]$/.test(layout)) {
         mountIframe(root, shop, json.data.templateId || templateId);
         return;
       }

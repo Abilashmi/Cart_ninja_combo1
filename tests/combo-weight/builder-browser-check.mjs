@@ -138,7 +138,7 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
 {
   const page = await open({ fresh: true });
   const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
-  check('picker shows 4 templates, the 4th is The Weight Box', titles.length === 4 && titles[3] === 'The Weight Box', titles.join(', '));
+  check('picker shows 5 templates, the 4th is The Weight Box', titles.length === 5 && titles[3] === 'The Weight Box', titles.join(', '));
   const card = page.locator('.tpl-pick-card', { hasText: 'The Weight Box' });
   check('Weight Box card is marked Pro', (await card.textContent()).includes('Pro'));
   await page.screenshot({ path: path.join(SHOTS, 'picker.png'), fullPage: true });

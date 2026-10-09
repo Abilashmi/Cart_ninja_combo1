@@ -15,10 +15,14 @@ const img = (label) => ({ src: 'data:image/svg+xml;utf8,' + encodeURIComponent(`
 // window.__WEIGHT (tests/combo-weight/builder-browser-check.mjs): a
 // weight-priced template, variants with Shopify weights (product 2 has none).
 const GRAMS = { 1: 300, 2: null, 3: 450, 4: 500, 5: 700 };
+// Brand / type / tags / compare-at prices feed the Quick Shop filters and cards.
+const VENDOR = { 1: 'Neem Co', 2: 'Rosa', 3: 'Glow Labs', 4: 'Glow Labs', 5: 'Sun Safe' };
+const COMPARE = { 3: '799.00', 4: '649.00' };
 const product = (n, title, handle, price, variants = 1) => ({
   id: `gid://shopify/Product/${n}`, title, handle: `p${n}`, available: true, totalInventory: 10,
   image: img(title.split(' ')[0]), collections: [{ handle, title: handle }],
-  variants: Array.from({ length: variants }, (_, i) => ({ id: `gid://shopify/ProductVariant/${n * 10 + i}`, title: variants > 1 ? `Size ${i + 1}` : 'Default Title', price, available: true, inventoryQuantity: 10, grams: window.__WEIGHT ? GRAMS[n] : undefined })),
+  vendor: VENDOR[n], productType: handle === 'serums' ? 'Serum' : 'Cleanser', tags: n === 3 ? ['bestseller'] : [], summary: `${title} for daily care`,
+  variants: Array.from({ length: variants }, (_, i) => ({ id: `gid://shopify/ProductVariant/${n * 10 + i}`, title: variants > 1 ? `Size ${i + 1}` : 'Default Title', price, compareAtPrice: COMPARE[n] || null, available: true, inventoryQuantity: 10, grams: window.__WEIGHT ? GRAMS[n] : undefined })),
 });
 const PRODUCTS = [
   product(1, 'Neem Face Wash', 'face-wash', '299.00'),
@@ -35,6 +39,9 @@ const TEMPLATE = {
     step_1_collection: 'face-wash', step_1_title: 'Cleanse', step_2_collection: 'serums', step_2_title: 'Treat',
     step_3_collection: 'sunscreen', step_3_title: 'Protect',
     ...(window.__WEIGHT ? { pricing_mode: 'weight', weight_pricing: window.__WEIGHT } : {}),
+    // window.__QUICK_SHOP (tests/combo-weight/quickshop-builder-check.mjs): a
+    // Quick Shop template over two collections, priced by that weight_pricing.
+    ...(window.__QUICK_SHOP ? { layout: 'layout6', pricing_mode: 'weight', tab_count: 2, col_1: 'face-wash', col_2: 'serums', weight_pricing: window.__QUICK_SHOP } : {}),
   },
 };
 
@@ -65,6 +72,8 @@ const router = createBrowserRouter([
   },
   { path: '/api/combo-weight-audit', action: async () => ({ success: true, checked: 5, truncated: false, missing: [{ productId: 'gid://shopify/Product/2', variantId: 'gid://shopify/ProductVariant/20', title: 'Rose Face Wash', variantTitle: '', adminUrl: '#' }] }) },
   { path: '/api/theme-embed-status', loader: async () => ({ checked: true, enabled: true, editorUrl: '#' }) },
+  // Where a successful save (embed on) continues to.
+  { path: '/app/bundles/templates', Component: () => <div id="templates-list">Templates</div> },
 ]);
 
 // window.__PLAN: render under that plan (default: everything allowed).

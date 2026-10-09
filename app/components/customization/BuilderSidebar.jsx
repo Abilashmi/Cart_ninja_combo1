@@ -15,6 +15,9 @@ import { StylingSection } from './StylingSection';
 import { BehaviorSection } from './BehaviorSection';
 import { AdvancedSection } from './AdvancedSection';
 import { ThemePresets } from './ThemePresets';
+import {
+  QuickShopBarSection, QuickShopCardsSection, QuickShopColorsSection, QuickShopFiltersSection, QuickShopProgressSection,
+} from './QuickShopSections';
 
 const SETTINGS_INDEX = [
   { label: 'Steps & collections', category: 'layout', section: 'general', kw: 'step collection bundle rule combo size' },
@@ -29,7 +32,12 @@ const SETTINGS_INDEX = [
   { label: 'Variant selector', category: 'style', section: 'variants', kw: 'variant dropdown select' },
   { label: 'Buttons (add / checkout)', category: 'style', section: 'buttons', kw: 'button add to cart checkout buy color reset' },
   { label: 'Progress bar', category: 'advanced', section: 'progressBar', kw: 'progress bar discount threshold motivation' },
-  { label: 'Offer: coupon or weight pricing', category: 'advanced', section: 'discount', kw: 'coupon discount offer weight box kg gram tier price pricing' },
+  { label: 'Offer: coupon or weight pricing', category: 'advanced', section: 'discount', kw: 'coupon discount offer weight box kg gram tier price pricing quantity value spend items measure' },
+  { label: 'Quick Shop: filters', category: 'layout', section: 'qsFilters', kw: 'filter chip tag type brand vendor sort stock quick shop' },
+  { label: 'Quick Shop: product cards', category: 'layout', section: 'qsCards', kw: 'card columns badge eyebrow compare off quick shop' },
+  { label: 'Quick Shop: top progress', category: 'style', section: 'qsProgress', kw: 'progress milestone steps bar sticky icons quick shop' },
+  { label: 'Quick Shop: bottom bar', category: 'style', section: 'qsBar', kw: 'bottom bar go to cart saved celebrate ring slim quick shop' },
+  { label: 'Quick Shop: page colours', category: 'style', section: 'qsColors', kw: 'colour color page card accent quick shop' },
   { label: 'AI suggestions', category: 'advanced', section: 'aiSettings', kw: 'ai suggestion smart' },
   { label: 'Custom CSS', category: 'advanced', section: 'customCss', kw: 'css custom code style' },
 ];
@@ -234,8 +242,14 @@ function BuilderSidebarComponent({
               stepFieldAiLoading={stepFieldAiLoading}
               generateStepFieldSuggestion={generateStepFieldSuggestion}
             />
-            {/* The Weight Box (layout5) has its own fixed design: no banner, its own grid. */}
-            {config.layout !== 'layout5' && (
+            {config.layout === 'layout6' && (
+              <>
+                <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} />
+                <QuickShopCardsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsCards} onToggle={() => toggleSection('qsCards')} PxField={PxField} />
+              </>
+            )}
+            {/* The Weight Box (layout5) and Quick Shop (layout6) have their own designs: no banner, their own grid. */}
+            {config.layout !== 'layout5' && config.layout !== 'layout6' && (
               <>
                 <BannerSection
                   config={config}
@@ -280,11 +294,13 @@ function BuilderSidebarComponent({
                 </button>
               </div>
             </div>
-            <ThemePresets
-              config={config}
-              applyConfigPatch={applyConfigPatch}
-              updateConfig={updateConfig}
-            />
+            {config.layout !== 'layout6' && (
+              <ThemePresets
+                config={config}
+                applyConfigPatch={applyConfigPatch}
+                updateConfig={updateConfig}
+              />
+            )}
             <ContentSection
               config={config}
               expanded={expandedSections.content}
@@ -297,22 +313,32 @@ function BuilderSidebarComponent({
               PxField={PxField}
               ColorPickerField={ColorPickerField}
             />
-            <StylingSection
-              config={config}
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
-              updateConfig={updateConfig}
-              PxField={PxField}
-              ColorPickerField={ColorPickerField}
-            />
-            <BehaviorSection
-              config={config}
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
-              updateConfig={updateConfig}
-              PxField={PxField}
-              ColorPickerField={ColorPickerField}
-            />
+            {config.layout === 'layout6' ? (
+              <>
+                <QuickShopProgressSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsProgress} onToggle={() => toggleSection('qsProgress')} ColorPickerField={ColorPickerField} PxField={PxField} />
+                <QuickShopBarSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsBar} onToggle={() => toggleSection('qsBar')} ColorPickerField={ColorPickerField} PxField={PxField} />
+                <QuickShopColorsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsColors} onToggle={() => toggleSection('qsColors')} ColorPickerField={ColorPickerField} />
+              </>
+            ) : (
+              <>
+                <StylingSection
+                  config={config}
+                  expandedSections={expandedSections}
+                  toggleSection={toggleSection}
+                  updateConfig={updateConfig}
+                  PxField={PxField}
+                  ColorPickerField={ColorPickerField}
+                />
+                <BehaviorSection
+                  config={config}
+                  expandedSections={expandedSections}
+                  toggleSection={toggleSection}
+                  updateConfig={updateConfig}
+                  PxField={PxField}
+                  ColorPickerField={ColorPickerField}
+                />
+              </>
+            )}
           </>
         )}
 

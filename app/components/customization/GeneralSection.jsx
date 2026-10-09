@@ -163,8 +163,10 @@ function GeneralSectionComponent({
   // The Weight Box (layout5) uses the same collection list as layout2's
   // tabs (col_1..col_N), shown as pills; the box's weight, not an item
   // count, is its rule (Advanced → Offer).
-  if (layout === 'layout2' || layout === 'layout5') {
-    const isWeightBox = layout === 'layout5';
+  // Quick Shop (layout6) too: its collections become filter chips.
+  if (layout === 'layout2' || layout === 'layout5' || layout === 'layout6') {
+    const isWeightBox = layout === 'layout5' || layout === 'layout6';
+    const isQuickShop = layout === 'layout6';
     const tabCount = Number(config.tab_count || 1);
     const addTab = () => updateConfig('tab_count', tabCount + 1);
     const removeTab = (i) => {
@@ -173,13 +175,17 @@ function GeneralSectionComponent({
     };
     return (
       <SectionCard
-        title={isWeightBox ? 'Box Collections' : 'Collections (Switching Tabs)'}
+        title={isQuickShop ? 'Shop Collections' : isWeightBox ? 'Box Collections' : 'Collections (Switching Tabs)'}
         expanded={expanded}
         onToggle={onToggle}
         badge={`${tabCount} ${tabCount === 1 ? 'collection' : 'collections'}`}
       >
         <FormLayout>
-          {isWeightBox ? (
+          {isQuickShop ? (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Products from these collections fill the page. With more than one, each becomes a filter chip (see Filters). Tiers are under Advanced → Offer.
+            </Text>
+          ) : isWeightBox ? (
             <>
               <Text as="p" variant="bodySm" tone="subdued">
                 Products from these collections fill the box. With more than one, shoppers switch between them with pills. Weight tiers and the max box weight are under Advanced → Offer.

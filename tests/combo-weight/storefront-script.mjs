@@ -5,10 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createComboWeightCore } from '../../app/utils/combo-weight.shared.js';
 import { WEIGHT_BOX_CSS } from '../../app/utils/combo-weight-box.css.js';
+import { createQuickShopKit, QUICK_SHOP_CSS } from '../../app/utils/combo-quickshop.shared.js';
 
 const INTERPOLATIONS = {
   '${createComboWeightCore.toString()}': () => createComboWeightCore.toString(),
   '${JSON.stringify(WEIGHT_BOX_CSS)}': () => JSON.stringify(WEIGHT_BOX_CSS),
+  '${createQuickShopKit.toString()}': () => createQuickShopKit.toString(),
+  '${JSON.stringify(QUICK_SHOP_CSS)}': () => JSON.stringify(QUICK_SHOP_CSS),
 };
 
 export function loadComboPageScript() {

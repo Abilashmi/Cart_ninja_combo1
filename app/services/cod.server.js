@@ -477,7 +477,7 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
       }),
     });
     if (!box.tier || box.discountMinor <= 0) continue;
-    const title = tierLabel(box.tier, template.unit);
+    const title = tierLabel(box.tier, template.unit, template.measure);
     for (const { key, amountMinor } of box.allocations) {
       result.byLine.set(key, amountMinor);
       result.titles.set(key, title);
@@ -561,13 +561,18 @@ function boxLinesStacked(calc, lines, combo) {
   return [...expected].some(([id, amount]) => (taken.get(id) || 0) > amount + (count.get(id) || 0));
 }
 
-const CALCULATE = `#graphql
+// platformDiscounts = each Shopify discount on the draft (automatic, app /
+// Function and code ones) with its title and amount, so the popup can name
+// them. Validated against the 2026-01 schema; if the store's API version
+// rejects it, calculate() falls back to CALCULATE_BASIC for good.
+const CALCULATE_FIELDS = (withPlatform) => `#graphql
   mutation CodCalculate($input: DraftOrderInput!) {
     draftOrderCalculate(input: $input) {
       calculatedDraftOrder {
         currencyCode
         taxesIncluded
         discountCodes
+        ${withPlatform ? 'platformDiscounts { title code automaticDiscount totalAmountPriceSet { shopMoney { amount } } }' : ''}
         lineItems {
           name title variantTitle quantity sku
           variant { id }
@@ -586,9 +591,20 @@ const CALCULATE = `#graphql
       userErrors { field message }
     }
   }`;
+const CALCULATE = CALCULATE_FIELDS(true);
+const CALCULATE_BASIC = CALCULATE_FIELDS(false);
+let platformDiscountsSupported = true;
 
 async function calculate(admin, input) {
-  const data = await gql(admin, CALCULATE, { input });
+  let data;
+  try {
+    data = await gql(admin, platformDiscountsSupported ? CALCULATE : CALCULATE_BASIC, { input });
+  } catch (error) {
+    if (!platformDiscountsSupported || !(error instanceof CodError) || error.code !== 'shopify_error') throw error;
+    console.warn('[cod] draftOrderCalculate without platformDiscounts from now on');
+    platformDiscountsSupported = false;
+    data = await gql(admin, CALCULATE_BASIC, { input });
+  }
   const result = data?.draftOrderCalculate;
   if (result?.userErrors?.length) {
     console.warn('[cod] draftOrderCalculate userErrors:', JSON.stringify(result.userErrors).slice(0, 300));
@@ -604,11 +620,34 @@ function shippingLine(settings, charges, currencyCode) {
   };
 }
 
+// Codes from the shopper's cart (cart.js discount_codes / the BRIX drawer).
+const MAX_DISCOUNT_CODES = 5;
+function cleanCartCodes(list) {
+  const out = [];
+  for (const raw of Array.isArray(list) ? list : []) {
+    const c = typeof raw === 'string' ? raw.trim() : '';
+    if (/^[^\s<>"'`\\]{1,60}$/.test(c) && !out.some((x) => x.toLowerCase() === c.toLowerCase())) out.push(c);
+    if (out.length >= MAX_DISCOUNT_CODES) break;
+  }
+  return out;
+}
+
+// The cart's attributes (cart.js attributes), as order attributes. BRIX's own
+// keys and anything odd are dropped.
+function cleanAttributes(attributes) {
+  return Object.entries(attributes && typeof attributes === 'object' ? attributes : {})
+    .filter(([k, v]) => /^[\w .:-]{1,60}$/.test(k) && !/^_?brix/i.test(k) && k !== 'payment_method' && v != null && typeof v !== 'object' && String(v).length <= 250)
+    .slice(0, 20)
+    .map(([key, value]) => ({ key, value: String(value) }));
+}
+
 /**
  * Price the lines through Shopify and apply the merchant's COD rules.
  * Returns { quote, input } — `input` is the DraftOrderInput core reused by placeCodOrder.
  */
-export async function quoteCod(admin, { settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false }) {
+export async function quoteCod(admin, {
+  settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false, cartCodes = [], cartAttributes = {},
+}) {
   if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
     throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
   }
@@ -618,15 +657,23 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
   const hasBoxes = combo.boxes.length > 0;
 
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
+  // The cart's own discounts (settings.cartDiscounts, default on): Shopify's
+  // automatic discounts, including app / Function ones, and the codes already
+  // on the shopper's cart, as in Shopify checkout. Off: none of them.
+  const withCartDiscounts = settings.cartDiscounts !== false;
+  const carried = withCartDiscounts ? cleanCartCodes(cartCodes).filter((c) => !code || c.toLowerCase() !== code.toLowerCase()) : [];
+  const codes = [...(code ? [code] : []), ...carried].slice(0, MAX_DISCOUNT_CODES);
   let base = {
     lineItems: hasBoxes ? await comboPricedLineItems(admin, lines, combo) : draftLineItems(lines),
-    customAttributes: [{ ...COD_MARKER }],
+    // The cart's attributes go along (as they do into checkout): some
+    // discount Functions decide by them.
+    customAttributes: [{ ...COD_MARKER }, ...cleanAttributes(cartAttributes)],
     // Automatic order / shipping discounts and product discounts on the other
     // items apply as in checkout. Checkout never adds another product discount
     // to a box line (combinesWith.productDiscounts: false), so if Shopify does
     // that here, COD leaves automatic discounts off for this order instead.
-    acceptAutomaticDiscounts: true,
-    ...(code ? { discountCodes: [code] } : {}),
+    acceptAutomaticDiscounts: withCartDiscounts,
+    ...(codes.length ? { discountCodes: codes } : {}),
     ...(pincode ? { shippingAddress: { countryCode: 'IN', zip: String(pincode) } } : {}),
   };
 
@@ -658,9 +705,14 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
     ? Math.max(0, Math.round((itemsOriginal - comboDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
     : amountOf(calc.totalDiscountsSet);
 
-  const couponApplied = Boolean(code)
-    && (calc.discountCodes || []).some((c) => c.toLowerCase() === code.toLowerCase())
-    && otherDiscounts > 0;
+  // Which codes Shopify really used: by platformDiscounts when the API gives
+  // them, else by discountCodes plus a non-zero discount.
+  const platform = Array.isArray(calc.platformDiscounts) ? calc.platformDiscounts : null;
+  const usedCode = (c) => (platform
+    ? platform.some((d) => d.code && d.code.toLowerCase() === c.toLowerCase() && amountOf(d.totalAmountPriceSet) > 0)
+    : (calc.discountCodes || []).some((x) => x.toLowerCase() === c.toLowerCase()) && otherDiscounts > 0);
+  const couponApplied = Boolean(code) && usedCode(code);
+  const cartCodesApplied = carried.map((c) => ({ code: c, applied: usedCode(c) }));
 
   const quote = {
     currency: calc.currencyCode || currencyCode,
@@ -688,8 +740,18 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
     taxesIncluded: Boolean(calc.taxesIncluded),
     total: amountOf(calc.totalPriceSet),
     coupon: code ? { code, applied: couponApplied } : null,
+    // The cart's codes carried over (only when the merchant has cart discounts on).
+    cartCodes: cartCodesApplied,
+    // Each discount Shopify gave, by name (null when the API can't say).
+    discountList: platform
+      ? platform.map((d) => ({ title: d.title || d.code || 'Discount', code: d.code || null, automatic: Boolean(d.automaticDiscount), amount: amountOf(d.totalAmountPriceSet) }))
+        .filter((d) => d.amount > 0)
+      : null,
   };
-  if (code && !couponApplied) delete input.discountCodes;
+  // Only codes Shopify used go on the order.
+  const kept = [...(couponApplied ? [code] : []), ...cartCodesApplied.filter((c) => c.applied).map((c) => c.code)];
+  if (kept.length) input.discountCodes = kept;
+  else delete input.discountCodes;
   return { quote, input };
 }
 
@@ -771,7 +833,7 @@ async function trackPlacedOrder({ shop, settings, idemKey, order, quote, phone, 
  */
 export async function placeCodOrder(admin, {
   shop, settings, lines, coupon, address, phone, phoneVerified, surface, attributes = {}, idemKey, currencyCode,
-  track = null, clientIp: ip = null, userAgent = null, comboWeightLive = false,
+  track = null, clientIp: ip = null, userAgent = null, comboWeightLive = false, cartCodes = [], cartAttributes = {},
 }) {
   if (!/^[\w-]{8,64}$/.test(String(idemKey || ''))) throw new CodError('invalid_request', 'Refresh the page and try again.');
   const hash = phoneHash(shop, phone);
@@ -787,7 +849,7 @@ export async function placeCodOrder(admin, {
     throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429 });
   }
 
-  const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive });
+  const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive, cartCodes, cartAttributes });
 
   try {
     await php('cod_orders.php', {
@@ -817,6 +879,10 @@ export async function placeCodOrder(admin, {
       .slice(0, 10)
       .map(([key, value]) => ({ key, value: String(value) })),
   ];
+  // The cart's attributes priced with (quoteCod), unless set above.
+  for (const a of input.customAttributes || []) {
+    if (!customAttributes.some((c) => c.key === a.key)) customAttributes.push(a);
+  }
   const where = { drawer: 'cart drawer', product: 'product page', combo: 'combo page' }[surface] || surface;
   const orderInput = (withProvince) => ({
     ...input,

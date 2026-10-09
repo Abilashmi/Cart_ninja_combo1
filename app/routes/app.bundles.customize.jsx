@@ -51,9 +51,10 @@ import prisma from '../db.server';
 import { useCurrency } from '../components/CurrencyContext';
 import WeightMeter from '../components/customization/WeightMeter';
 import { usePlan } from '../components/PlanContext';
+import QuickShopPreview from '../components/customization/QuickShopPreview';
 import { ProBadge } from '../components/plan/PlanGate';
 import { WEIGHT_BOX_CSS, tierOfferText, weightBoxVars } from '../utils/combo-weight-box.css.js';
-import { WEIGHT_BOX_LAYOUT, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
+import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -1585,7 +1586,37 @@ const LAYOUT_MAP = {
   combo_main: 'layout1',
   custom_bundle_layout: 'layout1',
   combo_weight_box: WEIGHT_BOX_LAYOUT,
+  combo_quick_shop: QUICK_SHOP_LAYOUT,
 };
+
+// What a new Quick Shop starts with: priced by the number of items (the
+// merchant can switch to weight or value under Advanced → Offer), with the
+// "You unlocked …" wording of the bottom bar. Its own qs_* design settings
+// start from the kit's defaults (combo-quickshop.shared.js).
+const QUICK_SHOP_PRESET = {
+  layout: QUICK_SHOP_LAYOUT,
+  pricing_mode: 'weight',
+  has_discount_offer: false,
+  selected_discount_id: null,
+  tab_count: 1,
+  collection_title: 'Shop your box',
+  collection_description: '',
+  weight_pricing: {
+    ...defaultWeightPricing('quantity'),
+    tiers: [
+      { id: 't1', min_grams: 3, type: 'percentage', value: 5, label: '' },
+      { id: 't2', min_grams: 5, type: 'percentage', value: 10, label: '' },
+    ],
+    messages: { locked: 'Add {{remaining}} more to unlock {{tier}}', unlocked: 'You unlocked {{tier}}', over_max: 'Your box can hold up to {{max}}. Remove something to add this.' },
+  },
+};
+
+// The preset a picked layout starts from (only the box-priced templates have one).
+const presetFor = (mapped, prev) => (
+  mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET }
+    : mapped === QUICK_SHOP_LAYOUT ? { ...prev, ...QUICK_SHOP_PRESET }
+      : { ...prev, layout: mapped }
+);
 
 // What a new Weight Box starts with: priced by weight, sample tiers the
 // merchant edits under Advanced → Offer (book-box friendly defaults).
@@ -1711,6 +1742,32 @@ const TEMPLATE_CATALOGUE = [
     bestFor: 'Books, dry fruits, tea, coffee, anything sold by weight',
     differentiators: [
       'Only layout priced by weight',
+      'Discount enforced at checkout, not just shown',
+    ],
+  },
+  {
+    id: 'combo_quick_shop',
+    title: 'Quick Shop',
+    description:
+      'A quick-commerce style grid with filters and a + on every card. A progress bar and a bottom bar unlock offers by quantity, value or weight.',
+    img: '/quick-shop.svg',
+    fallbackImg: '/quick-shop.svg',
+    badge: 'Quantity · Value · Weight',
+    badgeTone: 'info',
+    blockName: 'combo_quick_shop',
+    // Pro only: the box price is applied by the BRIX checkout discount.
+    featureKey: 'combo_weight_pricing',
+    howItWorks:
+      'Shoppers filter, tap + and keep shopping. A top progress bar and a sticky bottom bar ("You unlocked 10% OFF · 5 items · ₹132 saved · Go to Cart") show what the box has earned.',
+    features: [
+      'Offers by number of items, box value or weight',
+      'Filter chips, Type / Brand / your own tag filters, Sort',
+      '5 top progress styles, 4 bottom bar styles',
+      'Same price at Shopify checkout and BRIX COD',
+    ],
+    bestFor: 'Groceries, meat & fish, FMCG, any big catalogue',
+    differentiators: [
+      'Feels like a quick-commerce app',
       'Discount enforced at checkout, not just shown',
     ],
   },
@@ -2132,6 +2189,12 @@ export default function Customize() {
     stickyCheckoutBtn: false,
     buttons: false,
     sectionSpacing: false,
+    // Quick Shop (layout6)
+    qsFilters: false,
+    qsCards: false,
+    qsProgress: false,
+    qsBar: false,
+    qsColors: false,
   });
 
   const toggleSection = (sectionKey) => {
@@ -2342,7 +2405,7 @@ export default function Customize() {
       setPickedLayout((prev) => (prev === mapped ? prev : mapped));
       setConfig((prev) => {
         if (prev.layout === mapped) return prev;
-        return mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : { ...prev, layout: mapped };
+        return presetFor(mapped, prev);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2356,7 +2419,7 @@ export default function Customize() {
       nextParams.set('layout', blockName);
       navigate(`/app/bundles/customize?${nextParams.toString()}`, { replace: true });
       setPickedLayout(mapped);
-      setConfig((prev) => (mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : { ...prev, layout: mapped }));
+      setConfig((prev) => presetFor(mapped, prev));
     },
     [navigate, searchParams]
   );
@@ -2369,8 +2432,8 @@ export default function Customize() {
       const h = config[`step_${i}_collection`];
       if (h && h !== '' && !fetchedHandlesRef.current.has(h)) handles.push(h);
     }
-    // The Weight Box shows all its collections at once ("All" pill).
-    if (config.layout === WEIGHT_BOX_LAYOUT) {
+    // The Weight Box and Quick Shop show all their collections at once ("All" pill).
+    if (config.layout === WEIGHT_BOX_LAYOUT || config.layout === QUICK_SHOP_LAYOUT) {
       for (let i = 1; i <= Number(config.tab_count || 1); i++) {
         const h = config[`col_${i}`];
         if (h && !fetchedHandlesRef.current.has(h) && !handles.includes(h)) handles.push(h);
@@ -2506,6 +2569,7 @@ export default function Customize() {
     content: 'style', productCard: 'style', previewBar: 'style',
     buttons: 'style', variants: 'style', collectionTabsStyles: 'style',
     progressBar: 'advanced', discount: 'advanced', aiSettings: 'advanced', customCss: 'advanced',
+    qsFilters: 'layout', qsCards: 'layout', qsProgress: 'style', qsBar: 'style', qsColors: 'style',
   };
 
   const handleOpenSection = useCallback((sectionKey = 'general') => {
@@ -2516,7 +2580,9 @@ export default function Customize() {
       const content = document.querySelector('.cst-sidebar-content');
       if (content) content.scrollTop = 0;
       const cards = document.querySelectorAll('.cst-section-card');
-      const orderMap = { layout: ['general','banner','products','content'], style: ['content','productCard','collectionTabsStyles','previewBar','variants','buttons'], advanced: ['progressBar','discount','aiSettings','customCss'] };
+      const orderMap = config.layout === QUICK_SHOP_LAYOUT
+        ? { layout: ['general', 'qsFilters', 'qsCards'], style: ['content', 'qsProgress', 'qsBar', 'qsColors'], advanced: ['discount', 'customCss'] }
+        : { layout: ['general','banner','products','content'], style: ['content','productCard','collectionTabsStyles','previewBar','variants','buttons'], advanced: ['progressBar','discount','aiSettings','customCss'] };
       const idx = (orderMap[category] || []).indexOf(sectionKey);
       const target = cards[Math.max(0, idx)];
       if (target) {
@@ -2526,7 +2592,7 @@ export default function Customize() {
         target.addEventListener('animationend', () => target.classList.remove('cst-flash'), { once: true });
       }
     }, 60);
-  }, [setActiveCategory, onlyOpen]);
+  }, [setActiveCategory, onlyOpen, config.layout]);
 
   const generateAiSuggestion = useCallback(
     async (requestedTarget) => {
@@ -2929,6 +2995,8 @@ export default function Customize() {
         return 'Editorial Split';
       case 'layout5':
         return 'Weight Box';
+      case 'layout6':
+        return 'Quick Shop';
       case 'layout1':
       default:
         return 'Guided Architect';
@@ -3258,11 +3326,11 @@ export default function Customize() {
         return;
       }
     }
-    if (config.layout === WEIGHT_BOX_LAYOUT
+    if ((config.layout === WEIGHT_BOX_LAYOUT || config.layout === QUICK_SHOP_LAYOUT)
       && !Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).some(Boolean)) {
       setActiveCategory('layout');
       setExpandedSections((prev) => ({ ...prev, general: true }));
-      shopify.toast.show('Choose at least one collection for the box', { isError: true });
+      shopify.toast.show(config.layout === QUICK_SHOP_LAYOUT ? 'Choose at least one collection for the page' : 'Choose at least one collection for the box', { isError: true });
       return;
     }
     if (config.layout === 'layout1') {
@@ -3654,7 +3722,7 @@ export default function Customize() {
                         <span></span>
                       </div>
                       <div className="preview-device-container preview-viewport preview-viewport--desktop">
-                        <ComboPreview
+                        <BuilderPreview
                           config={config}
                           device={previewDevice}
                           products={shopifyProducts.length > 0 ? shopifyProducts : products}
@@ -3679,7 +3747,7 @@ export default function Customize() {
                   </div>
                 ) : (
                   <div className="preview-device-container preview-viewport preview-viewport--mobile-classic">
-                    <ComboPreview
+                    <BuilderPreview
                       config={config}
                       device={previewDevice}
                       products={shopifyProducts.length > 0 ? shopifyProducts : products}
@@ -4398,6 +4466,21 @@ function InlineEdit({ value, configKey, onUpdate, style }) {
       </svg>
     </span>
   );
+}
+
+// Quick Shop has its own preview (the storefront's own renderer); every other
+// layout uses ComboPreview. A separate component per layout keeps each one's
+// hooks in a fixed order when the merchant switches templates.
+function BuilderPreview(props) {
+  if (props.config?.layout === QUICK_SHOP_LAYOUT) {
+    return (
+      <QuickShopPreview
+        config={props.config} device={props.device} products={props.products} collections={props.collections}
+        allStepProducts={props.allStepProducts} onRequestSection={props.onRequestSection}
+      />
+    );
+  }
+  return <ComboPreview {...props} />;
 }
 
 // Builder preview only: the COD button is shown but does nothing.
