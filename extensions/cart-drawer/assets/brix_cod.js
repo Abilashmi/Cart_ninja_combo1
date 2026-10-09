@@ -1695,7 +1695,9 @@
     if (cartHasCheckoutOnlyLines(cart)) reason = 'Not available with Packs or free gifts';
     else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
     else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
-    return reason ? { reason: reason, subtotal: subtotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal };
+    // total: what the cart costs after its discounts (shown in price tags).
+    var total = isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : subtotal;
+    return reason ? { reason: reason, subtotal: subtotal, total: total } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal, total: total };
   }
 
   // "Replace Checkout" hides the drawer's Checkout with a stylesheet rule, so
@@ -1732,7 +1734,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
-    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, state.subtotal), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
+    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, cartPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -1870,17 +1872,23 @@
     window.location.href = ROOT + 'checkout';
   }
 
+  // The cart's price for price tags: after its discounts when known.
+  function cartPrice(state) {
+    if (!state) return null;
+    return state.total != null ? state.total : state.subtotal != null ? state.subtotal : null;
+  }
+
   // The merchant's text on the theme drawer's own Checkout button (COD →
   // Customize → Cart drawer), with {price} = the cart total.
   function relabelCheckout(checkout, cfg, state) {
     var text = cfg && cfg.drawerCheckoutText;
     var el = text ? textTarget(checkout) : null;
     if (!el) return;
-    var price = state && state.subtotal != null ? state.subtotal : null;
+    var price = state ? cartPrice(state) : null;
     var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
     var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
-    if (next && el.textContent !== next) el.textContent = next;
+    setButtonText(el, next);
   }
 
   function paintTheme(cfg) {
@@ -2123,6 +2131,35 @@
     var section = form.closest('.shopify-section') || form.parentNode;
     return form.querySelector(BUY_NOW) || (section && section.querySelector(BUY_NOW)) || null;
   }
+  // Puts `text` on a theme button. Some themes hide the button's real text
+  // (font-size: 0) and draw their label with CSS, e.g.
+  //   #CartDrawer-Checkout::after { content: "Proceed to Checkout" }
+  // so that CSS text is replaced too. A ::before/::after with no letters
+  // (borders, icons, effects) is left alone.
+  var LABEL_PSEUDOS = ['before', 'after'];
+  function setButtonText(el, text) {
+    if (!el || !text) return;
+    if (el.textContent !== text) el.textContent = text;
+    var hosts = [el];
+    var btn = el.closest && el.closest('button, a, [role="button"], input[type="submit"]');
+    if (btn && btn !== el) hosts.push(btn);
+    hosts.forEach(function (host) {
+      LABEL_PSEUDOS.forEach(function (pseudo) {
+        var attr = 'data-brix-label-' + pseudo;
+        var content = '';
+        try { content = getComputedStyle(host, '::' + pseudo).content || ''; } catch (e) { return; }
+        if (!host.hasAttribute(attr) && !/^["'].*[A-Za-z0-9].*["']$/.test(content)) return;
+        if (host.getAttribute(attr) !== text) host.setAttribute(attr, text);
+        if (!document.getElementById('brix-cod-label-style')) {
+          var style = document.createElement('style');
+          style.id = 'brix-cod-label-style';
+          style.textContent = LABEL_PSEUDOS.map(function (p) { return '[data-brix-label-' + p + ']::' + p + '{content:attr(data-brix-label-' + p + ') !important}'; }).join('');
+          document.head.appendChild(style);
+        }
+      });
+    });
+  }
+
   // Where a button's text lives: Shopify's unbranded Buy it now, else the
   // element itself, else its innermost element with text (keeps icons).
   function textTarget(el) {
@@ -2150,7 +2187,7 @@
     var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
     var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
-    if (next && btn.textContent !== next) btn.textContent = next;
+    setButtonText(btn, next);
   }
 
   var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };

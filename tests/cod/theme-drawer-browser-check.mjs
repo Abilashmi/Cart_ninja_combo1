@@ -61,6 +61,10 @@ const THEMES = {
   // Prestige/Focal-style: Checkout shares a flex row with "View cart".
   prestige: `<div id="mini-cart" class="mini-cart drawer"><form id="mini-cart-form" action="/cart" method="post"></form>
     <div class="mini-cart__footer"><div class="mini-cart__actions"><a href="/cart" class="button">View cart</a><button type="submit" form="mini-cart-form" name="checkout" id="pr-checkout">Checkout</button></div></div></div>`,
+  // Dawn markup, but the theme draws Checkout's label with CSS (like the
+  // House of KO theme): the real text is font-size 0, ::after holds the words.
+  csslabel: `<style>#CartDrawer-Checkout{font-size:0;position:relative}#CartDrawer-Checkout::after{content:"Proceed to Checkout";font-size:16px}
+    .shop-pay::before{content:'';position:absolute;inset:0}</style><cart-drawer class="drawer"><div id="CartDrawer" class="cart-drawer">${dawnInner()}</div></cart-drawer>`,
   // A theme whose Checkout is a link.
   link: `<aside class="side-cart drawer"><div class="side-cart__foot"><a href="/checkout" id="link-checkout" class="button">Checkout</a></div></aside>`,
   // A theme BRIX doesn't recognise; the merchant gave the selector.
@@ -95,7 +99,7 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, viewport = {
     if (url.href === 'https://cdn.test/cart_drawer_inline.js') return route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: DRAWER_JS });
     if (url.origin === 'https://shop.test') {
       if (url.pathname === '/' && req.method() === 'GET') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: themePage(theme) });
-      if (url.pathname === '/cart.js') return json({ items: state.cart, item_count: state.cart.length, total_price: state.cart.reduce((n, l) => n + l.final_line_price, 0), currency: 'INR' });
+      if (url.pathname === '/cart.js') return json({ items: state.cart, item_count: state.cart.length, total_price: state.cart.reduce((n, l) => n + l.final_line_price, 0) - (state.cartDiscount || 0), currency: 'INR' });
       const m = /^\/products\/([^/]+)\.js$/.exec(url.pathname);
       if (m) { net.productReads.push(m[1]); return json({ handle: m[1], tags: TAGS[m[1]] || [] }); }
       if (url.pathname === '/cart' && req.method() === 'POST') { net.checkoutPosts.push(req.postData() || ''); return route.fulfill({ contentType: 'text/html', body: '<p>checkout</p>' }); }
@@ -411,6 +415,24 @@ const done = async (page, name) => {
   await settle(page, 1200);
   check('Checkout text: kept after the theme redraws its drawer', await page.evaluate(() => document.querySelector('#CartDrawer-Checkout').textContent) === 'Pay online ₹1,299');
   await done(page, '15-checkout-text');
+}
+
+/* 16. A theme that draws Checkout's label with CSS ::after, and an order discount */
+{
+  const page = await open('csslabel', { cfg: { drawerCheckoutText: 'Prepaid {price}', drawerPlacement: 'above' } });
+  page.state.cartDiscount = 19000; // 15% off storewide-style order discount: ₹1,299 → ₹1,109
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('cart:updated')));
+  await waitButton(page);
+  await settle(page, 1500);
+  const seen = await page.evaluate(() => {
+    const b = document.querySelector('#CartDrawer-Checkout');
+    return { text: b.textContent, after: getComputedStyle(b, '::after').content, shopPay: getComputedStyle(document.querySelector('.shop-pay'), '::before').content };
+  });
+  check('CSS label theme: what shoppers see (::after) is "Prepaid ₹…", not "Proceed to Checkout"', /^"Prepaid ₹[\d,]+"$/.test(seen.after) && seen.text.startsWith('Prepaid'), JSON.stringify(seen));
+  check('CSS label theme: an empty ::before / ::after (borders, effects) is left alone', seen.shopPay === '""' || seen.shopPay === "''", seen.shopPay);
+  const cod = (await look(page, DAWN_CO)).text;
+  check('price tags use the cart total after its discounts', seen.after === '"Prepaid ₹1,109"' || /1,109/.test(seen.after), `${seen.after} | ${cod}`);
+  await done(page, '16-css-label');
 }
 
 /* 14. Price tags in the button texts, and the combo page position */
