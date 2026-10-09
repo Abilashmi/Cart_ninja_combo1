@@ -242,7 +242,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
     // (combo-page.js draws it the same way, from BrixCod.comboButton()).
     const comboLook = codButtonLook(settings, 'combo');
     const codHidden = !settings.enabled || surfaceOff;
-    // Where COD sits next to the combo's Checkout (COD → Position in combo page).
+    // Where COD sits next to the combo's Checkout (COD → Customize → Combo page).
     const comboPlace = settings.comboPlacement || 'below';
     const comboCheckout = codHidden || comboPlace !== 'replace' ? <div key="co" className="cod-scr-combo-co">Checkout</div> : null;
     const comboCod = codHidden

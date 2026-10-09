@@ -6736,7 +6736,7 @@ function ComboPreview({
           <div className="bxw-total"><span>Total</span><span>{currencySymbol}{finalPrice.toFixed(2)}</span></div>
         </div>
         {(() => {
-          // COD where the merchant put it (COD → Customize → Position in combo page).
+          // COD where the merchant put it (COD → Customize → Combo page).
           const codShown = codEnabled && config.show_cod_button !== false;
           const checkoutBtn = !(codShown && codPlacement === 'replace') && (
             <button

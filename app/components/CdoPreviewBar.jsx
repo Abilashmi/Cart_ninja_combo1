@@ -398,7 +398,7 @@ export const CdoPreviewBar = ({
                 )}
                 {(() => {
                   // COD goes where the merchant put it (COD → Customize →
-                  // Position in combo page), as combo-page.js draws it.
+                  // Combo page), as combo-page.js draws it.
                   const codShown = Boolean(cod) && config.show_cod_button !== false;
                   const placement = codShown ? cod.placement || 'below' : 'below';
                   const codText = cod

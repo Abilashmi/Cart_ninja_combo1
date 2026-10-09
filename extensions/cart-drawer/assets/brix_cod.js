@@ -1871,7 +1871,7 @@
   }
 
   // The merchant's text on the theme drawer's own Checkout button (COD →
-  // Customize → Position in cart drawer), with {price} = the cart total.
+  // Customize → Cart drawer), with {price} = the cart total.
   function relabelCheckout(checkout, cfg, state) {
     var text = cfg && cfg.drawerCheckoutText;
     var el = text ? textTarget(checkout) : null;
@@ -2109,7 +2109,7 @@
   }
 
   // The theme's Buy it now: the merchant's selector (COD → Customize →
-  // Position in product page) when set, else Shopify's dynamic checkout
+  // Product page) when set, else Shopify's dynamic checkout
   // button in the product form, else anywhere in the product's section.
   function customBuyNow(cfg) {
     var sel = cfg && cfg.productButton && cfg.productButton.buyNowSelector;
@@ -2137,8 +2137,8 @@
     return null;
   }
 
-  // The merchant's text on Shopify's Buy it now (COD → Customize → Position
-  // in product page), with price tags for the chosen variant and quantity.
+  // The merchant's text on Shopify's Buy it now (COD → Customize →
+  // Product page), with price tags for the chosen variant and quantity.
   // Only while Buy it now shows (COD doesn't replace it). No prepaid offer
   // here (that's payment options), so {prepaid_price} is the price.
   function relabelBuyNow(cfg, form, info) {

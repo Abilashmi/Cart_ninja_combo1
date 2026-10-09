@@ -155,12 +155,12 @@ const layout = await page.evaluate(() => {
   };
 });
 check('customizer: titled "Customize COD" with an Active / Inactive pill, like the Cart Editor', layout.title === 'Customize COD' && layout.pill === (scenario === 'off' ? 'Inactive' : 'Active'), `${layout.title} · ${layout.pill}`);
-check('customizer: section groups Get started / Button positions / Buttons / Product page payments / Charges & rules / Checkout popup / Advanced',
-  layout.groups.join('|') === 'Get started|Button positions|Buttons|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
-check('customizer: opens on Position in cart drawer', layout.openRow === 'Position in cart drawer');
+check('customizer: section groups Get started / COD button / Product page payments / Charges & rules / Checkout popup / Advanced',
+  layout.groups.join('|') === 'Get started|COD button|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
+check('customizer: opens on Position in cart drawer', layout.openRow === 'Cart drawer');
 {
   const rows = await page.evaluate(() => [...document.querySelectorAll('.bcz-row-l')].map((r) => r.textContent));
-  check('customizer: one position section per place', ['Position in cart drawer', 'Position in product page', 'Position in combo page'].every((r) => rows.includes(r)), rows.join('|'));
+  check('customizer: one section per place, nothing else for the button', ['Cart drawer', 'Product page', 'Combo page'].every((r) => rows.includes(r)) && !rows.some((r) => /button$|Theme compatibility|^Position/.test(r)), rows.join('|'));
 }
 {
   const bars = await page.evaluate(() => ({
@@ -184,7 +184,7 @@ check(`layout at ${width}px: no sideways scroll`, !layout.overflow);
 
 if (scenario === 'live') {
   // Position
-  check('Position: badge shows the cart drawer is On', await badge('Position in cart drawer') === 'On');
+  check('Position: badge shows the cart drawer is On', await badge('Cart drawer') === 'On');
   check('Position: three placement cards; preview Above Checkout by default', await page.locator('.bcod-place-o .bcod-mini').count() === 3 && JSON.stringify((await pv()).order) === '["cod","checkout"]');
   await page.getByRole('radio', { name: /Replace Checkout/ }).click();
   check('Replace Checkout: preview shows only COD', JSON.stringify((await pv()).order) === '["cod"]');
@@ -193,7 +193,7 @@ if (scenario === 'live') {
   check('Below Checkout: preview shows Checkout, then COD', JSON.stringify((await pv()).order) === '["checkout","cod"]');
 
   // Cart drawer button
-  await openSec('Cart drawer button');
+  await openSec('Cart drawer');
   check('Opening a section closes the other (one at a time)', await page.locator('.bcz-row.is-open').count() === 1);
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash on delivery');
   await page.getByRole('button', { name: 'Outline', exact: true }).click();
@@ -245,7 +245,7 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Desktop' }).click();
 
   // Product page
-  await openSec('Position in product page');
+  await openSec('Product page');
   check('Position in product page: show and Replace Buy it now are here, the text is not', await page.getByLabel('Replace the Buy it now button').count() === 1 && await page.getByLabel('Button text', { exact: true }).count() === 0);
   check('Product page: preview switches to the product page', await page.locator('.bcz-screen .cod-scr-atc').count() === 1);
   await shot('product');
@@ -255,8 +255,10 @@ if (scenario === 'live') {
     const b = document.querySelector('.bcz-screen .cod-scr-buys .cod-pv-btn');
     return b ? { bg: getComputedStyle(b).backgroundColor, size: getComputedStyle(b).fontSize, text: b.textContent } : null;
   });
-  await openSec('Product page button');
-  check('Product page button: text, design and size and spacing together', await page.getByLabel('Button text', { exact: true }).count() === 1 && await page.getByText('Size and spacing').count() === 1);
+  await openSec('Product page');
+  check('Product page: position, COD text, Buy it now text and class, design and size all in one section',
+    await page.getByLabel('Show COD on product pages').count() === 1 && await page.getByLabel('COD button text').count() === 1
+    && await page.getByLabel('Buy it now class (optional)').count() === 1 && await page.getByText('Size and spacing').count() === 1);
   check('Product page button: follows the cart drawer button by default', await page.getByLabel('Same design as the cart drawer button').isChecked() && (await prodBtn())?.bg === 'rgb(29, 78, 216)');
   await page.getByLabel('Same design as the cart drawer button').uncheck();
   await page.getByRole('textbox', { name: /^Button colour/ }).fill('#be185d');
@@ -264,7 +266,7 @@ if (scenario === 'live') {
   await page.waitForTimeout(400);
   const pb = await prodBtn();
   check('Product page button: its own colour and font size', pb?.bg === 'rgb(190, 24, 93)' && pb.size === `${Math.round(19 * 0.8 * 10) / 10}px`, JSON.stringify(pb));
-  await openSec('Cart drawer button');
+  await openSec('Cart drawer');
   check('…and the cart drawer button keeps its own colour', (await pv()).codBg === 'rgb(29, 78, 216)');
   const comboBtn = () => page.evaluate(() => {
     const b = document.querySelector('.bcz-screen .cod-scr-combo .cod-pv-btn');
@@ -273,7 +275,7 @@ if (scenario === 'live') {
   const comboOrder = () => page.evaluate(() => [...document.querySelectorAll('.bcz-screen .cod-scr-combo-btns > *')]
     .map((b) => (b.classList.contains('cod-scr-combo-co') ? 'checkout' : b.classList.contains('cod-pv-btn') ? 'cod' : 'hidden')));
   // This store has COD off on combo pages: the preview says so, then turn it on.
-  await openSec('Position in combo page');
+  await openSec('Combo page');
   check('Combo pages off: the combo preview says the button is hidden', (await page.locator('.bcz-screen .cod-scr-combo .cod-pv-hidden').textContent()).includes('combo pages are turned off'));
   await page.getByLabel('Show COD on combo pages').check();
   await page.waitForTimeout(300);
@@ -286,7 +288,7 @@ if (scenario === 'live') {
   check('Position in combo page: Replace Checkout shows only COD', JSON.stringify(await comboOrder()) === '["cod"]', JSON.stringify(await comboOrder()));
   await shot('combo-position');
   await page.getByRole('radio', { name: /Above Checkout/ }).click();
-  await openSec('Combo page button');
+  await openSec('Combo page');
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash for this combo');
   await page.waitForTimeout(300);
   check('Combo pages: its own button text', (await comboBtn())?.text.includes('Pay cash for this combo'));
@@ -301,21 +303,21 @@ if (scenario === 'live') {
   await shot('combo');
 
   // Turning COD off in the cart drawer leaves the other places on
-  await openSec('Position in cart drawer');
+  await openSec('Cart drawer');
   await page.getByLabel('Show COD in the cart drawer').uncheck();
   await page.waitForTimeout(300);
-  await openSec('Position in combo page');
+  await openSec('Combo page');
   check('Drawer off: combo page still shows its COD button', (await comboBtn()) !== null);
-  await openSec('Position in product page');
+  await openSec('Product page');
   check('Drawer off: product page still shows its COD button', (await prodBtn()) !== null);
   await page.getByRole('tab', { name: 'COD checkout' }).click();
   await page.waitForTimeout(1400);
   check('Drawer off: the COD checkout popup preview is not "unavailable"', (await page.locator('.bcz-screen .cod-pv-err').count()) === 0 && (await page.locator('.bcz-screen .cod-pv-place').count()) === 1);
-  await openSec('Position in cart drawer');
+  await openSec('Cart drawer');
   await page.getByLabel('Show COD in the cart drawer').check();
 
   // Button text inside each Position section, and Shopify's Buy it now text
-  await openSec('Position in cart drawer');
+  await openSec('Cart drawer');
   check('Position in cart drawer: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash on delivery');
   await page.getByLabel('Checkout button text').fill('Pay online {price}');
   await page.waitForTimeout(200);
@@ -323,15 +325,15 @@ if (scenario === 'live') {
     const co = (await page.locator('.bcz-screen .bcod-dr-checkout').textContent()).trim();
     check('Checkout button text: the drawer preview\'s Checkout says "Pay online ₹…"', /^Pay online ₹[\d,]+$/.test(co), co);
   }
-  await openSec('Position in combo page');
+  await openSec('Combo page');
   check('Position in combo page: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash for this combo');
-  await openSec('Position in product page');
+  await openSec('Product page');
   check('Position in product page: COD button text here too', await page.getByLabel('COD button text').inputValue() === 'Buy with Cash on Delivery');
   check('Buy it now text: explains it is hidden while COD replaces it', (await page.locator('.bcz-row.is-open + * , .bcz-sec').filter({ hasText: 'Buy it now is hidden while COD replaces it' }).count()) > 0 || await page.getByText('Buy it now is hidden while COD replaces it').count() === 1);
-  await page.getByLabel('Buy it now selector (optional)').fill('<b>');
+  await page.getByLabel('Buy it now class (optional)').fill('<b>');
   await page.waitForTimeout(150);
   check('Buy it now selector: a non-selector is flagged', await page.getByText("doesn't look like a CSS selector").count() === 1);
-  await page.getByLabel('Buy it now selector (optional)').fill('.hk-buy-now');
+  await page.getByLabel('Buy it now class (optional)').fill('.hk-buy-now');
   await page.getByLabel('Replace the Buy it now button').uncheck();
   await page.getByLabel('Buy it now text').fill('Buy it now {price}');
   await page.waitForTimeout(300);
@@ -349,7 +351,7 @@ if (scenario === 'live') {
   check('Payment options: on → preview shows the Pay Online and Cash on Delivery cards, Pay Online selected',
     await page.locator('.bcz-screen .bxpay-card').count() === 2 && await page.locator('.bcz-screen .bxpay-card[data-pv-selected], .bcz-screen .bxpay-card[aria-checked="true"]').first().textContent().then((t) => t.includes('Pay Online')));
   check('Payment options: COD card shows the existing COD fee', (await page.locator('.bcz-screen .bxpay-card').nth(1).textContent()).includes('49'));
-  await openSec('Position in product page');
+  await openSec('Product page');
   check('Payment options on: Position in product page edits the Pay Online / Buy it now text', await page.getByLabel('Buy it now text').inputValue() === 'Buy it now' && await page.getByLabel("Use this text on Shopify's Buy it now button").isChecked());
   await openSec('Prepaid discount');
   await page.getByLabel('Give a prepaid discount').check();
