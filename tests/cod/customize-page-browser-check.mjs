@@ -317,11 +317,21 @@ if (scenario === 'live') {
   // Button text inside each Position section, and Shopify's Buy it now text
   await openSec('Position in cart drawer');
   check('Position in cart drawer: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash on delivery');
+  await page.getByLabel('Checkout button text').fill('Pay online {price}');
+  await page.waitForTimeout(200);
+  {
+    const co = (await page.locator('.bcz-screen .bcod-dr-checkout').textContent()).trim();
+    check('Checkout button text: the drawer preview\'s Checkout says "Pay online ₹…"', /^Pay online ₹[\d,]+$/.test(co), co);
+  }
   await openSec('Position in combo page');
   check('Position in combo page: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash for this combo');
   await openSec('Position in product page');
   check('Position in product page: COD button text here too', await page.getByLabel('COD button text').inputValue() === 'Buy with Cash on Delivery');
   check('Buy it now text: explains it is hidden while COD replaces it', (await page.locator('.bcz-row.is-open + * , .bcz-sec').filter({ hasText: 'Buy it now is hidden while COD replaces it' }).count()) > 0 || await page.getByText('Buy it now is hidden while COD replaces it').count() === 1);
+  await page.getByLabel('Buy it now selector (optional)').fill('<b>');
+  await page.waitForTimeout(150);
+  check('Buy it now selector: a non-selector is flagged', await page.getByText("doesn't look like a CSS selector").count() === 1);
+  await page.getByLabel('Buy it now selector (optional)').fill('.hk-buy-now');
   await page.getByLabel('Replace the Buy it now button').uncheck();
   await page.getByLabel('Buy it now text').fill('Buy it now {price}');
   await page.waitForTimeout(300);
@@ -496,7 +506,8 @@ if (scenario === 'live') {
   check('Save: the MSG91 keys go as write-only secrets, not in the settings',
     submitted.secrets?.msg91AuthKey === 'authKEY12345' && submitted.secrets?.msg91TemplateId === 'tmpl6789' && !JSON.stringify(saved).includes('authKEY'), JSON.stringify(submitted.secrets));
   check('Save: Buy it now text, Replace off and the Terms link are sent',
-    saved.productButton?.buyNowText === 'Buy it now {price}' && saved.productButton?.replaceBuyNow === false && saved.sheet?.termsUrl === '/pages/terms', JSON.stringify({ pb: saved.productButton, terms: saved.sheet?.termsUrl }));
+    saved.productButton?.buyNowText === 'Buy it now {price}' && saved.productButton?.replaceBuyNow === false && saved.sheet?.termsUrl === '/pages/terms'
+    && saved.productButton?.buyNowSelector === '.hk-buy-now' && saved.drawerCheckoutText === 'Pay online {price}', JSON.stringify({ pb: saved.productButton, terms: saved.sheet?.termsUrl }));
   check('Save: every change is sent',
     saved.enabled === true && saved.drawerPlacement === 'below' && saved.comboPlacement === 'above' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'
     && saved.buttons?.drawerText === 'Pay cash on delivery' && saved.codFeeEnabled === true && saved.codFee === 40 && saved.codFeeLabel === 'Handling fee'

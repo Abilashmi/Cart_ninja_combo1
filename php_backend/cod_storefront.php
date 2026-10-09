@@ -92,6 +92,8 @@ function cods_product_button($pb) {
         'replaceBuyNow' => ($q['replaceBuyNow'] ?? true) !== false,
         // Text for Shopify's Buy it now while it shows; may hold price tags. '' = Shopify's own.
         'buyNowText' => cods_text($q['buyNowText'] ?? '', '', 60),
+        // The theme's Buy it now, when BRIX can't find it by itself. '' = automatic.
+        'buyNowSelector' => cods_selector($q['buyNowSelector'] ?? ''),
         'marginTop' => $size('marginTop', 10, 0, 60),
         'marginBottom' => $size('marginBottom', 0, 0, 60),
         'paddingY' => $size('paddingY', 14, 4, 32),
@@ -332,6 +334,8 @@ if ($action === 'config') {
         'drawerPlacement' => cods_enum($s['drawerPlacement'] ?? '', ['replace', 'above', 'below'], 'above'),
         'comboPlacement' => cods_enum($s['comboPlacement'] ?? '', ['replace', 'above', 'below'], 'below'),
         'drawerSelector' => cods_selector($s['drawerSelector'] ?? ''),
+        // Text for the theme drawer's Checkout button; may hold price tags. '' = the theme's.
+        'drawerCheckoutText' => cods_text($s['drawerCheckoutText'] ?? '', '', 60),
         // The fee actually charged (0 while the fee switch is off).
         'codFee' => $feeOn ? cods_num($s['codFee'] ?? 0) : 0,
         'showCodFee' => ($s['showCodFee'] ?? true) !== false,

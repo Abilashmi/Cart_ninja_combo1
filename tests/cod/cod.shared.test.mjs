@@ -86,7 +86,7 @@ test('product page button: replace Buy it now by default, sizes clamped, partial
   assert.deepEqual(sanitizeCodSettings({}).productButton, DEFAULT_COD_SETTINGS.productButton);
   assert.equal(DEFAULT_COD_SETTINGS.productButton.replaceBuyNow, true);
   const s = sanitizeCodSettings({ productButton: { replaceBuyNow: false, marginTop: 999, paddingY: -3, paddingX: '20', radius: 'x', bogus: 1 } });
-  assert.deepEqual(s.productButton, { replaceBuyNow: false, buyNowText: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
+  assert.deepEqual(s.productButton, { replaceBuyNow: false, buyNowText: '', buyNowSelector: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
   const next = sanitizeCodSettings({ productButton: { radius: 0 } }, s);
   assert.deepEqual(next.productButton, { ...s.productButton, radius: 0 });
 });

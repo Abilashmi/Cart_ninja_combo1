@@ -131,7 +131,7 @@ function ProductButtonSizes({ form, set, setForm }) {
         <InlineStack align="space-between" blockAlign="center">
           <Text as="h3" variant="headingMd">Size and spacing</Text>
           {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
-            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow, buyNowText: f.pbBuyNowText }) }))}>Reset</Button>
+            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow, buyNowText: f.pbBuyNowText, buyNowSelector: f.pbBuyNowSelector }) }))}>Reset</Button>
           )}
         </InlineStack>
         {PB_SIZES.map(({ key, field, label }) => {
@@ -224,7 +224,7 @@ const GROUPS = [
     title: 'Button positions',
     items: [
       { id: 'position', label: 'Position in cart drawer', icon: CartIcon, preview: 'drawer', fields: ['drawerText'], toggle: 'drawer' },
-      { id: 'product', label: 'Position in product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton'], toggle: 'product' },
+      { id: 'product', label: 'Position in product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton', 'pbBuyNowSelector'], toggle: 'product' },
       { id: 'combo', label: 'Position in combo page', icon: CollectionIcon, preview: 'combo', fields: ['comboText'], toggle: 'combo' },
     ],
   },
@@ -447,6 +447,17 @@ export default function CodCustomizePage() {
                 <TextField label="Button text" value={form.drawerText} onChange={set('drawerText')} error={errors.drawerText} maxLength={60} autoComplete="off" helpText={priceTagHelp(form.drawerText, 'cart total')} />
               )}
               {form.drawer && <PlacementPicker value={form.drawerPlacement} onChange={set('drawerPlacement')} buttons={preview.buttons} />}
+              {form.drawer && form.drawerPlacement !== 'replace' && (
+                <TextField
+                  label="Checkout button text"
+                  value={form.drawerCheckoutText}
+                  onChange={set('drawerCheckoutText')}
+                  maxLength={60}
+                  placeholder="Check out"
+                  autoComplete="off"
+                  helpText={'Your theme cart drawer\'s own Checkout button (it still opens Shopify checkout). Leave empty to keep the theme\'s text. Prices: {price} = cart total. The BRIX Cart Drawer\'s Checkout text is in Cart Editor → Checkout button.'}
+                />
+              )}
               {form.drawer && form.drawerPlacement === 'replace' && (
                 <Text as="p" variant="bodySm" tone="subdued">Checkout is only hidden while COD can be used. For a cart that can&apos;t use COD, your Checkout button stays.</Text>
               )}
@@ -564,7 +575,17 @@ export default function CodCustomizePage() {
           {form.product && (
             <Card>
               <FormLayout>
-                <Text as="h3" variant="headingMd">Buy it now button text</Text>
+                <Text as="h3" variant="headingMd">Buy it now button</Text>
+                <TextField
+                  label="Buy it now selector (optional)"
+                  value={form.pbBuyNowSelector}
+                  onChange={set('pbBuyNowSelector')}
+                  error={errors.pbBuyNowSelector}
+                  placeholder=".product-form__buy-now"
+                  monospaced
+                  autoComplete="off"
+                  helpText="A class or CSS selector for your theme's Buy it now button. Only needed when its text doesn't change (or it isn't hidden by Replace) on your store. Leave empty to find it automatically."
+                />
                 {form.pp.enabled ? (
                   <>
                     <TextField

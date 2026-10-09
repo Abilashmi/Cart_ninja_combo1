@@ -49,7 +49,7 @@ const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-
 // A Dawn-like product page. The theme's own JS sets the hidden variant id
 // WITHOUT firing an event and redraws the price (like Dawn), and its quantity
 // buttons fire `change`.
-function productPage({ buyNow = true, block = false, pageType = 'product' } = {}) {
+function productPage({ buyNow = true, block = false, pageType = 'product', custom = false } = {}) {
   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
   <style>body{font-family:Arial,sans-serif;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}
   .product{display:grid;grid-template-columns:1fr 1fr;gap:32px}@media (max-width:749px){.product{grid-template-columns:1fr}}
@@ -66,6 +66,7 @@ function productPage({ buyNow = true, block = false, pageType = 'product' } = {}
       <form action="/cart/add" id="product-form-main"><input type="hidden" name="id" value="21">
         <div class="product-form__buttons"><button type="submit" name="add">Add to cart</button>${buyNow ? BUY_NOW_HTML : ''}</div>
       </form>
+      ${custom ? '<div class="hk-actions"><button type="button" class="hk-buy-now"><svg width="10" height="10"></svg><span class="hk-label">Buy it now</span></button></div>' : ''}
     </div>
   </div></section></main>
   <script>
@@ -92,7 +93,7 @@ const handler = async (route) => {
     return json({ tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/')) {
-    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product' }) });
+    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom') }) });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/cart/')) {
     navigations.push(url.pathname);
@@ -453,6 +454,31 @@ await page.selectOption('#opt', '22');
 await settle(page, 1000);
 s = await state(page);
 check('Buy it now text: follows the variant (₹1,500)', s.nativeText === 'Buy it now ₹1,500', s.nativeText);
+await page.close();
+
+// A theme with its own Buy it now button outside the form: found by the merchant's selector.
+const customBtn = (pg) => pg.evaluate(() => { const b = document.querySelector('.hk-buy-now'); return { text: b.textContent.trim(), icon: Boolean(b.querySelector('svg')), shown: getComputedStyle(b).display !== 'none' }; });
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Buy it now {price}' }, productPayment: null };
+page = await openPage('?custom=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+check('custom theme Buy it now, no selector: not found, left as it is', (await customBtn(page)).text === 'Buy it now');
+await page.close();
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Buy it now {price}', buyNowSelector: '.hk-buy-now' }, productPayment: null };
+page = await openPage('?custom=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+let cb = await customBtn(page);
+check('custom theme Buy it now + selector: text "Buy it now ₹1,100", icon kept', cb.text === 'Buy it now ₹1,100' && cb.icon && cb.shown, JSON.stringify(cb));
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+check('custom theme Buy it now + selector: follows the variant', (await customBtn(page)).text === 'Buy it now ₹1,500');
+await page.close();
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: true, buyNowSelector: '.hk-buy-now' }, productPayment: null };
+page = await openPage('?custom=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 800);
+check('custom theme Buy it now + selector + Replace: hidden, COD in its place', (await customBtn(page)).shown === false);
 await page.close();
 
 // Replace on: Buy it now is hidden, its text is left alone.

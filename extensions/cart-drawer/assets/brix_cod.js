@@ -1870,11 +1870,26 @@
     window.location.href = ROOT + 'checkout';
   }
 
+  // The merchant's text on the theme drawer's own Checkout button (COD →
+  // Customize → Position in cart drawer), with {price} = the cart total.
+  function relabelCheckout(checkout, cfg, state) {
+    var text = cfg && cfg.drawerCheckoutText;
+    var el = text ? textTarget(checkout) : null;
+    if (!el) return;
+    var price = state && state.subtotal != null ? state.subtotal : null;
+    var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
+    if (next && el.textContent !== next) el.textContent = next;
+  }
+
   function paintTheme(cfg) {
     var fmt = moneyFormatter(cfg.currency);
     themeMounts.forEach(function (m) {
       if (!m.checkout.isConnected) return;
-      paintDrawerSlot(m.slot, cfg, drawerState(cfg, themeCart, themeExcluded, fmt), m, function () {
+      var state = drawerState(cfg, themeCart, themeExcluded, fmt);
+      relabelCheckout(m.checkout, cfg, state);
+      paintDrawerSlot(m.slot, cfg, state, m, function () {
         open({
           surface: 'drawer',
           useCart: true,
@@ -2093,6 +2108,35 @@
     return b;
   }
 
+  // The theme's Buy it now: the merchant's selector (COD → Customize →
+  // Position in product page) when set, else Shopify's dynamic checkout
+  // button in the product form, else anywhere in the product's section.
+  function customBuyNow(cfg) {
+    var sel = cfg && cfg.productButton && cfg.productButton.buyNowSelector;
+    if (!sel) return null;
+    try { return document.querySelector(sel); } catch (e) { return null; }
+  }
+  function findBuyNow(form, cfg) {
+    var custom = customBuyNow(cfg);
+    if (custom) return custom;
+    if (!form) return null;
+    var section = form.closest('.shopify-section') || form.parentNode;
+    return form.querySelector(BUY_NOW) || (section && section.querySelector(BUY_NOW)) || null;
+  }
+  // Where a button's text lives: Shopify's unbranded Buy it now, else the
+  // element itself, else its innermost element with text (keeps icons).
+  function textTarget(el) {
+    if (!el) return null;
+    var shop = buyNowButton(el);
+    if (shop) return shop;
+    if (!el.children.length) return el;
+    var all = el.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      if (!all[i].children.length && /\S/.test(all[i].textContent) && !/^(svg|path|style|script)$/i.test(all[i].tagName)) return all[i];
+    }
+    return null;
+  }
+
   // The merchant's text on Shopify's Buy it now (COD → Customize → Position
   // in product page), with price tags for the chosen variant and quantity.
   // Only while Buy it now shows (COD doesn't replace it). No prepaid offer
@@ -2100,7 +2144,7 @@
   function relabelBuyNow(cfg, form, info) {
     var text = cfg && cfg.productButton && cfg.productButton.buyNowText;
     if (!text || !form) return;
-    var btn = buyNowButton(form.querySelector(BUY_NOW));
+    var btn = textTarget(findBuyNow(form, cfg));
     if (!btn) return;
     var price = productPrice(form, info);
     var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
@@ -2126,7 +2170,8 @@
     if (m && m.slot.getAttribute('data-brix-cod-slot') === 'auto' && m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
     var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, cfg.productButton || {});
     var addBtn = submitButtonFor(form);
-    var buyNow = look.replaceBuyNow && !excluded ? form.querySelector(BUY_NOW) : null;
+    var buyNow = look.replaceBuyNow && !excluded ? findBuyNow(form, cfg) : null;
+    if (buyNow && !form.contains(buyNow) && !customBuyNow(cfg)) buyNow = null;
     var slot = document.querySelector('[data-brix-cod-slot]:not([data-brix-cod-slot="auto"])');
     if (!slot) {
       slot = document.createElement('div');
@@ -2138,7 +2183,12 @@
       else if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
       else form.appendChild(slot);
     }
-    if (look.replaceBuyNow && !excluded) hideBuyNow(form.closest('.shopify-section') || form);
+    if (look.replaceBuyNow && !excluded) {
+      hideBuyNow(form.closest('.shopify-section') || form);
+      // A Buy it now found by the merchant's selector is hidden directly.
+      var custom = customBuyNow(cfg);
+      if (custom) custom.style.setProperty('display', 'none', 'important');
+    }
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
     var fmt = moneyFormatter(cfg.currency);
@@ -2333,6 +2383,8 @@
     }
 
     function buyNowHost(form) {
+      var custom = customBuyNow(st && st.cfg);
+      if (custom) return custom;
       var scope = form.closest('.shopify-section') || form;
       return form.querySelector(BUY_NOW) || scope.querySelector('.product-form__buttons ' + BUY_NOW.split(',')[0]) || null;
     }
@@ -2578,7 +2630,7 @@
         if (hide) scope.setAttribute('data-brix-pay-cod', ''); else scope.removeAttribute('data-brix-pay-cod');
       }
       st.scope = scope;
-      var btn = nativeButton(st.buyNow);
+      var btn = customBuyNow(st.cfg) ? textTarget(st.buyNow) : nativeButton(st.buyNow);
       if (!btn) return;
       if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
       var original = btn.getAttribute('data-brix-pay-orig');

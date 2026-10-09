@@ -35,6 +35,7 @@ export function productButtonForm(pb) {
   return {
     pbReplaceBuyNow: b.replaceBuyNow,
     pbBuyNowText: b.buyNowText || '',
+    pbBuyNowSelector: b.buyNowSelector || '',
     pbMarginTop: b.marginTop,
     pbMarginBottom: b.marginBottom,
     pbPaddingY: b.paddingY,
@@ -105,6 +106,7 @@ export function toForm(s) {
     drawerPlacement: s.drawerPlacement,
     comboPlacement: s.comboPlacement || 'below',
     drawerSelector: s.drawerSelector || '',
+    drawerCheckoutText: s.drawerCheckoutText || '',
     codFeeEnabled: s.codFeeEnabled,
     codFee: numText(s.codFee),
     showCodFee: s.showCodFee !== false,
@@ -168,6 +170,7 @@ export function toSettings(f) {
     drawerPlacement: f.drawerPlacement,
     comboPlacement: f.comboPlacement,
     drawerSelector: f.drawerSelector.trim(),
+    drawerCheckoutText: f.drawerCheckoutText,
     codFeeEnabled: f.codFeeEnabled,
     codFee: Number(f.codFee) || 0,
     showCodFee: f.showCodFee,
@@ -202,6 +205,7 @@ export function toSettings(f) {
     productButton: {
       replaceBuyNow: f.pbReplaceBuyNow,
       buyNowText: f.pbBuyNowText,
+      buyNowSelector: f.pbBuyNowSelector.trim(),
       marginTop: f.pbMarginTop,
       marginBottom: f.pbMarginBottom,
       paddingY: f.pbPaddingY,
@@ -238,6 +242,7 @@ export function formErrors(f) {
   ['codFee', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder'].forEach(money);
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
+  if (f.pbBuyNowSelector.trim() && !isValidDrawerSelector(f.pbBuyNowSelector)) e.pbBuyNowSelector = 'That doesn\'t look like a CSS selector, e.g. .product-form__buy-now';
   if (f.sheetTermsUrl.trim() && !isValidTermsUrl(f.sheetTermsUrl)) e.sheetTermsUrl = 'Use a link starting with https:// or a page on your store, like /pages/terms.';
   if (f.codFeeEnabled && !f.codFeeLabel.trim()) e.codFeeLabel = 'Enter the name shoppers see for this fee.';
   const selector = f.drawerSelector.trim();

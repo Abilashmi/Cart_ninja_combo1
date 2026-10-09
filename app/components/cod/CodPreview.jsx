@@ -120,7 +120,8 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
       scale={1}
     />
   ) : null;
-  const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">Check out</div> : null;
+  const checkoutText = settings.drawerCheckoutText ? codText(settings, settings.drawerCheckoutText, cart, money) : 'Check out';
+  const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">{checkoutText}</div> : null;
   const items = sampleItems(cart);
   return (
     <div className="bcod-dr-stage" data-placement={placement}>

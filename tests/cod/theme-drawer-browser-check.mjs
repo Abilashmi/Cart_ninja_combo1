@@ -400,6 +400,19 @@ const done = async (page, name) => {
   await off.context().close();
 }
 
+/* 15. The theme drawer's own Checkout text */
+{
+  const page = await open('dawn', { cfg: { drawerCheckoutText: 'Pay online {price}' } });
+  await waitButton(page);
+  await settle(page, 600);
+  const co = await page.evaluate(() => document.querySelector('#CartDrawer-Checkout').textContent);
+  check('Checkout text: the theme drawer\'s Checkout says "Pay online ₹1,299"', co === 'Pay online ₹1,299', co);
+  await page.evaluate(() => window.rerender('₹1,299.00'));
+  await settle(page, 1200);
+  check('Checkout text: kept after the theme redraws its drawer', await page.evaluate(() => document.querySelector('#CartDrawer-Checkout').textContent) === 'Pay online ₹1,299');
+  await done(page, '15-checkout-text');
+}
+
 /* 14. Price tags in the button texts, and the combo page position */
 {
   // ₹1,299 cart + ₹40 COD fee

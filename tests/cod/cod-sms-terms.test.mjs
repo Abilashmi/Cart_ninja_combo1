@@ -73,6 +73,22 @@ test('Buy it now text: kept, cleaned, and round-trips through the form', () => {
   assert.equal(toSettings(toForm(s)).productButton.buyNowText, 'Buy it now {price}');
 });
 
+test('Buy it now selector and the theme drawer\'s Checkout text', () => {
+  assert.equal(sanitizeCodSettings({ productButton: { buyNowSelector: ' .hk-buy-now ' } }).productButton.buyNowSelector, '.hk-buy-now');
+  assert.equal(sanitizeCodSettings({ productButton: { buyNowSelector: '<script>' } }).productButton.buyNowSelector, '', 'not a selector');
+  assert.equal(DEFAULT_COD_SETTINGS.drawerCheckoutText, '');
+  const s = sanitizeCodSettings({ drawerCheckoutText: '  Pay online   {price} ' });
+  assert.equal(s.drawerCheckoutText, 'Pay online {price}');
+  assert.equal(sanitizeCodSettings({ codFee: 5 }, s).drawerCheckoutText, 'Pay online {price}', 'other saves keep it');
+  const f = toForm(s);
+  assert.equal(toSettings(f).drawerCheckoutText, 'Pay online {price}');
+  assert.ok(formErrors({ ...f, pbBuyNowSelector: '<b>' }).pbBuyNowSelector);
+  assert.equal(toSettings({ ...f, pbBuyNowSelector: '.hk-buy-now' }).productButton.buyNowSelector, '.hk-buy-now');
+  const php = fs.readFileSync(new URL('../../php_backend/cod_storefront.php', import.meta.url), 'utf8');
+  assert.match(php, /'buyNowSelector' => cods_selector/);
+  assert.match(php, /'drawerCheckoutText' => cods_text/);
+});
+
 test('storefront and PHP: "Terms and conditions", no data policy; PHP passes buyNowText and termsUrl', () => {
   const js = fs.readFileSync(new URL('../../extensions/cart-drawer/assets/brix_cod.js', import.meta.url), 'utf8');
   assert.match(js, /Terms and conditions<\/a>/);

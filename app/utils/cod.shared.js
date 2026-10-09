@@ -32,6 +32,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // Advanced: CSS selector for the theme drawer's Checkout button, for themes
   // brix_cod.js doesn't recognise on its own. '' = find it automatically.
   drawerSelector: '',
+  // Text for the theme cart drawer's own Checkout button; may hold price tags.
+  // '' = the theme's text. (The BRIX Cart Drawer's is set in the Cart Editor.)
+  drawerCheckoutText: '',
   codFeeEnabled: false, // codFee is charged only while this is on
   codFee: 0,
   showCodFee: true, // false = fee is still charged, but folded into one "Delivery charges" line
@@ -73,6 +76,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     // Text for Shopify's own "Buy it now" while it shows (not replaced); may
     // hold price tags ("Buy it now {prepaid_price} Prepaid"). '' = Shopify's text.
     buyNowText: '',
+    // CSS selector of the theme's Buy it now, for themes BRIX doesn't find it
+    // in by itself. '' = find it automatically.
+    buyNowSelector: '',
     marginTop: 10,
     marginBottom: 0,
     paddingY: 14,
@@ -263,6 +269,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;
     if ('replaceBuyNow' in q) productButton.replaceBuyNow = Boolean(q.replaceBuyNow);
+    if ('buyNowSelector' in q) productButton.buyNowSelector = isValidDrawerSelector(String(q.buyNowSelector ?? '')) ? String(q.buyNowSelector).trim() : '';
     if ('buyNowText' in q) productButton.buyNowText = typeof q.buyNowText === 'string' ? q.buyNowText.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
     for (const [key, [min, max]] of Object.entries(COD_PRODUCT_BUTTON_LIMITS)) {
       if (key in q) productButton[key] = int(q[key], productButton[key], min, max);
@@ -313,6 +320,9 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     drawerPlacement: pick('drawerPlacement', COD_DRAWER_PLACEMENTS),
     comboPlacement: pick('comboPlacement', COD_COMBO_PLACEMENTS),
     drawerSelector,
+    drawerCheckoutText: has('drawerCheckoutText')
+      ? (typeof p.drawerCheckoutText === 'string' ? p.drawerCheckoutText.replace(/\s+/g, ' ').trim().slice(0, 60) : '')
+      : String(b.drawerCheckoutText || ''),
     codFeeEnabled: has('codFeeEnabled') ? Boolean(p.codFeeEnabled) : has('codFee') ? codFee > 0 : baseFeeFlag ?? codFee > 0,
     codFee,
     showCodFee: has('showCodFee') ? Boolean(p.showCodFee) : b.showCodFee !== false,
