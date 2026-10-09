@@ -85,11 +85,11 @@ const router = createBrowserRouter([
     }),
   },
   { path: '/app/fbt', element: <BarPage title="FBT" /> },
-  // The real FBT page (with its setup tour), mocked loader.
+  // The real FBT page, mocked loader.
   {
     path: '/app/fbt-real',
     Component: FbtPage,
-    loader: () => ({ shop: window.__SHOP || 'demo.myshopify.com', fbtConfig: { activeTemplate: 'fbt1', mode: 'manual', layout: 'horizontal' }, allProducts: [{ id: 'gid://shopify/Product/1', title: 'Yoga Mat', price: '25', image: '' }], manualRules: [], fbtEmbedEnabled: true, hasSavedFbtConfig: false }),
+    loader: () => ({ shop: window.__SHOP || 'demo.myshopify.com', config: {}, saved: false, enabled: true, embedEnabled: true, moneyFormat: '${{amount}}', samples: [] }),
   },
   { path: '/app/bundles', element: <BarPage title="Build a Combo" /> },
   // The real Build a Combo dashboard (with the setup tour), mocked loader.

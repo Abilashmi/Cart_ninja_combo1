@@ -11,6 +11,9 @@
 // hardcoded default. Without this, an AI tool that only means to change one
 // field (e.g. header color) would silently reset every other field in that
 // section back to its factory default.
+import {
+  loadFbtV2, saveFbtV2, listFbtRulesV2, fetchFbtRuleV2, appendFbtRuleV2, updateFbtRuleV2, removeFbtRuleV2, fbtSummaryForAgent,
+} from './fbt-v2.server.js';
 import { getDb } from './db.server';
 import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
@@ -597,84 +600,7 @@ function parseJsonSafe(v, fb) {
 // actually reads or applies them yet, so surfacing them would imply a
 // working discount feature that doesn't exist.
 export async function fetchFbtConfig(db, shop) {
-  const [settingsRows] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
-  const settings = settingsRows[0] || null;
-
-  if (settings) {
-    const [ruleRows] = await db.execute(
-      'SELECT * FROM fbt_rules WHERE shop_domain = ? ORDER BY sort_order ASC', [shop]
-    );
-    return {
-      source: 'normalized',
-      widget: {
-        enabled: !!settings.is_enabled,
-        selectedTemplate: settings.selected_template,
-        mode: settings.mode,
-        layout: settings.layout,
-        interactionType: settings.interaction_type,
-        showPrices: !!settings.show_prices,
-        showAddAllButton: !!settings.show_add_all_button,
-        bgColor: settings.bg_color,
-        textColor: settings.text_color,
-        priceColor: settings.price_color,
-        buttonColor: settings.button_color,
-        buttonTextColor: settings.button_text_color,
-        buttonText: settings.button_text,
-        borderColor: settings.border_color,
-        borderRadius: settings.border_radius,
-      },
-      rules: ruleRows.map((r) => ({
-        id: r.id,
-        name: r.name || null,
-        triggerScope: r.trigger_scope || 'all',
-        triggerProducts: parseJsonSafe(r.trigger_products, []),
-        triggerCollections: parseJsonSafe(r.trigger_collections, []),
-        fbtProducts: parseJsonSafe(r.fbt_products, []),
-        active: !!r.is_active,
-      })),
-    };
-  }
-
-  const [legacyRows] = await db.execute('SELECT * FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
-  const legacy = legacyRows[0] || null;
-  if (!legacy) return { source: 'none', widget: null, rules: [] };
-
-  const activeTemplateKey = ['fbt1', 'fbt2', 'fbt3'].includes(legacy.selectedTemp) ? legacy.selectedTemp : 'fbt1';
-  const slotKey = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[activeTemplateKey];
-  const tpl = parseJsonSafe(legacy[slotKey], {});
-  const legacyRules = parseJsonSafe(legacy.condition, []);
-
-  return {
-    source: 'legacy',
-    widget: {
-      // No is_enabled column on the legacy table — app.fbt.jsx's own loader
-      // treats the mere existence of this row as "enabled", so this mirrors
-      // that same established convention rather than inventing a new one.
-      enabled: true,
-      selectedTemplate: activeTemplateKey,
-      mode: legacy.selectedMode || 'manual',
-      layout: tpl.layout ?? null,
-      interactionType: tpl.interactionType ?? null,
-      showPrices: tpl.showPrices !== false,
-      showAddAllButton: tpl.showAddAllButton !== false,
-      bgColor: tpl.bgColor ?? null,
-      textColor: tpl.textColor ?? null,
-      priceColor: tpl.priceColor ?? null,
-      buttonColor: tpl.buttonColor ?? null,
-      buttonTextColor: tpl.buttonTextColor ?? null,
-      borderColor: tpl.borderColor ?? null,
-      borderRadius: tpl.borderRadius ?? null,
-    },
-    rules: legacyRules.map((r, i) => ({
-      id: r.id ?? `legacy-${i}`,
-      name: r.name || null,
-      triggerScope: r.displayScope || 'all',
-      triggerProducts: Array.isArray(r.triggerProducts) ? r.triggerProducts : [],
-      triggerCollections: Array.isArray(r.triggerCollections) ? r.triggerCollections : [],
-      fbtProducts: Array.isArray(r.fbtProducts) ? r.fbtProducts : [],
-      active: true,
-    })),
-  };
+  return fbtSummaryForAgent(shop);
 }
 
 // The storefront reads FBT config exclusively from the legacy fbt_widget
@@ -816,6 +742,20 @@ export async function saveFbtWidgetSettings(shop, planKey, patch) {
 
   const [settings] = await db.execute('SELECT * FROM fbt_widget_settings WHERE shop_domain = ?', [shop]);
   if (settings[0]) await syncFbtWidgetToLegacyRecord(shop, settings[0]);
+  // The v2 widget (fbt-v2.server.js) takes its look from config_v2: apply
+  // the colours / style the agent changed there too.
+  const { config: v2 } = await loadFbtV2(shop);
+  const themeKeys = { bg: ['bg_color', 'bgColor'], text: ['text_color', 'textColor'], price: ['price_color', 'priceColor'], button: ['button_color', 'buttonColor'], buttonText: ['button_text_color', 'buttonTextColor'], border: ['border_color', 'borderColor'], radius: ['border_radius', 'borderRadius'] };
+  const theme = { ...v2.theme };
+  for (const [key, names] of Object.entries(themeKeys)) {
+    const value = patch[names[0]] ?? patch[names[1]];
+    if (value !== undefined) theme[key] = value;
+  }
+  const interaction = patch.interaction_type ?? patch.interactionType;
+  await saveFbtV2(shop, {
+    theme,
+    ...(interaction ? { style: ['bundle', 'checkboxQty'].includes(interaction) ? 'bundle' : 'cards' } : {}),
+  }, { enabled: Boolean(Number(isEnabled)) });
   const [rules] = await db.execute('SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]);
   return { ...settings[0], rules: rules.map(parseFbtRule) };
 }
@@ -833,21 +773,6 @@ export async function saveFbtWidgetSettings(shop, planKey, patch) {
 // removal can find and drop exactly the entry this same code created,
 // without touching entries the manual editor's own save wrote (those use
 // client-generated `rule-<timestamp>` ids, never a bare fbt_rules row id).
-function buildFbtConditionEntry(ruleId, { name, triggerProducts, fbtProducts }) {
-  return {
-    id: String(ruleId),
-    name,
-    displayScope: triggerProducts.length ? 'per_product' : 'all',
-    triggerProducts,
-    triggerCollections: [],
-    fbtProducts,
-    aiGenerated: true,
-  };
-}
-async function readFbtLegacyCondition(db, shop) {
-  const [rows] = await db.execute('SELECT `condition` FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
-  return parseJsonSafe(rows[0]?.condition, []);
-}
 async function writeFbtLegacyCondition(db, shop, conditionArray) {
   await db.execute(`
     INSERT INTO fbt_widget (shopDomain, \`condition\`, updated_at)
@@ -860,18 +785,15 @@ async function writeFbtLegacyCondition(db, shop, conditionArray) {
 // check — filters by shop_domain so a ruleId can never be resolved against
 // another shop's row.
 export async function fetchFbtRuleById(shop, ruleId) {
-  const db = getDb();
-  const [rows] = await db.execute('SELECT * FROM fbt_rules WHERE id = ? AND shop_domain = ? LIMIT 1', [ruleId, shop]);
-  return rows[0] ? parseFbtRule(rows[0]) : null;
+  // FBT rules live in the v2 config now (fbt-v2.server.js).
+  return fetchFbtRuleV2(shop, ruleId);
 }
 
 // All of a shop's active rules, parsed — used by create_fbt_rule's
 // server-side duplicate check to compare a new rule's normalized product ID
 // sets against every rule that already exists before inserting it.
 export async function listActiveFbtRules(shop) {
-  const db = getDb();
-  const [rows] = await db.execute('SELECT * FROM fbt_rules WHERE shop_domain = ? AND is_active = 1 ORDER BY sort_order ASC', [shop]);
-  return rows.map(parseFbtRule);
+  return listFbtRulesV2(shop);
 }
 
 // Appends a single FBT rule (used by the create_fbt_rule AI tool — mirrors
@@ -882,44 +804,9 @@ export async function listActiveFbtRules(shop) {
 // already store full objects (this is what the manual editor writes too, and
 // what the storefront renderer needs to show a title/image/price), so the AI
 // path now matches that shape instead of storing ids the renderer can't use.
-export async function appendFbtRule(shop, { name, triggerProducts = [], triggerCollectionIds = [], offerProducts = [], discountType = 'none', discountValue = 0 }) {
-  const db = getDb();
-
-  const [existing] = await db.execute('SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ?', [shop]);
-  if (!existing.length) {
-    await db.execute(`
-      INSERT INTO fbt_widget_settings (shop_domain, is_enabled) VALUES (?, 1)
-    `, [shop]);
-  } else if (!existing[0].is_enabled) {
-    await db.execute(`UPDATE fbt_widget_settings SET is_enabled = 1, updated_at = CURRENT_TIMESTAMP(3) WHERE shop_domain = ?`, [shop]);
-  }
-
-  const [countRows] = await db.execute('SELECT COUNT(*) AS c FROM fbt_rules WHERE shop_domain = ? AND is_active = 1', [shop]);
-  const sortOrder = countRows[0]?.c ?? 0;
-  const ruleName = name || 'Rule';
-
-  // fbt_rules.trigger_scope is a real enforced MySQL enum
-  // ('all'|'specific_products'|'specific_collections') — the previous
-  // hardcoded 'specific' isn't a member, so MySQL was silently coercing it
-  // to ''. A rule with named trigger products is 'specific_products'; one
-  // with none (applies to every product, per the tool schema's own
-  // description) is 'all'.
-  const [ins] = await db.execute(`
-    INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, discount_type, discount_value, is_active, sort_order)
-    VALUES (?,?,?,?,?,?,?,?,1,?)
-  `, [
-    shop, ruleName, triggerProducts.length ? 'specific_products' : 'all',
-    triggerProducts.length ? JSON.stringify(triggerProducts) : null,
-    triggerCollectionIds.length ? JSON.stringify(triggerCollectionIds) : null,
-    offerProducts.length ? JSON.stringify(offerProducts) : null,
-    discountType, discountValue, sortOrder,
-  ]);
-
-  const condition = await readFbtLegacyCondition(db, shop);
-  condition.push(buildFbtConditionEntry(ins.insertId, { name: ruleName, triggerProducts, fbtProducts: offerProducts }));
-  await writeFbtLegacyCondition(db, shop, condition);
-
-  return { id: ins.insertId };
+export async function appendFbtRule(shop, { name, triggerProducts = [], offerProducts = [] }) {
+  // v2 config (fbt-v2.server.js): the storefront and the FBT page read rules from there.
+  return appendFbtRuleV2(shop, { name, triggerProducts, offerProducts });
 }
 
 // Modifies an EXISTING rule's trigger/offer products in place (used by the
@@ -932,45 +819,15 @@ export async function appendFbtRule(shop, { name, triggerProducts = [], triggerC
 // and confirmed the resulting offer list is non-empty — this function only
 // ever receives an already-validated final state, so the write itself can
 // never apply partially.
-export async function updateFbtRuleRecord(shop, ruleId, { name, triggerProducts, offerProducts }) {
-  const db = getDb();
-  await db.execute(`
-    UPDATE fbt_rules SET
-      trigger_scope = ?,
-      trigger_products = ?,
-      fbt_products = ?,
-      updated_at = CURRENT_TIMESTAMP(3)
-    WHERE id = ? AND shop_domain = ?
-  `, [
-    triggerProducts.length ? 'specific_products' : 'all',
-    triggerProducts.length ? JSON.stringify(triggerProducts) : null,
-    JSON.stringify(offerProducts),
-    ruleId, shop,
-  ]);
-
-  // Same condition-cache convention as appendFbtRule/removeFbtRule below:
-  // only the target rule's entry is touched, keyed by the fbt_rules id.
-  const condition = await readFbtLegacyCondition(db, shop);
-  const idx = condition.findIndex((entry) => String(entry.id) === String(ruleId));
-  const entry = buildFbtConditionEntry(ruleId, { name, triggerProducts, fbtProducts: offerProducts });
-  if (idx >= 0) condition[idx] = entry; else condition.push(entry);
-  await writeFbtLegacyCondition(db, shop, condition);
+export async function updateFbtRuleRecord(shop, ruleId, { triggerProducts, offerProducts }) {
+  return updateFbtRuleV2(shop, ruleId, { triggerProducts, offerProducts });
 }
 
 // Returns { removed: false } (never throws) when ruleId doesn't belong to
 // this shop, so the caller can honestly report failure instead of assuming
 // success — mirrors remove_upsell_rule's existing not-found handling.
 export async function removeFbtRule(shop, ruleId) {
-  const db = getDb();
-  const [result] = await db.execute('DELETE FROM fbt_rules WHERE id = ? AND shop_domain = ?', [ruleId, shop]);
-  if (!result.affectedRows) return { removed: false };
-
-  const condition = await readFbtLegacyCondition(db, shop);
-  const filtered = condition.filter((entry) => String(entry.id) !== String(ruleId));
-  if (filtered.length !== condition.length) {
-    await writeFbtLegacyCondition(db, shop, filtered);
-  }
-  return { removed: true };
+  return removeFbtRuleV2(shop, ruleId);
 }
 
 // Tags every fbt_rules row with which mode created it — 'manual' (the admin
@@ -1028,7 +885,7 @@ function extractNumericGid(gid) {
   return m ? m[1] : null;
 }
 
-async function fetchCatalogForAiFbt(admin) {
+export async function fetchCatalogForAiFbt(admin) {
   const products = [];
   let cursor = null;
   for (let page = 0; page < 3 && products.length < AI_COVERAGE_PRODUCT_CAP; page++) {
@@ -1094,7 +951,7 @@ async function fetchCatalogForAiFbt(admin) {
 // LLM call at all. Grouped/ranked in JS rather than a SQL window function so
 // this doesn't depend on a specific MySQL version being available in
 // production.
-async function fetchCoPurchaseMap(db, shop, countPerProduct) {
+export async function fetchCoPurchaseMap(db, shop, countPerProduct) {
   const [rows] = await db.execute(
     `SELECT a.product_id AS trigger_id, b.product_id AS offer_id, COUNT(DISTINCT a.order_id) AS cnt
      FROM store_order_line_items a

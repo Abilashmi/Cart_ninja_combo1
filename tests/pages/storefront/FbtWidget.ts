@@ -1,23 +1,20 @@
 import type { Page, Locator } from "@playwright/test";
 
-/** Page Object for Frequently Bought Together (extensions/cart-drawer/blocks/Fbt.liquid). */
+/** Page Object for Frequently Bought Together v2 (extensions/cart-drawer/assets/brix_fbt.js). */
 export class FbtWidget {
   readonly page: Page;
   readonly root: Locator;
   readonly title: Locator;
   readonly productCards: Locator;
   readonly addAllButton: Locator;
-  readonly navPrev: Locator;
-  readonly navNext: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.root = page.locator("ps-fbt-widget");
-    this.title = this.root.locator(".ps-fbt-title");
-    this.productCards = this.root.locator(".ps-product-card");
-    this.addAllButton = this.root.locator(".ps-fbt-addall");
-    this.navPrev = this.root.locator(".ps-fbt-nav-prev");
-    this.navNext = this.root.locator(".ps-fbt-nav-next");
+    this.root = page.locator("[data-brix-fbt] .bxf");
+    this.title = this.root.locator(".bxf-h");
+    // Bundle rows or cards, whichever style the store uses.
+    this.productCards = this.root.locator(".bxf-li, .bxf-card");
+    this.addAllButton = this.root.locator("[data-fbt-addall]");
   }
 
   async gotoProduct(handle: string) {
