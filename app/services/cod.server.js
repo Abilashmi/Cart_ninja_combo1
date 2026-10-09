@@ -22,6 +22,8 @@ import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
   maskPhone, splitName, provinceCodeFor, moneyFormatter,
 } from '../utils/cod.shared.js';
+import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
+import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
 
 export class CodError extends Error {
   constructor(code, message, { status = 400, details } = {}) {
@@ -349,6 +351,173 @@ function draftLineItems(lines) {
   }));
 }
 
+/* ───────────────────────── weight combo boxes ───────────────────────── */
+
+// A weight-priced combo box (combo page, or its lines in the cart drawer)
+// gets its price in Shopify checkout from the BRIX combo weight Function.
+// Draft orders don't run it for these lines (their _brix* markers are
+// stripped above), so COD applies the same box price itself, from the same
+// trusted config the Function reads and the same shared rules
+// (combo-weight.shared.js), as a line discount on the draft order.
+const numericOf = (gid) => String(gid || '').split('/').pop();
+
+async function loadComboWeightContext(admin) {
+  const data = await gql(admin, `#graphql
+    query CodComboWeight {
+      shop { metafield(namespace: "$app", key: "${COMBO_WEIGHT_CONFIG_KEY}") { jsonValue } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { discount { __typename ... on DiscountAutomaticApp { title status } } }
+      }
+    }`);
+  const active = (data?.discountNodes?.nodes || []).some((n) => n.discount?.__typename === 'DiscountAutomaticApp'
+    && n.discount.title === COMBO_WEIGHT_DISCOUNT_TITLE && n.discount.status === 'ACTIVE');
+  const config = data?.shop?.metafield?.jsonValue;
+  return { active, templates: config && typeof config === 'object' && config.templates && typeof config.templates === 'object' ? config.templates : null };
+}
+
+// Price, weight and collections of the box's variants, straight from Shopify.
+async function loadComboVariants(admin, variantIds) {
+  const ids = [...new Set(variantIds.map(String))];
+  const result = new Map();
+  // 10 per query keeps collections(first: 50) well under the query cost limit.
+  for (let start = 0; start < ids.length; start += 10) {
+    const data = await gql(admin, `#graphql
+      query CodComboVariants($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on ProductVariant {
+            id price
+            inventoryItem { measurement { weight { value unit } } }
+            product { id collections(first: 50) { nodes { id } } }
+          }
+        }
+      }`, { ids: ids.slice(start, start + 10).map(toVariantGid) });
+    for (const node of data?.nodes || []) {
+      if (!node?.id) continue;
+      const weight = node.inventoryItem?.measurement?.weight;
+      result.set(numericOf(node.id), {
+        price: node.price,
+        unitGrams: toGrams(weight?.value, weight?.unit),
+        productId: numericOf(node.product?.id),
+        collectionIds: (node.product?.collections?.nodes || []).map((c) => numericOf(c.id)),
+      });
+    }
+  }
+  return result;
+}
+
+function comboQualifies(template, variant) {
+  if (!variant?.productId) return false;
+  if ((template.product_ids || []).map(String).includes(variant.productId)) return true;
+  const allowed = (template.collection_ids || []).map(String);
+  return variant.collectionIds.some((id) => allowed.includes(id));
+}
+
+/**
+ * Box discounts for the weight-combo lines of a COD order: the same price
+ * Shopify checkout gives. `comboWeightLive` = the shop's plan publishes
+ * combo_weight_pricing. Applies only while the checkout discount is ACTIVE.
+ * Returns { byLine: Map<lineIndex, amountMinor>, titles: Map<lineIndex, title>, boxes: [...] }.
+ */
+export async function comboWeightAdjustments(admin, { lines, comboWeightLive = false, currencyCode = 'INR' }) {
+  const result = { byLine: new Map(), titles: new Map(), boxes: [], decimals: decimalsFor(currencyCode) };
+  const marked = lines.map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.properties?._brix_combo_id && line.properties?._brix_combo_group);
+  if (!marked.length || !comboWeightLive) return result;
+  const { active, templates } = await loadComboWeightContext(admin);
+  if (!active || !templates) return result;
+
+  const boxes = new Map();
+  for (const entry of marked) {
+    const comboId = String(entry.line.properties._brix_combo_id);
+    if (!Object.prototype.hasOwnProperty.call(templates, comboId)) continue;
+    const template = templates[comboId];
+    if (!template || !Array.isArray(template.tiers) || !template.tiers.length) continue;
+    const key = `${comboId}:${entry.line.properties._brix_combo_group}`;
+    if (!boxes.has(key)) boxes.set(key, { comboId, template, entries: [] });
+    boxes.get(key).entries.push(entry);
+  }
+  if (!boxes.size) return result;
+
+  const variants = await loadComboVariants(admin, [...boxes.values()].flatMap((b) => b.entries.map((e) => e.line.variantId)));
+  const { decimals } = result;
+  for (const { comboId, template, entries } of boxes.values()) {
+    const box = computeBox({
+      pricing: template,
+      decimals,
+      rate: 1,
+      lines: entries.map(({ line, index }) => {
+        const variant = variants.get(String(line.variantId));
+        return {
+          key: index,
+          unitGrams: variant?.unitGrams ?? null,
+          quantity: line.quantity,
+          subtotalMinor: variant ? toMinor(variant.price, decimals) * line.quantity : 0,
+          qualifies: comboQualifies(template, variant),
+        };
+      }),
+    });
+    if (!box.tier || box.discountMinor <= 0) continue;
+    const title = tierLabel(box.tier, template.unit);
+    for (const { key, amountMinor } of box.allocations) {
+      result.byLine.set(key, amountMinor);
+      result.titles.set(key, title);
+    }
+    result.boxes.push({ templateId: comboId, title, grams: box.grams, weight: formatWeight(box.grams, template.unit), amountMinor: box.discountMinor });
+  }
+  return result;
+}
+
+// How Shopify reads a FIXED_AMOUNT line discount on a draft order (per unit or
+// per line) has not been confirmed on a store yet, so the first combo quote
+// checks what Shopify actually did and remembers the mode that matched.
+let comboLineDiscountMode = 'unit';
+
+function comboLineItems(lines, combo, mode) {
+  const items = draftLineItems(lines);
+  const factor = 10 ** combo.decimals;
+  const out = [];
+  items.forEach((item, index) => {
+    const amountMinor = combo.byLine.get(index);
+    if (!amountMinor) { out.push(item); return; }
+    const title = combo.titles.get(index);
+    const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description: 'BRIX combo box' });
+    if (mode === 'line' || item.quantity === 1) {
+      out.push({ ...item, appliedDiscount: discount(amountMinor) });
+      return;
+    }
+    // Per unit: split the line when the box discount doesn't divide evenly,
+    // so the units still add up to exactly the box discount.
+    const base = Math.floor(amountMinor / item.quantity);
+    const extra = amountMinor - base * item.quantity;
+    if (extra > 0) out.push({ ...item, quantity: extra, appliedDiscount: discount(base + 1) });
+    if (item.quantity - extra > 0) out.push({ ...item, quantity: item.quantity - extra, ...(base > 0 ? { appliedDiscount: discount(base) } : {}) });
+  });
+  return out;
+}
+
+const lineDiscountMinor = (calc, decimals) => (calc?.lineItems || [])
+  .reduce((sum, li) => sum + toMinor(amountOf(li.originalTotalSet), decimals) - toMinor(amountOf(li.discountedTotalSet), decimals), 0);
+
+/**
+ * Line items carrying the box discounts, after checking on a bare
+ * draftOrderCalculate that Shopify discounts exactly what checkout would.
+ * Refuses COD (never charges a different price) when neither mode matches.
+ */
+async function comboPricedLineItems(admin, lines, combo) {
+  const expected = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0);
+  const modes = comboLineDiscountMode === 'unit' ? ['unit', 'line'] : ['line', 'unit'];
+  for (const mode of modes) {
+    const lineItems = comboLineItems(lines, combo, mode);
+    const probe = await calculate(admin, { lineItems, acceptAutomaticDiscounts: false });
+    if (Math.abs(lineDiscountMinor(probe, combo.decimals) - expected) <= lineItems.length) {
+      comboLineDiscountMode = mode;
+      return lineItems;
+    }
+  }
+  console.error('[cod] combo box discount did not price as expected; refusing COD for this box.');
+  throw new CodError('combo_price_mismatch', "Cash on Delivery can't be used for this box right now. Please pay online.", { status: 422 });
+}
+
 const CALCULATE = `#graphql
   mutation CodCalculate($input: DraftOrderInput!) {
     draftOrderCalculate(input: $input) {
@@ -396,18 +565,23 @@ function shippingLine(settings, charges, currencyCode) {
  * Price the lines through Shopify and apply the merchant's COD rules.
  * Returns { quote, input } — `input` is the DraftOrderInput core reused by placeCodOrder.
  */
-export async function quoteCod(admin, { settings, lines, coupon, pincode, surface, currencyCode = 'INR' }) {
+export async function quoteCod(admin, { settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false }) {
   if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
     throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
   }
   const { tags } = await loadVariants(admin, lines);
   const format = moneyFormatter(currencyCode);
+  const combo = await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode });
+  const hasBoxes = combo.boxes.length > 0;
 
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
   const base = {
-    lineItems: draftLineItems(lines),
+    lineItems: hasBoxes ? await comboPricedLineItems(admin, lines, combo) : draftLineItems(lines),
     customAttributes: [{ ...COD_MARKER }],
-    acceptAutomaticDiscounts: true,
+    // In checkout the box discount doesn't combine with other automatic
+    // product discounts (combinesWith.productDiscounts: false), so COD leaves
+    // them off too; discount codes still go to Shopify.
+    acceptAutomaticDiscounts: !hasBoxes,
     ...(code ? { discountCodes: [code] } : {}),
     ...(pincode ? { shippingAddress: { countryCode: 'IN', zip: String(pincode) } } : {}),
   };
@@ -426,9 +600,19 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
     input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode);
   }
 
+  // With a box discount, Items is the price before it, the box discount gets
+  // its own row, and Discounts is whatever else Shopify took off (worked out
+  // from Shopify's own total, so the rows always add up to what is charged).
+  const factor = 10 ** combo.decimals;
+  const comboDiscount = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0) / factor;
+  const itemsOriginal = (calc.lineItems || []).reduce((sum, li) => sum + amountOf(li.originalTotalSet), 0);
+  const otherDiscounts = hasBoxes
+    ? Math.max(0, Math.round((itemsOriginal - comboDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
+    : amountOf(calc.totalDiscountsSet);
+
   const couponApplied = Boolean(code)
     && (calc.discountCodes || []).some((c) => c.toLowerCase() === code.toLowerCase())
-    && amountOf(calc.totalDiscountsSet) > 0;
+    && otherDiscounts > 0;
 
   const quote = {
     currency: calc.currencyCode || currencyCode,
@@ -445,9 +629,11 @@ export async function quoteCod(admin, { settings, lines, coupon, pincode, surfac
       productId: li.product?.id ? String(li.product.id).split('/').pop() : null,
       sku: li.sku || null,
     })),
-    itemsTotal: amountOf(calc.lineItemsSubtotalPrice),
+    itemsTotal: hasBoxes ? Math.round(itemsOriginal * factor) / factor : amountOf(calc.lineItemsSubtotalPrice),
     subtotal: amountOf(calc.subtotalPriceSet),
-    discounts: amountOf(calc.totalDiscountsSet),
+    discounts: otherDiscounts,
+    comboDiscount,
+    comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor })),
     shipping: charges.shipping,
     codFee: charges.codFee,
     tax: amountOf(calc.totalTaxSet),
@@ -537,7 +723,7 @@ async function trackPlacedOrder({ shop, settings, idemKey, order, quote, phone, 
  */
 export async function placeCodOrder(admin, {
   shop, settings, lines, coupon, address, phone, phoneVerified, surface, attributes = {}, idemKey, currencyCode,
-  track = null, clientIp: ip = null, userAgent = null,
+  track = null, clientIp: ip = null, userAgent = null, comboWeightLive = false,
 }) {
   if (!/^[\w-]{8,64}$/.test(String(idemKey || ''))) throw new CodError('invalid_request', 'Refresh the page and try again.');
   const hash = phoneHash(shop, phone);
@@ -553,7 +739,7 @@ export async function placeCodOrder(admin, {
     throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429 });
   }
 
-  const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode });
+  const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive });
 
   try {
     await php('cod_orders.php', {
@@ -567,14 +753,19 @@ export async function placeCodOrder(admin, {
 
   const clearAttempt = () => php('cod_orders.php', { action: 'abandon', shop, idem_key: idemKey }).catch(() => {});
 
-  const tags = [...new Set(['COD', 'BRIX-COD', `brix-src-${surface}`, ...settings.orderTags])];
+  const boxes = quote.comboDiscounts || [];
+  const tags = [...new Set(['COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []), ...settings.orderTags])];
   const customAttributes = [
     { ...COD_MARKER },
     { key: 'payment_method', value: 'Cash on Delivery' },
     { key: 'brix_cod_source', value: surface },
     { key: 'brix_cod_phone_verified', value: phoneVerified ? 'yes' : 'no' },
+    ...(boxes.length ? [{
+      key: 'brix_combo_weight',
+      value: boxes.map((b) => `combo ${b.templateId}: ${b.title}, ${b.weight}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
+    }] : []),
     ...Object.entries(attributes || {})
-      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && !k.startsWith('_brix') && v != null && String(v).length <= 200)
+      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && !k.startsWith('_brix') && k !== 'brix_combo_weight' && v != null && String(v).length <= 200)
       .slice(0, 10)
       .map(([key, value]) => ({ key, value: String(value) })),
   ];

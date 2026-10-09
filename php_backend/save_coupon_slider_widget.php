@@ -101,7 +101,8 @@ function ensureTimerColumns($pdo) {
             ADD COLUMN IF NOT EXISTS timerExpired VARCHAR(255) NOT NULL DEFAULT 'Offer expired!',
             ADD COLUMN IF NOT EXISTS timerBg VARCHAR(20) NOT NULL DEFAULT '#fef2f2',
             ADD COLUMN IF NOT EXISTS timerText VARCHAR(20) NOT NULL DEFAULT '#991b1b',
-            ADD COLUMN IF NOT EXISTS timerAccent VARCHAR(20) NOT NULL DEFAULT '#dc2626'
+            ADD COLUMN IF NOT EXISTS timerAccent VARCHAR(20) NOT NULL DEFAULT '#dc2626',
+            ADD COLUMN IF NOT EXISTS timerMode VARCHAR(10) NOT NULL DEFAULT 'session'
     ");
     $ensured = true;
 }
@@ -463,6 +464,22 @@ try {
     logError('ensureTimerColumns failed', ['error' => $e->getMessage()]);
 }
 
+// 'session' (restarts each visit, then shows the expired label) or 'loop'
+// (starts again from the full time whenever it reaches zero). A save that
+// doesn't send it (e.g. BRIX's Coupon Banner tool) keeps the saved mode.
+$timerMode = payloadValue($payload, ['timerMode'], null);
+if (!in_array($timerMode, ['session', 'loop'], true)) {
+    $timerMode = 'session';
+    try {
+        $modeStmt = $pdo->prepare('SELECT timerMode FROM coupon_slider_widget WHERE shopDomain = :shopDomain LIMIT 1');
+        $modeStmt->execute([':shopDomain' => $shopDomain]);
+        $savedMode = $modeStmt->fetchColumn();
+        if (in_array($savedMode, ['session', 'loop'], true)) $timerMode = $savedMode;
+    } catch (PDOException $e) {
+        logError('Failed to read saved timerMode', ['error' => $e->getMessage()]);
+    }
+}
+
 $sql = '
 INSERT INTO coupon_slider_widget (
     shopDomain,
@@ -485,6 +502,7 @@ INSERT INTO coupon_slider_widget (
     timerBg,
     timerText,
     timerAccent,
+    timerMode,
     updated_at
 ) VALUES (
     :shopDomain,
@@ -507,6 +525,7 @@ INSERT INTO coupon_slider_widget (
     :timerBg,
     :timerText,
     :timerAccent,
+    :timerMode,
     CURRENT_TIMESTAMP(3)
 )
 ON DUPLICATE KEY UPDATE
@@ -529,6 +548,7 @@ ON DUPLICATE KEY UPDATE
     timerBg = VALUES(timerBg),
     timerText = VALUES(timerText),
     timerAccent = VALUES(timerAccent),
+    timerMode = VALUES(timerMode),
     updated_at = CURRENT_TIMESTAMP(3)
 ';
 
@@ -555,7 +575,8 @@ try {
         ':timerExpired'           => $timerExpired,
         ':timerBg'                => $timerBg,
         ':timerText'              => $timerText,
-        ':timerAccent'            => $timerAccent
+        ':timerAccent'            => $timerAccent,
+        ':timerMode'              => $timerMode
     ]);
 
     echo json_encode([

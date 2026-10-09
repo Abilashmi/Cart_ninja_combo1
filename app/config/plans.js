@@ -79,6 +79,7 @@ export const FEATURES = {
   ai_analytics:              { label: 'AI Analytics',                  states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
   advanced_ai_analytics:     { label: 'Advanced AI Analytics',         states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
   unlimited_ai_agents:       { label: 'Unlimited AI Agents',           states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
+  combo_weight_pricing:      { label: 'Weight-based Combo Pricing',    states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
 };
 
 export function isValidPlanKey(key) {

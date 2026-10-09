@@ -54,6 +54,7 @@ export async function action({ request }) {
       attributes: body.attributes,
       idemKey: body.idemKey,
       currencyCode: ctx.currencyCode,
+      comboWeightLive: ctx.comboWeightLive,
       // Server-side GA4 / Meta Purchase (cod-tracking.server.js); consent comes from the browser.
       track: sanitizeCodTrack(body.track),
       clientIp: clientIp(request),

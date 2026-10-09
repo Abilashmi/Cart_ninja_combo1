@@ -10,6 +10,17 @@ export function codButtonColors(buttons) {
   return { background: buttons.bg, color: buttons.color, boxShadow: 'none' };
 }
 
+/** Font size, weight and capitals of a look (brix_cod.js buttonType), at `scale`. */
+export function codButtonType(look, scale = 1) {
+  const size = Math.max(12, Math.min(22, Math.round(Number(look?.fontSize)) || 15));
+  return {
+    fontSize: `${Math.round(size * scale * 10) / 10}px`,
+    fontWeight: look?.bold === false ? 500 : 700,
+    textTransform: look?.uppercase ? 'uppercase' : 'none',
+    letterSpacing: look?.uppercase ? '.04em' : 'normal',
+  };
+}
+
 /** Cart drawer button sizes in px; the gap is on the side that faces Checkout. */
 export function codDrawerSize(settings, where) {
   const r = Math.round(Number(settings.buttons?.radius));

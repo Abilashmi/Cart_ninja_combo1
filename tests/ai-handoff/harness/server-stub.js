@@ -8,3 +8,4 @@ export default {};
 export const getEmbedStatus = null;
 export const getShopPlan = null;
 export const getCodSettings = null;
+export const getComboWeightDiscountStatus = null;

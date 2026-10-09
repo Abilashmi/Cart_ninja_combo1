@@ -96,6 +96,49 @@ function cods_product_button($pb) {
     ];
 }
 
+/**
+ * One COD button look, re-checked: style, colours, font size, bold, capitals,
+ * icon (+ radius). Anything invalid falls back to $base.
+ */
+function cods_button_look($raw, $base) {
+    $l = is_array($raw) ? $raw : [];
+    $hex = '/^#[0-9a-f]{3}([0-9a-f]{3})?$/i';
+    $out = [
+        'style' => cods_enum($l['style'] ?? '', ['filled', 'outline', 'minimal'], $base['style']),
+        'bg' => preg_match($hex, $l['bg'] ?? '') ? $l['bg'] : $base['bg'],
+        'color' => preg_match($hex, $l['color'] ?? '') ? $l['color'] : $base['color'],
+        'fontSize' => is_numeric($l['fontSize'] ?? null) ? max(12, min(22, (int)$l['fontSize'])) : $base['fontSize'],
+        'bold' => array_key_exists('bold', $l) ? (bool)$l['bold'] : $base['bold'],
+        'uppercase' => array_key_exists('uppercase', $l) ? (bool)$l['uppercase'] : $base['uppercase'],
+        'icon' => array_key_exists('icon', $l) ? (bool)$l['icon'] : $base['icon'],
+    ];
+    if (array_key_exists('radius', $base)) {
+        $out['radius'] = is_numeric($l['radius'] ?? null) ? max(0, min(40, (int)$l['radius'])) : $base['radius'];
+    }
+    return $out;
+}
+
+/**
+ * The COD button look for each place, resolved like codButtonLook() in
+ * app/utils/cod.shared.js: product and combo use the cart drawer look while
+ * their "same" is on. The product page's corners come from productButton.
+ */
+function cods_button_looks($buttons, $productRadius) {
+    $drawer = cods_button_look($buttons, [
+        'style' => 'filled', 'bg' => '#111827', 'color' => '#ffffff', 'fontSize' => 15,
+        'bold' => true, 'uppercase' => false, 'icon' => true, 'radius' => 12,
+    ]);
+    $p = is_array($buttons['product'] ?? null) ? $buttons['product'] : [];
+    $c = is_array($buttons['combo'] ?? null) ? $buttons['combo'] : null;
+    $product = ($p['same'] ?? true) === false ? cods_button_look($p, $drawer) : $drawer;
+    $product['radius'] = $productRadius;
+    // Settings saved before combo had its own look kept the old combo look:
+    // white with a dark outline, no icon.
+    $comboOld = ['style' => 'outline', 'bg' => '#111827', 'color' => '#ffffff', 'fontSize' => 15, 'bold' => true, 'uppercase' => false, 'icon' => false, 'radius' => 8];
+    $combo = $c === null ? $comboOld : (($c['same'] ?? false) === true ? $drawer : cods_button_look($c, $comboOld));
+    return ['drawer' => $drawer, 'product' => $product, 'combo' => $combo];
+}
+
 // One of the allowed values, else the default. Mirrors sanitizeCodSettings' pick().
 function cods_enum($value, $allowed, $default) {
     return in_array($value, $allowed, true) ? $value : $default;
@@ -265,6 +308,8 @@ if ($action === 'config') {
 
     $surfaces = is_array($s['surfaces'] ?? null) ? $s['surfaces'] : [];
     $buttons = is_array($s['buttons'] ?? null) ? $s['buttons'] : [];
+    $productButton = cods_product_button($s['productButton'] ?? null);
+    $looks = cods_button_looks($buttons, $productButton['radius']);
     // Settings saved before the fee switch existed charged codFee whenever it was set.
     $feeOn = array_key_exists('codFeeEnabled', $s) ? !empty($s['codFeeEnabled']) : true;
     $feeLabel = mb_substr(trim((string)($s['codFeeLabel'] ?? '')), 0, 40);
@@ -300,8 +345,11 @@ if ($action === 'config') {
             'color' => preg_match('/^#[0-9a-f]{3}([0-9a-f]{3})?$/i', $buttons['color'] ?? '') ? $buttons['color'] : '#ffffff',
             'style' => cods_enum($buttons['style'] ?? '', ['filled', 'outline', 'minimal'], 'filled'),
             'radius' => is_numeric($buttons['radius'] ?? null) ? max(0, min(40, (int)$buttons['radius'])) : 12,
+            'comboText' => cods_text($buttons['comboText'] ?? '', 'Cash on Delivery', 60),
+            // Each place's own button look (cart drawer, product page, combo page).
+            'looks' => $looks,
         ],
-        'productButton' => cods_product_button($s['productButton'] ?? null),
+        'productButton' => $productButton,
         'sheet' => cods_sheet($s['sheet'] ?? null),
         'tracking' => cods_tracking($s['tracking'] ?? null),
         'productPayment' => $payment,

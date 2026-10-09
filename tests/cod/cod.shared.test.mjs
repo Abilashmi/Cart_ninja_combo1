@@ -4,10 +4,48 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, normalizeIndianPhone, checkCodRules, codCharges, normalizeLines,
   validateAddress, provinceCodeFor, isCheckoutOnlyLine, maskPhone, splitName, parsePincodes, moneyFormatter,
-  isValidCodLogo, parseCodOffers, sanitizeCodTrack,
+  isValidCodLogo, parseCodOffers, sanitizeCodTrack, codButtonLook,
 } from '../../app/utils/cod.shared.js';
 
 const on = (patch = {}) => sanitizeCodSettings({ enabled: true, ...patch });
+
+test('button looks: drawer, product page and combo page each have their own', () => {
+  const s = on({
+    buttons: {
+      bg: '#0c7a43', style: 'filled', radius: 20, fontSize: 17, uppercase: true,
+      product: { same: false, style: 'outline', bg: '#1d4ed8', fontSize: 14, icon: false },
+      combo: { same: false, style: 'minimal', bg: '#be185d', radius: 4, bold: false },
+      comboText: 'Pay cash',
+    },
+    productButton: { radius: 6 },
+  });
+  assert.deepEqual(codButtonLook(s, 'drawer'), { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 17, bold: true, uppercase: true, icon: true, radius: 20, text: 'Cash on Delivery' });
+  const product = codButtonLook(s, 'product');
+  assert.deepEqual([product.style, product.bg, product.fontSize, product.icon, product.radius, product.uppercase], ['outline', '#1d4ed8', 14, false, 6, false], 'own look; corners from productButton');
+  const combo = codButtonLook(s, 'combo');
+  assert.deepEqual([combo.style, combo.bg, combo.radius, combo.bold, combo.text], ['minimal', '#be185d', 4, false, 'Pay cash']);
+});
+
+test('button looks: product follows the drawer until split; old settings keep the old combo look', () => {
+  const s = on({ buttons: { bg: '#6d28d9', style: 'outline' } });
+  const product = codButtonLook(s, 'product');
+  assert.equal(product.bg, '#6d28d9', 'same: true by default');
+  assert.equal(product.style, 'outline');
+  const combo = codButtonLook(s, 'combo');
+  assert.deepEqual([combo.style, combo.bg, combo.icon, combo.radius], ['outline', '#111827', false, 8], 'combo pages look as they did before');
+  const followed = on({ buttons: { bg: '#6d28d9', combo: { same: true } } });
+  assert.equal(codButtonLook(followed, 'combo').bg, '#6d28d9');
+  // Junk never gets through, and an existing value is kept.
+  const junk = sanitizeCodSettings({ buttons: { fontSize: 99, product: { bg: 'red', style: 'neon', same: false } } }, s);
+  assert.equal(junk.buttons.fontSize, 22);
+  assert.equal(junk.buttons.product.style, 'filled');
+  assert.equal(junk.buttons.product.bg, '#111827');
+  // Turning the drawer off changes nothing about the other places.
+  const drawerOff = on({ surfaces: { drawer: false } });
+  assert.deepEqual(drawerOff.surfaces, { drawer: false, product: true, combo: true });
+  assert.equal(checkCodRules({ settings: drawerOff, subtotal: 500, surface: 'product' }), null);
+  assert.equal(checkCodRules({ settings: drawerOff, subtotal: 500, surface: 'combo' }), null);
+});
 
 test('defaults: COD starts off, every surface on, OTP on', () => {
   const s = sanitizeCodSettings({});

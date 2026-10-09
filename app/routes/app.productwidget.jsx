@@ -166,6 +166,7 @@ export async function loader({ request }) {
             timerBg: couponWidget?.timerBg || '#fef2f2',
             timerText: couponWidget?.timerText || '#991b1b',
             timerAccent: couponWidget?.timerAccent || '#dc2626',
+            timerMode: couponWidget?.timerMode === 'loop' ? 'loop' : 'session',
         };
     }
     if (!couponConfig) couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
@@ -314,15 +315,16 @@ function ColorSwatch({ label, value, onChange }) {
     );
 }
 
-function CountdownStrip({ hours, minutes, label, expiredLabel, bgColor, textColor, accentColor }) {
+function CountdownStrip({ hours, minutes, loop, label, expiredLabel, bgColor, textColor, accentColor }) {
     const total = hours * 3600 + minutes * 60;
     const [rem, setRem] = useState(total);
-    useEffect(() => { setRem(total); }, [total]);
+    useEffect(() => { setRem(total); }, [total, loop]);
     useEffect(() => {
         if (rem <= 0) return;
-        const t = setInterval(() => setRem(r => Math.max(0, r - 1)), 1000);
+        // Loop mode: at zero, start again from the full time.
+        const t = setInterval(() => setRem(r => (r <= 1 && loop ? total : Math.max(0, r - 1))), 1000);
         return () => clearInterval(t);
-    }, [rem]);
+    }, [rem, loop, total]);
     const pad = (n) => String(n).padStart(2, "0");
     const h = Math.floor(rem / 3600);
     const m = Math.floor((rem % 3600) / 60);
@@ -672,6 +674,7 @@ export default function ProductWidgetPage() {
     const [timerBg,     setTimerBg]     = useState(couponConfig?.timerBg || "#fef2f2");
     const [timerText,   setTimerText]   = useState(couponConfig?.timerText || "#991b1b");
     const [timerAccent, setTimerAccent] = useState(couponConfig?.timerAccent || "#dc2626");
+    const [timerMode,   setTimerMode]   = useState(couponConfig?.timerMode === "loop" ? "loop" : "session");
     const [selectedCouponIds, setSelectedCouponIds] = useState(
         Array.isArray(couponConfig?.selectedActiveCoupons) ? couponConfig.selectedActiveCoupons.filter(Boolean) : []
     );
@@ -815,7 +818,7 @@ export default function ProductWidgetPage() {
                 couponStyles,
                 couponConditions,
                 layout: couponLayout,
-                timerEnabled, timerHours, timerMins, timerLabel, timerExpired, timerBg, timerText, timerAccent,
+                timerEnabled, timerHours, timerMins, timerLabel, timerExpired, timerBg, timerText, timerAccent, timerMode,
                 widgetPlacement,
                 ...overrides,
             },
@@ -844,7 +847,7 @@ export default function ProductWidgetPage() {
     const pvButtonText = editOv.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code");
 
     const timerStrip = timerEnabled ? (
-        <CountdownStrip hours={timerHours} minutes={timerMins} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
+        <CountdownStrip hours={timerHours} minutes={timerMins} loop={timerMode === "loop"} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
     ) : null;
 
     const renderPreview = () => {
@@ -1063,8 +1066,20 @@ export default function ProductWidgetPage() {
                                                         <div style={{ flex: 1 }}><TextField label="Hours" type="number" value={String(timerHours)} onChange={(v) => { setTimerHours(Math.min(23, Math.max(0, Number(v)))); mark(); }} autoComplete="off" /></div>
                                                         <div style={{ flex: 1 }}><TextField label="Minutes" type="number" value={String(timerMins)} onChange={(v) => { setTimerMins(Math.min(59, Math.max(0, Number(v)))); mark(); }} autoComplete="off" /></div>
                                                     </InlineStack>
+                                                    <Select
+                                                        label="Timer mode"
+                                                        options={[
+                                                            { label: "Per-session (resets each visit)", value: "session" },
+                                                            { label: "On loop (restarts when it ends)", value: "loop" },
+                                                        ]}
+                                                        value={timerMode}
+                                                        onChange={(v) => { setTimerMode(v); mark(); }}
+                                                        helpText={timerMode === "loop" ? "When the timer reaches zero it starts again from the full time, without end." : undefined}
+                                                    />
                                                     <TextField label="Timer label" value={timerLabel} onChange={(v) => { setTimerLabel(v); mark(); }} placeholder="Offer expires in" autoComplete="off" />
-                                                    <TextField label="Expired label" value={timerExpired} onChange={(v) => { setTimerExpired(v); mark(); }} placeholder="Offer expired!" autoComplete="off" />
+                                                    {timerMode !== "loop" && (
+                                                        <TextField label="Expired label" value={timerExpired} onChange={(v) => { setTimerExpired(v); mark(); }} placeholder="Offer expired!" autoComplete="off" />
+                                                    )}
                                                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                                                         <ColorSwatch label="Background" value={timerBg} onChange={(v) => { setTimerBg(v); mark(); }} />
                                                         <ColorSwatch label="Text" value={timerText} onChange={(v) => { setTimerText(v); mark(); }} />

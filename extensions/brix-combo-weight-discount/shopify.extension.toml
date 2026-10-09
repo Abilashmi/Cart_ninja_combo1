@@ -1,0 +1,23 @@
+api_version = "2025-10"
+uid = "5e24d41b-4066-e57f-fd7851359a2d647872f6"
+
+[[extensions]]
+name = "BRIX Combo Weight discount"
+handle = "brix-combo-weight-discount"
+type = "function"
+description = "Applies BRIX weight-tier combo box pricing (percentage off, amount off or a fixed box price) to marked cart lines at checkout."
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  # $collectionIds for the input query: every collection any weight combo
+  # counts, written to the discount by app/services/combo-weight-shopify.server.js.
+  [extensions.input.variables]
+  namespace = "$app"
+  key = "combo_weight_vars"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

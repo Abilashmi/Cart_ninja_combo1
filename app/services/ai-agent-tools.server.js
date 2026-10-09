@@ -13,6 +13,7 @@ import {
 import { resolveProductByName, appendUpsellRule, searchProducts } from './upsell-rules.server';
 import { resolveCollectionByName, searchCollections } from './collection-resolver.server';
 import { checkComboPlanGate, createComboTemplate } from './combo-templates.server';
+import { syncComboWeightIfNeeded } from './combo-weight-shopify.server';
 import {
   createDiscount, deleteDiscount, persistLocalCopy,
   createAutomaticFreeShipping, createAutomaticAmountOff, listActiveDiscounts,
@@ -1025,6 +1026,9 @@ export const TOOL_EXECUTORS = {
       name: templateName, template_type: layout, status: 'draft', is_active: 0,
       customization_data: JSON.stringify(customization),
     });
+    // Item-count combos (all BRIX makes today) need no checkout sync; this
+    // only runs if a weight combo is ever created here.
+    await syncComboWeightIfNeeded(ctx.admin, ctx.shop, customization);
     return { success: true, id, name: templateName, collection: collection.title };
   },
 

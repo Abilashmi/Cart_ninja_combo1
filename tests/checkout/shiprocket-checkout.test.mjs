@@ -162,6 +162,14 @@ test('cart with a Pack line stays on Shopify checkout (Shiprocket would not appl
   assert.equal(page.buyCartCalls.length, 0);
 });
 
+test('cart with a weight combo box stays on Shopify checkout (Shiprocket would not apply the box price)', async () => {
+  const page = makePage({ cartItems: [{ properties: { _brix_combo_id: '12', _brix_combo_group: 'b1' }, final_line_price: 11000 }, { properties: {}, final_line_price: 5000 }] });
+  page.api.checkoutCart({ coupon: null, fallbackUrl: '/checkout' });
+  await page.advance(200);
+  assert.deepEqual(page.navigations, ['/checkout']);
+  assert.equal(page.buyCartCalls.length, 0);
+});
+
 test('cart with a free reward gift stays on Shopify checkout', async () => {
   const page = makePage({ cartItems: [{ properties: {}, final_line_price: 6000 }, { properties: { _brixReward: 'true' }, final_line_price: 0 }] });
   page.api.checkoutCart({ fallbackUrl: '/checkout' });

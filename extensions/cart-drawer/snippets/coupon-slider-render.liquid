@@ -46,9 +46,22 @@ function escapeHtmlJs(v){
    doesn't quietly reset back to the full duration on every page view, but
    still starts fresh for a new visit — matching the Cart Drawer's own
    countdown timer's 'session' mode (cart_drawer_inline.js). */
-function getCouponTimerDeadline(shop,hours,minutes){
+// timerMode 'loop': never expires — at zero it starts the same duration
+// again. The cycle is anchored to the first time this device saw it
+// (localStorage), so changing page doesn't restart it (same as the drawer's
+// loop mode).
+function getCouponTimerDeadline(shop,hours,minutes,mode){
   var durationMs=((Number(hours)||0)*3600+(Number(minutes)||0)*60)*1000;
   if(durationMs<=0)return null;
+  if(mode==='loop'){
+    var now=Date.now(),anchor=now;
+    try{
+      var loopKey='ps_coupon_timer_loop_'+shop+'_'+durationMs;
+      var saved=parseInt(localStorage.getItem(loopKey)||'0',10);
+      if(saved&&saved<=now)anchor=saved;else localStorage.setItem(loopKey,String(now));
+    }catch(e){}
+    return anchor+durationMs*(Math.floor((now-anchor)/durationMs)+1);
+  }
   var key='ps_coupon_timer_deadline_'+shop;
   try{
     var stored=parseInt(sessionStorage.getItem(key)||'0',10);
@@ -79,7 +92,9 @@ function timerStripHtml(data){
 
 function startCouponTimer(el,data,shop){
   if(!data||!data.timerEnabled)return;
-  var deadline=getCouponTimerDeadline(shop,data.timerHours,data.timerMins);
+  var loop=data.timerMode==='loop';
+  var durationMs=((Number(data.timerHours)||0)*3600+(Number(data.timerMins)||0)*60)*1000;
+  var deadline=getCouponTimerDeadline(shop,data.timerHours,data.timerMins,data.timerMode);
   if(!deadline)return;
   var pairs=Array.prototype.map.call(el.querySelectorAll('.ps-timer-text'),function(textEl){
     return {textEl:textEl,labelEl:textEl.closest('.ps-timer-bar').querySelector('.ps-timer-label')};
@@ -89,6 +104,11 @@ function startCouponTimer(el,data,shop){
   function pad(n){return n<10?('0'+n):(''+n);}
   function tick(){
     var remainingMs=deadline-Date.now();
+    if(remainingMs<=0&&loop){
+      // Next round (skipping any that passed while the tab was asleep).
+      deadline+=durationMs*(Math.floor(-remainingMs/durationMs)+1);
+      remainingMs=deadline-Date.now();
+    }
     if(remainingMs<=0){
       pairs.forEach(function(p){p.labelEl.textContent=data.timerExpired||'Offer expired!';p.textEl.textContent='';});
       if(iv){clearInterval(iv);iv=null;}

@@ -7,9 +7,9 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadComboPageScript } from '../combo-weight/storefront-script.mjs';
 
-const source = fs.readFileSync(path.resolve('app/routes/combo-page[.]js.jsx'), 'utf8');
-const SCRIPT = source.slice(source.indexOf('String.raw`') + 'String.raw`'.length, source.lastIndexOf('\n`;'));
+const SCRIPT = loadComboPageScript();
 const API = 'https://app.test';
 const SHOTS = path.resolve('tests/combo-ai/screenshots');
 fs.mkdirSync(SHOTS, { recursive: true });

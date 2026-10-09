@@ -1,5 +1,8 @@
 import { authenticate } from '../shopify.server';
+import { toGrams } from '../utils/combo-weight.shared.js';
 
+// Variants (with Shopify weights) let the builder preview add real variants
+// and price weight-priced boxes (The Weight Box / weight pricing).
 const PRODUCT_FRAGMENT = `
   fragment ProductInfo on Product {
     id
@@ -7,6 +10,7 @@ const PRODUCT_FRAGMENT = `
     handle
     featuredImage { url altText width height }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
+    variants(first: 10) { nodes { id title price availableForSale image { url } inventoryItem { measurement { weight { value unit } } } } }
   }
 `;
 
@@ -92,5 +96,13 @@ function formatProduct(node) {
     } : null,
     price: node.priceRangeV2?.minVariantPrice?.amount || '0.00',
     currency: node.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
+    variants: (node.variants?.nodes || []).map((v) => ({
+      id: v.id,
+      title: v.title,
+      price: v.price,
+      available: v.availableForSale !== false,
+      image: v.image ? { src: v.image.url } : null,
+      grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
+    })),
   };
 }

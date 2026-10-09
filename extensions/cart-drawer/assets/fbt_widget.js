@@ -659,7 +659,7 @@
             });
 
             const totalAddedQty = addedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-            addBtn.textContent = totalAddedQty > 1 ? `Added ${totalAddedQty}` : 'Added âœ“';
+            addBtn.textContent = totalAddedQty > 1 ? `Added ${totalAddedQty}` : 'Added';
 
             if (failedItems.length > 0) {
               const failedTitles = failedItems

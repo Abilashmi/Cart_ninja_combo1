@@ -120,10 +120,19 @@ export function toForm(s) {
     orderTags: s.orderTags.join(', '),
     drawerText: s.buttons.drawerText,
     productText: s.buttons.productText,
+    comboText: s.buttons.comboText || DEFAULT_COD_SETTINGS.buttons.comboText,
+    // Cart drawer button look.
     bg: s.buttons.bg,
     color: s.buttons.color,
     btnStyle: s.buttons.style || 'filled',
     btnRadius: s.buttons.radius ?? 12,
+    btnFontSize: s.buttons.fontSize ?? 15,
+    btnBold: s.buttons.bold !== false,
+    btnUppercase: Boolean(s.buttons.uppercase),
+    btnIcon: s.buttons.icon !== false,
+    // Product page and combo page button looks (same = follow the cart drawer).
+    productLook: { ...DEFAULT_COD_SETTINGS.buttons.product, ...(s.buttons.product || {}) },
+    comboLook: { ...DEFAULT_COD_SETTINGS.buttons.combo, ...(s.buttons.combo || {}) },
     ...productButtonForm(s.productButton),
     ...sheetForm(s.sheet),
     ga4Id: s.tracking?.ga4Id || '',
@@ -169,7 +178,21 @@ export function toSettings(f) {
     allowCoupons: f.allowCoupons,
     prepaidNudgeText: f.prepaidNudgeText,
     orderTags: f.orderTags,
-    buttons: { drawerText: f.drawerText, productText: f.productText, bg: f.bg, color: f.color, style: f.btnStyle, radius: f.btnRadius },
+    buttons: {
+      drawerText: f.drawerText,
+      productText: f.productText,
+      comboText: f.comboText,
+      bg: f.bg,
+      color: f.color,
+      style: f.btnStyle,
+      radius: f.btnRadius,
+      fontSize: f.btnFontSize,
+      bold: f.btnBold,
+      uppercase: f.btnUppercase,
+      icon: f.btnIcon,
+      product: f.productLook,
+      combo: f.comboLook,
+    },
     productButton: {
       replaceBuyNow: f.pbReplaceBuyNow,
       marginTop: f.pbMarginTop,
@@ -222,6 +245,13 @@ export function formErrors(f) {
   if (!hex.test(f.color)) e.color = 'Use a hex colour like #ffffff.';
   if (!f.drawerText.trim()) e.drawerText = 'Enter the button text.';
   if (!f.productText.trim()) e.productText = 'Enter the button text.';
+  if (!String(f.comboText || '').trim()) e.comboText = 'Enter the button text.';
+  for (const [key, l] of [['product', f.productLook], ['combo', f.comboLook]]) {
+    if (l && l.same === false) {
+      if (!hex.test(l.bg || '')) e[`${key}Bg`] = 'Use a hex colour like #111827.';
+      if (!hex.test(l.color || '')) e[`${key}Color`] = 'Use a hex colour like #ffffff.';
+    }
+  }
   if (f.sheetLogo && !isValidCodLogo(f.sheetLogo)) e.sheetLogo = 'Use an image link that starts with https://, or upload a logo.';
   if (!f.sheetUseButton && !hex.test(f.sheetAccent)) e.sheetAccent = 'Use a hex colour like #4f46e5.';
   if (f.ga4Id.trim() && !GA4_ID_RE.test(f.ga4Id.trim().toUpperCase())) e.ga4Id = 'A Measurement ID looks like G-ABC123XYZ.';

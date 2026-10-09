@@ -439,11 +439,15 @@ function buildPreviewProducts(rules, catalog) {
     seen.add(p.id);
     return true;
   });
+  // Saved rule products don't carry a compare-at price; the catalog does
+  // (the storefront reads it live, the same way).
+  const catalogById = new Map((catalog || []).map((p) => [p.id, p]));
   return Array.from({ length: PREVIEW_SLOT_COUNT }, (_, i) => {
     const p = unique[i];
-    return p
-      ? { id: p.id, name: p.title || p.name || `Product ${i + 1}`, price: Number(p.price || 0), compareAtPrice: Number(p.compareAtPrice || 0), image: p.image || '' }
-      : { id: `placeholder-${i}`, name: 'Add a product', price: 0, image: '' };
+    if (!p) return { id: `placeholder-${i}`, name: 'Add a product', price: 0, compareAt: 0, image: '' };
+    const price = Number(p.price || 0);
+    const compareAt = Number(p.compareAtPrice ?? catalogById.get(p.id)?.compareAtPrice ?? 0);
+    return { id: p.id, name: p.title || p.name || `Product ${i + 1}`, price, compareAt: compareAt > price ? compareAt : 0, image: p.image || '' };
   });
 }
 
@@ -520,7 +524,7 @@ function ImagePlaceholder({ size = 64, image = '' }) {
 function findProductsByIds(allProducts, ids) {
   return allProducts.filter(p => ids.includes(p.id)).map(p => ({
     id: p.id, title: p.title, handle: p.handle,
-    image: p.image, price: p.price, compareAtPrice: p.compareAtPrice,
+    image: p.image, price: p.price,
   }));
 }
 
@@ -1066,7 +1070,8 @@ export default function FBTPage() {
   };
 
   const total = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + p.price * productStates[i].qty : sum, 0);
-  const compareTotal = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + Math.max(p.compareAtPrice || 0, p.price) * productStates[i].qty : sum, 0);
+  // What the same items cost at their compare-at prices, struck through next to the total.
+  const compareTotal = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + (p.compareAt || p.price) * productStates[i].qty : sum, 0);
   const activeCount = fbtPreviewProducts.filter((_, i) => isActive(i)).length;
 
   // Shared by the Save button and the instant enable/disable toggle below —
@@ -1229,12 +1234,6 @@ export default function FBTPage() {
     };
   })();
 
-  // Struck-through compare-at price, only when the product is on sale —
-  // mirrors priceHtml in fbt-widget-render.liquid.
-  const ComparePrice = ({ p }) => (p.compareAtPrice > p.price ? (
-    <s style={{ marginLeft: '6px', color: textColor, opacity: 0.55, fontWeight: 500 }}>{currencySymbol}{p.compareAtPrice}</s>
-  ) : null);
-
   const PreviewCard = ({ p, i }) => (
     <div style={{
       ...cardStyle,
@@ -1249,7 +1248,10 @@ export default function FBTPage() {
         overflow: 'hidden', wordBreak: 'break-word',
       }}>{p.name}</div>
       {showPrices && (
-        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>{currencySymbol}{p.price}<ComparePrice p={p} /></div>
+        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+          {p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}
+          {currencySymbol}{p.price}
+        </div>
       )}
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
         {renderAction(i)}
@@ -1294,7 +1296,10 @@ export default function FBTPage() {
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{p.name}</div>
             {showPrices && (
-              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>{currencySymbol}{p.price}<ComparePrice p={p} /></div>
+              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>
+                {p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}
+                {currencySymbol}{p.price}
+              </div>
             )}
           </div>
           <div style={{ flexShrink: 0 }}>{renderAction(i)}</div>
@@ -1893,10 +1898,10 @@ export default function FBTPage() {
                     <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
                       {interactionStyle === 'quick-add' ? 'Select items' : `Total (${activeCount} items)`}
                       <br />
-                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
-                      {compareTotal > total && (
-                        <s style={{ marginLeft: '8px', color: textColor, opacity: 0.55, fontSize: '14px', fontWeight: 500 }}>{currencySymbol}{Math.round(compareTotal)}</s>
+                      {Math.round(compareTotal) > Math.round(total) && (
+                        <s style={{ color: textColor, opacity: 0.5, fontSize: '14px', fontWeight: 500, marginRight: '6px' }}>{currencySymbol}{Math.round(compareTotal)}</s>
                       )}
+                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
                     {showAddAll && (
                       <button style={{

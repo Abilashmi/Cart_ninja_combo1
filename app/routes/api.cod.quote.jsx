@@ -25,6 +25,7 @@ export async function action({ request }) {
     assertLive(ctx, surface);
     const { quote } = await quoteCod(ctx.admin, {
       settings: ctx.settings, lines, coupon: body.coupon, pincode, surface, currencyCode: ctx.currencyCode,
+      comboWeightLive: ctx.comboWeightLive,
     });
     return ok({ quote });
   } catch (error) {

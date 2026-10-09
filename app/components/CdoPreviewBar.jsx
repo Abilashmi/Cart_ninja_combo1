@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { codButtonColors, codButtonType } from './cod/codButtonLook';
 
 // BRIX COD Checkout: when a provider supplies { onCod }, the bar shows a
 // Cash on Delivery button next to Checkout. Provided by the storefront combo
@@ -430,20 +431,27 @@ export const CdoPreviewBar = ({
                     style={{
                       flex: isMobile ? 1 : 'none',
                       width: isMobile ? '100%' : 'auto',
-                      background: config.cod_btn_bg || '#ffffff',
-                      color: config.cod_btn_text_color || '#111827',
-                      border: `1.5px solid ${config.cod_btn_text_color || '#111827'}`,
                       padding: '10px 20px',
-                      borderRadius: config.preview_border_radius || 6,
-                      fontWeight: 700,
                       cursor: (loading || !canOpenDrawer) ? 'not-allowed' : 'pointer',
                       minHeight: isMobile ? '48px' : 'auto',
-                      fontSize: isMobile ? '13px' : 'inherit',
                       opacity: (loading || !canOpenDrawer) ? 0.6 : 1,
+                      // The combo page button design from COD → Customize, when
+                      // the page passes it (cod.look); else the template's colours.
+                      ...(cod.look ? {
+                        ...codButtonColors(cod.look), ...codButtonType(cod.look), border: 'none', borderRadius: cod.look.radius,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      } : {
+                        background: config.cod_btn_bg || '#ffffff',
+                        color: config.cod_btn_text_color || '#111827',
+                        border: `1.5px solid ${config.cod_btn_text_color || '#111827'}`,
+                        borderRadius: config.preview_border_radius || 6,
+                        fontWeight: 700,
+                        fontSize: isMobile ? '13px' : 'inherit',
+                      }),
                     }}
                     disabled={loading || !canOpenDrawer}
                   >
-                    {config.cod_btn_text || 'Cash on Delivery'}
+                    {cod.look ? (cod.look.text || 'Cash on Delivery') : (config.cod_btn_text || 'Cash on Delivery')}
                   </button>
                 )}
                 {config.show_preview_add_to_cart_btn && (

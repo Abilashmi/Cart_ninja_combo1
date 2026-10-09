@@ -2,6 +2,38 @@ import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { checkComboPlanGate, createComboTemplate } from '../services/combo-templates.server';
 import { ensureComboForgeTemplate } from '../services/combo-page.server';
+import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
+import { COMBO_WEIGHT_FEATURE, syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
+import { isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
+
+/**
+ * Weight-priced combos (pricing_mode 'weight') are Pro only, and their pricing
+ * is always validated and re-normalized here, so what is stored (and later
+ * synced to the checkout Function) is the server's version, never the
+ * browser's. Returns { customizationData } or { response } to send back.
+ */
+async function prepareWeightPricing(shop, customizationData) {
+  let config;
+  try { config = JSON.parse(customizationData || '{}') || {}; } catch { return { customizationData }; }
+  if (!isWeightCombo(config)) return { customizationData };
+  const planKey = await getShopPlan(shop);
+  if (!canPublishFeature(planKey, COMBO_WEIGHT_FEATURE)) {
+    return { response: Response.json({ success: false, upgradeRequired: true, feature: COMBO_WEIGHT_FEATURE, error: 'Weight-based pricing is part of the Pro plan. Upgrade, or switch this combo back to item-count pricing to save it.' }, { status: 403 }) };
+  }
+  const { value, errors } = normalizeWeightPricing(config.weight_pricing);
+  if (errors.length) {
+    return { response: Response.json({ success: false, error: errors[0].message, weightErrors: errors }, { status: 422 }) };
+  }
+  // The Weight Box template is always weight-priced, whatever the browser sent.
+  return { customizationData: JSON.stringify({ ...config, pricing_mode: 'weight', weight_pricing: value }) };
+}
+
+// What the builder shows about this template's box discount after a save.
+function weightStatusFor(sync, templateId, active) {
+  if (!sync) return null;
+  const own = sync.templates?.[Number(templateId)];
+  return { state: sync.state, verified: Boolean(own?.verified), message: own?.message || sync.message, active: Boolean(active) };
+}
 
 // Shopify Pages don't process Liquid tags in their body content (confirmed
 // live — {{ ... }} shows up as literal text to shoppers), so shop/templateId
@@ -110,7 +142,8 @@ export async function action({ request }) {
       const formData = await request.formData();
       data = JSON.parse(formData.get('body') || '{}');
     }
-    const { id, name, template_type, status, is_active, customization_data, publishParams, action: dataAction } = data;
+    const { id, name, template_type, status, is_active, publishParams, action: dataAction } = data;
+    let { customization_data } = data;
 
     // ── Preview action ──────────────────────────────────────────────────────
     if (dataAction === 'preview') {
@@ -175,8 +208,16 @@ export async function action({ request }) {
     let pageError = null;
     const isActive = (is_active === 1 || is_active === true) ? 1 : 0;
 
+    const prepared = await prepareWeightPricing(shop, customization_data);
+    if (prepared.response) return prepared.response;
+    customization_data = prepared.customizationData;
+
     // ── Update existing template ────────────────────────────────────────────
     if (id) {
+      // Needed to tell whether this save turns weight pricing off for a
+      // template that had it (the Function's config must drop it then).
+      const [previousRows] = await db.execute('SELECT customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), shop]);
+      const previousConfig = previousRows?.[0]?.customization_data || null;
       await db.execute(
         `UPDATE combo_templates SET
            shop_domain = ?, name = ?, template_type = ?, status = ?, is_active = ?,
@@ -190,6 +231,7 @@ export async function action({ request }) {
           Number(id),
         ]
       );
+      const weightPricing = weightStatusFor(await syncComboWeightIfNeeded(admin, shop, previousConfig, customization_data), id, isActive);
 
       if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
         try {
@@ -202,8 +244,8 @@ export async function action({ request }) {
         }
       }
 
-      if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id });
-      return Response.json({ success: true, message: 'Template updated', id, page: pageResult });
+      if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id, weightPricing });
+      return Response.json({ success: true, message: 'Template updated', id, page: pageResult, weightPricing });
     }
 
     // ── Create new template ─────────────────────────────────────────────────
@@ -219,6 +261,7 @@ export async function action({ request }) {
       page_handle: publishParams?.pageInfo?.handle || null,
       page_id: publishParams?.pageInfo?.selectedPageId || null,
     });
+    const weightPricing = weightStatusFor(await syncComboWeightIfNeeded(admin, shop, customization_data), newId, isActive);
 
     if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
       try {
@@ -231,8 +274,8 @@ export async function action({ request }) {
       }
     }
 
-    if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id: newId });
-    return Response.json({ success: true, message: 'Template created', id: newId, page: pageResult });
+    if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id: newId, weightPricing });
+    return Response.json({ success: true, message: 'Template created', id: newId, page: pageResult, weightPricing });
   }
 
   if (request.method === 'DELETE') {
@@ -254,7 +297,7 @@ export async function action({ request }) {
     // (created by createShopifyPage above) stays live with no template
     // behind it. Kept in sync since this is a second, independently
     // reachable delete path for the same table.
-    const [rows] = await db.execute('SELECT page_id FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
+    const [rows] = await db.execute('SELECT page_id, customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
     const pageId = rows?.[0]?.page_id;
     let pageDeleteWarning = null;
     if (pageId) {
@@ -280,6 +323,7 @@ export async function action({ request }) {
     }
 
     await db.execute('DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
+    await syncComboWeightIfNeeded(admin, session.shop, rows?.[0]?.customization_data);
     return Response.json({
       success: true,
       message: pageDeleteWarning

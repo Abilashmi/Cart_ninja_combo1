@@ -1,6 +1,8 @@
 import { memo } from 'react';
-import { FormLayout, Checkbox, Select, Text, Button, TextField } from '@shopify/polaris';
+import { FormLayout, Checkbox, Text, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
+import { OfferSection } from './OfferSection';
+import { isWeightCombo } from '../../utils/combo-weight.shared.js';
 
 function AdvancedSectionComponent({
   config,
@@ -10,18 +12,24 @@ function AdvancedSectionComponent({
   ColorPickerField,
   localActiveDiscounts = [],
   onCreateCoupon,
+  weightStatus,
+  savedWeightHash,
 }) {
-  const couponOptions = (localActiveDiscounts || []).map((d) => ({
-    label: `${d.title || d.code || 'Untitled'} (${d.code || ''})`,
-    value: String(d.id),
-  }));
+  const isWeight = isWeightCombo(config);
 
   return (
     <>
       <SectionCard title="Progress Bar" expanded={expandedSections?.progressBar} onToggle={() => toggleSection?.('progressBar')}>
         <FormLayout>
-          <Checkbox label="Show Progress Bar" checked={!!config.show_progress_bar} onChange={(v) => updateConfig('show_progress_bar', v)} />
-          {config.show_progress_bar && (
+          {isWeight && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Weight-priced combos always show the weight meter instead, with the tiers and messages from Offer. Its colours and heading come from here.
+            </Text>
+          )}
+          {isWeight && ColorPickerField && <ColorPickerField label="Meter Color" value={config.progress_bar_color || '#111827'} onChange={(v) => updateConfig('progress_bar_color', v)} />}
+          {isWeight && <TextField label="Meter Heading" value={config.progress_text || ''} placeholder="Your box" onChange={(v) => updateConfig('progress_text', v)} autoComplete="off" />}
+          {!isWeight && <Checkbox label="Show Progress Bar" checked={!!config.show_progress_bar} onChange={(v) => updateConfig('show_progress_bar', v)} />}
+          {!isWeight && config.show_progress_bar && (
             <>
               {ColorPickerField && <ColorPickerField label="Progress Bar Color" value={config.progress_bar_color || '#000000'} onChange={(v) => updateConfig('progress_bar_color', v)} />}
               <TextField label="Progress Text" value={config.progress_text || ''} onChange={(v) => updateConfig('progress_text', v)} autoComplete="off" helpText="Shown near the progress bar" />
@@ -37,43 +45,18 @@ function AdvancedSectionComponent({
         </FormLayout>
       </SectionCard>
 
+      {/* Section key stays "discount": the setup tour and "find a setting" open it by that name. */}
       <div data-tour="combo-discount">
-      <SectionCard title="Coupon" expanded={expandedSections?.discount} onToggle={() => toggleSection?.('discount')}>
-        <FormLayout>
-          <Checkbox
-            label="Offer a coupon?"
-            checked={!!config.has_discount_offer}
-            onChange={(v) => {
-              updateConfig('has_discount_offer', v);
-              if (!v) updateConfig('selected_discount_id', null);
-            }}
-            helpText="Enable to offer a coupon code with this bundle"
-          />
-          {!config.has_discount_offer && (
-            <Button variant="secondary" onClick={() => onCreateCoupon?.()} fullWidth>
-              Create Coupon
-            </Button>
-          )}
-          {!!config.has_discount_offer && (
-            couponOptions.length > 0 ? (
-              <Select
-                label="Select Coupon"
-                value={String(config.selected_discount_id || '')}
-                placeholder="Choose a coupon..."
-                options={couponOptions}
-                onChange={(v) => updateConfig('selected_discount_id', v || null)}
-              />
-            ) : (
-              <>
-                <Text as="p" variant="bodySm" tone="subdued">No coupons created yet.</Text>
-                <Button variant="secondary" onClick={() => onCreateCoupon?.()} fullWidth>
-                  Create Coupon
-                </Button>
-              </>
-            )
-          )}
-        </FormLayout>
-      </SectionCard>
+        <OfferSection
+          config={config}
+          updateConfig={updateConfig}
+          expanded={expandedSections?.discount}
+          onToggle={() => toggleSection?.('discount')}
+          localActiveDiscounts={localActiveDiscounts}
+          onCreateCoupon={onCreateCoupon}
+          weightStatus={weightStatus}
+          savedWeightHash={savedWeightHash}
+        />
       </div>
 
       <SectionCard title="AI Settings" expanded={expandedSections?.aiSettings} onToggle={() => toggleSection?.('aiSettings')}>
