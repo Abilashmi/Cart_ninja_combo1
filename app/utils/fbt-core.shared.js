@@ -190,11 +190,8 @@ export function createFbtCore() {
    * template's colours) -> a v2 config, so a store keeps showing what it
    * showed until the merchant saves the new page.
    * legacyRules: [{ displayScope, triggerProducts: [{id, handle, title}], fbtProducts: [...] }]
-   * aiProductCount: the old "products per product" number (AI mode).
-   * How many products show stays what the old widget showed: its AI number
-   * for the old AI pairs, else every product of its biggest rule (up to 6).
    */
-  function fromLegacy(legacyRules, template, aiProductCount) {
+  function fromLegacy(legacyRules, template) {
     var tpl = template && typeof template === 'object' ? template : {};
     var rules = [];
     var pairs = {};
@@ -233,18 +230,7 @@ export function createFbtCore() {
       sources: { orders: true, carts: true, ai: true, shopify: false },
       rules: rules,
       pairs: pairs,
-      maxItems: legacyCount(rules, pairs, aiProductCount),
     });
-  }
-
-  function legacyCount(rules, pairs, aiProductCount) {
-    var most = 0;
-    for (var i = 0; i < rules.length; i++) most = Math.max(most, (rules[i].show && rules[i].show.products ? rules[i].show.products.length : 0));
-    var hasPairs = false;
-    for (var k in pairs) if (Object.prototype.hasOwnProperty.call(pairs, k)) { hasPairs = true; break; }
-    var ai = Math.round(Number(aiProductCount));
-    if (hasPairs && ai > 0) most = Math.max(most, ai);
-    return most > 0 ? Math.min(LIMITS.maxItems, most) : 3;
   }
 
   /**
