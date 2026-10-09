@@ -616,7 +616,7 @@ test('storefront config: returns display settings only, OTP only when Node has S
   assert.deepEqual(json.blockedPincodes, ['744101']);
   assert.deepEqual(json.surfaces, { drawer: true, product: true, combo: false });
   assert.equal(json.buttons.drawerText, 'Pay cash on delivery');
-  assert.deepEqual(json.productButton, { replaceBuyNow: false, marginTop: 4, marginBottom: 0, paddingY: 18, paddingX: 16, radius: 0 });
+  assert.deepEqual(json.productButton, { replaceBuyNow: false, buyNowPlacement: 'above', buyNowText: '', buyNowSelector: '', marginTop: 4, marginBottom: 0, paddingY: 18, paddingX: 16, radius: 0 });
   assert.equal(json.otpRequired, true, 'COD_OTP_DEV_LOG counts as an SMS provider in tests');
   assert.equal('_runtime' in json, false);
   assert.equal('orderTags' in json, false, 'merchant-only fields are not exposed');

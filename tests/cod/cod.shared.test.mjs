@@ -86,7 +86,7 @@ test('product page button: replace Buy it now by default, sizes clamped, partial
   assert.deepEqual(sanitizeCodSettings({}).productButton, DEFAULT_COD_SETTINGS.productButton);
   assert.equal(DEFAULT_COD_SETTINGS.productButton.replaceBuyNow, true);
   const s = sanitizeCodSettings({ productButton: { replaceBuyNow: false, marginTop: 999, paddingY: -3, paddingX: '20', radius: 'x', bogus: 1 } });
-  assert.deepEqual(s.productButton, { replaceBuyNow: false, buyNowText: '', buyNowSelector: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
+  assert.deepEqual(s.productButton, { replaceBuyNow: false, buyNowPlacement: 'above', buyNowText: '', buyNowSelector: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
   const next = sanitizeCodSettings({ productButton: { radius: 0 } }, s);
   assert.deepEqual(next.productButton, { ...s.productButton, radius: 0 });
 });
@@ -283,4 +283,21 @@ test('excluded tags: any matching product tag blocks COD, case-insensitive, many
   assert.equal(checkCodRules({ settings: s, subtotal: 500, productTags: ['fragile'] })?.code, 'product_excluded');
   assert.equal(checkCodRules({ settings: s, subtotal: 500, productTags: ['summer', 'cod-ok'] }), null, 'tags are exclusions, not a list of COD products');
   assert.equal(checkCodRules({ settings: on({}), subtotal: 500, productTags: ['no-cod'] }), null);
+});
+
+test('product page: COD replaces, or goes above or below, Shopify\'s Buy it now', () => {
+  assert.equal(DEFAULT_COD_SETTINGS.productButton.buyNowPlacement, 'replace');
+  const below = sanitizeCodSettings({ productButton: { buyNowPlacement: 'below' } });
+  assert.deepEqual([below.productButton.buyNowPlacement, below.productButton.replaceBuyNow], ['below', false]);
+  assert.equal(sanitizeCodSettings({ productButton: { buyNowPlacement: 'sideways' } }, below).productButton.buyNowPlacement, 'below', 'a bad value keeps the saved one');
+  assert.equal(sanitizeCodSettings({ productButton: { marginTop: 4 } }, below).productButton.buyNowPlacement, 'below', 'other saves keep it');
+  const replace = sanitizeCodSettings({ productButton: { buyNowPlacement: 'replace' } }, below);
+  assert.deepEqual([replace.productButton.buyNowPlacement, replace.productButton.replaceBuyNow], ['replace', true]);
+  // Saved before buyNowPlacement existed: replaceBuyNow decides.
+  const old = { ...DEFAULT_COD_SETTINGS, productButton: { replaceBuyNow: false, marginTop: 10 } };
+  assert.equal(sanitizeCodSettings({}, old).productButton.buyNowPlacement, 'above');
+  assert.equal(sanitizeCodSettings({}, { ...DEFAULT_COD_SETTINGS, productButton: { replaceBuyNow: true } }).productButton.buyNowPlacement, 'replace');
+  // The old switch still works for callers that only send it.
+  assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }).productButton.buyNowPlacement, 'above');
+  assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }, below).productButton.buyNowPlacement, 'below', 'turning replace off keeps Below');
 });

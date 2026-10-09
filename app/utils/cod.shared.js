@@ -16,6 +16,8 @@ export const COD_SOURCES = COD_SURFACES; // where an order was placed from
 export const COD_DRAWER_PLACEMENTS = ['replace', 'above', 'below'];
 // Where it goes on a combo page, relative to the combo's Checkout button.
 export const COD_COMBO_PLACEMENTS = COD_DRAWER_PLACEMENTS;
+// Where it goes on a product page, relative to Shopify's Buy it now button.
+export const COD_BUY_NOW_PLACEMENTS = ['replace', 'above', 'below'];
 
 // Price tags in button texts ({price}, {cod_price}, ...): price-tags.shared.js.
 export { COD_PRICE_TAGS, hasPriceTags, showsCodFee, fillPriceTags, codPriceValues, paymentPriceValues } from './price-tags.shared.js';
@@ -76,6 +78,10 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // The product page COD button (brix_cod.js initProductButton). Sizes in px.
   productButton: {
     replaceBuyNow: true, // take the place of Shopify's "Buy it now" button and hide it
+    // Where COD goes next to Shopify's Buy it now: replace (hide it), above or
+    // below it. Settings saved before this only had replaceBuyNow
+    // (true = replace, false = above); replaceBuyNow is kept in step.
+    buyNowPlacement: 'replace',
     // Text for Shopify's own "Buy it now" while it shows (not replaced); may
     // hold price tags ("Buy it now {prepaid_price} Prepaid"). '' = Shopify's text.
     buyNowText: '',
@@ -269,15 +275,19 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     combo: sanitizeButtonLook(pb?.combo, { ...D.combo, ...(bb.combo || {}) }, { same: true, radius: true }),
   };
   const productButton = { ...DEFAULT_COD_SETTINGS.productButton, ...(b.productButton || {}) };
+  // Stored before buyNowPlacement existed: its replaceBuyNow decides.
+  if (!COD_BUY_NOW_PLACEMENTS.includes(b.productButton?.buyNowPlacement)) productButton.buyNowPlacement = b.productButton?.replaceBuyNow === false ? 'above' : 'replace';
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;
-    if ('replaceBuyNow' in q) productButton.replaceBuyNow = Boolean(q.replaceBuyNow);
+    if (COD_BUY_NOW_PLACEMENTS.includes(q.buyNowPlacement)) productButton.buyNowPlacement = q.buyNowPlacement;
+    else if ('replaceBuyNow' in q) productButton.buyNowPlacement = q.replaceBuyNow ? 'replace' : (productButton.buyNowPlacement === 'below' ? 'below' : 'above');
     if ('buyNowSelector' in q) productButton.buyNowSelector = isValidDrawerSelector(String(q.buyNowSelector ?? '')) ? String(q.buyNowSelector).trim() : '';
     if ('buyNowText' in q) productButton.buyNowText = typeof q.buyNowText === 'string' ? q.buyNowText.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
     for (const [key, [min, max]] of Object.entries(COD_PRODUCT_BUTTON_LIMITS)) {
       if (key in q) productButton[key] = int(q[key], productButton[key], min, max);
     }
   }
+  productButton.replaceBuyNow = productButton.buyNowPlacement === 'replace';
   const sheet = { ...DEFAULT_COD_SETTINGS.sheet, ...(b.sheet || {}) };
   if (p.sheet && typeof p.sheet === 'object') {
     const q = p.sheet;

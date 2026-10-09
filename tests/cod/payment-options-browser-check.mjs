@@ -481,6 +481,17 @@ await settle(page, 800);
 check('custom theme Buy it now + selector + Replace: hidden, COD in its place', (await customBtn(page)).shown === false);
 await page.close();
 
+// Above / Below Shopify's Buy it now.
+for (const [placement, want] of [['above', 'cod,bin'], ['below', 'bin,cod']]) {
+  config = { ...COD, productButton: { ...COD.productButton, buyNowPlacement: placement, replaceBuyNow: false }, productPayment: null };
+  page = await openPage();
+  await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+  await settle(page, 600);
+  const order = await page.evaluate(() => [...document.querySelectorAll('[data-brix-cod-slot], .shopify-payment-button')].map((e) => (e.matches('[data-brix-cod-slot]') ? 'cod' : 'bin')).join());
+  check(`product COD ${placement} Buy it now: ${want}, Buy it now still shown`, order === want && (await state(page)).nativeShown === true, order);
+  await page.close();
+}
+
 // Replace on: Buy it now is hidden, its text is left alone.
 config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: true, buyNowText: 'Buy it now {price}' }, productPayment: null };
 page = await openPage();

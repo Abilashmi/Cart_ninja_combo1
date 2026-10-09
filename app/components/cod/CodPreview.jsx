@@ -225,14 +225,19 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
           <div className="cod-scr-sizes" aria-hidden="true"><span>S</span><span className="on">M</span><span>L</span><span>XL</span></div>
           <div className="cod-scr-buys">
             <div className="cod-scr-atc">Add to cart</div>
-            {codHidden ? <Hidden>COD button hidden: {why}</Hidden>
-              : <CodButton settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />}
-            {/* Buy it now is only hidden while a usable COD button shows, as on the storefront. */}
-            {(codHidden || excluded || !pb.replaceBuyNow) && (
-              <div className="cod-scr-bin">
-                {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
-              </div>
-            )}
+            {(() => {
+              // Where COD sits next to Buy it now (Customize COD → Product page), as on the storefront.
+              const place = pb.buyNowPlacement || (pb.replaceBuyNow === false ? 'above' : 'replace');
+              const cod = codHidden ? <Hidden key="cod">COD button hidden: {why}</Hidden>
+                : <CodButton key="cod" settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />;
+              // Buy it now is only hidden while a usable COD button replaces it, as on the storefront.
+              const bin = (codHidden || excluded || place !== 'replace') && (
+                <div key="bin" className="cod-scr-bin">
+                  {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
+                </div>
+              );
+              return place === 'below' ? [bin, cod] : [cod, bin];
+            })()}
           </div>
         </div>
       </div>

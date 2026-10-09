@@ -246,7 +246,7 @@ if (scenario === 'live') {
 
   // Product page
   await openSec('Product page');
-  check('Position in product page: show and Replace Buy it now are here, the text is not', await page.getByLabel('Replace the Buy it now button').count() === 1 && await page.getByLabel('Button text', { exact: true }).count() === 0);
+  check('Position in product page: show and Replace Buy it now are here, the text is not', await page.getByLabel('Below Buy it now').count() === 1 && await page.getByLabel('Button text', { exact: true }).count() === 0);
   check('Product page: preview switches to the product page', await page.locator('.bcz-screen .cod-scr-atc').count() === 1);
   await shot('product');
 
@@ -334,7 +334,9 @@ if (scenario === 'live') {
   await page.waitForTimeout(150);
   check('Buy it now selector: a non-selector is flagged', await page.getByText("doesn't look like a CSS selector").count() === 1);
   await page.getByLabel('Buy it now class (optional)').fill('.hk-buy-now');
-  await page.getByLabel('Replace the Buy it now button').uncheck();
+  await page.getByText('Below Buy it now', { exact: true }).click();
+  await page.waitForTimeout(150);
+  check('Below Buy it now: the preview shows Add to cart, Buy it now, then COD', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('.bcz-screen .cod-scr-buys > *')].map((e) => (e.classList.contains('cod-scr-atc') ? 'atc' : e.classList.contains('cod-scr-bin') ? 'bin' : 'cod')))) === '["atc","bin","cod"]');
   await page.getByLabel('Buy it now text').fill('Buy it now {price}');
   await page.waitForTimeout(300);
   {
@@ -508,7 +510,7 @@ if (scenario === 'live') {
   check('Save: the MSG91 keys go as write-only secrets, not in the settings',
     submitted.secrets?.msg91AuthKey === 'authKEY12345' && submitted.secrets?.msg91TemplateId === 'tmpl6789' && !JSON.stringify(saved).includes('authKEY'), JSON.stringify(submitted.secrets));
   check('Save: Buy it now text, Replace off and the Terms link are sent',
-    saved.productButton?.buyNowText === 'Buy it now {price}' && saved.productButton?.replaceBuyNow === false && saved.sheet?.termsUrl === '/pages/terms'
+    saved.productButton?.buyNowText === 'Buy it now {price}' && saved.productButton?.replaceBuyNow === false && saved.productButton?.buyNowPlacement === 'below' && saved.sheet?.termsUrl === '/pages/terms'
     && saved.productButton?.buyNowSelector === '.hk-buy-now' && saved.drawerCheckoutText === 'Pay online {price}', JSON.stringify({ pb: saved.productButton, terms: saved.sheet?.termsUrl }));
   check('Save: every change is sent',
     saved.enabled === true && saved.drawerPlacement === 'below' && saved.comboPlacement === 'above' && saved.buttons?.style === 'filled' && saved.buttons?.radius === 4 && saved.buttons?.bg === '#1d4ed8'

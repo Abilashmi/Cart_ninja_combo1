@@ -90,6 +90,8 @@ function cods_product_button($pb) {
     };
     return [
         'replaceBuyNow' => ($q['replaceBuyNow'] ?? true) !== false,
+        // replace | above | below Shopify's Buy it now; saved before it existed: from replaceBuyNow.
+        'buyNowPlacement' => cods_enum($q['buyNowPlacement'] ?? '', ['replace', 'above', 'below'], ($q['replaceBuyNow'] ?? true) !== false ? 'replace' : 'above'),
         // Text for Shopify's Buy it now while it shows; may hold price tags. '' = Shopify's own.
         'buyNowText' => cods_text($q['buyNowText'] ?? '', '', 60),
         // The theme's Buy it now, when BRIX can't find it by itself. '' = automatic.

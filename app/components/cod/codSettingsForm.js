@@ -33,7 +33,7 @@ export function sheetForm(sheet) {
 export function productButtonForm(pb) {
   const b = { ...DEFAULT_COD_SETTINGS.productButton, ...(pb || {}) };
   return {
-    pbReplaceBuyNow: b.replaceBuyNow,
+    pbBuyNowPlacement: b.buyNowPlacement || (b.replaceBuyNow === false ? 'above' : 'replace'),
     pbBuyNowText: b.buyNowText || '',
     pbBuyNowSelector: b.buyNowSelector || '',
     pbMarginTop: b.marginTop,
@@ -205,7 +205,8 @@ export function toSettings(f) {
       combo: f.comboLook,
     },
     productButton: {
-      replaceBuyNow: f.pbReplaceBuyNow,
+      buyNowPlacement: f.pbBuyNowPlacement,
+      replaceBuyNow: f.pbBuyNowPlacement === 'replace',
       buyNowText: f.pbBuyNowText,
       buyNowSelector: f.pbBuyNowSelector.trim(),
       marginTop: f.pbMarginTop,

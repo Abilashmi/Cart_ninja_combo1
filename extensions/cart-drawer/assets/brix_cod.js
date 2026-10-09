@@ -2238,7 +2238,7 @@
     setButtonText(btn, next);
   }
 
-  var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
+  var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, buyNowPlacement: '', marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
 
   var productMount = null; // { form, slot, addBtn } of the button on the page
 
@@ -2254,8 +2254,13 @@
     if (!form) return;
     if (m && m.slot.getAttribute('data-brix-cod-slot') === 'auto' && m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
     var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, cfg.productButton || {});
+    // replace | above | below Shopify's Buy it now (older settings: replaceBuyNow).
+    var where = look.buyNowPlacement === 'above' || look.buyNowPlacement === 'below' || look.buyNowPlacement === 'replace'
+      ? look.buyNowPlacement : look.replaceBuyNow === false ? 'above' : 'replace';
+    if (excluded && where === 'replace') where = 'above'; // an unavailable COD button never hides Buy it now
+    var replacing = where === 'replace';
     var addBtn = submitButtonFor(form);
-    var buyNow = look.replaceBuyNow && !excluded ? findBuyNow(form, cfg) : null;
+    var buyNow = findBuyNow(form, cfg);
     if (buyNow && !form.contains(buyNow) && !customBuyNow(cfg)) buyNow = null;
     var slot = document.querySelector('[data-brix-cod-slot]:not([data-brix-cod-slot="auto"])');
     if (!slot) {
@@ -2264,11 +2269,12 @@
       // The theme's spacing rules for its buttons must not add to the merchant's.
       slot.style.cssText = important('display:block;width:100%;margin:0;padding:0');
       var anchor = addBtn && addBtn.parentNode && form.contains(addBtn) ? addBtn : null;
-      if (buyNow) buyNow.parentNode.insertBefore(slot, buyNow);
+      if (buyNow && where === 'below') buyNow.parentNode.insertBefore(slot, buyNow.nextSibling);
+      else if (buyNow) buyNow.parentNode.insertBefore(slot, buyNow);
       else if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
       else form.appendChild(slot);
     }
-    if (look.replaceBuyNow && !excluded) {
+    if (replacing) {
       hideBuyNow(form.closest('.shopify-section') || form);
       // A Buy it now found by the merchant's selector is hidden directly.
       var custom = customBuyNow(cfg);
@@ -2282,7 +2288,7 @@
     var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt);
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
-    var keepsBuyNow = !look.replaceBuyNow || excluded;
+    var keepsBuyNow = !replacing;
     productMount.relabel = function () {
       var el = slot.querySelector('[data-brix-cod-label]');
       var next = codLabel(cfg, text, productPrice(form, info));

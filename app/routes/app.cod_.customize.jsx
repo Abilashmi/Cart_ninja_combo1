@@ -131,7 +131,7 @@ function ProductButtonSizes({ form, set, setForm }) {
         <InlineStack align="space-between" blockAlign="center">
           <Text as="h3" variant="headingMd">Size and spacing</Text>
           {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
-            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ replaceBuyNow: f.pbReplaceBuyNow, buyNowText: f.pbBuyNowText, buyNowSelector: f.pbBuyNowSelector }) }))}>Reset</Button>
+            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ buyNowPlacement: f.pbBuyNowPlacement, buyNowText: f.pbBuyNowText, buyNowSelector: f.pbBuyNowSelector }) }))}>Reset</Button>
           )}
         </InlineStack>
         {PB_SIZES.map(({ key, field, label }) => {
@@ -522,18 +522,22 @@ export default function CodCustomizePage() {
         <BlockStack gap="400">
           <Text as="p" tone="subdued">The COD button on product pages (it buys just that product): where it goes, what it says, Shopify&apos;s Buy it now text, and its look.</Text>
           {form.pp.enabled && (
-            <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size still apply; Replace the Buy it now button doesn&apos;t.</Banner>
+            <Banner tone="info">Payment options are on (Product page payments), so they decide where the COD button goes. Its text, look and size still apply; the Buy it now position below doesn&apos;t.</Banner>
           )}
           <Card>
             <FormLayout>
               <Text as="h3" variant="headingMd">Position</Text>
               <Checkbox label="Show COD on product pages" checked={form.product} onChange={set('product')} />
               {form.product && !form.pp.enabled && (
-                <Checkbox
-                  label="Replace the Buy it now button"
-                  helpText={form.pbReplaceBuyNow ? "Shopify's Buy it now is hidden and COD takes its place." : 'Buy it now stays; COD goes between Add to Cart and Buy it now.'}
-                  checked={form.pbReplaceBuyNow}
-                  onChange={set('pbReplaceBuyNow')}
+                <ChoiceList
+                  title="Next to Shopify's Buy it now button"
+                  choices={[
+                    { label: 'Replace Buy it now', value: 'replace', helpText: "Buy it now is hidden and COD takes its place." },
+                    { label: 'Above Buy it now', value: 'above', helpText: 'Add to cart, then COD, then Buy it now.' },
+                    { label: 'Below Buy it now', value: 'below', helpText: 'Add to cart, then Buy it now, then COD.' },
+                  ]}
+                  selected={[form.pbBuyNowPlacement]}
+                  onChange={(v) => set('pbBuyNowPlacement')(v[0])}
                 />
               )}
             </FormLayout>
@@ -570,8 +574,8 @@ export default function CodCustomizePage() {
                       />
                       <Checkbox label="Use this text on Shopify's Buy it now button" checked={form.pp.relabelBuyNow} onChange={setPP(['relabelBuyNow'])} />
                     </>
-                  ) : form.pbReplaceBuyNow ? (
-                    <Text as="p" tone="subdued">Buy it now is hidden while COD replaces it. Turn off &quot;Replace the Buy it now button&quot; to keep it and change its text here.</Text>
+                  ) : form.pbBuyNowPlacement === 'replace' ? (
+                    <Text as="p" tone="subdued">Buy it now is hidden while COD replaces it. Choose Above or Below Buy it now to keep it and change its text here.</Text>
                   ) : (
                     <TextField
                       label="Buy it now text"
