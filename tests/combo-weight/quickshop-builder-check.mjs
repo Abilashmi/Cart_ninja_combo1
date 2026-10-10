@@ -169,6 +169,10 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.click('[role="radiogroup"][aria-label^="Tier 2"] [role="radio"][aria-label="crown"]');
   const iconsNow = await page.$$eval('.bxq-mile-dot svg', (els) => els.map((e) => e.innerHTML));
   check('picking an icon changes that milestone in the preview', iconsNow.length === 2 && iconsNow[1].includes('m3 7 4.5 4L12 5'), iconsNow[1]);
+  await page.click('[role="radiogroup"][aria-label^="Tier 1"] [role="radio"][aria-label="percent"]');
+  await page.click('[role="radiogroup"][aria-label^="Tier 2"] [role="radio"][aria-label="percent"]');
+  const bothPercent = await page.$$eval('.bxq-mile-dot svg', (els) => els.map((e) => e.innerHTML));
+  check('% can be picked on every tier', bothPercent.length === 2 && bothPercent.every((h) => h.includes('M19 5 5 19')), JSON.stringify(bothPercent));
   check('no emoji in the sidebar or preview', !/[\u{1F300}-\u{1FAFF}]/u.test((await sidebar(page)) + (await page.textContent('.bxq'))));
   await section(page, 'Title & Description');
   await page.getByLabel('Show title & description').uncheck();

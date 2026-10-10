@@ -148,6 +148,16 @@ export function createQuickShopKit(core) {
     return out;
   }
 
+  // One icon per tier, by position: unlike list(), repeats are kept (the same
+  // icon on every tier is allowed).
+  function iconList(text) {
+    var out = [];
+    var parts = String(text || '').split(',');
+    for (var i = 0; i < parts.length; i++) out.push(parts[i].trim());
+    while (out.length && !out[out.length - 1]) out.pop();
+    return out;
+  }
+
   function lower(s) { return String(s || '').toLowerCase(); }
 
   function hasTag(product, tag) {
@@ -476,7 +486,7 @@ export function createQuickShopKit(core) {
     var saved = compareSavings + boxDiscount;
     var finalPrice = Math.max(0, total - boxDiscount);
     var progress = core.progressOf(view, box, 1);
-    var icons = list(opt(config, 'qs_tier_icons'));
+    var icons = iconList(opt(config, 'qs_tier_icons'));
     for (var m = 0; m < progress.marks.length; m++) {
       var mark = progress.marks[m];
       mark.label = mark.tier.label;

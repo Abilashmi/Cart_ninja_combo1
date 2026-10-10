@@ -215,6 +215,11 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('no emoji anywhere on the page', !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(await page.textContent('.bxq')));
   await page.close();
 
+  const same = await openCombo({ ...config, qs_tier_icons: 'percent, percent' }, wp(QUANTITY));
+  const samePaths = await same.page.$$eval('.bxq-mile-dot svg', (els) => els.map((e) => e.innerHTML));
+  check('the same icon can be picked for every tier', samePaths.length === 2 && samePaths[0] === samePaths[1] && samePaths[0].includes('M19 5 5 19'), JSON.stringify(samePaths));
+  await same.page.close();
+
   const phone = await openCombo(config, wp(QUANTITY), { viewport: { width: 390, height: 800 } });
   check('phone: title uses the mobile alignment', (await phone.page.$eval('.bxq-title', (e) => getComputedStyle(e).textAlign)) === 'right');
   await phone.page.close();
