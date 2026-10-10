@@ -246,11 +246,20 @@ function BuilderSidebarComponent({
             />
             {usesQuickShop(config.layout) && (
               <>
+                {/* One banner image (no slider) above the title. */}
+                <BannerSection
+                  config={config}
+                  expanded={expandedSections.banner}
+                  onToggle={() => toggleSection('banner')}
+                  updateConfig={updateConfig}
+                  PxField={PxField}
+                  ColorPickerField={ColorPickerField}
+                />
                 <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} />
                 <QuickShopCardsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsCards} onToggle={() => toggleSection('qsCards')} PxField={PxField} />
               </>
             )}
-            {/* Quick Shop (layout6) and the Weight Box (layout5, the same design) have their own designs: no banner, their own grid. */}
+            {/* Quick Shop (layout6) and the Weight Box (layout5, the same design) have their own grid. */}
             {!usesQuickShop(config.layout) && (
               <>
                 <BannerSection

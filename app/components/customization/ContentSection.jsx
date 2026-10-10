@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button, InlineStack } from '@shopify/polaris';
 import { MagicIcon, TextAlignLeftIcon, TextAlignCenterIcon, TextAlignRightIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
+import { usesQuickShop } from '../../utils/combo-weight.shared.js';
 
 export const HEADING_FONT_OPTIONS = [
   { label: 'Theme Font', value: 'inherit' },
@@ -29,7 +30,11 @@ function ContentSectionComponent({
         <Checkbox
           label="Show title & description"
           checked={!!config.show_title_description}
-          onChange={(checked) => updateConfig('show_title_description', checked)}
+          onChange={(checked) => {
+            updateConfig('show_title_description', checked);
+            // Quick Shop / Weight Box also had their own switch (qs_show_header); keep them together.
+            if (usesQuickShop(config.layout)) updateConfig('qs_show_header', checked);
+          }}
         />
         {config.show_title_description && (
           <>

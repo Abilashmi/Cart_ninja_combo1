@@ -193,6 +193,38 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+// ── title (Content settings), banner, SVG icons (no emoji) ──
+{
+  const BANNER = 'https://cdn.example.com/banner.jpg';
+  const config = {
+    ...baseConfig, collection_description: 'Pick any 3', heading_align: 'center', heading_size: 30, heading_color: '#ff0000',
+    heading_align_mobile: 'right', description_align: 'center', show_banner: true, banner_image_url: BANNER, banner_height_desktop: 200,
+    qs_tier_icons: '🎁, truck', qs_bar_icon_done: '🎉',
+  };
+  const { page } = await openCombo(config, wp(QUANTITY));
+  const title = await page.$eval('.bxq-title', (e) => { const cs = getComputedStyle(e); return { align: cs.textAlign, size: cs.fontSize, color: cs.color }; });
+  check('title follows Content: centred, 30px, red', title.align === 'center' && title.size === '30px' && title.color === 'rgb(255, 0, 0)', JSON.stringify(title));
+  check('description follows its own alignment', (await page.$eval('.bxq-desc', (e) => getComputedStyle(e).textAlign)) === 'center');
+  check('banner shows above the title', (await page.$eval('.bxq', (e) => { const b = e.querySelector('.bxq-banner img'); const h = e.querySelector('.bxq-head'); return !!b && b.getAttribute('src') === 'https://cdn.example.com/banner.jpg' && b.closest('.bxq-banner').getBoundingClientRect().height === 200 && !!(b.compareDocumentPosition(h) & 4); })));
+  const miles = await page.$$eval('.bxq-mile-dot', (els) => els.map((e) => ({ svg: !!e.querySelector('svg'), text: e.textContent.trim() })));
+  check('milestones draw SVG icons, never emoji (old 🎁 kept as the gift icon)', miles.length === 2 && miles.every((m) => m.svg && m.text === ''), JSON.stringify(miles));
+  const paths = await page.$$eval('.bxq-mile-dot svg', (els) => els.map((e) => e.innerHTML));
+  check('each tier gets a different icon', paths.length === 2 && paths[0] !== paths[1]);
+  await plus(page, 1); await plus(page, 2); await plus(page, 3);
+  check('bar icon is an SVG, no emoji', (await page.$eval('.bxq-msg-icon', (e) => !!e.querySelector('svg') && e.textContent.trim() === '')));
+  check('no emoji anywhere on the page', !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(await page.textContent('.bxq')));
+  await page.close();
+
+  const phone = await openCombo(config, wp(QUANTITY), { viewport: { width: 390, height: 800 } });
+  check('phone: title uses the mobile alignment', (await phone.page.$eval('.bxq-title', (e) => getComputedStyle(e).textAlign)) === 'right');
+  await phone.page.close();
+
+  const hidden = await openCombo({ ...config, show_title_description: false, show_banner: false }, wp(QUANTITY));
+  check('Show title & description off hides the title', (await hidden.page.$('.bxq-head')) === null);
+  check('Show banner off hides the banner', (await hidden.page.$('.bxq-banner')) === null);
+  await hidden.page.close();
+}
+
 // ── Shiprocket: BRIX one-time code / merchant's own offer / fallback ──
 {
   const config = { ...baseConfig, qs_checkout_with: 'shiprocket' };

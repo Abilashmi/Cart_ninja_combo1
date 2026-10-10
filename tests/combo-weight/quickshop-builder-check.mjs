@@ -159,6 +159,29 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.close();
 }
 
+// ── icons, banner, title switch ──
+{
+  const page = await open();
+  await tab(page, 'Style');
+  await section(page, 'Top progress');
+  const pickers = await page.$$('[role="radiogroup"][aria-label^="Tier "]');
+  check('one icon picker per tier', pickers.length === 2, String(pickers.length));
+  await page.click('[role="radiogroup"][aria-label^="Tier 2"] [role="radio"][aria-label="crown"]');
+  const iconsNow = await page.$$eval('.bxq-mile-dot svg', (els) => els.map((e) => e.innerHTML));
+  check('picking an icon changes that milestone in the preview', iconsNow.length === 2 && iconsNow[1].includes('m3 7 4.5 4L12 5'), iconsNow[1]);
+  check('no emoji in the sidebar or preview', !/[\u{1F300}-\u{1FAFF}]/u.test((await sidebar(page)) + (await page.textContent('.bxq'))));
+  await section(page, 'Title & Description');
+  await page.getByLabel('Show title & description').uncheck();
+  check('Content switch hides the Quick Shop title', (await page.$('.bxq-head')) === null);
+  await tab(page, 'Layout');
+  check('Layout tab has the Banner section', (await sidebar(page)).includes('Banner Settings'));
+  await section(page, 'Banner Settings');
+  if (!(await page.getByLabel('Show Banner').isChecked())) await page.getByLabel('Show Banner').check();
+  await page.getByLabel('Desktop Banner Image URL').fill('https://cdn.example.com/b.jpg');
+  check('banner shows in the preview', (await page.$('.bxq-banner img[src="https://cdn.example.com/b.jpg"]')) !== null);
+  await page.close();
+}
+
 // ── Shiprocket shop: Checkout with ──
 {
   const page = await open({ shiprocket: true });

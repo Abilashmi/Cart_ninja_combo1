@@ -37,7 +37,7 @@ const SAMPLE_PRODUCTS = [
 const toCss = (style) => Object.entries(style).map(([k, v]) => `${k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}:${v}`).join(';');
 
 // Which settings section each part of the page opens.
-const SECTION_OF = [['.bxq-top', 'qsProgress'], ['.bxq-bar', 'qsBar'], ['.bxq-filters', 'qsFilters'], ['.bxq-card', 'qsCards'], ['.bxq-head', 'content']];
+const SECTION_OF = [['.bxq-top', 'qsProgress'], ['.bxq-bar', 'qsBar'], ['.bxq-filters', 'qsFilters'], ['.bxq-card', 'qsCards'], ['.bxq-head', 'content'], ['.bxq-banner', 'banner']];
 
 export default function QuickShopPreview({ config, device, products = [], collections = [], allStepProducts = {}, onRequestSection = () => {} }) {
   const shopify = useAppBridge();

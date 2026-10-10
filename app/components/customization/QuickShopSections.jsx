@@ -12,6 +12,67 @@ const kit = createQuickShopKit(createComboWeightCore());
 const val = (config, key) => kit.opt(config, key);
 const isOn = (config, key) => kit.on(config, key);
 
+/**
+ * Pick one of the built-in SVG icons (no emoji), or paste an https image link.
+ * fallback = what the page draws when the value isn't an icon name.
+ */
+function IconPicker({ label, value, onChange, fallback = 'gift' }) {
+  const isUrl = /^https:\/\//.test(value || '');
+  const current = isUrl ? '' : kit.iconName(value, fallback);
+  return (
+    <div>
+      <Text as="p" variant="bodySm">{label}</Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }} role="radiogroup" aria-label={label}>
+        {kit.ICON_NAMES.map((name) => {
+          const on = current === name;
+          return (
+            <button
+              key={name} type="button" role="radio" aria-checked={on} aria-label={name} title={name}
+              onClick={() => onChange(name)}
+              style={{ width: 34, height: 34, padding: 7, borderRadius: 8, cursor: 'pointer', border: `1px solid ${on ? '#2563eb' : '#d1d5db'}`, background: on ? '#eff6ff' : '#fff', color: on ? '#2563eb' : '#374151' }}
+              // eslint-disable-next-line react/no-danger -- the kit's own fixed SVG markup
+              dangerouslySetInnerHTML={{ __html: kit.svgIcon(name) }}
+            />
+          );
+        })}
+      </div>
+      <TextField
+        label="Or an image link" value={isUrl ? value : ''} placeholder="https://… (optional)" autoComplete="off"
+        onChange={(v) => onChange(v.trim() ? v.trim() : current || fallback)}
+      />
+    </div>
+  );
+}
+
+/** One icon per tier, kept as qs_tier_icons ("gift, truck, …"); off = no icons. */
+function TierIcons({ config, updateConfig }) {
+  const tiers = config.weight_pricing?.tiers || [];
+  const saved = String(val(config, 'qs_tier_icons') || '').split(',').map((s) => s.trim());
+  const enabled = saved.some(Boolean);
+  const count = Math.max(tiers.length, 1);
+  const iconAt = (i) => saved[i] || kit.TIER_ICON_ORDER[i % kit.TIER_ICON_ORDER.length];
+  const setAt = (i, icon) => {
+    const next = Array.from({ length: Math.max(count, saved.length) }, (_, j) => iconAt(j));
+    next[i] = icon;
+    updateConfig('qs_tier_icons', next.join(', '));
+  };
+  return (
+    <BlockStack gap="300">
+      <Checkbox
+        label="Icons on the milestones" checked={enabled}
+        onChange={(v) => updateConfig('qs_tier_icons', v ? kit.DEFAULTS.qs_tier_icons : '')}
+      />
+      {enabled && Array.from({ length: count }, (_, i) => (
+        <IconPicker
+          key={tiers[i]?.id || i} fallback={i}
+          label={`Tier ${i + 1}${tiers[i]?.label ? ` · ${tiers[i].label}` : ''}`}
+          value={iconAt(i)} onChange={(icon) => setAt(i, icon)}
+        />
+      ))}
+    </BlockStack>
+  );
+}
+
 /** A row of small visual thumbnails to pick a style from. */
 function StylePicker({ label, value, options, onChange }) {
   return (
@@ -51,7 +112,7 @@ const TOP_STYLES = [
 ];
 
 const BAR_STYLES = [
-  { value: 'full', label: 'Message + items', preview: <div style={{ width: '100%' }}><div style={{ fontSize: 9, textAlign: 'left' }}>🎉 You unlocked</div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 9 }}>5 Items</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div></div> },
+  { value: 'full', label: 'Message + items', preview: <div style={{ width: '100%' }}><div style={{ fontSize: 9, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 3 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#16a34a' }} />You unlocked</div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 9 }}>5 Items</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div></div> },
   { value: 'slim', label: 'Slim line', preview: <div style={{ width: '100%' }}><div style={track}><div style={fill('60%')} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}><span style={{ fontSize: 9 }}>5 Items</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div></div> },
   { value: 'ring', label: 'Ring', preview: <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'space-between' }}><span style={{ width: 20, height: 20, borderRadius: '50%', border: '3px solid #2563eb', borderRightColor: '#e5e7eb', fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>5</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div> },
   { value: 'compact', label: 'Compact', preview: <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}><span style={{ fontSize: 9 }}>5 · ₹999</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div> },
@@ -175,12 +236,7 @@ function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, Co
             {style !== 'text' && (
               <>
                 <Checkbox label="Tier names under the bar" checked={isOn(config, 'qs_top_show_labels')} onChange={(v) => updateConfig('qs_top_show_labels', v)} />
-                {style === 'milestones' && (
-                  <TextField
-                    label="Milestone icons" value={val(config, 'qs_tier_icons')} onChange={(v) => updateConfig('qs_tier_icons', v)} autoComplete="off"
-                    helpText="One per tier, separated by commas: emoji or https:// image links."
-                  />
-                )}
+                {style === 'milestones' && <TierIcons config={config} updateConfig={updateConfig} />}
                 <div className="cst-grid-2">
                   <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_height" label="Bar thickness" min={2} max={24} />
                   <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_radius" label="Bar corners" max={999} />
@@ -218,10 +274,10 @@ function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPi
           </div>
         )}
         {style === 'full' && isOn(config, 'qs_bar_show_message') && (
-          <div className="cst-grid-2">
-            <TextField label="Icon when unlocked" value={val(config, 'qs_bar_icon_done')} onChange={(v) => updateConfig('qs_bar_icon_done', v)} autoComplete="off" helpText="Emoji or https:// image link" />
-            <TextField label="Icon before" value={val(config, 'qs_bar_icon_locked')} onChange={(v) => updateConfig('qs_bar_icon_locked', v)} autoComplete="off" />
-          </div>
+          <BlockStack gap="300">
+            <IconPicker label="Icon when unlocked" value={val(config, 'qs_bar_icon_done')} fallback="party" onChange={(v) => updateConfig('qs_bar_icon_done', v)} />
+            <IconPicker label="Icon before" value={val(config, 'qs_bar_icon_locked')} fallback="gift" onChange={(v) => updateConfig('qs_bar_icon_locked', v)} />
+          </BlockStack>
         )}
         <Checkbox label="Celebrate when a tier unlocks" checked={isOn(config, 'qs_bar_celebrate')} onChange={(v) => updateConfig('qs_bar_celebrate', v)} />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Button</Text></div>
@@ -269,7 +325,6 @@ function ColorsSectionComponent({ config, updateConfig, expanded, onToggle, Colo
   return (
     <SectionCard title="Page colours" expanded={expanded} onToggle={onToggle}>
       <FormLayout>
-        <Checkbox label="Show title and description" checked={isOn(config, 'qs_show_header')} onChange={(v) => updateConfig('qs_show_header', v)} />
         <Colors
           config={config} updateConfig={updateConfig} ColorPickerField={ColorPickerField}
           fields={[['qs_page_bg', 'Page background'], ['qs_card_bg', 'Card background'], ['qs_text_color', 'Text'], ['qs_accent', 'Accent (+ button, chips)'], ['qs_off_color', '% OFF text'], ['qs_badge_bg', 'Badge']]}

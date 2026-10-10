@@ -2578,7 +2578,7 @@ export default function Customize() {
       if (content) content.scrollTop = 0;
       const cards = document.querySelectorAll('.cst-section-card');
       const orderMap = usesQuickShop(config.layout)
-        ? { layout: ['general', 'qsFilters', 'qsCards'], style: ['content', 'qsProgress', 'qsBar', 'qsColors'], advanced: ['discount', 'customCss'] }
+        ? { layout: ['general', 'banner', 'qsFilters', 'qsCards'], style: ['content', 'qsProgress', 'qsBar', 'qsColors'], advanced: ['discount', 'customCss'] }
         : { layout: ['general','banner','products','content'], style: ['content','productCard','collectionTabsStyles','previewBar','variants','buttons'], advanced: ['progressBar','discount','aiSettings','customCss'] };
       const idx = (orderMap[category] || []).indexOf(sectionKey);
       const target = cards[Math.max(0, idx)];

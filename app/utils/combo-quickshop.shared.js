@@ -68,7 +68,7 @@ export function createQuickShopKit(core) {
     qs_top_track: '#e5e7eb',
     qs_top_fill: '#2563eb',
     qs_top_done: '#16a34a',
-    qs_tier_icons: '🎁, 🚚, 💰, ⭐, 🏆',
+    qs_tier_icons: 'gift, truck, percent, star, trophy', // built-in SVG icon names (ICONS) or https:// image links
     // Bottom bar
     qs_bar_style: 'full', // full | slim | ring | compact
     qs_bar_bg: '#ffffff',
@@ -79,8 +79,8 @@ export function createQuickShopKit(core) {
     qs_bar_show_thumbs: true,
     qs_bar_show_saved: true,
     qs_bar_celebrate: true,
-    qs_bar_icon_done: '🎉',
-    qs_bar_icon_locked: '🎁',
+    qs_bar_icon_done: 'party',
+    qs_bar_icon_locked: 'gift',
     qs_bar_icon_bg: '#16a34a',
     qs_saved_text: '{{saved}} saved, more coming up!',
     qs_saved_done_text: '{{saved}} saved!',
@@ -176,10 +176,51 @@ export function createQuickShopKit(core) {
 
   function isIconUrl(icon) { return /^https:\/\/[^\s"'<>]+$/.test(icon); }
 
-  function iconHtml(icon, cls) {
+  // Built-in line icons (no emoji anywhere): drawn in currentColor, so each
+  // place colours them (white on the unlocked circle, the bar colour before).
+  var ICON_PATHS = {
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+    truck: '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
+    trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+    crown: '<path d="m3 7 4.5 4L12 5l4.5 6L21 7l-2 11H5z"/>',
+    tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    coins: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+    party: '<path d="M4 20 8.5 7.5l8 8z"/><path d="M13 3.5v2M18.5 9h2M16 6l2.5-2.5M14 10l5-5"/>',
+    sparkles: '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+    heart: '<path d="M12 20s-7-4.4-9-9a4.8 4.8 0 0 1 9-3 4.8 4.8 0 0 1 9 3c-2 4.6-9 9-9 9z"/>',
+    box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+  };
+  var ICON_NAMES = ['gift', 'truck', 'percent', 'star', 'trophy', 'crown', 'tag', 'coins', 'party', 'sparkles', 'heart', 'box', 'bolt', 'check'];
+  // Tiers without a chosen icon get a different one each, in this order.
+  var TIER_ICON_ORDER = ['gift', 'truck', 'percent', 'star', 'trophy', 'crown'];
+  // Emoji saved before the icon set existed, drawn as the matching icon.
+  var EMOJI_ICONS = { '🎁': 'gift', '🚚': 'truck', '💰': 'coins', '💸': 'coins', '⭐': 'star', '🌟': 'star', '🏆': 'trophy', '👑': 'crown', '🎉': 'party', '🥳': 'party', '✨': 'sparkles', '❤️': 'heart', '📦': 'box', '⚡': 'bolt', '✅': 'check', '🏷️': 'tag', '%': 'percent' };
+
+  function svgIcon(name) {
+    return '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">' + ICON_PATHS[name] + '</svg>';
+  }
+
+  /**
+   * The icon name to draw for a setting value. fallback: an icon name, or a
+   * tier position (each tier gets a different icon from TIER_ICON_ORDER).
+   */
+  function iconName(icon, fallback) {
+    var s = String(icon === null || icon === undefined ? '' : icon).trim();
+    var lower = s.toLowerCase();
+    if (ICON_PATHS[lower]) return lower;
+    if (EMOJI_ICONS[s]) return EMOJI_ICONS[s];
+    if (typeof fallback === 'string' && ICON_PATHS[fallback]) return fallback;
+    return TIER_ICON_ORDER[(Number(fallback) || 0) % TIER_ICON_ORDER.length];
+  }
+
+  function iconHtml(icon, cls, i) {
     if (!icon) return '';
     if (isIconUrl(icon)) return '<img class="' + cls + '" src="' + esc(icon) + '" alt="" />';
-    return '<span class="' + cls + '" aria-hidden="true">' + esc(String(icon).slice(0, 8)) + '</span>';
+    return '<span class="' + cls + '" aria-hidden="true">' + svgIcon(iconName(icon, i)) + '</span>';
   }
 
   /* ── products: variants, filters, sorting ───────────────────────────── */
@@ -440,7 +481,9 @@ export function createQuickShopKit(core) {
       var mark = progress.marks[m];
       mark.label = mark.tier.label;
       mark.at = core.formatThreshold(view, mark.tier);
-      mark.icon = icons[m] || icons[icons.length - 1] || '';
+      // A tier past the list gets its own icon, not a repeat of the last one.
+      mark.icon = icons.length ? (icons[m] || TIER_ICON_ORDER[m % TIER_ICON_ORDER.length]) : '';
+      mark.iconIndex = m;
     }
 
     // Cards.
@@ -633,7 +676,7 @@ export function createQuickShopKit(core) {
       for (i = 0; i < progress.marks.length; i++) {
         var ms = progress.marks[i];
         html += '<div class="bxq-mile' + (ms.hit ? ' is-hit' : '') + (ms.next ? ' is-next' : '') + '" style="left:' + ms.percent.toFixed(1) + '%">'
-          + '<span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, 'bxq-mile-icon') : '') + '</span>'
+          + '<span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, 'bxq-mile-icon', ms.iconIndex) : '') + '</span>'
           + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + '</b><small>' + esc(ms.at) + '</small></span>' : '')
           + '</div>';
       }
@@ -712,7 +755,7 @@ export function createQuickShopKit(core) {
     if (showMessage && style !== 'compact') {
       var icon = model.box.tier ? opt(config, 'qs_bar_icon_done') : opt(config, 'qs_bar_icon_locked');
       html += '<div class="bxq-msg is-' + esc(msg.tone) + '">';
-      if (style === 'full' && icon) html += '<span class="bxq-msg-icon">' + iconHtml(icon, 'bxq-msg-glyph') + '</span>';
+      if (style === 'full' && icon) html += '<span class="bxq-msg-icon">' + iconHtml(icon, 'bxq-msg-glyph', model.box.tier ? 'party' : 'gift') + '</span>';
       html += '<span aria-live="polite">' + boldTier(msg.text, msg.tier) + '</span></div>';
     }
 
@@ -741,14 +784,94 @@ export function createQuickShopKit(core) {
     return html;
   }
 
+  /* ── title, description, banner: the builder's shared Content / Banner settings ── */
+
+  // A setting edited per device in the builder: <key>_mobile on phones, if set.
+  function pick(config, key, isMobile) {
+    if (isMobile) {
+      var m = config[key + '_mobile'];
+      if (m !== undefined && m !== null && m !== '') return m;
+    }
+    return config[key];
+  }
+
+  function isSet(v) { return v !== undefined && v !== null && v !== ''; }
+
+  function boxCss(config, prefix, isMobile) {
+    var parts = ['padding_top', 'padding_right', 'padding_bottom', 'padding_left', 'margin_top', 'margin_right', 'margin_bottom', 'margin_left'];
+    var css = '';
+    for (var i = 0; i < parts.length; i++) {
+      var v = pick(config, prefix + '_' + parts[i], isMobile);
+      if (isSet(v)) css += parts[i].replace('_', '-') + ':' + num(v, 0, -200, 400) + 'px;';
+    }
+    return css;
+  }
+
+  function textCss(config, prefix, isMobile, defaults) {
+    var css = '';
+    var align = pick(config, prefix + '_align', isMobile);
+    css += 'text-align:' + (align === 'center' || align === 'right' ? align : 'left') + ';';
+    var size = pick(config, prefix + '_size', isMobile);
+    if (isSet(size)) css += 'font-size:' + num(size, defaults.size, 10, 96) + 'px;';
+    var color = pick(config, prefix + '_color', isMobile);
+    if (isSet(color)) css += 'color:' + safeCss(color, defaults.color) + ';';
+    var weight = String(pick(config, prefix + '_font_weight', isMobile) || '');
+    if (/^[1-9]00$/.test(weight)) css += 'font-weight:' + weight + ';';
+    return css;
+  }
+
+  function renderHead(model) {
+    var config = model.config;
+    if (!on(config, 'qs_show_header') || config.show_title_description === false) return '';
+    if (!model.title && !model.description) return '';
+    var m = model.isMobile;
+    var html = '<header class="bxq-head">';
+    if (model.title) {
+      var titleCss = textCss(config, 'heading', m, { size: m ? 22 : 28, color: 'inherit' });
+      var family = String(config.heading_font_family || '');
+      if (family && family !== 'inherit' && /^[\w -]{1,40}$/.test(family)) titleCss += "font-family:'" + family + "',sans-serif;";
+      if (isSet(config.heading_letter_spacing)) titleCss += 'letter-spacing:' + num(config.heading_letter_spacing, 0, -10, 20) + 'px;';
+      if (isSet(config.heading_line_height)) titleCss += 'line-height:' + num(config.heading_line_height, 1.2, 0.5, 3) + ';';
+      var transform = config.heading_text_transform;
+      if (transform === 'uppercase' || transform === 'lowercase' || transform === 'capitalize') titleCss += 'text-transform:' + transform + ';';
+      var wrapCss = boxCss(config, 'title_container', m);
+      if (config.title_max_width_mode === 'custom' && !m) {
+        var align = pick(config, 'heading_align', m);
+        wrapCss += 'max-width:' + num(config.title_max_width_custom, 400, 100, 2000) + 'px;'
+          + (align === 'center' ? 'margin-left:auto;margin-right:auto;' : align === 'right' ? 'margin-left:auto;' : '');
+      }
+      html += '<div class="bxq-title-wrap" style="' + wrapCss + '"><h2 class="bxq-title" style="' + titleCss + '">' + esc(model.title) + '</h2></div>';
+    }
+    if (model.description) {
+      html += '<div class="bxq-desc-wrap" style="' + boxCss(config, 'description_container', m) + '">'
+        + '<p class="bxq-desc" style="' + textCss(config, 'description', m, { size: 15, color: 'inherit' }) + '">' + esc(model.description) + '</p></div>';
+    }
+    return html + '</header>';
+  }
+
+  // The Banner section's image (Layout tab): the phone image on phones if set.
+  function renderBanner(model) {
+    var config = model.config;
+    if (config.show_banner === false) return '';
+    var m = model.isMobile;
+    var url = m && isIconUrl(config.banner_image_mobile_url) ? config.banner_image_mobile_url : config.banner_image_url;
+    if (!isIconUrl(url)) return '';
+    var fit = config.banner_fit_mode;
+    var height = m ? num(config.banner_height_mobile || config.banner_height_desktop, 120, 40, 800) : num(config.banner_height_desktop, 180, 40, 1000);
+    var width = m ? num(config.banner_width_mobile || config.banner_width_desktop, 100, 20, 100) : num(config.banner_width_desktop, 100, 20, 100);
+    var boxCssText = 'width:' + (config.banner_full_width ? '100%' : width + '%') + ';'
+      + (fit === 'adapt' ? '' : 'height:' + height + 'px;');
+    var imgCss = fit === 'adapt' ? 'height:auto;' : 'height:100%;object-fit:' + (fit === 'contain' ? 'contain' : 'cover') + ';';
+    return '<div class="bxq-banner' + (config.banner_full_width ? ' is-full' : '') + '" style="' + boxCssText + '">'
+      + '<img src="' + esc(url) + '" alt="' + esc(model.title || 'Banner') + '" style="' + imgCss + '" /></div>';
+  }
+
   /** The whole page as HTML (attributes data-combo-action drive it). */
   function render(model) {
     var config = model.config;
     var html = '<div class="bxq' + (model.isMobile ? ' bxq--m' : '') + '" style="' + vars(config) + '">';
-    if (on(config, 'qs_show_header') && (model.title || model.description)) {
-      html += '<header class="bxq-head">' + (model.title ? '<h2 class="bxq-title">' + esc(model.title) + '</h2>' : '')
-        + (model.description ? '<p class="bxq-desc">' + esc(model.description) + '</p>' : '') + '</header>';
-    }
+    html += renderBanner(model);
+    html += renderHead(model);
     html += renderTop(model);
     html += renderFilters(model);
     if (model.row.menus.length) {
@@ -799,6 +922,10 @@ export function createQuickShopKit(core) {
     buildModel: buildModel,
     render: render,
     applyUiAction: applyUiAction,
+    ICON_NAMES: ICON_NAMES,
+    TIER_ICON_ORDER: TIER_ICON_ORDER,
+    iconName: iconName,
+    svgIcon: svgIcon,
   };
 }
 
@@ -817,6 +944,9 @@ export const QUICK_SHOP_CSS = `
 .bxq-head{margin:4px 0 14px;}
 .bxq-title{margin:0;font-size:28px;line-height:1.2;font-weight:800;color:var(--bxq-text);}
 .bxq--m .bxq-title{font-size:22px;}
+.bxq-banner{margin:0 auto 16px;overflow:hidden;border-radius:var(--bxq-radius);}
+.bxq-banner.is-full{border-radius:0;}
+.bxq-banner img{display:block;width:100%;}
 .bxq-desc{margin:6px 0 0;font-size:15px;line-height:1.5;opacity:.72;max-width:70ch;}
 .bxq-top{background:var(--bxq-top-bg);color:var(--bxq-top-text);border-radius:16px;padding:14px 18px 16px;margin:0 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
 .bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;}
@@ -854,7 +984,12 @@ export const QUICK_SHOP_CSS = `
 .bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
 .bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
-.bxq-mile-icon{width:20px;height:20px;object-fit:contain;line-height:20px;}
+.bxq-mile-icon{width:18px;height:18px;object-fit:contain;display:block;}
+.bxq-mile-dot{color:#6b7280;}
+.bxq-mile.is-next .bxq-mile-dot{color:var(--bxq-fill);}
+.bxq-mile.is-hit .bxq-mile-dot{color:#fff;}
+.bxq-msg-icon{color:#fff;}
+.bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
 .bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
 .bxq--m .bxq-mile{width:84px;}
 .bxq--m .bxq-mile-label{font-size:11px;}
