@@ -89,6 +89,10 @@ export function createQuickShopKit(core) {
     qs_btn_text_color: '#ffffff',
     qs_btn_radius: 14,
     qs_btn_action: 'checkout', // checkout | cart
+    // Checkout with: shopify | shiprocket (BRIX one-time code for the box discount)
+    // | shiprocket_own (the merchant's own Shiprocket offer). Shiprocket only on
+    // shops with it switched on (integrations_admin.php) and with qs_btn_action checkout.
+    qs_checkout_with: 'shopify',
     qs_require_first_tier: false,
   };
 

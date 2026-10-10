@@ -41,15 +41,16 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 const browser = await chromium.launch();
 
-async function open({ plan = 'pro', quickShop = QUANTITY, fresh = false, viewport = { width: 1500, height: 1000 } } = {}) {
+async function open({ plan = 'pro', quickShop = QUANTITY, fresh = false, shiprocket = false, viewport = { width: 1500, height: 1000 } } = {}) {
   const page = await browser.newPage({ viewport });
   page.on('pageerror', (e) => check('no page errors', false, e.message));
-  await page.addInitScript(({ plan: pl, quickShop: q, fresh: f }) => {
+  await page.addInitScript(({ plan: pl, quickShop: q, fresh: f, shiprocket: sr }) => {
+    window.__SHIPROCKET = sr;
     window.shopify = { toast: { show: (message, opts) => { (window.__toasts = window.__toasts || []).push({ message, ...(opts || {}) }); } } };
     window.__PLAN = pl;
     if (q) window.__QUICK_SHOP = q;
     if (f) window.__NEW = true;
-  }, { plan, quickShop, fresh });
+  }, { plan, quickShop, fresh, shiprocket });
   await page.route('**/api/combo-ai-suggestions', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true,"data":{"enabled":false}}' }));
   await page.goto(`${base}/app/bundles/customize`);
   await page.waitForSelector(fresh ? '.tpl-pick-card' : '.bxq-card', { timeout: 20000 });
@@ -91,6 +92,7 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   check('Ring bar shows the item count', (await text(page, '.bxq-ring')) === '3');
   await page.getByLabel('Button text', { exact: true }).fill('View box');
   check('button text follows the setting', (await text(page, '.bxq-go')) === 'View box');
+  check('no Shiprocket choice on a shop without Shiprocket', !(await sidebar(page)).includes('Checkout with'));
 
   // Clicking the bar opens its settings; clicking a card opens the card settings
   await page.click('.bxq-card .bxq-name');
@@ -154,6 +156,19 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.click('button:has-text("Mobile")').catch(() => {});
   await page.waitForSelector('.bxq--m', { timeout: 5000 }).catch(() => {});
   check('phone preview uses the phone layout', (await page.$('.bxq--m')) !== null);
+  await page.close();
+}
+
+// ── Shiprocket shop: Checkout with ──
+{
+  const page = await open({ shiprocket: true });
+  await tab(page, 'Style');
+  await section(page, 'Bottom bar');
+  check('Shiprocket shop: Checkout with offered, Shopify by default', (await sidebar(page)).includes('Checkout with') && (await page.getByLabel('Checkout with').inputValue()) === 'shopify');
+  await page.getByLabel('Checkout with').selectOption('shiprocket');
+  check('Shiprocket + BRIX code explains the one-time code', (await sidebar(page)).includes('one-time code worth the box discount'));
+  await page.getByLabel('Button goes to').selectOption('cart');
+  check('Cart page destination hides Checkout with', !(await sidebar(page)).includes('Checkout with'));
   await page.close();
 }
 

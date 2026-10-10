@@ -68,9 +68,11 @@ const check = (name, ok, detail = '') => { results.push({ name, ok }); console.l
 
 const browser = await chromium.launch();
 
-async function openCombo(config, pricing, { cod = false, viewport = { width: 1280, height: 900 } } = {}) {
+// shiprocket: { code } = Shiprocket on for the shop, BrixCheckout stubbed, the
+// box-code API answers with that code ('fail' = a 502).
+async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 } } = {}) {
   const page = await browser.newPage({ viewport });
-  const log = { add: [], update: [], navigations: [], cod: [] };
+  const log = { add: [], update: [], navigations: [], cod: [], boxCode: [] };
   page.on('pageerror', (e) => check('no page errors', false, e.message));
   await page.route('**/*', async (route) => {
     const req = route.request();
@@ -78,7 +80,8 @@ async function openCombo(config, pricing, { cod = false, viewport = { width: 128
     const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data), headers: { 'Access-Control-Allow-Origin': '*' } });
     if (url.origin === 'https://store.test') {
       if (url.pathname === '/pages/box') {
-        const stubs = cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;", placement: ${JSON.stringify(cod.placement || 'below')} }); } };` : '';
+        const srStub = shiprocket ? 'window.__sr = []; window.BrixCheckout = { checkoutItems: function (o) { window.__sr.push(o); } };' : '';
+        const stubs = srStub + (cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;", placement: ${JSON.stringify(cod.placement || 'below')} }); } };` : '');
         return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100}</style></head><body style="margin:0"><main><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></main><script src="${API}/combo-page.js"></script></body></html>` });
       }
       if (url.pathname === '/cart.js') return json({ items: [] });
@@ -89,7 +92,11 @@ async function openCombo(config, pricing, { cod = false, viewport = { width: 128
     }
     if (url.pathname === '/combo-page.js') return route.fulfill({ status: 200, contentType: 'application/javascript; charset=utf-8', body: SCRIPT });
     if (url.pathname === '/api/combo-page-data') {
-      return json({ success: true, data: { templateId: 9, templateName: 'Meat Box', config, productsByHandle, collectionNameMap: { chicken: 'Chicken', mutton: 'Mutton' }, activeDiscounts: [], weightPricing: pricing, shiprocketEnabled: false } });
+      return json({ success: true, data: { templateId: 9, templateName: 'Meat Box', config, productsByHandle, collectionNameMap: { chicken: 'Chicken', mutton: 'Mutton' }, activeDiscounts: [], weightPricing: pricing, shiprocketEnabled: Boolean(shiprocket) } });
+    }
+    if (url.pathname === '/api/combo-box-code') {
+      log.boxCode.push({ body: JSON.parse(req.postData()), contentType: req.headers()['content-type'] });
+      return shiprocket.code === 'fail' ? json({ success: false }, 502) : json({ success: true, code: shiprocket.code });
     }
     if (url.pathname === '/api/bundle-analytics') return json({ success: true });
     return route.fulfill({ status: 404, body: '' });
@@ -169,6 +176,55 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   const lines = log.add[0]?.items || [];
   check('Go to Cart adds the box with combo properties and goes to checkout',
     lines.length === 3 && lines.every((l) => l.properties?._brix_combo_id === '9' && l.properties._brix_combo_group) && log.navigations.includes('/checkout'), JSON.stringify(log));
+  await page.close();
+}
+
+// ── Shiprocket: BRIX one-time code / merchant's own offer / fallback ──
+{
+  const config = { ...baseConfig, qs_checkout_with: 'shiprocket' };
+  const { page, log } = await openCombo(config, wp(QUANTITY), { shiprocket: { code: 'BXTESTCODE22' } });
+  await plus(page, 1); await plus(page, 2); await plus(page, 3);
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(400);
+  const sr = await page.evaluate(() => window.__sr);
+  const req = log.boxCode[0];
+  check('Shiprocket: asks BRIX for the box code with the box items (simple CORS request)',
+    req && req.body.shop === 'demo.myshopify.com' && String(req.body.templateId) === '9' && req.body.items.length === 3 && req.contentType.startsWith('text/plain'), JSON.stringify(req));
+  check('Shiprocket: opens with the items and the code, nothing added to the cart',
+    sr.length === 1 && sr[0].coupon === 'BXTESTCODE22' && sr[0].items.length === 3 && sr[0].items.every((i) => !i.properties) && log.add.length === 0, JSON.stringify(sr));
+  check('Shiprocket: Shopify fallback carries the same items and code',
+    /\/cart\/10:1,20:1,30:1\?.*discount=BXTESTCODE22/.test(sr[0]?.fallbackUrl || ''), sr[0]?.fallbackUrl);
+  await page.close();
+}
+{
+  const config = { ...baseConfig, qs_checkout_with: 'shiprocket_own' };
+  const { page, log } = await openCombo(config, wp(QUANTITY), { shiprocket: { code: 'UNUSED' } });
+  await plus(page, 1);
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(400);
+  const sr = await page.evaluate(() => window.__sr);
+  check('Shiprocket own offer: no BRIX code asked for or sent', log.boxCode.length === 0 && sr.length === 1 && sr[0].coupon === null, JSON.stringify(sr));
+  await page.close();
+}
+{
+  const config = { ...baseConfig, qs_checkout_with: 'shiprocket' };
+  const { page, log } = await openCombo(config, wp(QUANTITY), { shiprocket: { code: 'fail' } });
+  await plus(page, 1);
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(500);
+  const sr = await page.evaluate(() => window.__sr || []); // the page has moved on to /checkout
+  check('Shiprocket: no code → box goes to Shopify checkout as before',
+    sr.length === 0 && log.add.length === 1 && log.add[0].items[0].properties?._brix_combo_id === '9' && log.navigations.includes('/checkout'), JSON.stringify(log));
+  await page.close();
+}
+{
+  // Shop without Shiprocket: the setting is ignored.
+  const config = { ...baseConfig, qs_checkout_with: 'shiprocket' };
+  const { page, log } = await openCombo(config, wp(QUANTITY));
+  await plus(page, 1);
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(400);
+  check('Shiprocket off for the shop: Shopify checkout', log.boxCode.length === 0 && log.navigations.includes('/checkout'));
   await page.close();
 }
 

@@ -198,7 +198,7 @@ function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, Co
   );
 }
 
-function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPickerField, PxField }) {
+function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPickerField, PxField, shiprocketEnabled = false }) {
   const style = val(config, 'qs_bar_style');
   return (
     <SectionCard title="Bottom bar" expanded={expanded} onToggle={onToggle} badge={BAR_STYLES.find((s) => s.value === style)?.label}>
@@ -230,8 +230,24 @@ function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPi
           label="Button goes to"
           options={[{ label: 'Checkout', value: 'checkout' }, { label: 'Cart page', value: 'cart' }]}
           value={val(config, 'qs_btn_action')} onChange={(v) => updateConfig('qs_btn_action', v)}
-          helpText="Either way the box is added to the cart first, so the discount applies at checkout."
+          helpText="The box discount applies at checkout either way."
         />
+        {shiprocketEnabled && val(config, 'qs_btn_action') === 'checkout' && (
+          <Select
+            label="Checkout with"
+            options={[
+              { label: 'Shopify checkout', value: 'shopify' },
+              { label: 'Shiprocket, BRIX applies the box discount', value: 'shiprocket' },
+              { label: "Shiprocket, my own Shiprocket offer", value: 'shiprocket_own' },
+            ]}
+            value={val(config, 'qs_checkout_with')} onChange={(v) => updateConfig('qs_checkout_with', v)}
+            helpText={val(config, 'qs_checkout_with') === 'shiprocket'
+              ? 'BRIX makes a one-time code worth the box discount (single use, 2 hours) and opens Shiprocket with it.'
+              : val(config, 'qs_checkout_with') === 'shiprocket_own'
+                ? 'Shiprocket opens with no BRIX code: set up a matching offer in Shiprocket yourself, or shoppers pay full price there.'
+                : 'Shiprocket can\'t run the box discount itself, so Shopify checkout is the default.'}
+          />
+        )}
         <Checkbox
           label="Only allow checkout once the first tier is unlocked" checked={isOn(config, 'qs_require_first_tier')}
           onChange={(v) => updateConfig('qs_require_first_tier', v)}

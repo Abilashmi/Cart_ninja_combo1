@@ -46,6 +46,7 @@ import ComboSetupTour from '../components/bundles/ComboSetupTour';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import { checkComboPlanGate } from '../services/combo-templates.server';
 import { getComboWeightDiscountStatus } from '../services/combo-weight-shopify.server';
+import { isShiprocketEnabled } from '../services/shop-integrations.server';
 import prisma from '../db.server';
 import { useCurrency } from '../components/CurrencyContext';
 import WeightMeter from '../components/customization/WeightMeter';
@@ -913,6 +914,8 @@ export const loader = async ({ request }) => {
     activeDiscounts,
     ...(await codPromise.then((c) => ({ codEnabled: c.enabled, codComboLook: c.look, codPlacement: c.placement, codFee: c.codFee }))),
     weightStatus,
+    // Box combos can offer Shiprocket checkout only where it's switched on.
+    shiprocketEnabled: await isShiprocketEnabled(shop),
   });
 };
 
@@ -1779,6 +1782,7 @@ export default function Customize() {
     initialProducts: loaderProducts = [],
     shop,
     weightStatus: loaderWeightStatus = null,
+    shiprocketEnabled = false,
   } = useLoaderData();
 
   // Weight-priced combos: whether the box discount is live in checkout (from
@@ -3798,6 +3802,7 @@ export default function Customize() {
             }
             onCreateCoupon={() => setCreateDiscountModalOpen(true)}
             weightStatus={weightStatus}
+            shiprocketEnabled={shiprocketEnabled}
             savedWeightHash={savedWeightHash}
           />
         </div>

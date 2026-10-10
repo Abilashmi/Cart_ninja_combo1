@@ -71,6 +71,7 @@ function BuilderSidebarComponent({
   onCreateCoupon,
   weightStatus,
   savedWeightHash,
+  shiprocketEnabled = false,
 }) {
   const [search, setSearch] = useState('');
 
@@ -317,7 +318,7 @@ function BuilderSidebarComponent({
             {usesQuickShop(config.layout) ? (
               <>
                 <QuickShopProgressSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsProgress} onToggle={() => toggleSection('qsProgress')} ColorPickerField={ColorPickerField} PxField={PxField} />
-                <QuickShopBarSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsBar} onToggle={() => toggleSection('qsBar')} ColorPickerField={ColorPickerField} PxField={PxField} />
+                <QuickShopBarSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsBar} onToggle={() => toggleSection('qsBar')} ColorPickerField={ColorPickerField} PxField={PxField}  shiprocketEnabled={shiprocketEnabled} />
                 <QuickShopColorsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsColors} onToggle={() => toggleSection('qsColors')} ColorPickerField={ColorPickerField} />
               </>
             ) : (

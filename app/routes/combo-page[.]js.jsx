@@ -680,8 +680,8 @@ const SCRIPT_BODY = String.raw`
   }
 
   // Weight combos: into the real cart and on to Shopify checkout, where the
-  // Function applies the box price. Never Shiprocket (it can't run our
-  // Function) and never a discount code.
+  // Function applies the box price. Shiprocket (it can't run our Function)
+  // only when the merchant picks it for this combo: checkoutBoxWithShiprocket.
   function onWeightCheckout(root, state) {
     if (!state.canCheckout || state.checkingOut) return;
     var co = buildComboItems(state);
@@ -689,10 +689,55 @@ const SCRIPT_BODY = String.raw`
     trackEvent(state, 'click', state.finalPrice);
     state.checkingOut = true;
     render(root);
-    var destination = WeightCore.usesQuickShop(state.config.layout) ? QuickShop.opt(state.config, 'qs_btn_action') : 'checkout';
+    var quickShop = WeightCore.usesQuickShop(state.config.layout);
+    var destination = quickShop ? QuickShop.opt(state.config, 'qs_btn_action') : 'checkout';
+    var via = quickShop ? QuickShop.opt(state.config, 'qs_checkout_with') : 'shopify';
+    if (destination === 'checkout' && via !== 'shopify' && state.shiprocketEnabled && window.BrixCheckout) {
+      checkoutBoxWithShiprocket(root, state, co, via === 'shiprocket');
+      return;
+    }
+    addBoxAndGo(root, state, co, destination);
+  }
+
+  function addBoxAndGo(root, state, co, destination) {
     addComboToCart({ templateId: state.templateId, items: co.items, attributes: co.attributes, destination: destination }).catch(function (err) {
       state.checkingOut = false;
       showToast(root, state, (err && err.message) || 'Could not add your box to the cart. Please try again.');
+    });
+  }
+
+  // Box combos the merchant sends to Shiprocket (qs_checkout_with). Shiprocket
+  // can't run the box Function, so for 'shiprocket' BRIX makes a one-time
+  // Shopify code worth this box's discount (api.combo-box-code, priced on the
+  // server) and hands it over with the items; 'shiprocket_own' = the
+  // merchant's own Shiprocket offer prices it, no code. If the code can't be
+  // made, the box goes to Shopify checkout as usual, where the Function applies.
+  function checkoutBoxWithShiprocket(root, state, co, withCode) {
+    var items = co.items.map(function (it) { return { variantId: it.variantId, quantity: it.quantity }; });
+    var codeReady = !withCode ? Promise.resolve(null) : fetch(API_ORIGIN + '/api/combo-box-code', {
+      method: 'POST',
+      // text/plain keeps this a simple CORS request (no preflight); the server reads JSON from the body.
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ shop: state.shop, templateId: state.templateId, items: items }),
+    }).then(function (r) { return r.json(); }).then(function (json) {
+      if (!json || !json.success) throw new Error('box code unavailable');
+      return json.code || null;
+    });
+    codeReady.then(function (code) {
+      var params = new URLSearchParams();
+      for (var key in co.attributes) params.set('attributes[' + key + ']', co.attributes[key]);
+      if (code) params.set('discount', code);
+      var lines = items.map(function (it) { return it.variantId + ':' + it.quantity; }).join(',');
+      window.BrixCheckout.checkoutItems({
+        items: items,
+        coupon: code,
+        attributes: co.attributes,
+        // Shopify checkout with the same items and code if Shiprocket doesn't open.
+        fallbackUrl: shopRoot() + 'cart/' + lines + '?' + params.toString(),
+        onOpen: function () { state.checkingOut = false; render(root); },
+      });
+    }).catch(function () {
+      addBoxAndGo(root, state, co, 'checkout');
     });
   }
 

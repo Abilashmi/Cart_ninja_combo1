@@ -56,6 +56,7 @@ const router = createBrowserRouter([
       initialProducts: window.__EMPTY_COLLECTIONS ? PRODUCTS.map((p) => ({ ...p, collections: [{ handle: 'frontpage' }] })) : PRODUCTS,
       shop: 'demo.myshopify.com',
       weightStatus: window.__WEIGHT_STATUS || null,
+      shiprocketEnabled: window.__SHIPROCKET === true,
     }),
   },
   // window.__EMPTY_COLLECTIONS: the step collections hold no products (an

@@ -482,7 +482,11 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
       result.byLine.set(key, amountMinor);
       result.titles.set(key, title);
     }
-    result.boxes.push({ templateId: comboId, title, grams: box.grams, weight: formatWeight(box.grams, template.unit), amountMinor: box.discountMinor });
+    result.boxes.push({
+      templateId: comboId, title, grams: box.grams, weight: formatWeight(box.grams, template.unit), amountMinor: box.discountMinor,
+      // The lines that count toward the box and their subtotal (combo-box-code.server.js).
+      subtotalMinor: box.subtotalMinor, lineKeys: box.countedKeys,
+    });
   }
   return result;
 }
