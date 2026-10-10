@@ -167,6 +167,28 @@ async function findInstalledDiscount(admin) {
 
 const varsMetafield = (variables) => ({ namespace: '$app', key: COMBO_WEIGHT_VARS_KEY, type: 'json', value: JSON.stringify(variables) });
 
+// Returns the status Shopify reports afterwards (the old one if it refused).
+async function activateComboWeightDiscount(admin, id) {
+  try {
+    const data = await gql(admin, `#graphql
+      mutation ComboWeightDiscountActivate($id: ID!) {
+        discountAutomaticActivate(id: $id) {
+          automaticDiscountNode { id automaticDiscount { __typename ... on DiscountAutomaticApp { status } } }
+          userErrors { field message code }
+        }
+      }`, { id });
+    const result = data?.discountAutomaticActivate;
+    if (result?.userErrors?.length) {
+      console.warn('[combo-weight] reactivate refused:', JSON.stringify(result.userErrors).slice(0, 200));
+      return 'EXPIRED';
+    }
+    return result?.automaticDiscountNode?.automaticDiscount?.status || 'EXPIRED';
+  } catch (error) {
+    console.warn('[combo-weight] reactivate failed:', String(error?.message || error).slice(0, 200));
+    return 'EXPIRED';
+  }
+}
+
 /**
  * Create the automatic app discount that runs the Function, if it doesn't
  * exist yet, and (re)write its input variables. Requires the Function to be
@@ -176,6 +198,14 @@ export async function ensureComboWeightDiscount(admin, variables) {
   const existing = await findInstalledDiscount(admin);
   if (existing) {
     await setMetafields(admin, [{ ownerId: existing.id, ...varsMetafield(variables) }]);
+    // Deactivating it in Shopify admin (or giving it an end date) leaves it
+    // EXPIRED, and every weight combo page then hides its box pricing. A sync
+    // only runs while active weight combos exist, so turn it back on. A
+    // SCHEDULED discount is left alone.
+    if (existing.status === 'EXPIRED') {
+      const status = await activateComboWeightDiscount(admin, existing.id);
+      return { created: false, reactivated: status === 'ACTIVE', discountId: existing.id, status };
+    }
     return { created: false, discountId: existing.id, status: existing.status };
   }
   const data = await gql(admin, `#graphql

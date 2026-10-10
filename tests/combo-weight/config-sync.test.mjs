@@ -34,7 +34,7 @@ const row = (id, { active = 1, layout = 'layout1', weight = pricing(), mode = 'w
   customization_data: JSON.stringify({ layout, step_1_collection: 'books', pricing_mode: mode, weight_pricing: weight, ...extra }),
 });
 
-function fakeAdmin({ discount = null, createErrors = [], storedConfig = null, collections = { books: 'gid://shopify/Collection/900' } } = {}) {
+function fakeAdmin({ discount = null, createErrors = [], activateErrors = [], storedConfig = null, collections = { books: 'gid://shopify/Collection/900' } } = {}) {
   const calls = [];
   const state = { discount, config: storedConfig, metafields: [] };
   return {
@@ -61,6 +61,12 @@ function fakeAdmin({ discount = null, createErrors = [], storedConfig = null, co
           state.discount = 'ACTIVE';
           data = { discountAutomaticAppCreate: { automaticAppDiscount: { discountId: 'gid://shopify/DiscountAutomaticNode/5', status: 'ACTIVE' }, userErrors: [] } };
         }
+      } else if (op === 'ComboWeightDiscountActivate') {
+        if (!activateErrors.length) state.discount = 'ACTIVE';
+        data = { discountAutomaticActivate: {
+          automaticDiscountNode: { id: variables.id, automaticDiscount: { __typename: 'DiscountAutomaticApp', status: state.discount } },
+          userErrors: activateErrors,
+        } };
       } else {
         throw new Error(`fake admin: unhandled op ${op}`);
       }
@@ -169,6 +175,15 @@ test('sync: inactive templates are dropped; nothing stored and nothing wanted â†
   assert.ok(!admin.calls.some((c) => c.op === 'ComboWeightMetafields'), 'no config to clear, no write');
 });
 
+test('sync: an expired box discount (deactivated in Shopify admin) is turned back on', async () => {
+  db.templates = [row(12)];
+  const admin = fakeAdmin({ discount: 'EXPIRED' });
+  const result = await sync.syncComboWeightDiscount(admin, nextShop());
+  assert.ok(admin.calls.some((c) => c.op === 'ComboWeightDiscountActivate' && c.variables.id === 'gid://shopify/DiscountAutomaticNode/5'));
+  assert.equal(result.state, 'active');
+  assert.equal(result.verified, true);
+});
+
 test('sync: Function not deployed, discount turned off, and too-large configs are reported honestly', async () => {
   db.templates = [row(12)];
   const notDeployed = await sync.syncComboWeightDiscount(fakeAdmin({ createErrors: [{ field: ['functionHandle'], message: 'Function not found', code: 'INVALID' }] }), nextShop());
@@ -176,8 +191,13 @@ test('sync: Function not deployed, discount turned off, and too-large configs ar
   assert.equal(notDeployed.verified, false);
   assert.match(notDeployed.message, /deployed/);
 
-  const off = await sync.syncComboWeightDiscount(fakeAdmin({ discount: 'EXPIRED' }), nextShop());
-  assert.equal(off.state, 'inactive');
+  const scheduled = await sync.syncComboWeightDiscount(fakeAdmin({ discount: 'SCHEDULED' }), nextShop());
+  assert.equal(scheduled.state, 'inactive', 'a scheduled discount is left alone');
+  assert.equal(scheduled.verified, false);
+
+  const refused = fakeAdmin({ discount: 'EXPIRED', activateErrors: [{ field: null, message: 'nope', code: 'INVALID' }] });
+  const off = await sync.syncComboWeightDiscount(refused, nextShop());
+  assert.equal(off.state, 'inactive', 'still reported when Shopify will not reactivate it');
   assert.equal(off.verified, false);
 
   const many = Array.from({ length: 50 }, (_, i) => `gid://shopify/Product/${1000000000000 + i}`);
