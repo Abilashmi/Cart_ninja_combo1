@@ -2548,19 +2548,25 @@ const SCRIPT_BODY = String.raw`
     // a sibling of <main>, not something a header/footer name match would
     // catch. Must survive the hide pass, or shoppers lose their cart drawer
     // while on the combo page.
+    // The site header/footer are never inside the page's main area; a
+    // "page-header" class in there is the page title (seen on a live theme:
+    // <h1 class="main-page-title page-header">), so it is never kept.
+    var mainArea = document.querySelector('main, [role="main"], #MainContent');
     function shouldPreserve(el) {
       if (!el || el.nodeType !== 1) return false;
       if (el.id === 'cc-root') return true;
       var tag = el.tagName.toLowerCase();
-      if (tag === 'header' || tag === 'footer' || tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return true;
-      var id = el.id || '';
-      var cls = (typeof el.className === 'string') ? el.className : '';
-      // <sticky-header> and the like count too.
-      if (HEADER_FOOTER_RE.test(tag) || HEADER_FOOTER_RE.test(id) || HEADER_FOOTER_RE.test(cls)) return true;
+      if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return true;
       // Fixed layers (the theme's cart drawer, popups, chat buttons) take no
       // room on the page, and hiding them would break them.
       try { if (window.getComputedStyle(el).position === 'fixed') return true; } catch (e) { }
-      return false;
+      if (mainArea && mainArea !== el && mainArea.contains(el)) return false;
+      if (/^h[1-6]$/.test(tag)) return false;
+      if (tag === 'header' || tag === 'footer') return true;
+      var id = el.id || '';
+      var cls = (typeof el.className === 'string') ? el.className : '';
+      // <sticky-header> and the like count too.
+      return HEADER_FOOTER_RE.test(tag) || HEADER_FOOTER_RE.test(id) || HEADER_FOOTER_RE.test(cls);
     }
     function hideOtherChildren(container, keep) {
       var children = container.children;

@@ -68,7 +68,8 @@ const baseConfig = {
 const DAWN_PAGE = '<div id="shopify-section-sections--1__header" class="shopify-section shopify-section-group-header-group section-header"><sticky-header class="header-wrapper"><header class="header">Store header</header></sticky-header></div>'
   + '<cart-drawer class="drawer" style="position:fixed;right:0;top:0;width:10px;height:10px">drawer</cart-drawer>'
   + '<main id="MainContent"><section id="shopify-section-template--1__main" class="shopify-section section"><div class="page-width page-width--narrow">'
-  + '<h1 class="main-page-title page-title h0">Meat Box</h1><div class="rte"><p class="intro">Page text</p><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></div></div></section>'
+  // As on a live store: the title carries a "page-header" class, inside an extra .container.
+  + '<div class="container"><h1 class="main-page-title page-header">Meat Box</h1><div class="rte"><p class="intro">Page text</p><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></div></div></div></section>'
   + '<section id="shopify-section-template--1__rich" class="shopify-section"><div class="rich-text">Other section</div></section></main>'
   + '<div id="shopify-section-sections--1__footer" class="shopify-section shopify-section-group-footer-group"><footer class="footer">Store footer</footer></div>';
 
