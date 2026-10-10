@@ -31,15 +31,8 @@ export const loader = async ({ request }) => {
         currencyLocale: currency.locale,
         planKey,
         shop: session.shop,
-        // Local dev (`npm run dev`) always shows hidden-in-production nav items
-        // like COD Checkout; production (Dockerfile) runs with NODE_ENV=production.
-        // eslint-disable-next-line no-undef
-        isLocalDev: process.env.NODE_ENV !== "production",
     };
 };
-
-// Stores that see COD Checkout in the nav while it's hidden for everyone else.
-const COD_NAV_SHOPS = ['house-of-ko-4.myshopify.com'];
 
 // s-app-nav / s-link are Shopify App Bridge native web components. Plain
 // text content always renders; nested React icon components (e.g.
@@ -69,7 +62,7 @@ function navBadge(featureKey, planKey) {
 }
 
 export default function App() {
-    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop, isLocalDev } = useLoaderData();
+    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop } = useLoaderData();
     const navigation = useNavigation();
     const isNavigating = navigation.state !== "idle";
 
@@ -90,10 +83,9 @@ export default function App() {
                             <s-link href="/app/cartdrawer">Cart Editor</s-link>
                             <s-link href="/app/bundles">Build a Combo {navBadge('build_a_combo', planKey)}</s-link>
                             <s-link href="/app/packs">Packs</s-link>
-                            {/* COD Checkout is hidden from the nav until it's ready for
-                                merchants, except for the stores in COD_NAV_SHOPS and in
-                                local dev; the page still works at /app/cod. */}
-                            {(isLocalDev || COD_NAV_SHOPS.includes(shop)) && <s-link href="/app/cod">COD Checkout</s-link>}
+                            {/* Every store sees COD Checkout; it stays off on the storefront
+                                until the merchant turns it on (DEFAULT_COD_SETTINGS.enabled). */}
+                            <s-link href="/app/cod">COD Checkout</s-link>
                             <s-link href="/app/fbt">Frequently Bought Together</s-link>
                             <s-link href="/app/productwidget">Coupon Banner</s-link>
                             <s-link href="/app/coupons">Discount Creator</s-link>
