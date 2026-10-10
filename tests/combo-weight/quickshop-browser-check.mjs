@@ -79,7 +79,7 @@ async function openCombo(config, pricing, { cod = false, viewport = { width: 128
     if (url.origin === 'https://store.test') {
       if (url.pathname === '/pages/box') {
         const stubs = cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;", placement: ${JSON.stringify(cod.placement || 'below')} }); } };` : '';
-        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script></head><body style="margin:0"><main><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></main><script src="${API}/combo-page.js"></script></body></html>` });
+        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100}</style></head><body style="margin:0"><main><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></main><script src="${API}/combo-page.js"></script></body></html>` });
       }
       if (url.pathname === '/cart.js') return json({ items: [] });
       if (url.pathname === '/cart/update.js') { log.update.push(JSON.parse(req.postData())); return json({ items: [] }); }
@@ -149,6 +149,9 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('3 items unlock 5% OFF, bolded, celebrating', bar3.includes('You unlocked 5% OFF') && (await page.$('.bxq-bar.is-celebrate')) !== null && (await text(page, '.bxq-msg b')) === '5% OFF', bar3);
   // 168 + 259 + 199 = 626; 5% = 31.30; compare: 11 + 30 = 41 → 72.30
   check('savings = compare-at + box discount, "more coming up"', bar3.includes('₹72.30 saved, more coming up!'), bar3);
+  const fills = await page.$$eval('.bxq-miles-fill, .bxq-fill, .bxq-step-fill, .bxq-slim-fill', (els) => els.map((e) => [getComputedStyle(e).display, e.getBoundingClientRect().width]));
+  check('progress fill shows on a theme that hides div:empty', fills.length > 0 && fills.every(([d, w]) => d !== 'none' && w > 0), JSON.stringify(fills));
+  check('bottom bar sits above theme sticky/fixed bits (z-index 999)', (await page.$eval('.bxq-bar', (e) => getComputedStyle(e).zIndex)) === '999');
   check('milestone 1 hit, 2 is next', (await page.$$eval('.bxq-mile', (els) => els.map((e) => e.className))).join('|').match(/is-hit.*\|.*is-next/) !== null);
   await plus(page, 3);
   check('celebrates once, not on every render', (await page.$('.bxq-bar.is-celebrate')) === null);
