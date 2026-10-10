@@ -589,9 +589,19 @@ export function createComboWeightCore() {
     return handles;
   }
 
+  /**
+   * Is the page drawn with the Quick Shop design (quick-commerce grid,
+   * stepper cards, top progress, sticky bar)? Quick Shop, and the Weight Box,
+   * which is Quick Shop always priced by weight.
+   */
+  function usesQuickShop(layout) {
+    return layout === QUICK_SHOP_LAYOUT || layout === WEIGHT_BOX_LAYOUT;
+  }
+
   return {
     WEIGHT_BOX_LAYOUT: WEIGHT_BOX_LAYOUT,
     QUICK_SHOP_LAYOUT: QUICK_SHOP_LAYOUT,
+    usesQuickShop: usesQuickShop,
     MEASURES: MEASURES,
     measureOf: measureOf,
     formatItems: formatItems,
@@ -624,7 +634,7 @@ export function createComboWeightCore() {
 const core = createComboWeightCore();
 
 export const {
-  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
+  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, usesQuickShop, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
   TIER_TYPES, LIMITS, DEFAULT_MESSAGES,
   toGrams, decimalsFor, toMinor, fromMinor, allocateMinor, pickTier, nextTierAfter, formatWeight,
   tierLabel, fillMessage, pricingHash, defaultWeightPricing, normalizeWeightPricing, computeBox,

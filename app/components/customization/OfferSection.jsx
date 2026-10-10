@@ -97,6 +97,9 @@ function OfferSectionComponent({
   const isWeight = isWeightCombo(config);
   const isWeightBox = config.layout === WEIGHT_BOX_LAYOUT;
   const isQuickShop = config.layout === QUICK_SHOP_LAYOUT;
+  // Drawn with the Quick Shop design (Quick Shop, or the Weight Box): tier
+  // labels show on the page, extra options folded away.
+  const qsDesign = isQuickShop || isWeightBox;
   const canUseWeight = canPublishFeature(FEATURE);
   const raw = config.weight_pricing || defaultWeightPricing();
   const unit = raw.unit === 'g' ? 'g' : 'kg';
@@ -335,10 +338,10 @@ function OfferSectionComponent({
                 error={errorFor(`tiers.${index}.value`)}
               />
               <TextField
-                label={isQuickShop ? 'Label on the page and at checkout' : 'Label at checkout'} autoComplete="off" maxLength={LIMITS.label}
+                label={qsDesign ? 'Label on the page and at checkout' : 'Label at checkout'} autoComplete="off" maxLength={LIMITS.label}
                 value={tier.label || ''}
-                placeholder={isQuickShop ? (tier.type === 'percentage' ? `${tier.value}% OFF` : tier.type === 'fixed_amount' ? `${symbol}${tier.value} OFF` : `Box at ${symbol}${tier.value}`) : tierLabel({ ...tier, label: '' }, unit, measure)}
-                helpText={isQuickShop ? 'e.g. FREE DELIVERY. Shoppers see it in the progress bars.' : undefined}
+                placeholder={qsDesign ? (tier.type === 'percentage' ? `${tier.value}% OFF` : tier.type === 'fixed_amount' ? `${symbol}${tier.value} OFF` : `Box at ${symbol}${tier.value}`) : tierLabel({ ...tier, label: '' }, unit, measure)}
+                helpText={qsDesign ? 'e.g. FREE DELIVERY. Shoppers see it in the progress bars.' : undefined}
                 onChange={(v) => setTier(index, { label: v })}
               />
             </BlockStack>
@@ -348,12 +351,12 @@ function OfferSectionComponent({
         {tiers.length < LIMITS.tiers && <Button onClick={addTier}>Add tier</Button>}
       </BlockStack>
 
-      {isQuickShop && (
+      {qsDesign && (
         <Button variant="plain" disclosure={showMore ? 'up' : 'down'} onClick={() => setShowMore((v) => !v)}>
           More options
         </Button>
       )}
-      {(!isQuickShop || showMore) && moreOptions}
+      {(!qsDesign || showMore) && moreOptions}
 
       {summary && (
         <Box padding="300" background="bg-surface-success" borderRadius="200">
@@ -379,7 +382,7 @@ function OfferSectionComponent({
           </InlineStack>
         ) : isWeightBox ? (
           <InlineStack gap="200" blockAlign="center">
-            <Text as="p" variant="bodySm" tone="subdued">The Weight Box template is always priced by the weight of the box.</Text>
+            <Text as="p" variant="bodySm" tone="subdued">The Weight Box is the Quick Shop design, always priced by the weight of the box.</Text>
             <ProBadge featureKey={FEATURE} />
           </InlineStack>
         ) : (

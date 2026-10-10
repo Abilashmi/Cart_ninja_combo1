@@ -130,7 +130,7 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
 // ── picker: Quick Shop card → preset ──
 {
   const page = await open({ fresh: true, quickShop: null });
-  const card = page.locator('.tpl-pick-card', { hasText: 'Quick Shop' });
+  const card = page.locator('.tpl-pick-card').filter({ has: page.locator('h3', { hasText: /^Quick Shop$/ }) });
   check('picker has a Pro Quick Shop card', (await card.count()) === 1 && (await card.textContent()).includes('Pro'));
   await card.locator('button:has-text("Use This Template")').click();
   await page.waitForSelector('.bxq', { timeout: 15000 });
@@ -143,7 +143,7 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.close();
 
   const starter = await open({ fresh: true, plan: 'starter', quickShop: null });
-  const locked = starter.locator('.tpl-pick-card', { hasText: 'Quick Shop' });
+  const locked = starter.locator('.tpl-pick-card').filter({ has: starter.locator('h3', { hasText: /^Quick Shop$/ }) });
   check('Starter: Quick Shop offers the upgrade', (await locked.locator('button').last().textContent()).includes('Upgrade to Pro'));
   await starter.close();
 }

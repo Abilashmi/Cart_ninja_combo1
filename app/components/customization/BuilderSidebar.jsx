@@ -14,6 +14,7 @@ import { ContentSection } from './ContentSection';
 import { StylingSection } from './StylingSection';
 import { BehaviorSection } from './BehaviorSection';
 import { AdvancedSection } from './AdvancedSection';
+import { usesQuickShop } from '../../utils/combo-weight.shared.js';
 import { ThemePresets } from './ThemePresets';
 import {
   QuickShopBarSection, QuickShopCardsSection, QuickShopColorsSection, QuickShopFiltersSection, QuickShopProgressSection,
@@ -242,14 +243,14 @@ function BuilderSidebarComponent({
               stepFieldAiLoading={stepFieldAiLoading}
               generateStepFieldSuggestion={generateStepFieldSuggestion}
             />
-            {config.layout === 'layout6' && (
+            {usesQuickShop(config.layout) && (
               <>
                 <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} />
                 <QuickShopCardsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsCards} onToggle={() => toggleSection('qsCards')} PxField={PxField} />
               </>
             )}
-            {/* The Weight Box (layout5) and Quick Shop (layout6) have their own designs: no banner, their own grid. */}
-            {config.layout !== 'layout5' && config.layout !== 'layout6' && (
+            {/* Quick Shop (layout6) and the Weight Box (layout5, the same design) have their own designs: no banner, their own grid. */}
+            {!usesQuickShop(config.layout) && (
               <>
                 <BannerSection
                   config={config}
@@ -294,7 +295,7 @@ function BuilderSidebarComponent({
                 </button>
               </div>
             </div>
-            {config.layout !== 'layout6' && (
+            {!usesQuickShop(config.layout) && (
               <ThemePresets
                 config={config}
                 applyConfigPatch={applyConfigPatch}
@@ -313,7 +314,7 @@ function BuilderSidebarComponent({
               PxField={PxField}
               ColorPickerField={ColorPickerField}
             />
-            {config.layout === 'layout6' ? (
+            {usesQuickShop(config.layout) ? (
               <>
                 <QuickShopProgressSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsProgress} onToggle={() => toggleSection('qsProgress')} ColorPickerField={ColorPickerField} PxField={PxField} />
                 <QuickShopBarSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsBar} onToggle={() => toggleSection('qsBar')} ColorPickerField={ColorPickerField} PxField={PxField} />

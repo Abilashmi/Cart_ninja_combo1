@@ -180,7 +180,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
       <style>{QUICK_SHOP_CSS}</style>
       {!hasProducts && (
         <div style={{ background: '#fff7ed', color: '#9a3412', fontSize: 13, padding: '8px 12px', borderRadius: 8, margin: isMobile ? 8 : '0 0 10px' }}>
-          Sample products. Choose collections under Layout → Shop Collections to see yours.
+          Sample products. Choose collections under Layout → {config.layout === 'layout5' ? 'Box Collections' : 'Shop Collections'} to see yours.
         </div>
       )}
       {/* The kit escapes every text it puts in the HTML. */}

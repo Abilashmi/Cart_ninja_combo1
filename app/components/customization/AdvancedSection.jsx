@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { FormLayout, Checkbox, Text, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 import { OfferSection } from './OfferSection';
-import { QUICK_SHOP_LAYOUT, isWeightCombo } from '../../utils/combo-weight.shared.js';
+import { isWeightCombo, usesQuickShop } from '../../utils/combo-weight.shared.js';
 
 function AdvancedSectionComponent({
   config,
@@ -17,7 +17,7 @@ function AdvancedSectionComponent({
 }) {
   const isWeight = isWeightCombo(config);
   // Quick Shop has its own Top progress / Bottom bar (Style tab) and no AI row.
-  const isQuickShop = config.layout === QUICK_SHOP_LAYOUT;
+  const isQuickShop = usesQuickShop(config.layout); // Quick Shop or the Weight Box (same design)
 
   return (
     <>

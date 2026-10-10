@@ -36,8 +36,7 @@ import { useAppBridge } from '@shopify/app-bridge-react';
 import { authenticate } from '../shopify.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import { getCodSettings } from '../services/cod.server';
-import { codButtonLook, codFeeOf, codPriceValues, fillPriceTags } from '../utils/cod.shared';
-import { codButtonColors, codButtonType } from '../components/cod/codButtonLook';
+import { codButtonLook, codFeeOf } from '../utils/cod.shared';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
@@ -53,8 +52,7 @@ import WeightMeter from '../components/customization/WeightMeter';
 import { usePlan } from '../components/PlanContext';
 import QuickShopPreview from '../components/customization/QuickShopPreview';
 import { ProBadge } from '../components/plan/PlanGate';
-import { WEIGHT_BOX_CSS, tierOfferText, weightBoxVars } from '../utils/combo-weight-box.css.js';
-import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
+import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, usesQuickShop, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -1618,23 +1616,17 @@ const presetFor = (mapped, prev) => (
       : { ...prev, layout: mapped }
 );
 
-// What a new Weight Box starts with: priced by weight, sample tiers the
-// merchant edits under Advanced → Offer (book-box friendly defaults).
+// What a new Weight Box starts with: the Quick Shop design, always priced by
+// weight, with sample weight tiers the merchant edits under Advanced → Offer.
+// Its qs_* design settings start from the kit's defaults, like Quick Shop.
 const WEIGHT_BOX_PRESET = {
   layout: WEIGHT_BOX_LAYOUT,
   pricing_mode: 'weight',
   has_discount_offer: false,
   selected_discount_id: null,
   tab_count: 1,
-  tab_all_label: 'All',
   collection_title: 'Build your box',
-  collection_description: 'Fill your box by weight. The heavier the box, the better the price.',
-  add_btn_text: 'Add to box',
-  primary_color: '#1f3a2e',
-  bg_color: '#faf7f2',
-  text_color: '#1c1917',
-  progress_success_color: '#15803d',
-  progress_bar_color: '#1f3a2e',
+  collection_description: '',
   weight_pricing: {
     ...defaultWeightPricing(),
     max_grams: 2500,
@@ -1642,6 +1634,7 @@ const WEIGHT_BOX_PRESET = {
       { id: 't1', min_grams: 1000, type: 'percentage', value: 10, label: '' },
       { id: 't2', min_grams: 2000, type: 'percentage', value: 15, label: '' },
     ],
+    messages: { locked: 'Add {{remaining}} more to unlock {{tier}}', unlocked: 'You unlocked {{tier}}', over_max: 'Your box can weigh up to {{max}}. Remove something to add this.' },
   },
 };
 
@@ -1723,25 +1716,25 @@ const TEMPLATE_CATALOGUE = [
     id: 'combo_weight_box',
     title: 'The Weight Box',
     description:
-      'Shoppers fill a box by weight. Hit 1 kg, 2 kg… and the price drops, right in Shopify checkout.',
-    img: '/weight-box.svg',
-    fallbackImg: '/weight-box.svg',
+      'A quick-commerce style box priced by weight: shoppers tap + and keep shopping, and at 1 kg, 2 kg… the price drops, right in Shopify checkout.',
+    img: '/quick-shop.svg',
+    fallbackImg: '/quick-shop.svg',
     badge: 'Priced by weight',
     badgeTone: 'success',
     blockName: 'combo_weight_box',
     // Pro only: weight pricing is applied by the BRIX checkout discount.
     featureKey: 'combo_weight_pricing',
     howItWorks:
-      'Products show their weight. A live box panel fills up as shoppers add items and unlocks your weight tiers: a % off, an amount off, or a fixed box price.',
+      'The Quick Shop design (filters, a + on every card, a top progress bar and a sticky bottom bar), always priced by weight: each tier is a % off, an amount off or a fixed box price.',
     features: [
       'Weight tiers: % off, amount off or box price',
-      'Live box panel with weight meter and price',
+      'Quick-commerce grid, filters and sticky bottom bar',
       'Max box weight, enforced on the page',
       'Same price at Shopify checkout and BRIX COD',
     ],
     bestFor: 'Books, dry fruits, tea, coffee, anything sold by weight',
     differentiators: [
-      'Only layout priced by weight',
+      'Always priced by weight',
       'Discount enforced at checkout, not just shown',
     ],
   },
@@ -2580,7 +2573,7 @@ export default function Customize() {
       const content = document.querySelector('.cst-sidebar-content');
       if (content) content.scrollTop = 0;
       const cards = document.querySelectorAll('.cst-section-card');
-      const orderMap = config.layout === QUICK_SHOP_LAYOUT
+      const orderMap = usesQuickShop(config.layout)
         ? { layout: ['general', 'qsFilters', 'qsCards'], style: ['content', 'qsProgress', 'qsBar', 'qsColors'], advanced: ['discount', 'customCss'] }
         : { layout: ['general','banner','products','content'], style: ['content','productCard','collectionTabsStyles','previewBar','variants','buttons'], advanced: ['progressBar','discount','aiSettings','customCss'] };
       const idx = (orderMap[category] || []).indexOf(sectionKey);
@@ -4468,11 +4461,12 @@ function InlineEdit({ value, configKey, onUpdate, style }) {
   );
 }
 
-// Quick Shop has its own preview (the storefront's own renderer); every other
+// Quick Shop (and the Weight Box) has its own preview (the storefront's own renderer); every other
 // layout uses ComboPreview. A separate component per layout keeps each one's
 // hooks in a fixed order when the merchant switches templates.
 function BuilderPreview(props) {
-  if (props.config?.layout === QUICK_SHOP_LAYOUT) {
+  // The Weight Box is Quick Shop always priced by weight.
+  if (usesQuickShop(props.config?.layout)) {
     return (
       <QuickShopPreview
         config={props.config} device={props.device} products={props.products} collections={props.collections}
@@ -6752,181 +6746,6 @@ function ComboPreview({
     // Sticky Preview Bar has been removed per user request
     return null;
   };
-
-  // === The Weight Box (layout5, Pro) ===
-  // Same markup and CSS (WEIGHT_BOX_CSS) as the storefront's renderLayout5 in
-  // combo-page[.]js.jsx, priced by weightPreview (the shared core). In the
-  // phone preview the box panel sits under the grid instead of a sheet.
-  if (config.layout === WEIGHT_BOX_LAYOUT && weightPreview) {
-    const { view, box } = weightPreview;
-    const handles = [...new Set(Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).filter(Boolean))];
-    const tab = activeTab !== 'all' && handles.includes(activeTab) ? activeTab : 'all';
-    const seen = new Set();
-    let list = (tab === 'all' ? handles.flatMap((h) => getStepViewProducts(h)) : getStepViewProducts(tab))
-      .filter((p) => (seen.has(p.id) ? false : seen.add(p.id)));
-    if (!list.length) list = (products || []).length ? products.slice(0, 12) : DEMO_PRODUCTS;
-    const productById = new Map([...list, ...(products || []), ...Object.values(allStepProducts || {}).flat()].map((p) => [String(p.id), p]));
-    const imgOf = (v, p) => v?.image?.src || v?.image?.url || p?.image?.src || p?.image?.url || '';
-    const tiers = view.tiers || [];
-    const top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
-    const scale = view.maxGrams != null ? view.maxGrams : Math.round(top * 1.2);
-    const percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
-    const msg = boxMessage(view, box);
-    const discount = totalPrice - finalPrice;
-    const canCheckout = totalItems > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
-    const weightLabel = (g) => formatWeight(g, g < 1000 ? 'g' : 'kg');
-    const open = (section) => (e) => { e.stopPropagation(); onRequestSection(section); };
-
-    const panel = (
-      <div className="bxw-panel" id="bxw-preview-panel" role="presentation" onClick={open('discount')}>
-        <div className="bxw-panel-head"><span>{config.progress_text || 'Your box'}</span><span className="bxw-count">{totalItems} item{totalItems === 1 ? '' : 's'}</span></div>
-        <div className="bxw-scale">
-          <span className="bxw-kg">{formatWeight(box.grams, view.unit)}</span>
-          {view.maxGrams != null && <span className="bxw-of">of {formatWeight(view.maxGrams, view.unit)} max</span>}
-        </div>
-        <div className={`bxw-track${box.overMax ? ' is-over' : ''}${box.tier ? ' is-good' : ''}`}>
-          <div className="bxw-fill" style={{ width: `${percent}%` }} />
-          {tiers.map((t) => (
-            <span key={t.id || t.min_grams} className={`bxw-mark${box.grams >= t.min_grams && !box.overMax ? ' is-hit' : ''}`} style={{ left: `${Math.min(100, (t.min_grams / scale) * 100)}%` }} />
-          ))}
-        </div>
-        <p className={`bxw-msg is-${msg.tone}`}>{msg.text}</p>
-        <div className="bxw-items">
-          {selectedProducts.length === 0 && <div className="bxw-empty">Your box is empty. Add items to start filling it.</div>}
-          {selectedProducts.map((it) => {
-            const p = productById.get(String(it.id));
-            const g = weightPreview.gramsByVariant[it.variantId];
-            const counted = weightPreview.qualifies(it.id) && g > 0;
-            return (
-              <div key={`${it.source}:${it.id}`} className="bxw-item">
-                {it.image ? <img src={it.image} alt="" /> : <span className="bxw-noimg" />}
-                <div className="bxw-item-main">
-                  <div className="bxw-item-name">{p?.title || 'Product'}</div>
-                  <div className="bxw-item-sub">{counted ? weightLabel(g * it.quantity) : 'Not counted'} · {currencySymbol}{(it.price * it.quantity).toFixed(2)}</div>
-                </div>
-                <div className="bxw-mini">
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDec(it.id, it.source); }} aria-label="Remove one">−</button>
-                  <span>{it.quantity}</span>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleInc(it.id, null, it.source); }} aria-label="Add one">+</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="bxw-totals">
-          <div><span>Items</span><span>{currencySymbol}{totalPrice.toFixed(2)}</span></div>
-          {discount > 0.004 && <div className="is-good"><span>Box discount</span><span>−{currencySymbol}{discount.toFixed(2)}</span></div>}
-          <div className="bxw-total"><span>Total</span><span>{currencySymbol}{finalPrice.toFixed(2)}</span></div>
-        </div>
-        {(() => {
-          // COD where the merchant put it (COD → Customize → Combo page).
-          const codShown = codEnabled && config.show_cod_button !== false;
-          const checkoutBtn = !(codShown && codPlacement === 'replace') && (
-            <button
-              type="button" className="bxw-checkout" disabled={!canCheckout}
-              onClick={(e) => { e.stopPropagation(); shopify.toast.show('Checkout works on your live combo page.'); }}
-            >
-              {config.preview_checkout_btn_text || 'Checkout'}
-            </button>
-          );
-          const codBtn = codShown && (
-            <button
-              type="button" className="bxw-cod" disabled={!canCheckout}
-              style={codComboLook ? { ...codButtonColors(codComboLook), ...codButtonType(codComboLook), border: 'none', borderRadius: codComboLook.radius } : undefined}
-            >
-              {fillPriceTags(
-                codComboLook?.text || config.cod_btn_text || 'Cash on Delivery',
-                codPriceValues(finalPrice, codFee),
-                (n) => `${currencySymbol}${Number.isInteger(n) ? n : n.toFixed(2)}`,
-              )}
-            </button>
-          );
-          return codPlacement === 'below' ? <>{checkoutBtn}{codBtn}</> : <>{codBtn}{checkoutBtn}</>;
-        })()}
-      </div>
-    );
-
-    return (
-      <div style={{ background: '#eef1f5', padding: isMobile ? 0 : 16 }}>
-        <style>{WEIGHT_BOX_CSS}</style>
-        <div className={`bxw${isMobile ? ' bxw--mobile' : ''}`} style={{ ...weightBoxVars(rawConfig), background: '#fff', borderRadius: 12, margin: isMobile ? 0 : '0 auto' }}>
-          <div className="bxw-main">
-            <header className="bxw-hero" role="presentation" onClick={open('content')} style={{ cursor: 'pointer' }}>
-              <div className="bxw-eyebrow">{config.weight_box_eyebrow || 'Build your box'}</div>
-              <h2 className="bxw-title">{config.collection_title || 'Build your box'}</h2>
-              {config.collection_description && <p className="bxw-desc">{config.collection_description}</p>}
-              {tiers.length > 0 && (
-                <ol className="bxw-ladder">
-                  {tiers.map((t) => (
-                    <li key={t.id || t.min_grams} className={`bxw-rung${box.grams >= t.min_grams && !box.overMax ? ' is-hit' : ''}${box.nextTier?.min_grams === t.min_grams ? ' is-next' : ''}`}>
-                      <span className="bxw-rung-w">{formatWeight(t.min_grams, view.unit)}</span>
-                      <span className="bxw-rung-o">{tierOfferText(t, currencySymbol)}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </header>
-            {handles.length > 1 && (
-              <nav className="bxw-pills" aria-label="Collections">
-                {['all', ...handles].map((h) => (
-                  <button key={h} type="button" className={`bxw-pill${tab === h ? ' is-on' : ''}`} onClick={() => setActiveTab(h)}>
-                    {h === 'all' ? (config.tab_all_label || 'All') : (collections.find((c) => c.handle === h)?.title || h)}
-                  </button>
-                ))}
-              </nav>
-            )}
-            <div className="bxw-grid">
-              {list.map((p) => {
-                const variants = p.variants || [];
-                const variant = variants.find((v) => String(v.id) === String(selectedVariants[p.id])) || variants[0];
-                const item = selectedProducts.find((s) => String(s.id) === String(p.id) && s.source === 'box');
-                const g = variant ? weightPreview.gramsByVariant[variant.id] : null;
-                const counts = weightPreview.qualifies(p.id) && g > 0;
-                const image = imgOf(variant, p);
-                return (
-                  <div key={p.id} className={`bxw-card${item ? ' is-in' : ''}`} data-cdo-product-id={p.id}>
-                    <div className="bxw-media">
-                      {image ? <img src={image} alt={p.title} /> : <span className="bxw-noimg" />}
-                    </div>
-                    <div className="bxw-info">
-                      <div className="bxw-name">{p.title}</div>
-                      {variants.length > 1 && (
-                        <select className="bxw-select" value={variant?.id || ''} onChange={(e) => handleVariantChange(p.id, e.target.value)}>
-                          {variants.map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}
-                        </select>
-                      )}
-                      <div className="bxw-meta">
-                        <span className="bxw-price">{currencySymbol}{Number(variant?.price ?? p.price ?? 0).toFixed(2)}</span>
-                        <span className={`bxw-chip${counts ? '' : ' is-off'}`}>{counts ? weightLabel(g) : 'Not counted'}</span>
-                      </div>
-                      {item ? (
-                        <div className="bxw-stepper">
-                          <button type="button" onClick={() => handleDec(p.id, 'box')} aria-label="Remove one">−</button>
-                          <span>{item.quantity} in box</span>
-                          <button type="button" onClick={() => handleInc(p.id, variant, 'box')} aria-label="Add one">+</button>
-                        </div>
-                      ) : (
-                        <button type="button" className="bxw-add" onClick={() => handleInc(p.id, variant, 'box')}>{config.add_btn_text || 'Add to box'}</button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {renderAiSuggestions()}
-            {isMobile && <div style={{ marginTop: 16 }}>{panel}</div>}
-          </div>
-          {!isMobile && <aside className="bxw-aside">{panel}</aside>}
-          {isMobile && (
-            <div className="bxw-bar is-preview">
-              <div className="bxw-bar-info"><b>{formatWeight(box.grams, view.unit)}</b><span>{totalItems} item{totalItems === 1 ? '' : 's'} · {currencySymbol}{finalPrice.toFixed(2)}</span></div>
-              <button type="button" className="bxw-bar-btn" onClick={() => document.getElementById('bxw-preview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>View box</button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // === Layout 3 (FMCG / App Style) Specific Rendering ===
   if (config.layout === 'layout3') {

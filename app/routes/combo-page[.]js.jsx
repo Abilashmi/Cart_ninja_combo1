@@ -28,7 +28,6 @@
 // (layout6) is drawn by app/utils/combo-quickshop.shared.js, injected the same
 // way and also used by the builder preview.
 import { createComboWeightCore } from '../utils/combo-weight.shared.js';
-import { WEIGHT_BOX_CSS } from '../utils/combo-weight-box.css.js';
 import { createQuickShopKit, QUICK_SHOP_CSS } from '../utils/combo-quickshop.shared.js';
 
 const SCRIPT_BODY = String.raw`
@@ -245,7 +244,6 @@ const SCRIPT_BODY = String.raw`
       box: null, // WeightCore.computeBox result, recomputed by computePricing()
       canCheckout: false,
       checkingOut: false,
-      boxOpen: false, // The Weight Box's bottom sheet on phones
       // Quick Shop (layout6): filters, open menu, the bar's item list.
       qsUi: { chip: 'all', dd: {}, instock: false, menu: null, sheetOpen: false },
       qsLastTier: null, // the tier shown last render, to celebrate a new one once
@@ -324,7 +322,7 @@ const SCRIPT_BODY = String.raw`
     // A Weight Box can be checked out once it weighs at least the first tier,
     // and not over the max; Quick Shop lets any box through unless the
     // merchant requires the first tier.
-    state.canCheckout = state.config.layout === WeightCore.QUICK_SHOP_LAYOUT
+    state.canCheckout = WeightCore.usesQuickShop(state.config.layout)
       ? QuickShop.canCheckout(state.config, box, totalSelected, tiers)
       : totalSelected > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
   }
@@ -691,7 +689,7 @@ const SCRIPT_BODY = String.raw`
     trackEvent(state, 'click', state.finalPrice);
     state.checkingOut = true;
     render(root);
-    var destination = state.config.layout === WeightCore.QUICK_SHOP_LAYOUT ? QuickShop.opt(state.config, 'qs_btn_action') : 'checkout';
+    var destination = WeightCore.usesQuickShop(state.config.layout) ? QuickShop.opt(state.config, 'qs_btn_action') : 'checkout';
     addComboToCart({ templateId: state.templateId, items: co.items, attributes: co.attributes, destination: destination }).catch(function (err) {
       state.checkingOut = false;
       showToast(root, state, (err && err.message) || 'Could not add your box to the cart. Please try again.');
@@ -2122,12 +2120,9 @@ const SCRIPT_BODY = String.raw`
     return html;
   }
 
-  /* === RENDER: LAYOUT5 "The Weight Box" (Pro, always weight-priced) === */
-  // Built around the box: a tier ladder up top, collection pills, a product
-  // grid with each item's weight, and a sticky "Your box" panel (a bottom
-  // sheet on phones) with the meter, the items, the price and checkout.
-  // Mirrored by the builder preview (app.bundles.customize.jsx renderWeightBox).
+  /* === The Weight Box (layout5) is drawn as Quick Shop (renderLayout6), always priced by weight. === */
 
+  // Collection handles of a box page's pills (col_1..col_N, tab_count).
   function weightBoxHandles(config) {
     var out = [];
     for (var i = 1; i <= (config.tab_count || 4); i++) {
@@ -2136,204 +2131,6 @@ const SCRIPT_BODY = String.raw`
     }
     return out;
   }
-
-  function tierOfferText(tier, symbol) {
-    if (tier.type === 'percentage') return tier.value + '% off';
-    if (tier.type === 'fixed_amount') return symbol + tier.value + ' off';
-    return 'Box for ' + symbol + tier.value;
-  }
-
-  function weightBoxVars(config) {
-    return styleStr({
-      '--bxw-accent': config.primary_color || '#1f3a2e',
-      '--bxw-good': config.progress_success_color || '#15803d',
-      '--bxw-bg': config.bg_color || '#faf7f2',
-      '--bxw-text': config.text_color || '#1c1917',
-      '--bxw-bar': config.progress_bar_color || '#1f3a2e',
-    });
-  }
-
-  function renderBoxCard(state, product) {
-    var variants = product.variants || [];
-    var activeVariantId = getActiveVariantId(state, product);
-    var activeVariant = null;
-    for (var i = 0; i < variants.length; i++) { if (String(variants[i].id) === String(activeVariantId)) { activeVariant = variants[i]; break; } }
-    var sel = state.selectedMap[activeVariantId];
-    var qty = sel ? (sel.qty || 0) : 0;
-    var price = activeVariant && activeVariant.price != null ? parseFloat(activeVariant.price) : parseFloat(product.price || 0);
-    var grams = state.variantGramsMap[activeVariantId];
-    var counts = !!state.qualifying[product.id] && grams > 0;
-    var image = (activeVariant && activeVariant.image) || product.image || (product.images && product.images[0]);
-    var inBox = false;
-    for (i = 0; i < variants.length; i++) if (state.selectedMap[variants[i].id]) inBox = true;
-
-    var html = '<div class="brix-combo-card bxw-card' + (inBox ? ' is-in' : '') + '" data-product-id="' + esc(product.id) + '">';
-    html += '<div class="bxw-media" data-combo-action="lightbox-open" data-product-id="' + esc(product.id) + '">';
-    html += image ? '<img src="' + esc(image.url) + '" alt="' + esc(image.altText || product.title) + '" loading="lazy" />' : '<span class="bxw-noimg"></span>';
-    if (inBox) html += '<span class="bxw-tick">' + ICON_CHECK + '</span>';
-    html += '</div><div class="bxw-info">';
-    html += '<div class="bxw-name">' + esc(product.title) + '</div>';
-    if (variants.length > 1) {
-      html += '<select class="bxw-select" data-combo-action="variant-select" data-product-id="' + esc(product.id) + '">';
-      for (i = 0; i < variants.length; i++) {
-        html += '<option value="' + esc(variants[i].id) + '"' + (String(variants[i].id) === String(activeVariantId) ? ' selected' : '') + '>' + esc(variants[i].title) + '</option>';
-      }
-      html += '</select>';
-    }
-    html += '<div class="bxw-meta"><span class="bxw-price">' + getCurrencySymbol(product.currency) + price.toFixed(2) + '</span>';
-    html += '<span class="bxw-chip' + (counts ? '' : ' is-off') + '">' + (counts ? esc(WeightCore.formatWeight(grams, grams < 1000 ? 'g' : 'kg')) : 'Not counted') + '</span></div>';
-    if (qty > 0) {
-      html += '<div class="bxw-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(product.id) + '" aria-label="Remove one">−</button>'
-        + '<span aria-live="polite">' + qty + ' in box</span>'
-        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '" aria-label="Add one">+</button></div>';
-    } else {
-      html += '<button type="button" class="bxw-add" data-combo-action="card-add" data-product-id="' + esc(product.id) + '">' + esc(state.config.add_btn_text || 'Add to box') + '</button>';
-    }
-    html += '</div></div>';
-    return html;
-  }
-
-  function renderBoxPanel(state, inSheet) {
-    var config = state.config;
-    var w = state.weight;
-    var box = state.box;
-    var symbol = getBarCurrencySymbol(state);
-    var tiers = w.tiers || [];
-    var top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
-    var scale = w.maxGrams != null ? w.maxGrams : Math.round(top * 1.2);
-    var percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
-    var msg = WeightCore.boxMessage(w, box);
-    var items = buildSelectedProducts(state);
-    var discount = state.totalPrice - state.finalPrice;
-
-    var html = '<div class="bxw-panel' + (inSheet ? ' is-sheet' : '') + '">';
-    html += '<div class="bxw-panel-head"><span>' + esc(config.progress_text || 'Your box') + '</span>';
-    if (inSheet) html += '<button type="button" class="bxw-close" data-combo-action="box-close" aria-label="Close">' + ICON_CLOSE + '</button>';
-    else html += '<span class="bxw-count">' + state.totalSelected + ' item' + (state.totalSelected === 1 ? '' : 's') + '</span>';
-    html += '</div>';
-
-    html += '<div class="bxw-scale"><span class="bxw-kg">' + esc(WeightCore.formatWeight(box.grams, w.unit)) + '</span>';
-    if (w.maxGrams != null) html += '<span class="bxw-of">of ' + esc(WeightCore.formatWeight(w.maxGrams, w.unit)) + ' max</span>';
-    html += '</div>';
-    html += '<div class="bxw-track' + (box.overMax ? ' is-over' : '') + (box.tier && w.enabled ? ' is-good' : '') + '" role="progressbar" aria-label="Box weight" aria-valuemin="0" aria-valuemax="' + scale + '" aria-valuenow="' + Math.round(box.grams) + '">';
-    html += '<div class="bxw-fill" style="width:' + percent + '%"></div>';
-    if (w.enabled) {
-      for (var t = 0; t < tiers.length; t++) {
-        var left = scale > 0 ? Math.min(100, (tiers[t].min_grams / scale) * 100) : 0;
-        html += '<span class="bxw-mark' + (box.grams >= tiers[t].min_grams && !box.overMax ? ' is-hit' : '') + '" style="left:' + left + '%"></span>';
-      }
-    }
-    html += '</div>';
-    html += '<p class="bxw-msg is-' + msg.tone + '" aria-live="polite">' + esc(msg.text) + '</p>';
-
-    html += '<div class="bxw-items">';
-    if (!items.length) {
-      html += '<div class="bxw-empty">Your box is empty. Add items to start filling it.</div>';
-    }
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i];
-      var g = state.variantGramsMap[it.variantId];
-      var counted = !!state.qualifying[it.id] && g > 0;
-      html += '<div class="bxw-item">';
-      html += it.image ? '<img src="' + esc(it.image) + '" alt="" />' : '<span class="bxw-noimg"></span>';
-      html += '<div class="bxw-item-main"><div class="bxw-item-name">' + esc(it.title) + '</div>';
-      html += '<div class="bxw-item-sub">' + (counted ? esc(WeightCore.formatWeight(g * it.quantity, g * it.quantity < 1000 ? 'g' : 'kg')) : 'Not counted') + ' · ' + symbol + (it.price * it.quantity).toFixed(2) + '</div></div>';
-      html += '<div class="bxw-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(it.variantId) + '" aria-label="Remove one">−</button><span>' + it.quantity + '</span>'
-        + '<button type="button" data-combo-action="box-inc" data-variant-id="' + esc(it.variantId) + '" aria-label="Add one">+</button></div>';
-      html += '</div>';
-    }
-    html += '</div>';
-
-    html += '<div class="bxw-totals">';
-    html += '<div><span>Items</span><span>' + symbol + state.totalPrice.toFixed(2) + '</span></div>';
-    if (discount > 0.004) html += '<div class="is-good"><span>Box discount</span><span>−' + symbol + discount.toFixed(2) + '</span></div>';
-    html += '<div class="bxw-total"><span>Total</span><span>' + symbol + state.finalPrice.toFixed(2) + '</span></div>';
-    html += '</div>';
-
-    var disabled = !state.canCheckout || state.checkingOut;
-    var codShown = state.codAvailable && config.show_cod_button !== false;
-    var codPlace = codPlacement(state);
-    var checkoutBtn = codShown && codPlace === 'replace' ? '' : '<button type="button" class="bxw-checkout" data-combo-action="checkout"' + (disabled ? ' disabled' : '') + '>'
-      + esc(state.checkingOut ? 'Adding your box…' : (config.preview_checkout_btn_text || 'Checkout')) + '</button>';
-    var codBtn = '';
-    if (codShown) {
-      var cb = state.codButton;
-      codBtn = '<button type="button" class="bxw-cod" data-combo-action="cod"' + (disabled ? ' disabled' : '')
-        + (cb ? ' style="display:flex;align-items:center;justify-content:center;gap:8px;' + cb.css + '"' : '') + '>'
-        + (cb ? cb.icon : '') + esc(codText(state)) + '</button>';
-    }
-    html += codPlace === 'below' ? checkoutBtn + codBtn : codBtn + checkoutBtn;
-    if (items.length) html += '<button type="button" class="bxw-clear" data-combo-action="reset">Empty the box</button>';
-    html += '</div>';
-    return html;
-  }
-
-  function renderLayout5(state, isMobile) {
-    if (!state.weightMode) return renderLayout2(state, isMobile);
-    var config = state.config;
-    var w = state.weight;
-    var box = state.box;
-    var symbol = getBarCurrencySymbol(state);
-    var handles = weightBoxHandles(config);
-    if (state.activeTab !== 'all' && handles.indexOf(state.activeTab) === -1) state.activeTab = 'all';
-    var products = state.activeTab === 'all' ? uniqueProducts(state, handles) : (state.productsByHandle[state.activeTab] || []);
-
-    var html = '<div class="bxw' + (isMobile ? ' bxw--mobile' : '') + '" style="' + weightBoxVars(config) + '">';
-    html += '<div class="bxw-main">';
-    html += '<header class="bxw-hero">';
-    html += '<div class="bxw-eyebrow">' + esc(config.weight_box_eyebrow || 'Build your box') + '</div>';
-    html += '<h2 class="bxw-title">' + esc(config.collection_title || state.templateName || 'Build your box') + '</h2>';
-    if (config.collection_description) html += '<p class="bxw-desc">' + esc(config.collection_description) + '</p>';
-    if (w.enabled && (w.tiers || []).length) {
-      html += '<ol class="bxw-ladder">';
-      for (var t = 0; t < w.tiers.length; t++) {
-        var tier = w.tiers[t];
-        var reached = box.grams >= tier.min_grams && !box.overMax;
-        var isNext = box.nextTier && box.nextTier.min_grams === tier.min_grams;
-        html += '<li class="bxw-rung' + (reached ? ' is-hit' : '') + (isNext ? ' is-next' : '') + '">'
-          + '<span class="bxw-rung-w">' + esc(WeightCore.formatWeight(tier.min_grams, w.unit)) + '</span>'
-          + '<span class="bxw-rung-o">' + esc(tierOfferText(tier, symbol)) + '</span></li>';
-      }
-      html += '</ol>';
-    }
-    html += '</header>';
-
-    if (handles.length > 1) {
-      html += '<nav class="bxw-pills" aria-label="Collections">';
-      html += '<button type="button" class="bxw-pill' + (state.activeTab === 'all' ? ' is-on' : '') + '" data-combo-action="tab-pick" data-tab="all">' + esc(config.tab_all_label || 'All') + '</button>';
-      for (var h = 0; h < handles.length; h++) {
-        html += '<button type="button" class="bxw-pill' + (state.activeTab === handles[h] ? ' is-on' : '') + '" data-combo-action="tab-pick" data-tab="' + esc(handles[h]) + '">' + esc(state.collectionNameMap[handles[h]] || handles[h]) + '</button>';
-      }
-      html += '</nav>';
-    }
-
-    if (!products.length) {
-      html += '<div class="bxw-empty">No products in this collection yet.</div>';
-    } else {
-      html += '<div class="bxw-grid">';
-      for (var p = 0; p < products.length; p++) html += renderBoxCard(state, products[p]);
-      html += '</div>';
-    }
-    html += renderAiSuggestions(state, isMobile);
-    html += '</div>'; // main
-
-    if (!isMobile) {
-      html += '<aside class="bxw-aside">' + renderBoxPanel(state, false) + '</aside>';
-    } else {
-      // Phone: a bar with the box weight and price; tap to open the box.
-      html += '<div class="bxw-bar"><div class="bxw-bar-info"><b>' + esc(WeightCore.formatWeight(box.grams, w.unit)) + '</b>'
-        + '<span>' + state.totalSelected + ' item' + (state.totalSelected === 1 ? '' : 's') + ' · ' + symbol + state.finalPrice.toFixed(2) + '</span></div>'
-        + '<button type="button" class="bxw-bar-btn" data-combo-action="box-open">View box</button></div>';
-      if (state.boxOpen) {
-        html += '<div class="bxw-scrim" data-combo-action="box-close"></div>';
-        html += '<div class="bxw-sheet" role="dialog" aria-label="Your box">' + renderBoxPanel(state, true) + '</div>';
-      }
-    }
-    html += '</div>';
-    return html;
-  }
-
-  /* === RENDER: QUICK SHOP (layout6) — app/utils/combo-quickshop.shared.js === */
 
   function renderLayout6(state, isMobile) {
     var config = state.config;
@@ -2380,10 +2177,9 @@ const SCRIPT_BODY = String.raw`
     var config = state.config;
 
     var html;
-    if (config.layout === WeightCore.QUICK_SHOP_LAYOUT) {
+    // The Weight Box is drawn as Quick Shop (always priced by weight).
+    if (WeightCore.usesQuickShop(config.layout)) {
       html = renderLayout6(state, isMobile);
-    } else if (config.layout === WeightCore.WEIGHT_BOX_LAYOUT) {
-      html = renderLayout5(state, isMobile);
     } else if (config.layout === 'layout4') {
       html = renderLayout4(state, isMobile);
     } else if (config.layout === 'layout2') {
@@ -2415,10 +2211,7 @@ const SCRIPT_BODY = String.raw`
 
   /* === GLOBAL STYLES (injected once) === */
 
-  // The Weight Box (renderLayout5): app/utils/combo-weight-box.css.js, the
-  // same styles the builder preview uses.
-  var WEIGHT_BOX_CSS = ${JSON.stringify(WEIGHT_BOX_CSS)};
-  // Quick Shop (renderLayout6): app/utils/combo-quickshop.shared.js.
+  // Quick Shop (renderLayout6, also the Weight Box): app/utils/combo-quickshop.shared.js.
   var QUICK_SHOP_CSS = ${JSON.stringify(QUICK_SHOP_CSS)};
 
   var stylesInjected = false;
@@ -2446,7 +2239,7 @@ const SCRIPT_BODY = String.raw`
       '.brix-combo-ai-track { scrollbar-width: thin; }' +
       '@keyframes brix-combo-ai-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } 30%, 70% { box-shadow: 0 0 0 4px rgba(0,0,0,0.35); } }' +
       '.brix-combo-ai-flash { animation: brix-combo-ai-flash 1.6s ease-in-out; }' +
-      WEIGHT_BOX_CSS + QUICK_SHOP_CSS;
+      QUICK_SHOP_CSS;
     document.head.appendChild(style);
   }
 
@@ -2473,7 +2266,7 @@ const SCRIPT_BODY = String.raw`
       var productId = el.getAttribute('data-product-id');
       var product = productId ? state.productMap[productId] : null;
       // Quick Shop filters, menus and the bar's item list.
-      if (state.config.layout === WeightCore.QUICK_SHOP_LAYOUT && QuickShop.applyUiAction(state.qsUi, action, el)) { render(root); return; }
+      if (WeightCore.usesQuickShop(state.config.layout) && QuickShop.applyUiAction(state.qsUi, action, el)) { render(root); return; }
 
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
       if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
@@ -2551,8 +2344,6 @@ const SCRIPT_BODY = String.raw`
         else onQtyChange(root, state, boxVariant, boxSel.qty - 1);
         return;
       }
-      if (action === 'box-open') { state.boxOpen = true; render(root); return; }
-      if (action === 'box-close') { state.boxOpen = false; render(root); return; }
       if (action === 'checkout') { onCheckout(root, state); return; }
       if (action === 'cod') { onCod(root, state); return; }
       if (action === 'reset') { onReset(root, state); return; }

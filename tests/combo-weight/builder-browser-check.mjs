@@ -143,19 +143,21 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   check('Weight Box card is marked Pro', (await card.textContent()).includes('Pro'));
   await page.screenshot({ path: path.join(SHOTS, 'picker.png'), fullPage: true });
   await card.locator('button:has-text("Use This Template")').click();
-  await page.waitForSelector('.bxw', { timeout: 15000 });
-  check('picking it opens the Weight Box design in the preview', (await page.$('.bxw-panel')) !== null);
-  const ladder = await page.$$eval('.bxw-rung', (els) => els.map((e) => e.textContent));
-  check('preview starts with sample tiers (1 kg 10%, 2 kg 15%)', ladder.length === 2 && ladder[0].includes('10% off') && ladder[1].includes('15% off'), ladder.join(' | '));
-  await page.click(`.bxw-card[data-cdo-product-id="${P(5)}"] .bxw-add`); // 700 g
-  await page.click(`.bxw-card[data-cdo-product-id="${P(4)}"] .bxw-add`); // 500 g
-  const panel = await page.textContent('.bxw-panel');
-  check('adding products fills the box panel (1.2 kg, 10% off)', panel.includes('1.2 kg') && panel.includes('Box discount'), panel.replace(/\s+/g, ' ').slice(0, 220));
-  check('product without a weight says "Not counted"', (await page.textContent(`.bxw-card[data-cdo-product-id="${P(2)}"]`)).includes('Not counted'));
+  await page.waitForSelector('.bxq', { timeout: 15000 });
+  check('picking it opens the Quick Shop design in the preview (no old box panel)', (await page.$('.bxq-card')) !== null && (await page.$('.bxw')) === null);
+  const top = await page.textContent('.bxq-top');
+  check('top progress starts with sample weight tiers (1 kg 10%, 2 kg 15%)', top.includes('1 kg') && top.includes('10% OFF') && top.includes('15% OFF'), top.replace(/\s+/g, ' '));
+  // A fresh template shows sample products (with weights) until collections are chosen.
+  check('fresh: sample products, hint names "Box Collections"', (await page.textContent('body')).includes('Layout → Box Collections'));
+  for (const id of ['sample-3', 'sample-2', 'sample-4']) await page.click(`.bxq-card[data-product-id="${id}"] [data-combo-action="qty-inc"]`); // 500 + 450 + 450 g
+  const msg = await page.textContent('.bxq-msg');
+  check('adding 1.4 kg unlocks the 1 kg tier in the bottom bar', msg.includes('You unlocked') && msg.includes('10% OFF'), msg.replace(/\s+/g, ' '));
   await page.screenshot({ path: path.join(SHOTS, 'builder-weight-box.png') });
+  await page.click('.cst-sidebar-tab:has-text("Style")');
+  check('Style tab: Quick Shop\'s Top progress / Bottom bar / Page colours', ((t) => t.includes('Top progress') && t.includes('Bottom bar') && t.includes('Page colours'))(await sidebar(page)));
   await openOffer(page);
   const offer = await sidebar(page);
-  check('Offer: no item-count option for the Weight Box', offer.includes('always priced by the weight of the box') && !(await page.$('input[type="radio"][value="count"]')));
+  check('Offer: always by weight (no item-count or measure choice)', offer.includes('always priced by the weight of the box') && !offer.includes('Box measured by') && !(await page.$('input[type="radio"][value="count"]')));
   await page.click('.cst-sidebar-tab:has-text("Layout")');
   check('Layout tab: "Box Collections" section', (await sidebar(page)).includes('Box Collections'));
   await page.click('button:has-text("Save Template")');

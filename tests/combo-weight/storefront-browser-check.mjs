@@ -87,7 +87,7 @@ async function openCombo(config, { wp = weightPricing(), cartItems = [], shiproc
     return route.fulfill({ status: 404, body: '' });
   });
   await page.goto('https://store.test/pages/box');
-  await page.waitForSelector('.brix-combo-card');
+  await page.waitForSelector('.brix-combo-card, .bxq-card');
   return { page, log };
 }
 
@@ -186,43 +186,37 @@ const checkoutBtn = '[data-combo-action="checkout"]';
   await page.close();
 }
 
-// ── The Weight Box template (layout5): its own design, desktop + phone ──
+// ── The Weight Box template (layout5): the Quick Shop design, priced by weight ──
 {
   const boxConfig = {
     layout: 'layout5', collection_title: 'Build your book box', collection_description: 'Fill a box by weight. Heavier boxes cost less per book.',
     col_1: 'books', col_2: 'comics', tab_count: 2, weight_pricing: weight,
   };
   productsByHandle.comics = [book(5, 'Comic Vol 1', '90.00', 200)];
+  const qsCard = (n) => `.bxq-card[data-product-id="${P(n)}"]`;
+  const qsPlus = (pg, n) => pg.click(`${qsCard(n)} [data-combo-action="qty-inc"]`);
   const { page, log } = await openCombo(boxConfig, { cod: true });
-  check('Weight Box renders its own layout', (await page.$('.bxw')) !== null && (await page.$('.bxw-aside .bxw-panel')) !== null);
-  const ladder = await page.$$eval('.bxw-rung', (els) => els.map((e) => e.textContent));
-  check('tier ladder shows each tier', ladder.length === 2 && ladder[0].includes('1 kg') && ladder[0].includes('10% off') && ladder[1].includes('Box for ₹1700'), ladder.join(' | '));
-  check('collection pills incl. All', (await page.$$eval('.bxw-pill', (els) => els.map((e) => e.textContent))).join(',') === 'All,Books,Comics');
-  check('empty box message', (await page.textContent('.bxw-panel')).includes('Your box is empty'));
-  await add(page, 2); await inc(page, 2); await inc(page, 2); // Atlas ×3 = 1.35 kg
-  const panel = await page.textContent('.bxw-panel');
-  check('panel shows weight, discount and total', panel.includes('1.35 kg') && panel.includes('Box discount') && panel.includes('₹324.00'), panel.replace(/\s+/g, ' ').slice(0, 300));
-  check('first rung is reached', await page.$eval('.bxw-rung', (el) => el.classList.contains('is-hit')));
-  await page.click('.bxw-item [data-combo-action="box-dec"]');
-  check('box − lowers the quantity from the panel', (await page.textContent('.bxw-item .bxw-mini span')).trim() === '2');
-  await page.click('.bxw-pill:has-text("Comics")');
-  check('pill switches the grid', (await page.$$('.bxw-card')).length === 1 && (await page.textContent('.bxw-card')).includes('Comic Vol 1'));
-  await page.click('.bxw-pill:has-text("All")');
-  await inc(page, 2);
+  check('Weight Box is drawn with the Quick Shop design (not the old box page)', (await page.$('.bxq')) !== null && (await page.$('.bxw')) === null);
+  const top = await page.textContent('.bxq-top');
+  check('top progress shows the weight tiers', top.includes('1 kg') && top.includes('10%') && top.includes('2 kg'), top.replace(/\s+/g, ' '));
+  check('filter chips: All + both collections', ((t) => t.includes('Books') && t.includes('Comics'))(await page.textContent('.bxq-filters')));
+  await qsPlus(page, 2); await qsPlus(page, 2); await qsPlus(page, 2); // Atlas ×3 = 1.35 kg
+  const msg = await page.textContent('.bxq-msg');
+  check('1.35 kg unlocks the 1 kg tier in the bottom bar (the store\'s own wording)', msg.includes('10% off unlocked'), msg.replace(/\s+/g, ' '));
+  await page.click('[data-combo-action="qs-chip"][data-value="c:comics"]');
+  check('chip switches the grid', (await page.$$('.bxq-card')).length === 1 && (await page.textContent('.bxq-card')).includes('Comic Vol 1'));
+  await page.click('[data-combo-action="qs-chip"][data-value="all"]');
   await page.screenshot({ path: path.join(SHOTS, 'weight-box-desktop.png'), fullPage: true });
-  await page.click('.bxw-checkout');
+  await page.click('.bxq-go');
   await page.waitForTimeout(400);
-  check('Weight Box checkout puts the box in the cart', log.add[0]?.items?.[0]?.properties?._brix_combo_id === '7' && log.navigations.includes('/checkout'));
+  check('checkout puts the box in the cart (combo properties) and goes to checkout', log.add[0]?.items?.[0]?.properties?._brix_combo_id === '7' && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]));
   await page.close();
 
   const phone = await openCombo(boxConfig, { viewport: { width: 390, height: 844 } });
-  check('phone: no side panel, a bottom bar instead', (await phone.page.$('.bxw-aside')) === null && (await phone.page.$('.bxw-bar')) !== null);
-  await add(phone.page, 1);
-  await phone.page.click('.bxw-bar-btn');
-  check('phone: "View box" opens the sheet', (await phone.page.textContent('.bxw-sheet')).includes('0.3 kg'));
+  check('phone: Quick Shop phone layout with the sticky bottom bar', (await phone.page.$('.bxq.bxq--m, .bxq--m')) !== null);
+  await qsPlus(phone.page, 1);
+  check('phone: bottom bar counts the item', (await phone.page.textContent('.bxq-bar')).includes('1 Item'));
   await phone.page.screenshot({ path: path.join(SHOTS, 'weight-box-phone.png') });
-  await phone.page.click('.bxw-close');
-  check('phone: sheet closes', (await phone.page.$('.bxw-sheet')) === null);
   await phone.page.close();
 }
 
@@ -246,8 +240,10 @@ const checkoutBtn = '[data-combo-action="checkout"]';
   const boxConfig = { layout: 'layout5', col_1: 'books', tab_count: 1, weight_pricing: weight };
   for (const [placement, want] of [['above', 'cod,checkout'], ['replace', 'cod']]) {
     const { page } = await openCombo(boxConfig, { cod: { placement } });
-    await page.waitForSelector('.bxw-panel [data-combo-action="cod"]', { timeout: 3000 }).catch(() => {});
-    const got = (await order(page, '.bxw-panel [data-combo-action="checkout"], .bxw-panel [data-combo-action="cod"]')).join(',');
+    // Quick Shop's bottom bar (Checkout + COD) shows once the box has something in it.
+    await page.click(`.bxq-card[data-product-id="${P(2)}"] [data-combo-action="qty-inc"]`);
+    await page.waitForSelector('.bxq [data-combo-action="cod"]', { timeout: 3000 }).catch(() => {});
+    const got = (await order(page, '.bxq [data-combo-action="checkout"], .bxq [data-combo-action="cod"]')).join(',');
     check(`Weight Box, COD ${placement}: ${want}`, got === want, got);
     await page.close();
   }
