@@ -242,12 +242,17 @@ export function invalidateStorefrontWeightStatus(shop) {
 export async function getStorefrontWeightStatus(shop, admin, now = Date.now()) {
   const cached = storefrontCache.get(shop);
   if (cached && now - cached.at < STOREFRONT_TTL_MS) return cached.value;
-  let value = { discountActive: false, hashes: {} };
+  // discountState: active | missing | <Shopify status, lower case> | error
+  let value = { discountActive: false, discountState: 'error', hashes: {} };
   try {
     const [discount, shopData] = await Promise.all([findInstalledDiscount(admin), readShop(admin)]);
     const hashes = {};
     for (const [id, entry] of Object.entries(shopData.config?.templates || {})) hashes[id] = entry?.hash || null;
-    value = { discountActive: discount?.status === 'ACTIVE', hashes };
+    value = {
+      discountActive: discount?.status === 'ACTIVE',
+      discountState: !discount ? 'missing' : String(discount.status || '').toLowerCase(),
+      hashes,
+    };
   } catch (error) {
     console.warn('[combo-weight] storefront status check failed:', String(error?.message || error).slice(0, 200));
   }
@@ -262,6 +267,24 @@ export async function getStorefrontWeightStatus(shop, admin, now = Date.now()) {
  */
 export function weightPricingLive({ planLive, active, hash, templateId, status }) {
   return Boolean(planLive && active && status?.discountActive && hash && status.hashes?.[String(templateId)] === hash);
+}
+
+/**
+ * Why weight pricing isn't live (null when it is), safe to send to the page:
+ * plan_locked | invalid | inactive (combo off) | discount_missing |
+ * discount_<status> (e.g. discount_expired) | discount_unknown (check failed) |
+ * out_of_date (Shopify holds older pricing for this combo: save it again).
+ */
+export function weightPricingReason({ planLive, active, hash, templateId, status, invalid = false }) {
+  if (!planLive) return 'plan_locked';
+  if (invalid || !hash) return 'invalid';
+  if (!active) return 'inactive';
+  if (!status?.discountActive) {
+    const state = status?.discountState || 'error';
+    return state === 'missing' ? 'discount_missing' : state === 'error' ? 'discount_unknown' : `discount_${state}`;
+  }
+  if (status.hashes?.[String(templateId)] !== hash) return 'out_of_date';
+  return null;
 }
 
 // "Selected" collections: their product ids, cached per pricing version
@@ -320,7 +343,7 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
 
   return {
     enabled,
-    reason: enabled ? null : (!planLive ? 'plan_locked' : 'not_live'),
+    reason: enabled ? null : weightPricingReason({ planLive, active, hash: pricing.hash, templateId, status, invalid: errors.length > 0 }),
     hash: pricing.hash,
     measure: pricing.measure || 'weight',
     unit: pricing.unit,

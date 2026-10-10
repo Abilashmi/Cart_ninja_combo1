@@ -111,6 +111,19 @@ test('weightPricingLive: only Pro + active + ACTIVE discount + matching hash', (
   assert.equal(sync.weightPricingLive({ planLive: true, active: true, hash: 'abc', templateId: 12, status: { ...status, discountActive: false } }), false);
 });
 
+test('weightPricingReason: says exactly why the box discount is not live', () => {
+  const status = { discountActive: true, discountState: 'active', hashes: { 12: 'abc' } };
+  const base = { planLive: true, active: true, hash: 'abc', templateId: 12, status };
+  assert.equal(sync.weightPricingReason(base), null);
+  assert.equal(sync.weightPricingReason({ ...base, planLive: false }), 'plan_locked');
+  assert.equal(sync.weightPricingReason({ ...base, invalid: true }), 'invalid');
+  assert.equal(sync.weightPricingReason({ ...base, active: false }), 'inactive');
+  assert.equal(sync.weightPricingReason({ ...base, status: { discountActive: false, discountState: 'missing', hashes: {} } }), 'discount_missing');
+  assert.equal(sync.weightPricingReason({ ...base, status: { discountActive: false, discountState: 'expired', hashes: {} } }), 'discount_expired');
+  assert.equal(sync.weightPricingReason({ ...base, status: { discountActive: false, discountState: 'error', hashes: {} } }), 'discount_unknown');
+  assert.equal(sync.weightPricingReason({ ...base, hash: 'new' }), 'out_of_date');
+});
+
 test('sync on Pro: writes the config, creates the discount with its input variables, verified', async () => {
   db.templates = [row(12), row(13, { mode: 'count' })];
   const admin = fakeAdmin();
@@ -221,7 +234,7 @@ test('status: verified only when the discount is ACTIVE and the hash matches; st
 
   const shop = nextShop();
   const first = await sync.getStorefrontWeightStatus(shop, admin, 1000);
-  assert.deepEqual(first, { discountActive: true, hashes: { 12: 'abc' } });
+  assert.deepEqual(first, { discountActive: true, discountState: 'active', hashes: { 12: 'abc' } });
   const callsBefore = admin.calls.length;
   await sync.getStorefrontWeightStatus(shop, admin, 30_000);
   assert.equal(admin.calls.length, callsBefore, 'served from the 60 s cache');
