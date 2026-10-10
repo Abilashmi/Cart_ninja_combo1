@@ -63,6 +63,15 @@ const baseConfig = {
   collection_title: 'Fresh meat box', qs_card_eyebrow: '8 MINS', qs_filter_custom: true, qs_filter_custom_label: 'Cut', qs_filter_custom_tags: 'Curry Cut, Boneless, Drumstick',
 };
 
+// A Dawn-shaped page: header group, the page section (title + .rte holding
+// the mount point), another template section, footer group, fixed drawer.
+const DAWN_PAGE = '<div id="shopify-section-sections--1__header" class="shopify-section shopify-section-group-header-group section-header"><sticky-header class="header-wrapper"><header class="header">Store header</header></sticky-header></div>'
+  + '<cart-drawer class="drawer" style="position:fixed;right:0;top:0;width:10px;height:10px">drawer</cart-drawer>'
+  + '<main id="MainContent"><section id="shopify-section-template--1__main" class="shopify-section section"><div class="page-width page-width--narrow">'
+  + '<h1 class="main-page-title page-title h0">Meat Box</h1><div class="rte"><p class="intro">Page text</p><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></div></div></section>'
+  + '<section id="shopify-section-template--1__rich" class="shopify-section"><div class="rich-text">Other section</div></section></main>'
+  + '<div id="shopify-section-sections--1__footer" class="shopify-section shopify-section-group-footer-group"><footer class="footer">Store footer</footer></div>';
+
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 
@@ -82,7 +91,7 @@ async function openCombo(config, pricing, { cod = false, shiprocket = null, view
       if (url.pathname === '/pages/box') {
         const srStub = shiprocket ? 'window.__sr = []; window.BrixCheckout = { checkoutItems: function (o) { window.__sr.push(o); } };' : '';
         const stubs = srStub + (cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;", placement: ${JSON.stringify(cod.placement || 'below')} }); } };` : '');
-        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100}</style></head><body style="margin:0"><main><div data-brix-combo-root data-shop="demo.myshopify.com" data-template-id="9"></div></main><script src="${API}/combo-page.js"></script></body></html>` });
+        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100}</style></head><body style="margin:0">${DAWN_PAGE}<script src="${API}/combo-page.js"></script></body></html>` });
       }
       if (url.pathname === '/cart.js') return json({ items: [] });
       if (url.pathname === '/cart/update.js') { log.update.push(JSON.parse(req.postData())); return json({ items: [] }); }
@@ -116,6 +125,10 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
 {
   const { page, log } = await openCombo(baseConfig, wp(QUANTITY));
   check('all 5 products from both collections', (await titles(page)).length === 5);
+  const shown = (sel) => page.$eval(sel, (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0).catch(() => false);
+  check('combo page hides the theme page title', !(await shown('.main-page-title')));
+  check('combo page hides the page text and other sections', !(await shown('.intro')) && !(await shown('.rich-text')));
+  check('combo page keeps the header, footer and the theme cart drawer', (await shown('header.header')) && (await shown('footer.footer')) && (await page.$eval('cart-drawer', (e) => getComputedStyle(e).display !== 'none')));
   const c1 = await text(page, card(1));
   check('card: eyebrow, subtitle, badge, OFF and compare price', c1.includes('8 MINS') && c1.includes('No Antibiotics') && c1.includes('Bestseller') && c1.includes('6% OFF') && c1.includes('₹168') && c1.includes('₹179'), c1);
   check('card: variant dropdown with weights', (await page.$$eval(`${card(1)} select option`, (o) => o.map((x) => x.textContent))).join('|') === '500 g|1 kg');

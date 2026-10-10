@@ -2533,7 +2533,10 @@ const SCRIPT_BODY = String.raw`
   // between the theme's default page-title section and unrelated content —
   // once we've confirmed a page really is a combo page, hide everything
   // except the site header/footer so the widget gets the full space between
-  // them. Runs once per page load, right after a successful mount.
+  // them. Every level from the mount point up to <body> is cleared: on Dawn
+  // the page title (h1.main-page-title) is a sibling of the page's .rte,
+  // and the template's other sections are siblings of its section in <main>.
+  // Runs once per page load, right after a successful mount.
   var pageChromeHidden = false;
   function hidePageChrome(root) {
     if (pageChromeHidden) return;
@@ -2552,22 +2555,28 @@ const SCRIPT_BODY = String.raw`
       if (tag === 'header' || tag === 'footer' || tag === 'script' || tag === 'style' || tag === 'link' || tag === 'noscript') return true;
       var id = el.id || '';
       var cls = (typeof el.className === 'string') ? el.className : '';
-      return HEADER_FOOTER_RE.test(id) || HEADER_FOOTER_RE.test(cls);
+      // <sticky-header> and the like count too.
+      if (HEADER_FOOTER_RE.test(tag) || HEADER_FOOTER_RE.test(id) || HEADER_FOOTER_RE.test(cls)) return true;
+      // Fixed layers (the theme's cart drawer, popups, chat buttons) take no
+      // room on the page, and hiding them would break them.
+      try { if (window.getComputedStyle(el).position === 'fixed') return true; } catch (e) { }
+      return false;
     }
-    function hideOtherChildren(container) {
-      if (!container) return;
+    function hideOtherChildren(container, keep) {
       var children = container.children;
       for (var i = 0; i < children.length; i++) {
         var el = children[i];
-        if (el === root || (el.contains && el.contains(root))) continue;
-        if (shouldPreserve(el)) continue;
+        if (el === keep || shouldPreserve(el)) continue;
         el.setAttribute('data-brix-combo-hidden', '1');
         el.style.display = 'none';
       }
     }
 
-    hideOtherChildren(document.body);
-    hideOtherChildren(root.parentElement);
+    var level = root;
+    while (level && level !== document.body && level.parentElement) {
+      hideOtherChildren(level.parentElement, level);
+      level = level.parentElement;
+    }
   }
 
   // Hiding sibling content (above) makes the combo page read as a clean
