@@ -323,6 +323,16 @@ export function UpsellSection() {
             <FormLayout>
               <FeatureToggle label="Show when cart is empty" enabled={upsellProducts.showWhenEmpty} onToggle={(v) => updateUpsellProducts({ showWhenEmpty: v })} />
               <FeatureToggle label="Show product reviews on upsells" enabled={upsellProducts.showReviews} onToggle={(v) => updateUpsellProducts({ showReviews: v })} />
+              <Select
+                label="When a product is sold out"
+                options={[
+                  { label: 'Show a similar product instead', value: 'replace' },
+                  { label: 'Just hide it', value: 'hide' },
+                ]}
+                value={upsellProducts.soldOutBehavior === 'hide' ? 'hide' : 'replace'}
+                onChange={(v) => updateUpsellProducts({ soldOutBehavior: v })}
+                helpText="Similar products come from Shopify's own related-product suggestions and are always in stock. Products with sizes or colours get a dropdown, starting on an in-stock option."
+              />
             </FormLayout>
           </BlockStack>
 

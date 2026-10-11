@@ -398,6 +398,42 @@
   flex: 1;
 }
 
+/* Upsell variant dropdown (size / colour). !important keeps theme select
+   styles (full-width, tall, uppercase) from blowing up the small card. */
+.cc-upsell-variant {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  height: 30px !important;
+  margin: 6px 0 0 !important;
+  padding: 0 24px 0 8px !important;
+  font-size: 12px !important;
+  line-height: 28px !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  color: #1e293b !important;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+.cc-upsell-variant:focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 1px;
+}
+.cc-upsell-variant:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.cc-upsell-compare[hidden] {
+  display: none !important;
+}
+
 .cc-add-btn--v {
   width: 80%;
   height: 42px;

@@ -754,6 +754,9 @@
         underline: data.upsellTitle?.formatting?.underline || false,
       },
       manualRules: data.manualRules || [],
+      // A sold-out pick: 'replace' = fill its spot with Shopify's related
+      // products (in stock only), 'hide' = just leave it out.
+      soldOutBehavior: data.soldOutBehavior === 'hide' ? 'hide' : 'replace',
       activeTemplate: data.activeTemplate || 'grid',
       layout, // 'carousel' or 'grid'
     };
@@ -762,73 +765,26 @@
   /* =================== UPSELL PRODUCT ENRICHMENT =================== */
 
   async function enrichUpsellProducts(upsell) {
-    // The admin editor only ever saves plain product IDs under
-    // `rule.upsellProductIds` (see app/components/sections/UpsellSection.jsx)
-    // — it never writes a `upsellProductDetails` field. The old check here
-    // read `rule.upsellProductDetails` for "is there anything to enrich?",
-    // which is always empty/undefined, so this whole function — including
-    // the individual per-product fallback below — silently never ran.
-    // renderUpsellSectionAsync() falls back to the bulk store-catalog lookup
-    // for products that ARE within its first 250 results, but shops with
-    // more products than that (or a catalog fetch hiccup) had no recovery
-    // path for the rest until this actually builds upsellProductDetails.
-    const hasAnyManualProducts = (upsell.manualRules || []).some(
-      (rule) => (rule.upsellProductIds || []).length > 0
-    );
-    if (!hasAnyManualProducts) return;
-
-    try {
-      const res = await originalFetch('/products.json?limit=250');
-      const data = await res.json();
-      // Build lookup map: numeric product ID → product object
-      const productMap = {};
-      for (const p of data.products || []) {
-        productMap[String(p.id)] = p;
+    // The admin saves plain product ids (rule.upsellProductIds). Build each
+    // rule's upsellProductDetails from the shared storefront catalog, loading
+    // further pages for products past the first 250. Variant and stock come
+    // from the catalog at render time (ccProductDetail), never stored here.
+    const ids = [];
+    for (const rule of upsell.manualRules || []) {
+      for (const rawId of rule.upsellProductIds || []) {
+        const numId = ccExtractNumericId(rawId) || String(rawId || '').replace('gid://shopify/Product/', '');
+        if (numId && !ids.includes(numId)) ids.push(numId);
       }
-
+    }
+    if (!ids.length) return;
+    try {
+      const catalog = await ccEnsureCatalogProducts(ids);
+      const byId = (catalog && catalog.detailsById) || {};
       for (const rule of upsell.manualRules || []) {
         rule.upsellProductDetails = (rule.upsellProductIds || []).map((rawId) => {
           const numId = ccExtractNumericId(rawId) || String(rawId || '').replace('gid://shopify/Product/', '');
-          const sp = productMap[numId];
-          if (sp) {
-            return {
-              id: numId,
-              title: sp.title,
-              price: sp.variants?.[0]?.price || sp.price_min || '',
-              image: sp.images?.[0]?.src || sp.featured_image || null,
-              handle: sp.handle,
-              variantId: sp.variants?.[0]?.id || null,
-            };
-          }
-          return { id: numId };
+          return byId[numId] ? { ...byId[numId] } : { id: numId };
         });
-
-        // Individual fallback: try to resolve any products still missing variantId
-        for (let i = 0; i < rule.upsellProductDetails.length; i++) {
-          const detail = rule.upsellProductDetails[i];
-          if (!detail.variantId && detail.handle) {
-            try {
-              const pRes = await originalFetch('/products/' + detail.handle + '.json');
-              if (pRes.ok) {
-                const pData = await pRes.json();
-                const sp = pData.product;
-                if (sp && sp.variants && sp.variants.length > 0) {
-                  rule.upsellProductDetails[i] = {
-                    ...detail,
-                    title: detail.title || sp.title,
-                    price: detail.price || sp.variants[0].price || '',
-                    image: detail.image || sp.images?.[0]?.src || null,
-                    variantId: sp.variants[0].id,
-                  };
-                }
-              }
-            } catch (innerErr) {
-            }
-          }
-          // Final warning if still no variantId
-          if (!rule.upsellProductDetails[i].variantId) {
-          }
-        }
       }
     } catch (e) {
     }
@@ -884,6 +840,102 @@
   // 1. Fetch intercept — catches AJAX add-to-cart calls (only on success)
   const originalFetch = window.fetch;
 
+  /**
+   * One product from /products.json (prices as "199.00"), /products/x.js or
+   * /recommendations/products.json (prices in paise/cents) as the drawer's
+   * product detail. variantId is the first IN-STOCK variant (the first one
+   * is often a sold-out size), and variants lists every option for the
+   * upsell card's dropdown.
+   */
+  function ccProductDetail(p, pricesInCents) {
+    const id = p && p.id != null ? String(p.id) : '';
+    const title = p && p.title != null ? String(p.title) : '';
+    if (!id || !title) return null;
+    const money = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      if (!Number.isFinite(n)) return null;
+      return (pricesInCents ? n / 100 : n).toFixed(2);
+    };
+    const imgOf = (img) => (img ? (typeof img === 'string' ? img : img.src || null) : null);
+    const productImage = imgOf(p.images && p.images[0]) || imgOf(p.featured_image) || null;
+    const variants = (Array.isArray(p.variants) ? p.variants : []).filter((v) => v && v.id != null).map((v) => ({
+      id: String(v.id),
+      title: String(v.title || v.public_title || ''),
+      price: money(v.price),
+      compareAtPrice: money(v.compare_at_price),
+      available: v.available !== false,
+      image: imgOf(v.featured_image) || null,
+    }));
+    const pick = variants.find((v) => v.available) || variants[0] || null;
+    return {
+      id,
+      title,
+      handle: p.handle || '',
+      price: (pick && pick.price) || money(p.price_min != null ? p.price_min : p.price) || '',
+      compareAtPrice: (pick && pick.compareAtPrice) || null,
+      image: (pick && pick.image) || productImage,
+      productImage,
+      variantId: pick ? pick.id : null,
+      variants,
+      // /products.json only lists products published to the Online Store,
+      // so "live" is covered by appearing at all; this is stock.
+      available: variants.length ? variants.some((v) => v.available) : true,
+    };
+  }
+
+  // Products past the first 250 (a big catalogue): load further pages, at
+  // most CC_CATALOG_MAX_PAGES, until every wanted product id is known.
+  const CC_CATALOG_MAX_PAGES = 8;
+  async function ccEnsureCatalogProducts(ids) {
+    const catalog = await ccGetStoreCatalog();
+    if (!catalog || !catalog.detailsById) return catalog;
+    const missing = () => (ids || []).filter((id) => !catalog.detailsById[String(id)]);
+    while (missing().length && catalog.lastPageFull && (catalog.pagesLoaded || 1) < CC_CATALOG_MAX_PAGES) {
+      const page = (catalog.pagesLoaded || 1) + 1;
+      try {
+        const res = await originalFetch('/products.json?limit=250&page=' + page);
+        if (!res.ok) break;
+        const data = await res.json().catch(() => null);
+        const products = Array.isArray(data?.products) ? data.products : [];
+        products.forEach((p) => {
+          const detail = ccProductDetail(p);
+          if (!detail || catalog.detailsById[detail.id]) return;
+          catalog.candidateCatalog.push({ id: detail.id, title: detail.title });
+          catalog.detailsById[detail.id] = detail;
+        });
+        catalog.pagesLoaded = page;
+        catalog.lastPageFull = products.length >= 250;
+      } catch (e) {
+        break;
+      }
+    }
+    return catalog;
+  }
+
+  // Shopify's own "related products" for a product, in stock only (used to
+  // fill the spot of a sold-out upsell). Never throws.
+  const _ccRelatedCache = {};
+  async function ccRelatedProducts(productId) {
+    const key = String(productId || '');
+    if (!key) return [];
+    if (_ccRelatedCache[key]) return _ccRelatedCache[key];
+    _ccRelatedCache[key] = (async () => {
+      try {
+        const root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+        const res = await originalFetch(root + 'recommendations/products.json?product_id=' + encodeURIComponent(key) + '&limit=10&intent=related');
+        if (!res.ok) return [];
+        const data = await res.json().catch(() => null);
+        return (Array.isArray(data?.products) ? data.products : [])
+          .map((p) => ccProductDetail(p, true))
+          .filter((d) => d && d.available && d.variantId);
+      } catch (e) {
+        return [];
+      }
+    })();
+    return _ccRelatedCache[key];
+  }
+
   async function ccGetStoreCatalog() {
     const now = Date.now();
     if (
@@ -908,35 +960,19 @@
 
         const candidateCatalog = [];
         const detailsById = {};
-
         products.forEach((p) => {
-          const id = p && p.id != null ? String(p.id) : '';
-          const title = p && p.title != null ? String(p.title) : '';
-          if (!id || !title) return;
-
-          candidateCatalog.push({ id, title });
-          detailsById[id] = {
-            id,
-            title,
-            price: p?.variants?.[0]?.price || p?.price_min || '',
-            compareAtPrice: p?.variants?.[0]?.compare_at_price || null,
-            image: p?.images?.[0]?.src || p?.featured_image || null,
-            handle: p?.handle || '',
-            variantId: p?.variants?.[0]?.id || null,
-            // /products.json only ever lists products published to the
-            // Online Store channel, so "live" is already covered just by a
-            // product appearing here at all — but it says nothing about
-            // stock. Without this, an upsell/FBT suggestion could point at
-            // a fully sold-out product with an Add-to-Cart button that
-            // fails at checkout.
-            available: Array.isArray(p?.variants) ? p.variants.some((v) => v && v.available) : true,
-          };
+          const detail = ccProductDetail(p);
+          if (!detail) return;
+          candidateCatalog.push({ id: detail.id, title: detail.title });
+          detailsById[detail.id] = detail;
         });
 
         _ccStoreCatalogCache = {
           ts: Date.now(),
           candidateCatalog,
           detailsById,
+          pagesLoaded: 1,
+          lastPageFull: products.length >= 250,
         };
 
         return _ccStoreCatalogCache;
@@ -3386,6 +3422,25 @@
 
   /* =================== UPSELL SECTION RENDERER =================== */
 
+  /**
+   * The variant dropdown on an upsell card ('' for a single-variant product).
+   * Sold-out options stay listed (so shoppers see the size exists) but can't
+   * be picked; the in-stock default is selected. Each option carries its
+   * price / compare-at / image so a change updates the card without a fetch.
+   */
+  function ccUpsellVariantSelect(detail) {
+    const variants = detail.variants || [];
+    if (variants.length < 2) return '';
+    const options = variants.map((v) => {
+      const price = v.price ? formatMoney(parseFloat(v.price)) : '';
+      const compare = v.compareAtPrice && parseFloat(v.compareAtPrice) > parseFloat(v.price || 0) ? formatMoney(parseFloat(v.compareAtPrice)) : '';
+      const label = v.title + (v.available ? '' : ' (Sold out)');
+      return `<option value="${escapeHtml(String(ccExtractNumericId(v.id) || v.id))}"${v.available ? '' : ' disabled'}${String(v.id) === String(detail.variantId) ? ' selected' : ''}`
+        + ` data-price="${escapeHtml(price)}" data-compare="${escapeHtml(compare)}" data-image="${escapeHtml(v.image || '')}">${escapeHtml(label)}</option>`;
+    }).join('');
+    return `<select class="cc-upsell-variant" aria-label="${escapeHtml('Choose an option for ' + (detail.title || 'this product'))}">${options}</select>`;
+  }
+
   async function renderUpsellSectionAsync(cart, upsellConfig) {
     const cartProductIds = cart.items.map(item => String(item.product_id));
     let upsellProducts = [];
@@ -3420,51 +3475,61 @@
       }
     }
 
-    // Ensure we have a full store catalog fallback so AI/manual
-    // recommendations can always be enriched with real title/image/price.
-    if (!storeDetailsById) {
-      const storeCatalog = await ccGetStoreCatalog();
-      if (storeCatalog && storeCatalog.detailsById) {
-        storeDetailsById = storeCatalog.detailsById;
-      }
+    // Every picked product's live detail (title, price, variants, stock),
+    // loading further catalogue pages for products past the first 250.
+    const storeCatalog = await ccEnsureCatalogProducts(upsellProducts);
+    if (storeCatalog && storeCatalog.detailsById) {
+      storeDetailsById = storeCatalog.detailsById;
     }
 
     // Apply storefront conditions (match cart_drawer.js behavior)
     if (!upsellConfig.showIfInCart) {
       upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
     }
-    // Only cap by the global limit in AI mode. Manual rules show every product the
-    // merchant explicitly selected (selecting 3 products should display all 3).
+    // Manual rules show every product the merchant selected; AI mode is
+    // capped by the global limit. That's how many cards the shopper should see.
+    let wanted = upsellProducts.length;
     if (upsellConfig.limit && upsellConfig.useAI) {
       const parsedLimit = Number.parseInt(String(upsellConfig.limit), 10);
-      if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
-        upsellProducts = upsellProducts.slice(0, parsedLimit);
+      if (Number.isFinite(parsedLimit) && parsedLimit > 0) wanted = Math.min(wanted, parsedLimit);
+    }
+    if (wanted === 0) return '';
+
+    // Drop products that can't be resolved (no live detail, no saved title:
+    // would be an empty placeholder card) and products whose every variant
+    // is sold out. Only a product the live catalogue positively marks sold
+    // out counts as sold out; /products.json never lists unpublished ones.
+    const savedDetailOf = (productId) => (matchedUpsellDetails || []).find(
+      (d) => String(d.id).replace('gid://shopify/Product/', '') === productId || String(d.id).includes(productId)
+    );
+    const soldOut = [];
+    upsellProducts = upsellProducts.filter((productId) => {
+      const live = storeDetailsById && storeDetailsById[String(productId)];
+      if (live) {
+        if (live.available === false) { soldOut.push(String(productId)); return false; }
+        return true;
+      }
+      const detail = savedDetailOf(productId);
+      return detail && detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
+    }).slice(0, wanted);
+
+    // Fill the spots of sold-out picks with Shopify's related products: first
+    // those related to the sold-out product itself, then to the cart's items.
+    const replacementDetails = {};
+    if (upsellConfig.soldOutBehavior !== 'hide' && soldOut.length && upsellProducts.length < wanted) {
+      const seeds = soldOut.concat(cartProductIds.filter((id) => !soldOut.includes(id))).slice(0, 5);
+      for (const seed of seeds) {
+        if (upsellProducts.length >= wanted) break;
+        const related = await ccRelatedProducts(seed);
+        for (const detail of related) {
+          if (upsellProducts.length >= wanted) break;
+          if (upsellProducts.includes(detail.id) || soldOut.includes(detail.id)) continue;
+          if (cartProductIds.includes(detail.id)) continue;
+          upsellProducts.push(detail.id);
+          replacementDetails[detail.id] = detail;
+        }
       }
     }
-    if (upsellProducts.length === 0) return '';
-
-    // Pre-filter: remove products that can't be resolved from the store catalog
-    // and have no valid saved title — prevents rendering empty placeholder cards
-    upsellProducts = upsellProducts.filter((productId) => {
-      const resolvedFromStore = storeDetailsById && !!storeDetailsById[String(productId)];
-      if (resolvedFromStore) return true;
-      const detail = (matchedUpsellDetails || []).find(
-        (d) => String(d.id).replace('gid://shopify/Product/', '') === productId ||
-               String(d.id).includes(productId)
-      );
-      return detail && detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
-    });
-
-    // Never suggest a product every variant of which is out of stock — only
-    // excludes when the live storefront catalog positively says so (a
-    // product simply missing from that catalog page, e.g. beyond the
-    // /products.json?limit=250 cutoff, is left alone rather than guessed
-    // at). "Live"/published is already guaranteed above: /products.json
-    // never lists an unpublished product in the first place.
-    upsellProducts = upsellProducts.filter((productId) => {
-      const detail = storeDetailsById && storeDetailsById[String(productId)];
-      return !detail || detail.available !== false;
-    });
 
     if (upsellProducts.length === 0) return '';
 
@@ -3538,33 +3603,26 @@
                  String(d.id).includes(productId)
         ) || null;
 
-      // Always try to enrich from the live store catalog (/products.json).
-      // This fixes: saved details with only {id}, image:"📦" placeholder, or
-      // data saved when loadedShopifyProducts was empty in admin.
-      if (storeDetailsById) {
-        const storeDetail = storeDetailsById[String(productId)];
-        if (storeDetail) {
-          const savedImage = detail?.image;
-          const useSavedImage = savedImage && savedImage !== '📦' && savedImage !== null;
-          detail = {
-            ...storeDetail,
-            ...(detail || {}),
-            // Always take live image when saved value is missing or placeholder
-            image: useSavedImage ? savedImage : storeDetail.image,
-            // Always take live title/price when saved value is missing
-            title: (detail?.title && detail.title !== 'Product') ? detail.title : storeDetail.title,
-            price: detail?.price || storeDetail.price,
-            compareAtPrice: detail?.compareAtPrice || storeDetail.compareAtPrice,
-            variantId: detail?.variantId || storeDetail.variantId,
-          };
-        }
+      // Live detail from the store catalog (/products.json) or Shopify's
+      // related products: its variant, price, image and stock always win over
+      // anything saved earlier (a saved first variant may be sold out now).
+      const storeDetail = replacementDetails[productId] || (storeDetailsById && storeDetailsById[String(productId)]);
+      if (storeDetail) {
+        const savedImage = detail?.image;
+        const useSavedImage = savedImage && savedImage !== '📦' && !storeDetail.image;
+        detail = {
+          ...(detail || {}),
+          ...storeDetail,
+          image: useSavedImage ? savedImage : storeDetail.image,
+          title: (detail?.title && detail.title !== 'Product') ? detail.title : storeDetail.title,
+        };
       }
 
       detail = detail || {};
 
       // Skip products that cannot be resolved from the current store catalog
       // and have no valid saved title/price — prevents showing placeholder cards
-      const resolvedFromStore = storeDetailsById && !!storeDetailsById[String(productId)];
+      const resolvedFromStore = !!storeDetail;
       const hasSavedTitle = detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
       if (!resolvedFromStore && !hasSavedTitle) return;
 
@@ -3576,7 +3634,7 @@
           : '';
       const imageHtml =
         detail.image && detail.image !== '📦' && detail.image !== null
-          ? `<img src="${detail.image}" alt="${escapeHtml(title)}" style="width:100%;height:100%;object-fit:contain;" loading="lazy">`
+          ? `<img class="cc-upsell-img" src="${escapeHtml(detail.image)}" alt="${escapeHtml(title)}" style="width:100%;height:100%;object-fit:contain;" loading="lazy">`
           : `<span style="font-size:20px;color:#94a3b8;" aria-hidden="true">📦</span>`;
 
       const hasVariantId = detail.variantId !== undefined && detail.variantId !== null && String(detail.variantId).trim() !== '';
@@ -3584,6 +3642,7 @@
       const safeAddToCartId = ccExtractNumericId(addToCartId) || addToCartId;
       const addIsProductId = hasVariantId ? 'false' : 'true';
       const safeHandle = (detail.handle || '').replace(/[^a-z0-9-]/g, '');
+      const variantSelect = ccUpsellVariantSelect(detail);
 
       if (isGrid) {
         // GRID CARD: Always Square Design (Image on Top, Content Below)
@@ -3596,8 +3655,9 @@
             <div class="cc-upsell-content">
               <p class="cc-upsell-title cc-upsell-title--grid" style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:#1e293b;
                 line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
+              ${variantSelect}
               <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
-                <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+                <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
                 <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="padding:4px 10px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
               </div>
             </div>
@@ -3614,9 +3674,10 @@
             </div>
             <p class="cc-upsell-v-title">${escapeHtml(title)}</p>
             <div class="cc-upsell-v-price">
-              <span class="cc-upsell-v-price-now">${priceText}</span>
-              ${compareAtText ? `<span class="cc-upsell-v-price-compare">${compareAtText}</span>` : ''}
+              <span class="cc-upsell-v-price-now cc-upsell-price">${priceText}</span>
+              <span class="cc-upsell-v-price-compare cc-upsell-compare"${compareAtText ? '' : ' hidden'}>${compareAtText}</span>
             </div>
+            ${variantSelect}
             <div class="cc-upsell-v-spacer"></div>
             <button type="button" class="cc-add-btn cc-add-btn--v" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add to cart')}</button>
           </div>
@@ -3632,7 +3693,8 @@
             </div>
             <div style="padding:8px;display:flex;flex-direction:column;gap:4px;flex:1;">
               <p style="margin:0;font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
-              <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+              <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+              ${variantSelect}
               <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="margin-top:auto;width:100%;padding:5px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
             </div>
           </div>
@@ -3652,6 +3714,7 @@
         list.setAttribute('role', 'region');
         list.setAttribute('aria-label', (upsellConfig.upsellTitle.text || 'Recommended products') + ', scroll for more');
         list.addEventListener('keydown', (e) => {
+          if (e.target && e.target.closest && e.target.closest('select')) return; // the variant dropdown uses arrow keys
           if (e.key === 'ArrowRight') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'right'); }
           else if (e.key === 'ArrowLeft') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'left'); }
         });
@@ -3674,6 +3737,7 @@
         let dragPointerId = null;
         list.addEventListener('pointerdown', (e) => {
           if (e.pointerType === 'touch') return;
+          if (e.target && e.target.closest && e.target.closest('select')) return; // opening the variant dropdown
           isDown = true;
           hasDragged = false;
           startX = e.clientX;
@@ -3752,6 +3816,54 @@
     removeItem(key);
   };
 
+  // Upsell variant dropdown: the card's price, image and Add button follow the
+  // chosen option (all carried on the <option>, no fetch).
+  function ccApplyUpsellVariant(select) {
+    var card = select.closest('.cc-upsell-card');
+    var opt = select.options[select.selectedIndex];
+    if (!card || !opt) return;
+    var btn = card.querySelector('.cc-add-btn');
+    if (btn) { btn.setAttribute('data-cc-id', opt.value); btn.setAttribute('data-cc-isproduct', 'false'); }
+    var price = card.querySelector('.cc-upsell-price');
+    if (price && opt.getAttribute('data-price')) price.textContent = opt.getAttribute('data-price');
+    var compare = card.querySelector('.cc-upsell-compare');
+    if (compare) {
+      var c = opt.getAttribute('data-compare') || '';
+      compare.textContent = c;
+      if (c) compare.removeAttribute('hidden'); else compare.setAttribute('hidden', '');
+    }
+    var img = card.querySelector('.cc-upsell-img');
+    if (img && opt.getAttribute('data-image')) img.setAttribute('src', opt.getAttribute('data-image'));
+  }
+  document.addEventListener('change', function (e) {
+    var select = e.target && e.target.closest && e.target.closest('.cc-upsell-variant');
+    if (select) ccApplyUpsellVariant(select);
+  });
+
+  // Shopify refused the add (that option sold out since the page loaded):
+  // mark it sold out and move to the next in-stock option, or show the whole
+  // card as sold out. Returns true when another option is available.
+  function ccMarkUpsellSoldOut(btn) {
+    var card = btn.closest('.cc-upsell-card');
+    var select = card && card.querySelector('.cc-upsell-variant');
+    if (select) {
+      var current = select.options[select.selectedIndex];
+      if (current && !current.disabled) {
+        current.disabled = true;
+        if (current.textContent.indexOf('(Sold out)') === -1) current.textContent += ' (Sold out)';
+      }
+      for (var i = 0; i < select.options.length; i++) {
+        if (!select.options[i].disabled) {
+          select.selectedIndex = i;
+          ccApplyUpsellVariant(select);
+          return true;
+        }
+      }
+      select.disabled = true;
+    }
+    return false;
+  }
+
   // Delegated click listener for upsell "Add to Cart" buttons
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.cc-add-btn');
@@ -3766,7 +3878,15 @@
     btn.disabled = true;
     btn.textContent = 'Adding...';
 
-    function onDone(success) {
+    function onDone(success, soldOut) {
+      if (!success && soldOut) {
+        var another = ccMarkUpsellSoldOut(btn);
+        btn.textContent = 'Sold out';
+        setTimeout(function () {
+          if (another) { btn.textContent = origText; btn.disabled = false; }
+        }, 1500);
+        return;
+      }
       if (success) {
         btn.textContent = 'Added!';
         btn.style.background = '#10b981';
@@ -3800,8 +3920,9 @@
           setTimeout(function () { renderDrawer(); }, 800);
           onDone(true);
         } else {
-          r.text().then(function (t) { console.error('[CartDrawer] 422 body:', t); });
-          onDone(false);
+          // 422 = Shopify won't add it (sold out / no stock left for that variant).
+          r.text().then(function (t) { console.error('[CartDrawer] 422 body:', t); }).catch(function () {});
+          onDone(false, r.status === 422);
         }
       }).catch(function (err) {
         console.error('[CartDrawer] fetch error:', err);

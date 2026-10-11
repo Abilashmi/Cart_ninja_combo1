@@ -591,9 +591,37 @@ function UpsellReviewStars({ productId }) {
   );
 }
 
+// Variant dropdown on an upsell card, like the storefront's
+// (cart_drawer_inline.js ccUpsellVariantSelect): sold-out options are listed
+// but can't be picked.
+function UpsellVariantSelect({ product, value, onChange, small }) {
+  const variants = product.variants || [];
+  if (variants.length < 2) return null;
+  return (
+    <select
+      aria-label={`Choose an option for ${product.title}`}
+      value={value}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ width: '100%', height: small ? 22 : 26, margin: '3px 0', padding: '0 4px', fontSize: small ? 9 : 11, border: '1px solid #d1d5db', borderRadius: 5, background: '#fff', color: '#1e293b' }}
+    >
+      {variants.map((v) => (
+        <option key={v.id} value={v.id} disabled={!v.available}>{v.title}{v.available ? '' : ' (Sold out)'}</option>
+      ))}
+    </select>
+  );
+}
+
 function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadge, onAdd }) {
   const { formatMoney } = useCurrency();
-  const addProduct = (product) => (e) => { e.stopPropagation(); onAdd?.(product); };
+  // Chosen variant per product; default = first in-stock variant.
+  const [picked, setPicked] = useState({});
+  const variantOf = (product) => {
+    const variants = product.variants || [];
+    return variants.find((v) => v.id === picked[product.id]) || variants.find((v) => v.available) || variants[0] || null;
+  };
+  const addProduct = (product) => (e) => { e.stopPropagation(); onAdd?.({ ...product, price: variantOf(product)?.price ?? product.price }); };
+  const pickVariant = (product) => (id) => setPicked((prev) => ({ ...prev, [product.id]: id }));
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
   const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
@@ -602,7 +630,20 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   // No specific selection yet (e.g. AI mode, or rule not configured) — show
   // real catalog products instead of the merchant's actual pick, still real
   // store data rather than a fake placeholder.
-  const products = (resolved.length ? resolved : allProducts).slice(0, Math.max(1, count));
+  // Sold-out picks: hidden, or (default) their spot filled. The storefront
+  // fills it with Shopify's related products; the preview can't ask Shopify
+  // for those, so it shows other in-stock store products in their place.
+  const inStock = (p) => p.available !== false;
+  let products = (resolved.length ? resolved : allProducts.filter(inStock)).slice(0, Math.max(1, count));
+  if (products.some((p) => !inStock(p))) {
+    const kept = products.filter(inStock);
+    if (upsell.soldOutBehavior !== 'hide') {
+      const fill = allProducts.filter((p) => inStock(p) && !kept.some((k) => k.id === p.id) && !manualIds.includes(p.id));
+      products = kept.concat(fill.slice(0, products.length - kept.length));
+    } else {
+      products = kept;
+    }
+  }
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
   const formatPrice = (p) => formatMoney(Number(p || 0));
@@ -626,7 +667,8 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
               <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', flexShrink: 0 }} />
               <div style={{ padding: '5px 6px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
-                <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(product.price)}</div>
+                <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+                <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} small />
                 {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
                 <button onClick={addProduct(product)} style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
                   {upsell.buttonText}
@@ -644,7 +686,8 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: '12px', fontWeight: 500 }}>{product.title}</div>
-              <div style={{ fontSize: '11px', color: '#6d7175' }}>{formatPrice(product.price)}</div>
+              <div style={{ fontSize: '11px', color: '#6d7175' }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+              <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} />
               {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
             </div>
             <button onClick={addProduct(product)} style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: checkoutBg, color: checkoutText }}>

@@ -63,11 +63,13 @@ const data = {
 };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+// One context, so later pages (the upsell checks) get the same mocks.
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const page = await ctx.newPage();
 const errors = [];
 const saves = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.route('https://admin.test/**', async (route) => {
+await ctx.route('https://admin.test/**', async (route) => {
   const url = new URL(route.request().url());
   if (url.pathname.startsWith('/api/')) {
     saves.push({ path: url.pathname, body: JSON.parse(route.request().postData() || '{}') });
@@ -79,7 +81,7 @@ await page.route('https://admin.test/**', async (route) => {
   }
   return route.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><style>${polarisCss}</style><style>${appCss}</style><style>body{margin:0}</style></head><body><div id="root"></div><script>window.__DATA__=${JSON.stringify(data)}</script><script>${js}</script></body></html>` });
 });
-await page.route('https://img.test/**', (route) => route.fulfill({ contentType: 'image/svg+xml', body: svg(800, 400, '#be185d', 'MOBILE') }));
+await ctx.route('https://img.test/**', (route) => route.fulfill({ contentType: 'image/svg+xml', body: svg(800, 400, '#be185d', 'MOBILE') }));
 await page.goto('https://admin.test/app/cartdrawer');
 await page.waitForSelector('text=Image Banner');
 await page.waitForTimeout(300);
@@ -179,6 +181,37 @@ await page.locator('button', { hasText: 'Header Style' }).first().click();
 await page.waitForTimeout(200);
 p = await preview();
 check('banner off and section closed: nothing in the preview', !p.banner && !p.placeholder);
+
+// ── Upsell preview: variant dropdown, sold-out picks ──
+const V = (id, title, price, available) => ({ id: `gid://shopify/ProductVariant/${id}`, title, price, available });
+data.allProducts = [
+  { id: 'gid://shopify/Product/101', title: 'Girls Grey Jeans', image: '', price: '899.00', available: true, variants: [V(1, '5-6 years', '849.00', false), V(2, '7-8 years', '899.00', true), V(3, '9-10 years', '949.00', true)] },
+  { id: 'gid://shopify/Product/102', title: 'Navy Co-ord Set', image: '', price: '1099.00', available: false, variants: [V(4, '5-6 Y', '1099.00', false)] },
+  { id: 'gid://shopify/Product/103', title: 'Cotton Socks', image: '', price: '199.00', available: true, variants: [V(5, 'Default Title', '199.00', true)] },
+];
+const upsellRecord = (soldOutBehavior) => ({ cartStatus: 1, upsell_status: 1, upsell_data: JSON.stringify({
+  enabled: true, useAI: false, direction: 'vertical', layout: 'carousel', title: 'You may also like', buttonText: 'Add', soldOutBehavior,
+  manualRules: [{ id: 'r1', triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/101', 'gid://shopify/Product/102'] }],
+}) });
+for (const behavior of ['replace', 'hide']) {
+  data.cartRecord = upsellRecord(behavior);
+  const up = await ctx.newPage();
+  up.on('pageerror', (e) => errors.push(e.message));
+  await up.goto('https://admin.test/app/cartdrawer');
+  await up.waitForSelector('.cart-preview-upsell-section', { timeout: 8000 }).catch(() => {});
+  const shown = await up.$$eval('.cart-preview-upsell-section', (els) => (els[0] ? els[0].textContent : ''));
+  if (behavior === 'replace') {
+    const sel = up.locator('.cart-preview-upsell-section select').first();
+    check('preview: product with sizes gets a dropdown on the first in-stock size', (await sel.count()) === 1 && (await sel.inputValue()) === 'gid://shopify/ProductVariant/2');
+    check('preview: sold-out size listed but disabled', await sel.locator('option').first().evaluate((o) => o.disabled && o.textContent.includes('Sold out')));
+    await sel.selectOption('gid://shopify/ProductVariant/3');
+    check('preview: picking a size changes the price', (await up.textContent('.cart-preview-upsell-section')).includes('949'));
+    check('preview: sold-out pick replaced by an in-stock product', !shown.includes('Navy Co-ord Set') && shown.includes('Cotton Socks'), shown.slice(0, 160));
+  } else {
+    check('preview: "Just hide it" leaves the sold-out pick out with no stand-in', !shown.includes('Navy Co-ord Set') && !shown.includes('Cotton Socks') && shown.includes('Girls Grey Jeans'), shown.slice(0, 160));
+  }
+  await up.close();
+}
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();

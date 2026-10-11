@@ -115,6 +115,7 @@ export const defaultCartEditorState = {
       limit: 3,
       showReviews: false,
       showIfInCart: false,
+      soldOutBehavior: 'replace', // replace (Shopify related, in stock) | hide
       manualRules: [],
     },
     countdownTimer: {

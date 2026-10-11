@@ -64,9 +64,9 @@ export const loader = async ({ request }) => {
               id
               title
               featuredImage { url }
-              variants(first: 1) {
+              variants(first: 25) {
                 edges {
-                  node { price }
+                  node { id title price availableForSale }
                 }
               }
             }
@@ -116,12 +116,19 @@ export const loader = async ({ request }) => {
     .filter(Boolean)
     .filter((c) => c.status === 'ACTIVE');
 
-  const allProducts = productsJson.data?.products?.edges?.map(({ node }) => ({
-    id: node.id,
-    title: node.title,
-    image: node.featuredImage?.url || '',
-    price: node.variants.edges[0]?.node?.price || '0.00',
-  })) || [];
+  const allProducts = productsJson.data?.products?.edges?.map(({ node }) => {
+    const variants = (node.variants?.edges || []).map(({ node: v }) => ({ id: v.id, title: v.title, price: v.price, available: v.availableForSale !== false }));
+    // Like the storefront drawer: the first in-stock variant is the default.
+    const pick = variants.find((v) => v.available) || variants[0];
+    return {
+      id: node.id,
+      title: node.title,
+      image: node.featuredImage?.url || '',
+      price: pick?.price || '0.00',
+      variants,
+      available: variants.length ? variants.some((v) => v.available) : true,
+    };
+  }) || [];
 
   const drawerEnabled = cartRecord
     ? truthyFlag(cartRecord.cartStatus ?? cartRecord.cart_status)
