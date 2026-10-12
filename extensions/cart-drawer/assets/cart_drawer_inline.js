@@ -392,6 +392,10 @@
 
       if (configJson.status === 'success' && configJson.data) {
         const d = configJson.data;
+        // The shop's Shiprocket switch (php_backend/integrations_admin.php),
+        // published even when the BRIX drawer is off: BRIX COD's "Pay online"
+        // (brix_cod.js) uses it on the theme's drawer and product pages too.
+        window.__brixShiprocket = isEnabled(d.shiprocket_enabled);
 
         const cartActive =
           isEnabled(d.cartStatus) || isEnabled(d.cart_status) ||

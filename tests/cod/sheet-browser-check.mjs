@@ -411,6 +411,38 @@ check('product page: Buy it now kept when replacing is off, COD button under Add
 await shot(page4, '9-product-keeps-buy-now');
 check('product page: merchant spacing applied', kept.style === '4px 6px 20px 24px 0px', kept.style);
 await page4.close();
+
+// "Pay online" from the product page COD popup: Shiprocket when the shop has
+// it on (window.__brixShiprocket, set by cart_drawer_inline.js), else a Shopify
+// checkout with just this item.
+for (const shiprocket of [true, false]) {
+  const pg = await browser.newPage();
+  if (shiprocket) {
+    await pg.addInitScript(() => {
+      window.__brixShiprocket = true; window.__sr = [];
+      window.BrixCheckout = { checkoutCart: (o) => window.__sr.push({ kind: 'cart', o }), checkoutItems: (o) => window.__sr.push({ kind: 'items', items: o.items, fallbackUrl: o.fallbackUrl }) };
+    });
+  }
+  const navs = [];
+  await pg.route('**/*', (route) => {
+    const u = new URL(route.request().url());
+    if (u.origin === 'https://shop.test' && u.pathname.startsWith('/cart/') && !u.pathname.endsWith('.js')) { navs.push(u.pathname); return route.fulfill({ contentType: 'text/html', body: '<p>checkout</p>' }); }
+    return handler(route);
+  });
+  await pg.goto('https://shop.test/dawn');
+  await pg.locator('[data-brix-cod-btn]').first().click();
+  const online = pg.locator('[data-brix-cod-sheet] [data-act="online"]').first();
+  await online.waitFor({ timeout: 5000 });
+  await online.click();
+  await pg.waitForTimeout(shiprocket ? 300 : 2200);
+  if (shiprocket) {
+    const sr = await pg.evaluate(() => window.__sr);
+    check('product page + Shiprocket: "Pay online" opens Shiprocket with just this item', sr.length === 1 && sr[0].kind === 'items' && sr[0].items.length === 1 && /^\/cart\/\d+:\d+$/.test(sr[0].fallbackUrl) && navs.length === 0, JSON.stringify({ sr, navs }));
+  } else {
+    check('product page without Shiprocket: "Pay online" goes to a Shopify checkout with just this item', navs.length === 1 && /^\/cart\/\d+:\d+$/.test(navs[0]), JSON.stringify(navs));
+  }
+  await pg.close();
+}
 productButton = null;
 check('settings and PIN lookups come from the PHP backend', phpReads.includes('config') && phpReads.includes('pincode'));
 check('OTP, pricing and the order go through the PHP relay', ['/api/cod/otp', '/api/cod/quote', '/api/cod/order'].every((p) => posted.some((x) => x.path === p)));

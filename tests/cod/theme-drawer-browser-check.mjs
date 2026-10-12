@@ -84,9 +84,20 @@ function themePage(theme) {
 
 const browser = await chromium.launch();
 
-async function open(theme, { cfg = {}, cart = CART, brixOn = false, viewport = { width: 1280, height: 800 } } = {}) {
+// shiprocket: the shop has Shiprocket on (integrations_admin.php); BRIX's
+// hand-off (brix_checkout.js) is stubbed and records its calls in window.__sr.
+async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket = false, viewport = { width: 1280, height: 800 } } = {}) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
+  if (shiprocket) {
+    await page.addInitScript(() => {
+      window.__sr = [];
+      window.BrixCheckout = {
+        checkoutCart: (o) => window.__sr.push({ kind: 'cart', fallbackUrl: o.fallbackUrl }),
+        checkoutItems: (o) => window.__sr.push({ kind: 'items', items: o.items, fallbackUrl: o.fallbackUrl }),
+      };
+    });
+  }
   const net = { quotes: [], checkoutPosts: [], navigations: [], productReads: [] };
   const state = { cart: [...cart], cfg: { ...BASE_CFG, ...cfg, buttons: { ...BASE_CFG.buttons, ...(cfg.buttons || {}) } } };
   page.errors = [];
@@ -118,7 +129,10 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, viewport = {
       return json({ success: false, error: 'unmocked' }, 404);
     }
     if (url.origin === BRIX_PHP) {
-      if (url.pathname === '/save_cart_drawer.php') return json(brixOn ? { status: 'success', data: { cartStatus: '1', checkoutName: 'Checkout Now' } } : { status: 'success', data: { cartStatus: '0' } });
+      if (url.pathname === '/save_cart_drawer.php') {
+        const sr = shiprocket ? { shiprocket_enabled: 1 } : {};
+        return json(brixOn ? { status: 'success', data: { cartStatus: '1', checkoutName: 'Checkout Now', ...sr } } : { status: 'success', data: { cartStatus: '0', ...sr } });
+      }
       if (url.pathname === '/save_coupon.php') return json({ status: 'success', data: [] });
       return json({ status: 'success' });
     }
@@ -191,6 +205,24 @@ const done = async (page, name) => {
   const s = await look(page, DAWN_CO);
   check('Below Checkout: COD sits below Checkout, Checkout still shown', s.buttons === 1 && s.before === false && s.checkoutShown === true);
   await done(page, '2-dawn-below');
+}
+
+/* 3b. Shop on Shiprocket: "Pay online" in the COD popup opens Shiprocket (theme drawer, BRIX drawer off) */
+{
+  const page = await open('dawn', { cfg: { drawerPlacement: 'replace' }, shiprocket: true });
+  await waitButton(page);
+  check('Shiprocket switch published even with the BRIX drawer off', await page.evaluate(() => window.__brixShiprocket === true && window.__brixCartDrawerActive === false));
+  page.state.quoteError = true;
+  await page.locator('[data-brix-cod-drawer] [data-brix-cod-btn]').click();
+  const payOnline = page.locator('[data-brix-cod-sheet] [data-act="online"]');
+  await payOnline.first().waitFor({ timeout: 5000 }).catch(() => null);
+  await payOnline.first().click();
+  await page.waitForTimeout(400);
+  const sr = await page.evaluate(() => window.__sr);
+  check('Shiprocket: "Pay online" hands the cart to Shiprocket, not the theme\'s Shopify checkout',
+    sr.length === 1 && sr[0].kind === 'cart' && sr[0].fallbackUrl === '/checkout' && page.net.checkoutPosts.length === 0, JSON.stringify({ sr, posts: page.net.checkoutPosts }));
+  allErrors.push(...page.errors);
+  await page.context().close();
 }
 
 /* 3. Replace Checkout, then "Pay online" goes through the theme's own Checkout */

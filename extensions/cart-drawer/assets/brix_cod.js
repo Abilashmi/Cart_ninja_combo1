@@ -1912,12 +1912,54 @@
     setReplaced(m.checkout, false);
   }
 
+  /* ---------- "Pay online": Shopify, or Shiprocket where the shop has it on ---------- */
+
+  // cart_drawer_inline.js sets window.__brixShiprocket from the shop's
+  // integration switch (php_backend/integrations_admin.php) once its settings
+  // load, then fires brix:drawer:ready. A tap usually comes long after; wait
+  // up to 1.5 s otherwise, then go on with what's known.
+  function whenCheckoutKnown(cb) {
+    if (typeof window.__brixShiprocket === 'boolean' || window.__brixCartDrawerActive !== undefined) { cb(); return; }
+    var done = false;
+    function go() { if (!done) { done = true; cb(); } }
+    document.addEventListener('brix:drawer:ready', go, { once: true });
+    setTimeout(go, 1500);
+  }
+
+  // window.BrixCheckout = brix_checkout.js (same app embed): opens
+  // Shiprocket and falls back to the given Shopify URL if it can't.
+  function shiprocketOn() {
+    return window.__brixShiprocket === true && window.BrixCheckout && typeof window.BrixCheckout.checkoutCart === 'function';
+  }
+
+  // Pay online for exactly these items (product page): Shiprocket with just
+  // them, else a Shopify checkout with just them.
+  function payOnlineItems(items) {
+    var url = ROOT + 'cart/' + items.map(function (it) { return it.variantId + ':' + it.quantity; }).join(',');
+    whenCheckoutKnown(function () {
+      if (shiprocketOn()) {
+        window.BrixCheckout.checkoutItems({
+          items: items.map(function (it) { return { variantId: Number(it.variantId), quantity: Number(it.quantity) || 1 }; }),
+          fallbackUrl: url,
+        });
+        return;
+      }
+      window.location.href = url;
+    });
+  }
+
   // "Pay online" goes through the theme's own Checkout button, so anything
   // the theme or another app does on checkout (notes, terms box, checkout
   // apps) still happens. Clicking works while it's hidden by "Replace".
+  // Shops on Shiprocket get Shiprocket for the whole cart (BRIX's own
+  // hand-off, which doesn't depend on Shiprocket's script catching a
+  // scripted click on a hidden button).
   function themeCheckout(btn) {
-    if (btn && btn.isConnected && !btn.disabled) { btn.click(); return; }
-    window.location.href = ROOT + 'checkout';
+    whenCheckoutKnown(function () {
+      if (shiprocketOn()) { window.BrixCheckout.checkoutCart({ fallbackUrl: ROOT + 'checkout' }); return; }
+      if (btn && btn.isConnected && !btn.disabled) { btn.click(); return; }
+      window.location.href = ROOT + 'checkout';
+    });
   }
 
   // The cart's price for price tags: after its discounts when known.
@@ -2315,9 +2357,7 @@
       open({
         surface: 'product',
         items: [sel],
-        onPayOnline: function () {
-          window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity;
-        },
+        onPayOnline: function () { payOnlineItems([sel]); },
       });
     });
   }
@@ -2814,7 +2854,7 @@
         open({
           surface: 'product',
           items: [sel],
-          onPayOnline: function () { window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity; },
+          onPayOnline: function () { payOnlineItems([sel]); },
         });
       });
     }
