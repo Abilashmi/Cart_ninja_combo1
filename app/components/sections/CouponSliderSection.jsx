@@ -48,7 +48,26 @@ function makeCouponSliderItem(shopifyCoupon) {
   };
 }
 
-function CouponAppearanceEditor({ item, onUpdate, onClose }) {
+// A text card: words only (free shipping, an automatic discount...), no code
+// and no Apply button. Its id starts with "text:" (cart_drawer_inline.js).
+function makeTextCouponItem() {
+  return {
+    id: 'text:' + Math.random().toString(36).slice(2, 10),
+    textOnly: true,
+    code: '',
+    labelText: 'Free shipping',
+    description: 'On all orders, no code needed',
+    bgColor: '#4f46e5',
+    textColor: '#ffffff',
+    icon: 'shipping',
+    borderRadius: 8,
+    buttonText: '',
+    buttonBgColor: '#000000',
+    buttonTextColor: '#ffffff',
+  };
+}
+
+function CouponAppearanceEditor({ item, onUpdate, onClose, onRemove }) {
   return (
     <BlockStack gap="400">
       <div style={{ padding: '10px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
@@ -57,15 +76,19 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
         </Text>
       </div>
       <FormLayout>
-        <Text as="h4" variant="headingSm">Edit: {item.code}</Text>
-        <InlineStack gap="400">
-          <div style={{ flex: 1 }}>
-            <TextField label="Coupon Code" value={item.code} onChange={() => {}} disabled autoComplete="off" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <TextField label="Label Text" value={item.labelText} onChange={(v) => onUpdate({ labelText: v })} autoComplete="off" />
-          </div>
-        </InlineStack>
+        <Text as="h4" variant="headingSm">Edit: {item.textOnly ? (item.labelText || 'Text card') : item.code}</Text>
+        {item.textOnly ? (
+          <TextField label="Heading" value={item.labelText} onChange={(v) => onUpdate({ labelText: v })} autoComplete="off" helpText="Text card: shows only this heading and the description, with no code and no Apply button." />
+        ) : (
+          <InlineStack gap="400">
+            <div style={{ flex: 1 }}>
+              <TextField label="Coupon Code" value={item.code} onChange={() => {}} disabled autoComplete="off" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <TextField label="Label Text" value={item.labelText} onChange={(v) => onUpdate({ labelText: v })} autoComplete="off" />
+            </div>
+          </InlineStack>
+        )}
         <TextField label="Description" value={item.description} onChange={(v) => onUpdate({ description: v })} autoComplete="off" />
         <Text as="h4" variant="headingSm">Appearance</Text>
         <InlineStack gap="400">
@@ -105,12 +128,16 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
             />
           </div>
         </InlineStack>
-        <Text as="h4" variant="headingSm">Button Settings</Text>
-        <TextField label="Button Text" value={item.buttonText} onChange={(v) => onUpdate({ buttonText: v })} autoComplete="off" />
-        <InlineStack gap="400">
-          <ColorField label="Button Background" value={item.buttonBgColor} onChange={(v) => onUpdate({ buttonBgColor: v })} />
-          <ColorField label="Button Text Color" value={item.buttonTextColor} onChange={(v) => onUpdate({ buttonTextColor: v })} />
-        </InlineStack>
+        {!item.textOnly && (
+          <>
+            <Text as="h4" variant="headingSm">Button Settings</Text>
+            <TextField label="Button Text" value={item.buttonText} onChange={(v) => onUpdate({ buttonText: v })} autoComplete="off" />
+            <InlineStack gap="400">
+              <ColorField label="Button Background" value={item.buttonBgColor} onChange={(v) => onUpdate({ buttonBgColor: v })} />
+              <ColorField label="Button Text Color" value={item.buttonTextColor} onChange={(v) => onUpdate({ buttonTextColor: v })} />
+            </InlineStack>
+          </>
+        )}
         <Divider />
         <CustomizableLockedSection featureKey="open_countdown">
         <Text as="h4" variant="headingSm">Countdown Timer</Text>
@@ -142,6 +169,7 @@ function CouponAppearanceEditor({ item, onUpdate, onClose }) {
       </FormLayout>
       <InlineStack gap="200">
         <Button onClick={onClose}>Done</Button>
+        {onRemove && <Button tone="critical" variant="plain" onClick={onRemove}>Remove from cart slider</Button>}
       </InlineStack>
     </BlockStack>
   );
@@ -267,6 +295,12 @@ function ManageCouponsTab() {
     setExpandedId(shopifyCoupon.id);
   };
 
+  const addTextCard = () => {
+    const item = makeTextCouponItem();
+    addCouponSliderItem(item);
+    setExpandedId(item.id);
+  };
+
   const removeCoupon = (id) => {
     removeCouponSliderItem(id);
     if (expandedId === id) setExpandedId(null);
@@ -287,6 +321,12 @@ function ManageCouponsTab() {
           <Text as="p" variant="bodySm" tone="subdued">
             Click a coupon to edit its appearance in the cart drawer.
           </Text>
+          <div>
+            <Button onClick={addTextCard}>Add a text card (no code)</Button>
+            <div style={{ marginTop: 4 }}>
+              <Text as="p" variant="bodySm" tone="subdued">Just show words, like &ldquo;Free shipping on all orders&rdquo; or an automatic discount. No code, no Apply button.</Text>
+            </div>
+          </div>
 
           {couponSlider.selectedCoupons.length === 0 ? (
             <div style={{ padding: '16px', textAlign: 'center', border: '1px dashed #c9cccf', borderRadius: '8px' }}>
@@ -328,7 +368,7 @@ function ManageCouponsTab() {
                           {item.labelText || item.code}
                         </div>
                         <div style={{ fontSize: '11px', color: '#6d7175', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.description}
+                          {item.textOnly ? `Text card · ${item.description || 'no code'}` : item.description}
                         </div>
                       </div>
 

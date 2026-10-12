@@ -216,6 +216,56 @@ await check('Create in BRIX warns about unsaved changes', async () => {
   await context.close();
 });
 
+console.log('\nCoupon Banner — saved texts and text offers');
+
+await check('reopening the page shows each coupon\'s saved heading / subtext / button text (template2 too)', async () => {
+  for (const tpl of ['template1', 'template2']) {
+    const n = tpl.slice(-1);
+    const data = pageData({ selected: ['gid://shopify/DiscountCodeNode/1'] });
+    data.couponConfig = { ...data.couponConfig, activeTemplate: tpl, [`temp${n}CouponStyle`]: { 'gid://shopify/DiscountCodeNode/1': { couponCode: 'SAVE10', headingText: 'FIRST ORDER', subtextText: 'Get 10% Discount', buttonText: 'Grab it' } }, [`temp${n}CouponCondition`]: [] };
+    const { page, context, posts } = await open({ data });
+    await page.getByRole('button', { name: 'Customize Coupon' }).click();
+    assert.equal(await page.getByLabel('Heading').inputValue(), 'FIRST ORDER', tpl);
+    assert.equal(await page.getByLabel('Subtext').inputValue(), 'Get 10% Discount', tpl);
+    assert.equal(await page.getByLabel('Button Text').inputValue(), 'Grab it', tpl);
+    // Saving after an unrelated change keeps them (they used to be sent empty).
+    await page.getByRole('button', { name: 'Layout' }).click();
+    await page.getByLabel('Banner layout').selectOption('grid');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.waitForTimeout(400);
+    const style = posts.at(-1)?.couponStyles?.['gid://shopify/DiscountCodeNode/1'] || {};
+    assert.equal(style.headingText, 'FIRST ORDER', `${tpl} save keeps heading`);
+    assert.equal(style.buttonText, 'Grab it', `${tpl} save keeps button text`);
+    await context.close();
+  }
+});
+
+await check('Add a text offer: selected, editable, saved with no code; preview has no button', async () => {
+  const { page, context, posts } = await open();
+  await page.getByRole('button', { name: 'Add a text offer with no code' }).click();
+  await page.waitForTimeout(400); // let "Customize Coupon" finish opening (an instant fill mid-animation is cut short)
+  await page.getByLabel('Heading').fill('Free shipping over ₹999');
+  await page.getByLabel('Subtext').fill('Automatic at checkout');
+  assert.equal(await page.getByLabel('Button Text').count(), 0, 'no button text field for a text offer');
+  assert.ok(await page.getByText('Free shipping over ₹999', { exact: true }).first().isVisible(), 'preview shows the heading');
+  assert.equal(await page.getByRole('button', { name: 'Copy Code', exact: true }).count(), 0, 'preview has no Copy button for a text offer');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const body = posts.at(-1);
+  const id = (body.selectedActiveCoupons || []).find((x) => x.startsWith('text:'));
+  assert.ok(id, 'text offer id saved in the selected list');
+  assert.deepEqual({ ...body.couponStyles[id] }, { headingText: 'Free shipping over ₹999', subtextText: 'Automatic at checkout', textOnly: true });
+  await context.close();
+});
+
+await check('a saved text offer comes back in the list with its heading', async () => {
+  const data = pageData({ selected: ['text:k9'] });
+  data.couponConfig = { ...data.couponConfig, temp1CouponStyle: { 'text:k9': { headingText: 'Free gift over ₹1499', textOnly: true } } };
+  const { page, context } = await open({ data });
+  assert.ok(await page.getByText('Text offer: Free gift over ₹1499').first().isVisible());
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

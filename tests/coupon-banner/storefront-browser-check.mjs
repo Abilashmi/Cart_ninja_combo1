@@ -46,4 +46,31 @@ const codes = await page.locator('ps-coupon-slider .ps-btn[data-code]').evaluate
 assert.deepEqual(codes, ['SHIPROCKET10', 'SAVE10', '2024'], 'custom + store codes in saved order; numeric-only custom code kept as-is');
 assert.doesNotMatch(await page.locator('ps-coupon-slider').evaluate((el) => el.innerHTML), /custom:/, 'the internal id prefix never reaches shoppers');
 console.log('  ✓ storefront renders custom + store coupons from the same saved config (incl. numeric-only code)');
+
+// Text offers ("text:<id>"): heading + subtext only, no code, no Copy button,
+// on every template; merchant text is escaped.
+for (const tpl of ['template1', 'template2', 'template3']) {
+  const n = tpl.slice(-1);
+  config.data = {
+    is_enabled: 1, widgetPlacement: 'custom', selectedTemplate: tpl,
+    selectedCouponsGlobal: ['text:abc123', 'gid://shopify/DiscountCodeNode/1'],
+    [`temp${n}DefaultStyle`]: { headingText: 'GET 10% OFF!', subtextText: 'Apply at checkout' },
+    [`temp${n}CouponStyle`]: {
+      'text:abc123': { headingText: 'Free shipping <b>today</b>', subtextText: 'Orders over ₹999 & up', textOnly: true },
+      'gid://shopify/DiscountCodeNode/1': { couponCode: 'SAVE10' },
+    },
+    [`temp${n}CouponCondition`]: [],
+  };
+  await page.goto('http://shop.test/products/tee');
+  await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+  const cards = await page.locator('ps-coupon-slider .ps-card').evaluateAll((els) => els.map((e) => ({ text: e.textContent, buttons: e.querySelectorAll('.ps-btn').length, bold: e.querySelectorAll('b').length })));
+  assert.equal(cards[0].buttons, 0, `${tpl}: text offer has no Copy button`);
+  assert.match(cards[0].text, /Free shipping <b>today<\/b>/, `${tpl}: heading shown as plain text (escaped)`);
+  assert.match(cards[0].text, /Orders over ₹999 & up/, `${tpl}: subtext shown`);
+  assert.equal(cards[0].bold, 0, `${tpl}: merchant text is not run as HTML`);
+  assert.doesNotMatch(cards[0].text, /text:|abc123|Your Code/i, `${tpl}: no code or internal id`);
+  assert.equal(cards[1].buttons, 1, `${tpl}: the real coupon keeps its Copy button`);
+  assert.equal(await page.locator('ps-coupon-slider .ps-btn').first().getAttribute('data-code'), 'SAVE10');
+}
+console.log('  ✓ text offers show heading + subtext only (no code, no Copy) on all 3 templates; text escaped');
 await browser.close();

@@ -213,6 +213,41 @@ for (const behavior of ['replace', 'hide']) {
   await up.close();
 }
 
+// ── Coupon slider: the drawer's own saved title wins over the shared row
+// (which the Coupon Banner page writes); text cards ──
+{
+  data.cartRecord = { cartStatus: 1, coupon_status: 1, coupon_data: JSON.stringify({
+    enabled: true, sectionTitle: 'Unlock your savings', titleColor: '#be185d', titleFontSize: 18, position: 'top', layout: 'grid', template: 'template2',
+    selectedCoupons: [{ id: 'text:t1', textOnly: true, code: '', labelText: 'Free shipping', description: 'On all orders', bgColor: '#4f46e5', textColor: '#ffffff', icon: 'shipping', borderRadius: 8, buttonText: '' }],
+  }) };
+  // What a Coupon Banner save leaves in the shared row.
+  data.csRecord = { is_enabled: 1, selected_template: 'template1', title_text: 'Apply Coupon', title_color: '#1e293b', title_font_size: 14, title_alignment: 'left', position: 'above_cart', layout: 'list', selected_coupons: null };
+  const cp = await ctx.newPage();
+  cp.on('pageerror', (e) => errors.push(e.message));
+  await cp.goto('https://admin.test/app/cartdrawer');
+  await cp.locator('button', { hasText: 'Coupon Slider' }).first().click();
+  await cp.waitForTimeout(300);
+  check('coupon slider: reopening shows the drawer\'s own saved title, not the Coupon Banner\'s', (await cp.getByLabel('Title text', { exact: true }).inputValue()) === 'Unlock your savings', await cp.getByLabel('Title text', { exact: true }).inputValue());
+  await cp.getByRole('tab', { name: 'Manage Coupons' }).click();
+  check('coupon slider: saved text card listed', (await cp.textContent('body')).includes('Text card · On all orders'));
+  await cp.getByRole('button', { name: 'Add a text card (no code)' }).click();
+  await cp.waitForTimeout(300);
+  check('coupon slider: a new text card opens with Heading and no code / button fields',
+    (await cp.getByLabel('Heading').count()) === 1 && (await cp.getByLabel('Coupon Code').count()) === 0 && (await cp.getByLabel('Button Text').count()) === 0);
+  await cp.getByRole('button', { name: 'Items', exact: true }).click();
+  await cp.waitForTimeout(300);
+  // Smallest element holding the coupon title and both cards: its buttons, minus the ← → arrows.
+  const previewButtons = await cp.evaluate(() => {
+    const root = document.querySelector('.bxcd-root');
+    const all = [...root.querySelectorAll('div')].filter((d) => d.textContent.includes('Unlock your savings') && d.textContent.includes('no code needed'));
+    const box = all.sort((a, b) => a.textContent.length - b.textContent.length)[0];
+    return box ? [...box.querySelectorAll('button')].filter((b) => !/^[←→‹›]$/.test(b.textContent.trim())).length : -1;
+  });
+  check('coupon slider preview: text cards have no Apply button', previewButtons === 0, String(previewButtons));
+  await cp.close();
+  data.cartRecord = null; data.csRecord = null;
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

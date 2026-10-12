@@ -457,9 +457,9 @@ function CouponCard({ coupon, template, isVertical }) {
           <span style={{ fontSize: '10px', fontWeight: 700, color: coupon.bgColor, letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{coupon.labelText}</span>
         </div>
         {!isVertical && <div style={{ fontSize: '9px', color: '#6b7280', lineHeight: 1.3, flex: 1 }}>{coupon.description}</div>}
-        <button style={{ marginTop: 'auto', alignSelf: 'center', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', width: '68%', textAlign: 'center' }}>
+        {!coupon.textOnly && (<button style={{ marginTop: 'auto', alignSelf: 'center', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', width: '68%', textAlign: 'center' }}>
           {coupon.buttonText}
-        </button>
+        </button>)}
       </div>
     );
   }
@@ -471,9 +471,9 @@ function CouponCard({ coupon, template, isVertical }) {
         <span style={{ color: coupon.textColor, display: 'flex', lineHeight: 0 }}><IconComp width="20" height="20" fill="currentColor" /></span>
         <div style={{ fontSize: '11px', fontWeight: 800, color: coupon.textColor, letterSpacing: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{coupon.labelText}</div>
         {!isVertical && <div style={{ fontSize: '8px', color: coupon.textColor, opacity: 0.85, lineHeight: 1.3, flex: 1 }}>{coupon.description}</div>}
-        <button style={{ marginTop: 'auto', padding: '4px 6px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 700, cursor: 'pointer', width: '68%', textAlign: 'center', letterSpacing: '0.5px' }}>
+        {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '4px 6px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 700, cursor: 'pointer', width: '68%', textAlign: 'center', letterSpacing: '0.5px' }}>
           {coupon.buttonText}
-        </button>
+        </button>)}
       </div>
     );
   }
@@ -489,9 +489,9 @@ function CouponCard({ coupon, template, isVertical }) {
           {!isVertical && <div style={{ fontSize: '9px', opacity: 0.85, lineHeight: 1.3 }}>{coupon.description}</div>}
         </div>
       </div>
-      <button style={{ marginTop: 'auto', padding: '3px 4px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, alignSelf: 'center', width: '60%', textAlign: 'center' }}>
+      {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '3px 4px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, alignSelf: 'center', width: '60%', textAlign: 'center' }}>
         {coupon.buttonText}
-      </button>
+      </button>)}
     </div>
   );
 }
@@ -519,9 +519,9 @@ function SingleCouponCard({ coupon, template }) {
           <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', color: isMinimal ? coupon.bgColor : textColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
           {coupon.description && <div style={{ fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' }}>{coupon.description}</div>}
         </div>
-        <button style={{ ...buttonStyle, flexShrink: 0, padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        {!coupon.textOnly && (<button style={{ ...buttonStyle, flexShrink: 0, padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           {coupon.buttonText}
-        </button>
+        </button>)}
       </div>
     </div>
   );

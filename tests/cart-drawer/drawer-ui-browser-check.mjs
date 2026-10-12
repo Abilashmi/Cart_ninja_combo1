@@ -304,6 +304,26 @@ for (const width of [1280, 390]) {
   await page.context().close();
 }
 
+/* 5d. Coupon section: a text card (no code) next to a real coupon */
+{
+  const cfg = config({ banner: { enabled: false } });
+  cfg.data.coupon_status = 1;
+  cfg.data.coupon_data = JSON.stringify({
+    enabled: true, position: 'top', template: 'template2', sectionTitle: 'Unlock your savings',
+    selectedCoupons: [
+      { id: 'text:t1', textOnly: true, code: '', labelText: 'Free shipping <b>today</b>', description: 'No code needed', bgColor: '#4f46e5', textColor: '#ffffff', icon: 'shipping', borderRadius: 8, buttonText: '' },
+      { id: 'gid://shopify/DiscountCodeNode/1', code: 'SAVE10', labelText: 'SAVE10', description: '10% off', bgColor: '#be185d', textColor: '#ffffff', icon: 'discount', borderRadius: 8, buttonText: 'Apply' },
+    ],
+  });
+  const page = await open({ width: 1280, cfg });
+  const cards = await page.$$eval('.cc-coupon-card', (els) => els.map((e) => ({ text: e.textContent.replace(/\s+/g, ' ').trim(), buttons: [...e.querySelectorAll('button')].map((b) => b.getAttribute('onclick') || ''), bold: e.querySelectorAll('b').length })));
+  check('coupon section: text card shows its heading and description', cards.length === 2 && cards[0].text.includes('Free shipping <b>today</b>') && cards[0].text.includes('No code needed') && cards[0].bold === 0, JSON.stringify(cards));
+  check('coupon section: text card has no Apply/Copy button', cards[0] && cards[0].buttons.length === 0);
+  check('coupon section: the real coupon still applies its own code', cards[1] && cards[1].buttons.length === 1 && cards[1].buttons[0].includes("ccApplyCoupon('SAVE10')"));
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
 /* 6. Checkout still works */
 {
   const page = await open({ width: 1280 });

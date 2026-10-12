@@ -12,3 +12,5 @@ export const listCustomCoupons = null;
 export const addCustomCoupon = null;
 export const getStoredCoupons = null;
 export default function BrixBarStub() { return null; }
+export const saveCouponSliderSettings = null;
+export const getShopPlan = null;

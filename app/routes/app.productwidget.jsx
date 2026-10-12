@@ -13,12 +13,14 @@ import BrixBar from "../components/ai-agent/BrixBar";
 import { SliderField } from "../components/shared/SliderField";
 import {
     DiscountIcon, ColorIcon, MagicIcon, ClockIcon,
-    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon, PlusIcon,
+    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon, PlusIcon, TextIcon,
 } from "@shopify/polaris-icons";
 import { ProBadge } from "../components/plan/PlanGate";
 import { usePlan } from "../components/PlanContext";
 import { COUPON_BANNER_TEMPLATE_DEFAULTS, validateCustomCouponCode } from "../config/coupon-banner";
 import { listCustomCoupons, addCustomCoupon } from "../services/coupon-banner.server";
+import { saveCouponSliderSettings } from "../services/cart-config-writes.server";
+import { getShopPlan } from "../services/plan-permissions.server";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -208,40 +210,63 @@ export async function action({ request }) {
         [tplKey]: { styles: template, couponStyles: couponStyles || {}, couponConditions: couponConditions || [] },
         ...rest,
     };
+    // The coupon_slider_settings row is shared with the Cart Editor's coupon
+    // section. Save only what this page owns, merged onto the existing row
+    // (the PHP endpoint used here rewrote every column, so each Coupon Banner
+    // save reset the cart drawer coupon title, colours and coupon cards).
     const settingsPayload = {
-        shop,
         is_enabled: isEnabled ? 1 : 0,
         selected_template: tplKey,
         position: rest.widgetPlacement || 'above_cart',
         layout: rest.layout || 'list',
-        display_condition: rest.displayCondition || 'all',
-        product_handles: JSON.stringify(Array.isArray(rest.productHandles) ? rest.productHandles : []),
-        collection_handles: JSON.stringify(Array.isArray(rest.collectionHandles) ? rest.collectionHandles : []),
-        tag_handles: JSON.stringify(Array.isArray(rest.tagHandles) ? rest.tagHandles : []),
     };
 
     try {
-        const [widgetRes, settingsRes] = await Promise.all([
+        const [widgetRes, settingsSaved] = await Promise.all([
             fetch(`${BASE_PHP_URL}/save_coupon_slider_widget.php`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(widgetPayload),
             }),
-            fetch(`${BASE_PHP_URL}/coupon_slider_settings.php`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Forge-Secret": process.env.SHOPIFY_API_KEY || "" },
-                body: JSON.stringify(settingsPayload),
-            }),
+            getShopPlan(shop)
+                .then((planKey) => saveCouponSliderSettings(shop, planKey, settingsPayload))
+                .then(() => true)
+                .catch((e) => { console.error("[ProductWidget action] settings save failed:", e); return false; }),
         ]);
         const widgetData = await widgetRes.json().catch(() => ({}));
-        const settingsData = await settingsRes.json().catch(() => ({}));
-        if (widgetData.status === "success" || settingsData.status === "success") return { success: true };
-        console.error("[ProductWidget action] PHP errors:", { widgetData, settingsData });
+        if (widgetData.status === "success" && settingsSaved) return { success: true };
+        console.error("[ProductWidget action] save errors:", { widgetData, settingsSaved });
     } catch (e) { console.error("[ProductWidget action] Save failed:", e); }
     return { success: false };
 }
 
 /* ─── CONSTANTS ───────────────────────────────────────────────────────────── */
+// The loader keeps each template's per-coupon data under its PHP column name
+// (temp1CouponStyle / temp1CouponCondition ...), not under "template1".
+const COUPON_COLUMN_PREFIX = { template1: "temp1", template2: "temp2", template3: "temp3" };
+
+// A text offer: a banner card with only a heading and subtext (e.g. "Free
+// shipping over ₹999", or an automatic discount that has no code). No code,
+// no Copy button. Stored like any coupon: its id ("text:<random>") in the
+// selected list, its words in the per-coupon heading / subtext.
+const isTextOfferId = (id) => typeof id === "string" && id.indexOf("text:") === 0;
+const newTextOfferId = () => "text:" + Math.random().toString(36).slice(2, 10);
+const textOfferLabel = (heading) => `Text offer: ${heading || "(no heading yet)"}`;
+
+/** Per-coupon overrides (heading, subtext, button, colours, show-on) saved for one template. */
+function savedCouponOverrides(couponConfig, tplKey) {
+    const prefix = COUPON_COLUMN_PREFIX[tplKey] || "temp1";
+    const styleMap = couponConfig?.[`${prefix}CouponStyle`] || {};
+    const condArr = couponConfig?.[`${prefix}CouponCondition`] || [];
+    const out = {};
+    Object.keys(styleMap || {}).forEach((cid) => { out[cid] = { ...styleMap[cid] }; });
+    (Array.isArray(condArr) ? condArr : []).forEach((c) => {
+        if (!c || !c.couponId) return;
+        out[c.couponId] = { ...(out[c.couponId] || {}), displayCondition: c.displayCondition || "all", productHandles: c.productHandles || [], collectionHandles: c.collectionHandles || [] };
+    });
+    return out;
+}
+
 const TEMPLATES = [
     { id: "classic-banner", name: "Classic Banner", tplKey: "template1" },
     { id: "minimal-card",   name: "Minimal Card",   tplKey: "template2" },
@@ -339,11 +364,11 @@ function CountdownStrip({ hours, minutes, loop, label, expiredLabel, bgColor, te
 }
 
 /* ─── COUPON SELECTOR ─────────────────────────────────────────────────────── */
-function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear, onAddCustom }) {
+function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear, onAddCustom, onAddText }) {
     const filtered = (discounts || []).filter((c) => {
         if (!search) return true;
         const q = search.toLowerCase();
-        return c.code.toLowerCase().includes(q) || (c.title || "").toLowerCase().includes(q);
+        return (c.code || "").toLowerCase().includes(q) || (c.title || "").toLowerCase().includes(q);
     });
 
     const selectedIds = selectedCouponIds || [];
@@ -384,6 +409,23 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
                     <span style={{ minWidth: 0 }}>
                         <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#008060" }}>Add custom coupon code</span>
                         <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>Made the coupon in Shopify, Shiprocket or another app? Add its code here.</span>
+                    </span>
+                </button>
+            )}
+
+            {onAddText && (
+                <button
+                    type="button"
+                    onClick={onAddText}
+                    aria-label="Add a text offer with no code"
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: "#ffffff", border: "1.5px dashed #c7d2fe", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                    <span style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon source={TextIcon} />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#4338ca" }}>Add a text offer (no code)</span>
+                        <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>Just show words, like &ldquo;Free shipping over ₹999&rdquo; or an automatic discount. No code, no Copy button.</span>
                     </span>
                 </button>
             )}
@@ -438,9 +480,11 @@ function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, 
                                             </div>
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ fontSize: "13px", fontWeight: 600, color: isSelected ? "#008060" : "#202223", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                                    {coupon.code}
+                                                    {coupon.isText ? coupon.title : coupon.code}
                                                 </div>
-                                                {coupon.title !== coupon.code && (
+                                                {coupon.isText ? (
+                                                    <div style={{ fontSize: "11px", color: "#6d7175" }}>Text only · no code</div>
+                                                ) : coupon.title !== coupon.code && (
                                                     <div style={{ fontSize: "11px", color: "#6d7175", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                                         {coupon.title}
                                                     </div>
@@ -572,7 +616,9 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
                     <BlockStack gap="300">
                         <TextField label="Heading" value={ov.headingText ?? ""} onChange={(v) => onChange({ headingText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={30} showCharacterCount />
                         <TextField label="Subtext" value={ov.subtextText ?? ""} onChange={(v) => onChange({ subtextText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={35} showCharacterCount multiline={2} />
-                        <TextField label="Button Text" value={ov.buttonText ?? ""} onChange={(v) => onChange({ buttonText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={10} showCharacterCount />
+                        {coupon.isText
+                            ? <Text as="p" variant="bodySm" tone="subdued">Text offers show only the heading and subtext: no code and no Copy button.</Text>
+                            : <TextField label="Button Text" value={ov.buttonText ?? ""} onChange={(v) => onChange({ buttonText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={10} showCharacterCount />}
                         {colorRow("Background", "bgColor", "#ffffff")}
                         {colorRow("Text", "textColor", "#111827")}
                         {colorRow("Accent", "accentColor", "#3b82f6")}
@@ -629,7 +675,10 @@ export default function ProductWidgetPage() {
     const shopifyBridge = useAppBridge();
     // Custom (external) coupons first, then the store's active Shopify codes.
     const [customCoupons, setCustomCoupons] = useState(() => (loadedCustomCoupons || []).map((c) => ({ ...c, title: "Custom coupon", isCustom: true })));
-    const allCoupons = [...customCoupons, ...(discounts || [])];
+    // Text offers saved earlier come back from the selected list; new ones are added with "Add a text offer".
+    const [textOfferIds, setTextOfferIds] = useState(() => (
+        Array.isArray(couponConfig?.selectedActiveCoupons) ? couponConfig.selectedActiveCoupons.filter(isTextOfferId) : []
+    ));
     const [customCouponOpen, setCustomCouponOpen] = useState(false);
     const { canPublishFeature } = usePlan();
     const couponPublishable = canPublishFeature('coupon_lock_pro');
@@ -683,28 +732,23 @@ export default function ProductWidgetPage() {
         setHasChanges(true);
     };
     // Per-coupon overrides: { [couponId]: { headingText, subtextText, bgColor, textColor, accentColor, buttonColor, buttonTextColor, displayCondition, productHandles } }
-    const [couponOverrides, setCouponOverrides] = useState(() => {
-        // Was `couponConfig?.temp1CouponStyle || couponConfig?.temp2CouponStyle
-        // || couponConfig?.temp3CouponStyle || {}` — the loader always fills a
-        // template with no saved data as `{}` (never null/undefined), and `{}`
-        // is truthy in JS, so this `||` chain could never actually fall through
-        // past temp1CouponStyle: whenever the merchant was on any template
-        // other than Classic Banner, its real per-coupon heading/subtext/etc
-        // overrides were silently discarded in favor of temp1's permanently-
-        // empty map, which is exactly why "FIRST ORDER" / "Get 10% Discount"
-        // never showed back up for Minimal Card even though it was really
-        // saved. Read the CURRENTLY SELECTED template's own map directly,
-        // same as activeTpl does just above.
-        const styleMap = couponConfig?.[`${tKey}CouponStyle`] || {};
-        const condArr = couponConfig?.[`${tKey}CouponCondition`] || [];
-        const out = {};
-        Object.keys(styleMap || {}).forEach((cid) => { out[cid] = { ...styleMap[cid] }; });
-        (Array.isArray(condArr) ? condArr : []).forEach((c) => {
-            if (!c || !c.couponId) return;
-            out[c.couponId] = { ...(out[c.couponId] || {}), displayCondition: c.displayCondition || "all", productHandles: c.productHandles || [], collectionHandles: c.collectionHandles || [] };
-        });
-        return out;
-    });
+    // Saved per-coupon heading / subtext / button text / colours for the
+    // selected template. (Used to look for "template1CouponStyle", a key the
+    // loader never sets, so every saved per-coupon text was lost on reload and
+    // the next save erased it.)
+    const [couponOverrides, setCouponOverrides] = useState(() => savedCouponOverrides(couponConfig, tKey));
+    const textOffers = textOfferIds.map((id) => ({ id, code: "", title: couponOverrides[id]?.headingText || "", isText: true }))
+        .map((c) => ({ ...c, title: textOfferLabel(c.title) }));
+    const allCoupons = [...textOffers, ...customCoupons, ...(discounts || [])];
+    const addTextOffer = () => {
+        const id = newTextOfferId();
+        setTextOfferIds((prev) => [id, ...prev]);
+        setCouponOverrides((prev) => ({ ...prev, [id]: { headingText: "Free shipping on all orders", subtextText: "No code needed" } }));
+        setSelectedCouponIds((prev) => [id, ...prev]);
+        setEditingCouponId(id);
+        setOpenSection("text");
+        setHasChanges(true);
+    };
     const updateOverride = (cid, patch) => {
         setCouponOverrides((prev) => ({ ...prev, [cid]: { ...(prev[cid] || {}), ...patch } }));
         setHasChanges(true);
@@ -771,15 +815,7 @@ export default function ProductWidgetPage() {
         // on tab switch: pull this template's real per-coupon overrides
         // directly by key instead of leaving couponOverrides frozen with
         // whichever template's map happened to load first.
-        const styleMap = couponConfig?.[`${t.tplKey}CouponStyle`] || {};
-        const condArr = couponConfig?.[`${t.tplKey}CouponCondition`] || [];
-        const nextOverrides = {};
-        Object.keys(styleMap).forEach((cid) => { nextOverrides[cid] = { ...styleMap[cid] }; });
-        (Array.isArray(condArr) ? condArr : []).forEach((c) => {
-            if (!c || !c.couponId) return;
-            nextOverrides[c.couponId] = { ...(nextOverrides[c.couponId] || {}), displayCondition: c.displayCondition || "all", productHandles: c.productHandles || [], collectionHandles: c.collectionHandles || [] };
-        });
-        setCouponOverrides(nextOverrides);
+        setCouponOverrides(savedCouponOverrides(couponConfig, t.tplKey));
         mark();
     };
 
@@ -801,6 +837,7 @@ export default function ProductWidgetPage() {
             const style = {};
             // Save the real discount code so "Copy Code" copies the code, not the GID number
             if (couponObj?.code) style.couponCode = couponObj.code;
+            if (isTextOfferId(cid)) style.textOnly = true;
             ["headingText", "subtextText", "buttonText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor"].forEach((k) => {
                 if (ov[k] !== undefined && ov[k] !== "") style[k] = ov[k];
             });
@@ -845,6 +882,8 @@ export default function ProductWidgetPage() {
     // to per template (see buildCard() in coupon-slider-render.liquid) —
     // "Copy" for Bold & Vibrant, "Copy Code" everywhere else.
     const pvButtonText = editOv.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code");
+    // A text offer has no code and no button, on the storefront and here.
+    const pvTextOnly = !!editingCoupon?.isText;
 
     const timerStrip = timerEnabled ? (
         <CountdownStrip hours={timerHours} minutes={timerMins} loop={timerMode === "loop"} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
@@ -859,7 +898,7 @@ export default function ProductWidgetPage() {
                             <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
                             <div style={{ fontSize: "13px", color: pvText, opacity: 0.65, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
                         </div>
-                        <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
+                        {!pvTextOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>}
                     </div>
                     {timerStrip}
                 </div>
@@ -869,14 +908,14 @@ export default function ProductWidgetPage() {
             return (
                 <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
                     <div style={{ display: "flex", gap: "12px" }}>
-                        <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${pvAccent}50`, boxSizing: "border-box" }}>
+                        {!pvTextOnly && <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${pvAccent}50`, boxSizing: "border-box" }}>
                             <div style={{ fontSize: "9px", letterSpacing: "2px", color: pvAccent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
                             <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>{previewCode}</div>
-                        </div>
+                        </div>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
                             <div style={{ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
-                            <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", whiteSpace: "nowrap" }}>{pvButtonText}</button>
+                            {!pvTextOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", whiteSpace: "nowrap" }}>{pvButtonText}</button>}
                         </div>
                     </div>
                     {timerStrip}
@@ -892,10 +931,10 @@ export default function ProductWidgetPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
                         <div style={{ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
-                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        {!pvTextOnly && <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewCode}</div>
                             <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
-                        </div>
+                        </div>}
                     </div>
                 </div>
                 {timerStrip}
@@ -1002,6 +1041,7 @@ export default function ProductWidgetPage() {
                                         <CouponSelector
                                             discounts={allCoupons}
                                             onAddCustom={() => setCustomCouponOpen(true)}
+                                            onAddText={addTextOffer}
                                             selectedCouponIds={selectedCouponIds}
                                             search={couponSearch}
                                             onSearchChange={setCouponSearch}
@@ -1022,7 +1062,7 @@ export default function ProductWidgetPage() {
                                                     onChange={setEditingCouponId}
                                                     options={selectedCouponIds.map((cid) => {
                                                         const c = allCoupons.find((x) => x.id === cid);
-                                                        return { label: c?.code || cid, value: cid };
+                                                        return { label: c?.isText ? c.title : (c?.code || cid), value: cid };
                                                     })}
                                                 />
                                                 <CouponOverridePanel

@@ -677,7 +677,10 @@
       selectedActiveCoupons = data.selectedCoupons.map(c => c.id).filter(Boolean);
       allCouponDetails = data.selectedCoupons.map(c => ({
         id: c.id,
-        code: c.code || c.labelText || '',
+        // A text card ("Add a text card" in the Cart Editor): words only, no
+        // code and no Apply button (free shipping, an automatic discount...).
+        textOnly: c.textOnly === true || String(c.id || '').indexOf('text:') === 0,
+        code: (c.textOnly === true || String(c.id || '').indexOf('text:') === 0) ? '' : (c.code || c.labelText || ''),
         label: c.labelText || c.code || '',
         description: c.description || '',
         backgroundColor: c.bgColor || c.backgroundColor || '#4f46e5',
@@ -3181,11 +3184,13 @@
         // 1. Check if we have saved details from DB
         const saved = savedDetails.find((d) => d.id === id);
         if (saved) {
-          const resolvedCode = saved.code || saved.label || saved.description || '';
-          if (!resolvedCode) return null;
+          const textOnly = saved.textOnly === true;
+          const resolvedCode = textOnly ? '' : (saved.code || saved.label || saved.description || '');
+          if (!resolvedCode && !(textOnly && (saved.label || saved.description))) return null;
           const btn = saved.button || {};
           return {
             id,
+            textOnly,
             code: resolvedCode,
             label: saved.label || saved.code || 'Coupon',
             description: saved.description || '',
@@ -3338,9 +3343,9 @@
           <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;color:${isMinimal ? bg : tc};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</div>
           ${coupon.description ? `<div style="font-size:11px;opacity:0.85;line-height:1.35;margin-top:2px;">${escapeHtml(coupon.description)}</div>` : ''}
         </div>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="flex-shrink:0;padding:7px 14px;border-radius:6px;${btnStyle}font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
+        ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="flex-shrink:0;padding:7px 14px;border-radius:6px;${btnStyle}font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
           ${escapeHtml(btnLabel)}
-        </button>
+        </button>`}
       </div>
     </div>
   `;
@@ -3364,9 +3369,9 @@
         <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(coupon.label || coupon.code)}</span>
       </div>
       <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${coupon.code === _lastCopiedCode ? '#10b981' : baseColor};background:${coupon.code === _lastCopiedCode ? '#10b981' : 'transparent'};color:${coupon.code === _lastCopiedCode ? '#fff' : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${coupon.code === _lastCopiedCode ? '#10b981' : baseColor};background:${coupon.code === _lastCopiedCode ? '#10b981' : 'transparent'};color:${coupon.code === _lastCopiedCode ? '#fff' : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
         ${escapeHtml(btnLabel)}
-      </button>
+      </button>`}
     </div>
   `;
       } else if (style === 'style-2') {
@@ -3384,9 +3389,9 @@
       <span style="color:${tc};display:flex;line-height:0;">${iconSvg}</span>
       <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(coupon.label || coupon.code)}</div>
       ${coupon.description ? `<div style="font-size:8px;color:${tc};opacity:0.85;line-height:1.3;flex:1;">${escapeHtml(coupon.description)}</div>` : ''}
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
         ${escapeHtml(btnLabel)}
-      </button>
+      </button>`}
     </div>
   `;
       } else {
@@ -3408,9 +3413,9 @@
           <div style="font-size:9px;opacity:0.85;line-height:1.3;">${escapeHtml(coupon.description || '')}</div>
         </div>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
         ${escapeHtml(btnLabel)}
-      </button>
+      </button>`}
     </div>
   `;
       }

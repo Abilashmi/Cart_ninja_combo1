@@ -195,8 +195,14 @@ function normalizeCouponPosition(pos, fallback) {
   return fallback;
 }
 
-function hydrateFromCouponSlider(cs, base) {
+// own = the drawer's own coupon settings (cart_drawer.coupon_data, what the
+// storefront drawer reads). The coupon_slider_settings row is shared with the
+// Coupon Banner page, which writes on/off, template, placement and layout
+// (and used to reset the title and coupons), so it only fills what the
+// drawer's own settings don't have.
+function hydrateFromCouponSlider(cs, base, own = {}) {
   if (!cs) return base;
+  const has = (key) => own && Object.prototype.hasOwnProperty.call(own, key) && own[key] !== null && own[key] !== undefined;
   // coupon_slider_settings.selected_coupons stores raw GIDs (from Product Widget).
   // Only adopt them as full coupon objects if each element is a plain object;
   // GID strings are NOT compatible with the Cart Editor coupon card format.
@@ -208,16 +214,16 @@ function hydrateFromCouponSlider(cs, base) {
       ...base.body,
       couponSlider: {
         ...base.body.couponSlider,
-        enabled:        dbFlag(cs.is_enabled),
-        template:       cs.selected_template ?? base.body.couponSlider.template,
-        sectionTitle:   cs.title_text        ?? base.body.couponSlider.sectionTitle,
-        titleColor:     cs.title_color       ?? base.body.couponSlider.titleColor,
-        titleFontSize:  Number(cs.title_font_size ?? base.body.couponSlider.titleFontSize),
-        titleTextAlign: cs.title_alignment   ?? base.body.couponSlider.titleTextAlign,
-        position:       normalizeCouponPosition(cs.position, base.body.couponSlider.position),
-        layout:         cs.layout            ?? base.body.couponSlider.layout,
+        ...(own.__hasStatus ? {} : { enabled: dbFlag(cs.is_enabled) }),
+        ...(has('template') ? {} : { template: cs.selected_template ?? base.body.couponSlider.template }),
+        ...(has('sectionTitle') ? {} : { sectionTitle: cs.title_text ?? base.body.couponSlider.sectionTitle }),
+        ...(has('titleColor') ? {} : { titleColor: cs.title_color ?? base.body.couponSlider.titleColor }),
+        ...(has('titleFontSize') ? {} : { titleFontSize: Number(cs.title_font_size ?? base.body.couponSlider.titleFontSize) }),
+        ...(has('titleTextAlign') ? {} : { titleTextAlign: cs.title_alignment ?? base.body.couponSlider.titleTextAlign }),
+        ...(has('position') ? {} : { position: normalizeCouponPosition(cs.position, base.body.couponSlider.position) }),
+        ...(has('layout') ? {} : { layout: cs.layout ?? base.body.couponSlider.layout }),
         // Only override selectedCoupons if the stored items are full coupon objects, not bare GIDs
-        ...(hasFullObjects ? { selectedCoupons: rawSelected } : {}),
+        ...(hasFullObjects && !has('selectedCoupons') ? { selectedCoupons: rawSelected } : {}),
       },
     },
   };
@@ -298,7 +304,8 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     const fromRecord  = initialRecord       ? hydrateFromRecord(initialRecord, base)          : base;
     const fromConfig  = initialConfigRecord ? hydrateFromConfig(initialConfigRecord, fromRecord) : fromRecord;
     const fromPb      = initialPbRecord     ? hydrateFromProgressBar(initialPbRecord, fromConfig) : fromConfig;
-    const fromCs      = initialCsRecord     ? hydrateFromCouponSlider(initialCsRecord, fromPb)    : fromPb;
+    const ownCoupon   = initialRecord ? { ...parseJSONSafe(initialRecord.coupon_data), __hasStatus: initialRecord.coupon_status != null } : {};
+    const fromCs      = initialCsRecord     ? hydrateFromCouponSlider(initialCsRecord, fromPb, ownCoupon) : fromPb;
     const fromUpsell  = initialUpsellRecord ? hydrateFromUpsell(initialUpsellRecord, fromCs)      : fromCs;
 
     console.log('[Context init] initialCsRecord:', JSON.stringify(initialCsRecord));

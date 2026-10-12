@@ -189,7 +189,8 @@ function getStyles(d,tpl){
   return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
 }
 
-function buildCard(tpl,s,code,h,sub,timerData){
+/* textOnly: a text offer (id "text:...", no code): heading + subtext only, no code panel, no Copy button. */
+function buildCard(tpl,s,code,h,sub,timerData,textOnly){
   var fs=parseInt(s.fontSize)||13;
   var br=parseInt(s.borderRadius)||6;
   var p=parseInt(s.padding)||16;
@@ -222,12 +223,12 @@ function buildCard(tpl,s,code,h,sub,timerData){
           +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
           +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
         +'</div>'
-        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+        +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:9px 16px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
           +bt1
-        +'</button>'
+        +'</button>')
       +'</div>'
       +timerStripHtml(timerData);
 
@@ -245,19 +246,19 @@ function buildCard(tpl,s,code,h,sub,timerData){
       '<div style="display:flex;flex-direction:row;overflow:visible;position:relative;align-items:stretch;">'
         +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
         +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
-        +'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
+        +(textOnly?'':'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
           +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+ac+';margin-bottom:8px;display:block;white-space:nowrap;">Your Code</span>'
           +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
-        +'</div>'
+        +'</div>')
         +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
           +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
           +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
-          +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+          +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'" style="'
             +'background:'+bc+';color:'+btc+';border:none;'
             +'padding:7px 14px;border-radius:'+br+'px;'
             +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
             +bt1
-          +'</button>'
+          +'</button>')
         +'</div>'
       +'</div>'
       +(timerData&&timerData.timerEnabled?('<div style="padding:0 16px 14px;">'+timerStripHtml(timerData)+'</div>'):'');
@@ -281,7 +282,7 @@ function buildCard(tpl,s,code,h,sub,timerData){
           +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
         +'</div>'
       +'</div>'
-      +'<div style="display:flex;align-items:center;gap:8px;">'
+      +(textOnly?'':'<div style="display:flex;align-items:center;gap:8px;">'
         +'<div style="flex:1;padding:7px 10px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+code+'</div>'
         +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
@@ -289,7 +290,7 @@ function buildCard(tpl,s,code,h,sub,timerData){
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
           +bt3
         +'</button>'
-      +'</div>'
+      +'</div>')
       +timerStripHtml(timerData);
 
   }
@@ -353,14 +354,17 @@ function renderSlider(el,data,ctx){
     var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
     /* custom:<code> = a code added via "+ Custom Coupon" (created outside BRIX); the id carries the code itself */
     var customCode=nid.indexOf('custom:')===0?nid.slice(7):null;
-    var code=storedCode||ovCode||sCode||customCode||nid.split('/').pop();
+    /* text:<id> = a text offer (no code): only its heading and subtext show */
+    var textOnly=nid.indexOf('text:')===0||ov.textOnly===true;
+    var code=textOnly?'':(storedCode||ovCode||sCode||customCode||nid.split('/').pop());
 
     /* headingText: item.h -> ov.headingText (per-coupon) -> template default */
     var h=storedH!==null?storedH:(ov.headingText!==undefined?ov.headingText:(s.headingText||code));
     /* subtextText: item.s -> ov.subtextText (per-coupon) -> template default */
     var sub=storedSub!==null?storedSub:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||''));
 
-    itemsToRender.push({style:s,code:code,heading:h,subtext:sub});
+    /* Merchant-typed text goes into innerHTML: escape it (the admin preview shows it as plain text too). */
+    itemsToRender.push({style:s,code:escapeHtmlJs(code),heading:escapeHtmlJs(h),subtext:escapeHtmlJs(sub),textOnly:textOnly});
   });
 
   if(!itemsToRender.length){
@@ -390,7 +394,7 @@ function renderSlider(el,data,ctx){
   // widget title outside any card. startCouponTimer runs after the cards
   // exist in the DOM since it queries for their .ps-timer-text elements.
   itemsToRender.forEach(function(item){
-    w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext,data));
+    w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext,data,item.textOnly));
   });
 
   startCouponTimer(el,data,el.dataset.shop);
