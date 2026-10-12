@@ -21,6 +21,8 @@ import { COUPON_BANNER_TEMPLATE_DEFAULTS, validateCustomCouponCode } from "../co
 import { listCustomCoupons, addCustomCoupon } from "../services/coupon-banner.server";
 import { saveCouponSliderSettings } from "../services/cart-config-writes.server";
 import { getShopPlan } from "../services/plan-permissions.server";
+import { CouponStyleFields } from "../components/shared/CouponStyleFields";
+import { couponIconHtml, couponSubtitleStyle } from "../utils/coupon-style.shared.js";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -572,7 +574,7 @@ function CustomCouponModal({ open, onClose, existingCodes, fetcher, onCreateInBr
 }
 
 /* Per-coupon override editor — text, colors, and display pages for one coupon */
-function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateDefaults }) {
+function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateDefaults, iconDefaultShow = false }) {
     const shopify = useAppBridge();
     const [openState, setOpen] = useState(false);
     const open = alwaysOpen || openState;
@@ -624,6 +626,12 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
                         {colorRow("Accent", "accentColor", "#3b82f6")}
                         {colorRow("Button", "buttonColor", "#3b82f6")}
                         {colorRow("Button text", "buttonTextColor", "#ffffff")}
+                        <CouponStyleFields
+                            value={ov}
+                            onChange={onChange}
+                            hideCopied={coupon.isText}
+                            defaults={{ subColor: ov.textColor || td.textColor, iconColor: ov.accentColor || td.accentColor, icon: "discount", iconShow: iconDefaultShow }}
+                        />
                         <Select label="Show on" value={ov.displayCondition || "all"} onChange={(v) => onChange({ displayCondition: v })}
                             options={[{ label: "All product pages", value: "all" }, { label: "Specific products", value: "product_handle" }, { label: "Specific collections", value: "collection_handle" }]} />
                         {pickerError && <Banner tone="critical" onDismiss={() => setPickerError("")}>{pickerError}</Banner>}
@@ -838,7 +846,9 @@ export default function ProductWidgetPage() {
             // Save the real discount code so "Copy Code" copies the code, not the GID number
             if (couponObj?.code) style.couponCode = couponObj.code;
             if (isTextOfferId(cid)) style.textOnly = true;
-            ["headingText", "subtextText", "buttonText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor"].forEach((k) => {
+            ["headingText", "subtextText", "buttonText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor",
+                // Subtitle font, "Copied" colours and icon (CouponStyleFields).
+                "subFontSize", "subFontWeight", "subColor", "copiedBgColor", "copiedTextColor", "iconShow", "icon", "iconImage", "iconColor", "iconSize"].forEach((k) => {
                 if (ov[k] !== undefined && ov[k] !== "") style[k] = ov[k];
             });
             if (Object.keys(style).length) couponStyles[cid] = style;
@@ -884,6 +894,13 @@ export default function ProductWidgetPage() {
     const pvButtonText = editOv.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code");
     // A text offer has no code and no button, on the storefront and here.
     const pvTextOnly = !!editingCoupon?.isText;
+    // Icon and subtitle font, like the storefront (coupon-slider-render.liquid csIcon / csSubCss).
+    const pvIcon = (size, show) => {
+        const html = couponIconHtml(editOv, { size, color: pvAccent, defaultShow: show });
+        // eslint-disable-next-line react/no-danger -- built-in SVG or a checked https image
+        return html ? <span className="pw-coupon-icon" style={{ display: "flex", lineHeight: 0, flexShrink: 0 }} dangerouslySetInnerHTML={{ __html: html }} /> : null;
+    };
+    const pvSub = (base) => couponSubtitleStyle(editOv, base);
 
     const timerStrip = timerEnabled ? (
         <CountdownStrip hours={timerHours} minutes={timerMins} loop={timerMode === "loop"} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
@@ -894,9 +911,10 @@ export default function ProductWidgetPage() {
             return (
                 <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${pvAccent}` }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                        {pvIcon(22, false)}
                         <div style={{ flex: 1, minWidth: "100px", overflow: "hidden" }}>
                             <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
-                            <div style={{ fontSize: "13px", color: pvText, opacity: 0.65, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
+                            <div className="pw-sub" style={pvSub({ fontSize: "13px", color: pvText, opacity: 0.65, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
                         </div>
                         {!pvTextOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>}
                     </div>
@@ -913,8 +931,11 @@ export default function ProductWidgetPage() {
                             <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>{previewCode}</div>
                         </div>}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
-                            <div style={{ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                                {pvIcon(20, false)}
+                                <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{pvHeading}</div>
+                            </div>
+                            <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
                             {!pvTextOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", whiteSpace: "nowrap" }}>{pvButtonText}</button>}
                         </div>
                     </div>
@@ -925,12 +946,14 @@ export default function ProductWidgetPage() {
         return (
             <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px` }}>
                 <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-                    <div style={{ width: "44px", height: "44px", background: pvAccent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Icon source={DiscountIcon} />
-                    </div>
+                    {pvIcon(22, true) && (
+                        <div style={{ minWidth: "44px", minHeight: "44px", padding: "4px", boxSizing: "border-box", background: pvAccent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {pvIcon(22, true)}
+                        </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
-                        <div style={{ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{pvSubtext}</div>
+                        <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
                         {!pvTextOnly && <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewCode}</div>
                             <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
@@ -1072,6 +1095,7 @@ export default function ProductWidgetPage() {
                                                     override={couponOverrides[editingCouponId]}
                                                     onChange={(patch) => updateOverride(editingCouponId, patch)}
                                                     templateDefaults={{ bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor }}
+                                                    iconDefaultShow={selectedTemplate === "bold-vibrant"}
                                                 />
                                             </BlockStack>
                                         )}

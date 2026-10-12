@@ -13,6 +13,7 @@ import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
 import { usePlan } from '../PlanContext';
+import { CouponStyleFields } from '../shared/CouponStyleFields';
 
 const COUPON_ICON_MAP = {
   discount: DiscountCodeIcon,
@@ -23,14 +24,6 @@ const COUPON_ICON_MAP = {
   cash: CashDollarIcon,
 };
 
-const COUPON_ICON_OPTIONS = [
-  { label: 'Discount Tag', value: 'discount' },
-  { label: 'Gift Card', value: 'gift' },
-  { label: 'Free Shipping', value: 'shipping' },
-  { label: 'Star', value: 'star' },
-  { label: 'Percentage', value: 'percent' },
-  { label: 'Cash', value: 'cash' },
-];
 
 function makeCouponSliderItem(shopifyCoupon) {
   return {
@@ -95,39 +88,20 @@ function CouponAppearanceEditor({ item, onUpdate, onClose, onRemove }) {
           <ColorField label="Background Color" value={item.bgColor} onChange={(v) => onUpdate({ bgColor: v })} />
           <ColorField label="Text Color" value={item.textColor} onChange={(v) => onUpdate({ textColor: v })} />
         </InlineStack>
-        <InlineStack gap="400">
-          <div style={{ flex: 1 }}>
-            <BlockStack gap="200">
-              <Select
-                label="Icon"
-                options={COUPON_ICON_OPTIONS}
-                value={item.icon}
-                onChange={(v) => onUpdate({ icon: v })}
-              />
-              {(() => {
-                const IconComp = COUPON_ICON_MAP[item.icon] ?? DiscountCodeIcon;
-                return (
-                  <div style={{ padding: '8px 12px', border: '1px solid #e1e3e5', borderRadius: '8px', background: '#f9fafb', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Text as="span" variant="bodySm" tone="subdued">Preview:</Text>
-                    <span style={{ color: item.bgColor, display: 'flex', lineHeight: 0 }}>
-                      <IconComp width="20" height="20" fill="currentColor" />
-                    </span>
-                  </div>
-                );
-              })()}
-            </BlockStack>
-          </div>
-          <div style={{ flex: 1 }}>
-            <TextField
-              label="Border Radius"
-              type="number"
-              value={String(item.borderRadius)}
-              onChange={(v) => onUpdate({ borderRadius: Number(v) })}
-              suffix="px"
-              autoComplete="off"
-            />
-          </div>
-        </InlineStack>
+        <TextField
+          label="Border Radius"
+          type="number"
+          value={String(item.borderRadius)}
+          onChange={(v) => onUpdate({ borderRadius: Number(v) })}
+          suffix="px"
+          autoComplete="off"
+        />
+        <CouponStyleFields
+          value={item}
+          onChange={onUpdate}
+          hideCopied={item.textOnly}
+          defaults={{ subColor: item.textColor, iconColor: item.textColor, icon: item.icon || 'discount', iconShow: true }}
+        />
         {!item.textOnly && (
           <>
             <Text as="h4" variant="headingSm">Button Settings</Text>

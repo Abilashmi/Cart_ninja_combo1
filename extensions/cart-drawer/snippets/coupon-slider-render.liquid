@@ -189,6 +189,38 @@ function getStyles(d,tpl){
   return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
 }
 
+/* Coupon style set per coupon on the Coupon Banner page (same fields as the
+   cart drawer; app/utils/coupon-style.shared.js): built-in SVG icons (same
+   paths), own icon image, icon size / colour / show, subtitle font, "Copied"
+   colours. Only safe CSS goes into style attributes. */
+var CS_ICON_PATHS={
+  discount: '<path d="M3.25 5.5c0-1.242 1.007-2.25 2.25-2.25.414 0 .75.336.75.75s-.336.75-.75.75-.75.336-.75.75-.336.75-.75.75-.75-.336-.75-.75Z"/><path d="M12.78 7.22c.293.293.293.768 0 1.06l-4.5 4.5c-.293.293-.767.293-1.06 0-.293-.292-.293-.767 0-1.06l4.5-4.5c.293-.293.767-.293 1.06 0Z"/><path d="M9 8c0 .553-.448 1-1 1s-1-.447-1-1c0-.552.448-1 1-1s1 .448 1 1Z"/><path d="M12 13c.552 0 1-.447 1-1 0-.552-.448-1-1-1s-1 .448-1 1c0 .553.448 1 1 1Z"/><path d="M3.25 14.5c0 1.243 1.007 2.25 2.25 2.25.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75s-.75-.335-.75-.75c0-.414-.336-.75-.75-.75s-.75.336-.75.75Z"/><path d="M16.75 14.5c0 1.243-1.007 2.25-2.25 2.25-.414 0-.75-.335-.75-.75 0-.414.336-.75.75-.75s.75-.335.75-.75c0-.414.336-.75.75-.75s.75.336.75.75Z"/><path d="M16.75 5.5c0-1.242-1.007-2.25-2.25-2.25-.414 0-.75.336-.75.75s.336.75.75.75.75.336.75.75.336.75.75.75.75-.336.75-.75Z"/><path d="M16 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 16.75c.414 0 .75-.335.75-.75 0-.414-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75 0 .415.336.75.75.75h2Z"/><path d="M4 8.25c.414 0 .75.336.75.75v2c0 .415-.336.75-.75.75s-.75-.335-.75-.75v-2c0-.414.336-.75.75-.75Z"/><path d="M11 4.75c.414 0 .75-.336.75-.75s-.336-.75-.75-.75h-2c-.414 0-.75.336-.75.75s.336.75.75.75h2Z"/>',
+  gift: '<path d="M7.835 9.5h-.96c-.343 0-.625-.28-.625-.628 0-.344.28-.622.619-.622.242 0 .463.142.563.363l.403.887Z"/><path d="M10.665 9.5h.96c.343 0 .625-.28.625-.628 0-.344-.28-.622-.619-.622-.242 0-.463.142-.563.363l-.403.887Z"/><path fill-rule="evenodd" d="M8.5 4h-3.25c-1.519 0-2.75 1.231-2.75 2.75v2.25h1.25c.414 0 .75.336.75.75s-.336.75-.75.75h-1.25v2.75c0 1.519 1.231 2.75 2.75 2.75h3.441c-.119-.133-.191-.308-.191-.5v-2c0-.414.336-.75.75-.75s.75.336.75.75v2c0 .192-.072.367-.191.5h4.941c1.519 0 2.75-1.231 2.75-2.75v-2.75h-2.75c-.414 0-.75-.336-.75-.75s.336-.75.75-.75h2.75v-2.25c0-1.519-1.231-2.75-2.75-2.75h-4.75v2.25c0 .414-.336.75-.75.75s-.75-.336-.75-.75v-2.25Zm.297 3.992c-.343-.756-1.097-1.242-1.928-1.242-1.173 0-2.119.954-2.119 2.122 0 1.171.95 2.128 2.125 2.128h.858c-.595.51-1.256.924-1.84 1.008-.41.058-.694.438-.635.848.058.41.438.695.848.636 1.11-.158 2.128-.919 2.803-1.53.121-.11.235-.217.341-.322.106.105.22.213.34.322.676.611 1.693 1.372 2.804 1.53.41.059.79-.226.848-.636.059-.41-.226-.79-.636-.848-.583-.084-1.244-.498-1.839-1.008h.858c1.176 0 2.125-.957 2.125-2.128 0-1.168-.946-2.122-2.119-2.122-.83 0-1.585.486-1.928 1.242l-.453.996-.453-.996Z"/>',
+  shipping: '<path fill-rule="evenodd" d="M4.75 4.5a.75.75 0 0 0 0 1.5h3.25a1 1 0 0 1 0 2h-4.75a.75.75 0 0 0 0 1.5h3a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 0 0 1.5h.458a2.5 2.5 0 1 0 4.78.75h3.024a2.5 2.5 0 1 0 4.955-.153 1.75 1.75 0 0 0 1.033-1.597v-1.22a1.75 1.75 0 0 0-1.326-1.697l-1.682-.42a.25.25 0 0 1-.18-.174l-.426-1.494a2.75 2.75 0 0 0-2.645-1.995h-6.991Zm2.75 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
+  star: '<path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/>',
+  percent: '<path fill-rule="evenodd" d="M11.527 3.327c-.6-1.306-2.455-1.306-3.054 0a1.68 1.68 0 0 1-2.112.874c-1.347-.5-2.66.813-2.16 2.16a1.68 1.68 0 0 1-.874 2.112c-1.306.6-1.306 2.455 0 3.054a1.68 1.68 0 0 1 .874 2.112c-.5 1.347.813 2.659 2.16 2.16a1.68 1.68 0 0 1 2.112.874c.6 1.306 2.455 1.306 3.054 0a1.68 1.68 0 0 1 2.112-.874c1.347.499 2.66-.813 2.16-2.16a1.68 1.68 0 0 1 .874-2.112c1.306-.6 1.306-2.455 0-3.054a1.68 1.68 0 0 1-.874-2.112c.5-1.347-.813-2.66-2.16-2.16a1.68 1.68 0 0 1-2.112-.874Zm-2.527 4.923a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3.53.53-4 4a.75.75 0 1 1-1.06-1.06l4-4a.75.75 0 1 1 1.06 1.06Zm.47 3.47a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
+  cash: '<path d="M9.5 6.5a.75.75 0 0 1 1.5 0v.25h.75a.75.75 0 0 1 0 1.5h-2.25a.5.5 0 0 0 0 1h1a2 2 0 1 1 0 4v.25a.75.75 0 0 1-1.5 0v-.25h-.75a.75.75 0 0 1 0-1.5h2.25a.5.5 0 0 0 0-1h-1a2 2 0 1 1 0-4v-.25Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
+};
+function csHex(v){return typeof v==='string'&&/^#[0-9a-f]{3,8}$/i.test(v.trim())?v.trim():null;}
+function csPx(v,min,max){var n=Number(v);return v===''||v==null||!isFinite(n)?null:Math.max(min,Math.min(max,Math.round(n)));}
+function csIcon(s,size,color,defaultShow){
+  var show=s.iconShow===undefined||s.iconShow===null?defaultShow:s.iconShow!==false;
+  if(!show)return'';
+  var px=csPx(s.iconSize,8,48)||size;
+  var img=typeof s.iconImage==='string'&&/^https:\/\/[^\s"'<>()]+$/.test(s.iconImage.trim())?s.iconImage.trim():null;
+  if(img)return'<img src="'+escapeHtmlJs(img)+'" alt="" width="'+px+'" height="'+px+'" style="width:'+px+'px;height:'+px+'px;object-fit:contain;display:block;flex-shrink:0;">';
+  var paths=CS_ICON_PATHS[s.icon]||CS_ICON_PATHS.discount;
+  return'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="'+px+'" height="'+px+'" fill="'+(csHex(s.iconColor)||color)+'" style="display:block;flex-shrink:0;">'+paths+'</svg>';
+}
+function csSubCss(s,size){
+  var px=csPx(s.subFontSize,6,24),w=/^[1-9]00$/.test(String(s.subFontWeight||''))?String(s.subFontWeight):null,c=csHex(s.subColor);
+  return'font-size:'+(px||size)+'px;'+(w?'font-weight:'+w+';':'')+(c?'color:'+c+';opacity:1;':'');
+}
+/* Copied colours ride on the button (data-copied-*), read by the click handler. */
+function csCopiedAttrs(s){
+  return' data-copied-bg="'+escapeHtmlJs(csHex(s.copiedBgColor)||'#10b981')+'" data-copied-text="'+escapeHtmlJs(csHex(s.copiedTextColor)||'#ffffff')+'"';
+}
+
 /* textOnly: a text offer (id "text:...", no code): heading + subtext only, no code panel, no Copy button. */
 function buildCard(tpl,s,code,h,sub,timerData,textOnly){
   var fs=parseInt(s.fontSize)||13;
@@ -219,11 +251,12 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
       +'flex:0 0 320px;min-width:320px;box-sizing:border-box;';
     card.innerHTML=
       '<div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px;">'
+        +csIcon(s,22,ac,false)
         +'<div style="flex:1;min-width:100px;overflow:hidden;">'
           +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
         +'</div>'
-        +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+        +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:9px 16px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
@@ -251,9 +284,10 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
           +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
         +'</div>')
         +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
-          +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
-          +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+          +'<div style="display:flex;align-items:center;gap:8px;min-width:0;">'+csIcon(s,20,ac,false)
+          +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">'+h+'</div></div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
+          +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
             +'background:'+bc+';color:'+btc+';border:none;'
             +'padding:7px 14px;border-radius:'+br+'px;'
             +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
@@ -276,15 +310,15 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
       +'flex:0 0 280px;min-width:280px;box-sizing:border-box;';
     card.innerHTML=
       '<div style="display:flex;align-items:flex-start;gap:10px;">'
-        +'<div style="width:38px;height:38px;border-radius:9px;background:'+ac+'15;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;">🏷️</div>'
+        +(function(){var ic=csIcon(s,20,ac,true);return ic?'<div class="ps-icon-box" style="min-width:38px;min-height:38px;padding:4px;box-sizing:border-box;border-radius:9px;background:'+ac+'15;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ic+'</div>':'';})()
         +'<div style="flex:1;min-width:0;">'
           +'<div style="font-size:'+(fs+1)+'px;font-weight:700;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-          +'<div style="font-size:'+(fs-1)+'px;color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">'+sub+'</div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
         +'</div>'
       +'</div>'
       +(textOnly?'':'<div style="display:flex;align-items:center;gap:8px;">'
         +'<div style="flex:1;padding:7px 10px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+code+'</div>'
-        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
+        +'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:8px 14px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
@@ -433,7 +467,7 @@ function renderSlider(el,data,ctx){
       navigator.clipboard.writeText(c).catch(function(){});
     }
     var prevBg=btn.style.background,prevCol=btn.style.color;
-    btn.innerText='Copied!';btn.style.background='#10b981';btn.style.color='#fff';
+    btn.innerText='Copied!';btn.style.background=btn.getAttribute('data-copied-bg')||'#10b981';btn.style.color=btn.getAttribute('data-copied-text')||'#fff';
     setTimeout(function(){btn.innerText=t;btn.style.background=prevBg;btn.style.color=prevCol;},2000);
   });
 }

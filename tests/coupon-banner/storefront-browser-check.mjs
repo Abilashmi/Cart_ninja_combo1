@@ -73,4 +73,42 @@ for (const tpl of ['template1', 'template2', 'template3']) {
   assert.equal(await page.locator('ps-coupon-slider .ps-btn').first().getAttribute('data-code'), 'SAVE10');
 }
 console.log('  ✓ text offers show heading + subtext only (no code, no Copy) on all 3 templates; text escaped');
+
+// Per-coupon style: icon (SVG default on Bold & Vibrant, own image, hidden,
+// colour, size), subtitle font, "Copied" colours.
+config.data = {
+  is_enabled: 1, widgetPlacement: 'custom', selectedTemplate: 'template3',
+  selectedCouponsGlobal: ['gid://shopify/DiscountCodeNode/1', 'gid://shopify/DiscountCodeNode/2', 'gid://shopify/DiscountCodeNode/3'],
+  temp3DefaultStyle: { headingText: 'Deal', subtextText: 'Sub', accentColor: '#3b82f6' },
+  temp3CouponStyle: {
+    'gid://shopify/DiscountCodeNode/1': { couponCode: 'A1', icon: 'gift', iconColor: '#ff0000', iconSize: 30, subFontSize: 17, subFontWeight: '700', subColor: '#00ff00', copiedBgColor: '#123456', copiedTextColor: '#fedcba' },
+    'gid://shopify/DiscountCodeNode/2': { couponCode: 'B2', iconImage: 'https://cdn.example.com/i.png', iconSize: 24 },
+    'gid://shopify/DiscountCodeNode/3': { couponCode: 'C3', iconShow: false },
+  },
+  temp3CouponCondition: [],
+};
+await page.route('https://cdn.example.com/**', (route) => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>' }));
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 3, null, { timeout: 10000 });
+const styled = await page.locator('ps-coupon-slider .ps-card').evaluateAll((els) => els.map((e) => {
+  const svg = e.querySelector('svg'); const img = e.querySelector('img'); const sub = e.querySelector('.ps-sub'); const cs = getComputedStyle(sub);
+  return { svgFill: svg && svg.getAttribute('fill'), svgSize: svg && svg.getAttribute('width'), img: img && img.getAttribute('src'), imgSize: img && img.getAttribute('width'), emoji: /🏷/.test(e.textContent), sub: [cs.fontSize, cs.fontWeight, cs.color] };
+}));
+assert.deepEqual([styled[0].svgFill, styled[0].svgSize], ['#ff0000', '30'], 'picked SVG icon in its colour and size');
+assert.deepEqual(styled[0].sub, ['17px', '700', 'rgb(0, 255, 0)'], 'subtitle font size / weight / colour');
+assert.deepEqual([styled[1].img, styled[1].imgSize, styled[1].svgFill], ['https://cdn.example.com/i.png', '24', null], 'own icon image instead of the SVG');
+assert.ok(!styled[2].svgFill && !styled[2].img, 'icon hidden');
+assert.ok(styled.every((c) => !c.emoji), 'no emoji icon any more');
+await page.locator('ps-coupon-slider .ps-btn').first().click();
+const copied = await page.locator('ps-coupon-slider .ps-btn').first().evaluate((b) => [b.innerText, getComputedStyle(b).backgroundColor, getComputedStyle(b).color]);
+assert.deepEqual(copied, ['Copied!', 'rgb(18, 52, 86)', 'rgb(254, 220, 186)'], 'Copied state uses the merchant colours');
+config.data.selectedTemplate = 'template1';
+config.data.temp1DefaultStyle = { headingText: 'Deal' };
+config.data.temp1CouponStyle = { 'gid://shopify/DiscountCodeNode/1': { couponCode: 'A1' }, 'gid://shopify/DiscountCodeNode/2': { couponCode: 'B2', iconShow: true, icon: 'star' } };
+config.data.selectedCouponsGlobal = ['gid://shopify/DiscountCodeNode/1', 'gid://shopify/DiscountCodeNode/2'];
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+const t1 = await page.locator('ps-coupon-slider .ps-card').evaluateAll((els) => els.map((e) => e.querySelectorAll('svg').length));
+assert.deepEqual(t1, [0, 1], 'Classic Banner: no icon unless switched on');
+console.log('  ✓ icon (SVG / image / hidden / colour / size), subtitle font and Copied colours on the storefront banner');
 await browser.close();

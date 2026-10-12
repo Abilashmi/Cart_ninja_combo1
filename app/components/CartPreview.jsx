@@ -4,12 +4,12 @@ import { Icon, Button } from '@shopify/polaris';
 import {
   CartIcon, DesktopIcon, MobileIcon,
   GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon,
-  DiscountFilledIcon, DiscountCodeIcon, CashDollarIcon,
 } from '@shopify/polaris-icons';
 import { PreviewLockBadge } from './plan/PlanGate';
 import PreviewCartItems from './PreviewCartItems';
 import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
+import { couponIconHtml, couponSubtitleStyle } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 // The storefront drawer's own stylesheet for item rows, pricing summary and the
 // image banner, so the preview draws them exactly like the live drawer. Linked
@@ -54,15 +54,6 @@ function getSectionLabel(section, body) {
   const positionLabel = getPositionLabel(sectionState?.[positionKey]);
   return positionLabel ? `${baseLabel} - ${positionLabel}` : baseLabel;
 }
-
-const COUPON_ICON_MAP = {
-  discount: DiscountCodeIcon,
-  gift: GiftCardFilledIcon,
-  shipping: DeliveryFilledIcon,
-  star: StarFilledIcon,
-  percent: DiscountFilledIcon,
-  cash: CashDollarIcon,
-};
 
 // Polaris' icon set has no actual gem/diamond icon, so the storefront widget
 // (extensions/cart-drawer/assets/cart_drawer.js, CC_ICON_PRESETS.diamond)
@@ -444,19 +435,27 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   );
 }
 
+// A coupon card's icon (built-in SVG or own image, size, colour, or hidden),
+// the same as the storefront's ccCouponIcon.
+function CouponIcon({ coupon, size, color, wrapStyle }) {
+  const html = couponIconHtml(coupon, { size, color, defaultIcon: coupon.icon || 'discount' });
+  if (!html) return null;
+  // eslint-disable-next-line react/no-danger -- built-in SVG or a checked https image
+  return <span style={{ display: 'flex', lineHeight: 0, flexShrink: 0, ...wrapStyle }} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 function CouponCard({ coupon, template, isVertical }) {
   const timer = coupon.timerEnabled ? <CouponTimerDisplay coupon={coupon} /> : null;
-  const IconComp = COUPON_ICON_MAP[coupon.icon] ?? DiscountCodeIcon;
 
   if (template === 'minimal-card') {
     return (
       <div style={{ backgroundColor: '#ffffff', borderRadius: `${coupon.borderRadius}px`, border: '1px solid #e5e7eb', borderLeft: `3px solid ${coupon.bgColor}`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, height: '100%', boxSizing: 'border-box' }}>
         {timer}
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ color: coupon.bgColor, display: 'flex', lineHeight: 0, flexShrink: 0 }}><IconComp width="14" height="14" fill="currentColor" /></span>
+          <CouponIcon coupon={coupon} size={14} color={coupon.bgColor} />
           <span style={{ fontSize: '10px', fontWeight: 700, color: coupon.bgColor, letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{coupon.labelText}</span>
         </div>
-        {!isVertical && <div style={{ fontSize: '9px', color: '#6b7280', lineHeight: 1.3, flex: 1 }}>{coupon.description}</div>}
+        {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', color: '#6b7280', lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', alignSelf: 'center', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', width: '68%', textAlign: 'center' }}>
           {coupon.buttonText}
         </button>)}
@@ -468,9 +467,9 @@ function CouponCard({ coupon, template, isVertical }) {
     return (
       <div style={{ backgroundColor: coupon.bgColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', minWidth: 0, textAlign: 'center', boxShadow: `0 2px 8px ${coupon.bgColor}55`, height: '100%', boxSizing: 'border-box' }}>
         {timer}
-        <span style={{ color: coupon.textColor, display: 'flex', lineHeight: 0 }}><IconComp width="20" height="20" fill="currentColor" /></span>
+        <CouponIcon coupon={coupon} size={20} color={coupon.textColor} />
         <div style={{ fontSize: '11px', fontWeight: 800, color: coupon.textColor, letterSpacing: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{coupon.labelText}</div>
-        {!isVertical && <div style={{ fontSize: '8px', color: coupon.textColor, opacity: 0.85, lineHeight: 1.3, flex: 1 }}>{coupon.description}</div>}
+        {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '8px', color: coupon.textColor, opacity: 0.85, lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '4px 6px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 700, cursor: 'pointer', width: '68%', textAlign: 'center', letterSpacing: '0.5px' }}>
           {coupon.buttonText}
         </button>)}
@@ -483,10 +482,10 @@ function CouponCard({ coupon, template, isVertical }) {
     <div style={{ backgroundColor: coupon.bgColor, color: coupon.textColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, height: '100%', boxSizing: 'border-box' }}>
       {timer}
       <div style={{ display: 'flex', flexDirection: isVertical ? 'column' : 'row', alignItems: isVertical ? 'center' : 'flex-start', gap: '5px' }}>
-        <span style={{ color: coupon.textColor, display: 'flex', lineHeight: 0, flexShrink: 0 }}><IconComp width={isVertical ? 18 : 14} height={isVertical ? 18 : 14} fill="currentColor" /></span>
+        <CouponIcon coupon={coupon} size={isVertical ? 18 : 14} color={coupon.textColor} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
-          {!isVertical && <div style={{ fontSize: '9px', opacity: 0.85, lineHeight: 1.3 }}>{coupon.description}</div>}
+          {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', opacity: 0.85, lineHeight: 1.3 })}>{coupon.description}</div>}
         </div>
       </div>
       {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '3px 4px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, alignSelf: 'center', width: '60%', textAlign: 'center' }}>
@@ -500,7 +499,6 @@ function CouponCard({ coupon, template, isVertical }) {
 // description, button on the right) in its style's colours — nothing to
 // slide, so no arrows. Mirrors cart_drawer_inline.js's singleCouponHtml.
 function SingleCouponCard({ coupon, template }) {
-  const IconComp = COUPON_ICON_MAP[coupon.icon] ?? DiscountCodeIcon;
   const isMinimal = template === 'minimal-card';
   const textColor = isMinimal ? '#111827' : coupon.textColor;
   const accent = isMinimal ? coupon.bgColor : coupon.textColor;
@@ -514,10 +512,10 @@ function SingleCouponCard({ coupon, template }) {
     <div style={{ ...cardStyle, color: textColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {coupon.timerEnabled ? <CouponTimerDisplay coupon={coupon} /> : null}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-        <span style={{ color: accent, display: 'flex', lineHeight: 0, flexShrink: 0 }}><IconComp width="18" height="18" fill="currentColor" /></span>
+        <CouponIcon coupon={coupon} size={18} color={accent} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', color: isMinimal ? coupon.bgColor : textColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
-          {coupon.description && <div style={{ fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' }}>{coupon.description}</div>}
+          {coupon.description && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' })}>{coupon.description}</div>}
         </div>
         {!coupon.textOnly && (<button style={{ ...buttonStyle, flexShrink: 0, padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           {coupon.buttonText}

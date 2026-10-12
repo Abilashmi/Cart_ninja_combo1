@@ -244,6 +244,20 @@ for (const behavior of ['replace', 'hide']) {
     return box ? [...box.querySelectorAll('button')].filter((b) => !/^[←→‹›]$/.test(b.textContent.trim())).length : -1;
   });
   check('coupon slider preview: text cards have no Apply button', previewButtons === 0, String(previewButtons));
+  // The new text card's editor is still open: icon + subtitle settings drive the preview.
+  check('coupon slider: text card editor has icon + subtitle settings, no Copied colours',
+    (await cp.getByLabel('Show icon').count()) === 1 && (await cp.getByText('Copied button background').count()) === 0);
+  await cp.getByRole('radio', { name: 'Star' }).click();
+  await cp.getByLabel('Icon size').fill('30');
+  await cp.getByLabel('Size', { exact: true }).fill('16');
+  await cp.waitForTimeout(200);
+  const pv = await cp.evaluate(() => {
+    const root = document.querySelector('.bxcd-root');
+    const svgs = [...root.querySelectorAll('svg')].map((x) => x.getAttribute('width'));
+    const sub = [...root.querySelectorAll('div')].find((d) => d.textContent.trim() === 'On all orders, no code needed');
+    return { svgs, sub: sub ? getComputedStyle(sub).fontSize : null };
+  });
+  check('coupon slider preview: icon size and subtitle size follow the settings', pv.svgs.includes('30') && pv.sub === '16px', JSON.stringify(pv));
   await cp.close();
   data.cartRecord = null; data.csRecord = null;
 }

@@ -227,7 +227,7 @@ await check('reopening the page shows each coupon\'s saved heading / subtext / b
     await page.getByRole('button', { name: 'Customize Coupon' }).click();
     assert.equal(await page.getByLabel('Heading').inputValue(), 'FIRST ORDER', tpl);
     assert.equal(await page.getByLabel('Subtext').inputValue(), 'Get 10% Discount', tpl);
-    assert.equal(await page.getByLabel('Button Text').inputValue(), 'Grab it', tpl);
+    assert.equal(await page.getByLabel('Button Text', { exact: true }).inputValue(), 'Grab it', tpl);
     // Saving after an unrelated change keeps them (they used to be sent empty).
     await page.getByRole('button', { name: 'Layout' }).click();
     await page.getByLabel('Banner layout').selectOption('grid');
@@ -246,7 +246,7 @@ await check('Add a text offer: selected, editable, saved with no code; preview h
   await page.waitForTimeout(400); // let "Customize Coupon" finish opening (an instant fill mid-animation is cut short)
   await page.getByLabel('Heading').fill('Free shipping over ₹999');
   await page.getByLabel('Subtext').fill('Automatic at checkout');
-  assert.equal(await page.getByLabel('Button Text').count(), 0, 'no button text field for a text offer');
+  assert.equal(await page.getByLabel('Button Text', { exact: true }).count(), 0, 'no button text field for a text offer');
   assert.ok(await page.getByText('Free shipping over ₹999', { exact: true }).first().isVisible(), 'preview shows the heading');
   assert.equal(await page.getByRole('button', { name: 'Copy Code', exact: true }).count(), 0, 'preview has no Copy button for a text offer');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -263,6 +263,36 @@ await check('a saved text offer comes back in the list with its heading', async 
   data.couponConfig = { ...data.couponConfig, temp1CouponStyle: { 'text:k9': { headingText: 'Free gift over ₹1499', textOnly: true } } };
   const { page, context } = await open({ data });
   assert.ok(await page.getByText('Text offer: Free gift over ₹1499').first().isVisible());
+  await context.close();
+});
+
+await check('subtitle font, Copied colours and icon: in the preview and saved', async () => {
+  const { page, context, posts } = await open({ data: pageData({ selected: ['gid://shopify/DiscountCodeNode/1'] }) });
+  await page.getByRole('button', { name: 'Customize Coupon' }).click();
+  await page.waitForTimeout(400);
+  await page.getByLabel('Size', { exact: true }).fill('18');
+  await page.getByLabel('Weight', { exact: true }).selectOption('800');
+  const subStyle = await page.locator('.pw-sub').first().evaluate((e) => [getComputedStyle(e).fontSize, getComputedStyle(e).fontWeight]);
+  assert.deepEqual(subStyle, ['18px', '800'], 'preview subtitle follows the font settings');
+  assert.equal(await page.locator('.pw-coupon-icon').count(), 0, 'Classic Banner: no icon by default');
+  await page.getByLabel('Show icon').check();
+  await page.getByRole('radio', { name: 'Gift' }).click();
+  assert.equal(await page.locator('.pw-coupon-icon svg').count(), 1, 'icon shows in the preview once switched on');
+  await page.getByLabel('Icon size').fill('28');
+  assert.equal(await page.locator('.pw-coupon-icon svg').getAttribute('width'), '28');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const st = posts.at(-1).couponStyles['gid://shopify/DiscountCodeNode/1'];
+  assert.deepEqual({ size: st.subFontSize, weight: st.subFontWeight, show: st.iconShow, icon: st.icon, iconSize: st.iconSize }, { size: 18, weight: '800', show: true, icon: 'gift', iconSize: 28 });
+  await context.close();
+});
+
+await check('text offers have no Copied colour settings', async () => {
+  const { page, context } = await open();
+  await page.getByRole('button', { name: 'Add a text offer with no code' }).click();
+  await page.waitForTimeout(400);
+  assert.equal(await page.getByText('Copied button background').count(), 0);
+  assert.equal(await page.getByLabel('Show icon').count(), 1, 'icon settings still there');
   await context.close();
 });
 

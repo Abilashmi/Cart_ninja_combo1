@@ -324,6 +324,38 @@ for (const width of [1280, 390]) {
   await page.context().close();
 }
 
+/* 5e. Coupon card style: icon, subtitle font, Copied colours */
+{
+  const cfg = config({ banner: { enabled: false } });
+  cfg.data.coupon_status = 1;
+  const base = { bgColor: '#4f46e5', textColor: '#ffffff', borderRadius: 8, buttonText: 'Apply' };
+  cfg.data.coupon_data = JSON.stringify({
+    enabled: true, position: 'top', template: 'template3',
+    selectedCoupons: [
+      { ...base, id: 'c1', code: 'AAA', labelText: 'AAA', description: 'First', icon: 'gift', iconColor: '#ff0000', iconSize: 26, subFontSize: 15, subFontWeight: '800', subColor: '#00ff00', copiedBgColor: '#123456', copiedTextColor: '#fedcba' },
+      { ...base, id: 'c2', code: 'BBB', labelText: 'BBB', description: 'Second', iconImage: 'https://img.test/tee.svg', iconSize: 20 },
+      { ...base, id: 'c3', code: 'CCC', labelText: 'CCC', description: 'Third', iconShow: false },
+    ],
+  });
+  const page = await open({ width: 1280, cfg });
+  const cards = await page.$$eval('.cc-coupon-card', (els) => els.map((e) => {
+    const svg = e.querySelector('svg'); const img = e.querySelector('img');
+    const desc = [...e.querySelectorAll('div')].find((d) => /^(First|Second|Third)$/.test(d.textContent.trim()));
+    const cs = desc && getComputedStyle(desc);
+    return { fill: svg && svg.getAttribute('fill'), size: svg && svg.getAttribute('width'), img: img && img.getAttribute('src'), sub: cs ? [cs.fontSize, cs.fontWeight, cs.color] : null };
+  }));
+  check('coupon style: picked SVG icon in its colour and size', cards[0] && cards[0].fill === '#ff0000' && cards[0].size === '26', JSON.stringify(cards[0]));
+  check('coupon style: subtitle font size / weight / colour', cards[0] && JSON.stringify(cards[0].sub) === JSON.stringify(['15px', '800', 'rgb(0, 255, 0)']), JSON.stringify(cards[0] && cards[0].sub));
+  check('coupon style: own icon image', cards[1] && cards[1].img === 'https://img.test/tee.svg' && !cards[1].fill, JSON.stringify(cards[1]));
+  check('coupon style: icon hidden', cards[2] && !cards[2].fill && !cards[2].img, JSON.stringify(cards[2]));
+  await page.locator('.cc-coupon-card').first().locator('button').click();
+  await page.waitForTimeout(300);
+  const copied = await page.locator('.cc-coupon-card').first().locator('button').evaluate((b) => [b.textContent.trim(), getComputedStyle(b).backgroundColor, getComputedStyle(b).color]);
+  check('coupon style: Copied state uses the merchant colours', copied[0].startsWith('Copied') && copied[1] === 'rgb(18, 52, 86)' && copied[2] === 'rgb(254, 220, 186)', JSON.stringify(copied));
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
 /* 6. Checkout still works */
 {
   const page = await open({ width: 1280 });
