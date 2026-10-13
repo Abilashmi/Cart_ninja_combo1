@@ -11,3 +11,5 @@ export const ensureFbtAiInstructionColumns = null;
 export const resolveFbtInstructions = null;
 export const checkAndConsumeCredit = null;
 export default function BrixBarStub() { return null; }
+export const ensureFbtOfferColumns = null;
+export const syncFbtOfferDiscount = null;

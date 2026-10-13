@@ -169,12 +169,56 @@ function uniqueById(list) {
 
 // side: { products: [names], collections: [names], productTypes: [names], tags: [names] }
 // collections: [{ id, title }] with catalog products carrying collectionIds.
+// Shopping words a merchant uses for a kind of product that its titles
+// rarely contain ("tops", "bottoms"): each maps to words that do show up in
+// titles, types or tags. Only used when nothing matches the word itself.
+export const CATEGORY_WORDS = {
+  top: ['top', 't-shirt', 'tshirt', 'tee', 'shirt', 'polo', 'hoodie', 'sweatshirt', 'sweater', 'jumper', 'cardigan', 'blouse', 'tank', 'camisole', 'crop', 'kurta', 'kurti', 'tunic', 'jacket', 'blazer', 'vest', 'bodysuit', 'henley', 'jersey'],
+  bottom: ['bottom', 'jogger', 'pant', 'trouser', 'jean', 'denim', 'short', 'legging', 'jegging', 'skirt', 'chino', 'cargo', 'pyjama', 'pajama', 'trackpant', 'track pant', 'palazzo', 'culotte', 'salwar', 'dhoti', 'capri', 'sweatpant', 'lower'],
+  footwear: ['shoe', 'sneaker', 'sandal', 'slipper', 'boot', 'heel', 'flat', 'loafer', 'flip flop', 'footwear'],
+  accessory: ['cap', 'hat', 'belt', 'bag', 'wallet', 'sock', 'scarf', 'watch', 'sunglass', 'jewellery', 'jewelry', 'earring', 'necklace', 'bracelet', 'ring', 'accessory', 'accessories'],
+  innerwear: ['brief', 'boxer', 'trunk', 'bra', 'panty', 'vest', 'innerwear', 'underwear', 'lingerie'],
+};
+
+function hasWords(text, words) {
+  const have = new Set(tokens(text));
+  return words.every((w) => have.has(w));
+}
+
+// A group word ("tops", "bottom wear", "socks") that is not a product title:
+// a collection, product type or tag with that word, else the category's
+// usual title words (CATEGORY_WORDS). Returns { products, via } or null.
+export function matchGroup(name, catalog, collections = []) {
+  const want = tokens(name).filter((w) => !['all', 'every', 'the', 'my', 'our', 'any', 'wear', 'item', 'product'].includes(w));
+  if (!want.length) return null;
+  const cols = (collections || []).filter((c) => hasWords(c.title, want));
+  if (cols.length) {
+    const ids = new Set(cols.map((c) => c.id));
+    const products = (catalog || []).filter((p) => (p.collectionIds || []).some((id) => ids.has(id)));
+    if (products.length) return { products, via: `collection ${cols.map((c) => `"${c.title}"`).join(', ')}` };
+  }
+  const byType = (catalog || []).filter((p) => p.productType && hasWords(p.productType, want));
+  if (byType.length) return { products: byType, via: 'product type' };
+  const byTag = (catalog || []).filter((p) => (p.tags || []).some((t) => hasWords(t, want)));
+  if (byTag.length) return { products: byTag, via: 'tag' };
+  const words = want.length === 1 ? CATEGORY_WORDS[want[0]] : null;
+  if (words) {
+    const lists = words.map((w) => tokens(w));
+    const fits = (text) => lists.some((l) => hasWords(text, l));
+    const products = (catalog || []).filter((p) => fits(p.title) || (p.productType && fits(p.productType)) || (p.tags || []).some(fits));
+    if (products.length) return { products, via: 'product names' };
+  }
+  return null;
+}
+
 function resolveSide(side, catalog, collections, warnings, label) {
   const found = [];
   for (const name of side?.products || []) {
     const m = matchProducts(name, catalog);
-    if (m.status === 'not_found') warnings.push(`No product called "${name}" in your store (${label}).`);
-    else found.push(...m.products);
+    if (m.status !== 'not_found') { found.push(...m.products); continue; }
+    const group = matchGroup(name, catalog, collections);
+    if (group) found.push(...group.products);
+    else warnings.push(`No product, collection, type or tag matches "${name}" in your store (${label}).`);
   }
   for (const name of side?.collections || []) {
     const n = norm(name);
@@ -285,7 +329,18 @@ export function buildRulesFromPlan(plan, { catalog = [], collections = [], pairs
 export function parsePromptHeuristically(text) {
   const rules = [];
   const parts = String(text || '').split(/\n|;/).map((s) => s.trim()).filter(Boolean);
+  const names = (s) => s.split(/,|\band\b|&|\+/i).map((x) => x.trim()).filter(Boolean);
   for (const part of parts) {
+    // "match the tops and bottoms", "pair A & B", "A and B together": both ways.
+    const both = part.replace(/[.!]+$/, '').match(/^(?:please\s+)?(?:match|pair|combine|link|club|bundle)\s+(?:up\s+)?(?:the\s+)?(.+?)\s+(?:and|&|\+)\s+(?:the\s+)?(.+?)(?:\s+together)?$/i)
+      || part.replace(/[.!]+$/, '').match(/^(?:the\s+)?(.+?)\s+(?:and|&|\+)\s+(?:the\s+)?(.+?)\s+(?:together|as a set|as a combo)$/i);
+    if (both && !/\bwith\b/i.test(part)) {
+      const a = both[1].trim();
+      const b = both[2].trim();
+      rules.push({ trigger: { products: [a] }, offer: { products: [b] } });
+      rules.push({ trigger: { products: [b] }, offer: { products: [a] } });
+      continue;
+    }
     const cleaned = part.replace(/^(please\s+)?(pair|show|recommend|suggest|offer)\s+/i, '').replace(/^if\s+/i, '');
     const m = cleaned.match(/^(.+?)\s*(?:->|=>|→|:|\bthen\b|\bgoes with\b|\bgo with\b|\bwith\b|\balongside\b)\s*(.+)$/i);
     if (!m) continue;
@@ -293,7 +348,6 @@ export function parsePromptHeuristically(text) {
     const right = m[2].trim().replace(/[.!]+$/, '');
     const all = /^(all|every|any)\s*(products?|items?)?$|^everything$/i.test(left);
     const history = /(usually|often|frequently|customers|people)\s.*\b(buy|bought|order)|order history|past orders|bought together/i.test(right);
-    const names = (s) => s.split(/,|\band\b|&|\+/i).map((x) => x.trim()).filter(Boolean);
     rules.push({
       trigger: all ? { allProducts: true } : { products: names(left) },
       offer: history ? { fromOrderHistory: true } : { products: names(right) },

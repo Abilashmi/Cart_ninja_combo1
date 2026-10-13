@@ -245,6 +245,8 @@ export function buildPlanMessages(prompt, { catalog, collections }) {
     '"trigger" = the product the shopper is looking at or has in the cart. "offer" = what to recommend with it.',
     'Copy product titles exactly from the catalog when the merchant clearly means one product.',
     'When they mean a group (e.g. "all joggers", "socks"), put that word in "products" as written (every product whose title contains it is used), or use a matching collection / product type / tag.',
+    'If a group word (e.g. "tops", "bottoms", "snacks") is not in any title, collection, type or tag above, list the exact titles of the catalog products that belong to that group instead.',
+    'If they ask to match / pair / combine two groups without saying which way (e.g. "match tops and bottoms"), return two rules: tops → bottoms and bottoms → tops.',
     'If they say "every product" / "all products" as the trigger, set "allProducts": true and leave the trigger lists empty.',
     'If they ask for what customers usually buy with something / past orders / bought together, set offer.fromOrderHistory true and leave the offer lists empty.',
     'Set offer.count only if they give a number of recommendations.',

@@ -89,7 +89,7 @@ async function open(start, { width = 1280, fbt = fbtData } = {}) {
     if (url.pathname === '/harness/fbt-action') {
       const body = JSON.parse(route.request().postData());
       posts.fbt.push(body);
-      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, aiCoverage: body.regenerateAi ? AI_COVERAGE : null }) });
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, aiCoverage: body.regenerateAi ? AI_COVERAGE : null, offerSync: { state: 'not_deployed', message: 'The bundle offer discount is not installed on this store yet.' } }) });
     }
     const file = path.join(dist, url.pathname === '/' ? 'index.html' : url.pathname);
     if (fs.existsSync(file) && fs.statSync(file).isFile()) return route.fulfill({ contentType: MIME[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
@@ -230,6 +230,64 @@ await check('AI-Powered: saved instructions come back on reload and plain Save k
   const saved = posts.fbt.at(-1);
   assert.equal(saved.aiInstructions, 'Cap with every product');
   assert.ok(!saved.regenerateAi, 'a plain Save does not re-run AI');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('Bundle offer: switch on, % and text; preview shows the offer; Save sends it and shows Shopify\'s state', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  await page.getByRole('button', { name: /Bundle offer/ }).first().click();
+  await page.getByText('Give an offer when everything is bought together').click();
+  assert.equal(await page.getByLabel('Give an offer when everything is bought together').isChecked(), true);
+  await page.getByLabel('Percent off').fill('15');
+  await page.getByLabel('Text on the widget').fill('Take all {count}, save {discount}');
+  await page.waitForTimeout(200);
+  const pv = await page.locator('.fbtpv-offer').textContent();
+  assert.equal(pv, 'Take all 4, save 15%', 'preview: 3 products + the one viewed');
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await new Promise((r) => setTimeout(r, 500));
+  const saved = posts.fbt.at(-1);
+  assert.deepEqual(saved.offer, { enabled: true, type: 'percentage', value: 15, text: 'Take all {count}, save {discount}' });
+  await page.getByText('The bundle offer discount is not installed on this store yet.').waitFor();
+  await page.screenshot({ path: path.join(shotDir, 'fbt-offer.png') });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('Saved rule: own offer (% off this set) is sent with the rule', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  await openFbtConfigure(page);
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Offer', { exact: true }).selectOption('percentage');
+  await dialog.getByLabel('Offer value').fill('20');
+  await page.getByRole('button', { name: 'Save', exact: true }).last().click();
+  await new Promise((r) => setTimeout(r, 500));
+  const r0 = posts.fbt.at(-1).manualRules[0];
+  assert.equal(r0.offerMode, 'percentage');
+  assert.equal(Number(r0.offerValue), 20);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('Images and spacing: preview follows; Save sends them in the template', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  await page.getByRole('button', { name: /Styling & Display/ }).first().click();
+  await page.getByLabel('Image size').fill('100');
+  await page.getByLabel('Image corners').fill('50');
+  await page.getByLabel('Image fit').selectOption('cover');
+  await page.getByLabel('Padding inside the widget').fill('30');
+  await page.getByLabel('Space between products').fill('22');
+  await page.waitForTimeout(200);
+  const pv = await page.evaluate(() => {
+    const img = document.querySelector('.fbtpv-img');
+    const w = document.querySelector('.fbtpv-widget');
+    return { h: getComputedStyle(img).height, r: getComputedStyle(img).borderTopLeftRadius, pad: getComputedStyle(w).paddingTop };
+  });
+  assert.deepEqual(pv, { h: '100px', r: '50px', pad: '30px' });
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await new Promise((r) => setTimeout(r, 500));
+  const tpl = posts.fbt.at(-1).templates.fbt1;
+  assert.deepEqual([tpl.imageSize, tpl.imageRadius, tpl.imageFit, tpl.widgetPadding, tpl.gap, tpl.marginTop], [100, 50, 'cover', 30, 22, 16]);
   assert.deepEqual(errors, []);
   await context.close();
 });

@@ -31,6 +31,7 @@ import { getDb } from './db.server';
 import { saveCouponBanner } from './coupon-banner.server';
 import { needsInfo, CHOICES } from '../utils/ai-needs-info';
 import { cleanBannerImage, cleanBannerPlacement, cleanBannerSpacing, BANNER_PLACEMENTS } from '../utils/cart-banner.shared';
+import { syncFbtOfferDiscount } from './fbt-offer-shopify.server';
 
 function parseJsonSafe(v, fb) {
   if (!v) return fb;
@@ -838,6 +839,8 @@ export const TOOL_EXECUTORS = {
       discountValue: discountValue || 0,
     });
     if (template) await saveFbtWidgetSettings(ctx.shop, ctx.planKey, { selected_template: template });
+    // Rule changes rewrite the widget's rule list: put the live bundle offer back (never throws).
+    if (ctx.admin) await syncFbtOfferDiscount(ctx.admin, ctx.shop);
     return { success: true, id: ruleId, offers: offerResults.map((r) => r.title), showsOn: triggerResults.length ? triggerResults.map((r) => r.title) : 'all product pages', ...(template ? { template } : {}) };
   },
 
@@ -904,6 +907,7 @@ export const TOOL_EXECUTORS = {
       triggerProducts: newTriggerProducts,
       offerProducts: newOfferProducts,
     });
+    if (ctx.admin) await syncFbtOfferDiscount(ctx.admin, ctx.shop);
 
     const changed = {};
     const unchanged = { ruleId };
@@ -918,6 +922,7 @@ export const TOOL_EXECUTORS = {
   async remove_fbt_rule(ctx, { ruleId }) {
     const { removed } = await removeFbtRule(ctx.shop, ruleId);
     if (!removed) return { success: false, reason: 'not_found', message: `No FBT rule found with id ${ruleId}.` };
+    if (ctx.admin) await syncFbtOfferDiscount(ctx.admin, ctx.shop);
     return { success: true };
   },
 

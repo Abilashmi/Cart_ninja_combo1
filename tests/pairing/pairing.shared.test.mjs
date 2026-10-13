@@ -209,3 +209,52 @@ test('instructionsHash changes with the text or the count, not with spacing', ()
   assert.notEqual(instructionsHash('socks with joggers', 3), instructionsHash('socks with joggers', 4));
   assert.notEqual(instructionsHash('socks with joggers', 3), instructionsHash('caps with joggers', 3));
 });
+
+// ── "match the tops and bottoms" (words that are not in any product title) ──
+import { matchGroup } from '../../app/utils/pairing.shared.js';
+
+const CLOTHES = [
+  P(21, 'Cotton T-Shirt'), P(22, 'Oversized Hoodie'), P(23, 'Linen Kurta'),
+  P(24, 'Boys Joggers'), P(25, 'Slim Fit Jeans'), P(26, 'Cargo Pants'),
+  P(27, 'Leather Belt'),
+];
+
+test('"match the bottom and top": both ways, tops and bottoms found by their usual names', () => {
+  const plan = parsePromptHeuristically('match the bottom and top');
+  assert.equal(plan.rules.length, 2);
+  const { rules, warnings } = buildRulesFromPlan(plan, { catalog: CLOTHES, maxOffers: 3 });
+  assert.deepEqual(warnings.filter((w) => w.includes('No product')), []);
+  const byFirst = Object.fromEntries(rules.map((r) => [r.triggerProducts[0].title, r]));
+  assert.deepEqual(byFirst['Boys Joggers'].triggerProducts.map((p) => p.title).sort(), ['Boys Joggers', 'Cargo Pants', 'Slim Fit Jeans']);
+  assert.deepEqual(byFirst['Boys Joggers'].offerProducts.map((p) => p.title).sort(), ['Cotton T-Shirt', 'Linen Kurta', 'Oversized Hoodie']);
+  assert.deepEqual(byFirst['Cotton T-Shirt'].offerProducts.map((p) => p.title).sort(), ['Boys Joggers', 'Cargo Pants', 'Slim Fit Jeans']);
+  assert.ok(!rules.some((r) => [...r.triggerProducts, ...r.offerProducts].some((p) => p.title === 'Leather Belt')), 'a belt is neither');
+});
+
+test('group words prefer the store\'s own collection, type or tag over the built-in word list', () => {
+  const catalog = [
+    { ...P(31, 'Classic Polo'), collectionIds: ['c-tops'] },
+    { ...P(32, 'Cotton T-Shirt'), collectionIds: [] },
+    { ...P(33, 'Denim Shorts'), productType: 'Bottom Wear' },
+    { ...P(34, 'Yoga Leggings'), tags: ['bottoms'] },
+  ];
+  const tops = matchGroup('tops', catalog, [{ id: 'c-tops', title: 'Tops' }]);
+  assert.deepEqual(tops.products.map((p) => p.title), ['Classic Polo'], 'the merchant\'s Tops collection wins');
+  assert.match(tops.via, /collection/);
+  assert.deepEqual(matchGroup('bottoms', catalog).products.map((p) => p.title), ['Denim Shorts'], 'product type before tags');
+  assert.equal(matchGroup('spaceships', catalog), null);
+});
+
+test('more phrasings: "pair X & Y", "X and Y together", and "with" still one way', () => {
+  assert.equal(parsePromptHeuristically('pair tops & bottoms').rules.length, 2);
+  assert.equal(parsePromptHeuristically('tops and bottoms together').rules.length, 2);
+  const oneWay = parsePromptHeuristically('pair joggers with socks and caps').rules;
+  assert.equal(oneWay.length, 1);
+  assert.deepEqual(oneWay[0].offer.products, ['socks', 'caps']);
+});
+
+test('unknown group word still warns instead of guessing', () => {
+  const { rules, warnings } = buildRulesFromPlan(parsePromptHeuristically('match spaceships and rockets'), { catalog: CLOTHES });
+  assert.equal(rules.length, 0);
+  assert.ok(warnings.some((w) => w.includes('"spaceships"')));
+});

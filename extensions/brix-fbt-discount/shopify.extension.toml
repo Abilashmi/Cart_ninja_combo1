@@ -1,0 +1,18 @@
+api_version = "2025-10"
+uid = "6bc8c3e0-3def-4c9c-883f-c64906585d41e8ee1dd3"
+
+[[extensions]]
+name = "BRIX bundle offer discount"
+handle = "brix-fbt-discount"
+uid = "6bc8c3e0-3def-4c9c-883f-c64906585d41e8ee1dd3"
+type = "function"
+description = "Gives the FBT 'buy all together' offer once the cart holds the product and every product recommended with it."
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

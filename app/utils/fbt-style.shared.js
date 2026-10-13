@@ -56,3 +56,54 @@ export function fbtEffectiveColors(c) {
     successText: c.successTextColor || buttonText,
   };
 }
+
+// Image and spacing settings, in px (also in the template JSON). Defaults
+// are what the widget always drew, so widgets saved before look the same.
+// Mirrored by fbt-widget-render.liquid normalizeConfig (fbtNum).
+export const FBT_LAYOUT_DEFAULTS = Object.freeze({
+  imageSize: 64, // card image height; list rows use 75% of it (48 by default)
+  imageFit: 'contain', // contain = whole image | cover = fill the box
+  imageRadius: 8,
+  imageBg: '', // '' = a light tint of the border colour
+  cardWidth: 140, // carousel cards
+  gap: 10, // between products
+  cardPadding: 10, // inside each card (sides 2px less); list rows +2
+  widgetPadding: 20, // inside the widget; phones get 70%
+  marginTop: 16,
+  marginBottom: 16,
+});
+
+export const FBT_LAYOUT_LIMITS = Object.freeze({
+  imageSize: [40, 200],
+  imageRadius: [0, 100],
+  cardWidth: [100, 280],
+  gap: [0, 40],
+  cardPadding: [0, 30],
+  widgetPadding: [0, 48],
+  marginTop: [0, 80],
+  marginBottom: [0, 80],
+});
+
+export const FBT_IMAGE_FITS = ['contain', 'cover'];
+
+/** The image / spacing keys of a template, each valid (bad or missing = default). */
+export function pickFbtLayout(tpl) {
+  const out = { ...FBT_LAYOUT_DEFAULTS };
+  for (const [k, [min, max]] of Object.entries(FBT_LAYOUT_LIMITS)) {
+    const n = Math.round(Number(tpl?.[k]));
+    if (tpl?.[k] !== '' && tpl?.[k] != null && Number.isFinite(n)) out[k] = Math.max(min, Math.min(max, n));
+  }
+  if (FBT_IMAGE_FITS.includes(tpl?.imageFit)) out.imageFit = tpl.imageFit;
+  out.imageBg = normalizeHex(tpl?.imageBg) || '';
+  return out;
+}
+
+/** Sizes the widget draws from a layout (rows and phones are derived). */
+export function fbtLayoutSizes(l) {
+  return {
+    rowImage: Math.round(l.imageSize * 0.75),
+    phonePadding: Math.round(l.widgetPadding * 0.7),
+    cardPadding: `${l.cardPadding}px ${Math.max(0, l.cardPadding - 2)}px`,
+    rowPadding: l.cardPadding + 2,
+  };
+}

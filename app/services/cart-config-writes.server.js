@@ -1118,6 +1118,26 @@ export async function ensureFbtAiInstructionColumns(db) {
   ]);
 }
 
+// FBT "buy all together" offer (app/utils/fbt-offer.shared.js): the widget's
+// offer on fbt_widget_settings, each rule's own choice on fbt_rules (own
+// columns, not the old discount_type/discount_value, whose column types
+// aren't known on every database). offer_state / offer_message = the last
+// sync with Shopify (fbt-offer-shopify.server.js).
+export async function ensureFbtOfferColumns(db) {
+  await ensureColumns(db, 'fbt_widget_settings.offer', 'fbt_widget_settings', [
+    { name: 'offer_enabled', ddl: '`offer_enabled` TINYINT(1) NOT NULL DEFAULT 0' },
+    { name: 'offer_type', ddl: "`offer_type` VARCHAR(16) NOT NULL DEFAULT 'percentage'" },
+    { name: 'offer_value', ddl: '`offer_value` DECIMAL(12,2) NOT NULL DEFAULT 10.00' },
+    { name: 'offer_text', ddl: '`offer_text` VARCHAR(160) NULL' },
+    { name: 'offer_state', ddl: '`offer_state` VARCHAR(16) NULL' },
+    { name: 'offer_message', ddl: '`offer_message` VARCHAR(255) NULL' },
+  ]);
+  await ensureColumns(db, 'fbt_rules.offer', 'fbt_rules', [
+    { name: 'offer_mode', ddl: "`offer_mode` VARCHAR(16) NOT NULL DEFAULT 'widget'" },
+    { name: 'offer_value', ddl: '`offer_value` DECIMAL(12,2) NOT NULL DEFAULT 0.00' },
+  ]);
+}
+
 export async function ensureFbtRulesSourceColumn(db) {
   await ensureColumns(db, 'fbt_rules.source', 'fbt_rules', [
     { name: 'source', ddl: "`source` VARCHAR(10) NOT NULL DEFAULT 'manual'" },

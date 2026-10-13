@@ -10,7 +10,7 @@ import BrixBar from '../components/ai-agent/BrixBar';
 import { SliderField } from '../components/shared/SliderField';
 import {
   SettingsIcon, MagicIcon, ColorIcon, ChevronDownIcon, ChevronUpIcon, ProductIcon,
-  CheckCircleIcon, TargetIcon, PlayIcon,
+  CheckCircleIcon, TargetIcon, PlayIcon, DiscountIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
@@ -23,13 +23,15 @@ import { toFbtRule, fbtRuleKey } from '../utils/pairing.shared';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import {
-  ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules, ensureFbtAiInstructionColumns,
+  ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules, ensureFbtAiInstructionColumns, ensureFbtOfferColumns,
 } from '../services/cart-config-writes.server';
+import { syncFbtOfferDiscount } from '../services/fbt-offer-shopify.server';
+import { sanitizeFbtOffer, sanitizeRuleOffer, fbtOfferText, FBT_OFFER_TEXT_DEFAULT } from '../utils/fbt-offer.shared';
 import { resolveFbtInstructions } from '../services/pairing-assistant.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
-import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras } from '../utils/fbt-style.shared.js';
+import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras, pickFbtLayout, fbtLayoutSizes } from '../utils/fbt-style.shared.js';
 
 // Ceiling for a single Shopify Admin API call in this route. Generous enough
 // that a merely-slow response still succeeds, low enough that a stalled one
@@ -125,6 +127,7 @@ export const loader = async ({ request }) => {
       try {
         const db = getDb();
         await ensureFbtRulesSourceColumn(db);
+        await ensureFbtOfferColumns(db);
         const [settings] = await db.execute(
           'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
         );
@@ -140,11 +143,11 @@ export const loader = async ({ request }) => {
           const s = settings[0];
           // Heading / title / button-state colours live only in the active
           // template's JSON (fbt_widget.tempN), which the storefront reads.
-          let extras = pickFbtExtras({});
+          let extras = { ...pickFbtExtras({}), ...pickFbtLayout({}) };
           try {
             const [legacyRows] = await db.execute('SELECT temp1, temp2, temp3 FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
             const slot = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[s.selected_template || 'fbt1'] || 'temp1';
-            if (legacyRows[0]) extras = pickFbtExtras(parseJson(legacyRows[0][slot], {}));
+            if (legacyRows[0]) { const tplJson = parseJson(legacyRows[0][slot], {}); extras = { ...pickFbtExtras(tplJson), ...pickFbtLayout(tplJson) }; }
           } catch (e) { console.error('[FBT loader] template colours:', e.message); }
           fbtConfig = {
             ...extras,
@@ -166,6 +169,8 @@ export const loader = async ({ request }) => {
             aiProductCount: s.ai_product_count || 3,
             aiInstructions: s.ai_instructions || '',
             widgetPlacement: s.widget_placement || 'above_cart',
+            offer: sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text }),
+            offerStatus: s.offer_state ? { state: s.offer_state, message: s.offer_message || '' } : null,
           };
           manualRules = rules.map(r => ({
             id: r.id,
@@ -174,6 +179,8 @@ export const loader = async ({ request }) => {
             triggerProducts: parseJson(r.trigger_products, []),
             triggerCollections: parseJson(r.trigger_collections, []),
             fbtProducts: parseJson(r.fbt_products, []),
+            offerMode: r.offer_mode || 'widget',
+            offerValue: Number(r.offer_value) || 0,
           }));
         } else {
           // Fall back to legacy fbt_widget table
@@ -183,6 +190,7 @@ export const loader = async ({ request }) => {
             const tpl = parseJson(row.temp1, {});
             fbtConfig = {
               ...pickFbtExtras(parseJson(row[{ fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[row.selectedTemp] || 'temp1'], {})),
+              ...pickFbtLayout(parseJson(row[{ fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[row.selectedTemp] || 'temp1'], {})),
               is_enabled: 1,
               activeTemplate: row.selectedTemp || 'fbt1',
               mode: row.selectedMode || 'manual',
@@ -384,12 +392,14 @@ export const action = async ({ request }) => {
       // untouched, ready to resume the moment mode flips back to 'ai'),
       // then rebuild condition from exactly what's left.
       await ensureFbtRulesSourceColumn(db);
+      await ensureFbtOfferColumns(db);
       await db.execute("DELETE FROM fbt_rules WHERE shop_domain = ? AND source = 'manual'", [shop]);
       for (let i = 0; i < manualRules.length; i++) {
         const r = manualRules[i];
+        const ruleOffer = sanitizeRuleOffer(r.offerMode, r.offerValue);
         await db.execute(`
-          INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
-          VALUES (?,?,?,?,?,?,1,?,'manual')
+          INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source, offer_mode, offer_value)
+          VALUES (?,?,?,?,?,?,1,?,'manual',?,?)
         `, [
           shop,
           r.name || `Rule ${i + 1}`,
@@ -398,6 +408,7 @@ export const action = async ({ request }) => {
           r.triggerCollections?.length ? JSON.stringify(r.triggerCollections) : null,
           r.fbtProducts?.length ? JSON.stringify(r.fbtProducts) : null,
           i,
+          ruleOffer.mode, ruleOffer.value,
         ]);
       }
       await rebuildFbtLegacyConditionForMode(shop, 'manual');
@@ -424,7 +435,17 @@ export const action = async ({ request }) => {
       selectedTemplate, aiEnabled, aiProductCount,
     ]);
 
-    return { success: true, aiCoverage };
+    // The "buy all together" offer: save it, then bring the checkout
+    // discount and the storefront widget in line (never throws).
+    if (body.offer && typeof body.offer === 'object') {
+      const offer = sanitizeFbtOffer(body.offer);
+      await ensureFbtOfferColumns(db);
+      await db.execute('UPDATE fbt_widget_settings SET offer_enabled = ?, offer_type = ?, offer_value = ?, offer_text = ? WHERE shop_domain = ?',
+        [offer.enabled ? 1 : 0, offer.type, offer.value, offer.text, shop]);
+    }
+    const offerSync = await syncFbtOfferDiscount(admin, shop);
+
+    return { success: true, aiCoverage, offerSync };
   } catch (e) {
     console.error('[FBT action] DB write:', e.message);
     return { success: false, error: e.message };
@@ -463,7 +484,45 @@ const SECTION_TIPS = {
   interaction: 'Offering "Add All to Cart" in a single click increases bundle conversion by up to 37% — lower friction means more customers complete the bundle.',
   colors:      'Matching your FBT widget colors to your brand palette boosts trust — 71% of consumers expect a consistent visual experience across all touchpoints.',
   styling:     'Larger product images in FBT widgets increase click-through by 23% — shoppers are 60% more likely to add a product they can clearly see.',
+  offer:       'A small saving for taking the whole set gives shoppers a reason to add every recommended product, not just one.',
 };
+
+const OFFER_STATUS_TONE = { active: 'success', not_needed: 'info', not_deployed: 'warning', inactive: 'warning', failed: 'critical' };
+
+/* A rule's own offer (Manual rules): the widget's offer, none, or its own. */
+function RuleOfferPicker({ rule, onChange, currencySymbol }) {
+  const mode = rule.offerMode || 'widget';
+  const own = mode === 'percentage' || mode === 'fixed_amount';
+  return (
+    <div className="brix-rule-line" style={{ alignItems: 'center' }}>
+      <span className="brix-rule-k">Offer</span>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Select
+          label="Offer" labelHidden
+          options={[
+            { label: 'Widget\'s bundle offer', value: 'widget' },
+            { label: 'No offer', value: 'none' },
+            { label: '% off this set', value: 'percentage' },
+            { label: 'Amount off this set', value: 'fixed_amount' },
+          ]}
+          value={mode}
+          onChange={(v) => onChange({ offerMode: v, offerValue: v === 'percentage' ? (rule.offerValue || 10) : v === 'fixed_amount' ? (rule.offerValue || 100) : 0 })}
+        />
+        {own && (
+          <div style={{ width: 110 }}>
+            <TextField
+              label="Offer value" labelHidden type="number" autoComplete="off"
+              value={String(rule.offerValue ?? '')}
+              prefix={mode === 'fixed_amount' ? currencySymbol : undefined}
+              suffix={mode === 'percentage' ? '%' : undefined}
+              onChange={(v) => onChange({ offerValue: v })}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const defaultProductStates = () => Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: true, qty: 1, checked: true }));
 
@@ -538,25 +597,17 @@ function usePrevious(value) {
   return ref.current;
 }
 
-/* ─── IMAGE PLACEHOLDER ───────────────────────────────────────────────────── */
-function ImagePlaceholder({ size = 64, image = '' }) {
+/* The storefront's product image box (fbt-widget-render.liquid): fixed
+   height, the merchant's corners / fit / background. */
+function PreviewImage({ width, height, image, layout, borderColor }) {
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '10px',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      border: '1px solid #e5e7eb',
-      backgroundColor: '#f3f4f6',
-      backgroundImage: image ? `url(${image})` : undefined,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
+    <div className="fbtpv-img" style={{
+      width, height, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: `${layout.imageRadius}px`, background: layout.imageBg || `${borderColor}22`,
     }}>
-      {!image && (
-        <svg width={size * 0.46} height={size * 0.46} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <polyline points="21 15 16 10 5 21" />
-        </svg>
-      )}
+      {image
+        ? <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: layout.imageFit, display: 'block' }} />
+        : <span style={{ fontSize: 9, color: '#9ca3af' }}>No image</span>}
     </div>
   );
 }
@@ -781,6 +832,10 @@ export default function FBTPage() {
   const [borderRadius,      setBorderRadius]      = useState(fbtConfig.borderRadius   ?? 8);
   // Heading / title / hover / selected / loading / success colours ('' = follow a base colour).
   const [extraColors,       setExtraColors]       = useState(() => pickFbtExtras(fbtConfig));
+  // Image and spacing (px), same keys the storefront reads from the template JSON.
+  const [fbtLayout,         setFbtLayout]         = useState(() => pickFbtLayout(fbtConfig));
+  const setLayoutKey = (key) => (v) => { setFbtLayout((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
+  const sizes = fbtLayoutSizes(fbtLayout);
   const setExtra = (key) => (v) => { setExtraColors((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
   const fx = fbtEffectiveColors({ textColor, priceColor, buttonColor, buttonTextColor, ...extraColors });
   // Preview of the Add-all button's states (idle → loading → success).
@@ -791,6 +846,10 @@ export default function FBTPage() {
   const [fbtCount,          setFbtCount]          = useState(String(fbtConfig.aiProductCount || 6));
   const [aiInstructions,    setAiInstructions]    = useState(fbtConfig.aiInstructions || '');
   const [aiRunResult,       setAiRunResult]       = useState(null); /* last Regenerate's coverage, shown in the AI pane */
+  // "Buy all together" offer (fbt-offer.shared.js) and the last sync with Shopify.
+  const [offer,             setOffer]             = useState(() => sanitizeFbtOffer(fbtConfig.offer || {}));
+  const [offerStatus,       setOfferStatus]       = useState(fbtConfig.offerStatus || null);
+  const setOfferKey = (key) => (v) => { setOffer((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
   // Tracks whether AI mode has actually been saved to the backend at least
   // once (not just selected in the modal) — gates "Regenerate Suggestions",
   // which only makes sense once there's something to regenerate.
@@ -1067,6 +1126,7 @@ export default function FBTPage() {
       setHasChanges(false);
       if (configMode === 'ai') setAiConfigured(true);
       if (fetcher.data.aiCoverage) setAiRunResult(fetcher.data.aiCoverage);
+      if (fetcher.data.offerSync) setOfferStatus({ state: fetcher.data.offerSync.state, message: fetcher.data.offerSync.message });
       // Setup tour's "Customize" step: a successful save is the one clear,
       // reliable signal that real customization work was done and kept —
       // not just that the accordion was opened and closed again.
@@ -1123,6 +1183,7 @@ export default function FBTPage() {
       showPrices, showAddAllButton: showAddAll,
       bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
       ...Object.fromEntries(FBT_EXTRA_COLOR_KEYS.map((k) => [k, extraColors[k] || ''])),
+      ...fbtLayout,
     };
     /* build template objects so PHP saves them into temp1/temp2/temp3 columns */
     const templates = {};
@@ -1144,6 +1205,7 @@ export default function FBTPage() {
         aiEnabled: configMode === 'ai',
         aiProductCount: Number(fbtCount),
         aiInstructions,
+        offer: { ...offer, value: Number(offer.value) },
         widgetPlacement,
         ...curSettings,
         shop,
@@ -1251,14 +1313,14 @@ export default function FBTPage() {
       borderRadius: `${borderRadius}px`,
       boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
       border: 'none',
-      padding: '12px 8px',
+      padding: sizes.cardPadding,
     };
     if (selectedTemplate === 'vertical-list') return {
       background: bgColor,
       borderRadius: `${borderRadius}px`,
       border: `1px solid ${borderColor}`,
       borderLeft: `4px solid ${fx.checkbox}`,
-      padding: '10px 8px',
+      padding: sizes.cardPadding,
     };
     /* classic-grid */
     return {
@@ -1266,7 +1328,7 @@ export default function FBTPage() {
       borderRadius: `${borderRadius}px`,
       border: `1px solid ${borderColor}`,
       boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      padding: '10px 8px',
+      padding: sizes.cardPadding,
     };
   })();
 
@@ -1276,7 +1338,7 @@ export default function FBTPage() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
       boxSizing: 'border-box',
     }}>
-      <ImagePlaceholder size={56} image={p.image} />
+      <PreviewImage width="100%" height={fbtLayout.imageSize} image={p.image} layout={fbtLayout} borderColor={borderColor} />
       <div style={{
         color: fx.title, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
         textAlign: 'center', width: '100%',
@@ -1310,7 +1372,7 @@ export default function FBTPage() {
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {fbtPreviewProducts.map((p, i) => (
         <div key={p.id} style={{
-          display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 2px',
+          display: 'flex', alignItems: 'center', gap: '12px', padding: `${sizes.rowPadding}px 2px`,
           borderBottom: i < fbtPreviewProducts.length - 1 ? `1px solid ${borderColor}` : 'none',
         }}>
           {interactionStyle === 'checkbox-qty' && (
@@ -1325,7 +1387,7 @@ export default function FBTPage() {
               style={{ width: '18px', height: '18px', accentColor: fx.checkbox, flexShrink: 0, cursor: 'pointer' }}
             />
           )}
-          <ImagePlaceholder size={44} image={p.image} />
+          <PreviewImage width={sizes.rowImage} height={sizes.rowImage} image={p.image} layout={fbtLayout} borderColor={borderColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               color: fx.title, fontSize: '12px', fontWeight: 600,
@@ -1343,16 +1405,16 @@ export default function FBTPage() {
       ))}
     </div>
   ) : layout === 'grid' ? (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: `${fbtLayout.gap}px` }}>
       {fbtPreviewProducts.map((p, i) => (
         <PreviewCard key={p.id} p={p} i={i} />
       ))}
     </div>
   ) : (
-    <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+    <div style={{ display: 'flex', gap: `${fbtLayout.gap}px`, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: '4px', scrollbarWidth: 'none' }}>
       {fbtPreviewProducts.flatMap((p, i) => {
         const nodes = [
-          <div key={p.id} style={{ flex: '0 0 120px', width: '120px', scrollSnapAlign: 'start' }}>
+          <div key={p.id} style={{ flex: `0 0 ${fbtLayout.cardWidth}px`, width: `${fbtLayout.cardWidth}px`, scrollSnapAlign: 'start' }}>
             <PreviewCard p={p} i={i} />
           </div>,
         ];
@@ -1810,6 +1872,11 @@ export default function FBTPage() {
                                       <span className="brix-rule-k">Recommends</span>
                                       <span className="brix-rule-v">{summarizeTitles(rule.fbtProducts) || '—'}</span>
                                     </div>
+                                    <RuleOfferPicker
+                                      rule={rule}
+                                      currencySymbol={currencySymbol}
+                                      onChange={(patch) => { setManualRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, ...patch } : r))); mark(); }}
+                                    />
                                   </div>
                                   <div className="brix-rule-act">
                                     <Button variant="plain" tone="critical" onClick={() => { setManualRules(prev => prev.filter(r => r.id !== rule.id)); mark(); }}>Remove</Button>
@@ -1944,9 +2011,75 @@ export default function FBTPage() {
                     </BlockStack>
                   </AccordionSection>
 
+                  <AccordionSection id="offer" icon={DiscountIcon} title="Bundle offer" isOpen={openSection === 'offer'} onToggle={toggleSection} tip={SECTION_TIPS.offer}>
+                    <BlockStack gap="300">
+                      <Checkbox
+                        label="Give an offer when everything is bought together"
+                        helpText="Applies at checkout when the cart has the product being viewed and every product recommended with it. One of each gets the discount."
+                        checked={offer.enabled}
+                        onChange={setOfferKey('enabled')}
+                      />
+                      {offer.enabled && (
+                        <>
+                          <InlineGrid columns={2} gap="300">
+                            <Select
+                              label="Offer"
+                              options={[{ label: '% off the set', value: 'percentage' }, { label: 'Amount off the set', value: 'fixed_amount' }]}
+                              value={offer.type}
+                              onChange={(v) => { setOffer((prev) => ({ ...prev, type: v, value: v === 'percentage' ? 10 : 100 })); setHasChanges(true); }}
+                            />
+                            <TextField
+                              label={offer.type === 'percentage' ? 'Percent off' : 'Amount off'}
+                              type="number" autoComplete="off"
+                              value={String(offer.value ?? '')}
+                              prefix={offer.type === 'fixed_amount' ? currencySymbol : undefined}
+                              suffix={offer.type === 'percentage' ? '%' : undefined}
+                              onChange={setOfferKey('value')}
+                              error={!(Number(offer.value) > 0) ? 'Enter an amount above 0.' : offer.type === 'percentage' && Number(offer.value) > 90 ? 'At most 90%.' : undefined}
+                            />
+                          </InlineGrid>
+                          <TextField
+                            label="Text on the widget"
+                            value={offer.text}
+                            onChange={setOfferKey('text')}
+                            autoComplete="off"
+                            maxLength={120}
+                            placeholder={FBT_OFFER_TEXT_DEFAULT}
+                            helpText="{count} = number of products including the one being viewed, {discount} = the saving (10% or an amount)."
+                          />
+                          <Text as="p" variant="bodySm" tone="subdued">Manual rules can use their own offer, or none, under Configure → Saved rules. Save to apply.</Text>
+                        </>
+                      )}
+                      {offerStatus && (offer.enabled || offerStatus.state === 'active') && (
+                        <Banner tone={OFFER_STATUS_TONE[offerStatus.state] || 'info'}>
+                          <Text as="p" variant="bodySm">{offerStatus.message}</Text>
+                        </Banner>
+                      )}
+                    </BlockStack>
+                  </AccordionSection>
+
                   <AccordionSection id="styling" icon={MagicIcon} title="Styling & Display" isOpen={openSection === 'styling'} onToggle={toggleSection} tip={SECTION_TIPS.styling}>
                     <BlockStack gap="300">
                       <SliderField label="Border Radius" value={borderRadius} min={0} max={20} suffix="px" onChange={(v) => { setBorderRadius(v); mark(); }} />
+                      <Divider />
+                      <Text as="h4" variant="headingSm">Images</Text>
+                      <SliderField label="Image size" value={fbtLayout.imageSize} min={40} max={200} suffix="px" onChange={setLayoutKey('imageSize')} helpText="Image height on cards; list rows use 75% of it." />
+                      <SliderField label="Image corners" value={fbtLayout.imageRadius} min={0} max={100} suffix="px" onChange={setLayoutKey('imageRadius')} />
+                      <Select
+                        label="Image fit"
+                        options={[{ label: 'Show the whole image', value: 'contain' }, { label: 'Fill the box (may crop)', value: 'cover' }]}
+                        value={fbtLayout.imageFit}
+                        onChange={setLayoutKey('imageFit')}
+                      />
+                      <ColorField label="Image background" value={fbtLayout.imageBg} fallback="#f3f4f6" allowEmpty onChange={setLayoutKey('imageBg')} helpText="Shows around images that don't fill the box. Empty = a light tint of the border colour" />
+                      <SliderField label="Card width (carousel)" value={fbtLayout.cardWidth} min={100} max={280} suffix="px" onChange={setLayoutKey('cardWidth')} />
+                      <Divider />
+                      <Text as="h4" variant="headingSm">Spacing</Text>
+                      <SliderField label="Space between products" value={fbtLayout.gap} min={0} max={40} suffix="px" onChange={setLayoutKey('gap')} />
+                      <SliderField label="Padding inside each product" value={fbtLayout.cardPadding} min={0} max={30} suffix="px" onChange={setLayoutKey('cardPadding')} />
+                      <SliderField label="Padding inside the widget" value={fbtLayout.widgetPadding} min={0} max={48} suffix="px" onChange={setLayoutKey('widgetPadding')} helpText="Phones use 70% of it." />
+                      <SliderField label="Space above the widget" value={fbtLayout.marginTop} min={0} max={80} suffix="px" onChange={setLayoutKey('marginTop')} />
+                      <SliderField label="Space below the widget" value={fbtLayout.marginBottom} min={0} max={80} suffix="px" onChange={setLayoutKey('marginBottom')} />
                       <Divider />
                       <Checkbox label="Show Prices"          checked={showPrices}  onChange={(v) => { setShowPrices(v);  mark(); }} />
                       <Checkbox label="Show 'Add All' Button" checked={showAddAll} onChange={(v) => { setShowAddAll(v); mark(); }} />
@@ -1979,8 +2112,8 @@ export default function FBTPage() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Preview</Text>
-                <div style={{
-                  background: bgColor, borderRadius: '12px', padding: '18px',
+                <div className="fbtpv-widget" style={{
+                  background: bgColor, borderRadius: '12px', padding: `${fbtLayout.widgetPadding}px`,
                   border: `1px solid ${borderColor}`,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
                   zoom: 0.78,
@@ -2013,6 +2146,11 @@ export default function FBTPage() {
                       )}
                       <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
+                    {offer.enabled && Number(offer.value) > 0 && (
+                      <div className="fbtpv-offer" style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: '8px', background: `${priceColor}14`, color: priceColor, fontSize: '12px', fontWeight: 700, textAlign: 'center' }}>
+                        {fbtOfferText(offer.text, { count: fbtPreviewProducts.length + 1, offer: { type: offer.type, value: Number(offer.value) }, symbol: currencySymbol })}
+                      </div>
+                    )}
                     {showAddAll && (
                       <button
                         type="button"
@@ -2036,7 +2174,9 @@ export default function FBTPage() {
                       >
                         {addAllPreview === 'loading' ? 'Adding...'
                           : addAllPreview === 'success' ? `Added ${activeCount || fbtPreviewProducts.length}`
-                          : interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
+                          : interactionStyle === 'quick-add' ? 'Add to Cart'
+                          : offer.enabled && Number(offer.value) > 0 && (activeCount || fbtPreviewProducts.length) === fbtPreviewProducts.length ? `Add all ${fbtPreviewProducts.length + 1} to Cart`
+                          : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
                       </button>
                     )}
                     <style>{'.fbtpv-btn:not(:disabled):not(.is-selected):hover{background:var(--fbt-hover) !important}'}</style>
