@@ -4,7 +4,7 @@ import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
   Select, Checkbox, Divider, RadioButton, Collapsible,
-  Icon, Modal, TextField, Toast, Frame, Banner,
+  Icon, Modal, TextField, Toast, Frame, Banner, ButtonGroup,
 } from '@shopify/polaris';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { SliderField } from '../components/shared/SliderField';
@@ -18,11 +18,15 @@ import { ProBadge } from '../components/plan/PlanGate';
 import { usePlan } from '../components/PlanContext';
 import { useCurrency } from '../components/CurrencyContext';
 import ProductPickerBody from '../components/shared/ProductPickerBody';
+import PairingAssistant, { PAIRING_EXAMPLES } from '../components/shared/PairingAssistant';
+import { toFbtRule, fbtRuleKey } from '../utils/pairing.shared';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import {
-  ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules,
+  ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules, ensureFbtAiInstructionColumns,
 } from '../services/cart-config-writes.server';
+import { resolveFbtInstructions } from '../services/pairing-assistant.server';
+import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
 import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras } from '../utils/fbt-style.shared.js';
@@ -160,6 +164,7 @@ export const loader = async ({ request }) => {
             borderRadius: s.border_radius ?? 8,
             aiEnabled: s.mode === 'ai',
             aiProductCount: s.ai_product_count || 3,
+            aiInstructions: s.ai_instructions || '',
             widgetPlacement: s.widget_placement || 'above_cart',
           };
           manualRules = rules.map(r => ({
@@ -346,8 +351,32 @@ export const action = async ({ request }) => {
       // it re-sorts/re-writes every AI rule on every unrelated save. The
       // already-generated source='ai' rows are left completely untouched
       // here otherwise.
+      // The instructions box is saved with every AI-mode save, so typed
+      // text is never lost; it only takes effect on a Regenerate.
+      const aiInstructions = typeof body.aiInstructions === 'string' ? body.aiInstructions.trim().slice(0, 2000) : null;
+      if (aiInstructions !== null) {
+        await ensureFbtAiInstructionColumns(db);
+        await db.execute('UPDATE fbt_widget_settings SET ai_instructions = ? WHERE shop_domain = ?', [aiInstructions || null, shop]);
+      }
       if (body.regenerateAi) {
-        aiCoverage = await generateAiFbtRules(admin, shop, aiProductCount);
+        let instructions = null;
+        if (aiInstructions) {
+          const [cachedRows] = await db.execute('SELECT ai_instruction_rules FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+          instructions = await resolveFbtInstructions(admin, shop, aiInstructions, {
+            maxOffers: aiProductCount,
+            cached: parseJson(cachedRows[0]?.ai_instruction_rules, null),
+            consumeCredit: () => checkAndConsumeCredit(shop, admin),
+          });
+          if (instructions.cacheable) {
+            await db.execute('UPDATE fbt_widget_settings SET ai_instruction_rules = ? WHERE shop_domain = ?', [
+              JSON.stringify({ hash: instructions.hash, rules: instructions.rules, warnings: instructions.warnings }), shop,
+            ]);
+          }
+        }
+        aiCoverage = await generateAiFbtRules(admin, shop, aiProductCount, { pinned: instructions?.rules || [] });
+        if (instructions) {
+          aiCoverage.instructions = { rules: instructions.rules.length, warnings: instructions.warnings, fromCache: instructions.fromCache };
+        }
       }
     } else {
       // Manual mode: replace only this shop's manual rows (never the AI
@@ -760,6 +789,8 @@ export default function FBTPage() {
   const [showAddAll,        setShowAddAll]        = useState(fbtConfig.showAddAllButton !== false);
   const [configMode,        setConfigMode]        = useState(fbtConfig.mode === 'ai' ? 'ai' : 'manual');
   const [fbtCount,          setFbtCount]          = useState(String(fbtConfig.aiProductCount || 6));
+  const [aiInstructions,    setAiInstructions]    = useState(fbtConfig.aiInstructions || '');
+  const [aiRunResult,       setAiRunResult]       = useState(null); /* last Regenerate's coverage, shown in the AI pane */
   // Tracks whether AI mode has actually been saved to the backend at least
   // once (not just selected in the modal) — gates "Regenerate Suggestions",
   // which only makes sense once there's something to regenerate.
@@ -773,6 +804,7 @@ export default function FBTPage() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [pickerTarget,      setPickerTarget]      = useState(null); /* 'trigger' | 'fbt' */
   const [draftRule,         setDraftRule]         = useState(null); /* rule being built */
+  const [ruleSource,        setRuleSource]        = useState('pick'); /* 'pick' | 'describe' | 'orders' — how the next rules are made */
   const [ruleCreatedToast,  setRuleCreatedToast]  = useState(false); /* one-off toast, nothing stays on screen — the rule itself shows up in Saved Rules below */
   const [configureToast,    setConfigureToast]    = useState(false); /* shown when Save is blocked — nothing set up yet in the active mode */
 
@@ -1034,6 +1066,7 @@ export default function FBTPage() {
     if (fetcher.data?.success) {
       setHasChanges(false);
       if (configMode === 'ai') setAiConfigured(true);
+      if (fetcher.data.aiCoverage) setAiRunResult(fetcher.data.aiCoverage);
       // Setup tour's "Customize" step: a successful save is the one clear,
       // reliable signal that real customization work was done and kept —
       // not just that the accordion was opened and closed again.
@@ -1110,6 +1143,7 @@ export default function FBTPage() {
         manualRules,
         aiEnabled: configMode === 'ai',
         aiProductCount: Number(fbtCount),
+        aiInstructions,
         widgetPlacement,
         ...curSettings,
         shop,
@@ -1557,6 +1591,23 @@ export default function FBTPage() {
                         error={!aiCountValid ? 'Enter a whole number greater than 0.' : undefined}
                         helpText={aiCountValid ? `Example: ${fbtCount} means each product gets ${fbtCount} FBT suggestions.` : undefined}
                       />
+                      <BlockStack gap="150">
+                        <TextField
+                          label="Your instructions (optional)"
+                          value={aiInstructions}
+                          onChange={(v) => { setAiInstructions(v); mark(); }}
+                          multiline={3}
+                          maxLength={2000}
+                          autoComplete="off"
+                          placeholder={'e.g. Always show socks with joggers\nFor the Summer collection, recommend what customers usually buy with each product'}
+                          helpText="Followed first for the products you name; AI fills in every other product. Uses 1 AI credit when the instructions change."
+                        />
+                        <InlineStack gap="150" wrap>
+                          {PAIRING_EXAMPLES.map((ex) => (
+                            <Button key={ex} size="micro" variant="tertiary" onClick={() => { setAiInstructions((p) => (p.trim() ? `${p.trim()}\n${ex}` : ex)); mark(); }}>{ex}</Button>
+                          ))}
+                        </InlineStack>
+                      </BlockStack>
                       <InlineStack gap="200">
                         <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={() => handleSave({ regenerateAi: true })}>
                           {aiConfigured ? 'Update Configuration' : 'Configure AI'}
@@ -1565,6 +1616,23 @@ export default function FBTPage() {
                           <Button disabled={!aiCountValid} loading={isSaving} onClick={() => handleSave({ regenerateAi: true })}>Regenerate Suggestions</Button>
                         )}
                       </InlineStack>
+                      {aiRunResult && (
+                        <Banner tone={aiRunResult.productsCovered > 0 ? 'success' : 'warning'}>
+                          <BlockStack gap="100">
+                            <Text as="p" variant="bodySm">
+                              {aiRunResult.productsCovered > 0
+                                ? `Recommendations ready for ${aiRunResult.productsCovered} of ${aiRunResult.totalProducts} products.`
+                                : 'No recommendations could be made yet. This needs order history, products in collections, or instructions.'}
+                              {aiRunResult.instructions
+                                ? ` Your instructions became ${aiRunResult.instructions.rules} rule${aiRunResult.instructions.rules === 1 ? '' : 's'}, applied first on ${aiRunResult.pinnedProducts || 0} product${aiRunResult.pinnedProducts === 1 ? '' : 's'}.`
+                                : ''}
+                            </Text>
+                            {(aiRunResult.instructions?.warnings || []).map((w, i) => (
+                              <Text as="p" variant="bodySm" tone="caution" key={i}>{w}</Text>
+                            ))}
+                          </BlockStack>
+                        </Banner>
+                      )}
                     </BlockStack>
                   )}
 
@@ -1595,6 +1663,23 @@ export default function FBTPage() {
                           <Text as="h3" variant="headingSm">Create a rule</Text>
                         </InlineStack>
                         <div style={{ paddingLeft: '30px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <ButtonGroup variant="segmented">
+                            <Button pressed={ruleSource === 'pick'} onClick={() => setRuleSource('pick')}>Pick products</Button>
+                            <Button pressed={ruleSource === 'describe'} onClick={() => setRuleSource('describe')}>Describe in words</Button>
+                            <Button pressed={ruleSource === 'orders'} onClick={() => setRuleSource('orders')}>From past orders</Button>
+                          </ButtonGroup>
+                          {ruleSource !== 'pick' ? (
+                            <PairingAssistant
+                              tab={ruleSource}
+                              maxOffers={3}
+                              existingKeys={new Set(manualRules.map(fbtRuleKey))}
+                              onAddRules={(rules) => {
+                                setManualRules((prev) => [...prev, ...rules.map((r) => toFbtRule(r))]);
+                                setRuleCreatedToast(true);
+                                mark();
+                              }}
+                            />
+                          ) : (<>
                           <Text as="p" variant="bodySm" tone="subdued">Pick trigger products (pages where FBT shows) and FBT products (what to recommend).</Text>
 
                           {/* Two selectors. Each one shows what is actually
@@ -1686,6 +1771,7 @@ export default function FBTPage() {
                                 : 'Select a trigger product and at least one recommended product.'}
                             </Text>
                           </BlockStack>
+                          </>)}
                         </div>
                       </BlockStack>
 

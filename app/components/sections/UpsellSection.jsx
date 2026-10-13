@@ -8,6 +8,8 @@ import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
 import { useCurrency } from '../CurrencyContext';
+import PairingAssistant from '../shared/PairingAssistant';
+import { toUpsellRule, upsellRuleKey } from '../../utils/pairing.shared';
 
 const CONFIG_OPTIONS = [
   { value: 'ai', label: 'AI Recommendations', desc: 'Let AI automatically suggest relevant products based on cart contents', icon: MagicIcon },
@@ -99,6 +101,14 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
   );
 }
 
+// "Joggers, Socks +2 more" from ids, using the rule's own saved details first.
+function summarizeIds(ids, details, catalog) {
+  const byId = new Map([...(catalog || []), ...(details || [])].map((p) => [String(p.id), p]));
+  const titles = (ids || []).map((id) => byId.get(String(id))?.title).filter(Boolean);
+  if (titles.length !== (ids || []).length || !titles.length) return '';
+  return titles.length <= 2 ? titles.join(', ') : `${titles.slice(0, 2).join(', ')} +${titles.length - 2} more`;
+}
+
 function LimitPicker({ value, onChange }) {
   return (
     <BlockStack gap="100">
@@ -125,8 +135,9 @@ function LimitPicker({ value, onChange }) {
 }
 
 export function UpsellSection() {
-  const { body, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, resetDirty } = useCartEditor();
+  const { body, allProducts, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, resetDirty } = useCartEditor();
   const { upsellProducts } = body;
+  const [assistantTab, setAssistantTab] = useState(null); // null | 'describe' | 'orders'
   const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
   const [pickerConfig, setPickerConfig] = useState(null);
   const aiFetcher = useFetcher();
@@ -271,6 +282,31 @@ export function UpsellSection() {
                 </Text>
               </BlockStack>
               <LimitPicker value={upsellProducts.limit} onChange={(v) => updateUpsellProducts({ limit: v })} />
+              <BlockStack gap="150">
+                <Text as="p" variant="bodySm" tone="subdued">Create rules from your own words or from what customers bought together:</Text>
+                <InlineStack gap="200">
+                  <Button icon={MagicIcon} onClick={() => setAssistantTab('describe')}>Describe in words</Button>
+                  <Button onClick={() => setAssistantTab('orders')}>From past orders</Button>
+                </InlineStack>
+              </BlockStack>
+              <Modal
+                open={Boolean(assistantTab)}
+                onClose={() => setAssistantTab(null)}
+                title="Create upsell rules"
+                size="large"
+                primaryAction={{ content: 'Done', onAction: () => setAssistantTab(null) }}
+              >
+                <Modal.Section>
+                  {assistantTab && (
+                    <PairingAssistant
+                      defaultTab={assistantTab}
+                      maxOffers={upsellProducts.limit || 3}
+                      existingKeys={new Set(upsellProducts.manualRules.map(upsellRuleKey))}
+                      onAddRules={(rules) => rules.forEach((r) => addUpsellRule(toUpsellRule(r)))}
+                    />
+                  )}
+                </Modal.Section>
+              </Modal>
               <BlockStack gap="200">
                 {upsellProducts.manualRules.map((rule, index) => (
                   <div key={rule.id} style={{ border: '1px solid #e1e3e5', borderRadius: '8px', overflow: 'hidden' }}>
@@ -285,7 +321,7 @@ export function UpsellSection() {
                           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #c9cccf', background: '#ffffff', fontSize: '13px', color: '#202223' }}>
                               {rule.triggerProductIds?.length > 0
-                                ? `${rule.triggerProductIds.length} product${rule.triggerProductIds.length !== 1 ? 's' : ''} selected`
+                                ? (summarizeIds(rule.triggerProductIds, null, allProducts) || `${rule.triggerProductIds.length} product${rule.triggerProductIds.length !== 1 ? 's' : ''} selected`)
                                 : `${rule.triggerProductCount} Trigger Product${rule.triggerProductCount !== 1 ? 's' : ''}`}
                             </div>
                             <Button size="slim" onClick={() => setPickerConfig({ ruleId: rule.id, type: 'trigger', selectedIds: rule.triggerProductIds || [] })}>Select</Button>
@@ -296,7 +332,7 @@ export function UpsellSection() {
                           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #c9cccf', background: '#ffffff', fontSize: '13px', color: '#202223' }}>
                               {rule.upsellProductIds?.length > 0
-                                ? `${rule.upsellProductIds.length} product${rule.upsellProductIds.length !== 1 ? 's' : ''} selected`
+                                ? (summarizeIds(rule.upsellProductIds, rule.upsellProductDetails, allProducts) || `${rule.upsellProductIds.length} product${rule.upsellProductIds.length !== 1 ? 's' : ''} selected`)
                                 : `${rule.upsellProductCount} Upsell Product${rule.upsellProductCount !== 1 ? 's' : ''}`}
                             </div>
                             <Button size="slim" onClick={() => setPickerConfig({ ruleId: rule.id, type: 'upsell', selectedIds: rule.upsellProductIds || [] })}>Select</Button>

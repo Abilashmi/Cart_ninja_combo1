@@ -15,6 +15,7 @@ import { getDb } from './db.server';
 import { getShopPlan } from './plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
+import { mergeInstructionRules } from '../utils/pairing.shared';
 import { withTimeout } from '../utils/with-timeout';
 import { cleanBannerImage, cleanBannerPlacement, cleanBannerSpacing, DEFAULT_BANNER_PLACEMENT, BANNER_SPACING_DEFAULT } from '../utils/cart-banner.shared';
 
@@ -1107,6 +1108,16 @@ export async function removeFbtRule(shop, ruleId) {
 // builder (appendFbtRule's chat-created rows are a separate, unaffected
 // concern — they stay visible in both modes' fbt_rules reads today, but
 // they aren't what this bug was about).
+// FBT AI-Powered mode's instructions box: the merchant's text, and what it
+// last resolved to ({ hash, rules, warnings } JSON) so a Regenerate with
+// unchanged text doesn't ask the model (or use a credit) again.
+export async function ensureFbtAiInstructionColumns(db) {
+  await ensureColumns(db, 'fbt_widget_settings.ai_instructions', 'fbt_widget_settings', [
+    { name: 'ai_instructions', ddl: '`ai_instructions` TEXT NULL' },
+    { name: 'ai_instruction_rules', ddl: '`ai_instruction_rules` MEDIUMTEXT NULL' },
+  ]);
+}
+
 export async function ensureFbtRulesSourceColumn(db) {
   await ensureColumns(db, 'fbt_rules.source', 'fbt_rules', [
     { name: 'source', ddl: "`source` VARCHAR(10) NOT NULL DEFAULT 'manual'" },
@@ -1264,6 +1275,7 @@ async function computeAiPairingRules(admin, shop, countPerProduct) {
     rules,
     covered,
     n,
+    catalog,
     totalProducts: catalog.length,
     productsSkipped: catalog.length - covered,
     truncated: catalog.length >= AI_COVERAGE_PRODUCT_CAP,
@@ -1276,11 +1288,22 @@ async function computeAiPairingRules(admin, shop, countPerProduct) {
 // tagged source='ai' and only source='ai' rows are ever touched here, so a
 // merchant's own manual rules are never affected by running or re-running
 // this.
-export async function generateAiFbtRules(admin, shop, countPerProduct) {
+// pinned: rules from the merchant's own instructions (AI-Powered mode's
+// instructions box, see resolveFbtInstructions) — applied first for the
+// products they name, the automatic picks fill the rest.
+export async function generateAiFbtRules(admin, shop, countPerProduct, { pinned = [] } = {}) {
   const db = getDb();
   await ensureFbtRulesSourceColumn(db);
 
-  const { rules, covered, n, totalProducts, productsSkipped, truncated } = await computeAiPairingRules(admin, shop, countPerProduct);
+  const auto = await computeAiPairingRules(admin, shop, countPerProduct);
+  const { n, totalProducts, truncated } = auto;
+  let { rules, covered, productsSkipped } = auto;
+  let pinnedProducts = 0;
+  if (pinned.length) {
+    ({ rules, pinnedProducts } = mergeInstructionRules(rules, pinned, n, auto.catalog));
+    covered = rules.length;
+    productsSkipped = Math.max(0, totalProducts - covered);
+  }
 
   await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
 
@@ -1317,7 +1340,7 @@ export async function generateAiFbtRules(admin, shop, countPerProduct) {
   `, [shop, n]);
   await rebuildFbtLegacyConditionForMode(shop, 'ai');
 
-  return { totalProducts, productsCovered: covered, productsSkipped, truncated };
+  return { totalProducts, productsCovered: covered, productsSkipped, truncated, pinnedProducts };
 }
 
 // The Upsell widget's own "AI Recommendations" — was previously a bare LLM
