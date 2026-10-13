@@ -235,10 +235,14 @@ export function createQuickShopKit(core) {
 
   /* ── products: variants, filters, sorting ───────────────────────────── */
 
+  // The shopper's pick, else the first in-stock variant (variants[0] is often
+  // a sold-out size), else the first one (the card then shows Out of stock).
   function activeVariant(product, pending) {
     var variants = product.variants || [];
     var id = pending && pending[product.id];
-    for (var i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
+    var i;
+    for (i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
+    for (i = 0; i < variants.length; i++) if (variants[i].available !== false) return variants[i];
     return variants[0] || null;
   }
 

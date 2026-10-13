@@ -199,6 +199,7 @@ const SCRIPT_BODY = String.raw`
     var productMap = {};
     var variantPriceMap = {};
     var variantGramsMap = {};
+    var variantAvailableMap = {};
     var handle;
     for (handle in data.productsByHandle) {
       if (!Object.prototype.hasOwnProperty.call(data.productsByHandle, handle)) continue;
@@ -211,6 +212,9 @@ const SCRIPT_BODY = String.raw`
           var v = variants[j];
           variantPriceMap[v.id] = v.price != null ? parseFloat(v.price) : parseFloat(p.price || 0);
           variantGramsMap[v.id] = v.grams > 0 ? v.grams : null;
+          // Shopify's availableForSale (combo-page.server.js): false = sold out
+          // and not sold past zero, so it can never go into the box.
+          variantAvailableMap[v.id] = v.available !== false;
         }
       }
     }
@@ -235,6 +239,7 @@ const SCRIPT_BODY = String.raw`
       aiPairs: null, // set by loadAiSuggestions when config.ai_mode is on
       productMap: productMap,
       variantPriceMap: variantPriceMap,
+      variantAvailableMap: variantAvailableMap,
       // Weight pricing: grams per variant (null = no weight, doesn't count),
       // the tiers etc. from the server, and which products count toward the box.
       variantGramsMap: variantGramsMap,
@@ -446,9 +451,23 @@ const SCRIPT_BODY = String.raw`
     state.toastTimer = setTimeout(function () { state.toast = null; render(root); }, 2800);
   }
 
+  function isVariantAvailable(state, variantId) {
+    return state.variantAvailableMap[variantId] !== false;
+  }
+
+  function soldOutText(state) {
+    return state.config.sold_out_text || 'Sold out';
+  }
+
+  // Every way into the box (Add button, +, variant popup, AI picks, Quick
+  // Shop) comes through here, so a sold-out variant is stopped in one place.
   function onAdd(root, state, product, variantId, qty) {
     qty = qty || 1;
     if (state.selectedMap[variantId]) return;
+    if (!isVariantAvailable(state, variantId)) {
+      showToast(root, state, soldOutText(state) + (product && product.title ? ': ' + product.title : ''));
+      return;
+    }
     if (state.weightMode) {
       if (blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, product.id, qty))) return;
       state.selectedMap[variantId] = { productId: product.id, qty: qty };
@@ -503,10 +522,13 @@ const SCRIPT_BODY = String.raw`
     render(root);
   }
 
+  // The shopper's pick, else the first in-stock variant (variants[0] is often
+  // a sold-out size), else the first one (the card then shows Sold out).
   function getActiveVariantId(state, product) {
     var pending = state.pendingVariant[product.id];
     if (pending) return pending;
     var variants = product.variants || [];
+    for (var i = 0; i < variants.length; i++) if (variants[i].available !== false) return variants[i].id;
     return (variants[0] && variants[0].id) || product.variantId || '';
   }
 
@@ -837,6 +859,7 @@ const SCRIPT_BODY = String.raw`
     var selection = state.selectedMap[activeVariantId];
     var isAdded = !!selection;
     var qty = selection ? (selection.qty || 0) : 0;
+    var soldOut = !isAdded && !isVariantAvailable(state, activeVariantId);
     var displayPrice = activeVariant && activeVariant.price != null ? parseFloat(activeVariant.price) : parseFloat(product.price || 0);
 
     var otherAdded = [];
@@ -888,7 +911,9 @@ const SCRIPT_BODY = String.raw`
           fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s',
           background: (pv.id === activeVariantId) ? highlightColor : '#f9f9f9',
           color: (pv.id === activeVariantId) ? '#fff' : '#333',
-        }) + '">' + esc(pv.title) + '</div>';
+          opacity: pv.available === false ? '0.5' : '1',
+          textDecoration: pv.available === false ? 'line-through' : 'none',
+        }) + '">' + esc(pv.title) + (pv.available === false ? ' (' + esc(soldOutText(state)) + ')' : '') + '</div>';
       }
       html += '</div></div>';
     }
@@ -938,6 +963,8 @@ const SCRIPT_BODY = String.raw`
           border: (hv.id === activeVariantId) ? ('1px solid ' + highlightColor) : '1px solid #ddd',
           background: (hv.id === activeVariantId) ? highlightColor : 'white',
           color: (hv.id === activeVariantId) ? 'white' : 'black',
+          opacity: hv.available === false ? '0.5' : '1',
+          textDecoration: hv.available === false ? 'line-through' : 'none',
         }) + '">' + esc(hv.title) + '</div>';
       }
       html += '</div>';
@@ -979,7 +1006,7 @@ const SCRIPT_BODY = String.raw`
       }) + '">';
       for (i = 0; i < variants.length; i++) {
         var sv = variants[i];
-        html += '<option value="' + esc(sv.id) + '"' + (sv.id === activeVariantId ? ' selected' : '') + '>' + esc(sv.title) + '</option>';
+        html += '<option value="' + esc(sv.id) + '"' + (sv.id === activeVariantId ? ' selected' : '') + '>' + esc(sv.title) + (sv.available === false ? ' (' + esc(soldOutText(state)) + ')' : '') + '</option>';
       }
       html += '</select>';
     }
@@ -1019,18 +1046,18 @@ const SCRIPT_BODY = String.raw`
         cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
       }) + '">−</button>';
       html += '<span style="' + styleStr({ width: '35px', textAlign: 'center', fontWeight: '700', fontSize: '14px', border: '1px solid #ddd', borderLeft: 'none', borderRight: 'none', padding: '6px 0' }) + '">' + qty + '</span>';
-      html += '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '" style="' + styleStr({
+      html += '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '"' + (soldOut ? ' disabled' : '') + ' style="' + styleStr({
         width: '30px', height: '30px', border: '1px solid #ddd', background: '#f9f9f9', borderRadius: '0 6px 6px 0',
-        cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
+        cursor: soldOut ? 'not-allowed' : 'pointer', opacity: soldOut ? '0.4' : '1', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
       }) + '">+</button>';
       html += '</div>';
     }
     if (showAddBtn) {
-      html += '<button type="button" data-combo-action="card-add" data-product-id="' + esc(product.id) + '" style="' + styleStr({
-        flex: '1', background: isAdded ? '#ff4d4d' : btnBg, color: btnTextColor, border: 'none',
-        padding: '8px 12px', marginLeft: '4px', borderRadius: btnRadius + 'px', cursor: 'pointer',
+      html += '<button type="button" data-combo-action="card-add" data-product-id="' + esc(product.id) + '"' + (soldOut ? ' disabled' : '') + ' style="' + styleStr({
+        flex: '1', background: soldOut ? '#e5e7eb' : isAdded ? '#ff4d4d' : btnBg, color: soldOut ? '#6b7280' : btnTextColor, border: 'none',
+        padding: '8px 12px', marginLeft: '4px', borderRadius: btnRadius + 'px', cursor: soldOut ? 'not-allowed' : 'pointer',
         fontWeight: btnFontWeight, fontSize: btnFontSize + 'px', transition: 'all 0.2s', whiteSpace: 'nowrap',
-      }) + '">' + esc(addBtnText) + '</button>';
+      }) + '">' + esc(soldOut ? soldOutText(state) : addBtnText) + '</button>';
     }
     html += '</div>'; // actions row
     html += '</div>'; // body
