@@ -52,14 +52,16 @@ function ItemRow({ title, variant, image, price, quantity = 1, onRemove, testId 
 function GiftRow({ reward }) {
   const { formatMoney } = useCurrency();
   const isFree = reward.pricing === 'free';
-  const price = Number(reward.product?.price) || 0;
+  const price = Number(reward.variant?.price ?? reward.product?.price) || 0;
   const title = reward.product?.title || 'Reward product';
+  const variantTitle = reward.variant && reward.variant.title !== 'Default Title' && (reward.product?.variants || []).length > 1 ? reward.variant.title : '';
   return (
     <div className="bxcd-item bxcd-item--gift" data-testid="preview-reward-line">
-      <span className={`bxcd-item__badge${isFree ? ' bxcd-item__badge--free' : ''}`}>{GIFT_ICON}{isFree ? 'FREE GIFT' : 'REWARD'}</span>
+      <span className={`bxcd-item__badge${isFree ? ' bxcd-item__badge--free' : ''}`}>{GIFT_ICON}{reward.badge || (isFree ? 'FREE GIFT' : 'REWARD')}</span>
       <div className="bxcd-item__media">{reward.product?.image ? <img src={reward.product.image} alt={title} /> : BOX_ICON}</div>
       <p className="bxcd-item__title">{title}</p>
       <button type="button" className="bxcd-item__remove" aria-label="Remove product" title="Remove" onClick={stop()}>{X_ICON}</button>
+      {variantTitle && <p className="bxcd-item__variant">{variantTitle}</p>}
       <div className="bxcd-item__price">
         {isFree ? <span className="bxcd-item__note">Added for reaching your milestone</span> : <span className="bxcd-item__unit">{price > 0 ? formatMoney(price) : ''}</span>}
       </div>

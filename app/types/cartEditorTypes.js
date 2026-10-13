@@ -11,6 +11,11 @@ export const defaultTier = {
   // 'free' = BRIX makes the reward product free at checkout (via its discount
   // Function once the milestone is reached); 'regular' = added at its normal price.
   rewardPricing: 'free',
+  // { productGid: variantGid } — the variant added for each reward product.
+  // A product not listed gets its first in-stock variant.
+  rewardVariants: {},
+  // The gift row's badge text in the drawer ('' = FREE / REWARD).
+  rewardBadgeLabel: '',
   // Merchant-authored template shown while this tier is NOT YET reached —
   // supports {amount}/{items}/{target} placeholders, filled in dynamically
   // from the current progress mode/cart value at render time (see
@@ -58,7 +63,13 @@ export const defaultCartEditorState = {
   body: {
     announcements: {
       enabled: false,
+      // `text` is always messages[0] (older readers and the AI tool use it).
       text: 'Free shipping on orders over ₹999!',
+      messages: ['Free shipping on orders over ₹999!'],
+      // With 2+ messages: rotate every `interval` seconds and/or show ‹ › arrows.
+      autoRotate: true,
+      interval: 4,
+      showArrows: true,
       bgColor: '#4f46e5',
       textColor: '#ffffff',
       fontSize: 14,
@@ -99,6 +110,9 @@ export const defaultCartEditorState = {
       titleFontSize: 14,
       titleTextAlign: 'left',
       titleColor: '#1e293b',
+      // Coupon card size in a scrolling row (px). Height 0 = grows with the text.
+      cardWidth: 132,
+      cardMinHeight: 0,
       selectedCoupons: [],
     },
     upsellProducts: {
@@ -109,6 +123,12 @@ export const defaultCartEditorState = {
       titleColor: '#1a1a1a',
       titleAlign: 'left',
       buttonText: 'Add',
+      // Add button: the checkout button's colours, or its own when off.
+      useCheckoutButtonColors: true,
+      buttonColor: '#111827',
+      buttonTextColor: '#ffffff',
+      productTitleColor: '#1e293b',
+      priceColor: '#10b981',
       position: 'bottom',
       direction: 'horizontal',
       layout: 'carousel',

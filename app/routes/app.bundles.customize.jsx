@@ -37,6 +37,7 @@ import { authenticate } from '../shopify.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import { getCodSettings } from '../services/cod.server';
 import { codButtonLook, codFeeOf } from '../utils/cod.shared';
+import { HEX_ERROR, normalizeHex } from '../utils/color.shared.js';
 import { BuilderSidebar } from '../components/customization/BuilderSidebar';
 import { BuilderActionBar } from '../components/customization/BuilderActionBar';
 import { ValidationPanel } from '../components/customization/ValidationPanel';
@@ -1092,17 +1093,33 @@ const CollapsibleCard = ({ title, expanded, onToggle, children }) => {
 };
 
 // Simple ColorPickerField component
+// A typed code is saved only once it's a valid hex (#rgb / #rrggbb, stored as
+// #rrggbb) or another colour the browser understands (some saved configs use
+// rgba(...)); until then the box shows an error and the last colour is kept.
 function ColorPickerField({ label, value, onChange }) {
   const [visible, setVisible] = useState(false);
-  const [color, setColor] = useState(hexToHsb(value || '#000000'));
+  const [color, setColor] = useState(hexToHsb(normalizeHex(value) || '#000000'));
+  const [draft, setDraft] = useState(value || '');
 
   useEffect(() => {
-    setColor(hexToHsb(value || '#000000'));
+    setColor(hexToHsb(normalizeHex(value) || '#000000'));
+    setDraft((d) => (normalizeHex(d) && normalizeHex(d) === normalizeHex(value) ? d : (value || '')));
   }, [value]);
 
   const handleColorChange = (newColor) => {
     setColor(newColor);
-    onChange(hsbToHex(newColor));
+    const hex = hsbToHex(newColor);
+    setDraft(hex);
+    onChange(hex);
+  };
+
+  const isCssColor = (v) => typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && !/^#/.test(v.trim()) && CSS.supports('color', v.trim());
+  const draftOk = draft.trim() === '' || Boolean(normalizeHex(draft)) || isCssColor(draft);
+  const handleText = (v) => {
+    setDraft(v);
+    const hex = normalizeHex(v);
+    if (hex) onChange(hex);
+    else if (v.trim() && isCssColor(v)) onChange(v.trim());
   };
 
   const togglePopover = () => setVisible(!visible);
@@ -1120,11 +1137,9 @@ function ColorPickerField({ label, value, onChange }) {
         {label}
       </div>
       <TextField
-        value={value}
-        onChange={(v) => {
-          // allow manual hex entry
-          onChange(v);
-        }}
+        value={draft}
+        onChange={handleText}
+        error={draftOk ? undefined : HEX_ERROR}
         autoComplete="off"
         prefix={
           <div

@@ -14,9 +14,11 @@ const XAMPP = process.env.XAMPP_DIR || 'C:/xampp';
 const MYSQLD = path.join(XAMPP, 'mysql/bin/mysqld.exe');
 const INSTALL_DB = path.join(XAMPP, 'mysql/bin/mysql_install_db.exe');
 const PHP = path.join(XAMPP, 'php/php.exe');
-const DB_PORT = 3399;
-const PHP_PORT = 8399;
-const APP_PORT = 8398; // fake BRIX app server that cod_checkout.php relays to
+// Base ports; a test file that may run next to another harness test (node
+// --test runs files in parallel) passes its own portOffset.
+const BASE_DB_PORT = 3399;
+const BASE_PHP_PORT = 8399;
+const BASE_APP_PORT = 8398; // fake BRIX app server that cod_checkout.php relays to
 const SECRET = 'test-forge-secret';
 
 export const harnessAvailable = () => [MYSQLD, INSTALL_DB, PHP].every((f) => fs.existsSync(f));
@@ -34,7 +36,11 @@ async function waitFor(fn, label, timeoutMs = 30000) {
 }
 
 // extraFiles: more php_backend files to serve (e.g. save_cart_drawer.php for the cart drawer tests).
-export async function startHarness({ extraFiles = [] } = {}) {
+// portOffset: added to every port, so two harnesses can run at once.
+export async function startHarness({ extraFiles = [], portOffset = 0 } = {}) {
+  const DB_PORT = BASE_DB_PORT + portOffset;
+  const PHP_PORT = BASE_PHP_PORT + portOffset * 2;
+  const APP_PORT = BASE_APP_PORT + portOffset * 2;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'brix-cod-php-'));
   const dataDir = path.join(root, 'data');
   const webDir = path.join(root, 'web');

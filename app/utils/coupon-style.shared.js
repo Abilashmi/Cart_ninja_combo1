@@ -11,7 +11,16 @@ export const COUPON_ICON_PATHS = {
   star: '<path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/>',
   percent: '<path fill-rule="evenodd" d="M11.527 3.327c-.6-1.306-2.455-1.306-3.054 0a1.68 1.68 0 0 1-2.112.874c-1.347-.5-2.66.813-2.16 2.16a1.68 1.68 0 0 1-.874 2.112c-1.306.6-1.306 2.455 0 3.054a1.68 1.68 0 0 1 .874 2.112c-.5 1.347.813 2.659 2.16 2.16a1.68 1.68 0 0 1 2.112.874c.6 1.306 2.455 1.306 3.054 0a1.68 1.68 0 0 1 2.112-.874c1.347.499 2.66-.813 2.16-2.16a1.68 1.68 0 0 1 .874-2.112c1.306-.6 1.306-2.455 0-3.054a1.68 1.68 0 0 1-.874-2.112c.5-1.347-.813-2.66-2.16-2.16a1.68 1.68 0 0 1-2.112-.874Zm-2.527 4.923a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3.53.53-4 4a.75.75 0 1 1-1.06-1.06l4-4a.75.75 0 1 1 1.06 1.06Zm.47 3.47a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
   cash: '<path d="M9.5 6.5a.75.75 0 0 1 1.5 0v.25h.75a.75.75 0 0 1 0 1.5h-2.25a.5.5 0 0 0 0 1h1a2 2 0 1 1 0 4v.25a.75.75 0 0 1-1.5 0v-.25h-.75a.75.75 0 0 1 0-1.5h2.25a.5.5 0 0 0 0-1h-1a2 2 0 1 1 0-4v-.25Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
+  // The Indian Rupee sign (₹) in a ring, like `cash`. Drawn as paths (not
+  // text) so no font can turn it into a missing-character box.
+  rupee: '<path d="M7.6 5.9h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M7.6 8.15h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M9.2 5.9a2.85 2.85 0 0 1 0 5.7H7.6a.6.6 0 0 1 0-1.2h1.6a1.65 1.65 0 0 0 0-3.3Z"/><path d="M8.35 11.25l.85-.85 3.1 3.3a.6.6 0 0 1-.87.83Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
 };
+
+// The ₹ sign alone (no ring), for the Progress Bar milestone icons: the same
+// paths as COUPON_ICON_PATHS.rupee, shown through RUPEE_GLYPH_VIEWBOX so it
+// fills the icon. Mirrored by cart_drawer_inline.js CC_ICON_PRESETS.rupee.
+export const RUPEE_GLYPH_PATHS = '<path d="M7.6 5.9h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M7.6 8.15h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M9.2 5.9a2.85 2.85 0 0 1 0 5.7H7.6a.6.6 0 0 1 0-1.2h1.6a1.65 1.65 0 0 0 0-3.3Z"/><path d="M8.35 11.25l.85-.85 3.1 3.3a.6.6 0 0 1-.87.83Z"/>';
+export const RUPEE_GLYPH_VIEWBOX = '5.5 5 9 10';
 
 export const COUPON_ICON_OPTIONS = [
   { label: 'Discount tag', value: 'discount' },
@@ -19,7 +28,8 @@ export const COUPON_ICON_OPTIONS = [
   { label: 'Free shipping', value: 'shipping' },
   { label: 'Star', value: 'star' },
   { label: 'Percentage', value: 'percent' },
-  { label: 'Cash', value: 'cash' },
+  { label: 'Cash ($)', value: 'cash' },
+  { label: 'Rupee (₹)', value: 'rupee' },
 ];
 
 export const COUPON_FONT_WEIGHTS = [

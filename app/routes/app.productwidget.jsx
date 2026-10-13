@@ -22,6 +22,7 @@ import { listCustomCoupons, addCustomCoupon } from "../services/coupon-banner.se
 import { saveCouponSliderSettings } from "../services/cart-config-writes.server";
 import { getShopPlan } from "../services/plan-permissions.server";
 import { CouponStyleFields } from "../components/shared/CouponStyleFields";
+import { ColorField } from "../components/shared/ColorField";
 import { couponIconHtml, couponSubtitleStyle } from "../utils/coupon-style.shared.js";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
@@ -329,17 +330,7 @@ function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) 
 }
 
 function ColorSwatch({ label, value, onChange }) {
-    return (
-        <InlineStack align="space-between" blockAlign="center">
-            <Text as="span" variant="bodySm">{label}</Text>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <div style={{ width: "28px", height: "28px", borderRadius: "6px", background: value, border: "1px solid #e1e3e5", flexShrink: 0, overflow: "hidden", cursor: "pointer" }}>
-                    <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ opacity: 0, width: "200%", height: "200%", cursor: "pointer", marginLeft: "-50%", marginTop: "-50%" }} />
-                </div>
-                <Text as="span" variant="bodySm" tone="subdued">{value}</Text>
-            </div>
-        </InlineStack>
-    );
+    return <ColorField label={label} value={value} onChange={onChange} />;
 }
 
 function CountdownStrip({ hours, minutes, loop, label, expiredLabel, bgColor, textColor, accentColor }) {
@@ -597,12 +588,9 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
             setPickerError(`Couldn't open the ${type} picker (${e?.message || "unknown error"}). Try reloading the page.`);
         }
     };
+    // Empty = the template's own colour.
     const colorRow = (label, key, def) => (
-        <InlineStack gap="200" blockAlign="center">
-            <div style={{ flex: 1 }}><Text as="span" variant="bodySm">{label}</Text></div>
-            <input type="color" value={ov[key] || td[key] || def} onChange={(e) => onChange({ [key]: e.target.value })}
-                style={{ width: "36px", height: "28px", border: "1px solid #c9cccf", borderRadius: "6px", cursor: "pointer", padding: 0, background: "none" }} />
-        </InlineStack>
+        <ColorField label={label} value={ov[key] || ""} fallback={td[key] || def} allowEmpty onChange={(v) => onChange({ [key]: v })} />
     );
     return (
         <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
@@ -718,6 +706,10 @@ export default function ProductWidgetPage() {
     const [borderRadius,setBorderRadius]= useState(activeTpl.borderRadius ?? 12);
     const [fontSize,    setFontSize]    = useState(activeTpl.fontSize    ?? 16);
     const [padding,     setPadding]     = useState(activeTpl.padding     ?? 16);
+    // Card size on the storefront (coupon-slider-render.liquid buildCard): width
+    // 200-480 px (template default 320, Bold & Vibrant 280), min height 0-300 (0 = as tall as the text).
+    const [cardWidth,   setCardWidth]   = useState(activeTpl.cardWidth   ?? (tKey === "template3" ? 280 : 320));
+    const [cardMinHeight, setCardMinHeight] = useState(activeTpl.cardMinHeight ?? 0);
     // Seeded from couponConfig (the last-saved config) exactly like heading/
     // subtext/bgColor above — these previously always started from a
     // hardcoded default regardless of what was last configured, which is
@@ -818,6 +810,7 @@ export default function ProductWidgetPage() {
             setAccentColor(src.accentColor); setButtonColor(src.buttonColor);
             setBtnTextColor(src.buttonTextColor);
             setBorderRadius(src.borderRadius); setFontSize(src.fontSize); setPadding(src.padding);
+            setCardWidth(src.cardWidth ?? (t.tplKey === "template3" ? 280 : 320)); setCardMinHeight(src.cardMinHeight ?? 0);
         }
         // Same fix as couponOverrides' own useState initializer above, applied
         // on tab switch: pull this template's real per-coupon overrides
@@ -861,7 +854,7 @@ export default function ProductWidgetPage() {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
                 selectedActiveCoupons: selectedCouponIds,
-                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding },
+                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding, cardWidth, cardMinHeight },
                 couponStyles,
                 couponConditions,
                 layout: couponLayout,
@@ -906,6 +899,8 @@ export default function ProductWidgetPage() {
         <CountdownStrip hours={timerHours} minutes={timerMins} loop={timerMode === "loop"} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
     ) : null;
 
+    // Long text wraps instead of being cut off (same as the storefront).
+    const PW_WRAP = { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word" };
     const renderPreview = () => {
         if (selectedTemplate === "classic-banner") {
             return (
@@ -913,10 +908,10 @@ export default function ProductWidgetPage() {
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
                         {pvIcon(22, false)}
                         <div style={{ flex: 1, minWidth: "100px", overflow: "hidden" }}>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
-                            <div className="pw-sub" style={pvSub({ fontSize: "13px", color: pvText, opacity: 0.65, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", ...PW_WRAP }}>{pvHeading}</div>
+                            <div className="pw-sub" style={pvSub({ fontSize: "13px", color: pvText, opacity: 0.65, ...PW_WRAP })}>{pvSubtext}</div>
                         </div>
-                        {!pvTextOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>}
+                        {!pvTextOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{pvButtonText}</button>}
                     </div>
                     {timerStrip}
                 </div>
@@ -928,15 +923,15 @@ export default function ProductWidgetPage() {
                     <div style={{ display: "flex", gap: "12px" }}>
                         {!pvTextOnly && <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${pvAccent}50`, boxSizing: "border-box" }}>
                             <div style={{ fontSize: "9px", letterSpacing: "2px", color: pvAccent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
-                            <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>{previewCode}</div>
+                            <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", wordBreak: "break-all", maxWidth: "100%" }}>{previewCode}</div>
                         </div>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
                                 {pvIcon(20, false)}
-                                <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{pvHeading}</div>
+                                <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", ...PW_WRAP, minWidth: 0 }}>{pvHeading}</div>
                             </div>
-                            <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
-                            {!pvTextOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", whiteSpace: "nowrap" }}>{pvButtonText}</button>}
+                            <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", ...PW_WRAP })}>{pvSubtext}</div>
+                            {!pvTextOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", maxWidth: "100%", ...PW_WRAP }}>{pvButtonText}</button>}
                         </div>
                     </div>
                     {timerStrip}
@@ -952,11 +947,11 @@ export default function ProductWidgetPage() {
                         </div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pvHeading}</div>
-                        <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" })}>{pvSubtext}</div>
+                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", ...PW_WRAP }}>{pvHeading}</div>
+                        <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", ...PW_WRAP })}>{pvSubtext}</div>
                         {!pvTextOnly && <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                            <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{previewCode}</div>
-                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, whiteSpace: "nowrap" }}>{pvButtonText}</button>
+                            <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", wordBreak: "break-all" }}>{previewCode}</div>
+                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{pvButtonText}</button>
                         </div>}
                     </div>
                 </div>
@@ -1118,6 +1113,9 @@ export default function ProductWidgetPage() {
                                             <SliderField label="Border Radius" value={borderRadius} min={0} max={24} suffix="px" onChange={(v) => { setBorderRadius(v); mark(); }} />
                                             <SliderField label="Font Size" value={fontSize} min={10} max={28} suffix="px" onChange={(v) => { setFontSize(v); mark(); }} />
                                             <SliderField label="Padding" value={padding} min={8} max={32} suffix="px" onChange={(v) => { setPadding(v); mark(); }} />
+                                            <SliderField label="Coupon width" value={cardWidth} min={200} max={480} step={10} suffix="px" onChange={(v) => { setCardWidth(v); mark(); }} />
+                                            <SliderField label="Minimum coupon height" value={cardMinHeight} min={0} max={300} step={10} suffix="px" onChange={(v) => { setCardMinHeight(v); mark(); }} />
+                                            <Text as="p" variant="bodySm" tone="subdued">Width applies when more than one coupon shows (one coupon fills the row). Coupons grow taller for long text, so nothing is cut off; on phones a coupon is at most 85% of the screen width. Height 0 = as tall as the text.</Text>
                                         </BlockStack>
                                     </AccordionSection>
 
@@ -1186,7 +1184,9 @@ export default function ProductWidgetPage() {
                                     <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "14px" }}>
                                         Product Page Widget
                                     </div>
-                                    {renderPreview()}
+                                    <div style={{ width: selectedCouponIds.length > 1 ? `${cardWidth}px` : "100%", maxWidth: "100%", display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
+                                        <div style={{ flex: 1, display: "grid" }}>{renderPreview()}</div>
+                                    </div>
                                 </div>
                                 <Text as="p" variant="bodySm" tone="subdued">
                                     The preview updates in real-time as you change settings. This is how the widget will appear on your product pages.

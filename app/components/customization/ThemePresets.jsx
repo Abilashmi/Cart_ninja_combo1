@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Text, Popover, Button } from '@shopify/polaris';
+import { Text, Button } from '@shopify/polaris';
+import { ColorField } from '../shared/ColorField.jsx';
 
 export function paletteToPatch({ primary, onPrimary, accent, bg, text, muted, radius }) {
   return {
@@ -46,7 +46,6 @@ const PRESETS = [
 ];
 
 export function ThemePresets({ config, applyConfigPatch, updateConfig }) {
-  const [brandOpen, setBrandOpen] = useState(false);
   const brand = config.primary_color || '#111111';
 
   return (
@@ -85,32 +84,9 @@ export function ThemePresets({ config, applyConfigPatch, updateConfig }) {
           ))}
         </div>
 
-        <div className="cst-brand-row">
-          <Popover
-            active={brandOpen}
-            activator={
-              <button
-                type="button"
-                className="cst-brand-chip"
-                style={{ background: brand }}
-                onClick={() => setBrandOpen((v) => !v)}
-                aria-label="Pick brand color"
-              />
-            }
-            onClose={() => setBrandOpen(false)}
-          >
-            <div style={{ padding: 12 }}>
-              <input
-                type="color"
-                value={brand}
-                onChange={(e) => updateConfig('primary_color', e.target.value)}
-                style={{ width: 180, height: 40, border: 'none', background: 'none' }}
-              />
-            </div>
-          </Popover>
+        <div className="cst-brand-row" style={{ alignItems: 'flex-end' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Text as="p" variant="bodySm" fontWeight="semibold">Brand color</Text>
-            <Text as="p" variant="bodyXs" tone="subdued">{brand}</Text>
+            <ColorField label="Brand color" value={brand} onChange={(v) => updateConfig('primary_color', v)} />
           </div>
           <Button
             size="slim"

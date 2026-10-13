@@ -1,6 +1,10 @@
 import React, { useCallback } from 'react';
-import { Card, FormLayout, TextField, BlockStack, Text, InlineStack, Checkbox, Select } from '@shopify/polaris';
+import { Card, FormLayout, TextField, BlockStack, Text, InlineStack, Checkbox, Select, Button } from '@shopify/polaris';
+import { DeleteIcon, PlusIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
+import {
+  ANNOUNCEMENT_INTERVAL_MAX, ANNOUNCEMENT_INTERVAL_MIN, ANNOUNCEMENT_MAX_MESSAGES, clampInterval, cleanMessages,
+} from '../../utils/announcement.shared.js';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { SliderField } from '../shared/SliderField';
 import { ColorField } from './ColorField';
@@ -22,6 +26,16 @@ export function AnnouncementsSection() {
     } catch { /* network error — global Save will catch it */ }
   }, [updateAnnouncements]);
 
+  // The list being edited (may hold a blank message just added); `text`
+  // always follows the first filled one.
+  const editList = Array.isArray(announcements.messages) && announcements.messages.length
+    ? announcements.messages
+    : [announcements.text || ''];
+  const setMessages = (list) => {
+    const next = list.length ? list : [''];
+    updateAnnouncements({ messages: next, text: cleanMessages(next)[0] || '' });
+  };
+
   return (
     <BlockStack gap="400">
       <FeatureToggle
@@ -35,13 +49,63 @@ export function AnnouncementsSection() {
       {announcements.enabled && (
         <Card>
           <FormLayout>
-            <TextField
-              label="Announcement Text"
-              value={announcements.text}
-              onChange={(v) => updateAnnouncements({ text: v })}
-              autoComplete="off"
-              multiline={2}
-            />
+            <BlockStack gap="200">
+              {editList.map((msg, i) => (
+                <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label={editList.length > 1 ? `Message ${i + 1}` : 'Announcement Text'}
+                      value={msg}
+                      onChange={(v) => setMessages(editList.map((m, j) => (j === i ? v : m)))}
+                      autoComplete="off"
+                      multiline={2}
+                      maxLength={500}
+                    />
+                  </div>
+                  {editList.length > 1 && (
+                    <Button
+                      icon={DeleteIcon}
+                      accessibilityLabel={`Remove message ${i + 1}`}
+                      onClick={() => setMessages(editList.filter((_, j) => j !== i))}
+                    />
+                  )}
+                </InlineStack>
+              ))}
+              {editList.length < ANNOUNCEMENT_MAX_MESSAGES && (
+                <div>
+                  <Button icon={PlusIcon} onClick={() => setMessages([...editList, ''])}>Add message</Button>
+                </div>
+              )}
+              {editList.length > 1 && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Shoppers see one message at a time{announcements.showArrows !== false ? ' and can move between them with the side arrows' : ''}.
+                </Text>
+              )}
+            </BlockStack>
+            {editList.length > 1 && (
+              <BlockStack gap="200">
+                <Checkbox
+                  label="Rotate messages automatically"
+                  checked={announcements.autoRotate !== false}
+                  onChange={(v) => updateAnnouncements({ autoRotate: v })}
+                />
+                {announcements.autoRotate !== false && (
+                  <SliderField
+                    label="Time per message"
+                    value={clampInterval(announcements.interval ?? 4)}
+                    min={ANNOUNCEMENT_INTERVAL_MIN}
+                    max={ANNOUNCEMENT_INTERVAL_MAX}
+                    suffix="s"
+                    onChange={(v) => updateAnnouncements({ interval: v })}
+                  />
+                )}
+                <Checkbox
+                  label="Show side arrows"
+                  checked={announcements.showArrows !== false}
+                  onChange={(v) => updateAnnouncements({ showArrows: v })}
+                />
+              </BlockStack>
+            )}
             <InlineStack gap="400">
               <ColorField
                 label="Background Color"

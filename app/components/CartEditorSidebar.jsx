@@ -9,8 +9,9 @@ import { SECTION_GROUPS } from '../types/cartEditorTypes';
 import {
   ArrowLeftIcon, ChevronDownIcon, ColorIcon, SettingsIcon,
   LayoutHeaderIcon, MegaphoneIcon, ChartVerticalIcon,
-  DiscountCodeIcon, ProductIcon, CartIcon, CashDollarIcon, CodeIcon, ImageIcon,
+  DiscountCodeIcon, ProductIcon, CartIcon, CashDollarIcon, CashRupeeIcon, CodeIcon, ImageIcon,
 } from '@shopify/polaris-icons';
+import { useCurrency } from './CurrencyContext';
 import { Icon, Modal, Text } from '@shopify/polaris';
 import { DesignSection } from './sections/DesignSection';
 import { HeaderSection } from './sections/HeaderSection';
@@ -46,6 +47,9 @@ export function CartEditorSidebar({ onDiscard }) {
   } = useCartEditor();
 
   const [openSection, setOpenSection] = useState(null);
+  // The Checkout Button section's money icon follows the store's currency.
+  const { code: currencyCode } = useCurrency();
+  const cashIcon = currencyCode === 'INR' ? CashRupeeIcon : CashDollarIcon;
   const [statusError, setStatusError] = useState('');
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const statusFetcher = useFetcher();
@@ -176,7 +180,7 @@ export function CartEditorSidebar({ onDiscard }) {
 
             {group.items.map((item) => {
               const isOpen = openSection === item.id;
-              const IconComponent = ICON_MAP[item.icon] || SettingsIcon;
+              const IconComponent = item.icon === 'cash' ? cashIcon : (ICON_MAP[item.icon] || SettingsIcon);
               const isEnabled = item.toggleable ? getEnabled(item.enabledKey) : undefined;
               const SectionComponent = SECTION_COMPONENT_MAP[item.id];
 

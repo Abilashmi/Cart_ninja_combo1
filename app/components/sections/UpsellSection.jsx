@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useFetcher } from 'react-router';
-import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Modal, Banner } from '@shopify/polaris';
+import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Modal, Banner, Checkbox } from '@shopify/polaris';
 import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import ProductPickerBody from '../shared/ProductPickerBody';
@@ -389,6 +389,29 @@ export function UpsellSection() {
               />
               <ColorField label="Title color" value={upsellProducts.titleColor} onChange={(v) => updateUpsellProducts({ titleColor: v })} />
               <TextField label="Button text" value={upsellProducts.buttonText} onChange={(v) => updateUpsellProducts({ buttonText: v })} autoComplete="off" />
+            </FormLayout>
+          </BlockStack>
+
+          <Divider />
+
+          <BlockStack gap="300">
+            <Text as="h3" variant="headingSm">Colors</Text>
+            <FormLayout>
+              <InlineStack gap="300" wrap={false}>
+                <ColorField label="Product title" value={upsellProducts.productTitleColor || '#1e293b'} onChange={(v) => updateUpsellProducts({ productTitleColor: v })} />
+                <ColorField label="Price" value={upsellProducts.priceColor || '#10b981'} onChange={(v) => updateUpsellProducts({ priceColor: v })} />
+              </InlineStack>
+              <Checkbox
+                label="Add button uses the checkout button colors"
+                checked={upsellProducts.useCheckoutButtonColors !== false}
+                onChange={(v) => updateUpsellProducts({ useCheckoutButtonColors: v })}
+              />
+              {upsellProducts.useCheckoutButtonColors === false && (
+                <InlineStack gap="300" wrap={false}>
+                  <ColorField label="Add button" value={upsellProducts.buttonColor || '#111827'} onChange={(v) => updateUpsellProducts({ buttonColor: v })} />
+                  <ColorField label="Add button text" value={upsellProducts.buttonTextColor || '#ffffff'} onChange={(v) => updateUpsellProducts({ buttonTextColor: v })} />
+                </InlineStack>
+              )}
             </FormLayout>
           </BlockStack>
         </BlockStack>

@@ -6,10 +6,11 @@ import {
 import { ChevronDownIcon } from '@shopify/polaris-icons';
 import {
   DiscountCodeIcon, GiftCardFilledIcon, DeliveryFilledIcon,
-  StarFilledIcon, DiscountFilledIcon, CashDollarIcon,
+  StarFilledIcon, DiscountFilledIcon, CashDollarIcon, CashRupeeIcon,
 } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
+import { SliderField } from '../shared/SliderField';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
 import { usePlan } from '../PlanContext';
@@ -22,6 +23,7 @@ const COUPON_ICON_MAP = {
   star: StarFilledIcon,
   percent: DiscountFilledIcon,
   cash: CashDollarIcon,
+  rupee: CashRupeeIcon,
 };
 
 
@@ -208,6 +210,32 @@ function CouponStylesTab() {
           />
           <Text as="p" variant="bodySm" tone="subdued">
             When only one coupon is shown, it fills the full width and the slide arrows are hidden.
+          </Text>
+        </FormLayout>
+      </Card>
+      <Card>
+        <FormLayout>
+          <Text as="h3" variant="headingMd">Coupon Size</Text>
+          <SliderField
+            label="Card width"
+            value={Number(couponSlider.cardWidth) || 132}
+            min={100}
+            max={360}
+            step={4}
+            suffix="px"
+            onChange={(v) => updateCouponSlider({ cardWidth: v })}
+          />
+          <SliderField
+            label="Minimum card height"
+            value={Number(couponSlider.cardMinHeight) || 0}
+            min={0}
+            max={200}
+            step={4}
+            suffix="px"
+            onChange={(v) => updateCouponSlider({ cardMinHeight: v })}
+          />
+          <Text as="p" variant="bodySm" tone="subdued">
+            Cards grow taller when the coupon text is long, so it is never cut off. On phones a card is at most 85% of the screen width. 0 = as tall as the text.
           </Text>
         </FormLayout>
       </Card>

@@ -200,6 +200,7 @@ var CS_ICON_PATHS={
   star: '<path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/>',
   percent: '<path fill-rule="evenodd" d="M11.527 3.327c-.6-1.306-2.455-1.306-3.054 0a1.68 1.68 0 0 1-2.112.874c-1.347-.5-2.66.813-2.16 2.16a1.68 1.68 0 0 1-.874 2.112c-1.306.6-1.306 2.455 0 3.054a1.68 1.68 0 0 1 .874 2.112c-.5 1.347.813 2.659 2.16 2.16a1.68 1.68 0 0 1 2.112.874c.6 1.306 2.455 1.306 3.054 0a1.68 1.68 0 0 1 2.112-.874c1.347.499 2.66-.813 2.16-2.16a1.68 1.68 0 0 1 .874-2.112c1.306-.6 1.306-2.455 0-3.054a1.68 1.68 0 0 1-.874-2.112c.5-1.347-.813-2.66-2.16-2.16a1.68 1.68 0 0 1-2.112-.874Zm-2.527 4.923a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3.53.53-4 4a.75.75 0 1 1-1.06-1.06l4-4a.75.75 0 1 1 1.06 1.06Zm.47 3.47a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
   cash: '<path d="M9.5 6.5a.75.75 0 0 1 1.5 0v.25h.75a.75.75 0 0 1 0 1.5h-2.25a.5.5 0 0 0 0 1h1a2 2 0 1 1 0 4v.25a.75.75 0 0 1-1.5 0v-.25h-.75a.75.75 0 0 1 0-1.5h2.25a.5.5 0 0 0 0-1h-1a2 2 0 1 1 0-4v-.25Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
+  rupee: '<path d="M7.6 5.9h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M7.6 8.15h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M9.2 5.9a2.85 2.85 0 0 1 0 5.7H7.6a.6.6 0 0 1 0-1.2h1.6a1.65 1.65 0 0 0 0-3.3Z"/><path d="M8.35 11.25l.85-.85 3.1 3.3a.6.6 0 0 1-.87.83Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
 };
 function csHex(v){return typeof v==='string'&&/^#[0-9a-f]{3,8}$/i.test(v.trim())?v.trim():null;}
 function csPx(v,min,max){var n=Number(v);return v===''||v==null||!isFinite(n)?null:Math.max(min,Math.min(max,Math.round(n)));}
@@ -233,6 +234,13 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
   var btc=s.buttonTextColor||'#ffffff';
   var bt1=s.buttonText||'Copy Code';
   var bt3=s.buttonText||'Copy';
+  /* Merchant's card size (px): width 200-480 (template default 320 / 280),
+     min height 0-300 (0 = as tall as the text). Never wider than 85% of the
+     screen on phones; cards grow with long text instead of cutting it off. */
+  var cw=csPx(s.cardWidth,200,480)||(tpl==='template3'?280:320);
+  var mh=csPx(s.cardMinHeight,0,300)||0;
+  var size='flex:0 0 '+cw+'px;width:'+cw+'px;min-width:0;max-width:85vw;'+(mh?'min-height:'+mh+'px;':'');
+  var wrap='white-space:normal;overflow-wrap:anywhere;word-break:break-word;';
 
   var card=document.createElement('div');
   card.className='ps-card';
@@ -245,21 +253,21 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
       'background:'+bg+';'
       +'border-left:4px solid '+ac+';'
       +'border-radius:'+br+'px;'
-      +'padding:16px 18px;'
+      +'padding:'+p+'px '+(p+2)+'px;'
       +'box-shadow:0 2px 12px rgba(0,0,0,0.07);'
-      +'display:flex;flex-direction:column;'
-      +'flex:0 0 320px;min-width:320px;box-sizing:border-box;';
+      +'display:flex;flex-direction:column;justify-content:center;'
+      +size+'box-sizing:border-box;';
     card.innerHTML=
       '<div style="display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:14px;">'
         +csIcon(s,22,ac,false)
-        +'<div style="flex:1;min-width:100px;overflow:hidden;">'
-          +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
+        +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-weight:800;font-size:'+(fs+2)+'px;color:'+tc+';line-height:1.3;'+wrap+'">'+h+'</div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;margin-top:3px;line-height:1.4;'+wrap+csSubCss(s,fs-1)+'">'+sub+'</div>'
         +'</div>'
         +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:9px 16px;border-radius:'+br+'px;'
-          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
+          +'font-size:12px;font-weight:700;flex-shrink:0;max-width:45%;line-height:1.25;cursor:pointer;'+wrap+'">'
           +bt1
         +'</button>')
       +'</div>'
@@ -273,24 +281,24 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
       +'border-radius:'+br+'px;'
       +'display:flex;flex-direction:column;'
       +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
-      +'flex:0 0 320px;min-width:320px;'
+      +size
       +'box-sizing:border-box;';
     card.innerHTML=
-      '<div style="display:flex;flex-direction:row;overflow:visible;position:relative;align-items:stretch;">'
+      '<div style="display:flex;flex-direction:row;overflow:visible;position:relative;align-items:stretch;flex:1;">'
         +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
         +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
         +(textOnly?'':'<div style="width:100px;flex-shrink:0;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'15 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;border-right:2px dashed '+ac+'40;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
           +'<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+ac+';margin-bottom:8px;display:block;white-space:nowrap;">Your Code</span>'
-          +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;">'+code+'</span>'
+          +'<span style="font-size:12px;font-weight:900;font-family:monospace;color:'+ac+';text-align:center;max-width:100%;white-space:normal;word-break:break-all;">'+code+'</span>'
         +'</div>')
         +'<div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;">'
           +'<div style="display:flex;align-items:center;gap:8px;min-width:0;">'+csIcon(s,20,ac,false)
-          +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">'+h+'</div></div>'
-          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
+          +'<div style="font-size:'+(fs+2)+'px;font-weight:800;color:'+tc+';line-height:1.3;min-width:0;'+wrap+'">'+h+'</div></div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.6;line-height:1.4;margin-bottom:6px;'+wrap+csSubCss(s,fs-1)+'">'+sub+'</div>'
           +(textOnly?'':'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
             +'background:'+bc+';color:'+btc+';border:none;'
             +'padding:7px 14px;border-radius:'+br+'px;'
-            +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
+            +'font-size:12px;font-weight:700;align-self:flex-start;max-width:100%;line-height:1.25;cursor:pointer;'+wrap+'">'
             +bt1
           +'</button>')
         +'</div>'
@@ -303,25 +311,25 @@ function buildCard(tpl,s,code,h,sub,timerData,textOnly){
     card.style.cssText=
       'background:'+bg+';'
       +'border-radius:'+br+'px;'
-      +'padding:16px 18px;'
+      +'padding:'+p+'px '+(p+2)+'px;'
       +'display:flex;flex-direction:column;gap:12px;'
       +'box-shadow:0 2px 12px rgba(0,0,0,0.07);'
       +'border:1px solid '+ac+'20;'
-      +'flex:0 0 280px;min-width:280px;box-sizing:border-box;';
+      +size+'box-sizing:border-box;';
     card.innerHTML=
       '<div style="display:flex;align-items:flex-start;gap:10px;">'
         +(function(){var ic=csIcon(s,20,ac,true);return ic?'<div class="ps-icon-box" style="min-width:38px;min-height:38px;padding:4px;box-sizing:border-box;border-radius:9px;background:'+ac+'15;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ic+'</div>':'';})()
         +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-size:'+(fs+1)+'px;font-weight:700;color:'+tc+';line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
-          +'<div class="ps-sub" style="color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;'+csSubCss(s,fs-1)+'">'+sub+'</div>'
+          +'<div style="font-size:'+(fs+1)+'px;font-weight:700;color:'+tc+';line-height:1.3;'+wrap+'">'+h+'</div>'
+          +'<div class="ps-sub" style="color:'+tc+';opacity:0.55;line-height:1.4;margin-top:2px;'+wrap+csSubCss(s,fs-1)+'">'+sub+'</div>'
         +'</div>'
       +'</div>'
-      +(textOnly?'':'<div style="display:flex;align-items:center;gap:8px;">'
-        +'<div style="flex:1;padding:7px 10px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+code+'</div>'
+      +(textOnly?'':'<div style="display:flex;align-items:center;gap:8px;margin-top:auto;">'
+        +'<div style="flex:1;min-width:0;padding:7px 10px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;text-align:center;white-space:normal;word-break:break-all;">'+code+'</div>'
         +'<button class="ps-btn" type="button" data-code="'+code+'"'+csCopiedAttrs(s)+' style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:8px 14px;border-radius:'+br+'px;'
-          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
+          +'font-size:12px;font-weight:700;flex-shrink:0;max-width:45%;line-height:1.25;cursor:pointer;'+wrap+'">'
           +bt3
         +'</button>'
       +'</div>')
@@ -575,7 +583,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 .ps-slider-row{display:flex;align-items:center;gap:8px}
 .ps-coupon-wrapper{
   flex:1;min-width:0;
-  display:flex;flex-direction:row;flex-wrap:nowrap;
+  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:stretch;
   gap:12px;
   overflow-x:auto;
   scrollbar-width:none;
@@ -587,7 +595,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 .ps-card{scroll-snap-align:start;flex-shrink:0}
 /* Single coupon: full width (beats the cards' fixed inline widths) */
 .ps-slider--single .ps-coupon-wrapper{overflow:visible}
-.ps-slider--single .ps-card{flex:1 1 100% !important;min-width:0 !important;width:100%}
+.ps-slider--single .ps-card{flex:1 1 100% !important;min-width:0 !important;width:100% !important;max-width:100% !important}
 /* Nav arrows */
 .ps-nav{
   width:34px;height:34px;border-radius:50%;

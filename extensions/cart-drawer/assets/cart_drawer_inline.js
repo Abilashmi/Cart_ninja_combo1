@@ -142,6 +142,8 @@
     star: '<path d="M11.128 4.123c-.453-.95-1.803-.95-2.256 0l-1.39 2.912-3.199.421c-1.042.138-1.46 1.422-.697 2.146l2.34 2.222-.587 3.172c-.192 1.034.901 1.828 1.825 1.327l2.836-1.54 2.836 1.54c.924.501 2.017-.293 1.825-1.327l-.587-3.172 2.34-2.222c.762-.724.345-2.008-.697-2.146l-3.2-.421-1.389-2.912Z"/>',
     percent: '<path fill-rule="evenodd" d="M11.527 3.327c-.6-1.306-2.455-1.306-3.054 0a1.68 1.68 0 0 1-2.112.874c-1.347-.5-2.66.813-2.16 2.16a1.68 1.68 0 0 1-.874 2.112c-1.306.6-1.306 2.455 0 3.054a1.68 1.68 0 0 1 .874 2.112c-.5 1.347.813 2.659 2.16 2.16a1.68 1.68 0 0 1 2.112.874c.6 1.306 2.455 1.306 3.054 0a1.68 1.68 0 0 1 2.112-.874c1.347.499 2.66-.813 2.16-2.16a1.68 1.68 0 0 1 .874-2.112c1.306-.6 1.306-2.455 0-3.054a1.68 1.68 0 0 1-.874-2.112c.5-1.347-.813-2.66-2.16-2.16a1.68 1.68 0 0 1-2.112-.874Zm-2.527 4.923a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm3.53.53-4 4a.75.75 0 1 1-1.06-1.06l4-4a.75.75 0 1 1 1.06 1.06Zm.47 3.47a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/>',
     cash: '<path d="M9.5 6.5a.75.75 0 0 1 1.5 0v.25h.75a.75.75 0 0 1 0 1.5h-2.25a.5.5 0 0 0 0 1h1a2 2 0 1 1 0 4v.25a.75.75 0 0 1-1.5 0v-.25h-.75a.75.75 0 0 1 0-1.5h2.25a.5.5 0 0 0 0-1h-1a2 2 0 1 1 0-4v-.25Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
+    // ₹ in a ring (same paths as app/utils/coupon-style.shared.js).
+    rupee: '<path d="M7.6 5.9h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M7.6 8.15h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M9.2 5.9a2.85 2.85 0 0 1 0 5.7H7.6a.6.6 0 0 1 0-1.2h1.6a1.65 1.65 0 0 0 0-3.3Z"/><path d="M8.35 11.25l.85-.85 3.1 3.3a.6.6 0 0 1-.87.83Z"/><path fill-rule="evenodd" d="M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"/>',
   };
   function ccIconSvg(key, size, color) {
     const paths = CC_ICON_PATHS[key] || CC_ICON_PATHS.discount;
@@ -194,6 +196,10 @@
   let _ccConfigLoading = false;
   let _ccActive = false; // true only when drawer is fully configured and active
   let _ccCountdownInterval = null;
+  // Rotating announcement bar: its timer, and the message showing (kept
+  // across drawer redraws so a cart update doesn't jump back to the first).
+  let _ccAnnInterval = null;
+  let _ccAnnIndex = 0;
   // Timestamp of the most recent /cart/add call NOT made by us (i.e. seen
   // via the window.fetch/XHR monkeypatches below, which only observe calls
   // that go through the wrapped globals — our own add calls always use
@@ -426,6 +432,11 @@
           announcement: {
             enabled: isEnabled(d.announcement_enabled),
             text: d.announcement_text || '',
+            // Same rules as app/utils/announcement.shared.js messagesFromConfig.
+            messages: ccAnnouncementMessages(d.announcement_messages, d.announcement_text),
+            autoRotate: d.announcement_auto_rotate != null ? isEnabled(d.announcement_auto_rotate) : true,
+            interval: Math.max(2, Math.min(15, parseInt(d.announcement_interval || 4, 10) || 4)),
+            showArrows: d.announcement_show_arrows != null ? isEnabled(d.announcement_show_arrows) : true,
             bgColor: d.announcement_bg_color || '#4f46e5',
             textColor: d.announcement_text_color || '#ffffff',
             fontSize: parseInt(d.announcement_font_size || 14, 10),
@@ -549,6 +560,55 @@
     return match ? match[1] : '';
   }
 
+  function ccRewardVariantMap(raw) {
+    let map = raw;
+    if (typeof map === 'string') {
+      try { map = JSON.parse(map); } catch (e) { map = null; }
+    }
+    const out = {};
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return out;
+    Object.keys(map).forEach((pid) => {
+      const p = ccExtractNumericId(pid);
+      const v = ccExtractNumericId(map[pid]);
+      if (p && v) out[p] = v;
+    });
+    return out;
+  }
+
+  // The badge text on a reward line: the merchant's own text for the tier
+  // that product belongs to, else FREE GIFT / REWARD. A text that says
+  // "free" is only used on a line that really costs nothing.
+  function ccRewardBadgeText(item, isFreeGift) {
+    const fallback = isFreeGift ? 'FREE GIFT' : 'REWARD';
+    const tiers = (CONFIG && CONFIG.progress && CONFIG.progress.tiers) || [];
+    const pid = String(item.product_id);
+    const tier = tiers.find((t) => t.badgeLabel && (t.products || []).some((p) => ccExtractNumericId(p) === pid));
+    if (!tier) return fallback;
+    if (!isFreeGift && /free/i.test(tier.badgeLabel)) return fallback;
+    return tier.badgeLabel;
+  }
+
+  function ccClampInt(v, min, max, def) {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def;
+  }
+
+  // The announcement messages: the stored JSON list when it has any, else the
+  // single announcement_text (bars saved before rotation existed).
+  function ccAnnouncementMessages(raw, text) {
+    let list = raw;
+    if (typeof list === 'string') {
+      try { list = JSON.parse(list); } catch (e) { list = null; }
+    }
+    const clean = (Array.isArray(list) ? list : [])
+      .map((m) => String(m == null ? '' : m).trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (clean.length) return clean;
+    const single = String(text == null ? '' : text).trim();
+    return single ? [single] : [];
+  }
+
   function parseProgressData(d) {
     const data = parseJSON(d.progress_data || d.progressData);
     const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
@@ -604,6 +664,12 @@
           // 'free' = the reward must really cost nothing at checkout, or it is not
           // given at all (see syncRewardProducts). Anything else = regular price.
           pricing: (t.rewardPricing || t.reward_pricing) === 'free' ? 'free' : 'regular',
+          // The variant the merchant picked per reward product, as
+          // { numericProductId: numericVariantId }; a product not listed gets
+          // its first in-stock variant.
+          variants: ccRewardVariantMap(t.rewardVariants || t.reward_variants),
+          // The gift row's badge text ('' = FREE GIFT / REWARD).
+          badgeLabel: String(t.rewardBadgeLabel || t.reward_badge_label || '').trim().slice(0, 30),
           rewardType: t.rewardType || 'product',
           iconType: t.iconType || 'preset',
           // The admin's ProgressBarSection tier editor saves the icon key
@@ -630,12 +696,15 @@
       // `showWhenEmpty`; `showOnEmpty` was never written, so reading only it
       // made the "Show on empty cart" toggle a no-op (always shown).
       showOnEmpty: coerceBoolean(data.showWhenEmpty ?? data.showOnEmpty ?? data.show_on_empty, true),
-      barBackgroundColor: data.barBackgroundColor || data.colors?.background || '#e2e8f0',
-      barForegroundColor: data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
-      iconColor: data.iconColor || data.icon_color || data.colors?.icon || data.barForegroundColor || data.fill_color || data.colors?.fill || '#2563eb',
+      // The Cart Editor saves colours under `colors.*`. The flat keys are from
+      // older editors and used to be re-saved unchanged next to `colors`, so
+      // reading them first made the colour pickers do nothing on the store.
+      barBackgroundColor: data.colors?.background || data.barBackgroundColor || '#e5e7eb',
+      barForegroundColor: data.colors?.fill || data.barForegroundColor || data.fill_color || '#10b981',
+      iconColor: data.colors?.icon || data.iconColor || data.icon_color || data.colors?.fill || data.barForegroundColor || data.fill_color || '#2563eb',
       borderRadius: data.borderRadius || 8,
       completionText: data.completionText || data.completionMessage || '🎉 All Rewards Unlocked!',
-      completionTextColor: data.completionTextColor || data.colors?.message || '#10b981',
+      completionTextColor: data.colors?.message || data.completionTextColor || '#10b981',
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
@@ -759,6 +828,10 @@
       position,
       layout: data.layout || 'grid',
       alignment: data.alignment || 'horizontal',
+      // Card size in the scrolling row (px): width 100-360 (default 132),
+      // min height 0-200 (0 = as tall as its text).
+      cardWidth: ccClampInt(data.cardWidth, 100, 360, 132),
+      cardMinHeight: ccClampInt(data.cardMinHeight, 0, 200, 0),
       title: {
         // Cart Editor saves sectionTitle; legacy saves titleText; structured saves title.text
         text: title.text || data.sectionTitle || data.titleText || 'Apply Coupon',
@@ -793,9 +866,12 @@
       // Admin saves this as `showWhenEmpty` (see progress bar note above).
       showOnEmptyCart: coerceBoolean(data.showWhenEmpty ?? data.showOnEmptyCart ?? data.show_on_empty_cart, true),
       buttonText: data.buttonText || 'Add to cart',
+      // The Cart Editor saves the title flat (title / titleColor / titleAlign);
+      // upsellTitle.* is the older shape.
       upsellTitle: {
-        text: data.upsellTitle?.text || 'Recommended for you',
-        color: data.upsellTitle?.color || '#111827',
+        text: data.title || data.upsellTitle?.text || 'Recommended for you',
+        color: data.titleColor || data.upsellTitle?.color || '#111827',
+        align: ['left', 'center', 'right'].includes(data.titleAlign) ? data.titleAlign : 'left',
         bold: data.upsellTitle?.formatting?.bold || false,
         italic: data.upsellTitle?.formatting?.italic || false,
         underline: data.upsellTitle?.formatting?.underline || false,
@@ -804,6 +880,12 @@
       // A sold-out pick: 'replace' = fill its spot with Shopify's related
       // products (in stock only), 'hide' = just leave it out.
       soldOutBehavior: data.soldOutBehavior === 'hide' ? 'hide' : 'replace',
+      // Add button: the checkout button's colours unless the merchant set its own.
+      useCheckoutButtonColors: data.useCheckoutButtonColors !== false,
+      buttonColor: data.buttonColor || '#111827',
+      buttonTextColor: data.buttonTextColor || '#ffffff',
+      productTitleColor: data.productTitleColor || '#1e293b',
+      priceColor: data.priceColor || '#10b981',
       activeTemplate: data.activeTemplate || 'grid',
       layout, // 'carousel' or 'grid'
     };
@@ -2065,12 +2147,14 @@
 
     const wantedProductIds = new Set();
     const freePricedIds = new Set();
+    const wantedVariant = {};
     (pInfo.completed || []).forEach((tier) => {
       (tier.products || []).forEach((pid) => {
         const numId = ccExtractNumericId(pid);
         if (!numId) return;
         wantedProductIds.add(numId);
         if (tier.pricing === 'free') freePricedIds.add(numId);
+        if (tier.variants && tier.variants[numId] && !wantedVariant[numId]) wantedVariant[numId] = tier.variants[numId];
       });
     });
 
@@ -2102,7 +2186,12 @@
         const items = [];
         toAdd.forEach((pid) => {
           const detail = storeCatalog && storeCatalog.detailsById && storeCatalog.detailsById[pid];
-          const variantId = detail && detail.variantId;
+          // The merchant's chosen variant while it's in stock, else the
+          // first in-stock one.
+          const chosen = detail && wantedVariant[pid]
+            ? (detail.variants || []).find((v) => String(v.id) === String(wantedVariant[pid]) && v.available)
+            : null;
+          const variantId = chosen ? chosen.id : (detail && detail.variantId);
           if (variantId) {
             items.push({ id: Number(variantId), quantity: 1, properties: { _brixReward: 'true' } });
           }
@@ -2143,6 +2232,8 @@
       '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
     diamond:
       '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zM19.26 8h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/></svg>',
+    // ₹ sign alone (app/utils/coupon-style.shared.js RUPEE_GLYPH_PATHS).
+    rupee: '<svg viewBox="5.5 5 9 10" fill="currentColor" width="20" height="20"><path d="M7.6 5.9h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M7.6 8.15h4.8a.6.6 0 0 1 0 1.2H7.6a.6.6 0 0 1 0-1.2Z"/><path d="M9.2 5.9a2.85 2.85 0 0 1 0 5.7H7.6a.6.6 0 0 1 0-1.2h1.6a1.65 1.65 0 0 0 0-3.3Z"/><path d="M8.35 11.25l.85-.85 3.1 3.3a.6.6 0 0 1-.87.83Z"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.89 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>',
   };
 
@@ -2509,7 +2600,7 @@
       : formatMoney(item.final_line_price / 100);
 
     return '<div class="bxcd-item' + (isGift ? ' bxcd-item--gift' : '') + '" data-item-key="' + escapeHtml(key) + '"' + (isGift ? ' style="animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;"' : '') + '>' +
-      (isGift ? '<span class="bxcd-item__badge' + (isFreeGift ? ' bxcd-item__badge--free' : '') + '">' + CC_ICON_GIFT + (isFreeGift ? 'FREE GIFT' : 'REWARD') + '</span>' : '') +
+      (isGift ? '<span class="bxcd-item__badge' + (isFreeGift ? ' bxcd-item__badge--free' : '') + '">' + CC_ICON_GIFT + escapeHtml(ccRewardBadgeText(item, isFreeGift)) + '</span>' : '') +
       '<div class="bxcd-item__media">' + (item.image
         ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
         : '<span style="font-size:28px;" aria-hidden="true">📦</span>') + '</div>' +
@@ -2621,8 +2712,23 @@
 
     /* -------- ANNOUNCEMENT BAR (below header) -------- */
     const ann = CONFIG.announcement || {};
-    if (ann.enabled && ann.text) {
-      drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:${ann.textAlign || 'center'};font-weight:${ann.bold ? 700 : 500};font-style:${ann.italic ? 'italic' : 'normal'};flex-shrink:0;">${escapeHtml(ann.text)}</div>`;
+    const annMessages = Array.isArray(ann.messages) && ann.messages.length ? ann.messages : (ann.text ? [ann.text] : []);
+    if (ann.enabled && annMessages.length) {
+      const annStyle = `background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:${ann.textAlign || 'center'};font-weight:${ann.bold ? 700 : 500};font-style:${ann.italic ? 'italic' : 'normal'};flex-shrink:0;`;
+      if (annMessages.length < 2) {
+        drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;${annStyle}">${escapeHtml(annMessages[0])}</div>`;
+      } else {
+        // One message at a time; startAnnouncementRotator() runs it.
+        if (_ccAnnIndex >= annMessages.length) _ccAnnIndex = 0;
+        const arrows = ann.showArrows !== false;
+        drawerHtml += `<div id="cc-announcement-bar" class="cc-ann cc-ann--rotating" role="region" aria-roledescription="carousel" aria-label="Announcements" data-cc-ann-count="${annMessages.length}" style="${annStyle}">`
+          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-prev" aria-label="Previous announcement">&#8249;</button>` : '')
+          + `<div class="cc-ann-track" aria-live="polite">`
+          + annMessages.map((m, i) => `<div class="cc-ann-msg${i === _ccAnnIndex ? ' cc-ann-msg--on' : ''}"${i === _ccAnnIndex ? '' : ' aria-hidden="true"'}>${escapeHtml(m)}</div>`).join('')
+          + `</div>`
+          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-next" aria-label="Next announcement">&#8250;</button>` : '')
+          + `</div>`;
+      }
     }
 
     /* -------- COUNTDOWN TIMER BAR (below announcement) -------- */
@@ -2731,7 +2837,7 @@
           targetStr: pInfo.mode === 'quantity' ? String(pInfo.upcoming.target) : formatMoney(pInfo.upcoming.target),
         });
         pbHtml += `
-    <p style="margin:0;font-size:15px;font-weight:500;color:#64748b;">
+    <p style="margin:0;font-size:15px;font-weight:500;color:${progress.completionTextColor || '#10b981'};">
       ${escapeHtml(progressMsg)}
     </p>
   `;
@@ -3055,6 +3161,63 @@
 
     startCountdownTicker();
     startCouponTimers();
+    startAnnouncementRotator();
+  }
+
+  /* =================== ROTATING ANNOUNCEMENT BAR =================== */
+  // 2+ messages: one at a time, next every `interval` s (paused while hovered
+  // or focused), ‹ › arrows and swipe. Re-run after every drawer redraw; the
+  // timer stops itself once the bar is gone (drawer closed).
+  function startAnnouncementRotator() {
+    if (_ccAnnInterval) {
+      clearInterval(_ccAnnInterval);
+      _ccAnnInterval = null;
+    }
+    const bar = document.querySelector('#cc-announcement-bar.cc-ann--rotating');
+    if (!bar) return;
+    const msgs = bar.querySelectorAll('.cc-ann-msg');
+    const count = msgs.length;
+    if (count < 2) return;
+    const ann = (CONFIG && CONFIG.announcement) || {};
+    let paused = false;
+
+    function show(i) {
+      _ccAnnIndex = ((i % count) + count) % count;
+      msgs.forEach((el, j) => {
+        const on = j === _ccAnnIndex;
+        el.classList.toggle('cc-ann-msg--on', on);
+        if (on) el.removeAttribute('aria-hidden');
+        else el.setAttribute('aria-hidden', 'true');
+      });
+    }
+
+    const prev = bar.querySelector('.cc-ann-prev');
+    const next = bar.querySelector('.cc-ann-next');
+    if (prev) prev.addEventListener('click', (e) => { e.stopPropagation(); show(_ccAnnIndex - 1); });
+    if (next) next.addEventListener('click', (e) => { e.stopPropagation(); show(_ccAnnIndex + 1); });
+    bar.addEventListener('mouseenter', () => { paused = true; });
+    bar.addEventListener('mouseleave', () => { paused = false; });
+    bar.addEventListener('focusin', () => { paused = true; });
+    bar.addEventListener('focusout', () => { paused = false; });
+    let touchX = null;
+    bar.addEventListener('touchstart', (e) => { touchX = e.touches && e.touches[0] ? e.touches[0].clientX : null; }, { passive: true });
+    bar.addEventListener('touchend', (e) => {
+      const t = e.changedTouches && e.changedTouches[0];
+      if (touchX == null || !t) return;
+      const dx = t.clientX - touchX;
+      touchX = null;
+      if (Math.abs(dx) > 30) show(_ccAnnIndex + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+
+    if (ann.autoRotate === false) return;
+    _ccAnnInterval = setInterval(() => {
+      if (!document.body.contains(bar)) {
+        clearInterval(_ccAnnInterval);
+        _ccAnnInterval = null;
+        return;
+      }
+      if (!paused) show(_ccAnnIndex + 1);
+    }, (ann.interval || 4) * 1000);
   }
 
   /* =================== COUNTDOWN TIMER TICKER =================== */
@@ -3329,7 +3492,14 @@
     const isSingleCoupon = couponsToShow.length === 1;
     const couponListStyle = isSingleCoupon
       ? 'display:flex;flex-direction:row;padding:0 0 4px 0;'
-      : 'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
+      : 'display:flex;flex-direction:row;align-items:stretch;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
+    // Merchant's card size. Cards grow with their text (min-height, never a
+    // fixed height) and long labels wrap instead of being cut off; on phones
+    // a card is never wider than 85% of the screen.
+    const cardW = couponConfig.cardWidth || 132;
+    const cardMinH = couponConfig.cardMinHeight || 0;
+    const cardSize = `width:${cardW}px;max-width:85vw;${cardMinH ? `min-height:${cardMinH}px;` : ''}`;
+    const wrapText = 'white-space:normal;overflow-wrap:anywhere;word-break:break-word;';
     const couponNavHtml = isSingleCoupon ? '' : `
     <div style="display:flex;gap:6px;">
       <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="Previous coupon">←</button>
@@ -3388,10 +3558,10 @@
       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
         ${singleIcon ? `<span style="color:${accent};display:flex;line-height:0;flex-shrink:0;">${singleIcon}</span>` : ''}
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;color:${isMinimal ? bg : tc};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</div>
-          ${coupon.description ? `<div style="opacity:0.85;line-height:1.35;margin-top:2px;${ccCouponDescCss(coupon, 11)}">${escapeHtml(coupon.description)}</div>` : ''}
+          <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;line-height:1.3;color:${isMinimal ? bg : tc};${wrapText}">${escapeHtml(coupon.label || coupon.code)}</div>
+          ${coupon.description ? `<div style="opacity:0.85;line-height:1.35;margin-top:2px;${wrapText}${ccCouponDescCss(coupon, 11)}">${escapeHtml(coupon.description)}</div>` : ''}
         </div>
-        ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="flex-shrink:0;padding:7px 14px;border-radius:6px;${btnStyle}font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
+        ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="flex-shrink:0;max-width:45%;padding:7px 14px;border-radius:6px;${btnStyle}font-size:12px;font-weight:700;cursor:pointer;line-height:1.25;${wrapText}">
           ${escapeHtml(btnLabel)}
         </button>`}
       </div>
@@ -3413,14 +3583,14 @@
         const cBg = coupon.copiedBgColor || '#10b981';
         const cTc = coupon.copiedTextColor || '#fff';
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:#fff;border:1px solid #e5e7eb;border-left:3px solid ${baseColor};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+    <div data-coupon-card class="cc-coupon-card" style="${cardSize}flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:#fff;border:1px solid #e5e7eb;border-left:3px solid ${baseColor};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;">
       ${couponTimerHtml(coupon)}
-      <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
+      <div style="display:flex;align-items:flex-start;gap:5px;min-width:0;">
         ${iconSvg ? `<span style="color:${baseColor};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>` : ''}
-        <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(coupon.label || coupon.code)}</span>
+        <span style="font-size:10px;font-weight:700;letter-spacing:0.5px;line-height:1.3;flex:1;min-width:0;${wrapText}">${escapeHtml(coupon.label || coupon.code)}</span>
       </div>
-      <div style="opacity:0.85;line-height:1.3;${ccCouponDescCss(coupon, 9)}">${escapeHtml(coupon.description || '')}</div>
-      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${isCopied ? cBg : baseColor};background:${isCopied ? cBg : 'transparent'};color:${isCopied ? cTc : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;">
+      <div style="opacity:0.85;line-height:1.3;${wrapText}${ccCouponDescCss(coupon, 9)}">${escapeHtml(coupon.description || '')}</div>
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:1px solid ${isCopied ? cBg : baseColor};background:${isCopied ? cBg : 'transparent'};color:${isCopied ? cTc : baseColor};font-size:8px;font-weight:600;cursor:pointer;width:68%;text-align:center;${wrapText}">
         ${escapeHtml(btnLabel)}
       </button>`}
     </div>
@@ -3435,12 +3605,12 @@
         const borderR = coupon.borderRadius || 8;
         const iconSvg = ccCouponIcon(coupon, 20, tc);
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 8px;background:${bg};border-radius:${borderR}px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;box-shadow:0 2px 8px ${bg}55;box-sizing:border-box;height:100%;">
+    <div data-coupon-card class="cc-coupon-card" style="${cardSize}flex-shrink:0;scroll-snap-align:start;padding:10px 8px;background:${bg};border-radius:${borderR}px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;box-shadow:0 2px 8px ${bg}55;box-sizing:border-box;">
       ${couponTimerHtml(coupon)}
       ${iconSvg ? `<span style="color:${tc};display:flex;line-height:0;">${iconSvg}</span>` : ''}
-      <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;">${escapeHtml(coupon.label || coupon.code)}</div>
-      ${coupon.description ? `<div style="color:${tc};opacity:0.85;line-height:1.3;flex:1;${ccCouponDescCss(coupon, 8)}">${escapeHtml(coupon.description)}</div>` : ''}
-      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;">
+      <div style="font-size:11px;font-weight:800;color:${tc};letter-spacing:1px;line-height:1.3;width:100%;${wrapText}">${escapeHtml(coupon.label || coupon.code)}</div>
+      ${coupon.description ? `<div style="color:${tc};opacity:0.85;line-height:1.3;flex:1;${wrapText}${ccCouponDescCss(coupon, 8)}">${escapeHtml(coupon.description)}</div>` : ''}
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;padding:3px 6px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:700;cursor:pointer;width:68%;text-align:center;letter-spacing:0.5px;${wrapText}">
         ${escapeHtml(btnLabel)}
       </button>`}
     </div>
@@ -3455,16 +3625,16 @@
         const borderR = coupon.borderRadius || 8;
         const iconSvg = ccCouponIcon(coupon, 14, tc);
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="width:132px;flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:${bg};color:${tc};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;height:100%;">
+    <div data-coupon-card class="cc-coupon-card" style="${cardSize}flex-shrink:0;scroll-snap-align:start;padding:10px 9px;background:${bg};color:${tc};border-radius:${borderR}px;display:flex;flex-direction:column;gap:5px;box-sizing:border-box;">
       ${couponTimerHtml(coupon)}
       <div style="display:flex;align-items:flex-start;gap:5px;">
         ${iconSvg ? `<span style="color:${tc};display:flex;line-height:0;flex-shrink:0;">${iconSvg}</span>` : ''}
         <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</div>
-          <div style="opacity:0.85;line-height:1.3;${ccCouponDescCss(coupon, 9)}">${escapeHtml(coupon.description || '')}</div>
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;line-height:1.3;${wrapText}">${escapeHtml(coupon.label || coupon.code)}</div>
+          <div style="opacity:0.85;line-height:1.3;${wrapText}${ccCouponDescCss(coupon, 9)}">${escapeHtml(coupon.description || '')}</div>
         </div>
       </div>
-      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;">
+      ${coupon.textOnly ? '' : `<button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="margin-top:auto;align-self:center;padding:3px 4px;border-radius:4px;border:none;background:${btnBg};color:${btnTc};font-size:8px;font-weight:600;cursor:pointer;width:60%;text-align:center;${wrapText}">
         ${escapeHtml(btnLabel)}
       </button>`}
     </div>
@@ -3593,9 +3763,13 @@
     // the checkout button's style (CartPreview.jsx's UpsellPreview), not a
     // separate hardcoded color — match that here instead of the plain black
     // .cc-add-btn default.
+    // The merchant can give the button its own colours instead.
     const addBtnCbStyle = CONFIG.checkoutButtonStyle || {};
-    const addBtnBg = addBtnCbStyle.backgroundColor || '#111827';
-    const addBtnFg = addBtnCbStyle.textColor || '#ffffff';
+    const ownAddBtn = upsellConfig.useCheckoutButtonColors === false;
+    const addBtnBg = ownAddBtn ? (upsellConfig.buttonColor || '#111827') : (addBtnCbStyle.backgroundColor || '#111827');
+    const addBtnFg = ownAddBtn ? (upsellConfig.buttonTextColor || '#ffffff') : (addBtnCbStyle.textColor || '#ffffff');
+    const upTitleColor = upsellConfig.productTitleColor || '#1e293b';
+    const upPriceColor = upsellConfig.priceColor || '#10b981';
 
     const dir = upsellConfig.direction || 'vertical';
     const layout = upsellConfig.layout || 'carousel';
@@ -3639,7 +3813,7 @@
 <div style="padding:16px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
       }flex-shrink:0;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text || 'Product Recommendations')}</p>
+    <p style="margin:0;flex:1;min-width:0;text-align:${upsellConfig.upsellTitle.align || 'left'};${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text || 'Product Recommendations')}</p>
     ${showUpsellNav
         ? `<div style="display:flex;gap:6px;">
       <button id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="${navPrevTitle}" style="display:none;">${navPrevSymbol}</button>
@@ -3709,11 +3883,11 @@
               ${imageHtml}
             </div>
             <div class="cc-upsell-content">
-              <p class="cc-upsell-title cc-upsell-title--grid" style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:#1e293b;
+              <p class="cc-upsell-title cc-upsell-title--grid" style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:${upTitleColor};
                 line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
               ${variantSelect}
               <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
-                <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+                <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:${upPriceColor};">${priceText}</span>
                 <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="padding:4px 10px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
               </div>
             </div>
@@ -3728,9 +3902,9 @@
             <div class="cc-upsell-v-image">
               ${imageHtml}
             </div>
-            <p class="cc-upsell-v-title">${escapeHtml(title)}</p>
+            <p class="cc-upsell-v-title" style="color:${upTitleColor};">${escapeHtml(title)}</p>
             <div class="cc-upsell-v-price">
-              <span class="cc-upsell-v-price-now cc-upsell-price">${priceText}</span>
+              <span class="cc-upsell-v-price-now cc-upsell-price" style="color:${upPriceColor};">${priceText}</span>
               <span class="cc-upsell-v-price-compare cc-upsell-compare"${compareAtText ? '' : ' hidden'}>${compareAtText}</span>
             </div>
             ${variantSelect}
@@ -3748,8 +3922,8 @@
               ${imageHtml}
             </div>
             <div style="padding:8px;display:flex;flex-direction:column;gap:4px;flex:1;">
-              <p style="margin:0;font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
-              <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+              <p style="margin:0;font-size:11px;font-weight:600;color:${upTitleColor};line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
+              <span class="cc-upsell-price" style="font-size:12px;font-weight:800;color:${upPriceColor};">${priceText}</span>
               ${variantSelect}
               <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="margin-top:auto;width:100%;padding:5px;font-size:10px;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
             </div>

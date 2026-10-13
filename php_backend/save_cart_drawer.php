@@ -51,6 +51,17 @@ function ensureAnnouncementStyleColumns($pdo) {
     if (!in_array('announcement_text_align', $existingCols)) {
         $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN `announcement_text_align` VARCHAR(10) NOT NULL DEFAULT 'center'");
     }
+    // Rotating announcement bar (written by the Node app's saveCartDrawerConfig,
+    // which adds them too). announcement_text stays the first message.
+    $rotationDefs = [
+        'announcement_messages' => "`announcement_messages` TEXT NULL",
+        'announcement_auto_rotate' => "`announcement_auto_rotate` TINYINT(1) NOT NULL DEFAULT 1",
+        'announcement_interval' => "`announcement_interval` TINYINT UNSIGNED NOT NULL DEFAULT 4",
+        'announcement_show_arrows' => "`announcement_show_arrows` TINYINT(1) NOT NULL DEFAULT 1",
+    ];
+    foreach ($rotationDefs as $col => $ddl) {
+        if (!in_array($col, $existingCols)) $pdo->exec("ALTER TABLE cart_drawer_config ADD COLUMN $ddl");
+    }
     $ensured = true;
 }
 
@@ -276,6 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
               cdc.announcement_enabled, cdc.announcement_text, cdc.announcement_bg_color,
               cdc.announcement_text_color, cdc.announcement_font_size,
               cdc.announcement_bold, cdc.announcement_italic, cdc.announcement_text_align,
+              cdc.announcement_messages, cdc.announcement_auto_rotate, cdc.announcement_interval, cdc.announcement_show_arrows,
               cdc.header_title, cdc.header_bg_color, cdc.header_text_color, cdc.header_border_bottom,
               cdc.design_animation, cdc.design_border_radius, cdc.design_shadow, cdc.design_width,
               cdc.empty_cart_message, cdc.empty_cart_show_continue_shopping, cdc.empty_cart_show_recommendations,

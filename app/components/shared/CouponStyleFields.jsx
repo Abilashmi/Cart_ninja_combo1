@@ -4,19 +4,19 @@
 // app/utils/coupon-style.shared.js and both storefront renderers.
 import { BlockStack, Checkbox, InlineStack, Select, Text, TextField } from '@shopify/polaris';
 import { COUPON_FONT_WEIGHTS, COUPON_ICON_OPTIONS, couponIconSvg, httpsOrNull } from '../../utils/coupon-style.shared.js';
+import { ColorField } from './ColorField.jsx';
 
+// Empty = the card's own colour (fallback); Reset clears back to it.
 function ColorRow({ label, value, fallback, onChange }) {
   return (
-    <InlineStack gap="200" blockAlign="center" wrap={false}>
-      <div style={{ flex: 1 }}><Text as="span" variant="bodySm">{label}</Text></div>
-      <input
-        type="color" aria-label={label} value={value || fallback} onChange={(e) => onChange(e.target.value)}
-        style={{ width: 36, height: 28, border: '1px solid #c9cccf', borderRadius: 6, cursor: 'pointer', padding: 0, background: 'none' }}
-      />
+    <InlineStack gap="200" blockAlign="end" wrap={false}>
+      <ColorField label={label} value={value || ''} fallback={fallback} allowEmpty onChange={onChange} />
       {value && (
-        <button type="button" onClick={() => onChange('')} style={{ background: 'none', border: 'none', color: '#637381', cursor: 'pointer', fontSize: 12 }}>
-          Reset
-        </button>
+        <div style={{ paddingBottom: 6 }}>
+          <button type="button" onClick={() => onChange('')} style={{ background: 'none', border: 'none', color: '#637381', cursor: 'pointer', fontSize: 12 }}>
+            Reset
+          </button>
+        </div>
       )}
     </InlineStack>
   );

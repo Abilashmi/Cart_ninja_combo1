@@ -91,6 +91,37 @@ async function ensureAnnouncementStyleColumns(db) {
   ]);
 }
 
+// Rotating announcement bar: several messages (JSON array; announcement_text
+// stays the first one for older readers), auto-rotate, seconds per message,
+// side arrows.
+export const ANNOUNCEMENT_MAX_MESSAGES = 10;
+async function ensureAnnouncementRotationColumns(db) {
+  await ensureColumns(db, 'cart_drawer_config.announcement_rotation', 'cart_drawer_config', [
+    { name: 'announcement_messages', ddl: '`announcement_messages` TEXT NULL' },
+    { name: 'announcement_auto_rotate', ddl: '`announcement_auto_rotate` TINYINT(1) NOT NULL DEFAULT 1' },
+    { name: 'announcement_interval', ddl: '`announcement_interval` TINYINT UNSIGNED NOT NULL DEFAULT 4' },
+    { name: 'announcement_show_arrows', ddl: '`announcement_show_arrows` TINYINT(1) NOT NULL DEFAULT 1' },
+  ]);
+}
+
+// Messages from a patch: an array of strings (trimmed, max 500 chars each,
+// empties dropped, max ANNOUNCEMENT_MAX_MESSAGES) as JSON, or null when none.
+function cleanAnnouncementMessages(v) {
+  let list = v;
+  if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = [list]; } }
+  if (!Array.isArray(list)) return null;
+  const clean = list
+    .map((m) => String(m ?? '').trim().slice(0, 500))
+    .filter(Boolean)
+    .slice(0, ANNOUNCEMENT_MAX_MESSAGES);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+function cleanAnnouncementInterval(v, def) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && v !== '' && v !== null && v !== undefined ? Math.max(2, Math.min(15, n)) : def;
+}
+
 // Self-heals the countdown_* columns onto cart_drawer_config the same way
 // ensureAnnouncementStyleColumns does — the Cart Drawer's countdown timer had
 // no backend at all before this (see plan Phase 2); this is the first write
@@ -103,6 +134,37 @@ export async function ensureRewardPricingColumn(db) {
   await ensureColumns(db, 'progress_bar_tiers.reward_pricing', 'progress_bar_tiers', [
     { name: 'reward_pricing', ddl: "`reward_pricing` VARCHAR(10) NOT NULL DEFAULT 'regular'" },
   ]);
+}
+
+// A reward product's chosen variant ({ productGid: variantGid }; a product
+// not in it gets its first in-stock variant) and the merchant's own text for
+// the gift row's badge (empty = the drawer's FREE / REWARD).
+export const REWARD_BADGE_MAX = 30;
+export async function ensureRewardVariantColumns(db) {
+  await ensureColumns(db, 'progress_bar_tiers.reward_variants', 'progress_bar_tiers', [
+    { name: 'reward_variants', ddl: '`reward_variants` TEXT NULL' },
+    { name: 'reward_badge_label', ddl: '`reward_badge_label` VARCHAR(30) NULL' },
+  ]);
+}
+
+// { productGid: variantGid } with Shopify GIDs only, limited to the tier's
+// own products; JSON or null.
+function cleanRewardVariants(v, products) {
+  let map = v;
+  if (typeof map === 'string') { try { map = JSON.parse(map); } catch { map = null; } }
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return null;
+  const allowed = new Set((products || []).map(String));
+  const out = {};
+  for (const [pid, vid] of Object.entries(map)) {
+    if (!allowed.has(String(pid))) continue;
+    if (/^gid:\/\/shopify\/ProductVariant\/\d+$/.test(String(vid || ''))) out[pid] = String(vid);
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : null;
+}
+
+function cleanRewardBadge(v) {
+  const s = String(v ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, REWARD_BADGE_MAX);
+  return s || null;
 }
 
 export async function ensureCountdownTimerColumns(db) {
@@ -151,12 +213,32 @@ function pickBannerImage(v, exVal) {
 export async function saveCartDrawerConfig(shop, planKey, patch) {
   const db = getDb();
   await ensureAnnouncementStyleColumns(db);
+  await ensureAnnouncementRotationColumns(db);
   await ensureBannerColumns(db);
 
   const [exRows] = await db.execute(
     'SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [shop]
   );
   const ex = exRows[0] || {};
+
+  // announcement_text is always the first message. A caller sending only the
+  // text (the AI's update_announcement_bar) changes the first message and
+  // keeps the rest.
+  let announcementMessages;
+  let announcementText;
+  if (patch.announcement_messages !== undefined) {
+    announcementMessages = cleanAnnouncementMessages(patch.announcement_messages);
+    announcementText = announcementMessages ? JSON.parse(announcementMessages)[0] : pick(patch.announcement_text, null, null);
+  } else {
+    announcementText = pick(patch.announcement_text, ex.announcement_text, null);
+    const stored = ex.announcement_messages ? (JSON.parse(cleanAnnouncementMessages(ex.announcement_messages) || '[]')) : [];
+    if (patch.announcement_text !== undefined && stored.length) {
+      stored[0] = String(announcementText ?? '').trim();
+      announcementMessages = cleanAnnouncementMessages(stored);
+    } else {
+      announcementMessages = ex.announcement_messages ?? null;
+    }
+  }
 
   // Custom CSS is 'locked' on Free — always forced to null on save when not
   // publishable, regardless of what's already stored (matches the original
@@ -172,13 +254,14 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       custom_css,
       announcement_enabled, announcement_text, announcement_bg_color,
       announcement_text_color, announcement_font_size, announcement_bold, announcement_italic, announcement_text_align,
+      announcement_messages, announcement_auto_rotate, announcement_interval, announcement_show_arrows,
       open_on_add, open_on_icon_click, position,
       header_title, header_close_style, header_bg_color, header_text_color, header_border_bottom,
       design_width, design_border_radius, design_shadow, design_animation,
       empty_cart_message, empty_cart_show_continue_shopping, empty_cart_show_recommendations,
       banner_enabled, banner_desktop_image, banner_mobile_image, banner_placement, banner_alt,
       banner_margin_top, banner_margin_bottom
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
       is_enabled                        = VALUES(is_enabled),
       checkout_button_text              = VALUES(checkout_button_text),
@@ -195,7 +278,11 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
       announcement_bold                 = VALUES(announcement_bold),
       announcement_italic               = VALUES(announcement_italic),
       announcement_text_align           = VALUES(announcement_text_align),
-      open_on_add                       = VALUES(open_on_add),
+      announcement_messages             = VALUES(announcement_messages),
+      announcement_auto_rotate          = VALUES(announcement_auto_rotate),
+      announcement_interval             = VALUES(announcement_interval),
+      announcement_show_arrows          = VALUES(announcement_show_arrows),
+      open_on_add                      = VALUES(open_on_add),
       open_on_icon_click                = VALUES(open_on_icon_click),
       position                          = VALUES(position),
       header_title                      = VALUES(header_title),
@@ -228,13 +315,17 @@ export async function saveCartDrawerConfig(shop, planKey, patch) {
     pick(patch.checkout_button_border_radius, ex.checkout_button_border_radius, 4),
     customCss,
     pickFlag(patch.announcement_enabled, ex.announcement_enabled, 0),
-    pick(patch.announcement_text, ex.announcement_text, null),
+    announcementText,
     pick(patch.announcement_bg_color, ex.announcement_bg_color, '#111827'),
     pick(patch.announcement_text_color, ex.announcement_text_color, '#ffffff'),
     pick(patch.announcement_font_size, ex.announcement_font_size, 13),
     pickFlag(patch.announcement_bold, ex.announcement_bold, 0),
     pickFlag(patch.announcement_italic, ex.announcement_italic, 0),
     pick(patch.announcement_text_align, ex.announcement_text_align, 'center'),
+    announcementMessages,
+    pickFlag(patch.announcement_auto_rotate, ex.announcement_auto_rotate, 1),
+    cleanAnnouncementInterval(patch.announcement_interval, cleanAnnouncementInterval(ex.announcement_interval, 4)),
+    pickFlag(patch.announcement_show_arrows, ex.announcement_show_arrows, 1),
     pickFlag(patch.open_on_add, ex.open_on_add, 1),
     pickFlag(patch.open_on_icon_click, ex.open_on_icon_click, 1),
     pick(patch.position, ex.position, 'right'),
@@ -285,6 +376,11 @@ export async function fetchProgressBar(db, shop) {
           ? (() => { try { return JSON.parse(t.reward_products); } catch { return []; } })()
           : t.reward_products)
       : [],
+    reward_variants: t.reward_variants
+      ? (typeof t.reward_variants === 'string'
+          ? (() => { try { return JSON.parse(t.reward_variants) || {}; } catch { return {}; } })()
+          : t.reward_variants)
+      : {},
   }));
   return settings;
 }
@@ -297,6 +393,7 @@ export async function fetchProgressBar(db, shop) {
 export async function saveProgressBarSettings(shop, planKey, patch) {
   const db = getDb();
   await ensureRewardPricingColumn(db);
+  await ensureRewardVariantColumns(db);
   const ex = (await fetchProgressBar(db, shop)) || {};
 
   const progressBarAllowed = canPublishFeature(planKey, 'progress_bar');
@@ -330,7 +427,7 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
     pick(patch.mode, ex.mode, 'amount'),
     pickFlag(patch.show_on_empty, ex.show_on_empty, 1),
     pick(patch.bar_background_color, ex.bar_background_color, '#e5e7eb'),
-    pick(patch.bar_foreground_color, ex.bar_foreground_color, '#2563eb'),
+    pick(patch.bar_foreground_color, ex.bar_foreground_color, '#10b981'),
     pick(patch.icon_color, ex.icon_color, '#2563eb'),
     pick(patch.border_radius, ex.border_radius, 8),
     pick(patch.placement, ex.placement, 'top'),
@@ -352,8 +449,9 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
         await db.execute(`
           INSERT INTO progress_bar_tiers
             (shop_domain, settings_id, min_value, min_quantity, description,
-             reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, is_active, sort_order)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)
+             reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing,
+             reward_variants, reward_badge_label, is_active, sort_order)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
         `, [
           shop, settingsId,
           t.min_value ?? t.minValue ?? 0,
@@ -365,6 +463,12 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
           t.icon_custom_svg ?? t.iconCustomSvg ?? null,
           products,
           (t.reward_pricing ?? t.rewardPricing) === 'free' ? 'free' : 'regular',
+          // A caller that doesn't send these (the AI's tier tools) keeps what
+          // the tier in the same place had.
+          cleanRewardVariants(t.reward_variants ?? t.rewardVariants ?? ex.tiers?.[i]?.reward_variants, t.products),
+          cleanRewardBadge(t.reward_badge_label !== undefined || t.rewardBadgeLabel !== undefined
+            ? (t.reward_badge_label ?? t.rewardBadgeLabel)
+            : ex.tiers?.[i]?.reward_badge_label),
           i,
         ]);
       }
@@ -430,8 +534,19 @@ function parseManualRules(row) {
 // existing rules — the original route's bug (writing NULL whenever
 // manualRules wasn't sent) is fixed here by falling back to the existing
 // JSON column rather than to null.
+// The upsell row's own colours: Add button (or follow the checkout button,
+// the default and what every drawer did before), product title, price.
+async function ensureUpsellColorColumns(db) {
+  await ensureColumns(db, 'upsell_widget_settings.colors', 'upsell_widget_settings', [
+    { name: 'button_follow_checkout', ddl: '`button_follow_checkout` TINYINT(1) NOT NULL DEFAULT 1' },
+    { name: 'product_title_color', ddl: '`product_title_color` VARCHAR(20) NULL' },
+    { name: 'price_color', ddl: '`price_color` VARCHAR(20) NULL' },
+  ]);
+}
+
 export async function saveUpsellWidgetSettings(shop, planKey, patch) {
   const db = getDb();
+  await ensureUpsellColorColumns(db);
   const [exRows] = await db.execute(
     'SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
   );
@@ -445,9 +560,13 @@ export async function saveUpsellWidgetSettings(shop, planKey, patch) {
     INSERT INTO upsell_widget_settings
       (shop_domain, is_enabled, title, title_color, title_font_weight,
        show_on_empty_cart, layout, button_text, button_bg_color, button_text_color,
-       button_border_radius, show_price, position, display_limit, active_template, manual_rules)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       button_border_radius, show_price, position, display_limit, active_template, manual_rules,
+       button_follow_checkout, product_title_color, price_color)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
+      button_follow_checkout = VALUES(button_follow_checkout),
+      product_title_color = VALUES(product_title_color),
+      price_color         = VALUES(price_color),
       is_enabled          = VALUES(is_enabled),
       title               = VALUES(title),
       title_color         = VALUES(title_color),
@@ -481,6 +600,9 @@ export async function saveUpsellWidgetSettings(shop, planKey, patch) {
     pick(patch.display_limit, ex.display_limit, 3),
     pick(patch.active_template ?? patch.layout, ex.active_template, 'grid'),
     manualRules,
+    pickFlag(patch.button_follow_checkout, ex.button_follow_checkout, 1),
+    pick(patch.product_title_color, ex.product_title_color, null),
+    pick(patch.price_color, ex.price_color, null),
   ]);
 
   const [rows] = await db.execute(

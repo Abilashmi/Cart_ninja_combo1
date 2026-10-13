@@ -2,6 +2,8 @@ import { useNavigate, useLoaderData, useFetcher } from 'react-router';
 import { useCallback, useState, useRef } from 'react';
 import { Frame, Toast } from '@shopify/polaris';
 import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext';
+import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
+import { announcementMessages, clampInterval } from '../utils/announcement.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
 import '../styles/cart-editor.css';
@@ -49,7 +51,7 @@ function CartEditorContent() {
       intent:              'saveCartConfig',
       cartStatus:          status === 'active' ? 1 : 0,
       progress_status:     pb.enabled ? 1 : 0,
-      progress_data:       JSON.stringify(pb),
+      progress_data:       JSON.stringify(withoutLegacyBarColors(pb)),
       coupon_status:       cs.enabled ? 1 : 0,
       coupon_data:         JSON.stringify(cs),
       upsell_status:       up.enabled ? 1 : 0,
@@ -81,7 +83,11 @@ function CartEditorContent() {
           checkout_button_border_radius:      cb.borderRadius,
           custom_css:                         footer.customCSS,
           announcement_enabled:               ann.enabled ? 1 : 0,
-          announcement_text:                  ann.text || null,
+          announcement_text:                  announcementMessages(ann)[0] || null,
+          announcement_messages:              announcementMessages(ann),
+          announcement_auto_rotate:           ann.autoRotate !== false ? 1 : 0,
+          announcement_interval:              clampInterval(ann.interval ?? 4),
+          announcement_show_arrows:           ann.showArrows !== false ? 1 : 0,
           announcement_bg_color:              ann.bgColor   || '#111827',
           announcement_text_color:            ann.textColor || '#ffffff',
           announcement_font_size:             ann.fontSize  || 13,
@@ -117,7 +123,7 @@ function CartEditorContent() {
           mode:                   pb.mode             || 'amount',
           show_on_empty:          pb.showWhenEmpty    ?? pb.showOnEmpty ?? 1,
           bar_background_color:   pb.colors?.background || pb.barBackgroundColor || '#e5e7eb',
-          bar_foreground_color:   pb.colors?.fill       || pb.barForegroundColor || '#2563eb',
+          bar_foreground_color:   pb.colors?.fill       || pb.barForegroundColor || '#10b981',
           icon_color:             pb.colors?.icon       || pb.iconColor           || '#2563eb',
           border_radius:          pb.borderRadius       ?? 8,
           placement:              pb.position           || 'top',
@@ -139,6 +145,8 @@ function CartEditorContent() {
             icon_custom_svg: t.iconCustomSvg || null,
             products:       t.rewardProducts || t.products || [],
             reward_pricing: t.rewardPricing === 'free' ? 'free' : 'regular',
+            reward_variants: t.rewardVariants || {},
+            reward_badge_label: t.rewardBadgeLabel || '',
             sort_order:     i,
           })),
         }),
@@ -153,6 +161,9 @@ function CartEditorContent() {
           button_bg_color:       up.buttonColor       || '#111827',
           button_text_color:     up.buttonTextColor   || '#ffffff',
           button_border_radius:  up.buttonBorderRadius ?? 6,
+          button_follow_checkout: up.useCheckoutButtonColors !== false ? 1 : 0,
+          product_title_color:   up.productTitleColor || '#1e293b',
+          price_color:           up.priceColor        || '#10b981',
           show_price:            up.showPrice !== false ? 1 : 0,
           position:              up.position          || 'bottom',
           display_limit:         up.limit             || up.displayLimit || 3,

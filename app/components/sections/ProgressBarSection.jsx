@@ -167,6 +167,45 @@ function RewardProductsCard({ ids, catalog, onEdit }) {
   );
 }
 
+const REWARD_BADGE_MAX = 30;
+
+// For each picked reward product with more than one variant: which variant is
+// added to the cart (default = the first in-stock one, as before). Value is
+// { productGid: variantGid }; only picked products are kept.
+function RewardVariantPickers({ ids, catalog, value, onChange }) {
+  const products = (ids || [])
+    .map((id) => (catalog || []).find((p) => p.id === id))
+    .filter((p) => p && Array.isArray(p.variants) && p.variants.length > 1);
+  if (products.length === 0) return null;
+  const set = (productId, variantId) => {
+    const next = {};
+    for (const id of ids || []) if (value[id] && id !== productId) next[id] = value[id];
+    if (variantId) next[productId] = variantId;
+    onChange(next);
+  };
+  return (
+    <BlockStack gap="200">
+      {products.map((p) => {
+        const options = [
+          { label: 'First in-stock variant (automatic)', value: '' },
+          ...p.variants.map((v) => ({ label: `${v.title}${v.available === false ? ' (sold out)' : ''}`, value: v.id, disabled: v.available === false && v.id !== value[p.id] })),
+        ];
+        const chosen = p.variants.find((v) => v.id === value[p.id]);
+        return (
+          <Select
+            key={p.id}
+            label={`Variant of ${p.title}`}
+            options={options}
+            value={chosen ? chosen.id : ''}
+            onChange={(v) => set(p.id, v)}
+            helpText={chosen && chosen.available === false ? 'This variant is sold out, so the first in-stock variant is added instead until it is back.' : undefined}
+          />
+        );
+      })}
+    </BlockStack>
+  );
+}
+
 export function ProgressBarSection() {
   const { body, updateProgressBar, allProducts: catalog } = useCartEditor();
   const { symbol: currencySymbol } = useCurrency();
@@ -189,6 +228,8 @@ export function ProgressBarSection() {
       rewardProducts: [],
       rewardProductCount: 0,
       rewardPricing: 'free',
+      rewardVariants: {},
+      rewardBadgeLabel: '',
       progressMessage: '',
       completionMessage: '',
       confetti: true,
@@ -205,9 +246,14 @@ export function ProgressBarSection() {
   };
 
   const handleSaveProducts = (selectedIds) => {
+    // Keep variant choices only for products still picked.
+    const prev = progressBar.tiers[pickerTierIndex]?.rewardVariants || {};
+    const rewardVariants = {};
+    for (const id of selectedIds) if (prev[id]) rewardVariants[id] = prev[id];
     updateTier(pickerTierIndex, {
       rewardProducts: selectedIds,
       rewardProductCount: selectedIds.length,
+      rewardVariants,
     });
   };
 
@@ -322,6 +368,7 @@ export function ProgressBarSection() {
                     { label: 'Star', value: 'star' },
                     { label: 'Trophy', value: 'trophy' },
                     { label: 'Diamond', value: 'diamond' },
+                    { label: 'Rupee (₹)', value: 'rupee' },
                   ]}
                   value={activeTier.icon}
                   onChange={(v) => updateTier(activeTierIndex, { icon: v })}
@@ -333,6 +380,25 @@ export function ProgressBarSection() {
                     catalog={catalog}
                     onEdit={() => setPickerTierIndex(activeTierIndex)}
                   />
+                  <RewardVariantPickers
+                    ids={activeTier.rewardProducts}
+                    catalog={catalog}
+                    value={activeTier.rewardVariants || {}}
+                    onChange={(rewardVariants) => updateTier(activeTierIndex, { rewardVariants })}
+                  />
+                  {activeTier.rewardProductCount > 0 && (
+                    <TextField
+                      label="Gift badge text"
+                      value={activeTier.rewardBadgeLabel || ''}
+                      onChange={(v) => updateTier(activeTierIndex, { rewardBadgeLabel: v.replace(/\s+/g, ' ').slice(0, REWARD_BADGE_MAX) })}
+                      placeholder={activeTier.rewardPricing === 'free' ? 'FREE GIFT' : 'REWARD'}
+                      maxLength={REWARD_BADGE_MAX}
+                      showCharacterCount
+                      autoComplete="off"
+                      error={/[<>]/.test(activeTier.rewardBadgeLabel || '') ? 'Remove < and > from the badge text' : undefined}
+                      helpText={'The tag shown on the reward product in the cart, e.g. "BIRTHDAY GIFT". Leave empty for FREE GIFT / REWARD. Text with the word "free" only shows when the product really costs nothing.'}
+                    />
+                  )}
                   {activeTier.rewardProductCount > 0 && (
                     <Select
                       label="Reward price"

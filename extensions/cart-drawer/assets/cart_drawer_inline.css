@@ -494,10 +494,67 @@
   }
 }
 
+/* Rotating announcement bar (2+ messages): one message at a time, side
+   arrows. Colours/font come inline from the merchant's settings. */
+#cc-announcement-bar.cc-ann--rotating {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+}
+.cc-ann-track {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.cc-ann-msg {
+  grid-area: 1 / 1;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s linear 0.35s;
+}
+.cc-ann-msg--on {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s;
+}
+.cc-ann-arrow {
+  flex-shrink: 0;
+  background: none !important;
+  border: none !important;
+  color: inherit !important;
+  font: inherit;
+  font-size: 1.4em !important;
+  line-height: 1 !important;
+  padding: 0 6px !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  cursor: pointer;
+  opacity: 0.85;
+  box-shadow: none !important;
+}
+.cc-ann-arrow:hover,
+.cc-ann-arrow:focus-visible {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-ann-msg,
+  .cc-ann-msg--on {
+    transition: none;
+    transform: none;
+  }
+}
+
 @media (max-width: 480px) {
 
   /* Tighter spacing on phones: the drawer's sections are styled inline in
      cart_drawer_inline.js, so these need !important. */
+  #cc-announcement-bar.cc-ann--rotating { padding: 6px 6px !important; }
+  .cc-ann-arrow { padding: 0 4px !important; font-size: 1.25em !important; }
   #cc-drawer .cc-drawer-header { padding: 12px 14px !important; }
   #cc-drawer-body { padding: 10px 12px 12px !important; --cc-gap: 8px !important; }
   #cc-drawer .cc-progress-section { padding: 2px 4px !important; }

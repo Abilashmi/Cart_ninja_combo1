@@ -262,6 +262,105 @@ for (const behavior of ['replace', 'hide']) {
   data.cartRecord = null; data.csRecord = null;
 }
 
+// ── Customization fixes: hex codes, rotating announcements, upsell colours,
+// coupon size, free gift variant + badge, and what Save sends ──
+{
+  const P = 'gid://shopify/Product/101';
+  data.configRecord = { is_enabled: 1, banner_enabled: 0, announcement_enabled: 1, announcement_text: 'Free shipping today', announcement_bg_color: '#111827', announcement_text_color: '#ffffff' };
+  data.cartRecord = {
+    cartStatus: 1, upsell_status: 1, coupon_status: 1,
+    upsell_data: JSON.stringify({ enabled: true, useAI: false, direction: 'vertical', layout: 'carousel', title: 'More', buttonText: 'Add', manualRules: [{ id: 'r1', triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/103'] }] }),
+    coupon_data: JSON.stringify({ enabled: true, position: 'top', layout: 'carousel', template: 'template2', selectedCoupons: [
+      { id: 'c1', code: 'A', labelText: 'A very long coupon label that should wrap instead of being cut off', description: 'd', bgColor: '#4f46e5', textColor: '#ffffff', icon: 'rupee', borderRadius: 8, buttonText: 'Apply' },
+      { id: 'c2', code: 'B', labelText: 'B', description: 'd', bgColor: '#be185d', textColor: '#ffffff', icon: 'discount', borderRadius: 8, buttonText: 'Apply' },
+    ] }),
+  };
+  data.pbRecord = { is_enabled: 1, mode: 'amount', placement: 'top', show_on_empty: 1, tiers: [{ id: 9, min_value: 1, description: 'Gift', reward_type: 'product', icon_preset: 'rupee', reward_products: [P], reward_pricing: 'regular', reward_variants: {}, reward_badge_label: null }] };
+  saves.length = 0;
+  const ed = await ctx.newPage();
+  ed.on('pageerror', (e) => errors.push(e.message));
+  await ed.goto('https://admin.test/app/cartdrawer');
+  await ed.waitForSelector('text=Announcements');
+  const open = async (name) => { await ed.locator('button', { hasText: name }).first().click(); await ed.waitForTimeout(250); };
+
+  // Announcements: add a second message → arrows and rotation in the preview.
+  await open('Announcements');
+  await ed.getByRole('button', { name: 'Add message' }).click();
+  await ed.getByRole('textbox', { name: 'Message 2', exact: true }).fill('Sale ends Sunday');
+  await ed.waitForTimeout(200);
+  check('announcements: 2+ messages show auto-rotate, time and arrows settings', (await ed.getByLabel('Rotate messages automatically').count()) === 1 && (await ed.getByLabel('Show side arrows').count()) === 1);
+  const annText = () => ed.locator('.cart-preview-announcement-msg').textContent();
+  check('announcements preview: first message, with side arrows', (await annText()) === 'Free shipping today' && (await ed.getByRole('button', { name: 'Next announcement' }).count()) === 1);
+  await ed.getByRole('button', { name: 'Next announcement' }).click();
+  check('announcements preview: next arrow shows message 2', (await annText()) === 'Sale ends Sunday');
+
+  // Hex code typed by hand: invalid shows an error and is not used; valid is.
+  const bgBox = ed.getByRole('textbox', { name: /^Background Color/ });
+  await bgBox.fill('#12');
+  await ed.waitForTimeout(150);
+  const annBg = () => ed.locator('.cart-preview-announcement').evaluate((e) => getComputedStyle(e).backgroundColor);
+  check('colour code: an invalid code shows a clear message and the colour stays', (await ed.getByText('Enter a hex colour code like #008060').count()) >= 1 && (await annBg()) === 'rgb(17, 24, 39)', await annBg());
+  await bgBox.fill('#ABC');
+  await ed.waitForTimeout(150);
+  check('colour code: a typed #ABC is applied (as #aabbcc)', (await annBg()) === 'rgb(170, 187, 204)' && (await ed.getByText('Enter a hex colour code like #008060').count()) === 0, await annBg());
+  check('colour code: the swatch picker follows the typed code', (await ed.getByLabel('Pick Background Color').inputValue()) === '#aabbcc');
+
+  // Upsell: own Add button colour, price colour.
+  await open('Upsell Products');
+  await ed.getByLabel('Add button uses the checkout button colors').uncheck();
+  // Accessible name = label + the swatch prefix ("Add button #…").
+  await ed.getByRole('textbox', { name: /^Add button #/ }).fill('#008060');
+  await ed.getByRole('textbox', { name: /^Price/ }).fill('#ff5733');
+  await ed.waitForTimeout(200);
+  const up = await ed.evaluate(() => {
+    const sec = document.querySelector('.cart-preview-upsell-section');
+    const btn = sec && [...sec.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Add');
+    const price = sec && [...sec.querySelectorAll('div')].find((d) => /₹/.test(d.textContent) && d.children.length === 0);
+    return { btn: btn && getComputedStyle(btn).backgroundColor, price: price && getComputedStyle(price).color };
+  });
+  check('upsell preview: own Add button and price colours', up.btn === 'rgb(0, 128, 96)' && up.price === 'rgb(255, 87, 51)', JSON.stringify(up));
+
+  // Coupon card size + long label.
+  await open('Coupon Slider');
+  await ed.getByRole('spinbutton', { name: 'Card width' }).fill('220');
+  await ed.waitForTimeout(200);
+  const cp = await ed.evaluate(() => {
+    const label = [...document.querySelectorAll('.bxcd-root div, .bxcd-root span')].find((d) => d.textContent.trim().startsWith('A very long coupon label') && d.children.length === 0);
+    const card = label && label.closest('div[style*="width: 220px"]');
+    return { card: Boolean(card), wraps: label ? getComputedStyle(label).whiteSpace !== 'nowrap' && label.getBoundingClientRect().height > 20 : false };
+  });
+  check('coupon preview: card takes the merchant\'s width and the long label wraps', cp.card && cp.wraps, JSON.stringify(cp));
+
+  // Free gift: variant + badge.
+  await open('Progress Bar');
+  const varSel = ed.getByLabel('Variant of Girls Grey Jeans');
+  check('free gift: a variant picker for a reward product with sizes; sold-out sizes disabled', (await varSel.count()) === 1 && (await varSel.locator('option[disabled]').count()) === 1);
+  await varSel.selectOption('gid://shopify/ProductVariant/3');
+  await ed.getByLabel('Gift badge text').fill('VIP BONUS');
+  await ed.waitForTimeout(250);
+  const gift = await ed.evaluate(() => { const r = document.querySelector('[data-testid="preview-reward-line"]'); return r ? { badge: r.querySelector('.bxcd-item__badge').textContent, variant: r.querySelector('.bxcd-item__variant')?.textContent, text: r.textContent } : null; });
+  check('free gift preview: badge text and chosen variant shown', gift && gift.badge === 'VIP BONUS' && gift.variant === '9-10 years' && gift.text.includes('949'), JSON.stringify(gift));
+
+  await ed.getByRole('button', { name: 'Save', exact: true }).click();
+  await ed.waitForTimeout(800);
+  const body = (p) => saves.find((s) => s.path === p)?.body || {};
+  const c = body('/api/cart-drawer-config');
+  check('save: messages, rotation and the typed colour go to /api/cart-drawer-config',
+    JSON.stringify(c.announcement_messages) === '["Free shipping today","Sale ends Sunday"]' && c.announcement_text === 'Free shipping today' && c.announcement_auto_rotate === 1 && c.announcement_show_arrows === 1 && c.announcement_bg_color === '#aabbcc',
+    JSON.stringify({ m: c.announcement_messages, t: c.announcement_text, bg: c.announcement_bg_color }));
+  const pb = body('/api/progress-bar');
+  check('save: tier variant and badge go to /api/progress-bar', pb.tiers?.[0]?.reward_variants?.[P] === 'gid://shopify/ProductVariant/3' && pb.tiers?.[0]?.reward_badge_label === 'VIP BONUS', JSON.stringify(pb.tiers?.[0]));
+  const us = body('/api/upsell-settings');
+  check('save: upsell colours go to /api/upsell-settings', us.button_follow_checkout === 0 && us.button_bg_color === '#008060' && us.price_color === '#ff5733', JSON.stringify(us));
+  const legacy = await ed.evaluate(() => window.__LEGACY__);
+  const legacyPb = JSON.parse(legacy?.progress_data || '{}');
+  check('save: the storefront blob carries the new keys and no stale flat bar colours',
+    JSON.parse(legacy?.coupon_data || '{}').cardWidth === 220 && JSON.parse(legacy?.upsell_data || '{}').priceColor === '#ff5733' && legacyPb.tiers?.[0]?.rewardBadgeLabel === 'VIP BONUS' && !('barBackgroundColor' in legacyPb),
+    String(legacy?.coupon_data || '').slice(0, 80));
+  await ed.screenshot({ path: path.join(shotDir, 'customization.png') });
+  await ed.close();
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

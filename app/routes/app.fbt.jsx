@@ -24,6 +24,8 @@ import {
   ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules,
 } from '../services/cart-config-writes.server';
 import { withTimeout } from '../utils/with-timeout';
+import { ColorField } from '../components/shared/ColorField';
+import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras } from '../utils/fbt-style.shared.js';
 
 // Ceiling for a single Shopify Admin API call in this route. Generous enough
 // that a merely-slow response still succeeds, low enough that a stalled one
@@ -132,7 +134,16 @@ export const loader = async ({ request }) => {
         );
         if (settings.length > 0) {
           const s = settings[0];
+          // Heading / title / button-state colours live only in the active
+          // template's JSON (fbt_widget.tempN), which the storefront reads.
+          let extras = pickFbtExtras({});
+          try {
+            const [legacyRows] = await db.execute('SELECT temp1, temp2, temp3 FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
+            const slot = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[s.selected_template || 'fbt1'] || 'temp1';
+            if (legacyRows[0]) extras = pickFbtExtras(parseJson(legacyRows[0][slot], {}));
+          } catch (e) { console.error('[FBT loader] template colours:', e.message); }
           fbtConfig = {
+            ...extras,
             is_enabled: s.is_enabled,
             activeTemplate: s.selected_template || 'fbt1',
             mode: s.mode || 'manual',
@@ -166,6 +177,7 @@ export const loader = async ({ request }) => {
             const row = legacy[0];
             const tpl = parseJson(row.temp1, {});
             fbtConfig = {
+              ...pickFbtExtras(parseJson(row[{ fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[row.selectedTemp] || 'temp1'], {})),
               is_enabled: 1,
               activeTemplate: row.selectedTemp || 'fbt1',
               mode: row.selectedMode || 'manual',
@@ -702,23 +714,6 @@ function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, next
   );
 }
 
-/* ─── COLOR FIELD (Solaris-style) ─────────────────────────────────────────── */
-function ColorField({ label, value, onChange }) {
-  return (
-    <div>
-      <div style={{ fontSize: '13px', fontWeight: 500, color: '#202223', marginBottom: '6px' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #c9cccf', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
-          <div style={{ position: 'absolute', inset: 0, background: value, pointerEvents: 'none' }} />
-          <input type="color" value={value} onChange={(e) => onChange(e.target.value)}
-            style={{ opacity: 0, width: '150%', height: '150%', cursor: 'pointer', position: 'absolute', top: '-25%', left: '-25%' }} />
-        </div>
-        <span style={{ fontSize: '13px', color: '#6d7175', fontFamily: 'monospace' }}>{value}</span>
-      </div>
-    </div>
-  );
-}
-
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
   const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
@@ -755,6 +750,12 @@ export default function FBTPage() {
   const [buttonTextColor,   setButtonTextColor]   = useState(fbtConfig.buttonTextColor|| '#ffffff');
   const [borderColor,       setBorderColor]       = useState(fbtConfig.borderColor    || '#e5e7eb');
   const [borderRadius,      setBorderRadius]      = useState(fbtConfig.borderRadius   ?? 8);
+  // Heading / title / hover / selected / loading / success colours ('' = follow a base colour).
+  const [extraColors,       setExtraColors]       = useState(() => pickFbtExtras(fbtConfig));
+  const setExtra = (key) => (v) => { setExtraColors((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
+  const fx = fbtEffectiveColors({ textColor, priceColor, buttonColor, buttonTextColor, ...extraColors });
+  // Preview of the Add-all button's states (idle → loading → success).
+  const [addAllPreview,     setAddAllPreview]     = useState('idle');
   const [showPrices,        setShowPrices]        = useState(fbtConfig.showPrices     !== false);
   const [showAddAll,        setShowAddAll]        = useState(fbtConfig.showAddAllButton !== false);
   const [configMode,        setConfigMode]        = useState(fbtConfig.mode === 'ai' ? 'ai' : 'manual');
@@ -1088,6 +1089,7 @@ export default function FBTPage() {
         : interactionStyle,
       showPrices, showAddAllButton: showAddAll,
       bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
+      ...Object.fromEntries(FBT_EXTRA_COLOR_KEYS.map((k) => [k, extraColors[k] || ''])),
     };
     /* build template objects so PHP saves them into temp1/temp2/temp3 columns */
     const templates = {};
@@ -1164,7 +1166,7 @@ export default function FBTPage() {
             if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
             updateProduct(i, { checked: e.target.checked });
           }}
-          style={{ width: '18px', height: '18px', accentColor: buttonColor, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
+          style={{ width: '18px', height: '18px', accentColor: fx.checkbox, cursor: isLastChecked ? 'not-allowed' : 'pointer', opacity: isLastChecked ? 0.5 : 1, flexShrink: 0 }}
         />
       );
     }
@@ -1201,8 +1203,8 @@ export default function FBTPage() {
     }
 
     return (
-      <button onClick={() => updateProduct(i, { added: !s.added })}
-        style={{ ...btnBase, background: s.added ? '#008060' : buttonColor, whiteSpace: 'nowrap' }}>
+      <button className={`fbtpv-btn${s.added ? ' is-selected' : ''}`} onClick={() => updateProduct(i, { added: !s.added })}
+        style={{ ...btnBase, '--fbt-hover': fx.buttonHover, background: s.added ? fx.selectedBg : buttonColor, color: s.added ? fx.selectedText : buttonTextColor, whiteSpace: 'nowrap' }}>
         {s.added ? 'Added' : 'Add'}
       </button>
     );
@@ -1221,7 +1223,7 @@ export default function FBTPage() {
       background: bgColor,
       borderRadius: `${borderRadius}px`,
       border: `1px solid ${borderColor}`,
-      borderLeft: `4px solid ${buttonColor}`,
+      borderLeft: `4px solid ${fx.checkbox}`,
       padding: '10px 8px',
     };
     /* classic-grid */
@@ -1242,7 +1244,7 @@ export default function FBTPage() {
     }}>
       <ImagePlaceholder size={56} image={p.image} />
       <div style={{
-        color: textColor, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
+        color: fx.title, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
         textAlign: 'center', width: '100%',
         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
         overflow: 'hidden', wordBreak: 'break-word',
@@ -1286,13 +1288,13 @@ export default function FBTPage() {
                 if (!e.target.checked && activeCount <= 1) return; // at least 1 must stay selected
                 updateProduct(i, { checked: e.target.checked });
               }}
-              style={{ width: '18px', height: '18px', accentColor: buttonColor, flexShrink: 0, cursor: 'pointer' }}
+              style={{ width: '18px', height: '18px', accentColor: fx.checkbox, flexShrink: 0, cursor: 'pointer' }}
             />
           )}
           <ImagePlaceholder size={44} image={p.image} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              color: textColor, fontSize: '12px', fontWeight: 600,
+              color: fx.title, fontSize: '12px', fontWeight: 600,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{p.name}</div>
             {showPrices && (
@@ -1824,14 +1826,36 @@ export default function FBTPage() {
                   </AccordionSection>
 
                   <AccordionSection id="colors" icon={ColorIcon} title="Colors" isOpen={openSection === 'colors'} onToggle={toggleSection} tip={SECTION_TIPS.colors}>
-                    <InlineGrid columns={2} gap="300">
-                      <ColorField label="Background"   value={bgColor}         onChange={(v) => { setBgColor(v);         mark(); }} />
-                      <ColorField label="Text Color"   value={textColor}       onChange={(v) => { setTextColor(v);       mark(); }} />
-                      <ColorField label="Price Color"  value={priceColor}      onChange={(v) => { setPriceColor(v);      mark(); }} />
-                      <ColorField label="Button Color" value={buttonColor}     onChange={(v) => { setButtonColor(v);     mark(); }} />
-                      <ColorField label="Button Text"  value={buttonTextColor} onChange={(v) => { setButtonTextColor(v); mark(); }} />
-                      <ColorField label="Border Color" value={borderColor}     onChange={(v) => { setBorderColor(v);     mark(); }} />
-                    </InlineGrid>
+                    <BlockStack gap="400">
+                      <Text as="h4" variant="headingSm">Widget</Text>
+                      <InlineGrid columns={2} gap="300">
+                        <ColorField label="Background"   value={bgColor}         onChange={(v) => { setBgColor(v);         mark(); }} />
+                        <ColorField label="Border Color" value={borderColor}     onChange={(v) => { setBorderColor(v);     mark(); }} />
+                      </InlineGrid>
+                      <Text as="h4" variant="headingSm">Text</Text>
+                      <InlineGrid columns={2} gap="300">
+                        <ColorField label="Text Color"   value={textColor}       onChange={(v) => { setTextColor(v);       mark(); }} />
+                        <ColorField label="Heading" value={extraColors.headingColor} fallback={textColor} allowEmpty onChange={setExtra('headingColor')} helpText="Empty = text color" />
+                        <ColorField label="Product title" value={extraColors.titleColor} fallback={textColor} allowEmpty onChange={setExtra('titleColor')} helpText="Empty = text color" />
+                        <ColorField label="Price Color"  value={priceColor}      onChange={(v) => { setPriceColor(v);      mark(); }} />
+                      </InlineGrid>
+                      <Text as="h4" variant="headingSm">Buttons</Text>
+                      <InlineGrid columns={2} gap="300">
+                        <ColorField label="Button Color" value={buttonColor}     onChange={(v) => { setButtonColor(v);     mark(); }} />
+                        <ColorField label="Button Text"  value={buttonTextColor} onChange={(v) => { setButtonTextColor(v); mark(); }} />
+                        <ColorField label="Button hover" value={extraColors.buttonHoverColor} fallback={fx.buttonHover} allowEmpty onChange={setExtra('buttonHoverColor')} helpText="Empty = button color, a little darker" />
+                        <ColorField label="Selection indicator" value={extraColors.checkboxColor} fallback={buttonColor} allowEmpty onChange={setExtra('checkboxColor')} helpText="Checkboxes and the selected item's outline. Empty = button color" />
+                      </InlineGrid>
+                      <Text as="h4" variant="headingSm">Button states</Text>
+                      <InlineGrid columns={2} gap="300">
+                        <ColorField label="Added (selected) button" value={extraColors.selectedBgColor} fallback="#008060" allowEmpty onChange={setExtra('selectedBgColor')} helpText="Classic style: an item that is in the bundle" />
+                        <ColorField label="Added button text" value={extraColors.selectedTextColor} fallback="#ffffff" allowEmpty onChange={setExtra('selectedTextColor')} />
+                        <ColorField label="Adding… (loading)" value={extraColors.loadingBgColor} fallback={buttonColor} allowEmpty onChange={setExtra('loadingBgColor')} helpText="Add-all button while adding. Empty = button color" />
+                        <div />
+                        <ColorField label="Added to cart (success)" value={extraColors.successBgColor} fallback={buttonColor} allowEmpty onChange={setExtra('successBgColor')} helpText="Add-all button once added. Empty = button color" />
+                        <ColorField label="Success text" value={extraColors.successTextColor} fallback={buttonTextColor} allowEmpty onChange={setExtra('successTextColor')} />
+                      </InlineGrid>
+                    </BlockStack>
                   </AccordionSection>
 
                   <AccordionSection id="styling" icon={MagicIcon} title="Styling & Display" isOpen={openSection === 'styling'} onToggle={toggleSection} tip={SECTION_TIPS.styling}>
@@ -1878,7 +1902,7 @@ export default function FBTPage() {
                 }}>
                   {/* Preview header */}
                   <div style={{ marginBottom: '14px' }}>
-                    <div style={{ color: textColor, fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>
+                    <div style={{ color: fx.heading, fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>
                       Frequently Bought Together
                     </div>
                     <span style={{
@@ -1904,15 +1928,32 @@ export default function FBTPage() {
                       <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
                     {showAddAll && (
-                      <button style={{
-                        width: '100%', padding: '13px 16px', borderRadius: `${borderRadius}px`,
-                        border: 'none', background: buttonColor, color: buttonTextColor,
-                        fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                        letterSpacing: '0.02em', transition: 'opacity 0.15s',
-                      }}>
-                        {interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
+                      <button
+                        type="button"
+                        className="fbtpv-btn"
+                        disabled={addAllPreview !== 'idle'}
+                        onClick={() => {
+                          // Shows the loading and success colours, like the storefront.
+                          setAddAllPreview('loading');
+                          setTimeout(() => setAddAllPreview('success'), 900);
+                          setTimeout(() => setAddAllPreview('idle'), 2100);
+                        }}
+                        style={{
+                          '--fbt-hover': fx.buttonHover,
+                          width: '100%', padding: '13px 16px', borderRadius: `${borderRadius}px`,
+                          border: 'none',
+                          background: addAllPreview === 'loading' ? fx.loadingBg : addAllPreview === 'success' ? fx.successBg : buttonColor,
+                          color: addAllPreview === 'success' ? fx.successText : buttonTextColor,
+                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                          letterSpacing: '0.02em', transition: 'background 0.15s',
+                        }}
+                      >
+                        {addAllPreview === 'loading' ? 'Adding...'
+                          : addAllPreview === 'success' ? `Added ${activeCount || fbtPreviewProducts.length}`
+                          : interactionStyle === 'quick-add' ? 'Add to Cart' : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
                       </button>
                     )}
+                    <style>{'.fbtpv-btn:not(:disabled):not(.is-selected):hover{background:var(--fbt-hover) !important}'}</style>
                   </div>
 
                   {/* Template label */}

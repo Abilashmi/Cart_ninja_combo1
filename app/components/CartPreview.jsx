@@ -7,9 +7,10 @@ import {
 } from '@shopify/polaris-icons';
 import { PreviewLockBadge } from './plan/PlanGate';
 import PreviewCartItems from './PreviewCartItems';
+import { AnnouncementRotator } from './AnnouncementRotator';
 import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
-import { couponIconHtml, couponSubtitleStyle } from '../utils/coupon-style.shared.js';
+import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 // The storefront drawer's own stylesheet for item rows, pricing summary and the
 // image banner, so the preview draws them exactly like the live drawer. Linked
@@ -67,12 +68,19 @@ function DiamondIcon({ width = '13', height = '13', fill = 'currentColor' }) {
   );
 }
 
+// The ₹ sign: the same paths as the storefront's CC_ICON_PRESETS.rupee.
+function RupeeIcon({ width = '13', height = '13', fill = 'currentColor' }) {
+  // eslint-disable-next-line react/no-danger -- fixed built-in SVG paths
+  return <svg viewBox={RUPEE_GLYPH_VIEWBOX} width={width} height={height} fill={fill} dangerouslySetInnerHTML={{ __html: RUPEE_GLYPH_PATHS }} />;
+}
+
 const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
   shipping: DeliveryFilledIcon,
   star: StarFilledIcon,
   trophy: RewardIcon,
   diamond: DiamondIcon,
+  rupee: RupeeIcon,
 };
 
 const MOCK_PREVIEW_COUPONS = [
@@ -444,16 +452,19 @@ function CouponIcon({ coupon, size, color, wrapStyle }) {
   return <span style={{ display: 'flex', lineHeight: 0, flexShrink: 0, ...wrapStyle }} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function CouponCard({ coupon, template, isVertical }) {
+// Long labels wrap instead of being cut off (same as the storefront).
+const WRAP_TEXT = { whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' };
+
+function CouponCard({ coupon, template, isVertical, minHeight }) {
   const timer = coupon.timerEnabled ? <CouponTimerDisplay coupon={coupon} /> : null;
 
   if (template === 'minimal-card') {
     return (
-      <div style={{ backgroundColor: '#ffffff', borderRadius: `${coupon.borderRadius}px`, border: '1px solid #e5e7eb', borderLeft: `3px solid ${coupon.bgColor}`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, height: '100%', boxSizing: 'border-box' }}>
+      <div style={{ backgroundColor: '#ffffff', borderRadius: `${coupon.borderRadius}px`, border: '1px solid #e5e7eb', borderLeft: `3px solid ${coupon.bgColor}`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, flex: 1, minHeight: minHeight || undefined, boxSizing: 'border-box' }}>
         {timer}
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <CouponIcon coupon={coupon} size={14} color={coupon.bgColor} />
-          <span style={{ fontSize: '10px', fontWeight: 700, color: coupon.bgColor, letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{coupon.labelText}</span>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: coupon.bgColor, letterSpacing: '0.5px', lineHeight: 1.3, ...WRAP_TEXT, flex: 1, minWidth: 0 }}>{coupon.labelText}</span>
         </div>
         {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', color: '#6b7280', lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', alignSelf: 'center', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', width: '68%', textAlign: 'center' }}>
@@ -465,10 +476,10 @@ function CouponCard({ coupon, template, isVertical }) {
 
   if (template === 'bold-vibrant') {
     return (
-      <div style={{ backgroundColor: coupon.bgColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', minWidth: 0, textAlign: 'center', boxShadow: `0 2px 8px ${coupon.bgColor}55`, height: '100%', boxSizing: 'border-box' }}>
+      <div style={{ backgroundColor: coupon.bgColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', minWidth: 0, textAlign: 'center', boxShadow: `0 2px 8px ${coupon.bgColor}55`, flex: 1, minHeight: minHeight || undefined, boxSizing: 'border-box' }}>
         {timer}
         <CouponIcon coupon={coupon} size={20} color={coupon.textColor} />
-        <div style={{ fontSize: '11px', fontWeight: 800, color: coupon.textColor, letterSpacing: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{coupon.labelText}</div>
+        <div style={{ fontSize: '11px', fontWeight: 800, color: coupon.textColor, letterSpacing: '1px', lineHeight: 1.3, ...WRAP_TEXT, width: '100%' }}>{coupon.labelText}</div>
         {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '8px', color: coupon.textColor, opacity: 0.85, lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '4px 6px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 700, cursor: 'pointer', width: '68%', textAlign: 'center', letterSpacing: '0.5px' }}>
           {coupon.buttonText}
@@ -479,12 +490,12 @@ function CouponCard({ coupon, template, isVertical }) {
 
   // classic-banner (default)
   return (
-    <div style={{ backgroundColor: coupon.bgColor, color: coupon.textColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, height: '100%', boxSizing: 'border-box' }}>
+    <div style={{ backgroundColor: coupon.bgColor, color: coupon.textColor, borderRadius: `${coupon.borderRadius}px`, padding: '10px 9px', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, flex: 1, minHeight: minHeight || undefined, boxSizing: 'border-box' }}>
       {timer}
       <div style={{ display: 'flex', flexDirection: isVertical ? 'column' : 'row', alignItems: isVertical ? 'center' : 'flex-start', gap: '5px' }}>
         <CouponIcon coupon={coupon} size={isVertical ? 18 : 14} color={coupon.textColor} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px', lineHeight: 1.3, ...WRAP_TEXT }}>{coupon.labelText}</div>
           {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', opacity: 0.85, lineHeight: 1.3 })}>{coupon.description}</div>}
         </div>
       </div>
@@ -514,10 +525,10 @@ function SingleCouponCard({ coupon, template }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
         <CouponIcon coupon={coupon} size={18} color={accent} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', color: isMinimal ? coupon.bgColor : textColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{coupon.labelText}</div>
+          <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.5px', color: isMinimal ? coupon.bgColor : textColor, lineHeight: 1.3, ...WRAP_TEXT }}>{coupon.labelText}</div>
           {coupon.description && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' })}>{coupon.description}</div>}
         </div>
-        {!coupon.textOnly && (<button style={{ ...buttonStyle, flexShrink: 0, padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        {!coupon.textOnly && (<button style={{ ...buttonStyle, flexShrink: 0, maxWidth: '45%', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.25, ...WRAP_TEXT }}>
           {coupon.buttonText}
         </button>)}
       </div>
@@ -530,6 +541,9 @@ function CouponSliderPreview({ cs }) {
   const isGrid = cs.layout === 'grid';
   const isVertical = cs.alignment === 'vertical';
   const isSingle = displayCoupons.length === 1;
+  // Merchant's card size (storefront: cart_drawer_inline.js renderCouponSection).
+  const cardWidth = Math.max(100, Math.min(360, Number(cs.cardWidth) || 132));
+  const cardMinHeight = Math.max(0, Math.min(200, Number(cs.cardMinHeight) || 0));
 
   const containerStyle = isSingle
     ? { display: 'flex' }
@@ -546,8 +560,8 @@ function CouponSliderPreview({ cs }) {
       )}
       <div style={containerStyle}>
         {isSingle ? <SingleCouponCard coupon={displayCoupons[0]} template={cs.template} /> : displayCoupons.map((coupon) => (
-          <div key={coupon.id} style={{ minWidth: 0, width: (!isGrid && !isVertical) ? '140px' : (!isGrid && isVertical) ? '86px' : undefined, flexShrink: isGrid ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
-            <CouponCard coupon={coupon} template={cs.template} isVertical={isVertical} />
+          <div key={coupon.id} style={{ minWidth: 0, width: isGrid ? undefined : `${cardWidth}px`, maxWidth: isGrid ? undefined : '85%', flexShrink: isGrid ? undefined : 0, display: 'flex', flexDirection: 'column' }}>
+            <CouponCard coupon={coupon} template={cs.template} isVertical={isVertical} minHeight={cardMinHeight} />
           </div>
         ))}
       </div>
@@ -645,6 +659,12 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
   const formatPrice = (p) => formatMoney(Number(p || 0));
+  // Same colours as the storefront (cart_drawer_inline.js renderUpsell).
+  const ownButton = upsell.useCheckoutButtonColors === false;
+  const btnBg = ownButton ? (upsell.buttonColor || '#111827') : checkoutBg;
+  const btnText = ownButton ? (upsell.buttonTextColor || '#ffffff') : checkoutText;
+  const titleColor = upsell.productTitleColor || '#1e293b';
+  const priceColor = upsell.priceColor || '#10b981';
 
   return (
     <div className="cart-preview-upsell-section">
@@ -664,11 +684,11 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
             <div key={product.id} style={{ flexShrink: isGrid ? undefined : 0, width: isGrid ? undefined : '100px', border: '1px solid #e1e3e5', borderRadius: '7px', overflow: 'hidden', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
               <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', flexShrink: 0 }} />
               <div style={{ padding: '5px 6px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
-                <div style={{ fontSize: '11px', color: '#202223', fontWeight: 700 }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+                <div style={{ fontSize: '10px', fontWeight: 500, lineHeight: 1.3, marginBottom: '3px', color: titleColor, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
+                <div style={{ fontSize: '11px', color: priceColor, fontWeight: 700 }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
                 <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} small />
                 {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
-                <button onClick={addProduct(product)} style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: checkoutBg, color: checkoutText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
+                <button onClick={addProduct(product)} style={{ marginTop: 'auto', paddingTop: '5px', width: '100%', padding: '4px', borderRadius: '4px', border: 'none', backgroundColor: btnBg, color: btnText, fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
                   {upsell.buttonText}
                 </button>
               </div>
@@ -683,12 +703,12 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
               ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}),
             }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 500 }}>{product.title}</div>
-              <div style={{ fontSize: '11px', color: '#6d7175' }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: titleColor }}>{product.title}</div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: priceColor }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
               <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} />
               {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
             </div>
-            <button onClick={addProduct(product)} style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: checkoutBg, color: checkoutText }}>
+            <button onClick={addProduct(product)} style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: btnBg, color: btnText }}>
               {upsell.buttonText}
             </button>
           </div>
@@ -907,12 +927,12 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Announcements — show when enabled, or show muted placeholder when section is active */}
                   {(body.announcements.enabled || activeSection === 'announcements') && (
                     <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <div
+                      <AnnouncementRotator
+                        ann={body.announcements}
+                        placeholder="Your announcement text here…"
                         className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
                         style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
-                      >
-                        {body.announcements.text || 'Your announcement text here…'}
-                      </div>
+                      />
                     </HighlightZone>
                   )}
 

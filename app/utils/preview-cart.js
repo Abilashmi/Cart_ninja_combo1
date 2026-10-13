@@ -28,17 +28,47 @@ export function getUnlockedRewards({ tiers, mode, total, count, allProducts = []
     for (const id of ids) {
       if (seen.has(id)) continue;
       seen.add(id);
+      // null when the id isn't in the loaded catalog — the UI shows a generic gift line.
+      const product = allProducts.find((p) => p.id === id) || null;
+      const isFree = tier.rewardPricing === 'free';
       rewards.push({
         key: `${tier.id}:${id}`,
         tierId: tier.id,
         productId: id,
-        // null when the id isn't in the loaded catalog — the UI shows a generic gift line.
-        product: allProducts.find((p) => p.id === id) || null,
-        pricing: tier.rewardPricing === 'free' ? 'free' : 'regular',
+        product,
+        pricing: isFree ? 'free' : 'regular',
+        variant: rewardVariant(product, tier.rewardVariants?.[id]),
+        badge: rewardBadgeText(tier.rewardBadgeLabel, isFree),
       });
     }
   }
   return rewards;
+}
+
+/**
+ * The variant the drawer adds for a reward product (cart_drawer_inline.js
+ * syncRewardProducts): the chosen one while it's in stock, else the first
+ * in-stock variant, else the first. null when the product has no variants.
+ */
+export function rewardVariant(product, chosenId) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  return variants.find((v) => v.id === chosenId && v.available !== false)
+    || variants.find((v) => v.available !== false)
+    || variants[0]
+    || null;
+}
+
+/**
+ * The gift row's badge (cart_drawer_inline.js ccRewardBadgeText): the
+ * merchant's text, else FREE GIFT / REWARD. Text saying "free" is only used
+ * when the reward really is free.
+ */
+export function rewardBadgeText(label, isFree) {
+  const fallback = isFree ? 'FREE GIFT' : 'REWARD';
+  const text = String(label || '').trim().slice(0, 30);
+  if (!text) return fallback;
+  if (!isFree && /free/i.test(text)) return fallback;
+  return text;
 }
 
 /** Paid subtotal, item count and the amount regular-price rewards add on top. */
@@ -47,6 +77,6 @@ export function getPreviewTotals({ baseTotal, added, rewards }) {
   const paidCount = 1 + added.length;
   const regularRewardTotal = rewards
     .filter((r) => r.pricing === 'regular')
-    .reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0);
+    .reduce((sum, r) => sum + (Number(r.variant?.price ?? r.product?.price) || 0), 0);
   return { paidTotal, paidCount, regularRewardTotal, subtotal: paidTotal + regularRewardTotal };
 }

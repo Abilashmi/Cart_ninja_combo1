@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
+import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
+import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 
 function parseJSONSafe(v) {
   if (!v) return {};
@@ -11,9 +13,10 @@ function dbFlag(v) {
   return v === 1 || v === '1' || v === true;
 }
 
+
 function hydrateFromRecord(record, base) {
   if (!record) return base;
-  const pb = parseJSONSafe(record.progress_data);
+  const pb = withoutLegacyBarColors(parseJSONSafe(record.progress_data));
   const cs = parseJSONSafe(record.coupon_data);
   const up = parseJSONSafe(record.upsell_data);
   const cbStyle = parseJSONSafe(record.checkout_button_style);
@@ -83,6 +86,12 @@ function hydrateFromConfig(cfg, base) {
         ...(cfg.announcement_bold       != null ? { bold:      dbFlag(cfg.announcement_bold) }       : {}),
         ...(cfg.announcement_italic     != null ? { italic:    dbFlag(cfg.announcement_italic) }     : {}),
         ...(cfg.announcement_text_align != null ? { textAlign: cfg.announcement_text_align }         : {}),
+        ...(cfg.announcement_messages != null || cfg.announcement_text != null
+          ? { messages: messagesFromConfig(cfg.announcement_messages, cfg.announcement_text) }
+          : {}),
+        ...(cfg.announcement_auto_rotate != null ? { autoRotate: dbFlag(cfg.announcement_auto_rotate) } : {}),
+        ...(cfg.announcement_interval    != null ? { interval:   clampInterval(cfg.announcement_interval) } : {}),
+        ...(cfg.announcement_show_arrows != null ? { showArrows: dbFlag(cfg.announcement_show_arrows) } : {}),
       },
       imageBanner: {
         ...base.body.imageBanner,
@@ -159,6 +168,8 @@ function hydrateFromProgressBar(pb, base) {
     rewardProductCount: Array.isArray(t.reward_products) ? t.reward_products.length : 0,
     // 'free' = BRIX makes the reward product free at checkout; anything else = regular price.
     rewardPricing: (t.reward_pricing ?? t.rewardPricing) === 'free' ? 'free' : 'regular',
+    rewardVariants: (t.reward_variants && typeof t.reward_variants === 'object' && !Array.isArray(t.reward_variants)) ? t.reward_variants : {},
+    rewardBadgeLabel: t.reward_badge_label ?? t.rewardBadgeLabel ?? '',
   })) : base.body.progressBar.tiers;
 
   return {
@@ -246,6 +257,9 @@ function hydrateFromUpsell(up, base) {
         buttonColor:      up.button_bg_color   ?? base.body.upsellProducts.buttonColor,
         buttonTextColor:  up.button_text_color ?? base.body.upsellProducts.buttonTextColor,
         buttonBorderRadius: Number(up.button_border_radius ?? base.body.upsellProducts.buttonBorderRadius ?? 6),
+        ...(up.button_follow_checkout != null ? { useCheckoutButtonColors: dbFlag(up.button_follow_checkout) } : {}),
+        productTitleColor: up.product_title_color ?? base.body.upsellProducts.productTitleColor,
+        priceColor:       up.price_color         ?? base.body.upsellProducts.priceColor,
         showPrice:        dbFlag(up.show_price),
         position:         up.position          ?? base.body.upsellProducts.position,
         limit:            Number(up.display_limit ?? base.body.upsellProducts.limit),
@@ -367,8 +381,6 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
             ...prev.body.progressBar,
             ...(cart.goalBar?.enabled != null ? { enabled: cart.goalBar.enabled } : {}),
             ...(cart.goalBar?.barColor ? {
-              barForegroundColor: cart.goalBar.barColor,
-              fill_color: cart.goalBar.barColor,
               colors: { ...prev.body.progressBar.colors, fill: cart.goalBar.barColor },
             } : {}),
             // Full tier ladder from a BrixBar progress-bar tool call — the
@@ -390,7 +402,11 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
           announcements: {
             ...prev.body.announcements,
             ...(cart.announcement?.enabled != null ? { enabled: cart.announcement.enabled } : {}),
-            ...(cart.announcement?.text ? { text: cart.announcement.text } : {}),
+            // The AI sets one text: it becomes the first message, the rest stay.
+            ...(cart.announcement?.text ? {
+              text: cart.announcement.text,
+              messages: [cart.announcement.text, ...(prev.body.announcements?.messages || []).slice(1)],
+            } : {}),
             ...(cart.announcement?.bgColor ? { bgColor: cart.announcement.bgColor } : {}),
             ...(cart.announcement?.textColor ? { textColor: cart.announcement.textColor } : {}),
           },
