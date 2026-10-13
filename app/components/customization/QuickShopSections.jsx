@@ -136,7 +136,57 @@ function Px({ PxField, config, updateConfig, keyName, label, min = 0, max = 40 }
 
 /* ── Layout tab ─────────────────────────────────────────────────────────── */
 
-function FiltersSectionComponent({ config, updateConfig, expanded, onToggle }) {
+// The page's collections (col_1..col_N), as the storefront lists them.
+function pageHandles(config) {
+  const out = [];
+  for (let i = 1; i <= Number(config.tab_count || 1); i++) {
+    const h = config[`col_${i}`];
+    if (h && !out.includes(h)) out.push(h);
+  }
+  return out;
+}
+
+// Picture collection bar: look, size and an optional picture per collection.
+function CollectionPictures({ config, updateConfig, collections = [], PxField }) {
+  const own = config.qs_chip_images && typeof config.qs_chip_images === 'object' ? config.qs_chip_images : {};
+  const handles = pageHandles(config);
+  const setImage = (handle, url) => {
+    const next = { ...own };
+    if (url) next[handle] = url; else delete next[handle];
+    updateConfig('qs_chip_images', next);
+  };
+  return (
+    <BlockStack gap="300">
+      <div className="cst-grid-2">
+        <Select
+          label="Picture shape"
+          options={[{ label: 'Circle', value: 'circle' }, { label: 'Rounded square', value: 'rounded' }, { label: 'Square', value: 'square' }]}
+          value={val(config, 'qs_chip_image_shape')} onChange={(v) => updateConfig('qs_chip_image_shape', v)}
+        />
+        <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_chip_image_size" label="Picture size" min={40} max={120} />
+      </div>
+      {handles.map((h) => {
+        const col = collections.find((c) => c.handle === h);
+        const value = own[h] || '';
+        const bad = value && !kit.httpsUrl(value);
+        return (
+          <TextField
+            key={h}
+            label={`${col?.title || h} picture`}
+            value={value}
+            onChange={(v) => setImage(h, v.trim())}
+            placeholder="https://… (optional)"
+            autoComplete="off"
+            error={bad ? 'Use an https:// image link.' : undefined}
+            helpText={value ? undefined : col?.image ? 'Empty = the collection\'s own image.' : 'Empty = the first product\'s image (this collection has no image in Shopify).'}
+          />
+        );
+      })}
+    </BlockStack>
+  );
+}
+
+function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
   const source = val(config, 'qs_chips_source');
   const toggleWithLabel = (key, labelKey, title, help) => (
     <BlockStack gap="100">
@@ -159,6 +209,20 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle }) {
           selected={[source]}
           onChange={([v]) => updateConfig('qs_chips_source', v)}
         />
+        {source === 'collections' && (
+          <ChoiceList
+            title="Collection chips look"
+            choices={[
+              { label: 'Text chips', value: 'text' },
+              { label: 'Pictures with names', value: 'images', helpText: 'A row shoppers swipe to switch collections.' },
+            ]}
+            selected={[val(config, 'qs_chip_style')]}
+            onChange={([v]) => updateConfig('qs_chip_style', v)}
+          />
+        )}
+        {source === 'collections' && val(config, 'qs_chip_style') === 'images' && (
+          <CollectionPictures config={config} updateConfig={updateConfig} collections={collections} PxField={PxField} />
+        )}
         {source === 'tags' && (
           <TextField
             label="Tags to show as chips" value={config.qs_chip_tags || ''} onChange={(v) => updateConfig('qs_chip_tags', v)}
@@ -282,6 +346,13 @@ function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPi
         <Checkbox label="Celebrate when a tier unlocks" checked={isOn(config, 'qs_bar_celebrate')} onChange={(v) => updateConfig('qs_bar_celebrate', v)} />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Button</Text></div>
         <TextField label="Button text" value={val(config, 'qs_btn_label')} onChange={(v) => updateConfig('qs_btn_label', v)} autoComplete="off" maxLength={30} />
+        <div className="cst-grid-2">
+          {PxField && <PxField label="Text size" value={Number(config.qs_btn_font_size) || 16} min={12} max={24} onChange={(v) => updateConfig('qs_btn_font_size', v)} />}
+          <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_btn_font_size_m" label="Text size on phones" min={11} max={22} />
+          <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_btn_pad_y" label="Padding top and bottom" min={6} max={28} />
+          <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_btn_pad_x" label="Padding left and right" min={8} max={48} />
+        </div>
+        <Text as="p" variant="bodySm" tone="subdued">The padding also sizes the COD button next to it. COD&rsquo;s own text size and colours are under COD → Customize → Combo page button.</Text>
         <Select
           label="Button goes to"
           options={[{ label: 'Checkout', value: 'checkout' }, { label: 'Cart page', value: 'cart' }]}

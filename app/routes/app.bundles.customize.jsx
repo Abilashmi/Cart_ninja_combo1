@@ -557,7 +557,7 @@ export const loader = async ({ request }) => {
           query getCollections($cursor: String) {
             collections(first: 250, after: $cursor) {
               pageInfo { hasNextPage endCursor }
-              nodes { id title handle }
+              nodes { id title handle image { url } }
             }
           }`,
           { variables: { cursor: endCursor } }
@@ -582,6 +582,7 @@ export const loader = async ({ request }) => {
               id: n.id,
               title: n.title,
               handle: n.handle,
+              image: n.image?.url || '',
             }))
           );
           hasNextPage = data.pageInfo.hasNextPage;
@@ -731,6 +732,7 @@ export const loader = async ({ request }) => {
                 title
                 handle
                 productsCount { count }
+                image { url }
               }
             }
           }`
@@ -748,6 +750,7 @@ export const loader = async ({ request }) => {
           title: n.title,
           handle: n.handle,
           productsCount: n.productsCount?.count ?? 0,
+          image: n.image?.url || '',
         }));
         console.log(`[Customize Loader] Initial collections loaded: ${collections.length}`);
         return collections;

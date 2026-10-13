@@ -26,6 +26,14 @@ export function createQuickShopKit(core) {
     qs_chip_tags: '', // "Boneless, Curry Cut, Drumstick" when source = tags
     qs_show_all_chip: true,
     qs_all_label: 'All',
+    // Collection chips drawn as pictures with the name under them (a bar the
+    // shopper swipes to switch collections). Picture: qs_chip_images[handle]
+    // (https link), else the collection's Shopify image, else its first
+    // product's image.
+    qs_chip_style: 'text', // text | images
+    qs_chip_image_size: 64, // px on desktop; phones get 80% of it
+    qs_chip_image_shape: 'circle', // circle | rounded | square
+    qs_chip_images: null, // { [collection handle]: 'https://…' }
     qs_filter_type: true,
     qs_filter_type_label: 'Type',
     qs_filter_brand: true,
@@ -88,6 +96,12 @@ export function createQuickShopKit(core) {
     qs_btn_bg: '#2563eb',
     qs_btn_text_color: '#ffffff',
     qs_btn_radius: 14,
+    // Go to Cart button size (padding also applies to the COD button beside
+    // it; COD's text size is set under COD → Customize → Combo page button).
+    qs_btn_font_size: null, // px; null = the theme's text size, as before this setting
+    qs_btn_font_size_m: 15,
+    qs_btn_pad_y: 14, // phones: 2px less
+    qs_btn_pad_x: 26, // phones: at most 16
     qs_btn_action: 'checkout', // checkout | cart
     // Checkout with: shopify | shiprocket (BRIX one-time code for the box discount)
     // | shiprocket_own (the merchant's own Shiprocket offer). Shiprocket only on
@@ -285,18 +299,42 @@ export function createQuickShopKit(core) {
    * The filter row: chips + dropdown menus, from the merchant's choices and
    * the products on the page. ui = { chip, dd: { type, brand, custom, sort }, instock, menu }.
    */
-  function filterRow(config, products, handles, collectionNames, ui) {
+  function httpsUrl(value) {
+    var s = String(value || '').trim();
+    return /^https:\/\/[^\s"'<>()\\]{1,500}$/.test(s) ? s : '';
+  }
+
+  // A collection chip's picture: the merchant's own link, the collection's
+  // Shopify image, else its first product's image ('' = none).
+  function collectionImage(config, handle, collectionImages, productsByHandle) {
+    var own = opt(config, 'qs_chip_images');
+    if (own && typeof own === 'object' && httpsUrl(own[handle])) return httpsUrl(own[handle]);
+    if (collectionImages && httpsUrl(collectionImages[handle])) return httpsUrl(collectionImages[handle]);
+    var prods = (productsByHandle && productsByHandle[handle]) || [];
+    for (var i = 0; i < prods.length; i++) {
+      var img = prods[i].image && (prods[i].image.url || prods[i].image.src);
+      if (httpsUrl(img)) return httpsUrl(img);
+    }
+    return '';
+  }
+
+  function filterRow(config, products, handles, collectionNames, ui, collectionImages, productsByHandle) {
     var chips = [];
     var source = opt(config, 'qs_chips_source');
     var chipValues = [];
+    var pictures = opt(config, 'qs_chip_style') === 'images';
     if (source === 'collections' && handles.length > 1) {
-      for (var h = 0; h < handles.length; h++) chipValues.push({ value: 'c:' + handles[h], label: collectionNames[handles[h]] || handles[h] });
+      for (var h = 0; h < handles.length; h++) {
+        var chip = { value: 'c:' + handles[h], label: collectionNames[handles[h]] || handles[h] };
+        if (pictures) { chip.picture = true; chip.image = collectionImage(config, handles[h], collectionImages, productsByHandle); }
+        chipValues.push(chip);
+      }
     } else if (source === 'tags') {
       var tags = list(opt(config, 'qs_chip_tags'));
       for (var t = 0; t < tags.length; t++) chipValues.push({ value: 't:' + tags[t], label: tags[t] });
     }
     if (chipValues.length) {
-      if (on(config, 'qs_show_all_chip')) chips.push({ value: 'all', label: opt(config, 'qs_all_label'), on: !ui.chip || ui.chip === 'all' });
+      if (on(config, 'qs_show_all_chip')) chips.push({ value: 'all', label: opt(config, 'qs_all_label'), on: !ui.chip || ui.chip === 'all', picture: chipValues[0].picture === true, image: '' });
       for (var c = 0; c < chipValues.length; c++) {
         chipValues[c].on = ui.chip === chipValues[c].value;
         chips.push(chipValues[c]);
@@ -501,7 +539,7 @@ export function createQuickShopKit(core) {
     }
 
     // Cards.
-    var row = filterRow(config, all, handles, input.collectionNames || {}, ui);
+    var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {});
     var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending);
     var cards = [];
     var badgeTag = String(opt(config, 'qs_badge_tag') || '').trim();
@@ -569,6 +607,7 @@ export function createQuickShopKit(core) {
   var ICON_PLUS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   var ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   var ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>';
+  var ICON_GRID = '<svg viewBox="0 0 24 24" width="40%" height="40%" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
   var ICON_FILTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>';
 
   function vars(config) {
@@ -599,7 +638,19 @@ export function createQuickShopKit(core) {
       ['--bxq-btn', safeCss(opt(config, 'qs_btn_bg'), DEFAULTS.qs_btn_bg)],
       ['--bxq-btn-text', safeCss(opt(config, 'qs_btn_text_color'), DEFAULTS.qs_btn_text_color)],
       ['--bxq-btn-r', num(opt(config, 'qs_btn_radius'), 14, 0, 40) + 'px'],
+      ['--bxq-btn-fs-m', num(opt(config, 'qs_btn_font_size_m'), 15, 11, 22) + 'px'],
+      ['--bxq-btn-py', num(opt(config, 'qs_btn_pad_y'), 14, 6, 28) + 'px'],
+      ['--bxq-btn-px', num(opt(config, 'qs_btn_pad_x'), 26, 8, 48) + 'px'],
+      ['--bxq-btn-py-m', Math.max(4, num(opt(config, 'qs_btn_pad_y'), 14, 6, 28) - 2) + 'px'],
+      ['--bxq-btn-px-m', Math.min(16, num(opt(config, 'qs_btn_pad_x'), 26, 8, 48)) + 'px'],
+      ['--bxq-col-size', num(opt(config, 'qs_chip_image_size'), 64, 40, 120) + 'px'],
+      ['--bxq-col-size-m', Math.round(num(opt(config, 'qs_chip_image_size'), 64, 40, 120) * 0.8) + 'px'],
+      ['--bxq-col-r', { rounded: '16px', square: '4px' }[opt(config, 'qs_chip_image_shape')] || '50%'],
     ];
+    // Only once the merchant sets it: unset, the Go to Cart text keeps the
+    // theme's size (what pages showed before the setting existed).
+    var btnFs = opt(config, 'qs_btn_font_size');
+    if (btnFs !== null && btnFs !== '' && isFinite(Number(btnFs))) pairs.push(['--bxq-btn-fs', num(btnFs, 16, 12, 24) + 'px']);
     var out = '';
     for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ':' + pairs[i][1] + ';';
     return out;
@@ -614,13 +665,29 @@ export function createQuickShopKit(core) {
     return at === -1 ? html : html.slice(0, at) + '<b>' + t + '</b>' + html.slice(at + t.length);
   }
 
+  // Collection chips as pictures: a row of tiles above the filter chips.
+  function renderCollectionBar(chips) {
+    var html = '<div class="bxq-colbar" role="tablist" aria-label="Collections">';
+    for (var i = 0; i < chips.length; i++) {
+      var chip = chips[i];
+      html += '<button type="button" role="tab" class="bxq-col' + (chip.on ? ' is-on' : '') + '" aria-selected="' + (chip.on ? 'true' : 'false') + '" data-combo-action="qs-chip" data-value="' + esc(chip.value) + '">'
+        + '<span class="bxq-col-img">' + (chip.image ? '<img src="' + esc(chip.image) + '" alt="" loading="lazy" />' : (chip.value === 'all' ? ICON_GRID : '<span class="bxq-col-letter">' + esc(String(chip.label || '?').charAt(0).toUpperCase()) + '</span>')) + '</span>'
+        + '<span class="bxq-col-name">' + esc(chip.label) + '</span></button>';
+    }
+    return html + '</div>';
+  }
+
   function renderFilters(model) {
     var row = model.row;
-    if (!row.chips.length && !row.menus.length) return '';
-    var html = '<div class="bxq-filters">';
+    var pictureChips = [];
+    var chips = [];
+    for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
+    var bar = pictureChips.length ? renderCollectionBar(pictureChips) : '';
+    if (!chips.length && !row.menus.length) return bar;
+    var html = bar + '<div class="bxq-filters">';
     html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? ' is-active' : '') + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + '</button>';
-    for (var i = 0; i < row.chips.length; i++) {
-      var chip = row.chips[i];
+    for (var i = 0; i < chips.length; i++) {
+      var chip = chips[i];
       html += '<button type="button" class="bxq-chip' + (chip.on ? ' is-on' : '') + '" aria-pressed="' + (chip.on ? 'true' : 'false') + '" data-combo-action="' + (chip.toggle ? 'qs-instock' : 'qs-chip') + '" data-value="' + esc(chip.value) + '">' + esc(chip.label) + '</button>';
     }
     for (var m = 0; m < row.menus.length; m++) {
@@ -940,6 +1007,8 @@ export function createQuickShopKit(core) {
     TIER_ICON_ORDER: TIER_ICON_ORDER,
     iconName: iconName,
     svgIcon: svgIcon,
+    httpsUrl: httpsUrl,
+    collectionImage: collectionImage,
   };
 }
 
@@ -1013,6 +1082,20 @@ export const QUICK_SHOP_CSS = `
 .bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
 .bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}
 .bxq-chip--icon{padding:9px 14px;position:relative;}
+.bxq-colbar{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 12px;margin-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.bxq-colbar::-webkit-scrollbar{display:none;}
+.bxq-col{flex:0 0 auto;width:calc(var(--bxq-col-size) + 16px);display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;margin:0;border:0;background:none;cursor:pointer;font:inherit;color:var(--bxq-text) !important;}
+.bxq-col-img{width:var(--bxq-col-size);height:var(--bxq-col-size);border-radius:var(--bxq-col-r);overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;color:var(--bxq-accent);transition:box-shadow .15s;}
+.bxq-col-img img{width:100%;height:100%;object-fit:cover;display:block;}
+.bxq-col-letter{font-size:calc(var(--bxq-col-size) * .38);font-weight:800;}
+.bxq-col.is-on .bxq-col-img{box-shadow:0 0 0 2.5px var(--bxq-accent);}
+.bxq-col-name{max-width:100%;font-size:13px;font-weight:600;line-height:1.25;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.bxq-col.is-on .bxq-col-name{color:var(--bxq-accent) !important;}
+.bxq--m .bxq-colbar{gap:10px;}
+.bxq--m .bxq-col{width:calc(var(--bxq-col-size-m) + 12px);}
+.bxq--m .bxq-col-img{width:var(--bxq-col-size-m);height:var(--bxq-col-size-m);}
+.bxq--m .bxq-col-letter{font-size:calc(var(--bxq-col-size-m) * .38);}
+.bxq--m .bxq-col-name{font-size:12px;}
 .bxq-chip--icon.is-active::after{content:"";position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bxq-accent);}
 .bxq-dd{position:relative;flex:0 0 auto;}
 .bxq-menu{position:fixed;z-index:1001;margin-top:6px;min-width:200px;max-height:300px;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;}
@@ -1084,13 +1167,14 @@ export const QUICK_SHOP_CSS = `
 .bxq-saved{font-size:14px;font-weight:700;color:var(--bxq-save);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
 .bxq-total{font-size:14px;font-weight:700;opacity:.75;}
 .bxq-actions{display:flex;gap:8px;flex:0 0 auto;}
-.bxq-go,.bxq-cod{border:0;border-radius:var(--bxq-btn-r);padding:14px 26px;font-size:17px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.bxq-go,.bxq-cod{border:0;border-radius:var(--bxq-btn-r);padding:var(--bxq-btn-py,14px) var(--bxq-btn-px,26px);font-size:17px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.bxq .bxq-go{font-size:var(--bxq-btn-fs);}
 .bxq-go{background:var(--bxq-btn);color:var(--bxq-btn-text) !important;}
 .bxq-cod{background:#fff;border:1.5px solid var(--bxq-btn);color:var(--bxq-btn);display:inline-flex;align-items:center;justify-content:center;gap:6px;}
 .bxq--m .bxq-row{flex-wrap:wrap;}
 .bxq--m .bxq-actions.has-cod{flex:1 1 100%;}
 .bxq--m .bxq-actions.has-cod button{flex:1;}
-.bxq--m .bxq-go,.bxq--m .bxq-cod{padding:12px 16px;font-size:15px;}
+.bxq--m .bxq-go,.bxq--m .bxq-cod{padding:var(--bxq-btn-py-m,12px) var(--bxq-btn-px-m,16px);font-size:var(--bxq-btn-fs-m,15px);}
 .bxq-go:disabled,.bxq-cod:disabled{opacity:.45;cursor:not-allowed;}
 .bxq-ring{position:relative;width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
 .bxq-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}

@@ -195,12 +195,12 @@ export async function loadComboPageDataForRow(shop, row) {
   try {
     const colRes = await admin.graphql(`#graphql
       query { collections(first: 250) {
-        nodes { id title handle productsCount { count } }
+        nodes { id title handle productsCount { count } image { url } }
       } }
     `);
     const colJson = await colRes.json();
     collections = (colJson.data?.collections?.nodes || []).map((n) => ({
-      id: n.id, title: n.title, handle: n.handle,
+      id: n.id, title: n.title, handle: n.handle, image: n.image?.url || '',
     }));
   } catch (e) {
     console.error('[ComboPage] Collection fetch error:', e);
@@ -262,6 +262,9 @@ export async function loadComboPageDataForRow(shop, row) {
 
   const collectionNameMap = {};
   collections.forEach((c) => { collectionNameMap[c.handle] = c.title; });
+  // Quick Shop's picture collection bar (qs_chip_style: images), only for this page's collections.
+  const collectionImageMap = {};
+  collections.forEach((c) => { if (c.image && allHandles.includes(c.handle)) collectionImageMap[c.handle] = c.image; });
 
   let activeDiscounts = [];
   try {
@@ -325,5 +328,5 @@ export async function loadComboPageDataForRow(shop, row) {
     ? await storefrontWeightPricing({ shop, admin, templateId: row.id, active: Number(row.is_active) === 1 || row.is_active === true, config, productsByHandle })
     : null;
 
-  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, shop, activeDiscounts, weightPricing };
+  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, collectionImageMap, shop, activeDiscounts, weightPricing };
 }

@@ -1609,7 +1609,7 @@
     var b = cfg.buttons || {};
     var l = b.looks && b.looks[surface];
     if (l) return l;
-    return { style: b.style, bg: b.bg, color: b.color, radius: b.radius, fontSize: 15, bold: true, uppercase: false, icon: true };
+    return { style: b.style, bg: b.bg, color: b.color, radius: b.radius, fontSize: 15, bold: true, uppercase: false, icon: true, paddingY: 14, paddingX: 16 };
   }
 
   // Colours for a button style. Outline and Minimal draw the text in the
@@ -1683,12 +1683,15 @@
 
   // Drawer button sizes; the gap is on the side that faces Checkout.
   function drawerSize(cfg, where) {
-    var r = Math.round(Number(lookOf(cfg, 'drawer').radius));
+    var look = lookOf(cfg, 'drawer');
+    var r = Math.round(Number(look.radius));
+    var py = Math.round(Number(look.paddingY));
+    var px = Math.round(Number(look.paddingX));
     return {
       marginTop: where === 'below' ? 10 : 0,
       marginBottom: where === 'above' ? 10 : 0,
-      paddingY: 14,
-      paddingX: 16,
+      paddingY: isFinite(py) ? Math.max(4, Math.min(32, py)) : 14,
+      paddingX: isFinite(px) ? Math.max(4, Math.min(48, px)) : 16,
       radius: isFinite(r) ? Math.max(0, Math.min(40, r)) : 12,
     };
   }

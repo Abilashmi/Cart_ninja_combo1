@@ -205,6 +205,16 @@ if (scenario === 'live') {
   await page.getByRole('textbox', { name: /^Button colour/ }).fill('#1d4ed8');
   await page.waitForTimeout(400);
   check('COD button: colour updates the preview', (await pv()).codBg === 'rgb(29, 78, 216)');
+  {
+    const pad = () => page.evaluate(() => { const b = document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn'); return b ? [parseFloat(getComputedStyle(b).paddingTop), parseFloat(getComputedStyle(b).paddingLeft)] : null; });
+    const before = await pad();
+    await page.getByRole('spinbutton', { name: 'Padding top and bottom' }).fill('24');
+    await page.getByRole('spinbutton', { name: 'Padding left and right' }).fill('30');
+    await page.waitForTimeout(400);
+    const after = await pad();
+    const ratio = before && after ? [after[0] / before[0], after[1] / before[1]] : null;
+    check('COD button: padding updates the preview (14 → 24, 16 → 30 at the preview\'s scale)', ratio && Math.abs(ratio[0] - 24 / 14) < 0.08 && Math.abs(ratio[1] - 30 / 16) < 0.08, JSON.stringify({ before, after }));
+  }
   await shot('button');
 
   // Price tags: "Buy it for {cod_price} COD" = cart total + COD fee (₹49 here)
@@ -520,6 +530,7 @@ if (scenario === 'live') {
     && saved.productPayment?.enabled === true && saved.productPayment?.prepaid?.enabled === true && saved.productPayment?.prepaid?.percent === 10
     && saved.productPayment?.prepaid?.minSubtotal === 0 && saved.productPayment?.layout?.cardLayout === 'vertical' && saved.productPayment?.layout?.placement === 'below_price',
     JSON.stringify({ p: saved.drawerPlacement, cp: saved.comboPlacement, b: saved.buttons, fee: [saved.codFeeEnabled, saved.codFee, saved.codFeeLabel] }));
+  check('Saved: cart drawer button padding', saved.buttons?.paddingY === 24 && saved.buttons?.paddingX === 30, JSON.stringify({ py: saved.buttons?.paddingY, px: saved.buttons?.paddingX }));
   let asked = '';
   page.once('dialog', (d) => { asked = d.message(); d.accept(); });
   await page.locator('.bcz-back').click();

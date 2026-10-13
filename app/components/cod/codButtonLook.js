@@ -24,11 +24,13 @@ export function codButtonType(look, scale = 1) {
 /** Cart drawer button sizes in px; the gap is on the side that faces Checkout. */
 export function codDrawerSize(settings, where) {
   const r = Math.round(Number(settings.buttons?.radius));
+  const py = Math.round(Number(settings.buttons?.paddingY));
+  const px = Math.round(Number(settings.buttons?.paddingX));
   return {
     marginTop: where === 'below' ? 10 : 0,
     marginBottom: where === 'above' ? 10 : 0,
-    paddingY: 14,
-    paddingX: 16,
+    paddingY: Number.isFinite(py) ? Math.max(4, Math.min(32, py)) : 14,
+    paddingX: Number.isFinite(px) ? Math.max(4, Math.min(48, px)) : 16,
     radius: Number.isFinite(r) ? Math.max(0, Math.min(40, r)) : 12,
   };
 }

@@ -6,7 +6,7 @@
 import { Badge, BlockStack, Button, ButtonGroup, Card, Checkbox, FormLayout, InlineStack, Text, TextField } from '@shopify/polaris';
 import { ColorField } from '../sections/ColorField';
 import { SliderField } from '../shared/SliderField';
-import { COD_BUTTON_FONT_SIZES } from '../../utils/cod.shared';
+import { COD_BUTTON_FONT_SIZES, COD_BUTTON_PADDING } from '../../utils/cod.shared';
 import { STYLE_PRESETS, HEX, fullHex, contrastRatio } from './codSettingsForm';
 
 const BUTTON_STYLES = [['filled', 'Filled'], ['outline', 'Outline'], ['minimal', 'Minimal']];
@@ -14,9 +14,11 @@ const BUTTON_STYLES = [['filled', 'Filled'], ['outline', 'Outline'], ['minimal',
 /**
  * look: { style, bg, color, radius?, fontSize, bold, uppercase, icon }
  * onChange(patch) merges into the look. showRadius: show the corners slider
- * (the product page sets its corners under Size and spacing).
+ * (the product page sets its corners under Size and spacing). showPadding:
+ * the button's inner spacing (the cart drawer button; the product page has
+ * its own Size and spacing).
  */
-export default function ButtonDesignEditor({ look, onChange, showRadius = true, errors = {} }) {
+export default function ButtonDesignEditor({ look, onChange, showRadius = true, showPadding = false, errors = {} }) {
   const textOnWhite = look.style !== 'filled';
   const ratio = textOnWhite ? contrastRatio(look.bg, '#ffffff') : contrastRatio(look.bg, look.color);
   return (
@@ -80,6 +82,23 @@ export default function ButtonDesignEditor({ look, onChange, showRadius = true, 
           <Checkbox label="Show the cash icon" checked={look.icon !== false} onChange={(v) => onChange({ icon: v })} />
         </FormLayout>
       </Card>
+      {showPadding && (
+        <Card>
+          <FormLayout>
+            <Text as="h3" variant="headingSm">Button size</Text>
+            <SliderField
+              label="Padding top and bottom" value={Number(look.paddingY) || 14}
+              min={COD_BUTTON_PADDING.paddingY[0]} max={COD_BUTTON_PADDING.paddingY[1]} suffix="px"
+              onChange={(v) => onChange({ paddingY: v })}
+            />
+            <SliderField
+              label="Padding left and right" value={Number(look.paddingX) || 16}
+              min={COD_BUTTON_PADDING.paddingX[0]} max={COD_BUTTON_PADDING.paddingX[1]} suffix="px"
+              onChange={(v) => onChange({ paddingX: v })}
+            />
+          </FormLayout>
+        </Card>
+      )}
     </BlockStack>
   );
 }

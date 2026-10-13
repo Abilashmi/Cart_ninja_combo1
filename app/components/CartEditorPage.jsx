@@ -66,6 +66,8 @@ function CartEditorContent() {
         backgroundColor:  cb.bgColor,
         textColor:        cb.textColor,
         borderRadius:     cb.borderRadius,
+        fontSize:         cb.fontSize,
+        paddingY:         cb.paddingY,
         mobileButtonType: cb.mobileButtonType,
       }),
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });

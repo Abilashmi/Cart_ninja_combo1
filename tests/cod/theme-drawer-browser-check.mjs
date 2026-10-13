@@ -491,6 +491,29 @@ const done = async (page, name) => {
   await plain.context().close();
 }
 
+/* 15. Cart drawer COD button padding (COD → Customize → Cart drawer button → Button size) */
+{
+  const padOf = (page) => page.evaluate(() => {
+    const b = document.querySelector('[data-brix-cod-drawer] [data-brix-cod-btn]');
+    if (!b) return null;
+    const cs = getComputedStyle(b);
+    return { pt: cs.paddingTop, pl: cs.paddingLeft };
+  });
+  const sized = await open('dawn', { cfg: { buttons: { looks: { drawer: { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 15, bold: true, uppercase: false, icon: true, radius: 12, paddingY: 22, paddingX: 30 } } } } });
+  await waitButton(sized);
+  const p = await padOf(sized);
+  check('drawer COD button: the merchant\'s padding', p && p.pt === '22px' && p.pl === '30px', JSON.stringify(p));
+  allErrors.push(...sized.errors);
+  await sized.context().close();
+
+  const plain = await open('dawn');
+  await waitButton(plain);
+  const d = await padOf(plain);
+  check('drawer COD button: settings from before keep 14px / 16px', d && d.pt === '14px' && d.pl === '16px', JSON.stringify(d));
+  allErrors.push(...plain.errors);
+  await plain.context().close();
+}
+
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

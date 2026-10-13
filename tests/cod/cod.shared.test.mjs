@@ -19,7 +19,7 @@ test('button looks: drawer, product page and combo page each have their own', ()
     },
     productButton: { radius: 6 },
   });
-  assert.deepEqual(codButtonLook(s, 'drawer'), { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 17, bold: true, uppercase: true, icon: true, radius: 20, text: 'Cash on Delivery' });
+  assert.deepEqual(codButtonLook(s, 'drawer'), { style: 'filled', bg: '#0c7a43', color: '#ffffff', fontSize: 17, bold: true, uppercase: true, icon: true, radius: 20, paddingY: 14, paddingX: 16, text: 'Cash on Delivery' });
   const product = codButtonLook(s, 'product');
   assert.deepEqual([product.style, product.bg, product.fontSize, product.icon, product.radius, product.uppercase], ['outline', '#1d4ed8', 14, false, 6, false], 'own look; corners from productButton');
   const combo = codButtonLook(s, 'combo');
@@ -300,4 +300,17 @@ test('product page: COD replaces, or goes above or below, Shopify\'s Buy it now'
   // The old switch still works for callers that only send it.
   assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }).productButton.buyNowPlacement, 'above');
   assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }, below).productButton.buyNowPlacement, 'below', 'turning replace off keeps Below');
+});
+
+test('drawer button padding: defaults 14 / 16, clamped, kept on other saves', () => {
+  const d = sanitizeCodSettings({});
+  assert.deepEqual([d.buttons.paddingY, d.buttons.paddingX], [14, 16]);
+  const s = sanitizeCodSettings({ buttons: { paddingY: 20, paddingX: 30 } });
+  assert.deepEqual([codButtonLook(s, 'drawer').paddingY, codButtonLook(s, 'drawer').paddingX], [20, 30]);
+  const kept = sanitizeCodSettings({ buttons: { bg: '#123456' } }, s);
+  assert.deepEqual([kept.buttons.paddingY, kept.buttons.paddingX], [20, 30], 'another save keeps the padding');
+  const wild = sanitizeCodSettings({ buttons: { paddingY: 999, paddingX: -5 } });
+  assert.deepEqual([wild.buttons.paddingY, wild.buttons.paddingX], [32, 4]);
+  // Settings saved before padding existed draw at the old fixed size.
+  assert.deepEqual([codButtonLook({ buttons: { bg: '#111827' } }, 'drawer').paddingY, codButtonLook({ buttons: {} }, 'drawer').paddingX], [14, 16]);
 });

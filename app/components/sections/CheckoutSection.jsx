@@ -54,6 +54,22 @@ export function CheckoutSection() {
             suffix="px"
             onChange={(v) => updateCheckoutButton({ borderRadius: v })}
           />
+          <SliderField
+            label="Text size"
+            value={Number(checkoutButton.fontSize) || 15}
+            min={12}
+            max={22}
+            suffix="px"
+            onChange={(v) => updateCheckoutButton({ fontSize: v })}
+          />
+          <SliderField
+            label="Button height (padding top and bottom)"
+            value={Number(checkoutButton.paddingY) || 16}
+            min={8}
+            max={28}
+            suffix="px"
+            onChange={(v) => updateCheckoutButton({ paddingY: v })}
+          />
         </FormLayout>
       </Card>
       <CustomizableLockedSection featureKey="mobile_swipe_checkout">

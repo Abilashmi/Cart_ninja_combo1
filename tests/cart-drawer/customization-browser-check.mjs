@@ -348,6 +348,42 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   }
 }
 
+/* Checkout button: text size and height (padding) from checkout_button_style */
+{
+  const cbBox = (page, sel) => page.evaluate((q) => {
+    const b = document.querySelector(q);
+    if (!b) return null;
+    const cs = getComputedStyle(b);
+    return { fs: cs.fontSize, pt: cs.paddingTop, pb: cs.paddingBottom, h: Math.round(b.getBoundingClientRect().height) };
+  }, sel);
+  const sized = await openDrawer({ data: { checkout_button_style: JSON.stringify({ backgroundColor: '#111111', textColor: '#ffffff', borderRadius: 8, fontSize: 19, paddingY: 22 }) } });
+  await sized.waitForSelector('#cc-checkout-wrap button', { timeout: 5000 }).catch(() => {});
+  const b = await cbBox(sized, '#cc-checkout-wrap button');
+  check('checkout button: the merchant\'s text size and padding', b && b.fs === '19px' && b.pt === '22px' && b.pb === '22px', JSON.stringify(b));
+  await close(sized);
+
+  const plain = await openDrawer({ data: { checkout_button_style: JSON.stringify({ backgroundColor: '#111111', textColor: '#ffffff' }) } });
+  await plain.waitForSelector('#cc-checkout-wrap button', { timeout: 5000 }).catch(() => {});
+  const d = await cbBox(plain, '#cc-checkout-wrap button');
+  check('checkout button: drawers saved before keep 15px text and 16px padding', d && d.fs === '15px' && d.pt === '16px', JSON.stringify(d));
+  await close(plain);
+
+  const wild = await openDrawer({ data: { checkout_button_style: JSON.stringify({ fontSize: 99, paddingY: -3 }) } });
+  await wild.waitForSelector('#cc-checkout-wrap button', { timeout: 5000 }).catch(() => {});
+  const w = await cbBox(wild, '#cc-checkout-wrap button');
+  check('checkout button: out-of-range values are clamped (22px, 8px)', w && w.fs === '22px' && w.pt === '8px', JSON.stringify(w));
+  await close(wild);
+
+  const swipe = await openDrawer({ width: 390, data: { checkout_button_style: JSON.stringify({ mobileButtonType: 'swipe', paddingY: 22, fontSize: 18 }) } });
+  await swipe.waitForSelector('#cc-swipe-track', { timeout: 5000 }).catch(() => {});
+  const sw = await swipe.evaluate(() => {
+    const t = document.querySelector('#cc-swipe-track');
+    return t && { h: Math.round(t.getBoundingClientRect().height), thumb: Math.round(document.querySelector('#cc-swipe-thumb').getBoundingClientRect().height), fs: getComputedStyle(document.querySelector('#cc-swipe-label')).fontSize };
+  });
+  check('swipe button: height follows the padding (64px), thumb fits, label size', sw && sw.h === 64 && sw.thumb === 58 && sw.fs === '16px', JSON.stringify(sw));
+  await close(swipe);
+}
+
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((ok) => !ok).length;

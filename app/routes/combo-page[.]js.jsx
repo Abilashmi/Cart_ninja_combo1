@@ -232,6 +232,7 @@ const SCRIPT_BODY = String.raw`
       config: data.config || {},
       productsByHandle: data.productsByHandle || {},
       collectionNameMap: data.collectionNameMap || {},
+      collectionImageMap: data.collectionImageMap || {},
       activeDiscounts: data.activeDiscounts || [],
       // Internal per-shop switch (php_backend/integrations_admin.php) — see onCheckout.
       shiprocketEnabled: data.shiprocketEnabled === true,
@@ -2215,6 +2216,7 @@ const SCRIPT_BODY = String.raw`
       productsByHandle: state.productsByHandle,
       handles: weightBoxHandles(config),
       collectionNames: state.collectionNameMap,
+      collectionImages: state.collectionImageMap,
       selection: state.selectedMap,
       pending: state.pendingVariant,
       ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, checkingOut: state.checkingOut },

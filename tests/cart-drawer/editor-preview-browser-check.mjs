@@ -341,9 +341,22 @@ for (const behavior of ['replace', 'hide']) {
   const gift = await ed.evaluate(() => { const r = document.querySelector('[data-testid="preview-reward-line"]'); return r ? { badge: r.querySelector('.bxcd-item__badge').textContent, variant: r.querySelector('.bxcd-item__variant')?.textContent, text: r.textContent } : null; });
   check('free gift preview: badge text and chosen variant shown', gift && gift.badge === 'VIP BONUS' && gift.variant === '9-10 years' && gift.text.includes('949'), JSON.stringify(gift));
 
+  // Checkout button: text size and height, mirrored in the preview at its scale.
+  await open('Checkout Button');
+  await ed.getByLabel('Text size', { exact: true }).fill('19');
+  await ed.getByLabel('Button height (padding top and bottom)').fill('22');
+  await ed.waitForTimeout(250);
+  const cbPrev = await ed.evaluate(() => {
+    const b = [...document.querySelectorAll('.bxcd-root button')].find((x) => /→/.test(x.textContent));
+    return b ? { fs: getComputedStyle(b).fontSize, pt: getComputedStyle(b).paddingTop } : null;
+  });
+  check('checkout button preview: text size and height follow the settings (scaled like the rest of the preview)', cbPrev && cbPrev.fs === '16.5px' && cbPrev.pt === '15px', JSON.stringify(cbPrev));
+
   await ed.getByRole('button', { name: 'Save', exact: true }).click();
   await ed.waitForTimeout(800);
   const body = (p) => saves.find((s) => s.path === p)?.body || {};
+  const cbSaved = JSON.parse((await ed.evaluate(() => window.__LEGACY__))?.checkout_button_style || '{}');
+  check('save: checkout button text size and padding go to the storefront blob', cbSaved.fontSize === 19 && cbSaved.paddingY === 22, JSON.stringify(cbSaved));
   const c = body('/api/cart-drawer-config');
   check('save: messages, rotation and the typed colour go to /api/cart-drawer-config',
     JSON.stringify(c.announcement_messages) === '["Free shipping today","Sale ends Sunday"]' && c.announcement_text === 'Free shipping today' && c.announcement_auto_rotate === 1 && c.announcement_show_arrows === 1 && c.announcement_bg_color === '#aabbcc',

@@ -742,6 +742,20 @@ function PreviewImageBanner({ banner, device, editing }) {
 
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
+  // The preview draws the drawer smaller than the storefront (13px text and
+  // 11px padding for the storefront's 15 / 16); the Checkout button's text
+  // size and height keep that ratio.
+  const checkoutPreview = (() => {
+    const cb = footer.checkoutButton;
+    const font = Math.max(12, Math.min(22, Number(cb.fontSize) || 15));
+    const padY = Math.max(8, Math.min(28, Number(cb.paddingY) || 16));
+    return {
+      font: Math.round(font * 13 / 15 * 10) / 10,
+      padY: Math.round(padY * 11 / 16),
+      swipeH: Math.round((20 + padY * 2) * 44 / 52),
+      swipeFont: Math.round((Math.max(12, font - 2)) * 12 / 13 * 10) / 10,
+    };
+  })();
   const { symbol: currencySymbol, formatMoney } = useCurrency();
 
   const designTheme = settings.design?.theme;
@@ -1071,14 +1085,14 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       </div>
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (
-                        <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: 44, display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
-                          <div style={{ width: 38, height: 38, margin: 3, borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
+                        <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: checkoutPreview.swipeH, display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
+                          <div style={{ width: checkoutPreview.swipeH - 6, height: checkoutPreview.swipeH - 6, margin: 3, borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
                             <span style={{ color: footer.checkoutButton.bgColor, fontSize: 16, lineHeight: 1 }}>›</span>
                           </div>
-                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: 12, fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>Swipe to checkout</span>
+                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: checkoutPreview.swipeFont, fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>Swipe to checkout</span>
                         </div>
                       ) : (
-                        <button style={{ width: '100%', padding: '11px', border: 'none', borderRadius: `${footer.checkoutButton.borderRadius}px`, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>
+                        <button style={{ width: '100%', padding: `${checkoutPreview.padY}px 11px`, border: 'none', borderRadius: `${footer.checkoutButton.borderRadius}px`, fontSize: checkoutPreview.font, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>
                           {footer.checkoutButton.text} →
                         </button>
                       )}

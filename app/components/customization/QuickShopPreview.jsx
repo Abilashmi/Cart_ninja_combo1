@@ -69,6 +69,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
   const hasProducts = handles.some((h) => productsByHandle[h]?.length);
   const fallbackProducts = hasProducts ? null : SAMPLE_PRODUCTS;
   const collectionNames = useMemo(() => Object.fromEntries((collections || []).map((c) => [c.handle, c.title])), [collections]);
+  const collectionImages = useMemo(() => Object.fromEntries((collections || []).filter((c) => c.image).map((c) => [c.handle, c.image])), [collections]);
 
   const pricing = useMemo(() => {
     const { value } = normalizeWeightPricing(config.weight_pricing);
@@ -89,6 +90,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
     productsByHandle,
     handles,
     collectionNames,
+    collectionImages,
     fallbackProducts,
     selection: sel,
     pending,
@@ -98,7 +100,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
     symbol,
     decimals,
     isMobile,
-  }), [config, productsByHandle, handles, collectionNames, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
+  }), [config, productsByHandle, handles, collectionNames, collectionImages, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
 
   const model = buildFor(selection);
   const codShown = !!codEnabled && config.show_cod_button !== false;

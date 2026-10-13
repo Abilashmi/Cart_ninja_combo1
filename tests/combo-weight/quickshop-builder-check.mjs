@@ -199,6 +199,53 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.close();
 }
 
+// ── Picture collection bar and bottom bar button sizes ──
+{
+  const page = await open();
+  await tab(page, 'Layout');
+  await section(page, 'Filters');
+  await page.click('label:has-text("Pictures with names")');
+  await page.waitForSelector('.bxq-colbar');
+  const tiles = await page.$$eval('.bxq-col .bxq-col-name', (els) => els.map((e) => e.textContent));
+  check('builder: Pictures with names shows the picture bar in the preview', tiles.join(',') === 'All,Face Wash,Serums', tiles.join(','));
+  const side = await sidebar(page);
+  check('builder: shape, size and one picture field per collection', side.includes('Picture shape') && side.includes('Picture size') && side.includes('Face Wash picture') && side.includes('Serums picture'));
+  await page.getByLabel('Face Wash picture').fill('https://cdn.example.com/face.jpg');
+  check('builder: a picture link shows on its tile', (await page.$('.bxq-col[data-value^="c:"] img[src="https://cdn.example.com/face.jpg"]')) !== null);
+  await page.getByLabel('Serums picture').fill('http://insecure.example.com/s.jpg');
+  check('builder: a non-https link is flagged', (await sidebar(page)).includes('Use an https:// image link.'));
+  await page.getByLabel('Picture shape').selectOption('square');
+  check('builder: shape follows the setting', (await page.$eval('.bxq-col-img', (el) => getComputedStyle(el).borderRadius)) === '4px');
+  await page.click('.bxq-col:has-text("Serums")');
+  check('builder: tapping a tile filters the preview', (await page.$$('.bxq-card')).length === 2);
+
+  await plus(page, 3);
+  await tab(page, 'Style');
+  await section(page, 'Bottom bar');
+  const bar = await sidebar(page);
+  check('builder: button size fields', bar.includes('Text size') && bar.includes('Text size on phones') && bar.includes('Padding top and bottom') && bar.includes('Padding left and right'));
+  // PxField's caption isn't a <label>, so find each input by its field.
+  const px = (caption) => page.locator('.compact-field').filter({ has: page.locator(`div:text-is("${caption}")`) }).locator('input');
+  await px('Padding top and bottom').fill('20');
+  await px('Text size').fill('19');
+  await page.waitForTimeout(200);
+  const go = await page.$eval('.bxq-go', (el) => ({ pt: getComputedStyle(el).paddingTop, fs: getComputedStyle(el).fontSize }));
+  check('builder: the preview button follows the sizes', go.pt === '20px' && go.fs === '19px', JSON.stringify(go));
+
+  await page.click('button:has-text("Save Template")');
+  await page.waitForSelector('text=Template Title');
+  await page.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await page.waitForTimeout(800);
+  const saved = await page.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved: picture bar settings and button sizes',
+    config.qs_chip_style === 'images' && config.qs_chip_image_shape === 'square' && Object.values(config.qs_chip_images || {}).includes('https://cdn.example.com/face.jpg')
+    && Number(config.qs_btn_pad_y) === 20 && Number(config.qs_btn_font_size) === 19,
+    JSON.stringify({ style: config.qs_chip_style, shape: config.qs_chip_image_shape, images: config.qs_chip_images, py: config.qs_btn_pad_y, fs: config.qs_btn_font_size }));
+  await page.screenshot({ path: path.join(SHOTS, 'builder-collection-bar.png'), fullPage: false });
+  await page.close();
+}
+
 await browser.close();
 server.close();
 const failed = results.filter((r) => !r.ok);

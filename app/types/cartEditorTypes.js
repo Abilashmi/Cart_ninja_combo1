@@ -176,6 +176,8 @@ export const defaultCartEditorState = {
       bgColor: '#000000',
       textColor: '#ffffff',
       borderRadius: 8,
+      fontSize: 15, // px, storefront size (CHECKOUT_FONT_SIZES)
+      paddingY: 16, // px above and below the text (CHECKOUT_PADDING_Y)
       mobileButtonType: 'standard',
     },
     customCSS: '',

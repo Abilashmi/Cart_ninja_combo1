@@ -68,6 +68,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     style: 'filled', // filled | outline | minimal (outline/minimal use bg for text and border)
     radius: 12, // cart drawer button corners, px (product page has productButton.radius)
     fontSize: 15,
+    // Cart drawer button inner spacing, px (product page has productButton.padding*).
+    paddingY: 14,
+    paddingX: 16,
     bold: true,
     uppercase: false,
     icon: true, // the cash icon before the text
@@ -208,12 +211,14 @@ export function parseTags(value) {
 }
 
 export const COD_BUTTON_FONT_SIZES = [12, 22];
+// Cart drawer COD button padding, px: [min, max] (same ranges as the product page's).
+export const COD_BUTTON_PADDING = Object.freeze({ paddingY: [4, 32], paddingX: [4, 48] });
 
 /**
  * One COD button look: { style, bg, color, fontSize, bold, uppercase, icon }
  * (+ radius, + same). Valid fields of `patch` win, the rest keep `base`.
  */
-function sanitizeButtonLook(patch, base, { radius = false, same = false } = {}) {
+function sanitizeButtonLook(patch, base, { radius = false, same = false, padding = false } = {}) {
   const q = patch && typeof patch === 'object' ? patch : {};
   const out = {
     style: COD_BUTTON_STYLES.includes(q.style) ? q.style : (COD_BUTTON_STYLES.includes(base.style) ? base.style : 'filled'),
@@ -225,6 +230,10 @@ function sanitizeButtonLook(patch, base, { radius = false, same = false } = {}) 
     icon: 'icon' in q ? Boolean(q.icon) : base.icon !== false,
   };
   if (radius) out.radius = int('radius' in q ? q.radius : base.radius, 12, 0, 40);
+  if (padding) {
+    out.paddingY = int('paddingY' in q ? q.paddingY : base.paddingY, 14, ...COD_BUTTON_PADDING.paddingY);
+    out.paddingX = int('paddingX' in q ? q.paddingX : base.paddingX, 16, ...COD_BUTTON_PADDING.paddingX);
+  }
   if (same) out.same = 'same' in q ? Boolean(q.same) : base.same !== false;
   return out;
 }
@@ -239,7 +248,7 @@ function sanitizeButtonLook(patch, base, { radius = false, same = false } = {}) 
 export function codButtonLook(settings, surface = 'drawer') {
   const b = { ...DEFAULT_COD_SETTINGS.buttons, ...(settings?.buttons || {}) };
   const pick = (l) => ({ style: l.style, bg: l.bg, color: l.color, fontSize: l.fontSize ?? 15, bold: l.bold !== false, uppercase: Boolean(l.uppercase), icon: l.icon !== false });
-  const drawer = { ...pick(b), radius: b.radius ?? 12 };
+  const drawer = { ...pick(b), radius: b.radius ?? 12, paddingY: b.paddingY ?? 14, paddingX: b.paddingX ?? 16 };
   if (surface === 'product') {
     const own = b.product && b.product.same === false ? b.product : b;
     const pbRadius = settings?.productButton?.radius ?? DEFAULT_COD_SETTINGS.productButton.radius;
@@ -267,7 +276,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
   const bb = b.buttons || {};
   const pb = p.buttons && typeof p.buttons === 'object' ? p.buttons : null;
   const buttons = {
-    ...sanitizeButtonLook(pb, { ...D, ...bb }, { radius: true }),
+    ...sanitizeButtonLook(pb, { ...D, ...bb }, { radius: true, padding: true }),
     drawerText: text(pb?.drawerText, bb.drawerText || D.drawerText, 60),
     productText: text(pb?.productText, bb.productText || D.productText, 60),
     comboText: text(pb?.comboText, bb.comboText || D.comboText, 60),

@@ -398,8 +398,9 @@ export default function CodCustomizePage() {
   const drawerLook = {
     style: form.btnStyle, bg: form.bg, color: form.color, radius: form.btnRadius,
     fontSize: form.btnFontSize, bold: form.btnBold, uppercase: form.btnUppercase, icon: form.btnIcon,
+    paddingY: form.btnPaddingY, paddingX: form.btnPaddingX,
   };
-  const DRAWER_FIELDS = { style: 'btnStyle', bg: 'bg', color: 'color', radius: 'btnRadius', fontSize: 'btnFontSize', bold: 'btnBold', uppercase: 'btnUppercase', icon: 'btnIcon' };
+  const DRAWER_FIELDS = { style: 'btnStyle', bg: 'bg', color: 'color', radius: 'btnRadius', fontSize: 'btnFontSize', bold: 'btnBold', uppercase: 'btnUppercase', icon: 'btnIcon', paddingY: 'btnPaddingY', paddingX: 'btnPaddingX' };
   const setDrawerLook = (patch) => setForm((f) => {
     const next = { ...f };
     for (const [k, v] of Object.entries(patch)) if (DRAWER_FIELDS[k]) next[DRAWER_FIELDS[k]] = v;
@@ -511,7 +512,7 @@ export default function CodCustomizePage() {
                 </FormLayout>
               </Card>
               <Text as="h3" variant="headingMd">COD button design</Text>
-              <ButtonDesignEditor look={drawerLook} onChange={setDrawerLook} errors={{ bg: errors.bg, color: errors.color }} />
+              <ButtonDesignEditor look={drawerLook} onChange={setDrawerLook} showPadding errors={{ bg: errors.bg, color: errors.color }} />
             </>
           )}
         </BlockStack>

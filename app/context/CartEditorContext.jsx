@@ -38,6 +38,8 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.backgroundColor ? { bgColor: cbStyle.backgroundColor } : {}),
         ...(cbStyle.textColor ? { textColor: cbStyle.textColor } : {}),
         ...(cbStyle.borderRadius != null ? { borderRadius: cbStyle.borderRadius } : {}),
+        ...(cbStyle.fontSize != null ? { fontSize: Number(cbStyle.fontSize) } : {}),
+        ...(cbStyle.paddingY != null ? { paddingY: Number(cbStyle.paddingY) } : {}),
         ...(cbStyle.mobileButtonType ? { mobileButtonType: cbStyle.mobileButtonType } : {}),
       },
       customCSS: record.customCSS || base.footer.customCSS,
@@ -282,6 +284,8 @@ function mergeConfigIntoState(base, cfg) {
           bgColor: cfg.checkoutButtonStyle.backgroundColor || next.footer.checkoutButton.bgColor,
           textColor: cfg.checkoutButtonStyle.textColor || next.footer.checkoutButton.textColor,
           borderRadius: cfg.checkoutButtonStyle.borderRadius ?? next.footer.checkoutButton.borderRadius,
+          fontSize: cfg.checkoutButtonStyle.fontSize ?? next.footer.checkoutButton.fontSize,
+          paddingY: cfg.checkoutButtonStyle.paddingY ?? next.footer.checkoutButton.paddingY,
         },
       },
     };

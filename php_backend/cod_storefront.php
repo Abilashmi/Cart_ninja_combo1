@@ -123,6 +123,11 @@ function cods_button_look($raw, $base) {
     if (array_key_exists('radius', $base)) {
         $out['radius'] = is_numeric($l['radius'] ?? null) ? max(0, min(40, (int)$l['radius'])) : $base['radius'];
     }
+    // Cart drawer button padding (COD_BUTTON_PADDING in app/utils/cod.shared.js).
+    if (array_key_exists('paddingY', $base)) {
+        $out['paddingY'] = is_numeric($l['paddingY'] ?? null) ? max(4, min(32, (int)$l['paddingY'])) : $base['paddingY'];
+        $out['paddingX'] = is_numeric($l['paddingX'] ?? null) ? max(4, min(48, (int)$l['paddingX'])) : $base['paddingX'];
+    }
     return $out;
 }
 
@@ -134,7 +139,7 @@ function cods_button_look($raw, $base) {
 function cods_button_looks($buttons, $productRadius) {
     $drawer = cods_button_look($buttons, [
         'style' => 'filled', 'bg' => '#111827', 'color' => '#ffffff', 'fontSize' => 15,
-        'bold' => true, 'uppercase' => false, 'icon' => true, 'radius' => 12,
+        'bold' => true, 'uppercase' => false, 'icon' => true, 'radius' => 12, 'paddingY' => 14, 'paddingX' => 16,
     ]);
     $p = is_array($buttons['product'] ?? null) ? $buttons['product'] : [];
     $c = is_array($buttons['combo'] ?? null) ? $buttons['combo'] : null;
