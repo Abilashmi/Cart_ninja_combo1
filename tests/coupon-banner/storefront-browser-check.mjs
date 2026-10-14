@@ -111,4 +111,21 @@ await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps
 const t1 = await page.locator('ps-coupon-slider .ps-card').evaluateAll((els) => els.map((e) => e.querySelectorAll('svg').length));
 assert.deepEqual(t1, [0, 1], 'Classic Banner: no icon unless switched on');
 console.log('  ✓ icon (SVG / image / hidden / colour / size), subtitle font and Copied colours on the storefront banner');
+
+// Section title above the coupons ("Apply Coupon"): the merchant's text,
+// size, colour and alignment; empty = no title; text never run as HTML.
+const titleOf = () => page.locator('ps-coupon-slider .ps-section-title').evaluateAll((els) => els.map((e) => ({ text: e.textContent, size: getComputedStyle(e).fontSize, color: getComputedStyle(e).color, align: getComputedStyle(e).textAlign, bold: e.querySelectorAll('b').length })));
+config.data.temp1DefaultStyle = { headingText: 'Deal' };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+assert.equal((await titleOf())[0]?.text, 'Apply Coupon', 'not set: the old default title');
+config.data.temp1DefaultStyle = { headingText: 'Deal', title: { text: 'Grab these <b>offers</b>', fontSize: 20, textColor: '#be185d', alignment: 'center' } };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+assert.deepEqual((await titleOf())[0], { text: 'Grab these <b>offers</b>', size: '20px', color: 'rgb(190, 24, 93)', align: 'center', bold: 0 }, 'merchant title, size, colour, alignment; escaped');
+config.data.temp1DefaultStyle = { headingText: 'Deal', title: { text: '' } };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+assert.equal((await titleOf()).length, 0, 'empty title: no heading at all');
+console.log('  ✓ section title: default, the merchant\'s text / size / colour / alignment, empty = none, escaped');
 await browser.close();

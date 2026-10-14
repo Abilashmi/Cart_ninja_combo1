@@ -349,7 +349,8 @@ function renderSlider(el,data,ctx){
   var titleText=(titleCfg&&titleCfg.text!==undefined)?String(titleCfg.text):'Apply Coupon';
   var titleFontSize=parseInt(titleCfg&&titleCfg.fontSize,10);
   if(!titleFontSize||isNaN(titleFontSize))titleFontSize=14;
-  var titleColor=(titleCfg&&titleCfg.textColor)?String(titleCfg.textColor):'#111827';
+  var titleColor=(titleCfg&&/^#[0-9a-f]{3,8}$/i.test(String(titleCfg.textColor||'')))?String(titleCfg.textColor):'#111827';
+  titleFontSize=Math.max(10,Math.min(32,titleFontSize));
   var titleAlign=(titleCfg&&titleCfg.alignment)?String(titleCfg.alignment):'left';
   if(['left','center','right'].indexOf(titleAlign)===-1)titleAlign='left';
   var normalizedMap={};
@@ -418,7 +419,7 @@ function renderSlider(el,data,ctx){
   var single=itemsToRender.length===1;
   el.innerHTML=
     '<div class="ps-slider'+(single?' ps-slider--single':'')+'">'
-      +'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+titleText+'</div>'
+      +(String(titleText).trim()===''?'':'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+escapeHtmlJs(titleText)+'</div>')
       +'<div class="ps-slider-row">'
         +(single?'':'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>')
         +'<div class="ps-coupon-wrapper"></div>'

@@ -663,6 +663,20 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
 }
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
+// The Coupon Banner's section title ("Apply Coupon" above the coupons), as
+// the storefront reads it from the template style (title: { text, fontSize,
+// textColor, alignment }). Not saved yet = the storefront's own defaults.
+function readSectionTitle(tpl) {
+    const t = tpl && typeof tpl.title === "object" && tpl.title ? tpl.title : {};
+    const size = parseInt(t.fontSize, 10);
+    return {
+        text: t.text !== undefined && t.text !== null ? String(t.text) : "Apply Coupon",
+        fontSize: size >= 11 && size <= 28 ? size : 14,
+        textColor: /^#[0-9a-f]{6}$/i.test(t.textColor || "") ? t.textColor : "#111827",
+        alignment: ["left", "center", "right"].includes(t.alignment) ? t.alignment : "left",
+    };
+}
+
 export default function ProductWidgetPage() {
     const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
@@ -696,6 +710,10 @@ export default function ProductWidgetPage() {
         return "classic-banner"; // safe default: first template
     });
     const [openSection, setOpenSection] = useState(null);
+    // The heading above the coupons ("Apply Coupon"): the storefront reads
+    // tempNDefaultStyle.title (coupon-slider-render.liquid renderSlider).
+    const [sectionTitle, setSectionTitle] = useState(() => readSectionTitle(activeTpl));
+    const setTitleKey = (key) => (v) => { setSectionTitle((prev) => ({ ...prev, [key]: v })); mark(); };
     const [heading,     setHeading]     = useState(activeTpl.headingText || "GET 10% OFF!");
     const [subtext,     setSubtext]     = useState(activeTpl.subtextText || "Apply at checkout for savings");
     const [bgColor,     setBgColor]     = useState(activeTpl.bgColor     || "#ffffff");
@@ -806,6 +824,7 @@ export default function ProductWidgetPage() {
         const src = couponConfig?.templates?.[t.tplKey] || FAKE_COUPON_CONFIG.templates[t.tplKey];
         if (src) {
             setHeading(src.headingText); setSubtext(src.subtextText);
+            setSectionTitle(readSectionTitle(src));
             setBgColor(src.bgColor); setTextColor(src.textColor);
             setAccentColor(src.accentColor); setButtonColor(src.buttonColor);
             setBtnTextColor(src.buttonTextColor);
@@ -854,7 +873,7 @@ export default function ProductWidgetPage() {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
                 selectedActiveCoupons: selectedCouponIds,
-                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding, cardWidth, cardMinHeight },
+                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding, cardWidth, cardMinHeight, title: { ...sectionTitle, text: sectionTitle.text.trim() } },
                 couponStyles,
                 couponConditions,
                 layout: couponLayout,
@@ -1098,6 +1117,31 @@ export default function ProductWidgetPage() {
 
                                     <AccordionSection id="design" icon={ColorIcon} title="Layout" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
                                         <BlockStack gap="400">
+                                            <BlockStack gap="200">
+                                                <Text as="h3" variant="headingSm">Section title</Text>
+                                                <TextField
+                                                    label="Title above the coupons"
+                                                    value={sectionTitle.text}
+                                                    onChange={setTitleKey("text")}
+                                                    autoComplete="off"
+                                                    maxLength={60}
+                                                    placeholder="Apply Coupon"
+                                                    helpText="Leave empty to show no title."
+                                                />
+                                                {sectionTitle.text.trim() !== "" && (
+                                                    <>
+                                                        <SliderField label="Title size" value={sectionTitle.fontSize} min={11} max={28} suffix="px" onChange={setTitleKey("fontSize")} />
+                                                        <ColorField label="Title colour" value={sectionTitle.textColor} onChange={setTitleKey("textColor")} />
+                                                        <Select
+                                                            label="Title alignment"
+                                                            options={[{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }]}
+                                                            value={sectionTitle.alignment}
+                                                            onChange={setTitleKey("alignment")}
+                                                        />
+                                                    </>
+                                                )}
+                                            </BlockStack>
+                                            <Divider />
                                             <Select
                                                 label="Banner layout"
                                                 helpText="How multiple coupons are arranged on the product page."
@@ -1184,6 +1228,11 @@ export default function ProductWidgetPage() {
                                     <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "14px" }}>
                                         Product Page Widget
                                     </div>
+                                    {sectionTitle.text.trim() !== "" && (
+                                        <div className="pw-section-title" style={{ textAlign: sectionTitle.alignment, color: sectionTitle.textColor, fontSize: `${sectionTitle.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2 }}>
+                                            {sectionTitle.text}
+                                        </div>
+                                    )}
                                     <div style={{ width: selectedCouponIds.length > 1 ? `${cardWidth}px` : "100%", maxWidth: "100%", display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
                                         <div style={{ flex: 1, display: "grid" }}>{renderPreview()}</div>
                                     </div>

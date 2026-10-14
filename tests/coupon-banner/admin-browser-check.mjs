@@ -296,6 +296,30 @@ await check('text offers have no Copied colour settings', async () => {
   await context.close();
 });
 
+await check('section title: defaults to "Apply Coupon", editable (text, size, colour, alignment), previewed, saved; empty hides it', async () => {
+  const { page, context, posts } = await open();
+  await couponRow(page, 'SAVE10').click();
+  await page.getByRole('button', { name: /^Layout/ }).first().click();
+  const field = page.getByLabel('Title above the coupons');
+  assert.equal(await field.inputValue(), 'Apply Coupon');
+  assert.equal(await page.locator('.pw-section-title').textContent(), 'Apply Coupon');
+  await field.fill('Exclusive offers for you');
+  await page.getByLabel('Title size').fill('20');
+  await page.getByRole('textbox', { name: /^Title colour/ }).fill('#be185d');
+  await page.getByLabel('Title alignment').selectOption('center');
+  await page.waitForTimeout(200);
+  const pv = await page.locator('.pw-section-title').evaluate((e) => [e.textContent, getComputedStyle(e).fontSize, getComputedStyle(e).color, getComputedStyle(e).textAlign]);
+  assert.deepEqual(pv, ['Exclusive offers for you', '20px', 'rgb(190, 24, 93)', 'center']);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const save = posts.find((p) => p.template);
+  assert.deepEqual(save.template.title, { text: 'Exclusive offers for you', fontSize: 20, textColor: '#be185d', alignment: 'center' });
+  await field.fill('');
+  assert.equal(await page.locator('.pw-section-title').count(), 0, 'empty = no title in the preview');
+  assert.equal(await page.getByLabel('Title size').count(), 0, 'size / colour / alignment hidden while empty');
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
