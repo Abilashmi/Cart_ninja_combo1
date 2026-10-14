@@ -496,7 +496,7 @@ export default function CodCustomizePage() {
                       maxLength={60}
                       placeholder="Check out"
                       autoComplete="off"
-                      helpText={'Your theme drawer\'s own Checkout (still opens Shopify checkout). Empty = the theme\'s text. Prices: {price} = cart total. The BRIX Cart Drawer\'s Checkout text is in Cart Editor.'}
+                      helpText={'The Checkout button next to COD, in the BRIX Cart Drawer or your theme\'s drawer (it still opens your normal checkout). Empty = that drawer\'s own text (BRIX: Cart Editor → Checkout Button). Prices: {price} = cart total.'}
                     />
                   )}
                   <TextField

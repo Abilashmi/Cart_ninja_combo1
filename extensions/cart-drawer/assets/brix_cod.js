@@ -1807,6 +1807,7 @@
       if (!slot.isConnected) return;
       if (!cfg || cfg.surfaces.drawer === false) { slot.innerHTML = ''; setReplaced(checkout, false); return; }
       var state = drawerState(cfg, opts.cart, excluded, moneyFormatter(cfg.currency));
+      relabelBrixCheckout(checkout, cfg, state);
       paintDrawerSlot(slot, cfg, state, checkout ? { anchor: checkout, checkout: checkout } : null, function () {
         open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
       });
@@ -1973,15 +1974,30 @@
 
   // The merchant's text on the theme drawer's own Checkout button (COD →
   // Customize → Cart drawer), with {price} = the cart total.
-  function relabelCheckout(checkout, cfg, state) {
+  function checkoutLabel(cfg, state) {
     var text = cfg && cfg.drawerCheckoutText;
-    var el = text ? textTarget(checkout) : null;
-    if (!el) return;
+    if (!text) return '';
     var price = state ? cartPrice(state) : null;
     var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
     var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
-    var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
-    setButtonText(el, next);
+    return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
+  }
+
+  function relabelCheckout(checkout, cfg, state) {
+    var el = cfg && cfg.drawerCheckoutText ? textTarget(checkout) : null;
+    if (!el) return;
+    setButtonText(el, checkoutLabel(cfg, state));
+  }
+
+  // The same text on the BRIX Cart Drawer's own Checkout button (standard,
+  // animated and swipe): cart_drawer_inline.js marks its label
+  // [data-cc-checkout-label], so the → arrow stays. Empty = the drawer's
+  // own text (Cart Editor → Checkout Button).
+  function relabelBrixCheckout(checkout, cfg, state) {
+    if (!checkout || !cfg || !cfg.drawerCheckoutText) return;
+    var next = checkoutLabel(cfg, state);
+    var labels = checkout.querySelectorAll('[data-cc-checkout-label]');
+    for (var i = 0; i < labels.length; i++) if (labels[i].textContent !== next) labels[i].textContent = next;
   }
 
   function paintTheme(cfg) {

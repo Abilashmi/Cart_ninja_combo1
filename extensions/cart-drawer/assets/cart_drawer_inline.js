@@ -2286,7 +2286,7 @@
       const thumbH = trackH - 6;
       return `
   <div id="cc-swipe-track" data-href="${href}" style="position:relative;width:100%;height:${trackH}px;background:${bg};border-radius:${radius}px;overflow:hidden;touch-action:pan-y;user-select:none;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
-    <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:${Math.max(12, fontSize - 2)}px;font-weight:700;letter-spacing:0.3px;pointer-events:none;">${escapeHtml(CONFIG.checkoutName || 'Swipe to checkout')} →</span>
+    <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:${Math.max(12, fontSize - 2)}px;font-weight:700;letter-spacing:0.3px;pointer-events:none;"><span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Swipe to checkout')}</span> →</span>
     <div id="cc-swipe-thumb" style="position:absolute;top:3px;left:3px;width:${thumbH}px;height:${thumbH}px;border-radius:${thumbRadius}px;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:grab;touch-action:none;">
       <span style="color:${bg};font-size:20px;line-height:1;">›</span>
     </div>
@@ -2297,7 +2297,7 @@
       return `
   <button type="button" id="cc-animated-checkout-btn" class="cc-anim-btn" data-href="${href}" style="position:relative;overflow:hidden;width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
     <span id="cc-animated-checkout-spinner" style="display:none;width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);border-top-color:${fg};animation:cc-anim-spin 0.6s linear infinite;flex-shrink:0;"></span>
-    <span id="cc-animated-checkout-label" aria-live="polite">${escapeHtml(CONFIG.checkoutName || 'Checkout')}</span>
+    <span id="cc-animated-checkout-label" data-cc-checkout-label aria-live="polite">${escapeHtml(CONFIG.checkoutName || 'Checkout')}</span>
   </button>`;
     }
 
@@ -2308,14 +2308,14 @@
     if (CONFIG.shiprocketEnabled) {
       return `
   <button type="button" id="cc-standard-checkout-btn" data-href="${href}" style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-    ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
+    <span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Checkout Now')}</span> <span style="font-size:18px;">→</span>
   </button>`;
     }
 
     return `
   <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
     <button style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
+      <span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Checkout Now')}</span> <span style="font-size:18px;">→</span>
     </button>
   </a>`;
   }

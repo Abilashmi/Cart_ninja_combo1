@@ -491,6 +491,33 @@ const done = async (page, name) => {
   await plain.context().close();
 }
 
+/* 16. COD's "Checkout button text" also relabels the BRIX Cart Drawer's Checkout */
+{
+  const page = await open('dawn', { brixOn: true, cfg: { drawerPlacement: 'above', drawerCheckoutText: 'Pay online {price}' } });
+  await page.waitForFunction(() => window.__brixCartDrawerActive === true, null, { timeout: 5000 }).catch(() => null);
+  await page.evaluate(() => window.testCart());
+  await page.waitForSelector('#cc-cod-slot [data-brix-cod-btn]', { timeout: 6000 }).catch(() => null);
+  await settle(page, 600);
+  const label = await page.evaluate(() => {
+    const wrap = document.getElementById('cc-checkout-wrap');
+    const l = wrap && wrap.querySelector('[data-cc-checkout-label]');
+    return { text: l ? l.textContent : null, arrow: wrap ? /→/.test(wrap.textContent) : false };
+  });
+  check('BRIX drawer: Checkout shows COD\'s "Pay online {price}" text with the price, arrow kept', label.text && /^Pay online ₹1,299/.test(label.text) && label.arrow, JSON.stringify(label));
+  allErrors.push(...page.errors);
+  await page.context().close();
+
+  const plain = await open('dawn', { brixOn: true, cfg: { drawerPlacement: 'above' } });
+  await plain.waitForFunction(() => window.__brixCartDrawerActive === true, null, { timeout: 5000 }).catch(() => null);
+  await plain.evaluate(() => window.testCart());
+  await plain.waitForSelector('#cc-cod-slot [data-brix-cod-btn]', { timeout: 6000 }).catch(() => null);
+  await settle(plain, 500);
+  const own = await plain.evaluate(() => document.querySelector('#cc-checkout-wrap [data-cc-checkout-label]')?.textContent);
+  check('BRIX drawer: empty COD text keeps the Cart Editor\'s own Checkout text', own === 'Checkout Now', own);
+  allErrors.push(...plain.errors);
+  await plain.context().close();
+}
+
 /* 15. Cart drawer COD button padding (COD → Customize → Cart drawer button → Button size) */
 {
   const padOf = (page) => page.evaluate(() => {
