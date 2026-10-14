@@ -485,8 +485,6 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
     }
     result.boxes.push({
       templateId: comboId, title, grams: box.grams, weight: formatWeight(box.grams, template.unit), amountMinor: box.discountMinor,
-      // fixed_price = "Box at ₹999": a final price (combo-box-code.server.js).
-      tierType: box.tier.type,
       // The lines that count toward the box and their subtotal (combo-box-code.server.js).
       subtotalMinor: box.subtotalMinor, lineKeys: box.countedKeys,
     });
