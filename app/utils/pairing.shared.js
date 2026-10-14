@@ -710,8 +710,12 @@ export function mergeInstructionRules(autoRules, pinned, countPerProduct, catalo
 
 // Changes when the instructions or the per-product count change, so the
 // model is only asked again then (saved with the resolved rules).
+// Bump when the way instructions become rules changes, so a saved answer
+// from older logic is never reused.
+export const INSTRUCTIONS_LOGIC_VERSION = 3;
+
 export function instructionsHash(text, countPerProduct) {
-  const s = `${Number(countPerProduct) || 3}|${String(text || '').trim().replace(/\s+/g, ' ')}`;
+  const s = `v${INSTRUCTIONS_LOGIC_VERSION}|${Number(countPerProduct) || 3}|${String(text || '').trim().replace(/\s+/g, ' ')}`;
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(36);

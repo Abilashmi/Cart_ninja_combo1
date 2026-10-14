@@ -362,11 +362,16 @@ export const action = async ({ request }) => {
       // The instructions box is saved with every AI-mode save, so typed
       // text is never lost; it only takes effect on a Regenerate.
       const aiInstructions = typeof body.aiInstructions === 'string' ? body.aiInstructions.trim().slice(0, 2000) : null;
+      let instructionsChanged = false;
       if (aiInstructions !== null) {
         await ensureFbtAiInstructionColumns(db);
+        const [prevRows] = await db.execute('SELECT ai_instructions FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
+        instructionsChanged = (prevRows[0]?.ai_instructions || '') !== aiInstructions;
         await db.execute('UPDATE fbt_widget_settings SET ai_instructions = ? WHERE shop_domain = ?', [aiInstructions || null, shop]);
       }
-      if (body.regenerateAi) {
+      // New or edited instructions take effect on Save too — merchants
+      // shouldn't have to know they also need Regenerate.
+      if (body.regenerateAi || instructionsChanged) {
         let instructions = null;
         if (aiInstructions) {
           const [cachedRows] = await db.execute('SELECT ai_instruction_rules FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
@@ -1662,7 +1667,7 @@ export default function FBTPage() {
                           maxLength={2000}
                           autoComplete="off"
                           placeholder={'e.g. Always show socks with joggers\nFor the Summer collection, recommend what customers usually buy with each product'}
-                          helpText="Followed first for the products you name; AI fills in every other product. Uses 1 AI credit when the instructions change."
+                          helpText="Followed first for the products you name; AI fills in every other product. Saving changed instructions applies them (1 AI credit); Regenerate applies them again."
                         />
                         <InlineStack gap="150" wrap>
                           {PAIRING_EXAMPLES.map((ex) => (
