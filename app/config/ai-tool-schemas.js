@@ -501,7 +501,7 @@ export const TOOL_REGISTRY = [
   // ── Combo Forge ──────────────────────────────────────────────────────────
   {
     name: 'create_combo_template',
-    description: 'Create a new bundle/combo page draft using Combo Forge.',
+    description: 'Create a new Classic Combo bundle/combo page draft using Combo Forge (one template, three designs; the merchant can switch the design and add a tiered progress bar in the builder).',
     parameters: {
       type: 'object',
       properties: {

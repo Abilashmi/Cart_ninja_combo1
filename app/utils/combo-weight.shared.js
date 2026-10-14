@@ -36,11 +36,14 @@ export function createComboWeightCore() {
   // count, or an amount in the shop currency, by measure. max_grams is the
   // max weight or the max number of items; a value box has none.
   var MEASURES = ['weight', 'quantity', 'value'];
-  // The Quick Shop template (Pro): shop-style grid + progress bars, priced
-  // by any measure.
+  // The three box templates share one design (the Quick Shop kit: grid,
+  // filters, top progress, bottom bar); each is priced by one measure.
+  // Value Box (Growth; was "Quick Shop", which took any measure): box value.
   var QUICK_SHOP_LAYOUT = 'layout6';
-  // The Weight Box template (Pro): always priced by weight, its own design.
+  // Weight Box (Growth): always priced by weight.
   var WEIGHT_BOX_LAYOUT = 'layout5';
+  // Quantity Box (Starter): always priced by the number of items.
+  var QUANTITY_BOX_LAYOUT = 'layout7';
   var LIMITS = { tiers: 5, products: 50, collections: 100, label: 60, message: 160, maxGrams: 1000000, maxItems: 1000, maxValue: 10000000 };
   var DEFAULT_MESSAGES = {
     locked: 'Add {{remaining}} more to unlock {{tier}}',
@@ -168,6 +171,19 @@ export function createComboWeightCore() {
     if (measure === 'quantity') return formatItems(min) + ' box discount';
     if (measure === 'value') return 'Spend ' + formatMoney(min) + ' discount';
     return formatWeight(min, unit) + ' box discount';
+  }
+
+  /**
+   * What a tier gives, short, for progress-bar milestones: the merchant's
+   * label, else "10% OFF" / "₹100 OFF" / "Any 2 for ₹999" / "Box at ₹999".
+   */
+  function offerLabel(tier, measure, symbol) {
+    if (!tier) return '';
+    if (tier.label) return tier.label;
+    if (tier.type === 'percentage') return tier.value + '% OFF';
+    if (tier.type === 'fixed_amount') return formatMoney(tier.value, symbol) + ' OFF';
+    if (measure === 'quantity') return 'Any ' + tier.min_grams + ' for ' + formatMoney(tier.value, symbol);
+    return 'Box at ' + formatMoney(tier.value, symbol);
   }
 
   function fillMessage(template, vars) {
@@ -578,8 +594,8 @@ export function createComboWeightCore() {
     if (c.layout === 'layout2') {
       for (i = 1; i <= (c.tab_count || 8); i++) add(c['col_' + i]);
     }
-    // The Weight Box: its collection pills, like layout2's tabs.
-    if (c.layout === WEIGHT_BOX_LAYOUT || c.layout === QUICK_SHOP_LAYOUT) {
+    // The box templates: their collection pills, like layout2's tabs.
+    if (usesQuickShop(c.layout)) {
       for (i = 1; i <= (c.tab_count || 4); i++) add(c['col_' + i]);
     }
     if (!c.layout || c.layout === 'layout3' || c.layout === 'layout4') add(c.collection_handle || c.step_1_collection);
@@ -590,17 +606,18 @@ export function createComboWeightCore() {
   }
 
   /**
-   * Is the page drawn with the Quick Shop design (quick-commerce grid,
-   * stepper cards, top progress, sticky bar)? Quick Shop, and the Weight Box,
-   * which is Quick Shop always priced by weight.
+   * Is the page drawn with the box design (quick-commerce grid, cards, top
+   * progress, sticky bar)? The three box templates: Quantity Box, Weight Box
+   * and Value Box.
    */
   function usesQuickShop(layout) {
-    return layout === QUICK_SHOP_LAYOUT || layout === WEIGHT_BOX_LAYOUT;
+    return layout === QUICK_SHOP_LAYOUT || layout === WEIGHT_BOX_LAYOUT || layout === QUANTITY_BOX_LAYOUT;
   }
 
   return {
     WEIGHT_BOX_LAYOUT: WEIGHT_BOX_LAYOUT,
     QUICK_SHOP_LAYOUT: QUICK_SHOP_LAYOUT,
+    QUANTITY_BOX_LAYOUT: QUANTITY_BOX_LAYOUT,
     usesQuickShop: usesQuickShop,
     MEASURES: MEASURES,
     measureOf: measureOf,
@@ -621,6 +638,7 @@ export function createComboWeightCore() {
     nextTierAfter: nextTierAfter,
     formatWeight: formatWeight,
     tierLabel: tierLabel,
+    offerLabel: offerLabel,
     fillMessage: fillMessage,
     pricingHash: pricingHash,
     defaultWeightPricing: defaultWeightPricing,
@@ -634,10 +652,10 @@ export function createComboWeightCore() {
 const core = createComboWeightCore();
 
 export const {
-  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, usesQuickShop, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
+  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
   TIER_TYPES, LIMITS, DEFAULT_MESSAGES,
   toGrams, decimalsFor, toMinor, fromMinor, allocateMinor, pickTier, nextTierAfter, formatWeight,
-  tierLabel, fillMessage, pricingHash, defaultWeightPricing, normalizeWeightPricing, computeBox,
+  tierLabel, offerLabel, fillMessage, pricingHash, defaultWeightPricing, normalizeWeightPricing, computeBox,
   boxMessage, comboCollectionHandles,
 } = core;
 
@@ -645,8 +663,41 @@ export const {
  * Is this saved combo config priced by box tiers (pricing_mode 'weight' —
  * the name predates measures — whatever weight_pricing.measure is: weight,
  * quantity or value)? Absent keys = the classic item-count combo with an
- * optional coupon. The Weight Box and Quick Shop templates always are.
+ * optional coupon. The three box templates always are.
  */
 export function isWeightCombo(config) {
-  return Boolean(config && (config.pricing_mode === 'weight' || config.layout === WEIGHT_BOX_LAYOUT || config.layout === QUICK_SHOP_LAYOUT));
+  return Boolean(config && (config.pricing_mode === 'weight' || usesQuickShop(config.layout)));
+}
+
+/** Value Box / Weight Box / Quantity Box: the measure each template is always priced by. */
+const TEMPLATE_MEASURES = { [QUICK_SHOP_LAYOUT]: 'value', [WEIGHT_BOX_LAYOUT]: 'weight', [QUANTITY_BOX_LAYOUT]: 'quantity', layout3: 'weight' };
+
+/**
+ * The measure a layout is always priced by, or null when the merchant picks
+ * it (the older Classic Combo designs, layout1/2/4).
+ */
+export function fixedMeasureFor(layout) {
+  return TEMPLATE_MEASURES[layout] || null;
+}
+
+/**
+ * Which plan feature unlocks box-tier pricing for a layout:
+ *   Quantity Box → combo_quantity_pricing (Starter+)
+ *   Weight Box   → combo_weight_pricing (Growth+)
+ *   Value Box    → combo_value_pricing (Growth+)
+ *   older Classic Combo designs with tiers → combo_tier_pricing (Growth+)
+ */
+export function boxPricingFeature(layout) {
+  if (layout === QUANTITY_BOX_LAYOUT) return 'combo_quantity_pricing';
+  if (layout === WEIGHT_BOX_LAYOUT) return 'combo_weight_pricing';
+  if (layout === QUICK_SHOP_LAYOUT) return 'combo_value_pricing';
+  return 'combo_tier_pricing';
+}
+
+/** Every plan feature that publishes some box pricing. */
+export const BOX_PRICING_FEATURES = ['combo_quantity_pricing', 'combo_weight_pricing', 'combo_value_pricing', 'combo_tier_pricing'];
+
+/** Can the merchant choose this layout's measure (only the older Classic Combo designs)? */
+export function layoutAllowsMeasures(layout) {
+  return !fixedMeasureFor(layout);
 }

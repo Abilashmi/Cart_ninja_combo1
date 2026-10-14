@@ -94,7 +94,8 @@ export const loader = async ({ request }) => {
 const PLAN_BADGE_STYLE = {
   free:    { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151' },
   starter: { background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e' },
-  pro:     { background: '#e8f9fe', border: '1px solid #93c5fd', color: '#1a9de0' },
+  growth:  { background: '#ecfdf5', border: '1px solid #6ee7b7', color: '#047857' },
+  pro:    { background: '#e8f9fe', border: '1px solid #93c5fd', color: '#1a9de0' },
 };
 
 const COURSE_SECTIONS = [

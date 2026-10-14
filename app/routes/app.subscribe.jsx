@@ -12,7 +12,8 @@ import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
 // automatically, no copy to maintain here.
-const FEATURE_ROWS = Object.keys(FEATURES);
+// combo_tier_pricing only keeps tiers working on older Classic combos; not a selling point.
+const FEATURE_ROWS = Object.keys(FEATURES).filter((key) => key !== 'combo_tier_pricing');
 
 // Every merchant gets this trial length by default; a redeemed promo code
 // overrides it with whatever that code was configured with instead.
@@ -327,11 +328,12 @@ function featureLabelSuffix(state) {
 // page — does not affect app/config/plans.js or the analytics page's own
 // gating logic, which is intentionally left untouched.
 function featureRowLabel(featureKey, planKey, state) {
-    if (featureKey === 'full_analytics' && planKey === 'starter') {
+    if (featureKey === 'full_analytics' && (planKey === 'starter' || planKey === 'growth')) {
         return 'Full Analytics — Overview & Build a Combo only';
     }
     if (featureKey === 'build_a_combo' && state === 'enabled') {
-        return planKey === 'starter' ? 'Build a Combo — up to 3 templates' : 'Build a Combo — unlimited templates';
+        const limit = PLANS[planKey].comboTemplateLimit;
+        return limit === null ? 'Build a Combo — unlimited templates' : `Build a Combo — up to ${limit} templates`;
     }
     return FEATURES[featureKey].label + featureLabelSuffix(state);
 }
@@ -462,7 +464,7 @@ export default function SubscribePage() {
                     )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'stretch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, alignItems: 'stretch' }}>
                     {PLAN_KEYS.map((planKey) => {
                         const p = PLANS[planKey];
                         const prevPlanKey = PLAN_KEYS[PLAN_KEYS.indexOf(planKey) - 1];
@@ -478,7 +480,7 @@ export default function SubscribePage() {
 
                                 <div style={{ padding: '9px 22px', background: isHighlightPlan ? '#1a9de0' : '#f9fafb', borderBottom: `1px solid ${isHighlightPlan ? '#0e8bc8' : '#e5e7eb'}` }}>
                                     <span style={{ fontSize: 11, fontWeight: 700, color: isHighlightPlan ? '#fff' : '#6b7280', letterSpacing: '0.3px' }}>
-                                        {isHighlightPlan ? 'Most Popular' : planKey === 'pro' ? 'Best Value' : 'Free To Start With'}
+                                        {isHighlightPlan ? 'Most Popular' : planKey === 'pro' ? 'Best Value' : planKey === 'growth' ? 'Weight & Value Boxes' : 'Free To Start With'}
                                     </span>
                                 </div>
 
@@ -521,6 +523,9 @@ export default function SubscribePage() {
                                             // previous tier — a row with an identical state was already implied
                                             // by that heading.
                                             if (!prevPlanKey) return true;
+                                            // Same 'enabled' state but a bigger template allowance is
+                                            // still worth a row (Starter 3 → Growth 10 → Pro unlimited).
+                                            if (featureKey === 'build_a_combo' && PLANS[planKey].comboTemplateLimit !== PLANS[prevPlanKey].comboTemplateLimit) return true;
                                             return FEATURES[featureKey].states[planKey] !== FEATURES[featureKey].states[prevPlanKey];
                                         }).map((featureKey) => {
                                             const state = FEATURES[featureKey].states[planKey];

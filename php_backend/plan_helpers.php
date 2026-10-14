@@ -35,12 +35,13 @@ function plan_alias_legacy_plan_name($planName) {
     if (!$planName) return 'free';
     $normalized = strtolower($planName);
     if ($normalized === 'free') return 'free';
+    if (strpos($normalized, 'growth') !== false) return 'growth';
     if (strpos($normalized, 'pro') !== false) return 'pro';
     return 'starter';
 }
 
 /**
- * Resolves a shop domain to its canonical plan key ('free'|'starter'|'pro').
+ * Resolves a shop domain to its canonical plan key ('free'|'starter'|'growth'|'pro').
  * Reads shops.plan_key first, falling back to alias-mapping the legacy
  * plan_name for rows that predate the plan_key column.
  */

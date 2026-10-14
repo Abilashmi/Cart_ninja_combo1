@@ -80,9 +80,11 @@ const browser = await chromium.launch();
 
 // shiprocket: { code } = Shiprocket on for the shop, BrixCheckout stubbed, the
 // box-code API answers with that code ('fail' = a 502).
-async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 } } = {}) {
+// loader: { dataDelay, loaderDelay, loader (the /api/combo-loader answer's loader keys), dataStatus, wait = false }
+async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null } = {}) {
   const page = await browser.newPage({ viewport });
-  const log = { add: [], update: [], navigations: [], cod: [], boxCode: [] };
+  const log = { add: [], update: [], navigations: [], cod: [], boxCode: [], loader: 0 };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms || 0));
   page.on('pageerror', (e) => check('no page errors', false, e.message));
   await page.route('**/*', async (route) => {
     const req = route.request();
@@ -101,7 +103,14 @@ async function openCombo(config, pricing, { cod = false, shiprocket = null, view
       return route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>next</body></html>' });
     }
     if (url.pathname === '/combo-page.js') return route.fulfill({ status: 200, contentType: 'application/javascript; charset=utf-8', body: SCRIPT });
+    if (url.pathname === '/api/combo-loader') {
+      log.loader += 1;
+      await sleep(loader?.loaderDelay);
+      return json({ success: true, loader: loader?.loader || {} });
+    }
     if (url.pathname === '/api/combo-page-data') {
+      await sleep(loader?.dataDelay);
+      if (loader?.dataStatus) return json({ success: false }, loader.dataStatus);
       return json({ success: true, data: { templateId: 9, templateName: 'Meat Box', config, productsByHandle, collectionNameMap: { chicken: 'Chicken', mutton: 'Mutton' }, activeDiscounts: [], weightPricing: pricing, shiprocketEnabled: Boolean(shiprocket) } });
     }
     if (url.pathname === '/api/combo-box-code') {
@@ -112,7 +121,7 @@ async function openCombo(config, pricing, { cod = false, shiprocket = null, view
     return route.fulfill({ status: 404, body: '' });
   });
   await page.goto('https://store.test/pages/box');
-  await page.waitForSelector('.bxq-card');
+  if (!loader || loader.wait) await page.waitForSelector('.bxq-card');
   return { page, log };
 }
 
@@ -292,6 +301,70 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.click('[data-combo-action="checkout"]');
   await page.waitForTimeout(400);
   check('Go to Cart → /cart when the merchant picks the cart', log.navigations.includes('/cart'), JSON.stringify(log.navigations));
+  await page.close();
+}
+
+// ── Quantity Box (layout7): normal cards, "Any 2 for ₹999" box price ──
+{
+  const BUY2 = { measure: 'quantity', max_grams: 2, tiers: [t(2, 'fixed_price', 999)], messages: { unlocked: 'You unlocked {{tier}}' } };
+  const config = { ...baseConfig, layout: 'layout7', qs_card_layout: 'normal', qs_add_label: 'Add to box' };
+  const { page, log } = await openCombo(config, wp(BUY2));
+  check('Quantity Box is drawn with the box design', (await page.$('.bxq')) !== null);
+  check('normal cards: Add button under each card, no + on the image', (await page.$$('.bxq-cta')).length >= 4 && (await page.$$('.bxq-add')).length === 0);
+  check('normal cards: the merchant\'s button text', (await text(page, `.bxq-card[data-product-id="${P(1)}"] .bxq-cta`)) === 'Add to box', await text(page, `.bxq-card[data-product-id="${P(1)}"] .bxq-cta`));
+  await page.click(`.bxq-card[data-product-id="${P(1)}"] .bxq-cta`);
+  check('added card turns into a stepper', (await page.$(`.bxq-card[data-product-id="${P(1)}"] .bxq-cta--stepper`)) !== null);
+  await page.click(`.bxq-card[data-product-id="${P(2)}"] .bxq-cta`);
+  check('2 items unlock the box price', (await text(page, '.bxq-msg')).includes('You unlocked'), await text(page, '.bxq-msg'));
+  await page.click(`.bxq-card[data-product-id="${P(3)}"] .bxq-cta`);
+  check('max 2 items enforced', (await page.$$('.bxq-cta--stepper')).length === 2);
+  await page.screenshot({ path: path.join(SHOTS, 'quantity-box-normal-cards.png') });
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(500);
+  const props = log.add[0]?.items?.[0]?.properties || {};
+  check('checkout: box lines carry the combo id', props._brix_combo_id === '9' && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]));
+  await page.close();
+}
+
+// ── page loader: default round spinner → the merchant's loader → products ──
+{
+  const mine = { loader_style: 'dots', loader_color: '#be185d', loader_bg: '#fff7ed', loader_logo: 'https://cdn.example.com/logo.png', loader_logo_place: 'above', loader_text: 'Packing your box…' };
+  const config = { ...baseConfig, layout: 'layout7', ...mine };
+  const { page, log } = await openCombo(config, wp(QUANTITY), { loader: { dataDelay: 2500, loaderDelay: 700, loader: mine } });
+  await page.waitForSelector('.bxl', { timeout: 5000 });
+  check('loader: the default round spinner shows at once', (await page.$('.bxl.bxl--ring')) !== null && (await page.$('.bxl img')) === null);
+  check('loader: the theme page text is hidden while loading', !(await page.isVisible('.intro')));
+  await page.waitForSelector('.bxl.bxl--dots', { timeout: 3000 });
+  check('loader: the merchant\'s loader replaces it (dots, logo above, text, colours)',
+    (await page.$('.bxl-above img[src="https://cdn.example.com/logo.png"]')) !== null && (await text(page, '.bxl-text')) === 'Packing your box…'
+    && (await page.$eval('.bxl', (el) => getComputedStyle(el).backgroundColor)) === 'rgb(255, 247, 237)'
+    && (await page.$eval('.bxl-dots span', (el) => getComputedStyle(el).backgroundColor)) === 'rgb(190, 24, 93)');
+  await page.screenshot({ path: path.join(SHOTS, 'combo-loader.png') });
+  await page.waitForSelector('.bxq-card', { timeout: 6000 });
+  check('loader: gone once the products are shown', (await page.$('.bxl')) === null);
+  check('loader: asked the loader endpoint once', log.loader === 1, String(log.loader));
+
+  // Next visit: this browser remembers the look, so no default spinner first.
+  await page.reload();
+  await page.waitForSelector('.bxl', { timeout: 5000 });
+  check('loader: on the next visit the merchant\'s loader shows straight away', (await page.$('.bxl.bxl--dots')) !== null);
+  await page.waitForSelector('.bxq-card', { timeout: 6000 });
+  check('loader: no second loader request on the next visit', log.loader === 1, String(log.loader));
+  await page.close();
+}
+{
+  const config = { ...baseConfig, loader_enabled: false };
+  const { page } = await openCombo(config, wp(VALUE), { loader: { dataDelay: 1500, loaderDelay: 100, loader: { loader_enabled: false } } });
+  await page.waitForTimeout(600);
+  check('loader off: nothing drawn while loading', (await page.$('.bxl')) === null);
+  await page.waitForSelector('.bxq-card', { timeout: 6000 });
+  await page.close();
+}
+{
+  const { page } = await openCombo(baseConfig, wp(VALUE), { loader: { dataDelay: 800, loaderDelay: 50, dataStatus: 500 } });
+  await page.waitForSelector('.bxl', { timeout: 5000 });
+  await page.waitForTimeout(1500);
+  check('loader: if the combo can\'t load, the theme page comes back', (await page.$('.bxl')) === null && await page.isVisible('.intro'));
   await page.close();
 }
 

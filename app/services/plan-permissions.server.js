@@ -23,6 +23,7 @@ function aliasLegacyPlanName(planName) {
   if (!planName) return 'free';
   const normalized = String(planName).toLowerCase();
   if (normalized === 'free') return 'free';
+  if (normalized.includes('growth')) return 'growth';
   if (normalized.includes('pro')) return 'pro';
   // Any other historical subscription name ("Cart Ninja Pro" was actually
   // the old $29 tier despite the name) maps to starter.

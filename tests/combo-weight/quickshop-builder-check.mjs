@@ -41,16 +41,17 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 const browser = await chromium.launch();
 
-async function open({ plan = 'pro', quickShop = QUANTITY, fresh = false, shiprocket = false, viewport = { width: 1500, height: 1000 } } = {}) {
+async function open({ plan = 'pro', quickShop = QUANTITY, layout = 'layout7', fresh = false, shiprocket = false, viewport = { width: 1500, height: 1000 } } = {}) {
   const page = await browser.newPage({ viewport });
   page.on('pageerror', (e) => check('no page errors', false, e.message));
-  await page.addInitScript(({ plan: pl, quickShop: q, fresh: f, shiprocket: sr }) => {
+  await page.addInitScript(({ plan: pl, quickShop: q, layout: l, fresh: f, shiprocket: sr }) => {
     window.__SHIPROCKET = sr;
+    window.__QUICK_SHOP_LAYOUT = l;
     window.shopify = { toast: { show: (message, opts) => { (window.__toasts = window.__toasts || []).push({ message, ...(opts || {}) }); } } };
     window.__PLAN = pl;
     if (q) window.__QUICK_SHOP = q;
     if (f) window.__NEW = true;
-  }, { plan, quickShop, fresh, shiprocket });
+  }, { plan, quickShop, layout, fresh, shiprocket });
   await page.route('**/api/combo-ai-suggestions', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true,"data":{"enabled":false}}' }));
   await page.goto(`${base}/app/bundles/customize`);
   await page.waitForSelector(fresh ? '.tpl-pick-card' : '.bxq-card', { timeout: 20000 });
@@ -62,7 +63,7 @@ const tab = (page, name) => page.click(`.cst-sidebar-tab:has-text("${name}")`);
 const section = (page, title) => page.click(`.cst-section-header:has-text("${title}")`);
 const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data-combo-action="qty-inc"]`);
 
-// ── a saved Quick Shop: preview, styles, measure, filters, save ──
+// ── a saved Quantity Box (layout7, the box design): preview, styles, cards, filters, save ──
 {
   const page = await open();
   check('preview shows both collections\' products', (await page.$$('.bxq-card')).length === 4, String((await page.$$('.bxq-card')).length));
@@ -104,16 +105,24 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.getByLabel('Brand (vendor)').uncheck();
   check('turning Brand off removes it from the page', !(await text(page, '.bxq-filters')).includes('Brand'));
 
-  // Advanced: measure picker
+  // Layout → Product cards: the normal card (Add button under the price)
+  await tab(page, 'Layout');
+  if (!(await sidebar(page)).includes('Card layout')) await section(page, 'Product cards');
+  await page.click('button[role="radio"]:has-text("Add button")');
+  check('normal cards: an Add button under each card, no + on the image', (await page.$$('.bxq-card .bxq-cta')).length === 4 && (await page.$$('.bxq-card .bxq-add')).length === 0);
+  check('normal cards: a card already in the box shows a stepper', (await page.$$('.bxq-cta--stepper')).length >= 1);
+  await page.getByLabel('Add button text').fill('Add to box');
+  check('Add button text follows the setting', (await text(page, '.bxq-card:not(.is-in) .bxq-cta')).startsWith('Add to box'));
+
+  // Advanced: the Quantity Box is always priced by items
   await tab(page, 'Advanced');
-  check('no count Progress Bar / AI sections for Quick Shop', !(await sidebar(page)).includes('AI Settings') && !(await sidebar(page)).includes('Progress Bar'));
+  check('no count Progress Bar / AI sections for a box template', !(await sidebar(page)).includes('AI Settings') && !(await sidebar(page)).includes('Progress Bar'));
   await section(page, 'Offer');
-  check('measure picker with Quantity selected', await page.isChecked('input[type="radio"][value="quantity"]'));
-  await page.click('label:has-text("Value")');
-  const offer = await sidebar(page);
-  check('Value: spend field with currency, no box price option', offer.includes('Box total at least') && !(await page.$$eval('select option', (o) => o.map((x) => x.value))).includes('fixed_price'));
-  // $299 + $699 + $299 = $1297, past the sample $999 spend tier.
-  check('Value: summary in money, box unlocked', (await sidebar(page)).includes('$999+: 10% off') && (await text(page, '.bxq-msg')).includes('You unlocked 10% OFF'), await text(page, '.bxq-msg'));
+  let offer = await sidebar(page);
+  check('Quantity Box: priced by items, no measure picker', offer.includes('The Quantity Box is priced by the number of items') && !(await page.$('input[type="radio"][value="value"]')));
+  await page.getByRole('button', { name: /Buy N for/ }).click();
+  offer = await sidebar(page);
+  check('"Buy N for X" adds a box price tier and sets the max items', offer.includes('Price of the whole box') && offer.includes('(max 4 items)'), offer.match(/2 items\+[^)]*\)/)?.[0]);
   check('rare settings are under More options', !offer.includes('Which products count toward the box'));
   await page.click('button:has-text("More options")');
   check('More options opens them', (await sidebar(page)).includes('Which products count toward the box'));
@@ -124,30 +133,95 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.waitForTimeout(800);
   const saved = await page.evaluate(() => window.__SAVED?.[0]);
   const config = saved ? JSON.parse(saved.customization_data) : {};
-  check('saved: layout6, box-priced, measured by value', config.layout === 'layout6' && config.pricing_mode === 'weight' && config.weight_pricing?.measure === 'value', JSON.stringify({ layout: config.layout, measure: config.weight_pricing?.measure }));
-  check('saved: the style choices', config.qs_top_style === 'none' && config.qs_bar_style === 'ring' && config.qs_btn_label === 'View box' && config.qs_filter_brand === false);
+  check('saved: layout7, box-priced, measured by quantity, with the box price tier', config.layout === 'layout7' && config.pricing_mode === 'weight' && config.weight_pricing?.measure === 'quantity' && config.weight_pricing?.tiers?.some((t) => t.type === 'fixed_price' && t.min_grams === 4), JSON.stringify({ layout: config.layout, measure: config.weight_pricing?.measure, tiers: config.weight_pricing?.tiers }));
+  check('saved: the style choices', config.qs_top_style === 'none' && config.qs_bar_style === 'ring' && config.qs_btn_label === 'View box' && config.qs_filter_brand === false && config.qs_card_layout === 'normal' && config.qs_add_label === 'Add to box');
   await page.close();
 }
 
-// ── picker: Quick Shop card → preset ──
+// ── picker: three box templates, each with its preset ──
 {
+  const cardOf = (p, title) => p.locator('.tpl-pick-card').filter({ has: p.locator('h3', { hasText: new RegExp(`^${title}$`) }) });
   const page = await open({ fresh: true, quickShop: null });
-  const card = page.locator('.tpl-pick-card').filter({ has: page.locator('h3', { hasText: /^Quick Shop$/ }) });
-  check('picker has a Pro Quick Shop card', (await card.count()) === 1 && (await card.textContent()).includes('Pro'));
-  await card.locator('button:has-text("Use This Template")').click();
+  const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
+  check('picker: Quantity Box, Weight Box, Value Box', titles.join('|') === 'Quantity Box|Weight Box|Value Box', titles.join(', '));
+  check('plans on the cards: Starter $29, Growth $59, Growth $59', (await cardOf(page, 'Quantity Box').textContent()).includes('Starter · $29') && (await cardOf(page, 'Weight Box').textContent()).includes('Growth · $59') && (await cardOf(page, 'Value Box').textContent()).includes('Growth · $59'));
+  await cardOf(page, 'Value Box').locator('button:has-text("Use This Template")').click();
   await page.waitForSelector('.bxq', { timeout: 15000 });
   check('starts with sample products until collections are chosen', (await page.textContent('body')).includes('Sample products'));
-  check('preset: quantity tiers 3 → 5% OFF, 5 → 10% OFF', ((t) => t.includes('5% OFF') && t.includes('10% OFF') && t.includes('3 items'))(await text(page, '.bxq-top')), await text(page, '.bxq-top'));
+  check('Value Box preset: spend tiers ($999 → $100 OFF, $1999 → 15% OFF)', ((t) => t.includes('$100 OFF') && t.includes('15% OFF') && t.includes('$999'))(await text(page, '.bxq-top')), await text(page, '.bxq-top'));
   await page.screenshot({ path: path.join(SHOTS, 'quickshop-builder-new.png') });
   await page.click('button:has-text("Save Template")');
   await page.waitForTimeout(300);
-  check('save needs a collection', (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).some((m) => m.includes('Choose at least one collection for the page')));
+  check('save needs a collection', (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).some((m) => m.includes('Choose at least one collection for the box')));
   await page.close();
 
+  const qty = await open({ fresh: true, quickShop: null });
+  await cardOf(qty, 'Quantity Box').locator('button:has-text("Use This Template")').click();
+  await qty.waitForSelector('.bxq', { timeout: 15000 });
+  check('Quantity Box preset: 2 items → 5% OFF, 4 items → 10% OFF', ((t) => t.includes('5% OFF') && t.includes('10% OFF') && t.includes('2 items') && t.includes('4 items'))(await text(qty, '.bxq-top')), await text(qty, '.bxq-top'));
+  await qty.close();
+
   const starter = await open({ fresh: true, plan: 'starter', quickShop: null });
-  const locked = starter.locator('.tpl-pick-card').filter({ has: starter.locator('h3', { hasText: /^Quick Shop$/ }) });
-  check('Starter: Quick Shop offers the upgrade', (await locked.locator('button').last().textContent()).includes('Upgrade to Pro'));
+  check('Starter: Quantity Box usable', (await cardOf(starter, 'Quantity Box').locator('button:has-text("Use This Template")').count()) === 1);
+  check('Starter: Value Box offers the Growth upgrade', (await cardOf(starter, 'Value Box').locator('button').last().textContent()).includes('Upgrade to Growth'));
+  check('Starter: Weight Box offers the Growth upgrade', (await cardOf(starter, 'Weight Box').locator('button').last().textContent()).includes('Upgrade to Growth'));
   await starter.close();
+
+  const free = await open({ fresh: true, plan: 'free', quickShop: null });
+  check('Free: Quantity Box offers the Starter upgrade', (await cardOf(free, 'Quantity Box').locator('button').last().textContent()).includes('Upgrade to Starter'));
+  await free.close();
+
+  const growth = await open({ fresh: true, plan: 'growth', quickShop: null });
+  check('Growth: all three usable', (await growth.locator('.tpl-pick-card button:has-text("Use This Template")').count()) === 3);
+  await growth.close();
+}
+
+// ── an older Quick Shop priced by items becomes a Value Box ──
+{
+  const page = await open({ layout: 'layout6' });
+  check('told it is a Value Box now', (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).some((m) => m.includes('now a Value Box')));
+  check('preview shows the value tiers', ((t) => t.includes('$100 OFF') && t.includes('15% OFF'))(await text(page, '.bxq-top')), await text(page, '.bxq-top'));
+  await tab(page, 'Advanced');
+  await section(page, 'Offer');
+  check('Offer: priced by box value, no measure picker', (await sidebar(page)).includes('The Value Box is priced by how much the box costs') && !(await page.$('input[type="radio"][value="quantity"]')));
+  await page.click('button:has-text("Save Template")');
+  await page.waitForSelector('text=Template Title');
+  await page.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await page.waitForTimeout(800);
+  const saved = await page.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved as value', config.layout === 'layout6' && config.weight_pricing?.measure === 'value', JSON.stringify(config.weight_pricing));
+  await page.close();
+}
+
+// ── Style → Page loader: preview, style, logo, text, save ──
+{
+  const page = await open();
+  await tab(page, 'Style');
+  await section(page, 'Page loader');
+  check('Page loader section with the default round spinner preview', (await page.$('[data-testid="loader-preview"] .bxl.bxl--ring')) !== null);
+  await page.click('button[role="radio"]:has-text("Dots")');
+  check('picking Dots changes the preview', (await page.$('[data-testid="loader-preview"] .bxl.bxl--dots')) !== null);
+  await page.getByLabel('Or use an image link').fill('https://cdn.example.com/logo.png');
+  await page.click('button:has-text("Use link")');
+  check('a logo link shows in the preview', (await page.$('[data-testid="loader-preview"] img.bxl-logo[src="https://cdn.example.com/logo.png"]')) !== null);
+  await page.getByLabel('Logo position').selectOption('above');
+  check('logo above the loader', (await page.$('[data-testid="loader-preview"] .bxl-above img')) !== null);
+  await page.getByLabel('Text under the loader').fill('Packing your box…');
+  check('text shows in the preview', (await text(page, '[data-testid="loader-preview"] .bxl-text')) === 'Packing your box…');
+  await page.getByLabel('Show a loader while the page loads').uncheck();
+  check('turning it off hides the options', (await page.$('[data-testid="loader-preview"]')) === null && !(await sidebar(page)).includes('Text under the loader'));
+  await page.getByLabel('Show a loader while the page loads').check();
+  check('turning it back on keeps the settings', (await page.$('[data-testid="loader-preview"] .bxl.bxl--dots .bxl-above img')) !== null);
+  await page.click('button:has-text("Save Template")');
+  await page.waitForSelector('text=Template Title');
+  await page.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await page.waitForTimeout(800);
+  const saved = await page.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved: loader settings', config.loader_style === 'dots' && config.loader_logo === 'https://cdn.example.com/logo.png' && config.loader_logo_place === 'above' && config.loader_text === 'Packing your box…',
+    JSON.stringify({ s: config.loader_style, l: config.loader_logo, p: config.loader_logo_place, t: config.loader_text }));
+  await page.close();
 }
 
 // ── phone preview ──

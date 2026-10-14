@@ -160,14 +160,11 @@ function GeneralSectionComponent({
     );
   }
 
-  // The Weight Box (layout5) uses the same collection list as layout2's
-  // tabs (col_1..col_N), shown as pills; the box's weight, not an item
-  // count, is its rule (Advanced → Offer).
-  // Quick Shop (layout6) too: its collections become filter chips.
-  if (layout === 'layout2' || layout === 'layout5' || layout === 'layout6') {
-    // Quick Shop, and the Weight Box (the same design, always priced by weight).
-    const isQuickShop = layout === 'layout5' || layout === 'layout6';
-    const isWeightBox = layout === 'layout5';
+  // The box templates (Quantity Box layout7, Weight Box layout5, Value Box
+  // layout6) use the same collection list as layout2's tabs (col_1..col_N),
+  // shown as filter chips; their tiers are the rule (Advanced → Offer).
+  if (layout === 'layout2' || layout === 'layout5' || layout === 'layout6' || layout === 'layout7') {
+    const isQuickShop = layout === 'layout5' || layout === 'layout6' || layout === 'layout7';
     const tabCount = Number(config.tab_count || 1);
     const addTab = () => updateConfig('tab_count', tabCount + 1);
     const removeTab = (i) => {
@@ -176,7 +173,7 @@ function GeneralSectionComponent({
     };
     return (
       <SectionCard
-        title={isWeightBox ? 'Box Collections' : isQuickShop ? 'Shop Collections' : 'Collections (Switching Tabs)'}
+        title={isQuickShop ? 'Box Collections' : 'Collections (Switching Tabs)'}
         expanded={expanded}
         onToggle={onToggle}
         badge={`${tabCount} ${tabCount === 1 ? 'collection' : 'collections'}`}
@@ -184,9 +181,7 @@ function GeneralSectionComponent({
         <FormLayout>
           {isQuickShop ? (
             <Text as="p" variant="bodySm" tone="subdued">
-              {isWeightBox
-                ? 'Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). Weight tiers and the max box weight are under Advanced → Offer.'
-                : 'Products from these collections fill the page. With more than one, each becomes a filter chip (see Filters). Tiers are under Advanced → Offer.'}
+              Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). The tiers are under Advanced → Offer.
             </Text>
           ) : (
             <>

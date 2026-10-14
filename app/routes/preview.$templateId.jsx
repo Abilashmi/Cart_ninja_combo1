@@ -4,7 +4,7 @@ import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import WeightMeter from '../components/customization/WeightMeter';
-import { boxMessage, computeBox, decimalsFor, fillMessage, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
+import { boxMessage, computeBox, decimalsFor, fillMessage, formatItems, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
 // ⚠) — 1em/currentColor so each inherits the calling element's own
@@ -1540,7 +1540,7 @@ export default function ComboPreviewPage() {
   // ── WEIGHT: price a selection as a box ──
   const weightDecimals = decimalsFor(Object.values(productMap)[0]?.currency);
   const weightBoxFor = (map) => computeBox({
-    pricing: { tiers: weight.tiers, max_grams: weight.maxGrams, unit: weight.unit },
+    pricing: { tiers: weight.tiers, max_grams: weight.maxGrams, unit: weight.unit, measure: weight.measure },
     decimals: weightDecimals,
     rate: 1,
     lines: Object.entries(map).map(([variantId, sel]) => ({
@@ -1551,11 +1551,14 @@ export default function ComboPreviewPage() {
       qualifies: (weight.qualifyingProductIds || []).includes(sel.productId),
     })),
   });
+  const byItems = weight?.measure === 'quantity';
   const overMaxMessage = (box) => fillMessage(weight.messages?.over_max, {
-    max: formatWeight(weight.maxGrams, weight.unit), weight: formatWeight(box.grams, weight.unit),
+    max: byItems ? formatItems(weight.maxGrams) : formatWeight(weight.maxGrams, weight.unit),
+    weight: byItems ? formatItems(box.items) : formatWeight(box.grams, weight.unit),
   });
   const box = weight ? weightBoxFor(selectedMap) : null;
-  const canCheckoutBox = Boolean(weight && totalSelected > 0 && !box.overMax && weight.tiers.length && box.grams >= weight.tiers[0].min_grams);
+  // Checkout once the first tier is reached, whatever the box is measured by.
+  const canCheckoutBox = Boolean(weight && totalSelected > 0 && !box.overMax && weight.tiers.length && box.tier);
   // The layouts' own count-based bar is hidden; the preview bar gets the meter's words.
   const config = weight
     ? (() => {
@@ -1879,7 +1882,7 @@ export default function ComboPreviewPage() {
         </div>
       )}
 
-      {weight && <WeightMeter view={weight} box={box} config={config} />}
+      {weight && <WeightMeter view={{ ...weight, currencySymbol: barCurrencySymbol }} box={box} config={config} />}
 
       {layout === 'layout3' ? (
         <Layout3Preview
@@ -1925,7 +1928,7 @@ export default function ComboPreviewPage() {
           onReset={onReset}
           barCurrencySymbol={barCurrencySymbol}
         />
-      ) : layout === 'layout2' || layout === 'layout5' ? (
+      ) : layout === 'layout2' || layout === 'layout5' || layout === 'layout6' || layout === 'layout7' ? (
         // The Weight Box's collections are col_1..col_N like layout2's tabs.
         // This route is only the admin preview / iframe fallback; the live
         // page draws the Weight Box's own design (combo-page[.]js.jsx).

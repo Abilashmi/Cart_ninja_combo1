@@ -53,8 +53,9 @@ import { useCurrency } from '../components/CurrencyContext';
 import WeightMeter from '../components/customization/WeightMeter';
 import { usePlan } from '../components/PlanContext';
 import QuickShopPreview from '../components/customization/QuickShopPreview';
-import { ProBadge } from '../components/plan/PlanGate';
-import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, usesQuickShop, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
+import { isClassicLayout } from '../utils/combo-design.shared.js';
+import { PLANS, getMinPlanForFeature } from '../config/plans';
+import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, measureOf, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatItems, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -1603,15 +1604,21 @@ const LAYOUT_MAP = {
   combo_design_three: 'layout3',
   combo_design_four: 'layout4',
   combo_main: 'layout1',
+  // The Classic Combo card: starts on Guided Architect; the builder's Design
+  // section switches it between layout1 / layout2 / layout4.
+  combo_classic: 'layout1',
   custom_bundle_layout: 'layout1',
   combo_weight_box: WEIGHT_BOX_LAYOUT,
-  combo_quick_shop: QUICK_SHOP_LAYOUT,
+  combo_quick_shop: QUICK_SHOP_LAYOUT, // the Value Box
+  combo_quantity_box: QUANTITY_BOX_LAYOUT,
 };
 
-// What a new Quick Shop starts with: priced by the number of items (the
-// merchant can switch to weight or value under Advanced → Offer), with the
-// "You unlocked …" wording of the bottom bar. Its own qs_* design settings
-// start from the kit's defaults (combo-quickshop.shared.js).
+// The three box templates share one design (the Quick Shop kit) and start
+// from its qs_* defaults (combo-quickshop.shared.js); each is priced by one
+// measure, with sample tiers the merchant edits under Advanced → Offer.
+const BOX_MESSAGES = { locked: 'Add {{remaining}} more to unlock {{tier}}', unlocked: 'You unlocked {{tier}}' };
+
+// Value Box (layout6, was "Quick Shop"): priced by the box value.
 const QUICK_SHOP_PRESET = {
   layout: QUICK_SHOP_LAYOUT,
   pricing_mode: 'weight',
@@ -1621,12 +1628,31 @@ const QUICK_SHOP_PRESET = {
   collection_title: 'Shop your box',
   collection_description: '',
   weight_pricing: {
+    ...defaultWeightPricing('value'),
+    tiers: [
+      { id: 't1', min_grams: 999, type: 'fixed_amount', value: 100, label: '' },
+      { id: 't2', min_grams: 1999, type: 'percentage', value: 15, label: '' },
+    ],
+    messages: { ...BOX_MESSAGES, over_max: 'Your box is full. Remove something to add this.' },
+  },
+};
+
+// Quantity Box (layout7): priced by the number of items, e.g. "Any 2 for 999".
+const QUANTITY_BOX_PRESET = {
+  layout: QUANTITY_BOX_LAYOUT,
+  pricing_mode: 'weight',
+  has_discount_offer: false,
+  selected_discount_id: null,
+  tab_count: 1,
+  collection_title: 'Build your box',
+  collection_description: '',
+  weight_pricing: {
     ...defaultWeightPricing('quantity'),
     tiers: [
-      { id: 't1', min_grams: 3, type: 'percentage', value: 5, label: '' },
-      { id: 't2', min_grams: 5, type: 'percentage', value: 10, label: '' },
+      { id: 't1', min_grams: 2, type: 'percentage', value: 5, label: '' },
+      { id: 't2', min_grams: 4, type: 'percentage', value: 10, label: '' },
     ],
-    messages: { locked: 'Add {{remaining}} more to unlock {{tier}}', unlocked: 'You unlocked {{tier}}', over_max: 'Your box can hold up to {{max}}. Remove something to add this.' },
+    messages: { ...BOX_MESSAGES, over_max: 'Your box can hold up to {{max}}. Remove something to add this.' },
   },
 };
 
@@ -1634,8 +1660,26 @@ const QUICK_SHOP_PRESET = {
 const presetFor = (mapped, prev) => (
   mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET }
     : mapped === QUICK_SHOP_LAYOUT ? { ...prev, ...QUICK_SHOP_PRESET }
-      : { ...prev, layout: mapped }
+      : mapped === QUANTITY_BOX_LAYOUT ? { ...prev, ...QUANTITY_BOX_PRESET }
+        : { ...prev, layout: mapped }
 );
+
+// A Value Box (layout6) saved back when Quick Shop took any measure: it is
+// priced by box value now, so its old item / weight tiers (meaningless as
+// amounts) are replaced by the Value Box sample; which products count and
+// the messages carry over. The merchant reviews them and saves.
+function asValueBox(config) {
+  if (config.layout !== QUICK_SHOP_LAYOUT || !config.weight_pricing || measureOf(config.weight_pricing) === 'value') return config;
+  const old = config.weight_pricing;
+  return {
+    ...config,
+    weight_pricing: {
+      ...QUICK_SHOP_PRESET.weight_pricing,
+      qualify: old.qualify || QUICK_SHOP_PRESET.weight_pricing.qualify,
+      messages: { ...QUICK_SHOP_PRESET.weight_pricing.messages, locked: old.messages?.locked ?? BOX_MESSAGES.locked, unlocked: old.messages?.unlocked ?? BOX_MESSAGES.unlocked },
+    },
+  };
+}
 
 // What a new Weight Box starts with: the Quick Shop design, always priced by
 // weight, with sample weight tiers the merchant edits under Advanced → Offer.
@@ -1662,80 +1706,33 @@ const WEIGHT_BOX_PRESET = {
 // Template catalogue shown in the picker screen
 const TEMPLATE_CATALOGUE = [
   {
-    id: 'combo_main',
-    title: 'The Guided Architect',
+    id: 'combo_quantity_box',
+    title: 'Quantity Box',
     description:
-      'Customers build their combo step by step — each step locked to one collection.',
-    img: '/FMCG.png',
-    fallbackImg: '/FMCG.png',
-    badge: 'Step-by-Step',
+      'Shoppers fill a box and the price drops by the number of items: 2 items → 5% off, or "any 2 for ₹999", right in Shopify checkout.',
+    img: '/quick-shop.svg',
+    fallbackImg: '/quick-shop.svg',
+    badge: 'Priced by quantity',
     badgeTone: 'success',
-    blockName: 'combo_main',
+    blockName: 'combo_quantity_box',
+    featureKey: 'combo_quantity_pricing',
     howItWorks:
-      'Step 1 → Step 2 → Step 3. Each step shows one collection. A progress bar tracks picks and auto-unlocks your discount at the set threshold.',
+      'Pick a card layout (Quick add: a + on each picture, or an Add button under each card) and a progress style. Each tier is a % off, an amount off or a price for the whole box ("Buy 2 at ₹999").',
     features: [
-      'Locked steps — one collection per step',
-      'Live progress bar with discount trigger',
-      'Tiered discount auto-unlocks as cart fills',
-      'Sticky checkout summary at the bottom',
+      'Tiers by number of items: % off, amount off or box price',
+      'Quick add (+) or Add-button product cards',
+      'Milestones, bar, steps or text progress, sticky bottom bar',
+      'Same price at Shopify checkout and BRIX COD',
     ],
-    bestFor: 'FMCG kits, meal combos, multi-category sets',
+    bestFor: 'Kits, gift boxes, apparel, any "mix any N" offer',
     differentiators: [
-      'Only layout with enforced step order',
-      'Built-in progress-bar discount engine',
-    ],
-  },
-  {
-    id: 'combo_design_two',
-    title: 'The Velocity Stream',
-    description:
-      'Products from multiple collections under switchable tabs — no fixed step order.',
-    img: '/velocity.png',
-    fallbackImg: '/velocity.png',
-    badge: 'Tab Switcher',
-    badgeTone: 'success',
-    blockName: 'combo_design_two',
-    howItWorks:
-      'Collections appear as tabs at the top. Click a tab to load its products below. Customers browse freely across tabs in any order.',
-    features: [
-      'Up to 8 switchable collection tabs',
-      'No enforced order — free selection',
-      'Swipeable tab strip on mobile',
-      'Shared cart counter across all tabs',
-    ],
-    bestFor: 'Fashion, accessories, multi-category catalogues',
-    differentiators: [
-      'Tab-based — no locked sequence',
-      'No progress bar — full browsing freedom',
-    ],
-  },
-  {
-    id: 'combo_design_four',
-    title: 'The Editorial Split',
-    description:
-      'One collection, one hero banner, one grid — no tabs, no steps.',
-    img: '/Editorial.png',
-    fallbackImg: '/Editorial.png',
-    badge: 'Simple Grid',
-    badgeTone: 'success',
-    blockName: 'combo_design_four',
-    howItWorks:
-      'Assign one collection. All products appear in a grid below a hero banner. Customers add directly — nothing else to configure.',
-    features: [
-      'Hero banner with image & text overlay',
-      'Full collection in one clean grid',
-      'Simplest flow — no steps or tabs',
-      'Dark-mode ready colour scheme',
-    ],
-    bestFor: 'Gift sets, capsule collections, single-category combos',
-    differentiators: [
-      'No steps or tabs — one collection only',
-      'Hero image is the centrepiece',
+      'Buy N for a fixed price',
+      'Discount enforced at checkout, not just shown',
     ],
   },
   {
     id: 'combo_weight_box',
-    title: 'The Weight Box',
+    title: 'Weight Box',
     description:
       'A quick-commerce style box priced by weight: shoppers tap + and keep shopping, and at 1 kg, 2 kg… the price drops, right in Shopify checkout.',
     img: '/quick-shop.svg',
@@ -1743,13 +1740,13 @@ const TEMPLATE_CATALOGUE = [
     badge: 'Priced by weight',
     badgeTone: 'success',
     blockName: 'combo_weight_box',
-    // Pro only: weight pricing is applied by the BRIX checkout discount.
+    // Growth+: weight pricing is applied by the BRIX checkout discount.
     featureKey: 'combo_weight_pricing',
     howItWorks:
-      'The Quick Shop design (filters, a + on every card, a top progress bar and a sticky bottom bar), always priced by weight: each tier is a % off, an amount off or a fixed box price.',
+      'Same box design as the other templates (card layout, progress style, filters, sticky bottom bar), always priced by weight: each tier is a % off, an amount off or a fixed box price.',
     features: [
       'Weight tiers: % off, amount off or box price',
-      'Quick-commerce grid, filters and sticky bottom bar',
+      'Quick add (+) or Add-button product cards',
       'Max box weight, enforced on the page',
       'Same price at Shopify checkout and BRIX COD',
     ],
@@ -1761,20 +1758,21 @@ const TEMPLATE_CATALOGUE = [
   },
   {
     id: 'combo_quick_shop',
-    title: 'Quick Shop',
+    title: 'Value Box',
     description:
-      'A quick-commerce style grid with filters and a + on every card. A progress bar and a bottom bar unlock offers by quantity, value or weight.',
+      'Shoppers fill a box and unlock offers by how much they spend: spend ₹999 → ₹100 off, spend ₹1999 → 15% off, right in Shopify checkout.',
     img: '/quick-shop.svg',
     fallbackImg: '/quick-shop.svg',
-    badge: 'Quantity · Value · Weight',
+    badge: 'Priced by value',
     badgeTone: 'info',
     blockName: 'combo_quick_shop',
-    // Pro only: the box price is applied by the BRIX checkout discount.
-    featureKey: 'combo_weight_pricing',
+    // Growth+: the box discount is applied by the BRIX checkout discount.
+    featureKey: 'combo_value_pricing',
     howItWorks:
-      'Shoppers filter, tap + and keep shopping. A top progress bar and a sticky bottom bar ("You unlocked 10% OFF · 5 items · ₹132 saved · Go to Cart") show what the box has earned.',
+      'Same box design as the other templates. A top progress bar and a sticky bottom bar ("You unlocked ₹100 OFF · 5 items · ₹132 saved · Go to Cart") show what the box has earned.',
     features: [
-      'Offers by number of items, box value or weight',
+      'Offers by box value: % off or amount off',
+      'Quick add (+) or Add-button product cards',
       'Filter chips, Type / Brand / your own tag filters, Sort',
       '5 top progress styles, 4 bottom bar styles',
       'Same price at Shopify checkout and BRIX COD',
@@ -1927,17 +1925,25 @@ export default function Customize() {
     }
   }, [saveFetcher.data, shopify, navigate]);
 
-  const [config, setConfig] = useState(() => ({
+  const [config, setConfig] = useState(() => asValueBox({
     ...DEFAULT_COMBO_CONFIG,
     ...(initialTemplate?.config || {}),
   }));
+  // An older Quick Shop combo just moved to value pricing: say so once.
+  const valueBoxMigrated = Boolean(initialTemplate?.config?.layout === QUICK_SHOP_LAYOUT
+    && initialTemplate.config.weight_pricing && measureOf(initialTemplate.config.weight_pricing) !== 'value');
+  useEffect(() => {
+    if (valueBoxMigrated) shopify.toast.show('This combo is now a Value Box, priced by how much the box costs. Check its tiers under Advanced → Offer, then save.', { duration: 10000 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [previewDevice, setPreviewDevice] = useState('desktop');
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [saveTitle, setSaveTitle] = useState(
     initialTemplate?.title || 'Untitled Template'
   );
-  const [saveStatus, setSaveStatus] = useState(initialTemplate?.id ? 'saved' : null);
+  // A combo moved to Value Box pricing on open isn't saved that way yet.
+  const [saveStatus, setSaveStatus] = useState(initialTemplate?.id ? (valueBoxMigrated ? 'unsaved' : 'saved') : null);
 
   // Re-enable the "Save Template" button once the merchant changes anything
   // after a successful save — otherwise it stays disabled forever even
@@ -2190,7 +2196,10 @@ export default function Customize() {
 
   // Collapsible sections state
   const [expandedSections, setExpandedSections] = useState({
+    // Classic Combo (layout1/2/4): Guided Architect / Velocity Stream / Editorial Split
+    design: true,
     general: true,
+    loader: false,
     banner: false,
     content: false,
     products: false,
@@ -2420,6 +2429,10 @@ export default function Customize() {
       setPickedLayout((prev) => (prev === mapped ? prev : mapped));
       setConfig((prev) => {
         if (prev.layout === mapped) return prev;
+        // A Classic Combo's design is switched in the builder (Design
+        // section); a later URL change (e.g. ?templateId= after a save) must
+        // not put it back on the card's default design.
+        if (isClassicLayout(mapped) && isClassicLayout(prev.layout)) return prev;
         return presetFor(mapped, prev);
       });
     }
@@ -2447,8 +2460,8 @@ export default function Customize() {
       const h = config[`step_${i}_collection`];
       if (h && h !== '' && !fetchedHandlesRef.current.has(h)) handles.push(h);
     }
-    // The Weight Box and Quick Shop show all their collections at once ("All" pill).
-    if (config.layout === WEIGHT_BOX_LAYOUT || config.layout === QUICK_SHOP_LAYOUT) {
+    // The box templates show all their collections at once ("All" pill).
+    if (usesQuickShop(config.layout)) {
       for (let i = 1; i <= Number(config.tab_count || 1); i++) {
         const h = config[`col_${i}`];
         if (h && !fetchedHandlesRef.current.has(h) && !handles.includes(h)) handles.push(h);
@@ -3011,7 +3024,9 @@ export default function Customize() {
       case 'layout5':
         return 'Weight Box';
       case 'layout6':
-        return 'Quick Shop';
+        return 'Value Box';
+      case 'layout7':
+        return 'Quantity Box';
       case 'layout1':
       default:
         return 'Guided Architect';
@@ -3239,9 +3254,11 @@ export default function Customize() {
         <BrixBar size="md" floating />
         <ComboSetupTour page="picker" shop={shop} />
         <style>{`
-.template-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
-.tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px}
-@media(max-width:1400px){.template-picker-grid{grid-template-columns:repeat(2,1fr)}}
+.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
+.tpl-pick-designs{display:flex;flex-wrap:wrap;gap:6px}
+.tpl-pick-design{background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.tpl-pick-pro.is-locked{background:#f1f2f4;color:#4b5563}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
 .tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
 .tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
@@ -3263,7 +3280,7 @@ export default function Customize() {
           <Text variant="headingLg" as="h2">Choose a Template to Get Started</Text>
           <div style={{ marginTop: 8 }}>
             <Text variant="bodyMd" tone="subdued">
-              Each layout is a completely different shopping experience. Read the descriptions carefully — they behave differently, not just look different.
+              Three box templates with the same design options: pick how the box is priced (by quantity, weight or value), then choose the card layout and progress style inside.
             </Text>
           </div>
         </div>
@@ -3287,10 +3304,18 @@ export default function Customize() {
               <div className="tpl-pick-body">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <Text variant="headingMd" as="h3" fontWeight="bold">{tpl.title}</Text>
-                  {tpl.featureKey && <ProBadge featureKey={tpl.featureKey} />}
-                  {tpl.featureKey && canPublishFeature(tpl.featureKey) && <span className="tpl-pick-pro">Pro</span>}
+                  {tpl.featureKey && (() => {
+                    const plan = PLANS[getMinPlanForFeature(tpl.featureKey)];
+                    const open = canPublishFeature(tpl.featureKey);
+                    return plan && <span className={`tpl-pick-pro${open ? '' : ' is-locked'}`}>{open ? '' : '🔒 '}{plan.label} · ${plan.price.monthly}</span>;
+                  })()}
                 </div>
                 <Text variant="bodySm" tone="subdued">{tpl.description}</Text>
+                {tpl.designs?.length > 0 && (
+                  <div className="tpl-pick-designs">
+                    {tpl.designs.map((name) => <span key={name} className="tpl-pick-design">{name}</span>)}
+                  </div>
+                )}
                 {tpl.howItWorks && (
                   <div className="tpl-pick-how">
                     <div className="tpl-pick-how-label">How it works</div>
@@ -3313,7 +3338,7 @@ export default function Customize() {
                 <div style={{ marginTop: 6 }}>
                   {tpl.featureKey && !canPublishFeature(tpl.featureKey) ? (
                     <Button fullWidth onClick={() => navigate('/app/subscribe')}>
-                      Upgrade to Pro to use this template
+                      {`Upgrade to ${PLANS[getMinPlanForFeature(tpl.featureKey)]?.label || 'Pro'} to use this template`}
                     </Button>
                   ) : (
                     <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
@@ -3341,11 +3366,11 @@ export default function Customize() {
         return;
       }
     }
-    if ((config.layout === WEIGHT_BOX_LAYOUT || config.layout === QUICK_SHOP_LAYOUT)
+    if (usesQuickShop(config.layout)
       && !Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).some(Boolean)) {
       setActiveCategory('layout');
       setExpandedSections((prev) => ({ ...prev, general: true }));
-      shopify.toast.show(config.layout === QUICK_SHOP_LAYOUT ? 'Choose at least one collection for the page' : 'Choose at least one collection for the box', { isError: true });
+      shopify.toast.show('Choose at least one collection for the box', { isError: true });
       return;
     }
     if (config.layout === 'layout1') {
@@ -5529,7 +5554,8 @@ function ComboPreview({
   const weightPreview = (() => {
     if (!isWeight) return null;
     const { value } = normalizeWeightPricing(rawConfig.weight_pricing);
-    const view = { tiers: value.tiers, unit: value.unit, maxGrams: value.max_grams, messages: value.messages, enabled: true };
+    const measure = value.measure || 'weight';
+    const view = { tiers: value.tiers, unit: value.unit, maxGrams: value.max_grams, messages: value.messages, enabled: true, measure, currencySymbol };
     const gramsByVariant = {};
     [...(products || []), ...Object.values(allStepProducts || {}).flat(), ...DEMO_PRODUCTS].forEach((p) => {
       (p?.variants || []).forEach((v) => { gramsByVariant[v.id] = v.grams > 0 ? v.grams : null; });
@@ -5541,7 +5567,7 @@ function ComboPreview({
       || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
     const decimals = decimalsFor(null);
     const box = computeBox({
-      pricing: { tiers: value.tiers, max_grams: value.max_grams, unit: value.unit },
+      pricing: { tiers: value.tiers, max_grams: value.max_grams, unit: value.unit, measure },
       decimals,
       lines: selectedProducts.map((p, i) => ({
         key: `${p.source}:${p.variantId}:${i}`,
@@ -5557,9 +5583,19 @@ function ComboPreview({
     ? Math.max(0, totalPrice - weightPreview.box.discountMinor / 10 ** weightPreview.decimals)
     : hasDiscount ? discountedPrice : totalPrice;
 
-  // Adding this many of a variant would take the box over its max weight?
+  // Adding this many of a variant would take the box over its max weight
+  // (or, for a box counted by items, its max number of items)?
   const blockedByMaxWeight = (productId, variantId, addQty) => {
     if (!weightPreview || weightPreview.view.maxGrams == null) return false;
+    if (weightPreview.view.measure === 'value') return false;
+    if (weightPreview.view.measure === 'quantity') {
+      if (!weightPreview.qualifies(productId) || weightPreview.box.items + addQty <= weightPreview.view.maxGrams) return false;
+      shopify.toast.show(fillMessage(weightPreview.view.messages.over_max, {
+        max: formatItems(weightPreview.view.maxGrams),
+        weight: formatItems(weightPreview.box.items),
+      }), { isError: true });
+      return true;
+    }
     const grams = weightPreview.qualifies(productId) ? weightPreview.gramsByVariant[variantId] : null;
     if (!(grams > 0) || weightPreview.box.grams + grams * addQty <= weightPreview.view.maxGrams) return false;
     shopify.toast.show(fillMessage(weightPreview.view.messages.over_max, {
@@ -5683,6 +5719,18 @@ function ComboPreview({
       </div>
     );
   };
+
+  // Tier-priced combos: the box meter sits where the progress bar goes
+  // (the storefront's renderWeightMeter does the same). Click = Offer section.
+  const renderTierMeter = () => (
+    <div
+      key="tier-meter"
+      style={{ margin: '12px 0', cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #eee' }}
+      onClick={(e) => { e.stopPropagation(); onRequestSection('discount'); }}
+    >
+      <WeightMeter view={weightPreview.view} box={weightPreview.box} config={rawConfig} />
+    </div>
+  );
 
   const renderProgressBar = () => {
     if (!config.show_progress_bar) return null;
@@ -5916,14 +5964,6 @@ function ComboPreview({
   const renderPreviewBar = () => (
     <>
     {renderAiSuggestions()}
-    {weightPreview && (
-      <div
-        style={{ margin: '16px 0 0', cursor: 'pointer', borderRadius: 10, overflow: 'hidden', border: '1px solid #eee' }}
-        onClick={(e) => { e.stopPropagation(); onRequestSection('discount'); }}
-      >
-        <WeightMeter view={weightPreview.view} box={weightPreview.box} config={rawConfig} />
-      </div>
-    )}
     <div
       style={{ outline: inspectActive === 'previewBar' ? '2px solid #1a9de0' : inspectHover === 'previewBar' ? '2px dashed #1a9de0' : undefined, cursor: 'pointer' }}
       onMouseEnter={() => setInspectHover('previewBar')}
@@ -6685,7 +6725,7 @@ function ComboPreview({
   };
 
   let sectionOrder;
-  const progressSec = config.show_progress_bar ? [renderProgressBar] : [];
+  const progressSec = weightPreview ? [renderTierMeter] : config.show_progress_bar ? [renderProgressBar] : [];
 
   if (config.layout === 'layout2') {
     // For Combo Design Two: Banner → Progress → Title → Tabs → Preview → Products
@@ -7496,6 +7536,12 @@ function ComboPreview({
           boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
         }}
       >
+        {/* Tier-priced: the box meter is the sticky top bar. */}
+        {weightPreview && (
+          <div style={{ position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+            {renderTierMeter()}
+          </div>
+        )}
         {/* Top Progress Bar */}
         {config.show_progress_bar && (
           <div

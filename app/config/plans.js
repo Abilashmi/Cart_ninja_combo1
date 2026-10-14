@@ -3,7 +3,7 @@
 // To add a plan or feature: edit this file only — do not hardcode plan
 // names or feature availability anywhere else in the app.
 
-export const PLAN_KEYS = ['free', 'starter', 'pro'];
+export const PLAN_KEYS = ['free', 'starter', 'growth', 'pro'];
 
 export const PLANS = {
   free: {
@@ -35,12 +35,25 @@ export const PLANS = {
     comboTemplateLimit: 3,
     watermarkRemovable: true,
   },
+  growth: {
+    key: 'growth',
+    label: 'Growth',
+    tagline: 'Weight & value boxes',
+    price: { monthly: 59, annual: 590 },
+    rank: 2,
+    orderCap: 2000,
+    overageRate: 0.02,
+    aiBrixCredits: 60,
+    aiBrixOverageRate: 0.02,
+    comboTemplateLimit: 10,
+    watermarkRemovable: true,
+  },
   pro: {
     key: 'pro',
     label: 'Pro',
     tagline: 'High-volume brands',
     price: { monthly: 79, annual: 790 },
-    rank: 2,
+    rank: 3,
     orderCap: null,
     overageRate: 0,
     aiBrixCredits: 90,
@@ -55,31 +68,35 @@ export const PLANS = {
 // - preview: open and save, but must NOT render on the storefront
 // - locked: editing disabled, show upgrade prompt
 export const FEATURES = {
-  cart_drawer:              { label: 'Cart Drawer',                     states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
-  announcement_bar:         { label: 'Announcement Bar',                states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
-  empty_cart_customization: { label: 'Empty Cart Customization',        states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } },
-  ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
+  cart_drawer:              { label: 'Cart Drawer',                     states: { free: 'enabled', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  announcement_bar:         { label: 'Announcement Bar',                states: { free: 'enabled', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  empty_cart_customization: { label: 'Empty Cart Customization',        states: { free: 'enabled', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  ai_brix:                  { label: 'AI BRIX',                         states: { free: 'enabled', starter: 'enabled', growth: 'enabled', pro: 'enabled' } }, // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
 
-  fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  packs:                    { label: 'Packs',                           states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  cod_checkout:             { label: 'COD Checkout',                    states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  coupon_lock_pro:        { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
+  fbt:                      { label: 'Frequently Bought Together',      states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  packs:                    { label: 'Packs',                           states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  cod_checkout:             { label: 'COD Checkout',                    states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  coupon_lock_pro:        { label: 'Coupon Banner',                   states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
 
-  progress_bar:             { label: 'Progress Bar',                   states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  ai_cart_upsell:           { label: 'AI Cart Upsell',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  full_analytics:           { label: 'Full Analytics',                 states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  confetti:                 { label: 'Confetti',                       states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  mobile_swipe_checkout:    { label: 'Mobile Swipe Checkout',          states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  build_a_combo:            { label: 'Build a Combo',                  states: { free: 'locked', starter: 'enabled', pro: 'enabled' } }, // count-limited, see comboTemplateLimit
-  open_countdown:           { label: 'Open Countdown',                 states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  custom_css:                { label: 'Custom CSS',                    states: { free: 'preview', starter: 'enabled', pro: 'enabled' } },
-  priority_email_support:   { label: 'Priority Email Support',         states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
-  ai_support_247:           { label: '24/7 AI Support',                states: { free: 'locked', starter: 'enabled', pro: 'enabled' } },
+  progress_bar:             { label: 'Progress Bar',                   states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  ai_cart_upsell:           { label: 'AI Cart Upsell',                 states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  full_analytics:           { label: 'Full Analytics',                 states: { free: 'locked', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  confetti:                 { label: 'Confetti',                       states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  mobile_swipe_checkout:    { label: 'Mobile Swipe Checkout',          states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  build_a_combo:            { label: 'Build a Combo',                  states: { free: 'locked', starter: 'enabled', growth: 'enabled', pro: 'enabled' } }, // count-limited, see comboTemplateLimit
+  open_countdown:           { label: 'Open Countdown',                 states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  custom_css:                { label: 'Custom CSS',                    states: { free: 'preview', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  priority_email_support:   { label: 'Priority Email Support',         states: { free: 'locked', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  ai_support_247:           { label: '24/7 AI Support',                states: { free: 'locked', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
 
-  ai_analytics:              { label: 'AI Analytics',                  states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
-  advanced_ai_analytics:     { label: 'Advanced AI Analytics',         states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
-  unlimited_ai_agents:       { label: 'Unlimited AI Agents',           states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
-  combo_weight_pricing:      { label: 'Weight-based Combo Pricing',    states: { free: 'locked', starter: 'locked', pro: 'enabled' } },
+  ai_analytics:              { label: 'AI Analytics',                  states: { free: 'locked', starter: 'locked', growth: 'locked', pro: 'enabled' } },
+  advanced_ai_analytics:     { label: 'Advanced AI Analytics',         states: { free: 'locked', starter: 'locked', growth: 'locked', pro: 'enabled' } },
+  unlimited_ai_agents:       { label: 'Unlimited AI Agents',           states: { free: 'locked', starter: 'locked', growth: 'locked', pro: 'enabled' } },
+  // The three box combo templates (Build a Combo picker), see boxPricingFeature in combo-weight.shared.js.
+  combo_quantity_pricing:    { label: 'Quantity Box combos',           states: { free: 'locked', starter: 'enabled', growth: 'enabled', pro: 'enabled' } },
+  combo_weight_pricing:      { label: 'Weight Box combos',             states: { free: 'locked', starter: 'locked', growth: 'enabled', pro: 'enabled' } },
+  combo_value_pricing:       { label: 'Value Box combos',              states: { free: 'locked', starter: 'locked', growth: 'enabled', pro: 'enabled' } },
+  combo_tier_pricing:        { label: 'Tiered pricing on older Classic combos', states: { free: 'locked', starter: 'locked', growth: 'enabled', pro: 'enabled' } }, // Guided / Velocity / Editorial combos made before the box templates
 };
 
 export function isValidPlanKey(key) {

@@ -4,7 +4,7 @@
  * (extensions/brix-combo-weight-discount):
  *   - build the trusted config the Function reads, from the saved combo
  *     templates (never from the browser): only active weight templates, only
- *     on a plan with combo_weight_pricing
+ *     on a plan that publishes that layout's box pricing (boxPricingFeature)
  *   - write it to the shop's app-owned metafield, and the collection ids the
  *     Function's input query needs to the discount's input-variables metafield
  *   - make sure the automatic app discount that runs the Function exists
@@ -18,13 +18,22 @@
  */
 import { getDb } from './db.server';
 import { getShopPlan, canPublishFeature } from './plan-permissions.server';
-import { comboCollectionHandles, isWeightCombo, normalizeWeightPricing, tierLabel } from '../utils/combo-weight.shared.js';
+import { boxPricingFeature, comboCollectionHandles, isWeightCombo, normalizeWeightPricing, tierLabel } from '../utils/combo-weight.shared.js';
 
 export const COMBO_WEIGHT_FUNCTION_HANDLE = 'brix-combo-weight-discount';
 export const COMBO_WEIGHT_DISCOUNT_TITLE = 'BRIX Combo Weight';
 export const COMBO_WEIGHT_CONFIG_KEY = 'combo_weight_config';
 export const COMBO_WEIGHT_VARS_KEY = 'combo_weight_vars';
 export const COMBO_WEIGHT_FEATURE = 'combo_weight_pricing';
+
+/**
+ * Does the shop's plan publish box pricing for this template's layout?
+ * (boxPricingFeature: Quantity Box = Starter+, Weight / Value Box and older
+ * Classic tiers = Growth+.)
+ */
+export function templatePlanLive(planKey, config) {
+  return canPublishFeature(planKey, boxPricingFeature(config?.layout));
+}
 // Shopify drops metafields over 10 KB; stay clear of it.
 export const CONFIG_BYTE_LIMIT = 9000;
 
@@ -72,7 +81,8 @@ export async function loadWeightTemplates(shop) {
 /**
  * The Function's config + input variables. Pure.
  *   templates             from loadWeightTemplates
- *   planLive              the shop's plan publishes combo_weight_pricing
+ *   planLive              the shop's plan publishes box pricing: a boolean for
+ *                         every template, or (template) => boolean per template
  *   collectionIdsByHandle { handle: 'gid://shopify/Collection/1' } for layout-collection templates
  * Returns { config, variables, bytes, included: [id], skipped: [{ id, reason }] }.
  */
@@ -82,7 +92,8 @@ export function buildComboWeightFunctionConfig({ templates, planLive, currencyCo
   const skipped = [];
   const variableIds = new Set();
   for (const template of templates || []) {
-    if (!planLive) { skipped.push({ id: template.id, reason: 'plan_locked' }); continue; }
+    const live = typeof planLive === 'function' ? planLive(template) : planLive;
+    if (!live) { skipped.push({ id: template.id, reason: 'plan_locked' }); continue; }
     if (!template.active) { skipped.push({ id: template.id, reason: 'inactive' }); continue; }
     if (template.errors?.length) { skipped.push({ id: template.id, reason: 'invalid' }); continue; }
     const { pricing } = template;
@@ -359,7 +370,7 @@ async function selectedCollectionProductIds(admin, shop, pricing, now = Date.now
  */
 export async function storefrontWeightPricing({ shop, admin, templateId, active, config, productsByHandle }) {
   const { value: pricing, errors } = normalizeWeightPricing(config?.weight_pricing);
-  const planLive = canPublishFeature(await getShopPlan(shop), COMBO_WEIGHT_FEATURE);
+  const planLive = templatePlanLive(await getShopPlan(shop), config);
   const status = planLive && !errors.length ? await getStorefrontWeightStatus(shop, admin) : null;
   const enabled = !errors.length && weightPricingLive({ planLive, active, hash: pricing.hash, templateId, status });
 
@@ -378,7 +389,10 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
     measure: pricing.measure || 'weight',
     unit: pricing.unit,
     maxGrams: pricing.max_grams,
-    tiers: pricing.tiers.map((tier) => ({ ...tier, label: tierLabel(tier, pricing.unit, pricing.measure) })),
+    // The merchant's own labels ('' = none): the page names an unlabelled tier
+    // by its offer ("10% OFF", "Any 2 for ₹999"); messages that need a name
+    // fall back to the checkout wording through the core's tierLabel.
+    tiers: pricing.tiers.map((tier) => ({ ...tier, label: tier.label || '' })),
     messages: pricing.messages,
     qualifyingProductIds,
   };
@@ -386,8 +400,15 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
 
 /* ── sync ──────────────────────────────────────────────────────────────────── */
 
+const PLAN_LOCKED_REASONS = {
+  combo_quantity_pricing: 'Quantity Box pricing goes live on the Starter plan.',
+  combo_weight_pricing: 'Weight Box pricing goes live on the Growth plan.',
+  combo_value_pricing: 'Value Box pricing goes live on the Growth plan.',
+  combo_tier_pricing: 'Tiered progress-bar pricing goes live on the Growth plan.',
+};
+
 const TEMPLATE_REASONS = {
-  plan_locked: 'Weight-based pricing goes live on the Pro plan.',
+  plan_locked: PLAN_LOCKED_REASONS.combo_weight_pricing,
   inactive: 'This combo is turned off, so its box discount is not active.',
   invalid: 'This combo\'s box pricing has errors. Fix them and save again.',
   no_products: 'None of this combo\'s collections could be found in Shopify, so no product would count toward the box.',
@@ -405,16 +426,17 @@ export async function syncComboWeightDiscount(admin, shop) {
   let templates = [];
   try {
     const planKey = await getShopPlan(shop);
-    const planLive = canPublishFeature(planKey, COMBO_WEIGHT_FEATURE);
+    const planLive = (template) => templatePlanLive(planKey, template.config);
     templates = await loadWeightTemplates(shop);
-    const layoutHandles = planLive
-      ? templates.filter((t) => t.active && t.pricing.qualify.mode !== 'selected').flatMap((t) => comboCollectionHandles(t.config))
-      : [];
+    const layoutHandles = templates
+      .filter((t) => planLive(t) && t.active && t.pricing.qualify.mode !== 'selected')
+      .flatMap((t) => comboCollectionHandles(t.config));
     const [shopData, collectionIdsByHandle] = await Promise.all([readShop(admin), resolveCollectionIds(admin, layoutHandles)]);
     const built = buildComboWeightFunctionConfig({ templates, planLive, currencyCode: shopData.currencyCode, collectionIdsByHandle });
     const perTemplate = (verified, message) => Object.fromEntries(templates.map((t) => {
       const skip = built.skipped.find((s) => s.id === t.id);
-      return [t.id, skip ? { verified: false, message: TEMPLATE_REASONS[skip.reason] } : { verified, message }];
+      const reason = skip?.reason === 'plan_locked' ? PLAN_LOCKED_REASONS[boxPricingFeature(t.config.layout)] : TEMPLATE_REASONS[skip?.reason];
+      return [t.id, skip ? { verified: false, message: reason } : { verified, message }];
     }));
     const done = (result) => {
       invalidateStorefrontWeightStatus(shop);
@@ -443,10 +465,10 @@ export async function syncComboWeightDiscount(admin, shop) {
       if (shopData.config && Object.keys(shopData.config.templates || {}).length) {
         await setMetafields(admin, [{ ownerId: shopData.id, namespace: '$app', key: COMBO_WEIGHT_CONFIG_KEY, type: 'json', value: JSON.stringify(built.config) }]);
       }
-      const locked = !planLive && templates.some((t) => t.active);
+      const locked = templates.find((t) => t.active && !planLive(t));
       return done({
         ok: true, verified: false, state: locked ? 'plan_locked' : 'not_needed',
-        message: locked ? TEMPLATE_REASONS.plan_locked : 'No active weight combos.',
+        message: locked ? PLAN_LOCKED_REASONS[boxPricingFeature(locked.config.layout)] : 'No active weight combos.',
       });
     }
 

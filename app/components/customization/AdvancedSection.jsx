@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FormLayout, Checkbox, Text, TextField } from '@shopify/polaris';
+import { FormLayout, Checkbox, Select, Text, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 import { OfferSection } from './OfferSection';
 import { isWeightCombo, usesQuickShop } from '../../utils/combo-weight.shared.js';
@@ -25,11 +25,23 @@ function AdvancedSectionComponent({
         <FormLayout>
           {isWeight && (
             <Text as="p" variant="bodySm" tone="subdued">
-              Weight-priced combos always show the weight meter instead, with the tiers and messages from Offer. Its colours and heading come from here.
+              With a tiered progress bar (Offer), the bar shows each tier and what it unlocks, with the messages from Offer. Its style, colours and heading come from here.
             </Text>
           )}
-          {isWeight && ColorPickerField && <ColorPickerField label="Meter Color" value={config.progress_bar_color || '#111827'} onChange={(v) => updateConfig('progress_bar_color', v)} />}
-          {isWeight && <TextField label="Meter Heading" value={config.progress_text || ''} placeholder="Your box" onChange={(v) => updateConfig('progress_text', v)} autoComplete="off" />}
+          {isWeight && (
+            <Select
+              label="Progress style"
+              options={[
+                { label: 'Milestones (a dot per tier with its offer)', value: 'milestones' },
+                { label: 'Bar (thresholds under the bar)', value: 'bar' },
+              ]}
+              value={config.tier_progress_style === 'bar' ? 'bar' : 'milestones'}
+              onChange={(v) => updateConfig('tier_progress_style', v)}
+            />
+          )}
+          {isWeight && ColorPickerField && <ColorPickerField label="Bar Color" value={config.progress_bar_color || '#111827'} onChange={(v) => updateConfig('progress_bar_color', v)} />}
+          {isWeight && ColorPickerField && <ColorPickerField label="Unlocked Color" value={config.progress_success_color || '#16a34a'} onChange={(v) => updateConfig('progress_success_color', v)} />}
+          {isWeight && <TextField label="Heading" value={config.progress_text || ''} placeholder="Your box" onChange={(v) => updateConfig('progress_text', v)} autoComplete="off" />}
           {!isWeight && <Checkbox label="Show Progress Bar" checked={!!config.show_progress_bar} onChange={(v) => updateConfig('show_progress_bar', v)} />}
           {!isWeight && config.show_progress_bar && (
             <>

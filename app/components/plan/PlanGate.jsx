@@ -258,6 +258,9 @@ export function ProBadge({ featureKey }) {
   const navigate = useNavigate();
   if (canPublishFeature(featureKey)) return null;
   const isPreview = canPreviewFeature(featureKey);
+  // Paid features have always said "Pro"; only Growth-first features
+  // (e.g. combo_tier_pricing) name their own plan.
+  const label = getMinPlanForFeature(featureKey) === 'growth' ? PLANS.growth.label : 'Pro';
   return (
     <Tooltip content="Visit plans">
       <button
@@ -274,7 +277,7 @@ export function ProBadge({ featureKey }) {
         <span style={{ display: 'flex', alignItems: 'center', width: 13, height: 13, flexShrink: 0 }}>
           <Icon source={LockIcon} tone="inherit" />
         </span>
-        Pro{isPreview ? ' · Try it for free' : ''}
+        {label}{isPreview ? ' · Try it for free' : ''}
       </button>
     </Tooltip>
   );

@@ -3,26 +3,34 @@ import { getDb } from '../services/db.server';
 import { checkComboPlanGate, createComboTemplate } from '../services/combo-templates.server';
 import { ensureComboForgeTemplate } from '../services/combo-page.server';
 import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
-import { COMBO_WEIGHT_FEATURE, syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
-import { QUICK_SHOP_LAYOUT, isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
+import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
+import { boxPricingFeature, fixedMeasureFor, isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
+import { PLANS, getMinPlanForFeature } from '../config/plans';
 
 /**
- * Weight-priced combos (pricing_mode 'weight') are Pro only, and their pricing
- * is always validated and re-normalized here, so what is stored (and later
- * synced to the checkout Function) is the server's version, never the
- * browser's. Returns { customizationData } or { response } to send back.
+ * Box-tier-priced combos (pricing_mode 'weight') need a plan
+ * (boxPricingFeature): Quantity Box = Starter+, Weight Box / Value Box (and
+ * tiers on the older Classic designs) = Growth+. Their pricing is always
+ * validated and re-normalized here, so what is stored (and later synced to the
+ * checkout Function) is the server's version, never the browser's. Returns
+ * { customizationData } or { response } to send back.
  */
 async function prepareWeightPricing(shop, customizationData) {
   let config;
   try { config = JSON.parse(customizationData || '{}') || {}; } catch { return { customizationData }; }
   if (!isWeightCombo(config)) return { customizationData };
   const planKey = await getShopPlan(shop);
-  if (!canPublishFeature(planKey, COMBO_WEIGHT_FEATURE)) {
-    return { response: Response.json({ success: false, upgradeRequired: true, feature: COMBO_WEIGHT_FEATURE, error: 'Weight, quantity and value box pricing are part of the Pro plan. Upgrade, or switch this combo back to coupon pricing to save it.' }, { status: 403 }) };
+  const feature = boxPricingFeature(config.layout);
+  if (!canPublishFeature(planKey, feature)) {
+    const plan = PLANS[getMinPlanForFeature(feature)]?.label || 'Pro';
+    return { response: Response.json({ success: false, upgradeRequired: true, feature, error: `This combo template is part of the ${plan} plan. Upgrade to save it.` }, { status: 403 }) };
   }
-  // Only Quick Shop boxes can be measured by number of items or value; every
-  // other layout (the Weight Box included) is weighed, whatever was sent.
-  const raw = config.layout === QUICK_SHOP_LAYOUT ? config.weight_pricing : { ...(config.weight_pricing || {}), measure: 'weight' };
+  // Each box template is priced by its own measure, whatever was sent
+  // (Quantity Box = items, Weight Box = weight, Value Box = value; an older
+  // Quick Shop combo saved by quantity or weight becomes value here). Only
+  // the older Classic designs keep the merchant's choice.
+  const fixed = fixedMeasureFor(config.layout);
+  const raw = fixed ? { ...(config.weight_pricing || {}), measure: fixed } : config.weight_pricing;
   const { value, errors } = normalizeWeightPricing(raw);
   if (errors.length) {
     return { response: Response.json({ success: false, error: errors[0].message, weightErrors: errors }, { status: 422 }) };

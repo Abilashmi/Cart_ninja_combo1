@@ -249,6 +249,54 @@ const checkoutBtn = '[data-combo-action="checkout"]';
   }
 }
 
+// ── Classic Combo, Velocity Stream (layout2): tiers by items, "Buy 2 for ₹199" ──
+{
+  const { value: qty } = normalizeWeightPricing({
+    measure: 'quantity', max_grams: 3,
+    tiers: [{ id: 'q1', min_grams: 2, type: 'fixed_price', value: 199, label: '' }, { id: 'q2', min_grams: 3, type: 'percentage', value: 20, label: '' }],
+  });
+  const config = { layout: 'layout2', col_1: 'books', tab_count: 1, show_preview_bar: true, pricing_mode: 'weight', weight_pricing: qty };
+  const wp = weightPricing({ measure: 'quantity', hash: qty.hash, maxGrams: 3, tiers: qty.tiers.map((t) => ({ ...t, label: `${t.min_grams} items box discount` })), messages: qty.messages, qualifyingProductIds: [P(1), P(2), P(3), P(4)] });
+  const { page, log } = await openCombo(config, { wp });
+  let text = await meterText(page);
+  check('layout2 quantity meter: milestones with the offers', (await page.getAttribute('.brix-combo-weight', 'data-brix-tier-meter')) === 'milestones' && text.includes('Any 2 for ₹199') && text.includes('20% OFF') && text.includes('0 items'), text.replace(/\s+/g, ' '));
+  check('no weight chip on cards of an items box', !(await page.textContent(card(1))).includes('300 g') && !(await page.textContent(card(3))).includes('Not counted'));
+  check('checkout disabled before the first tier', await page.$eval(checkoutBtn, (b) => b.disabled));
+  await add(page, 1);
+  check('1 item: names the next offer', (await meterText(page)).includes('Add 1 item more to unlock Any 2 for ₹199'), (await meterText(page)).replace(/\s+/g, ' '));
+  await add(page, 2);
+  text = await meterText(page);
+  check('2 items unlock "Any 2 for ₹199"', text.includes('Any 2 for ₹199 unlocked!'), text.replace(/\s+/g, ' '));
+  const bar = await page.evaluate(() => document.body.innerText);
+  check('the 2 items cost ₹199 (Novel 110 + Atlas 120)', bar.includes('₹199.00') && bar.includes('₹230.00'), bar.split('\n').filter((l) => /₹/.test(l)).join(' | '));
+  await add(page, 3); await add(page, 4);
+  check('max 3 items enforced', (await page.textContent('body')).includes('Your box can hold up to 3 items'));
+  await page.screenshot({ path: path.join(SHOTS, 'storefront-classic-quantity.png') });
+  await page.click(checkoutBtn);
+  await page.waitForTimeout(600);
+  const props = log.add[0]?.items?.[0]?.properties || {};
+  check('checkout: box lines carry the combo id and go to Shopify checkout', props._brix_combo_id === '7' && props._brix_combo_version === qty.hash && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]));
+  await page.close();
+}
+
+// ── Classic Combo, Editorial Split (layout4): tiers by box value, bar style ──
+{
+  const { value: val } = normalizeWeightPricing({
+    measure: 'value',
+    tiers: [{ id: 'v1', min_grams: 200, type: 'fixed_amount', value: 30, label: '' }, { id: 'v2', min_grams: 1000, type: 'percentage', value: 10, label: '' }],
+  });
+  const config = { layout: 'layout4', collection_handle: 'books', show_preview_bar: true, pricing_mode: 'weight', weight_pricing: val, tier_progress_style: 'bar' };
+  const wp = weightPricing({ measure: 'value', hash: val.hash, maxGrams: null, tiers: val.tiers, messages: val.messages, qualifyingProductIds: [P(1), P(2), P(3), P(4)] });
+  const { page } = await openCombo(config, { wp });
+  check('layout4 value meter: bar style, money amounts', (await page.getAttribute('.brix-combo-weight', 'data-brix-tier-meter')) === 'bar' && (await meterText(page)).includes('₹0') && (await meterText(page)).includes('₹200'), (await meterText(page)).replace(/\s+/g, ' '));
+  await add(page, 1);
+  check('₹110 box: asks for ₹90 more', (await meterText(page)).includes('Add ₹90 more'), (await meterText(page)).replace(/\s+/g, ' '));
+  await add(page, 2);
+  check('₹230 box unlocks ₹30 off', (await meterText(page)).includes('₹30 OFF unlocked!'), (await meterText(page)).replace(/\s+/g, ' '));
+  check('checkout enabled once the first tier is reached', !(await page.$eval(checkoutBtn, (b) => b.disabled)));
+  await page.close();
+}
+
 // ── classic item-count combos are unchanged: cart permalink + Shiprocket ──
 {
   const countConfig = { ...baseConfig, pricing_mode: 'count', weight_pricing: undefined, max_products: 2 };

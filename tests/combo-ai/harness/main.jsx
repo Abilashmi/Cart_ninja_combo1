@@ -40,8 +40,9 @@ const TEMPLATE = {
     step_3_collection: 'sunscreen', step_3_title: 'Protect',
     ...(window.__WEIGHT ? { pricing_mode: 'weight', weight_pricing: window.__WEIGHT } : {}),
     // window.__QUICK_SHOP (tests/combo-weight/quickshop-builder-check.mjs): a
-    // Quick Shop template over two collections, priced by that weight_pricing.
-    ...(window.__QUICK_SHOP ? { layout: 'layout6', pricing_mode: 'weight', tab_count: 2, col_1: 'face-wash', col_2: 'serums', weight_pricing: window.__QUICK_SHOP } : {}),
+    // box template (window.__QUICK_SHOP_LAYOUT, default layout6 = Value Box)
+    // over two collections, priced by that weight_pricing.
+    ...(window.__QUICK_SHOP ? { layout: window.__QUICK_SHOP_LAYOUT || 'layout6', pricing_mode: 'weight', tab_count: 2, col_1: 'face-wash', col_2: 'serums', weight_pricing: window.__QUICK_SHOP } : {}),
   },
 };
 

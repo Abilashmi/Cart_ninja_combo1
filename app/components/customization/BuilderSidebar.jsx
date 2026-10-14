@@ -8,6 +8,9 @@ import {
   SearchIcon,
 } from '@shopify/polaris-icons';
 import { GeneralSection } from './GeneralSection';
+import { DesignSection } from './DesignSection';
+import { LoaderSection } from './LoaderSection';
+import { isClassicLayout } from '../../utils/combo-design.shared.js';
 import { BannerSection } from './BannerSection';
 import { ProductsSection } from './ProductsSection';
 import { ContentSection } from './ContentSection';
@@ -21,11 +24,13 @@ import {
 } from './QuickShopSections';
 
 const SETTINGS_INDEX = [
+  { label: 'Design (Guided / Tabs / Grid)', category: 'layout', section: 'design', kw: 'design layout guided architect velocity stream editorial split tabs steps grid switch' },
   { label: 'Steps & collections', category: 'layout', section: 'general', kw: 'step collection bundle rule combo size' },
   { label: 'Collection tabs', category: 'layout', section: 'general', kw: 'tab switch collection' },
   { label: 'Total products limit', category: 'layout', section: 'general', kw: 'max products limit' },
   { label: 'Banner image & slider', category: 'layout', section: 'banner', kw: 'banner image slider hero rotate' },
   { label: 'Products grid & columns', category: 'layout', section: 'products', kw: 'grid columns image ratio arrows scrollbar' },
+  { label: 'Page loader', category: 'style', section: 'loader', kw: 'loader loading spinner preloader logo wait' },
   { label: 'Title & description', category: 'style', section: 'content', kw: 'title description heading copy text' },
   { label: 'Product card style', category: 'style', section: 'productCard', kw: 'card padding radius hover' },
   { label: 'Collection tab styling', category: 'style', section: 'collectionTabsStyles', kw: 'tab color active styling premium' },
@@ -124,6 +129,12 @@ function BuilderSidebarComponent({
 .cst-section-title{font-size:14.5px;font-weight:600;color:#202223;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cst-section-badge{flex-shrink:0;font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;background:#e8eaed;color:#5c5f62;letter-spacing:.3px;text-transform:uppercase}
 .cst-section-body{padding:16px;border-top:1px solid #e1e3e5}
+.cst-design-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cst-design-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border:1px solid #d2d5d8;border-radius:10px;background:#fff;cursor:pointer;font-family:inherit;color:#5c5f62;text-align:center;transition:border-color .15s ease,box-shadow .15s ease}
+.cst-design-option:hover{border-color:#8c9196}
+.cst-design-option.is-selected{border:2px solid #1a9de0;padding:9px 5px;color:#1a9de0;box-shadow:0 0 0 3px rgba(26,157,224,.12)}
+.cst-design-name{font-size:12.5px;font-weight:700;color:#202223;line-height:1.25}
+.cst-design-short{font-size:11.5px;color:#6d7175}
 .cst-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cst-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .cst-full-width{grid-column:1 / -1}
@@ -232,6 +243,14 @@ function BuilderSidebarComponent({
       <div className="cst-sidebar-content">
         {activeCategory === 'layout' && (
           <>
+            {isClassicLayout(config.layout) && (
+              <DesignSection
+                config={config}
+                applyConfigPatch={applyConfigPatch}
+                expanded={expandedSections.design}
+                onToggle={() => toggleSection('design')}
+              />
+            )}
             <GeneralSection
               config={config}
               collections={collections}
@@ -322,6 +341,13 @@ function BuilderSidebarComponent({
               generatingDescription={generatingDescription}
               generateAiSuggestion={generateAiSuggestion}
               PxField={PxField}
+              ColorPickerField={ColorPickerField}
+            />
+            <LoaderSection
+              config={config}
+              updateConfig={updateConfig}
+              expanded={expandedSections.loader}
+              onToggle={() => toggleSection('loader')}
               ColorPickerField={ColorPickerField}
             />
             {usesQuickShop(config.layout) ? (

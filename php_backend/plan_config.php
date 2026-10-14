@@ -10,7 +10,7 @@
  * in BOTH files.
  */
 
-const PLAN_KEYS = ['free', 'starter', 'pro'];
+const PLAN_KEYS = ['free', 'starter', 'growth', 'pro'];
 
 const PLANS = [
     'free' => [
@@ -34,6 +34,15 @@ const PLANS = [
         'comboTemplateLimit' => 3,
         'watermarkRemovable' => true,
     ],
+    'growth' => [
+        'key' => 'growth',
+        'label' => 'Growth',
+        'orderCap' => 2000,
+        'overageRate' => 0.02,
+        'aiBrixCredits' => 60,
+        'comboTemplateLimit' => 10,
+        'watermarkRemovable' => true,
+    ],
     'pro' => [
         'key' => 'pro',
         'label' => 'Pro',
@@ -47,31 +56,34 @@ const PLANS = [
 
 // state: 'enabled' | 'preview' | 'locked'
 const FEATURES = [
-    'cart_drawer'              => ['free' => 'enabled', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'announcement_bar'         => ['free' => 'enabled', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'empty_cart_customization' => ['free' => 'enabled', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'ai_brix'                  => ['free' => 'enabled', 'starter' => 'enabled', 'pro' => 'enabled'],
+    'cart_drawer'              => ['free' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'announcement_bar'         => ['free' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'empty_cart_customization' => ['free' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'ai_brix'                  => ['free' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
 
-    'fbt'                      => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'coupon_lock_pro'          => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
+    'fbt'                      => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'coupon_lock_pro'          => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
 
-    'progress_bar'             => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'ai_cart_upsell'           => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'full_analytics'           => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'confetti'                 => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'mobile_swipe_checkout'    => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'build_a_combo'            => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'packs'                    => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'cod_checkout'             => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'open_countdown'           => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'custom_css'               => ['free' => 'preview', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'priority_email_support'   => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],
-    'ai_support_247'           => ['free' => 'locked', 'starter' => 'enabled', 'pro' => 'enabled'],
+    'progress_bar'             => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'ai_cart_upsell'           => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'full_analytics'           => ['free' => 'locked', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'confetti'                 => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'mobile_swipe_checkout'    => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'build_a_combo'            => ['free' => 'locked', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'packs'                    => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'cod_checkout'             => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'open_countdown'           => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'custom_css'               => ['free' => 'preview', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'priority_email_support'   => ['free' => 'locked', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'ai_support_247'           => ['free' => 'locked', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
 
-    'ai_analytics'             => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
-    'advanced_ai_analytics'    => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
-    'unlimited_ai_agents'      => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
-    'combo_weight_pricing'     => ['free' => 'locked', 'starter' => 'locked', 'pro' => 'enabled'],
+    'ai_analytics'             => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'locked', 'pro' => 'enabled'],
+    'advanced_ai_analytics'    => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'locked', 'pro' => 'enabled'],
+    'unlimited_ai_agents'      => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'locked', 'pro' => 'enabled'],
+    'combo_quantity_pricing'   => ['free' => 'locked', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'combo_weight_pricing'     => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'combo_value_pricing'      => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'enabled', 'pro' => 'enabled'],
+    'combo_tier_pricing'       => ['free' => 'locked', 'starter' => 'locked', 'growth' => 'enabled', 'pro' => 'enabled'],
 ];
 
 function plan_is_valid_key($key) {

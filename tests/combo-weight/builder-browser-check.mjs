@@ -60,7 +60,7 @@ async function open({ plan = 'pro', weight = WEIGHT, status = LIVE, saveWeight =
 async function openOffer(page) {
   await page.click('.cst-sidebar-tab:has-text("Advanced")');
   await page.click('.cst-section-header:has-text("Offer")');
-  await page.waitForSelector('text=/How this combo is priced|always priced by the weight of the box/');
+  await page.waitForSelector('text=/How this combo is priced|is priced by the weight of the box/');
 }
 const sidebar = (page) => page.textContent('.cst-sidebar-content');
 const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => `${t.isError ? '!' : ''}${t.message}`));
@@ -123,24 +123,24 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   const page = await open({ plan: 'starter', weight: null, status: null });
   await openOffer(page);
   check('count template on Starter: weight option disabled', await page.isDisabled('input[type="radio"][value="weight"]'));
-  check('Pro badge shown next to it', (await sidebar(page)).includes('Pro'));
+  check('Growth badge shown next to it (Classic Combo tiers are Growth+)', (await sidebar(page)).includes('Growth'));
   check('coupon controls still there for item-count combos', (await sidebar(page)).includes('Offer a coupon?'));
   await page.close();
 
   const locked = await open({ plan: 'starter', status: null });
   await openOffer(locked);
   const text = await sidebar(locked);
-  check('weight template after a downgrade: explained and locked', text.includes('part of the Pro plan') && text.includes('Requires the Pro plan'));
+  check('tiered template after a downgrade: explained and locked', text.includes('part of the Growth plan') && text.includes('Requires the Growth plan'));
   await locked.close();
 }
 
-// ── Template picker: "The Weight Box" is the 4th template, Pro only ──
+// ── Template picker: Quantity Box + Weight Box + Value Box ──
 {
   const page = await open({ fresh: true });
   const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
-  check('picker shows 5 templates, the 4th is The Weight Box', titles.length === 5 && titles[3] === 'The Weight Box', titles.join(', '));
-  const card = page.locator('.tpl-pick-card', { hasText: 'The Weight Box' });
-  check('Weight Box card is marked Pro', (await card.textContent()).includes('Pro'));
+  check('picker shows 3 templates: Quantity Box, Weight Box, Value Box', titles.join('|') === 'Quantity Box|Weight Box|Value Box', titles.join(', '));
+  const card = page.locator('.tpl-pick-card', { hasText: 'Weight Box' });
+  check('Weight Box card is marked Growth $59', (await card.textContent()).includes('Growth · $59'));
   await page.screenshot({ path: path.join(SHOTS, 'picker.png'), fullPage: true });
   await card.locator('button:has-text("Use This Template")').click();
   await page.waitForSelector('.bxq', { timeout: 15000 });
@@ -157,7 +157,7 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   check('Style tab: Quick Shop\'s Top progress / Bottom bar / Page colours', ((t) => t.includes('Top progress') && t.includes('Bottom bar') && t.includes('Page colours'))(await sidebar(page)));
   await openOffer(page);
   const offer = await sidebar(page);
-  check('Offer: always by weight (no item-count or measure choice)', offer.includes('always priced by the weight of the box') && !offer.includes('Box measured by') && !(await page.$('input[type="radio"][value="count"]')));
+  check('Offer: always by weight (no item-count or measure choice)', offer.includes('The Weight Box is priced by the weight of the box') && !offer.includes('Box measured by') && !(await page.$('input[type="radio"][value="count"]')));
   await page.click('.cst-sidebar-tab:has-text("Layout")');
   check('Layout tab: "Box Collections" section', (await sidebar(page)).includes('Box Collections'));
   await page.click('button:has-text("Save Template")');
@@ -166,10 +166,56 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   await page.close();
 
   const starter = await open({ fresh: true, plan: 'starter' });
-  const lockedCard = starter.locator('.tpl-pick-card', { hasText: 'The Weight Box' });
-  check('Starter: Weight Box card offers the upgrade instead', (await lockedCard.locator('button').last().textContent()).includes('Upgrade to Pro'));
-  check('Starter: other templates still usable', (await starter.locator('.tpl-pick-card', { hasText: 'The Guided Architect' }).locator('button:has-text("Use This Template")').count()) === 1);
+  const lockedCard = starter.locator('.tpl-pick-card', { hasText: 'Weight Box' });
+  check('Starter: Weight Box card offers the Growth upgrade instead', (await lockedCard.locator('button').last().textContent()).includes('Upgrade to Growth'));
+  check('Starter: Quantity Box usable', (await starter.locator('.tpl-pick-card', { hasText: 'Quantity Box' }).locator('button:has-text("Use This Template")').count()) === 1);
   await starter.close();
+}
+
+// ── older Classic combos (layout1/2/4): design switch + tiered progress bar on Growth ──
+{
+  const page = await open({ plan: 'growth', weight: null, status: null });
+  await page.waitForSelector('.cst-design-option', { timeout: 15000 });
+  check('an older Guided Architect combo opens on its design', await page.getAttribute('.cst-design-option[data-design="layout1"]', 'aria-checked') === 'true');
+  await page.click('.cst-design-option[data-design="layout2"]');
+  await page.waitForTimeout(300);
+  check('switching to Velocity Stream selects it', await page.getAttribute('.cst-design-option[data-design="layout2"]', 'aria-checked') === 'true');
+  check('the Layout tab now shows the tab collections', (await sidebar(page)).includes('Collections (Switching Tabs)'));
+  await page.click('.cst-design-option[data-design="layout4"]');
+  await page.waitForTimeout(300);
+  check('Editorial Split selectable too', await page.getAttribute('.cst-design-option[data-design="layout4"]', 'aria-checked') === 'true');
+  await page.close();
+
+  // Growth, an existing layout1 coupon combo → tiered progress bar by items.
+  const growth = await open({ plan: 'growth', weight: null, status: null });
+  await openOffer(growth);
+  check('Growth: tiered progress bar can be chosen', !(await growth.isDisabled('input[type="radio"][value="weight"]')));
+  await growth.click('.Polaris-Choice:has-text("Tiered progress bar")');
+  await growth.waitForSelector('text=Progress bar measured by');
+  check('measure choice shown for a Classic design, starting on Quantity', await growth.isChecked('input[type="radio"][value="quantity"]'));
+  await growth.getByRole('button', { name: /Buy N for/ }).click();
+  await growth.waitForTimeout(200);
+  const offer = await sidebar(growth);
+  check('"Buy N for X" adds a box price tier and sets the max items', offer.includes('Price of the whole box') && offer.includes('max 4 items'), offer.match(/3 items\+[^)]*\)/)?.[0]);
+  for (const n of [1, 3, 5]) await growth.click(`[data-cdo-product-id="${P(n)}"]`);
+  await growth.waitForSelector('[data-brix-tier-meter="milestones"]');
+  const meter = await growth.textContent('[data-brix-tier-meter]');
+  check('preview meter: items, milestone offers', meter.includes('3 items') && meter.includes('10% OFF') && meter.includes('Any 4 for'), meter.replace(/\s+/g, ' '));
+  await growth.screenshot({ path: path.join(SHOTS, 'builder-classic-tiers.png') });
+  await growth.click('button:has-text("Save Template")');
+  await growth.waitForSelector('text=Template Title');
+  await growth.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await growth.waitForTimeout(800);
+  const saved = await growth.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved: tiered, by quantity, with the box price tier', config.pricing_mode === 'weight' && config.weight_pricing?.measure === 'quantity' && config.weight_pricing?.tiers?.some((t) => t.type === 'fixed_price' && t.min_grams === 4) && config.weight_pricing?.max_grams === 4, JSON.stringify(config.weight_pricing));
+  await growth.close();
+
+  // Growth: all three box templates are usable.
+  const picker = await open({ fresh: true, plan: 'growth' });
+  check('Growth: Weight Box and Value Box usable', (await picker.locator('.tpl-pick-card', { hasText: 'Weight Box' }).locator('button:has-text("Use This Template")').count()) === 1
+    && (await picker.locator('.tpl-pick-card', { hasText: 'Value Box' }).locator('button:has-text("Use This Template")').count()) === 1);
+  await picker.close();
 }
 
 await browser.close();

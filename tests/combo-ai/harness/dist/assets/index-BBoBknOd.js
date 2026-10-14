@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-BNCr_M_G.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-BCogkTGI.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
 function _mergeNamespaces(n, m) {
   for (var i = 0; i < m.length; i++) {
     const e = m[i];
@@ -86,11 +86,11 @@ function requireReact_production_min() {
   }, enqueueForceUpdate: function() {
   }, enqueueReplaceState: function() {
   }, enqueueSetState: function() {
-  } }, C = Object.assign, D = {};
+  } }, C = Object.assign, D2 = {};
   function E(a, b, e) {
     this.props = a;
     this.context = b;
-    this.refs = D;
+    this.refs = D2;
     this.updater = e || B;
   }
   E.prototype.isReactComponent = {};
@@ -107,7 +107,7 @@ function requireReact_production_min() {
   function G(a, b, e) {
     this.props = a;
     this.context = b;
-    this.refs = D;
+    this.refs = D2;
     this.updater = e || B;
   }
   var H2 = G.prototype = new F();
@@ -438,7 +438,7 @@ function requireScheduler_production_min() {
         return p.now() - q;
       };
     }
-    var r = [], t = [], u = 1, v = null, y = 3, z = false, A = false, B = false, D = "function" === typeof setTimeout ? setTimeout : null, E = "function" === typeof clearTimeout ? clearTimeout : null, F = "undefined" !== typeof setImmediate ? setImmediate : null;
+    var r = [], t = [], u = 1, v = null, y = 3, z = false, A = false, B = false, D2 = "function" === typeof setTimeout ? setTimeout : null, E = "function" === typeof clearTimeout ? clearTimeout : null, F = "undefined" !== typeof setImmediate ? setImmediate : null;
     "undefined" !== typeof navigator && void 0 !== navigator.scheduling && void 0 !== navigator.scheduling.isInputPending && navigator.scheduling.isInputPending.bind(navigator.scheduling);
     function G(a) {
       for (var b = h(t); null !== b; ) {
@@ -514,14 +514,14 @@ function requireScheduler_production_min() {
         U.postMessage(null);
       };
     } else S = function() {
-      D(R, 0);
+      D2(R, 0);
     };
     function I(a) {
       O = a;
       N || (N = true, S());
     }
     function K(a, b) {
-      L = D(function() {
+      L = D2(function() {
         a(exports$1.unstable_now());
       }, b);
     }
@@ -2300,7 +2300,7 @@ function requireReactDom_production_min() {
     }
     if (Qb) throw a = Rb, Qb = false, Rb = null, a;
   }
-  function D(a, b) {
+  function D2(a, b) {
     var c = b[of];
     void 0 === c && (c = b[of] = /* @__PURE__ */ new Set());
     var d = a + "__bubble";
@@ -4527,7 +4527,7 @@ function requireReactDom_production_min() {
           l,
           c
         )), c = k;
-        else "dangerouslySetInnerHTML" === l ? (k = k ? k.__html : void 0, h = h ? h.__html : void 0, null != k && h !== k && (f = f || []).push(l, k)) : "children" === l ? "string" !== typeof k && "number" !== typeof k || (f = f || []).push(l, "" + k) : "suppressContentEditableWarning" !== l && "suppressHydrationWarning" !== l && (ea.hasOwnProperty(l) ? (null != k && "onScroll" === l && D("scroll", a), f || h === k || (f = [])) : (f = f || []).push(l, k));
+        else "dangerouslySetInnerHTML" === l ? (k = k ? k.__html : void 0, h = h ? h.__html : void 0, null != k && h !== k && (f = f || []).push(l, k)) : "children" === l ? "string" !== typeof k && "number" !== typeof k || (f = f || []).push(l, "" + k) : "suppressContentEditableWarning" !== l && "suppressHydrationWarning" !== l && (ea.hasOwnProperty(l) ? (null != k && "onScroll" === l && D2("scroll", a), f || h === k || (f = [])) : (f = f || []).push(l, k));
       }
       c && (f = f || []).push("style", c);
       var l = f;
@@ -4607,43 +4607,43 @@ function requireReactDom_production_min() {
             a = 0 !== (b.mode & 1);
             switch (c) {
               case "dialog":
-                D("cancel", d);
-                D("close", d);
+                D2("cancel", d);
+                D2("close", d);
                 break;
               case "iframe":
               case "object":
               case "embed":
-                D("load", d);
+                D2("load", d);
                 break;
               case "video":
               case "audio":
-                for (e = 0; e < lf.length; e++) D(lf[e], d);
+                for (e = 0; e < lf.length; e++) D2(lf[e], d);
                 break;
               case "source":
-                D("error", d);
+                D2("error", d);
                 break;
               case "img":
               case "image":
               case "link":
-                D(
+                D2(
                   "error",
                   d
                 );
-                D("load", d);
+                D2("load", d);
                 break;
               case "details":
-                D("toggle", d);
+                D2("toggle", d);
                 break;
               case "input":
                 Za(d, f);
-                D("invalid", d);
+                D2("invalid", d);
                 break;
               case "select":
                 d._wrapperState = { wasMultiple: !!f.multiple };
-                D("invalid", d);
+                D2("invalid", d);
                 break;
               case "textarea":
-                hb(d, f), D("invalid", d);
+                hb(d, f), D2("invalid", d);
             }
             ub(c, f);
             e = null;
@@ -4653,7 +4653,7 @@ function requireReactDom_production_min() {
                 d.textContent,
                 h,
                 a
-              ), e = ["children", "" + h]) : ea.hasOwnProperty(g) && null != h && "onScroll" === g && D("scroll", d);
+              ), e = ["children", "" + h]) : ea.hasOwnProperty(g) && null != h && "onScroll" === g && D2("scroll", d);
             }
             switch (c) {
               case "input":
@@ -4685,43 +4685,43 @@ function requireReactDom_production_min() {
               g = vb(c, d);
               switch (c) {
                 case "dialog":
-                  D("cancel", a);
-                  D("close", a);
+                  D2("cancel", a);
+                  D2("close", a);
                   e = d;
                   break;
                 case "iframe":
                 case "object":
                 case "embed":
-                  D("load", a);
+                  D2("load", a);
                   e = d;
                   break;
                 case "video":
                 case "audio":
-                  for (e = 0; e < lf.length; e++) D(lf[e], a);
+                  for (e = 0; e < lf.length; e++) D2(lf[e], a);
                   e = d;
                   break;
                 case "source":
-                  D("error", a);
+                  D2("error", a);
                   e = d;
                   break;
                 case "img":
                 case "image":
                 case "link":
-                  D(
+                  D2(
                     "error",
                     a
                   );
-                  D("load", a);
+                  D2("load", a);
                   e = d;
                   break;
                 case "details":
-                  D("toggle", a);
+                  D2("toggle", a);
                   e = d;
                   break;
                 case "input":
                   Za(a, d);
                   e = Ya(a, d);
-                  D("invalid", a);
+                  D2("invalid", a);
                   break;
                 case "option":
                   e = d;
@@ -4729,12 +4729,12 @@ function requireReactDom_production_min() {
                 case "select":
                   a._wrapperState = { wasMultiple: !!d.multiple };
                   e = A({}, d, { value: void 0 });
-                  D("invalid", a);
+                  D2("invalid", a);
                   break;
                 case "textarea":
                   hb(a, d);
                   e = gb(a, d);
-                  D("invalid", a);
+                  D2("invalid", a);
                   break;
                 default:
                   e = d;
@@ -4743,7 +4743,7 @@ function requireReactDom_production_min() {
               h = e;
               for (f in h) if (h.hasOwnProperty(f)) {
                 var k = h[f];
-                "style" === f ? sb(a, k) : "dangerouslySetInnerHTML" === f ? (k = k ? k.__html : void 0, null != k && nb(a, k)) : "children" === f ? "string" === typeof k ? ("textarea" !== c || "" !== k) && ob(a, k) : "number" === typeof k && ob(a, "" + k) : "suppressContentEditableWarning" !== f && "suppressHydrationWarning" !== f && "autoFocus" !== f && (ea.hasOwnProperty(f) ? null != k && "onScroll" === f && D("scroll", a) : null != k && ta(a, f, k, g));
+                "style" === f ? sb(a, k) : "dangerouslySetInnerHTML" === f ? (k = k ? k.__html : void 0, null != k && nb(a, k)) : "children" === f ? "string" === typeof k ? ("textarea" !== c || "" !== k) && ob(a, k) : "number" === typeof k && ob(a, "" + k) : "suppressContentEditableWarning" !== f && "suppressHydrationWarning" !== f && "autoFocus" !== f && (ea.hasOwnProperty(f) ? null != k && "onScroll" === f && D2("scroll", a) : null != k && ta(a, f, k, g));
               }
               switch (c) {
                 case "input":
@@ -16051,7 +16051,7 @@ function getResponsiveValue(componentName, componentProp, responsiveProp) {
   }
   return Object.fromEntries(Object.entries(responsiveProp).map(([breakpointAlias, responsiveValue]) => [`--pc-${componentName}-${componentProp}-${breakpointAlias}`, responsiveValue]));
 }
-var styles$S = {
+var styles$W = {
   "themeContainer": "Polaris-ThemeProvider--themeContainer"
 };
 const themeNamesLocal = ["light", "dark-experimental"];
@@ -16069,7 +16069,7 @@ function ThemeProvider(props) {
     value: getTheme(themeName)
   }, /* @__PURE__ */ React.createElement(ThemeContainer, {
     "data-portal-id": props["data-portal-id"],
-    className: classNames(createThemeClassName(themeName), styles$S.themeContainer, className)
+    className: classNames(createThemeClassName(themeName), styles$W.themeContainer, className)
   }, children)));
 }
 function clamp(number, min, max) {
@@ -16243,11 +16243,11 @@ function getBreakpointsQueryEntries(breakpoints) {
   const mediaConditionEntries = Object.entries(getMediaConditions(breakpoints));
   return mediaConditionEntries.map(([breakpointsToken, mediaConditions]) => Object.entries(mediaConditions).map(([direction, mediaCondition]) => {
     const breakpointsAlias = breakpointsToken.split("-")[1];
-    const directionAlias = `${breakpointsAlias}${capitalize(direction)}`;
+    const directionAlias = `${breakpointsAlias}${capitalize$1(direction)}`;
     return [directionAlias, mediaCondition];
   })).flat();
 }
-function capitalize(str) {
+function capitalize$1(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 function debounce(func, waitArg, options) {
@@ -17312,6 +17312,16 @@ var SvgUndoIcon = function SvgUndoIcon2(props) {
   }));
 };
 SvgUndoIcon.displayName = "UndoIcon";
+var SvgUploadIcon = function SvgUploadIcon2(props) {
+  return /* @__PURE__ */ React.createElement("svg", Object.assign({
+    viewBox: "0 0 20 20"
+  }, props), /* @__PURE__ */ React.createElement("path", {
+    d: "M16.5 6.26a.75.75 0 0 1-1.5 0v-.51a.75.75 0 0 0-.75-.75h-8.5a.75.75 0 0 0-.75.75v.51a.75.75 0 0 1-1.5 0v-.51a2.25 2.25 0 0 1 2.25-2.25h8.5a2.25 2.25 0 0 1 2.25 2.25v.51Z"
+  }), /* @__PURE__ */ React.createElement("path", {
+    d: "M10.75 16.01a.75.75 0 0 1-1.5 0v-6.69l-1.72 1.72a.75.75 0 1 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06l-1.72-1.72v6.69Z"
+  }));
+};
+SvgUploadIcon.displayName = "UploadIcon";
 var SvgViewIcon = function SvgViewIcon2(props) {
   return /* @__PURE__ */ React.createElement("svg", Object.assign({
     viewBox: "0 0 20 20"
@@ -17471,7 +17481,7 @@ function matches(node, selector) {
   let i = matches2.length;
   while (--i >= 0 && matches2.item(i) !== node) return i > -1;
 }
-var styles$R = {
+var styles$V = {
   "Button": "Polaris-Button",
   "disabled": "Polaris-Button--disabled",
   "pressed": "Polaris-Button--pressed",
@@ -17502,7 +17512,7 @@ var styles$R = {
   "Icon": "Polaris-Button__Icon",
   "Spinner": "Polaris-Button__Spinner"
 };
-var styles$Q = {
+var styles$U = {
   "Icon": "Polaris-Icon",
   "toneInherit": "Polaris-Icon--toneInherit",
   "toneBase": "Polaris-Icon--toneBase",
@@ -17527,7 +17537,7 @@ var styles$Q = {
   "Img": "Polaris-Icon__Img",
   "Placeholder": "Polaris-Icon__Placeholder"
 };
-var styles$P = {
+var styles$T = {
   "root": "Polaris-Text--root",
   "block": "Polaris-Text--block",
   "truncate": "Polaris-Text--truncate",
@@ -17581,7 +17591,7 @@ const Text = ({
   textDecorationLine
 }) => {
   const Component = as || (visuallyHidden ? "span" : "p");
-  const className = classNames(styles$P.root, variant && styles$P[variant], fontWeight && styles$P[fontWeight], (alignment || truncate) && styles$P.block, alignment && styles$P[alignment], breakWord && styles$P.break, tone && styles$P[tone], numeric && styles$P.numeric, truncate && styles$P.truncate, visuallyHidden && styles$P.visuallyHidden, textDecorationLine && styles$P[textDecorationLine]);
+  const className = classNames(styles$T.root, variant && styles$T[variant], fontWeight && styles$T[fontWeight], (alignment || truncate) && styles$T.block, alignment && styles$T[alignment], breakWord && styles$T.break, tone && styles$T[tone], numeric && styles$T.numeric, truncate && styles$T.truncate, visuallyHidden && styles$T.visuallyHidden, textDecorationLine && styles$T[textDecorationLine]);
   return /* @__PURE__ */ React.createElement(Component, Object.assign({
     className
   }, id && {
@@ -17601,14 +17611,14 @@ function Icon({
   } else {
     sourceType = "external";
   }
-  const className = classNames(styles$Q.Icon, tone && styles$Q[variationName("tone", tone)]);
+  const className = classNames(styles$U.Icon, tone && styles$U[variationName("tone", tone)]);
   const {
     mdDown
   } = useBreakpoints();
   const SourceComponent = source;
   const contentMarkup = {
     function: /* @__PURE__ */ React.createElement(SourceComponent, Object.assign({
-      className: styles$Q.Svg,
+      className: styles$U.Svg,
       focusable: "false",
       "aria-hidden": "true"
       // On Mobile we're scaling the viewBox to 18x18 to make the icons bigger
@@ -17618,10 +17628,10 @@ function Icon({
       viewBox: "1 1 18 18"
     } : {})),
     placeholder: /* @__PURE__ */ React.createElement("div", {
-      className: styles$Q.Placeholder
+      className: styles$U.Placeholder
     }),
     external: /* @__PURE__ */ React.createElement("img", {
-      className: styles$Q.Img,
+      className: styles$U.Img,
       src: `data:image/svg+xml;utf8,${source}`,
       alt: "",
       "aria-hidden": "true"
@@ -17634,7 +17644,7 @@ function Icon({
     visuallyHidden: true
   }, accessibilityLabel), contentMarkup[sourceType]);
 }
-var styles$O = {
+var styles$S = {
   "Spinner": "Polaris-Spinner",
   "sizeSmall": "Polaris-Spinner--sizeSmall",
   "sizeLarge": "Polaris-Spinner--sizeLarge"
@@ -17645,7 +17655,7 @@ function Spinner$1({
   hasFocusableParent
 }) {
   const isAfterInitialMount = useIsAfterInitialMount();
-  const className = classNames(styles$O.Spinner, size && styles$O[variationName("size", size)]);
+  const className = classNames(styles$S.Spinner, size && styles$S[variationName("size", size)]);
   const spinnerSVGMarkup = size === "large" ? /* @__PURE__ */ React.createElement("svg", {
     viewBox: "0 0 44 44",
     xmlns: "http://www.w3.org/2000/svg"
@@ -17843,9 +17853,9 @@ function Button({
   const {
     mdUp
   } = useBreakpoints();
-  const className = classNames(styles$R.Button, styles$R.pressable, styles$R[variationName("variant", variant)], styles$R[variationName("size", size)], styles$R[variationName("textAlign", textAlign)], fullWidth && styles$R.fullWidth, disclosure && styles$R.disclosure, icon && children && styles$R.iconWithText, icon && children == null && styles$R.iconOnly, isDisabled && styles$R.disabled, loading && styles$R.loading, pressed && !disabled && !url && styles$R.pressed, removeUnderline && styles$R.removeUnderline, tone && styles$R[variationName("tone", tone)]);
+  const className = classNames(styles$V.Button, styles$V.pressable, styles$V[variationName("variant", variant)], styles$V[variationName("size", size)], styles$V[variationName("textAlign", textAlign)], fullWidth && styles$V.fullWidth, disclosure && styles$V.disclosure, icon && children && styles$V.iconWithText, icon && children == null && styles$V.iconOnly, isDisabled && styles$V.disabled, loading && styles$V.loading, pressed && !disabled && !url && styles$V.pressed, removeUnderline && styles$V.removeUnderline, tone && styles$V[variationName("tone", tone)]);
   const disclosureMarkup = disclosure ? /* @__PURE__ */ React.createElement("span", {
-    className: loading ? styles$R.hidden : styles$R.Icon
+    className: loading ? styles$V.hidden : styles$V.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: loading ? "placeholder" : getDisclosureIconSource(disclosure, SvgChevronUpIcon, SvgChevronDownIcon)
   })) : null;
@@ -17853,7 +17863,7 @@ function Button({
     source: loading ? "placeholder" : icon
   }) : icon;
   const iconMarkup = iconSource ? /* @__PURE__ */ React.createElement("span", {
-    className: loading ? styles$R.hidden : styles$R.Icon
+    className: loading ? styles$V.hidden : styles$V.Icon
   }, iconSource) : null;
   const hasPlainText = ["plain", "monochromePlain"].includes(variant);
   let textFontWeight = "medium";
@@ -17873,7 +17883,7 @@ function Button({
     key: disabled ? "text-disabled" : "text"
   }, children) : null;
   const spinnerSVGMarkup = loading ? /* @__PURE__ */ React.createElement("span", {
-    className: styles$R.Spinner
+    className: styles$V.Spinner
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
     size: "small",
     accessibilityLabel: i18n.translate("Polaris.Button.spinnerAccessibilityLabel")
@@ -17948,7 +17958,7 @@ function buttonFrom({
     variant: plainVariant || destructiveVariant
   }, action, overrides), content);
 }
-var styles$N = {
+var styles$R = {
   "ShadowBevel": "Polaris-ShadowBevel"
 };
 function ShadowBevel(props) {
@@ -17962,7 +17972,7 @@ function ShadowBevel(props) {
   } = props;
   const Component = as;
   return /* @__PURE__ */ React.createElement(Component, {
-    className: styles$N.ShadowBevel,
+    className: styles$R.ShadowBevel,
     style: {
       "--pc-shadow-bevel-z-index": zIndex,
       ...getResponsiveValue("shadow-bevel", "content", mapResponsiveProp(bevel, (bevel2) => bevel2 ? '""' : "none")),
@@ -17977,7 +17987,7 @@ function mapResponsiveProp(responsiveProp, callback) {
   }
   return Object.fromEntries(Object.entries(responsiveProp).map(([breakpointsAlias, value]) => [breakpointsAlias, callback(value)]));
 }
-var styles$M = {
+var styles$Q = {
   "listReset": "Polaris-Box--listReset",
   "Box": "Polaris-Box",
   "visuallyHidden": "Polaris-Box--visuallyHidden",
@@ -18071,7 +18081,7 @@ const Box = /* @__PURE__ */ reactExports.forwardRef(({
     zIndex,
     opacity
   };
-  const className = classNames(styles$M.Box, visuallyHidden && styles$M.visuallyHidden, printHidden && styles$M.printHidden, as === "ul" && styles$M.listReset);
+  const className = classNames(styles$Q.Box, visuallyHidden && styles$Q.visuallyHidden, printHidden && styles$Q.printHidden, as === "ul" && styles$Q.listReset);
   return /* @__PURE__ */ React.createElement(as, {
     className,
     id,
@@ -18108,7 +18118,7 @@ const Card = ({
     minHeight: "100%"
   }, children)));
 };
-var styles$L = {
+var styles$P = {
   "InlineStack": "Polaris-InlineStack"
 };
 const InlineStack = function InlineStack2({
@@ -18128,11 +18138,11 @@ const InlineStack = function InlineStack2({
     ...getResponsiveValue("inline-stack", "flex-direction", direction)
   };
   return /* @__PURE__ */ React.createElement(Element2, {
-    className: styles$L.InlineStack,
+    className: styles$P.InlineStack,
     style
   }, children);
 };
-var styles$K = {
+var styles$O = {
   "BlockStack": "Polaris-BlockStack",
   "listReset": "Polaris-BlockStack--listReset",
   "fieldsetReset": "Polaris-BlockStack--fieldsetReset"
@@ -18147,7 +18157,7 @@ const BlockStack = ({
   reverseOrder = false,
   ...restProps
 }) => {
-  const className = classNames(styles$K.BlockStack, (as === "ul" || as === "ol") && styles$K.listReset, as === "fieldset" && styles$K.fieldsetReset);
+  const className = classNames(styles$O.BlockStack, (as === "ul" || as === "ol") && styles$O.listReset, as === "fieldset" && styles$O.fieldsetReset);
   const style = {
     "--pc-block-stack-align": align ? `${align}` : null,
     "--pc-block-stack-inline-align": inlineAlign ? `${inlineAlign}` : null,
@@ -18170,7 +18180,7 @@ function FilterActionsProvider({
     value: filterActions
   }, children);
 }
-var styles$J = {
+var styles$N = {
   "Item": "Polaris-ActionList__Item",
   "default": "Polaris-ActionList--default",
   "active": "Polaris-ActionList--active",
@@ -18183,7 +18193,7 @@ var styles$J = {
   "Text": "Polaris-ActionList__Text"
 };
 const WithinFilterContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$I = {
+var styles$M = {
   "Badge": "Polaris-Badge",
   "toneSuccess": "Polaris-Badge--toneSuccess",
   "toneSuccess-strong": "Polaris-Badge__toneSuccess--strong",
@@ -18286,7 +18296,7 @@ function getDefaultAccessibilityLabel(i18n, progress, tone) {
     });
   }
 }
-var styles$H = {
+var styles$L = {
   "Pip": "Polaris-Badge-Pip",
   "toneInfo": "Polaris-Badge-Pip--toneInfo",
   "toneSuccess": "Polaris-Badge-Pip--toneSuccess",
@@ -18304,7 +18314,7 @@ function Pip({
   accessibilityLabelOverride
 }) {
   const i18n = useI18n();
-  const className = classNames(styles$H.Pip, tone && styles$H[variationName("tone", tone)], progress && styles$H[variationName("progress", progress)]);
+  const className = classNames(styles$L.Pip, tone && styles$L[variationName("tone", tone)], progress && styles$L[variationName("progress", progress)]);
   const accessibilityLabel = accessibilityLabelOverride ? accessibilityLabelOverride : getDefaultAccessibilityLabel(i18n, progress, tone);
   return /* @__PURE__ */ React.createElement("span", {
     className
@@ -18343,7 +18353,7 @@ function Badge({
 }) {
   const i18n = useI18n();
   const withinFilter = reactExports.useContext(WithinFilterContext);
-  const className = classNames(styles$I.Badge, tone && styles$I[variationName("tone", tone)], size && size !== DEFAULT_SIZE && styles$I[variationName("size", size)], withinFilter && styles$I.withinFilter);
+  const className = classNames(styles$M.Badge, tone && styles$M[variationName("tone", tone)], size && size !== DEFAULT_SIZE && styles$M[variationName("size", size)], withinFilter && styles$M.withinFilter);
   const accessibilityLabel = toneAndProgressLabelOverride ? toneAndProgressLabelOverride : getDefaultAccessibilityLabel(i18n, progress, tone);
   let accessibilityMarkup = Boolean(accessibilityLabel) && /* @__PURE__ */ React.createElement(Text, {
     as: "span",
@@ -18351,7 +18361,7 @@ function Badge({
   }, accessibilityLabel);
   if (progress && !icon) {
     accessibilityMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$I.Icon
+      className: styles$M.Icon
     }, /* @__PURE__ */ React.createElement(Icon, {
       accessibilityLabel,
       source: progressIconMap[progress]
@@ -18360,7 +18370,7 @@ function Badge({
   return /* @__PURE__ */ React.createElement("span", {
     className
   }, accessibilityMarkup, icon && /* @__PURE__ */ React.createElement("span", {
-    className: styles$I.Icon
+    className: styles$M.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: icon
   })), children && /* @__PURE__ */ React.createElement(Text, {
@@ -18379,7 +18389,7 @@ function useToggle(initialState) {
     setFalse: reactExports.useCallback(() => setState(false), [])
   };
 }
-var styles$G = {
+var styles$K = {
   "TooltipContainer": "Polaris-Tooltip__TooltipContainer",
   "HasUnderline": "Polaris-Tooltip__HasUnderline"
 };
@@ -18420,7 +18430,7 @@ function Portal({
 }
 function noop$5() {
 }
-var styles$F = {
+var styles$J = {
   "TooltipOverlay": "Polaris-Tooltip-TooltipOverlay",
   "Tail": "Polaris-Tooltip-TooltipOverlay__Tail",
   "positionedAbove": "Polaris-Tooltip-TooltipOverlay--positionedAbove",
@@ -18520,7 +18530,7 @@ function windowRect(node) {
     width: document2.body.clientWidth
   });
 }
-var styles$E = {
+var styles$I = {
   "PositionedOverlay": "Polaris-PositionedOverlay",
   "fixed": "Polaris-PositionedOverlay--fixed",
   "preventInteraction": "Polaris-PositionedOverlay--preventInteraction"
@@ -18542,7 +18552,7 @@ function useComponentDidMount(callback) {
   }
 }
 const ScrollableContext = /* @__PURE__ */ reactExports.createContext(void 0);
-var styles$D = {
+var styles$H = {
   "Scrollable": "Polaris-Scrollable",
   "hasTopShadow": "Polaris-Scrollable--hasTopShadow",
   "hasBottomShadow": "Polaris-Scrollable--hasBottomShadow",
@@ -18645,7 +18655,7 @@ const ScrollableComponent = /* @__PURE__ */ reactExports.forwardRef(({
       globalThis.removeEventListener("resize", handleResize);
     };
   }, [stickyManager, handleScroll]);
-  const finalClassName = classNames(className, styles$D.Scrollable, vertical && styles$D.vertical, horizontal && styles$D.horizontal, shadow && topShadow && styles$D.hasTopShadow, shadow && bottomShadow && styles$D.hasBottomShadow, scrollbarWidth && styles$D[variationName("scrollbarWidth", scrollbarWidth)], scrollbarGutter && styles$D[variationName("scrollbarGutter", scrollbarGutter.replace(" ", ""))]);
+  const finalClassName = classNames(className, styles$H.Scrollable, vertical && styles$H.vertical, horizontal && styles$H.horizontal, shadow && topShadow && styles$H.hasTopShadow, shadow && bottomShadow && styles$H.hasBottomShadow, scrollbarWidth && styles$H[variationName("scrollbarWidth", scrollbarWidth)], scrollbarGutter && styles$H[variationName("scrollbarGutter", scrollbarGutter.replace(" ", ""))]);
   return /* @__PURE__ */ React.createElement(ScrollableContext.Provider, {
     value: scrollTo
   }, /* @__PURE__ */ React.createElement(StickyManagerContext.Provider, {
@@ -18899,7 +18909,7 @@ class PositionedOverlay extends reactExports.PureComponent {
       width: width == null || isNaN(width) ? void 0 : width,
       zIndex: zIndexOverride || zIndex || void 0
     };
-    const className = classNames(styles$E.PositionedOverlay, fixed && styles$E.fixed, preventInteraction && styles$E.preventInteraction, propClassNames);
+    const className = classNames(styles$I.PositionedOverlay, fixed && styles$I.fixed, preventInteraction && styles$I.preventInteraction, propClassNames);
     return /* @__PURE__ */ React.createElement("div", {
       className,
       style,
@@ -18979,8 +18989,8 @@ function TooltipOverlay({
       positioning,
       chevronOffset
     } = overlayDetails;
-    const containerClassName = classNames(styles$F.TooltipOverlay, measuring && styles$F.measuring, !measuring && styles$F.measured, instant && styles$F.instant, positioning === "above" && styles$F.positionedAbove);
-    const contentClassName = classNames(styles$F.Content, width && styles$F[width]);
+    const containerClassName = classNames(styles$J.TooltipOverlay, measuring && styles$J.measuring, !measuring && styles$J.measured, instant && styles$J.instant, positioning === "above" && styles$J.positionedAbove);
+    const contentClassName = classNames(styles$J.Content, width && styles$J[width]);
     const contentStyles = measuring ? void 0 : {
       minHeight: desiredHeight
     };
@@ -18993,7 +19003,7 @@ function TooltipOverlay({
       style,
       className: containerClassName
     }, layer.props), /* @__PURE__ */ React.createElement("svg", {
-      className: styles$F.Tail,
+      className: styles$J.Tail,
       width: "19",
       height: "11",
       fill: "none"
@@ -19119,7 +19129,7 @@ function Tooltip({
     as: "span",
     variant: "bodyMd"
   }, content))) : null;
-  const wrapperClassNames = classNames(activatorWrapper === "div" && styles$G.TooltipContainer, hasUnderline && styles$G.HasUnderline);
+  const wrapperClassNames = classNames(activatorWrapper === "div" && styles$K.TooltipContainer, hasUnderline && styles$K.HasUnderline);
   return /* @__PURE__ */ React.createElement(WrapperComponent, {
     onFocus: () => {
       handleOpen();
@@ -19202,22 +19212,22 @@ function Item$3({
   role,
   variant = "default"
 }) {
-  const className = classNames(styles$J.Item, disabled && styles$J.disabled, destructive && styles$J.destructive, active && styles$J.active, variant === "default" && styles$J.default, variant === "indented" && styles$J.indented, variant === "menu" && styles$J.menu);
+  const className = classNames(styles$N.Item, disabled && styles$N.disabled, destructive && styles$N.destructive, active && styles$N.active, variant === "default" && styles$N.default, variant === "indented" && styles$N.indented, variant === "menu" && styles$N.menu);
   let prefixMarkup = null;
   if (prefix) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$J.Prefix
+      className: styles$N.Prefix
     }, prefix);
   } else if (icon) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
-      className: styles$J.Prefix
+      className: styles$N.Prefix
     }, /* @__PURE__ */ React.createElement(Icon, {
       source: icon
     }));
   } else if (image) {
     prefixMarkup = /* @__PURE__ */ React.createElement("span", {
       role: "presentation",
-      className: styles$J.Prefix,
+      className: styles$N.Prefix,
       style: {
         backgroundImage: `url(${image}`
       }
@@ -19239,15 +19249,15 @@ function Item$3({
     fontWeight: active ? "semibold" : "regular"
   }, contentText);
   const badgeMarkup = badge && /* @__PURE__ */ React.createElement("span", {
-    className: styles$J.Suffix
+    className: styles$N.Suffix
   }, /* @__PURE__ */ React.createElement(Badge, {
     tone: badge.tone
   }, badge.content));
   const suffixMarkup = suffix && /* @__PURE__ */ React.createElement(Box, null, /* @__PURE__ */ React.createElement("span", {
-    className: styles$J.Suffix
+    className: styles$N.Suffix
   }, suffix));
   const textMarkup = /* @__PURE__ */ React.createElement("span", {
-    className: styles$J.Text
+    className: styles$N.Text
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     variant: "bodyMd",
@@ -19434,7 +19444,7 @@ function KeypressListener({
   }, [keyEvent, handleKeyEvent, useCapture, options, ownerDocument]);
   return null;
 }
-var styles$C = {
+var styles$G = {
   "TextField": "Polaris-TextField",
   "ClearButton": "Polaris-TextField__ClearButton",
   "Loading": "Polaris-TextField__Loading",
@@ -19472,7 +19482,7 @@ var styles$C = {
   "Segment": "Polaris-TextField__Segment",
   "monospaced": "Polaris-TextField--monospaced"
 };
-var styles$B = {
+var styles$F = {
   "hidden": "Polaris-Labelled--hidden",
   "LabelWrapper": "Polaris-Labelled__LabelWrapper",
   "disabled": "Polaris-Labelled--disabled",
@@ -19481,7 +19491,7 @@ var styles$B = {
   "Error": "Polaris-Labelled__Error",
   "Action": "Polaris-Labelled__Action"
 };
-var styles$A = {
+var styles$E = {
   "InlineError": "Polaris-InlineError",
   "Icon": "Polaris-InlineError__Icon"
 };
@@ -19494,9 +19504,9 @@ function InlineError({
   }
   return /* @__PURE__ */ React.createElement("div", {
     id: errorTextID(fieldID),
-    className: styles$A.InlineError
+    className: styles$E.InlineError
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$A.Icon
+    className: styles$E.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgAlertCircleIcon
   })), /* @__PURE__ */ React.createElement(Text, {
@@ -19507,7 +19517,7 @@ function InlineError({
 function errorTextID(id) {
   return `${id}Error`;
 }
-var styles$z = {
+var styles$D = {
   "Label": "Polaris-Label",
   "hidden": "Polaris-Label--hidden",
   "Text": "Polaris-Label__Text",
@@ -19522,13 +19532,13 @@ function Label({
   hidden,
   requiredIndicator
 }) {
-  const className = classNames(styles$z.Label, hidden && styles$z.hidden);
+  const className = classNames(styles$D.Label, hidden && styles$D.hidden);
   return /* @__PURE__ */ React.createElement("div", {
     className
   }, /* @__PURE__ */ React.createElement("label", {
     id: labelID(id),
     htmlFor: id,
-    className: classNames(styles$z.Text, requiredIndicator && styles$z.RequiredIndicator)
+    className: classNames(styles$D.Text, requiredIndicator && styles$D.RequiredIndicator)
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     variant: "bodyMd"
@@ -19547,14 +19557,14 @@ function Labelled({
   readOnly,
   ...rest
 }) {
-  const className = classNames(labelHidden && styles$B.hidden, disabled && styles$B.disabled, readOnly && styles$B.readOnly);
+  const className = classNames(labelHidden && styles$F.hidden, disabled && styles$F.disabled, readOnly && styles$F.readOnly);
   const actionMarkup = action ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$B.Action
+    className: styles$F.Action
   }, buttonFrom(action, {
     variant: "plain"
   })) : null;
   const helpTextMarkup = helpText ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$B.HelpText,
+    className: styles$F.HelpText,
     id: helpTextID$1(id),
     "aria-disabled": disabled
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -19564,13 +19574,13 @@ function Labelled({
     breakWord: true
   }, helpText)) : null;
   const errorMarkup = error && typeof error !== "boolean" && /* @__PURE__ */ React.createElement("div", {
-    className: styles$B.Error
+    className: styles$F.Error
   }, /* @__PURE__ */ React.createElement(InlineError, {
     message: error,
     fieldID: id
   }));
   const labelMarkup = label ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$B.LabelWrapper
+    className: styles$F.LabelWrapper
   }, /* @__PURE__ */ React.createElement(Label, Object.assign({
     id,
     requiredIndicator
@@ -19584,7 +19594,7 @@ function Labelled({
 function helpTextID$1(id) {
   return `${id}HelpText`;
 }
-var styles$y = {
+var styles$C = {
   "Connected": "Polaris-Connected",
   "Item": "Polaris-Connected__Item",
   "Item-primary": "Polaris-Connected__Item--primary",
@@ -19599,7 +19609,7 @@ function Item$2({
     setTrue: forceTrueFocused,
     setFalse: forceFalseFocused
   } = useToggle(false);
-  const className = classNames(styles$y.Item, focused && styles$y["Item-focused"], position === "primary" ? styles$y["Item-primary"] : styles$y["Item-connection"]);
+  const className = classNames(styles$C.Item, focused && styles$C["Item-focused"], position === "primary" ? styles$C["Item-primary"] : styles$C["Item-connection"]);
   return /* @__PURE__ */ React.createElement("div", {
     onBlur: forceFalseFocused,
     onFocus: forceTrueFocused,
@@ -19618,7 +19628,7 @@ function Connected({
     position: "right"
   }, right) : null;
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$y.Connected
+    className: styles$C.Connected
   }, leftConnectionMarkup, /* @__PURE__ */ React.createElement(Item$2, {
     position: "primary"
   }, children), rightConnectionMarkup);
@@ -19640,32 +19650,32 @@ const Spinner = /* @__PURE__ */ React.forwardRef(function Spinner2({
     };
   }
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.Spinner,
+    className: styles$G.Spinner,
     onClick,
     "aria-hidden": true,
     ref
   }, /* @__PURE__ */ React.createElement("div", {
     role: "button",
-    className: styles$C.Segment,
+    className: styles$G.Segment,
     tabIndex: -1,
     onClick: handleStep(1),
     onMouseDown: handleMouseDown(handleStep(1)),
     onMouseUp,
     onBlur
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.SpinnerIcon
+    className: styles$G.SpinnerIcon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgChevronUpIcon
   }))), /* @__PURE__ */ React.createElement("div", {
     role: "button",
-    className: styles$C.Segment,
+    className: styles$G.Segment,
     tabIndex: -1,
     onClick: handleStep(-1),
     onMouseDown: handleMouseDown(handleStep(-1)),
     onMouseUp,
     onBlur
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.SpinnerIcon
+    className: styles$G.SpinnerIcon
   }, /* @__PURE__ */ React.createElement(Icon, {
     source: SvgChevronDownIcon
   }))));
@@ -19692,7 +19702,7 @@ function Resizer({
   }, []);
   const minimumLinesMarkup = minimumLines ? /* @__PURE__ */ React.createElement("div", {
     ref: minimumLinesNode,
-    className: styles$C.DummyInput,
+    className: styles$G.DummyInput,
     dangerouslySetInnerHTML: {
       __html: getContentsForMinimumLines(minimumLines)
     }
@@ -19716,13 +19726,13 @@ function Resizer({
   });
   return /* @__PURE__ */ React.createElement("div", {
     "aria-hidden": true,
-    className: styles$C.Resizer
+    className: styles$G.Resizer
   }, /* @__PURE__ */ React.createElement(EventListener, {
     event: "resize",
     handler: handleHeightCheck
   }), /* @__PURE__ */ React.createElement("div", {
     ref: contentNode,
-    className: styles$C.DummyInput,
+    className: styles$G.DummyInput,
     dangerouslySetInnerHTML: {
       __html: getFinalContents(contents)
     }
@@ -19840,12 +19850,12 @@ function TextField$1({
   const normalizedStep = step != null ? step : 1;
   const normalizedMax = max != null ? max : Infinity;
   const normalizedMin = min != null ? min : -Infinity;
-  const className = classNames(styles$C.TextField, Boolean(normalizedValue) && styles$C.hasValue, disabled && styles$C.disabled, readOnly && styles$C.readOnly, error && styles$C.error, tone && styles$C[variationName("tone", tone)], multiline && styles$C.multiline, focus && !disabled && styles$C.focus, variant !== "inherit" && styles$C[variant], size === "slim" && styles$C.slim);
+  const className = classNames(styles$G.TextField, Boolean(normalizedValue) && styles$G.hasValue, disabled && styles$G.disabled, readOnly && styles$G.readOnly, error && styles$G.error, tone && styles$G[variationName("tone", tone)], multiline && styles$G.multiline, focus && !disabled && styles$G.focus, variant !== "inherit" && styles$G[variant], size === "slim" && styles$G.slim);
   const inputType = type === "currency" ? "text" : type;
   const isNumericType = type === "number" || type === "integer";
   const iconPrefix = /* @__PURE__ */ React.isValidElement(prefix) && prefix.type === Icon;
   const prefixMarkup = prefix ? /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$C.Prefix, iconPrefix && styles$C.PrefixIcon),
+    className: classNames(styles$G.Prefix, iconPrefix && styles$G.PrefixIcon),
     id: `${id}-Prefix`,
     ref: prefixRef
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -19853,7 +19863,7 @@ function TextField$1({
     variant: "bodyMd"
   }, prefix)) : null;
   const suffixMarkup = suffix ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.Suffix,
+    className: styles$G.Suffix,
     id: `${id}-Suffix`,
     ref: suffixRef
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -19861,7 +19871,7 @@ function TextField$1({
     variant: "bodyMd"
   }, suffix)) : null;
   const loadingMarkup = loading ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.Loading,
+    className: styles$G.Loading,
     id: `${id}-Loading`,
     ref: loadingRef
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
@@ -19876,7 +19886,7 @@ function TextField$1({
     }) : i18n.translate("Polaris.TextField.characterCount", {
       count: characterCount
     });
-    const characterCountClassName = classNames(styles$C.CharacterCount, multiline && styles$C.AlignFieldBottom);
+    const characterCountClassName = classNames(styles$G.CharacterCount, multiline && styles$G.AlignFieldBottom);
     const characterCountText = !maxLength ? characterCount : `${characterCount}/${maxLength}`;
     characterCountMarkup = /* @__PURE__ */ React.createElement("div", {
       id: `${id}-CharacterCounter`,
@@ -19893,7 +19903,7 @@ function TextField$1({
   const clearButtonVisible = normalizedValue !== "";
   const clearButtonMarkup = clearButton && clearButtonVisible ? /* @__PURE__ */ React.createElement("button", {
     type: "button",
-    className: styles$C.ClearButton,
+    className: styles$G.ClearButton,
     onClick: handleClearButtonPress,
     disabled
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -19979,7 +19989,7 @@ function TextField$1({
     labelledBy.push(`${id}-VerticalContent`);
   }
   labelledBy.unshift(labelID(id));
-  const inputClassName = classNames(styles$C.Input, align && styles$C[variationName("Input-align", align)], suffix && styles$C["Input-suffixed"], clearButton && styles$C["Input-hasClearButton"], monospaced && styles$C.monospaced, suggestion && styles$C.suggestion, autoSize && styles$C["Input-autoSize"]);
+  const inputClassName = classNames(styles$G.Input, align && styles$G[variationName("Input-align", align)], suffix && styles$G["Input-suffixed"], clearButton && styles$G["Input-hasClearButton"], monospaced && styles$G.monospaced, suggestion && styles$G.suggestion, autoSize && styles$G["Input-autoSize"]);
   const handleOnFocus = (event) => {
     setFocus(true);
     if (selectTextOnFocus && !suggestion) {
@@ -20045,19 +20055,19 @@ function TextField$1({
     "data-form-type": autoComplete === "off" ? "other" : void 0
   });
   const inputWithVerticalContentMarkup = verticalContent ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.VerticalContent,
+    className: styles$G.VerticalContent,
     id: `${id}-VerticalContent`,
     ref: verticalContentRef,
     onClick: handleClickChild
   }, verticalContent, input) : null;
   const inputMarkup = verticalContent ? inputWithVerticalContentMarkup : input;
   const backdropMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$C.Backdrop, connectedLeft && styles$C["Backdrop-connectedLeft"], connectedRight && styles$C["Backdrop-connectedRight"])
+    className: classNames(styles$G.Backdrop, connectedLeft && styles$G["Backdrop-connectedLeft"], connectedRight && styles$G["Backdrop-connectedRight"])
   });
   const inputAndSuffixMarkup = autoSize ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$C.InputAndSuffixWrapper
+    className: styles$G.InputAndSuffixWrapper
   }, /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$C.AutoSizeWrapper, suffix && styles$C.AutoSizeWrapperWithSuffix),
+    className: classNames(styles$G.AutoSizeWrapper, suffix && styles$G.AutoSizeWrapperWithSuffix),
     "data-auto-size-value": value || placeholder
   }, inputMarkup), suffixMarkup) : /* @__PURE__ */ React.createElement(React.Fragment, null, inputMarkup, suffixMarkup);
   return /* @__PURE__ */ React.createElement(Labelled, {
@@ -20292,10 +20302,10 @@ function ActionList({
   }, listeners, sectionMarkup));
 }
 ActionList.Item = Item$3;
-var styles$x = {
+var styles$B = {
   "ActionMenu": "Polaris-ActionMenu"
 };
-var styles$w = {
+var styles$A = {
   "RollupActivator": "Polaris-ActionMenu-RollupActions__RollupActivator"
 };
 function setActivatorAttributes(activator, {
@@ -20351,7 +20361,7 @@ function ConditionalRender({
 }) {
   return condition ? children : null;
 }
-var styles$v = {
+var styles$z = {
   "Popover": "Polaris-Popover",
   "PopoverOverlay": "Polaris-Popover__PopoverOverlay",
   "PopoverOverlay-noAnimation": "Polaris-Popover__PopoverOverlay--noAnimation",
@@ -20378,7 +20388,7 @@ function Section$2({
   children
 }) {
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$v.Section
+    className: styles$z.Section
   }, /* @__PURE__ */ React.createElement(Box, {
     paddingInlineStart: "300",
     paddingInlineEnd: "300",
@@ -20397,7 +20407,7 @@ function Pane({
   subdued,
   onScrolledToBottom
 }) {
-  const className = classNames(styles$v.Pane, fixed && styles$v["Pane-fixed"], subdued && styles$v["Pane-subdued"], captureOverscroll && styles$v["Pane-captureOverscroll"]);
+  const className = classNames(styles$z.Pane, fixed && styles$z["Pane-fixed"], subdued && styles$z["Pane-subdued"], captureOverscroll && styles$z["Pane-captureOverscroll"]);
   const content = sectioned ? wrapWithComponent(children, Section$2, {}) : children;
   const style = {
     height,
@@ -20454,11 +20464,11 @@ class PopoverOverlay extends reactExports.PureComponent {
         captureOverscroll
       } = this.props;
       const isCovering = positioning === "cover";
-      const className = classNames(styles$v.Popover, measuring && styles$v.measuring, (fullWidth || isCovering) && styles$v.fullWidth, hideOnPrint && styles$v["PopoverOverlay-hideOnPrint"], positioning && styles$v[variationName("positioned", positioning)]);
+      const className = classNames(styles$z.Popover, measuring && styles$z.measuring, (fullWidth || isCovering) && styles$z.fullWidth, hideOnPrint && styles$z["PopoverOverlay-hideOnPrint"], positioning && styles$z[variationName("positioned", positioning)]);
       const contentStyles = measuring ? void 0 : {
         height: desiredHeight
       };
-      const contentClassNames = classNames(styles$v.Content, fullHeight && styles$v["Content-fullHeight"], fluidContent && styles$v["Content-fluidContent"]);
+      const contentClassNames = classNames(styles$z.Content, fullHeight && styles$z["Content-fullHeight"], fluidContent && styles$z["Content-fluidContent"]);
       const {
         window: window2
       } = this.state;
@@ -20477,11 +20487,11 @@ class PopoverOverlay extends reactExports.PureComponent {
         handler: this.handleEscape,
         document: window2 == null ? void 0 : window2.document
       }), /* @__PURE__ */ React.createElement("div", {
-        className: styles$v.FocusTracker,
+        className: styles$z.FocusTracker,
         tabIndex: 0,
         onFocus: this.handleFocusFirstItem
       }), /* @__PURE__ */ React.createElement("div", {
-        className: styles$v.ContentContainer
+        className: styles$z.ContentContainer
       }, /* @__PURE__ */ React.createElement("div", {
         id,
         tabIndex: autofocusTarget === "none" ? void 0 : -1,
@@ -20492,7 +20502,7 @@ class PopoverOverlay extends reactExports.PureComponent {
         captureOverscroll,
         sectioned
       }))), /* @__PURE__ */ React.createElement("div", {
-        className: styles$v.FocusTracker,
+        className: styles$z.FocusTracker,
         tabIndex: 0,
         onFocus: this.handleFocusLastItem
       }));
@@ -20615,7 +20625,7 @@ class PopoverOverlay extends reactExports.PureComponent {
       transitionStatus
     } = this.state;
     if (transitionStatus === TransitionStatus.Exited && !active) return null;
-    const className = classNames(styles$v.PopoverOverlay, transitionStatus === TransitionStatus.Entering && styles$v["PopoverOverlay-entering"], transitionStatus === TransitionStatus.Entered && styles$v["PopoverOverlay-open"], transitionStatus === TransitionStatus.Exiting && styles$v["PopoverOverlay-exiting"], preferredPosition === "cover" && styles$v["PopoverOverlay-noAnimation"]);
+    const className = classNames(styles$z.PopoverOverlay, transitionStatus === TransitionStatus.Entering && styles$z["PopoverOverlay-entering"], transitionStatus === TransitionStatus.Entered && styles$z["PopoverOverlay-open"], transitionStatus === TransitionStatus.Exiting && styles$z["PopoverOverlay-exiting"], preferredPosition === "cover" && styles$z["PopoverOverlay-noAnimation"]);
     return /* @__PURE__ */ React.createElement(PositionedOverlay, {
       ref: this.overlayRef,
       fullWidth,
@@ -20822,7 +20832,7 @@ function RollupActions({
     return null;
   }
   const activatorMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: styles$w.RollupActivator
+    className: styles$A.RollupActivator
   }, /* @__PURE__ */ React.createElement(Button, {
     icon: SvgMenuHorizontalIcon,
     accessibilityLabel: accessibilityLabel || i18n.translate("Polaris.ActionMenu.RollupActions.rollupButton"),
@@ -20840,7 +20850,7 @@ function RollupActions({
     onActionAnyItem: toggleRollupOpen
   }));
 }
-var styles$u = {
+var styles$y = {
   "ActionsLayoutOuter": "Polaris-ActionMenu-Actions__ActionsLayoutOuter",
   "ActionsLayout": "Polaris-ActionMenu-Actions__ActionsLayout",
   "ActionsLayout--measuring": "Polaris-ActionMenu-Actions--actionsLayoutMeasuring",
@@ -20889,10 +20899,10 @@ function getVisibleAndHiddenActionsIndices(actions = [], groups = [], disclosure
     hiddenGroups
   };
 }
-var styles$t = {
+var styles$x = {
   "Details": "Polaris-ActionMenu-MenuGroup__Details"
 };
-var styles$s = {
+var styles$w = {
   "SecondaryAction": "Polaris-ActionMenu-SecondaryAction",
   "critical": "Polaris-ActionMenu-SecondaryAction--critical"
 };
@@ -20913,7 +20923,7 @@ function SecondaryAction({
     content: helpText
   }, buttonMarkup) : buttonMarkup;
   return /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$s.SecondaryAction, tone === "critical" && styles$s.critical)
+    className: classNames(styles$w.SecondaryAction, tone === "critical" && styles$w.critical)
   }, actionMarkup);
 }
 function MenuGroup({
@@ -20960,7 +20970,7 @@ function MenuGroup({
     sections,
     onActionAnyItem: handleClose
   }), details && /* @__PURE__ */ React.createElement("div", {
-    className: styles$t.Details
+    className: styles$x.Details
   }, details));
 }
 const ACTION_SPACING = 8;
@@ -21022,7 +21032,7 @@ function ActionsMeasurer({
   });
   useEventListener("resize", handleMeasurement);
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$u.ActionsLayoutMeasurer,
+    className: styles$y.ActionsLayoutMeasurer,
     ref: containerNode
   }, actionsMarkup, groupsMarkup, activator);
 }
@@ -21196,9 +21206,9 @@ function Actions({
     handleMeasurement
   });
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$u.ActionsLayoutOuter
+    className: styles$y.ActionsLayoutOuter
   }, actionsMeasurer, /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$u.ActionsLayout, !hasMeasured && styles$u["ActionsLayout--measuring"])
+    className: classNames(styles$y.ActionsLayout, !hasMeasured && styles$y["ActionsLayout--measuring"])
   }, actionsMarkup, groupsMarkup));
 }
 function isMenuGroup(actionOrMenuGroup) {
@@ -21214,7 +21224,7 @@ function ActionMenu({
   if (actions.length === 0 && groups.length === 0) {
     return null;
   }
-  const actionMenuClassNames = classNames(styles$x.ActionMenu, rollup && styles$x.rollup);
+  const actionMenuClassNames = classNames(styles$B.ActionMenu, rollup && styles$B.rollup);
   const rollupSections = groups.map((group) => convertGroupToSection(group));
   return /* @__PURE__ */ React.createElement("div", {
     className: actionMenuClassNames
@@ -21244,7 +21254,7 @@ function convertGroupToSection({
     }))
   };
 }
-var styles$r = {
+var styles$v = {
   "Listbox": "Polaris-Listbox"
 };
 const ComboboxTextFieldContext = /* @__PURE__ */ reactExports.createContext(void 0);
@@ -21290,7 +21300,7 @@ function scrollOptionIntoView(option, scrollable2) {
 const ListboxContext = /* @__PURE__ */ reactExports.createContext(void 0);
 const WithinListboxContext = /* @__PURE__ */ reactExports.createContext(false);
 const ActionContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$q = {
+var styles$u = {
   "TextOption": "Polaris-Listbox-TextOption",
   "allowMultiple": "Polaris-Listbox-TextOption--allowMultiple",
   "isAction": "Polaris-Listbox-TextOption--isAction",
@@ -21299,7 +21309,7 @@ var styles$q = {
   "Content": "Polaris-Listbox-TextOption__Content",
   "Checkbox": "Polaris-Listbox-TextOption__Checkbox"
 };
-var styles$p = {
+var styles$t = {
   "Checkbox": "Polaris-Checkbox",
   "ChoiceLabel": "Polaris-Checkbox__ChoiceLabel",
   "Backdrop": "Polaris-Checkbox__Backdrop",
@@ -21313,7 +21323,7 @@ var styles$p = {
   "checked": "Polaris-Checkbox--checked",
   "pathAnimation": "Polaris-Checkbox--pathAnimation"
 };
-var styles$o = {
+var styles$s = {
   "Choice": "Polaris-Choice",
   "labelHidden": "Polaris-Choice--labelHidden",
   "Label": "Polaris-Choice__Label",
@@ -21341,7 +21351,7 @@ function Choice({
   bleedInlineEnd,
   tone
 }) {
-  const className = classNames(styles$o.Choice, labelHidden && styles$o.labelHidden, disabled && styles$o.disabled, tone && styles$o[variationName("tone", tone)], labelClassName);
+  const className = classNames(styles$s.Choice, labelHidden && styles$s.labelHidden, disabled && styles$s.disabled, tone && styles$s[variationName("tone", tone)], labelClassName);
   const labelStyle = {
     // Pass through overrides for bleed values if they're set by the prop
     ...getResponsiveProps("choice", "bleed-block-end", "space", bleedBlockEnd || bleed),
@@ -21366,29 +21376,29 @@ function Choice({
       onClick,
       style: sanitizeCustomProperties(labelStyle)
     }, /* @__PURE__ */ React.createElement("span", {
-      className: styles$o.Control
+      className: styles$s.Control
     }, children), /* @__PURE__ */ React.createElement("span", {
-      className: styles$o.Label
+      className: styles$s.Label
     }, /* @__PURE__ */ React.createElement(Text, {
       as: "span",
       variant: "bodyMd"
     }, label)))
   );
   const helpTextMarkup = helpText ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$o.HelpText,
+    className: styles$s.HelpText,
     id: helpTextID(id)
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "span",
     tone: disabled ? void 0 : "subdued"
   }, helpText)) : null;
   const errorMarkup = error && typeof error !== "boolean" && /* @__PURE__ */ React.createElement("div", {
-    className: styles$o.Error
+    className: styles$s.Error
   }, /* @__PURE__ */ React.createElement(InlineError, {
     message: error,
     fieldID: id
   }));
   const descriptionMarkup = helpTextMarkup || errorMarkup ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$o.Descriptions
+    className: styles$s.Descriptions
   }, errorMarkup, helpTextMarkup) : null;
   return descriptionMarkup ? /* @__PURE__ */ React.createElement("div", null, labelMarkup, descriptionMarkup) : labelMarkup;
 }
@@ -21451,7 +21461,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     describedBy.push(ariaDescribedByProp);
   }
   const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
-  const wrapperClassName = classNames(styles$p.Checkbox, error && styles$p.error);
+  const wrapperClassName = classNames(styles$t.Checkbox, error && styles$t.error);
   const isIndeterminate = checked === "indeterminate";
   const isChecked = !isIndeterminate && Boolean(checked);
   const indeterminateAttributes = isIndeterminate ? {
@@ -21465,7 +21475,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     shapeRendering: "geometricPrecision",
     textRendering: "geometricPrecision"
   }, /* @__PURE__ */ React.createElement("path", {
-    className: classNames(checked && styles$p.checked),
+    className: classNames(checked && styles$t.checked),
     d: "M1.5,5.5L3.44655,8.22517C3.72862,8.62007,4.30578,8.64717,4.62362,8.28044L10.5,1.5",
     transform: "translate(2 2.980376)",
     opacity: "0",
@@ -21476,7 +21486,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     strokeLinejoin: "round",
     pathLength: "1"
   }));
-  const inputClassName = classNames(styles$p.Input, isIndeterminate && styles$p["Input-indeterminate"], tone && styles$p[variationName("tone", tone)]);
+  const inputClassName = classNames(styles$t.Input, isIndeterminate && styles$t["Input-indeterminate"], tone && styles$t[variationName("tone", tone)]);
   const extraChoiceProps = {
     helpText,
     error,
@@ -21491,7 +21501,7 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     label,
     labelHidden,
     disabled,
-    labelClassName: classNames(styles$p.ChoiceLabel, labelClassName),
+    labelClassName: classNames(styles$t.ChoiceLabel, labelClassName),
     fill: fill2,
     tone
   }, extraChoiceProps), /* @__PURE__ */ React.createElement("span", {
@@ -21514,11 +21524,11 @@ const Checkbox = /* @__PURE__ */ reactExports.forwardRef(function Checkbox2({
     "aria-describedby": ariaDescribedBy,
     role: isWithinListbox ? "presentation" : "checkbox"
   }, indeterminateAttributes)), /* @__PURE__ */ React.createElement("span", {
-    className: styles$p.Backdrop,
+    className: styles$t.Backdrop,
     onClick: stopPropagation,
     onKeyUp: stopPropagation
   }), /* @__PURE__ */ React.createElement("span", {
-    className: classNames(styles$p.Icon, !isIndeterminate && styles$p.animated)
+    className: classNames(styles$t.Icon, !isIndeterminate && styles$t.animated)
   }, isIndeterminate ? /* @__PURE__ */ React.createElement(Icon, {
     source: SvgMinusIcon
   }) : iconSource)));
@@ -21537,7 +21547,7 @@ const TextOption = /* @__PURE__ */ reactExports.memo(function TextOption2({
     allowMultiple
   } = reactExports.useContext(ComboboxListboxOptionContext);
   const isAction = reactExports.useContext(ActionContext);
-  const textOptionClassName = classNames(styles$q.TextOption, selected && !allowMultiple && styles$q.selected, disabled && styles$q.disabled, allowMultiple && styles$q.allowMultiple, isAction && styles$q.isAction);
+  const textOptionClassName = classNames(styles$u.TextOption, selected && !allowMultiple && styles$u.selected, disabled && styles$u.disabled, allowMultiple && styles$u.allowMultiple, isAction && styles$u.isAction);
   const optionMarkup = selected ? /* @__PURE__ */ React.createElement(Box, {
     width: "100%"
   }, /* @__PURE__ */ React.createElement(InlineStack, {
@@ -21552,16 +21562,16 @@ const TextOption = /* @__PURE__ */ reactExports.memo(function TextOption2({
   return /* @__PURE__ */ React.createElement("div", {
     className: textOptionClassName
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$q.Content
+    className: styles$u.Content
   }, allowMultiple && !isAction ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$q.Checkbox
+    className: styles$u.Checkbox
   }, /* @__PURE__ */ React.createElement(Checkbox, {
     disabled,
     checked: selected,
     label: children
   })) : optionMarkup));
 });
-var styles$n = {
+var styles$r = {
   "ListItem": "Polaris-Listbox-Loading__ListItem",
   "Loading": "Polaris-Listbox-Loading"
 };
@@ -21586,10 +21596,10 @@ const Loading = /* @__PURE__ */ reactExports.memo(function LoadingOption({
     };
   }, [label, setLoading]);
   return /* @__PURE__ */ React.createElement("li", {
-    className: styles$n.ListItem,
+    className: styles$r.ListItem,
     role: "presentation"
   }, children ? children : /* @__PURE__ */ React.createElement("div", {
-    className: styles$n.Loading
+    className: styles$r.Loading
   }, /* @__PURE__ */ React.createElement(Spinner$1, {
     size: "small",
     accessibilityLabel: label
@@ -21604,7 +21614,7 @@ const listboxWithinSectionDataSelector = {
   attribute: "data-polaris-listbox-within-section-item"
 };
 const SectionContext = /* @__PURE__ */ reactExports.createContext(null);
-var styles$m = {
+var styles$q = {
   "SectionGroup": "Polaris-Listbox-Section__SectionGroup",
   "noDivider": "Polaris-Listbox-Section--noDivider"
 };
@@ -21621,7 +21631,7 @@ function Section$1({
   }, listboxSectionDataSelector.props), title, /* @__PURE__ */ React.createElement("ul", {
     role: "group",
     "aria-labelledby": id,
-    className: classNames(styles$m.SectionGroup, !divider && styles$m.noDivider)
+    className: classNames(styles$q.SectionGroup, !divider && styles$q.noDivider)
   }, children)));
 }
 function useSection() {
@@ -21647,12 +21657,12 @@ function Header$2({
     id: sectionId
   }, content);
 }
-var styles$l = {
+var styles$p = {
   "Action": "Polaris-Listbox-Action",
   "ActionDivider": "Polaris-Listbox-Action__ActionDivider",
   "Icon": "Polaris-Listbox-Action__Icon"
 };
-var styles$k = {
+var styles$o = {
   "Option": "Polaris-Listbox-Option",
   "divider": "Polaris-Listbox-Option--divider"
 };
@@ -21714,7 +21724,7 @@ const Option = /* @__PURE__ */ reactExports.memo(function Option2({
     "data-listbox-option-value": value,
     "data-listbox-option-destructive": destructive,
     "data-within-section": isWithinSection,
-    className: classNames(styles$k.Option, divider && styles$k.divider),
+    className: classNames(styles$o.Option, divider && styles$o.divider),
     id: domId,
     ref: listItemRef,
     tabIndex: -1,
@@ -21736,12 +21746,12 @@ function Action(props) {
     divider
   } = props;
   const iconMarkup = icon && /* @__PURE__ */ React.createElement("div", {
-    className: styles$l.Icon
+    className: styles$p.Icon
   }, /* @__PURE__ */ React.createElement(Icon, {
     tone: "subdued",
     source: icon
   }));
-  const className = classNames(styles$l.Action, divider && styles$l.ActionDivider);
+  const className = classNames(styles$p.Action, divider && styles$p.ActionDivider);
   return /* @__PURE__ */ React.createElement(ActionContext.Provider, {
     value: true
   }, /* @__PURE__ */ React.createElement(Option, props, /* @__PURE__ */ React.createElement("div", {
@@ -22044,7 +22054,7 @@ function Listbox({
   }, children ? /* @__PURE__ */ React.createElement("ul", {
     tabIndex: 0,
     role: "listbox",
-    className: styles$r.Listbox,
+    className: styles$v.Listbox,
     "aria-label": inCombobox ? void 0 : accessibilityLabel,
     "aria-labelledby": textFieldLabelId,
     "aria-busy": Boolean(loading),
@@ -22061,7 +22071,7 @@ Listbox.Loading = Loading;
 Listbox.Section = Section$1;
 Listbox.Header = Header$2;
 Listbox.Action = Action;
-var styles$j = {
+var styles$n = {
   "Listbox": "Polaris-Combobox__Listbox"
 };
 function TextField({
@@ -22218,11 +22228,11 @@ function Combobox({
   }, /* @__PURE__ */ React.createElement(ComboboxListboxOptionContext.Provider, {
     value: listboxOptionContextValue
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$j.Listbox
+    className: styles$n.Listbox
   }, children)))) : null);
 }
 Combobox.TextField = TextField;
-var styles$i = {
+var styles$m = {
   "Backdrop": "Polaris-Backdrop",
   "transparent": "Polaris-Backdrop--transparent",
   "belowNavigation": "Polaris-Backdrop--belowNavigation"
@@ -22252,7 +22262,7 @@ function Backdrop(props) {
     transparent,
     setClosing
   } = props;
-  const className = classNames(styles$i.Backdrop, belowNavigation && styles$i.belowNavigation, transparent && styles$i.transparent);
+  const className = classNames(styles$m.Backdrop, belowNavigation && styles$m.belowNavigation, transparent && styles$m.transparent);
   const handleMouseDown = () => {
     if (setClosing) {
       setClosing(true);
@@ -22274,7 +22284,7 @@ function Backdrop(props) {
   }));
 }
 const BannerContext = /* @__PURE__ */ reactExports.createContext(false);
-var styles$h = {
+var styles$l = {
   "Banner": "Polaris-Banner",
   "keyFocused": "Polaris-Banner--keyFocused",
   "withinContentContainer": "Polaris-Banner--withinContentContainer",
@@ -22372,7 +22382,7 @@ function useBannerFocus(bannerRef) {
     shouldShowFocus
   };
 }
-var styles$g = {
+var styles$k = {
   "ButtonGroup": "Polaris-ButtonGroup",
   "Item": "Polaris-ButtonGroup__Item",
   "Item-plain": "Polaris-ButtonGroup__Item--plain",
@@ -22392,7 +22402,7 @@ function Item$1({
     setTrue: forceTrueFocused,
     setFalse: forceFalseFocused
   } = useToggle(false);
-  const className = classNames(styles$g.Item, focused && styles$g["Item-focused"], button.props.variant === "plain" && styles$g["Item-plain"]);
+  const className = classNames(styles$k.Item, focused && styles$k["Item-focused"], button.props.variant === "plain" && styles$k["Item-plain"]);
   return /* @__PURE__ */ React.createElement("div", {
     className,
     onFocus: forceTrueFocused,
@@ -22407,7 +22417,7 @@ function ButtonGroup({
   connectedTop,
   noWrap
 }) {
-  const className = classNames(styles$g.ButtonGroup, gap && styles$g[gap], variant && styles$g[variationName("variant", variant)], fullWidth && styles$g.fullWidth, noWrap && styles$g.noWrap);
+  const className = classNames(styles$k.ButtonGroup, gap && styles$k[gap], variant && styles$k[variationName("variant", variant)], fullWidth && styles$k.fullWidth, noWrap && styles$k.noWrap);
   const contents = elementChildren(children).map((child, index) => /* @__PURE__ */ React.createElement(Item$1, {
     button: child,
     key: index
@@ -22433,7 +22443,7 @@ const Banner = /* @__PURE__ */ reactExports.forwardRef(function Banner2(props, b
     handleMouseUp,
     shouldShowFocus
   } = useBannerFocus(bannerRef);
-  const className = classNames(styles$h.Banner, shouldShowFocus && styles$h.keyFocused, withinContentContainer ? styles$h.withinContentContainer : styles$h.withinPage);
+  const className = classNames(styles$l.Banner, shouldShowFocus && styles$l.keyFocused, withinContentContainer ? styles$l.withinContentContainer : styles$l.withinPage);
   return /* @__PURE__ */ React.createElement(BannerContext.Provider, {
     value: true
   }, /* @__PURE__ */ React.createElement("div", {
@@ -22471,7 +22481,7 @@ function BannerLayout({
       breakWord: true
     }, title) : null,
     bannerIcon: hideIcon ? null : /* @__PURE__ */ React.createElement("span", {
-      className: styles$h[bannerColors.icon]
+      className: styles$l[bannerColors.icon]
     }, /* @__PURE__ */ React.createElement(Icon, {
       source: icon ?? bannerAttributes[bannerTone].icon
     })),
@@ -22483,7 +22493,7 @@ function BannerLayout({
     dismissButton: onDismiss ? /* @__PURE__ */ React.createElement(Button, {
       variant: "tertiary",
       icon: /* @__PURE__ */ React.createElement("span", {
-        className: styles$h[isInlineIconBanner ? "icon-secondary" : bannerColors.icon]
+        className: styles$l[isInlineIconBanner ? "icon-secondary" : bannerColors.icon]
       }, /* @__PURE__ */ React.createElement(Icon, {
         source: SvgXIcon
       })),
@@ -22593,7 +22603,7 @@ function InlineIconBanner({
     gap: "200"
   }, /* @__PURE__ */ React.createElement("div", null, children), actionButtons)))), /* @__PURE__ */ React.createElement("div", {
     ref: dismissIconNode,
-    className: styles$h.DismissIcon
+    className: styles$l.DismissIcon
   }, dismissButton)));
 }
 function WithinContentContainerBanner({
@@ -22627,7 +22637,7 @@ function WithinContentContainerBanner({
     gap: "050"
   }, bannerTitle, /* @__PURE__ */ React.createElement("div", null, children)), actionButtons))), dismissButton));
 }
-var styles$f = {
+var styles$j = {
   "Bleed": "Polaris-Bleed"
 };
 const Bleed = ({
@@ -22669,7 +22679,7 @@ const Bleed = ({
     ...getResponsiveProps("bleed", "margin-inline-end", "space", negativeMarginInlineEnd)
   };
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$f.Bleed,
+    className: styles$j.Bleed,
     style: sanitizeCustomProperties(style)
   }, children);
 };
@@ -22688,10 +22698,10 @@ function Breadcrumbs({
     accessibilityLabel: backAction.accessibilityLabel ?? content
   });
 }
-var styles$e = {
+var styles$i = {
   "ChoiceChildren": "Polaris-ChoiceList__ChoiceChildren"
 };
-var styles$d = {
+var styles$h = {
   "RadioButton": "Polaris-RadioButton",
   "Input": "Polaris-RadioButton__Input",
   "Backdrop": "Polaris-RadioButton__Backdrop",
@@ -22739,7 +22749,7 @@ function RadioButton({
     describedBy.push(ariaDescribedByProp);
   }
   const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
-  const inputClassName = classNames(styles$d.Input, tone && styles$d[variationName("tone", tone)]);
+  const inputClassName = classNames(styles$h.Input, tone && styles$h[variationName("tone", tone)]);
   const extraChoiceProps = {
     helpText,
     bleed,
@@ -22753,12 +22763,12 @@ function RadioButton({
     labelHidden,
     disabled,
     id,
-    labelClassName: styles$d.ChoiceLabel,
+    labelClassName: styles$h.ChoiceLabel,
     fill: fill2
   }, extraChoiceProps, checked ? {
     tone
   } : {}), /* @__PURE__ */ React.createElement("span", {
-    className: styles$d.RadioButton
+    className: styles$h.RadioButton
   }, /* @__PURE__ */ React.createElement("input", {
     id,
     name,
@@ -22773,7 +22783,7 @@ function RadioButton({
     "aria-describedby": ariaDescribedBy,
     ref: inputNode
   }), /* @__PURE__ */ React.createElement("span", {
-    className: styles$d.Backdrop
+    className: styles$h.Backdrop
   })));
 }
 function ChoiceList({
@@ -22818,7 +22828,7 @@ function ChoiceList({
     const isSelected = choiceIsSelected(choice, selected);
     const renderedChildren = choice.renderChildren ? choice.renderChildren(isSelected) : null;
     const children = renderedChildren ? /* @__PURE__ */ React.createElement("div", {
-      className: styles$e.ChoiceChildren
+      className: styles$i.ChoiceChildren
     }, /* @__PURE__ */ React.createElement(Box, {
       paddingBlockStart: {
         xs: "400",
@@ -22892,7 +22902,7 @@ function updateSelectedChoices({
   }
   return selected.filter((selectedChoice) => selectedChoice !== value);
 }
-var styles$c = {
+var styles$g = {
   "ColorPicker": "Polaris-ColorPicker",
   "MainColor": "Polaris-ColorPicker__MainColor",
   "fullWidth": "Polaris-ColorPicker--fullWidth",
@@ -23052,12 +23062,12 @@ class Slidable extends reactExports.PureComponent {
     }) : null;
     return /* @__PURE__ */ React.createElement("div", {
       ref: this.setNode,
-      className: styles$c.Slidable,
+      className: styles$g.Slidable,
       onMouseDown: this.startDrag,
       onTouchStart: this.startDrag
     }, endDragListener, moveListener, touchMoveListener, touchEndListener, touchCancelListener, /* @__PURE__ */ React.createElement("div", {
       style: draggerPositioning,
-      className: styles$c.Dragger,
+      className: styles$g.Dragger,
       ref: this.setDraggerNode
     }));
   }
@@ -23150,10 +23160,10 @@ class AlphaPicker extends reactExports.PureComponent {
     const draggerY = calculateDraggerY$1(alpha, sliderHeight, draggerHeight);
     const background = alphaGradientForColor(color);
     return /* @__PURE__ */ React.createElement("div", {
-      className: styles$c.AlphaPicker,
+      className: styles$g.AlphaPicker,
       ref: this.setNode
     }, /* @__PURE__ */ React.createElement("div", {
-      className: styles$c.ColorLayer,
+      className: styles$g.ColorLayer,
       style: {
         background
       }
@@ -23257,7 +23267,7 @@ class HuePicker extends reactExports.PureComponent {
     } = this.state;
     const draggerY = calculateDraggerY(hue, sliderHeight, draggerHeight);
     return /* @__PURE__ */ React.createElement("div", {
-      className: styles$c.HuePicker,
+      className: styles$g.HuePicker,
       ref: this.setNode
     }, /* @__PURE__ */ React.createElement(Slidable, {
       draggerY,
@@ -23412,16 +23422,16 @@ class ColorPicker extends reactExports.PureComponent {
       color,
       onChange: this.handleAlphaChange
     }) : null;
-    const className = classNames(styles$c.ColorPicker, fullWidth && styles$c.fullWidth);
+    const className = classNames(styles$g.ColorPicker, fullWidth && styles$g.fullWidth);
     return /* @__PURE__ */ React.createElement("div", {
       className,
       id,
       onMouseDown: this.handlePickerDrag
     }, /* @__PURE__ */ React.createElement("div", {
       ref: this.setColorNode,
-      className: styles$c.MainColor
+      className: styles$g.MainColor
     }, /* @__PURE__ */ React.createElement("div", {
-      className: styles$c.ColorLayer,
+      className: styles$g.ColorLayer,
       style: {
         backgroundColor: colorString
       }
@@ -23435,7 +23445,7 @@ class ColorPicker extends reactExports.PureComponent {
     }), alphaSliderMarkup);
   }
 }
-var styles$b = {
+var styles$f = {
   "InlineGrid": "Polaris-InlineGrid"
 };
 function InlineGrid({
@@ -23450,7 +23460,7 @@ function InlineGrid({
     "--pc-inline-grid-align-items": alignItems
   };
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$b.InlineGrid,
+    className: styles$f.InlineGrid,
     style: sanitizeCustomProperties(style)
   }, children);
 }
@@ -23494,7 +23504,7 @@ function isInputFocused() {
   } = document.activeElement;
   return tagName === EditableTarget.Input || tagName === EditableTarget.Textarea || tagName === EditableTarget.Select || document.activeElement.hasAttribute(EditableTarget.ContentEditable);
 }
-var styles$a = {
+var styles$e = {
   "Pagination": "Polaris-Pagination",
   "table": "Polaris-Pagination--table",
   "TablePaginationActions": "Polaris-Pagination__TablePaginationActions"
@@ -23571,7 +23581,7 @@ function Pagination({
     return /* @__PURE__ */ React.createElement("nav", {
       "aria-label": navLabel,
       ref: node,
-      className: classNames(styles$a.Pagination, styles$a.table)
+      className: classNames(styles$e.Pagination, styles$e.table)
     }, previousButtonEvents, nextButtonEvents, /* @__PURE__ */ React.createElement(Box, {
       background: "bg-surface-secondary",
       paddingBlockStart: "150",
@@ -23582,7 +23592,7 @@ function Pagination({
       align: "center",
       blockAlign: "center"
     }, /* @__PURE__ */ React.createElement("div", {
-      className: styles$a.TablePaginationActions,
+      className: styles$e.TablePaginationActions,
       "data-buttongroup-variant": "segmented"
     }, /* @__PURE__ */ React.createElement("div", null, constructedPrevious), labelMarkup2, /* @__PURE__ */ React.createElement("div", null, constructedNext)))));
   }
@@ -23600,7 +23610,7 @@ function Pagination({
   return /* @__PURE__ */ React.createElement("nav", {
     "aria-label": navLabel,
     ref: node,
-    className: styles$a.Pagination
+    className: styles$e.Pagination
   }, previousButtonEvents, nextButtonEvents, /* @__PURE__ */ React.createElement(ButtonGroup, {
     variant: "segmented"
   }, constructedPrevious, labelMarkup, constructedNext));
@@ -23626,6 +23636,364 @@ function handleCallback(fn) {
 }
 function noop$1() {
 }
+function capitalize(word = "") {
+  const wordLower = word.toLowerCase();
+  return wordLower.charAt(0).toUpperCase() + wordLower.slice(1);
+}
+const dragEvents = ["dragover", "dragenter", "drop"];
+function fileAccepted(file, accept) {
+  return file.type === "application/x-moz-file" || accepts(file, accept);
+}
+function getDataTransferFiles(event) {
+  if (isDragEvent(event) && event.dataTransfer) {
+    const dt = event.dataTransfer;
+    if (dt.files && dt.files.length) {
+      return Array.from(dt.files);
+    } else if (dt.items && dt.items.length) {
+      return Array.from(dt.items);
+    }
+  } else if (isChangeEvent(event) && event.target.files) {
+    return Array.from(event.target.files);
+  }
+  return [];
+}
+function accepts(file, acceptedFiles) {
+  if (file && acceptedFiles) {
+    const fileName = file.name || "";
+    const mimeType = file.type || "";
+    const baseMimeType = mimeType.replace(/\/.*$/, "");
+    const acceptedFilesArray = Array.isArray(acceptedFiles) ? acceptedFiles : acceptedFiles.split(",");
+    return acceptedFilesArray.some((type) => {
+      const validType = type.trim();
+      if (validType.startsWith(".")) {
+        return fileName.toLowerCase().endsWith(validType.toLowerCase());
+      } else if (validType.endsWith("/*")) {
+        return baseMimeType === validType.replace(/\/.*$/, "");
+      }
+      return mimeType === validType;
+    });
+  }
+  return true;
+}
+function isDragEvent(event) {
+  return dragEvents.indexOf(event.type) > 0;
+}
+function isChangeEvent(event) {
+  return Object.prototype.hasOwnProperty.call(event, "target");
+}
+const defaultAllowMultiple = true;
+function createAllowMultipleKey(allowMultiple) {
+  return allowMultiple ? "allowMultiple" : "single";
+}
+const DropZoneContext = /* @__PURE__ */ reactExports.createContext({
+  disabled: false,
+  focused: false,
+  size: "extraLarge",
+  type: "file",
+  measuring: false,
+  allowMultiple: defaultAllowMultiple
+});
+var styles$d = {
+  "DropZone": "Polaris-DropZone",
+  "focused": "Polaris-DropZone--focused",
+  "noOutline": "Polaris-DropZone--noOutline",
+  "hasOutline": "Polaris-DropZone--hasOutline",
+  "isDisabled": "Polaris-DropZone--isDisabled",
+  "isDragging": "Polaris-DropZone--isDragging",
+  "sizeLarge": "Polaris-DropZone--sizeLarge",
+  "sizeMedium": "Polaris-DropZone--sizeMedium",
+  "sizeSmall": "Polaris-DropZone--sizeSmall",
+  "measuring": "Polaris-DropZone--measuring",
+  "Container": "Polaris-DropZone__Container",
+  "Overlay": "Polaris-DropZone__Overlay",
+  "hasError": "Polaris-DropZone--hasError"
+};
+var styles$c = {
+  "FileUpload": "Polaris-DropZone-FileUpload",
+  "large": "Polaris-DropZone-FileUpload--large",
+  "small": "Polaris-DropZone-FileUpload--small",
+  "UploadIcon": "Polaris-DropZone-FileUpload__UploadIcon",
+  "disabled": "Polaris-DropZone-FileUpload--disabled"
+};
+function FileUpload(props) {
+  const i18n = useI18n();
+  const {
+    size,
+    measuring,
+    type,
+    disabled,
+    allowMultiple
+  } = reactExports.useContext(DropZoneContext);
+  const typeSuffix = capitalize(type);
+  const allowMultipleKey = createAllowMultipleKey(allowMultiple);
+  const {
+    actionTitle = i18n.translate(`Polaris.DropZone.${allowMultipleKey}.actionTitle${typeSuffix}`),
+    actionHint
+  } = props;
+  const actionMarkup = /* @__PURE__ */ React.createElement(Button, {
+    disabled
+  }, actionTitle);
+  const fileUploadClassName = classNames(styles$c.FileUpload, measuring && styles$c.measuring, size === "large" && styles$c.large, size === "small" && styles$c.small);
+  const actionHintMarkup = actionHint && /* @__PURE__ */ React.createElement(Text, {
+    variant: "bodySm",
+    as: "p",
+    tone: "subdued"
+  }, actionHint);
+  let viewMarkup;
+  switch (size) {
+    case "large":
+    case "medium":
+      viewMarkup = /* @__PURE__ */ React.createElement(BlockStack, {
+        inlineAlign: "center",
+        gap: "200"
+      }, actionMarkup, actionHintMarkup);
+      break;
+    case "small":
+      viewMarkup = /* @__PURE__ */ React.createElement("div", {
+        className: classNames(styles$c.UploadIcon, disabled && styles$c.disabled)
+      }, /* @__PURE__ */ React.createElement(Icon, {
+        source: SvgUploadIcon
+      }));
+      break;
+  }
+  return /* @__PURE__ */ React.createElement("div", {
+    className: fileUploadClassName
+  }, viewMarkup);
+}
+const DropZone = function DropZone2({
+  dropOnPage,
+  label,
+  labelAction,
+  labelHidden,
+  children,
+  disabled = false,
+  outline = true,
+  accept,
+  active,
+  overlay: overlay2 = true,
+  allowMultiple = defaultAllowMultiple,
+  overlayText,
+  errorOverlayText,
+  id: idProp,
+  type = "file",
+  onClick,
+  error,
+  openFileDialog,
+  variableHeight,
+  onFileDialogClose,
+  customValidator,
+  onDrop,
+  onDropAccepted,
+  onDropRejected,
+  onDragEnter,
+  onDragOver,
+  onDragLeave
+}) {
+  var _a;
+  const node = reactExports.useRef(null);
+  const inputRef = reactExports.useRef(null);
+  const dragTargets = reactExports.useRef([]);
+  const adjustSize = reactExports.useCallback(debounce(() => {
+    if (!node.current) {
+      return;
+    }
+    if (variableHeight) {
+      setMeasuring(false);
+      return;
+    }
+    let size2 = "large";
+    const width = node.current.getBoundingClientRect().width;
+    if (width < 100) {
+      size2 = "small";
+    } else if (width < 160) {
+      size2 = "medium";
+    }
+    setSize(size2);
+    measuring && setMeasuring(false);
+  }, 50, {
+    trailing: true
+  }), []);
+  const [dragging, setDragging] = reactExports.useState(false);
+  const [internalError, setInternalError] = reactExports.useState(false);
+  const {
+    value: focused,
+    setTrue: handleFocus,
+    setFalse: handleBlur
+  } = useToggle(false);
+  const [size, setSize] = reactExports.useState("large");
+  const [measuring, setMeasuring] = reactExports.useState(true);
+  const i18n = useI18n();
+  const getValidatedFiles = reactExports.useCallback((files) => {
+    const acceptedFiles = [];
+    const rejectedFiles = [];
+    Array.from(files).forEach((file) => {
+      !fileAccepted(file, accept) || customValidator && !customValidator(file) ? rejectedFiles.push(file) : acceptedFiles.push(file);
+    });
+    if (!allowMultiple) {
+      acceptedFiles.splice(1, acceptedFiles.length);
+      rejectedFiles.push(...acceptedFiles.slice(1));
+    }
+    return {
+      files,
+      acceptedFiles,
+      rejectedFiles
+    };
+  }, [accept, allowMultiple, customValidator]);
+  const handleDrop = reactExports.useCallback((event) => {
+    stopEvent(event);
+    if (disabled) return;
+    const fileList = getDataTransferFiles(event);
+    const {
+      files,
+      acceptedFiles,
+      rejectedFiles
+    } = getValidatedFiles(fileList);
+    dragTargets.current = [];
+    setDragging(false);
+    setInternalError(rejectedFiles.length > 0);
+    onDrop && onDrop(files, acceptedFiles, rejectedFiles);
+    onDropAccepted && acceptedFiles.length && onDropAccepted(acceptedFiles);
+    onDropRejected && rejectedFiles.length && onDropRejected(rejectedFiles);
+    if (!(event.target && "value" in event.target)) return;
+    event.target.value = "";
+  }, [disabled, getValidatedFiles, onDrop, onDropAccepted, onDropRejected]);
+  const handleDragEnter = reactExports.useCallback((event) => {
+    stopEvent(event);
+    if (disabled) return;
+    const fileList = getDataTransferFiles(event);
+    if (event.target && !dragTargets.current.includes(event.target)) {
+      dragTargets.current.push(event.target);
+    }
+    if (dragging) return;
+    const {
+      rejectedFiles
+    } = getValidatedFiles(fileList);
+    setDragging(true);
+    setInternalError(rejectedFiles.length > 0);
+    onDragEnter && onDragEnter();
+  }, [disabled, dragging, getValidatedFiles, onDragEnter]);
+  const handleDragOver = reactExports.useCallback((event) => {
+    stopEvent(event);
+    if (disabled) return;
+    onDragOver && onDragOver();
+  }, [disabled, onDragOver]);
+  const document2 = isServer ? null : ((_a = node.current) == null ? void 0 : _a.ownerDocument) || globalThis.document;
+  const handleDragLeave = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (disabled) return;
+    dragTargets.current = dragTargets.current.filter((el) => {
+      const compareNode = dropOnPage && !isServer ? document2 : node.current;
+      return el !== event.target && compareNode && compareNode.contains(el);
+    });
+    if (dragTargets.current.length > 0) return;
+    setDragging(false);
+    setInternalError(false);
+    onDragLeave && onDragLeave();
+  }, [disabled, onDragLeave, dropOnPage, document2]);
+  const dropNode = dropOnPage && !isServer ? document2 : node.current;
+  useEventListener("drop", handleDrop, dropNode);
+  useEventListener("dragover", handleDragOver, dropNode);
+  useEventListener("dragenter", handleDragEnter, dropNode);
+  useEventListener("dragleave", handleDragLeave, dropNode);
+  useComponentDidMount(() => {
+    adjustSize();
+  });
+  reactExports.useEffect(() => {
+    if (!node.current) {
+      return;
+    }
+    const observer = new ResizeObserver(adjustSize);
+    observer.observe(node.current);
+    return () => {
+      observer.disconnect();
+    };
+  }, [adjustSize]);
+  const uniqId = reactExports.useId();
+  const id = idProp ?? uniqId;
+  const typeSuffix = capitalize(type);
+  const allowMultipleKey = createAllowMultipleKey(allowMultiple);
+  const overlayTextWithDefault = overlayText === void 0 ? i18n.translate(`Polaris.DropZone.${allowMultipleKey}.overlayText${typeSuffix}`) : overlayText;
+  const errorOverlayTextWithDefault = errorOverlayText === void 0 ? i18n.translate(`Polaris.DropZone.errorOverlayText${typeSuffix}`) : errorOverlayText;
+  const labelValue = label || i18n.translate(`Polaris.DropZone.${allowMultipleKey}.label${typeSuffix}`);
+  const labelHiddenValue = label ? labelHidden : true;
+  const classes = classNames(styles$d.DropZone, outline && styles$d.hasOutline, !outline && styles$d.noOutline, focused && styles$d.focused, (active || dragging) && styles$d.isDragging, disabled && styles$d.isDisabled, (internalError || error) && styles$d.hasError, !variableHeight && styles$d[variationName("size", size)], measuring && styles$d.measuring);
+  const dragOverlay = (active || dragging) && !internalError && !error && overlay2 && overlayMarkup(SvgUploadIcon, overlayTextWithDefault);
+  const dragErrorOverlay = dragging && (internalError || error) && overlayMarkup(SvgAlertCircleIcon, errorOverlayTextWithDefault, "critical");
+  const context = reactExports.useMemo(() => ({
+    disabled,
+    focused,
+    size,
+    type: type || "file",
+    measuring,
+    allowMultiple
+  }), [disabled, focused, measuring, size, type, allowMultiple]);
+  const open = reactExports.useCallback(() => {
+    if (!inputRef.current) return;
+    inputRef.current.click();
+  }, [inputRef]);
+  const triggerFileDialog = reactExports.useCallback(() => {
+    open();
+    onFileDialogClose == null ? void 0 : onFileDialogClose();
+  }, [open, onFileDialogClose]);
+  function overlayMarkup(icon, text, color) {
+    return /* @__PURE__ */ React.createElement("div", {
+      className: styles$d.Overlay
+    }, /* @__PURE__ */ React.createElement(BlockStack, {
+      gap: "200",
+      inlineAlign: "center"
+    }, size === "small" && /* @__PURE__ */ React.createElement(Icon, {
+      source: icon,
+      tone: color
+    }), (size === "medium" || size === "large") && /* @__PURE__ */ React.createElement(Text, {
+      variant: "bodySm",
+      as: "p",
+      fontWeight: "bold"
+    }, text)));
+  }
+  function handleClick(event) {
+    if (disabled) return;
+    return onClick ? onClick(event) : open();
+  }
+  reactExports.useEffect(() => {
+    if (openFileDialog) triggerFileDialog();
+  }, [openFileDialog, triggerFileDialog]);
+  return /* @__PURE__ */ React.createElement(DropZoneContext.Provider, {
+    value: context
+  }, /* @__PURE__ */ React.createElement(Labelled, {
+    id,
+    label: labelValue,
+    action: labelAction,
+    labelHidden: labelHiddenValue
+  }, /* @__PURE__ */ React.createElement("div", {
+    ref: node,
+    className: classes,
+    "aria-disabled": disabled,
+    onClick: handleClick,
+    onDragStart: stopEvent
+  }, dragOverlay, dragErrorOverlay, /* @__PURE__ */ React.createElement(Text, {
+    variant: "bodySm",
+    as: "span",
+    visuallyHidden: true
+  }, /* @__PURE__ */ React.createElement("input", {
+    id,
+    accept,
+    disabled,
+    multiple: allowMultiple,
+    onChange: handleDrop,
+    onFocus: handleFocus,
+    onBlur: handleBlur,
+    type: "file",
+    ref: inputRef,
+    autoComplete: "off"
+  })), /* @__PURE__ */ React.createElement("div", {
+    className: styles$d.Container
+  }, children))));
+};
+function stopEvent(event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+DropZone.FileUpload = FileUpload;
 const Focus = /* @__PURE__ */ reactExports.memo(function Focus2({
   children,
   disabled,
@@ -23646,7 +24014,7 @@ const Focus = /* @__PURE__ */ reactExports.memo(function Focus2({
 function isRef$1(ref) {
   return ref.current !== void 0;
 }
-var styles$9 = {
+var styles$b = {
   "Item": "Polaris-FormLayout__Item",
   "grouped": "Polaris-FormLayout--grouped",
   "condensed": "Polaris-FormLayout--condensed"
@@ -23655,7 +24023,7 @@ function Item({
   children,
   condensed = false
 }) {
-  const className = classNames(styles$9.Item, condensed ? styles$9.condensed : styles$9.grouped);
+  const className = classNames(styles$b.Item, condensed ? styles$b.condensed : styles$b.grouped);
   return children ? /* @__PURE__ */ React.createElement("div", {
     className
   }, children) : null;
@@ -24342,12 +24710,12 @@ function useMediaQuery() {
   }
   return mediaQuery;
 }
-var styles$8 = {
+var styles$a = {
   "Body": "Polaris-Modal__Body",
   "NoScrollBody": "Polaris-Modal__NoScrollBody",
   "IFrame": "Polaris-Modal__IFrame"
 };
-var styles$7 = {
+var styles$9 = {
   "Section": "Polaris-Modal-Section",
   "titleHidden": "Polaris-Modal-Section--titleHidden"
 };
@@ -24357,7 +24725,7 @@ function Section({
   subdued = false,
   titleHidden = false
 }) {
-  const className = classNames(styles$7.Section, titleHidden && styles$7.titleHidden);
+  const className = classNames(styles$9.Section, titleHidden && styles$9.titleHidden);
   return /* @__PURE__ */ React.createElement("div", {
     className
   }, /* @__PURE__ */ React.createElement(Box, Object.assign({
@@ -24369,7 +24737,7 @@ function Section({
     background: "bg-surface-tertiary"
   }), children));
 }
-var styles$6 = {
+var styles$8 = {
   "Container": "Polaris-Modal-Dialog__Container",
   "Dialog": "Polaris-Modal-Dialog",
   "Modal": "Polaris-Modal-Dialog__Modal",
@@ -24482,7 +24850,7 @@ function Dialog({
   if (frameContext) {
     toastMessages = frameContext.toastMessages;
   }
-  const classes = classNames(styles$6.Modal, size && styles$6[variationName("size", size)], limitHeight && styles$6.limitHeight);
+  const classes = classNames(styles$8.Modal, size && styles$8[variationName("size", size)], limitHeight && styles$8.limitHeight);
   const TransitionChild = instant ? Transition : FadeUp;
   reactExports.useEffect(() => {
     containerNode.current && !containerNode.current.contains(document.activeElement) && focusFirstFocusableNode(containerNode.current);
@@ -24513,7 +24881,7 @@ function Dialog({
     onEntered,
     onExited
   }), /* @__PURE__ */ React.createElement("div", {
-    className: styles$6.Container,
+    className: styles$8.Container,
     "data-polaris-layer": true,
     "data-polaris-overlay": true,
     ref: containerNode
@@ -24523,7 +24891,7 @@ function Dialog({
     "aria-label": labelledBy,
     "aria-labelledby": labelledBy,
     tabIndex: -1,
-    className: styles$6.Dialog
+    className: styles$8.Dialog
   }, /* @__PURE__ */ React.createElement("div", {
     className: classes
   }, /* @__PURE__ */ React.createElement(KeypressListener, {
@@ -24536,12 +24904,12 @@ function Dialog({
   }), children), ariaLiveAnnouncements))));
 }
 const fadeUpClasses = {
-  appear: classNames(styles$6.animateFadeUp, styles$6.entering),
-  appearActive: classNames(styles$6.animateFadeUp, styles$6.entered),
-  enter: classNames(styles$6.animateFadeUp, styles$6.entering),
-  enterActive: classNames(styles$6.animateFadeUp, styles$6.entered),
-  exit: classNames(styles$6.animateFadeUp, styles$6.exiting),
-  exitActive: classNames(styles$6.animateFadeUp, styles$6.exited)
+  appear: classNames(styles$8.animateFadeUp, styles$8.entering),
+  appearActive: classNames(styles$8.animateFadeUp, styles$8.entered),
+  enter: classNames(styles$8.animateFadeUp, styles$8.entering),
+  enterActive: classNames(styles$8.animateFadeUp, styles$8.entered),
+  exit: classNames(styles$8.animateFadeUp, styles$8.exiting),
+  exitActive: classNames(styles$8.animateFadeUp, styles$8.exited)
 };
 function FadeUp({
   children,
@@ -24709,21 +25077,21 @@ const Modal = function Modal2({
       blockAlign: "center"
     }, /* @__PURE__ */ React.createElement(Spinner$1, null))) : content;
     const scrollContainerMarkup = noScroll ? /* @__PURE__ */ React.createElement("div", {
-      className: styles$8.NoScrollBody
+      className: styles$a.NoScrollBody
     }, /* @__PURE__ */ React.createElement(Box, {
       width: "100%",
       overflowX: "hidden",
       overflowY: "hidden"
     }, body)) : /* @__PURE__ */ React.createElement(Scrollable, {
       shadow: true,
-      className: styles$8.Body,
+      className: styles$a.Body,
       onScrolledToBottom
     }, body);
     const bodyMarkup = src ? /* @__PURE__ */ React.createElement("iframe", {
       name: iFrameName,
       title: iframeTitle,
       src,
-      className: styles$8.IFrame,
+      className: styles$a.IFrame,
       onLoad: handleIFrameLoad,
       style: {
         height: `${iframeHeight}px`
@@ -24768,7 +25136,7 @@ function isRef(ref) {
   return Object.prototype.hasOwnProperty.call(ref, "current");
 }
 Modal.Section = Section;
-var styles$5 = {
+var styles$7 = {
   "Tag": "Polaris-Tag",
   "disabled": "Polaris-Tag--disabled",
   "clickable": "Polaris-Tag--clickable",
@@ -24792,7 +25160,7 @@ function Tag({
 }) {
   const i18n = useI18n();
   const segmented = onRemove && url;
-  const className = classNames(styles$5.Tag, disabled && styles$5.disabled, onClick && styles$5.clickable, onRemove && styles$5.removable, url && !disabled && styles$5.linkable, segmented && styles$5.segmented, size && styles$5[variationName("size", size)]);
+  const className = classNames(styles$7.Tag, disabled && styles$7.disabled, onClick && styles$7.clickable, onRemove && styles$7.removable, url && !disabled && styles$7.linkable, segmented && styles$7.segmented, size && styles$7[variationName("size", size)]);
   let tagTitle = accessibilityLabel;
   if (!tagTitle) {
     tagTitle = typeof children === "string" ? children : void 0;
@@ -24803,7 +25171,7 @@ function Tag({
     truncate: true
   }, /* @__PURE__ */ React.createElement("span", {
     title: tagTitle,
-    className: styles$5.Text
+    className: styles$7.Text
   }, children));
   if (onClick) {
     return /* @__PURE__ */ React.createElement("button", {
@@ -24819,7 +25187,7 @@ function Tag({
   const removeButton = onRemove ? /* @__PURE__ */ React.createElement("button", {
     type: "button",
     "aria-label": ariaLabel,
-    className: classNames(styles$5.Button, segmented && styles$5.segmented),
+    className: classNames(styles$7.Button, segmented && styles$7.segmented),
     onClick: onRemove,
     onMouseUp: handleMouseUpByBlurring,
     disabled
@@ -24827,17 +25195,17 @@ function Tag({
     source: SvgXSmallIcon
   })) : null;
   const tagContent = url && !disabled ? /* @__PURE__ */ React.createElement("a", {
-    className: classNames(styles$5.Link, segmented && styles$5.segmented),
+    className: classNames(styles$7.Link, segmented && styles$7.segmented),
     href: url
   }, tagText) : tagText;
   return /* @__PURE__ */ React.createElement("span", {
     className,
     "aria-disabled": disabled
   }, tagContent, size === "large" && /* @__PURE__ */ React.createElement("span", {
-    className: styles$5.overlay
+    className: styles$7.overlay
   }), removeButton);
 }
-var styles$4 = {
+var styles$6 = {
   "Link": "Polaris-Link",
   "monochrome": "Polaris-Link--monochrome",
   "removeUnderline": "Polaris-Link--removeUnderline"
@@ -24856,7 +25224,7 @@ function Link({
 }) {
   return /* @__PURE__ */ React.createElement(BannerContext.Consumer, null, (BannerContext2) => {
     const shouldBeMonochrome = monochrome || BannerContext2;
-    const className = classNames(styles$4.Link, shouldBeMonochrome && styles$4.monochrome, removeUnderline && styles$4.removeUnderline);
+    const className = classNames(styles$6.Link, shouldBeMonochrome && styles$6.monochrome, removeUnderline && styles$6.removeUnderline);
     return url ? /* @__PURE__ */ React.createElement(UnstyledLink, {
       onClick,
       className,
@@ -24882,13 +25250,13 @@ function isInterface(x) {
 function isReactElement(x) {
   return /* @__PURE__ */ reactExports.isValidElement(x) && x !== void 0;
 }
-var styles$3 = {
+var styles$5 = {
   "Page": "Polaris-Page",
   "fullWidth": "Polaris-Page--fullWidth",
   "narrowWidth": "Polaris-Page--narrowWidth",
   "Content": "Polaris-Page__Content"
 };
-var styles$2 = {
+var styles$4 = {
   "TitleWrapper": "Polaris-Page-Header__TitleWrapper",
   "TitleWrapperExpand": "Polaris-Page-Header__TitleWrapperExpand",
   "BreadcrumbWrapper": "Polaris-Page-Header__BreadcrumbWrapper",
@@ -24904,7 +25272,7 @@ var styles$2 = {
   "mediumTitle": "Polaris-Page-Header--mediumTitle",
   "isSingleRow": "Polaris-Page-Header--isSingleRow"
 };
-var styles$1 = {
+var styles$3 = {
   "Title": "Polaris-Header-Title",
   "TitleWithSubtitle": "Polaris-Header-Title__TitleWithSubtitle",
   "TitleWrapper": "Polaris-Header-Title__TitleWrapper",
@@ -24919,7 +25287,7 @@ function Title({
   compactTitle,
   hasSubtitleMaxWidth
 }) {
-  const className = classNames(styles$1.Title, subtitle && styles$1.TitleWithSubtitle);
+  const className = classNames(styles$3.Title, subtitle && styles$3.TitleWithSubtitle);
   const titleMarkup = title ? /* @__PURE__ */ React.createElement("h1", {
     className
   }, /* @__PURE__ */ React.createElement(Text, {
@@ -24931,10 +25299,10 @@ function Title({
     marginBlock: "100"
   }, titleMetadata) : null;
   const wrappedTitleMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: styles$1.TitleWrapper
+    className: styles$3.TitleWrapper
   }, titleMarkup, titleMetadataMarkup);
   const subtitleMarkup = subtitle ? /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$1.SubTitle, compactTitle && styles$1.SubtitleCompact, hasSubtitleMaxWidth && styles$1.SubtitleMaxWidth)
+    className: classNames(styles$3.SubTitle, compactTitle && styles$3.SubtitleCompact, hasSubtitleMaxWidth && styles$3.SubtitleMaxWidth)
   }, /* @__PURE__ */ React.createElement(Text, {
     as: "p",
     variant: "bodySm",
@@ -24968,7 +25336,7 @@ function Header({
   const isSingleRow = !primaryAction && !pagination && (isInterface(secondaryActions) && !secondaryActions.length || isReactElement(secondaryActions)) && !actionGroups.length;
   const hasActionGroupsOrSecondaryActions = actionGroups.length > 0 || isInterface(secondaryActions) && secondaryActions.length > 0 || isReactElement(secondaryActions);
   const breadcrumbMarkup = backAction ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.BreadcrumbWrapper
+    className: styles$4.BreadcrumbWrapper
   }, /* @__PURE__ */ React.createElement(Box, {
     maxWidth: "100%",
     paddingInlineEnd: "100",
@@ -24977,7 +25345,7 @@ function Header({
     backAction
   }))) : null;
   const paginationMarkup = pagination && !isNavigationCollapsed ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.PaginationWrapper
+    className: styles$4.PaginationWrapper
   }, /* @__PURE__ */ React.createElement(Box, {
     printHidden: true
   }, /* @__PURE__ */ React.createElement(Pagination, Object.assign({}, pagination, {
@@ -24985,7 +25353,7 @@ function Header({
     hasNext: pagination.hasNext
   })))) : null;
   const pageTitleMarkup = /* @__PURE__ */ React.createElement("div", {
-    className: classNames(styles$2.TitleWrapper, !hasActionGroupsOrSecondaryActions && styles$2.TitleWrapperExpand)
+    className: classNames(styles$4.TitleWrapper, !hasActionGroupsOrSecondaryActions && styles$4.TitleWrapperExpand)
   }, /* @__PURE__ */ React.createElement(Title, {
     title,
     subtitle,
@@ -25029,13 +25397,13 @@ function Header({
     blockAlign: "center"
   }, breadcrumbMarkup, paginationMarkup)) : null;
   const additionalMetadataMarkup = additionalMetadata ? /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.AdditionalMetaData
+    className: styles$4.AdditionalMetaData
   }, /* @__PURE__ */ React.createElement(Text, {
     tone: "subdued",
     as: "span",
     variant: "bodySm"
   }, additionalMetadata)) : null;
-  const headerClassNames = classNames(isSingleRow && styles$2.isSingleRow, navigationMarkup && styles$2.hasNavigation, actionMenuMarkup && styles$2.hasActionMenu, isNavigationCollapsed && styles$2.mobileView, !backAction && styles$2.noBreadcrumbs, title && title.length < LONG_TITLE && styles$2.mediumTitle, title && title.length > LONG_TITLE && styles$2.longTitle);
+  const headerClassNames = classNames(isSingleRow && styles$4.isSingleRow, navigationMarkup && styles$4.hasNavigation, actionMenuMarkup && styles$4.hasActionMenu, isNavigationCollapsed && styles$4.mobileView, !backAction && styles$4.noBreadcrumbs, title && title.length < LONG_TITLE && styles$4.mediumTitle, title && title.length > LONG_TITLE && styles$4.longTitle);
   const {
     slot1,
     slot2,
@@ -25078,20 +25446,20 @@ function Header({
   }, /* @__PURE__ */ React.createElement(ConditionalRender, {
     condition: [slot1, slot2, slot3, slot4].some(notNull)
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.Row
+    className: styles$4.Row
   }, slot1, slot2, /* @__PURE__ */ React.createElement(ConditionalRender, {
     condition: [slot3, slot4].some(notNull)
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.RightAlign
+    className: styles$4.RightAlign
   }, /* @__PURE__ */ React.createElement(ConditionalWrapper, {
     condition: [slot3, slot4].every(notNull),
     wrapper: (children) => /* @__PURE__ */ React.createElement("div", {
-      className: styles$2.Actions
+      className: styles$4.Actions
     }, children)
   }, slot3, slot4))))), /* @__PURE__ */ React.createElement(ConditionalRender, {
     condition: [slot5].some(notNull)
   }, /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.Row
+    className: styles$4.Row
   }, /* @__PURE__ */ React.createElement(InlineStack, {
     gap: "400"
   }, slot5))))));
@@ -25119,7 +25487,7 @@ function PrimaryActionMarkup({
     actionMarkup = primaryAction;
   }
   return /* @__PURE__ */ React.createElement("div", {
-    className: styles$2.PrimaryActionWrapper
+    className: styles$4.PrimaryActionWrapper
   }, /* @__PURE__ */ React.createElement(Box, {
     printHidden: true
   }, actionMarkup));
@@ -25211,9 +25579,9 @@ function Page({
   narrowWidth,
   ...rest
 }) {
-  const pageClassName = classNames(styles$3.Page, fullWidth && styles$3.fullWidth, narrowWidth && styles$3.narrowWidth);
+  const pageClassName = classNames(styles$5.Page, fullWidth && styles$5.fullWidth, narrowWidth && styles$5.narrowWidth);
   const hasHeaderContent = rest.title != null && rest.title !== "" || rest.subtitle != null && rest.subtitle !== "" || rest.primaryAction != null || rest.secondaryActions != null && (isInterface(rest.secondaryActions) && rest.secondaryActions.length > 0 || isReactElement(rest.secondaryActions)) || rest.actionGroups != null && rest.actionGroups.length > 0 || rest.backAction != null;
-  const contentClassName = classNames(!hasHeaderContent && styles$3.Content);
+  const contentClassName = classNames(!hasHeaderContent && styles$5.Content);
   const headerMarkup = hasHeaderContent ? /* @__PURE__ */ React.createElement(Header, Object.assign({
     filterActions: true
   }, rest)) : null;
@@ -25222,6 +25590,620 @@ function Page({
   }, headerMarkup, /* @__PURE__ */ React.createElement("div", {
     className: contentClassName
   }, children));
+}
+var sharedStyles = {
+  "RangeSlider": "Polaris-RangeSlider",
+  "Track--dashed-after": "Polaris-RangeSlider--trackDashedAfter",
+  "Track--dashed": "Polaris-RangeSlider--trackDashed"
+};
+var styles$2 = {
+  "DualThumb": "Polaris-RangeSlider-DualThumb",
+  "TrackWrapper": "Polaris-RangeSlider-DualThumb__TrackWrapper",
+  "disabled": "Polaris-RangeSlider-DualThumb--disabled",
+  "Track": "Polaris-RangeSlider-DualThumb__Track",
+  "error": "Polaris-RangeSlider-DualThumb--error",
+  "Thumbs": "Polaris-RangeSlider-DualThumb__Thumbs",
+  "Prefix": "Polaris-RangeSlider-DualThumb__Prefix",
+  "Suffix": "Polaris-RangeSlider-DualThumb__Suffix",
+  "Output": "Polaris-RangeSlider-DualThumb__Output",
+  "OutputBubble": "Polaris-RangeSlider-DualThumb__OutputBubble"
+};
+var Control = /* @__PURE__ */ (function(Control2) {
+  Control2[Control2["Lower"] = 0] = "Lower";
+  Control2[Control2["Upper"] = 1] = "Upper";
+  return Control2;
+})(Control || {});
+class DualThumb extends reactExports.Component {
+  constructor(...args) {
+    super(...args);
+    this.state = {
+      value: sanitizeValue(this.props.value, this.props.min, this.props.max, this.props.step),
+      trackWidth: 0,
+      trackLeft: 0
+    };
+    this.track = /* @__PURE__ */ reactExports.createRef();
+    this.trackWrapper = /* @__PURE__ */ reactExports.createRef();
+    this.thumbLower = /* @__PURE__ */ reactExports.createRef();
+    this.thumbUpper = /* @__PURE__ */ reactExports.createRef();
+    this.setTrackPosition = debounce(() => {
+      if (this.track.current) {
+        const thumbSize = 16;
+        const {
+          width,
+          left
+        } = this.track.current.getBoundingClientRect();
+        const adjustedTrackWidth = width - thumbSize;
+        const adjustedTrackLeft = left + thumbSize / 2;
+        const range = this.props.max - this.props.min;
+        const minValuePosition = this.props.min / range * adjustedTrackWidth;
+        this.setState({
+          trackWidth: adjustedTrackWidth,
+          trackLeft: adjustedTrackLeft - minValuePosition
+        });
+      }
+    }, 40, {
+      leading: true,
+      trailing: true,
+      maxWait: 40
+    });
+    this.handleMouseDownThumbLower = (event) => {
+      if (event.button !== 0 || this.props.disabled) return;
+      registerMouseMoveHandler(this.handleMouseMoveThumbLower);
+      event.stopPropagation();
+    };
+    this.handleMouseMoveThumbLower = (event) => {
+      const valueUpper = this.state.value[1];
+      this.setValue([this.actualXPosition(event.clientX), valueUpper], Control.Upper);
+    };
+    this.handleTouchStartThumbLower = (event) => {
+      if (this.props.disabled) return;
+      registerTouchMoveHandler(this.handleTouchMoveThumbLower);
+      event.stopPropagation();
+    };
+    this.handleTouchMoveThumbLower = (event) => {
+      event.preventDefault();
+      const valueUpper = this.state.value[1];
+      this.setValue([this.actualXPosition(event.touches[0].clientX), valueUpper], Control.Upper);
+    };
+    this.handleMouseDownThumbUpper = (event) => {
+      if (event.button !== 0 || this.props.disabled) return;
+      registerMouseMoveHandler(this.handleMouseMoveThumbUpper);
+      event.stopPropagation();
+    };
+    this.handleMouseMoveThumbUpper = (event) => {
+      const valueLower = this.state.value[0];
+      this.setValue([valueLower, this.actualXPosition(event.clientX)], Control.Lower);
+    };
+    this.handleTouchStartThumbUpper = (event) => {
+      if (this.props.disabled) return;
+      registerTouchMoveHandler(this.handleTouchMoveThumbUpper);
+      event.stopPropagation();
+    };
+    this.handleTouchMoveThumbUpper = (event) => {
+      event.preventDefault();
+      const valueLower = this.state.value[0];
+      this.setValue([valueLower, this.actualXPosition(event.touches[0].clientX)], Control.Lower);
+    };
+    this.handleKeypressLower = (event) => {
+      if (this.props.disabled) return;
+      const {
+        incrementValueLower,
+        decrementValueLower
+      } = this;
+      const handlerMap = {
+        [Key.UpArrow]: incrementValueLower,
+        [Key.RightArrow]: incrementValueLower,
+        [Key.DownArrow]: decrementValueLower,
+        [Key.LeftArrow]: decrementValueLower
+      };
+      const handler = handlerMap[event.keyCode];
+      if (handler != null) {
+        event.preventDefault();
+        event.stopPropagation();
+        handler();
+      }
+    };
+    this.handleKeypressUpper = (event) => {
+      if (this.props.disabled) return;
+      const {
+        incrementValueUpper,
+        decrementValueUpper
+      } = this;
+      const handlerMap = {
+        [Key.UpArrow]: incrementValueUpper,
+        [Key.RightArrow]: incrementValueUpper,
+        [Key.DownArrow]: decrementValueUpper,
+        [Key.LeftArrow]: decrementValueUpper
+      };
+      const handler = handlerMap[event.keyCode];
+      if (handler != null) {
+        event.preventDefault();
+        event.stopPropagation();
+        handler();
+      }
+    };
+    this.incrementValueLower = () => {
+      this.setValue([this.state.value[0] + this.props.step, this.state.value[1]], Control.Upper);
+    };
+    this.decrementValueLower = () => {
+      this.setValue([this.state.value[0] - this.props.step, this.state.value[1]], Control.Upper);
+    };
+    this.incrementValueUpper = () => {
+      this.setValue([this.state.value[0], this.state.value[1] + this.props.step], Control.Lower);
+    };
+    this.decrementValueUpper = () => {
+      this.setValue([this.state.value[0], this.state.value[1] - this.props.step], Control.Lower);
+    };
+    this.dispatchValue = () => {
+      const {
+        onChange,
+        id
+      } = this.props;
+      const {
+        value
+      } = this.state;
+      onChange(value, id);
+    };
+    this.setValue = (dirtyValue, control) => {
+      const {
+        props: {
+          min,
+          max,
+          step
+        },
+        state: {
+          value
+        }
+      } = this;
+      const sanitizedValue = sanitizeValue(dirtyValue, min, max, step, control);
+      if (isTupleEqual(sanitizedValue, value) === false) {
+        this.setState({
+          value: sanitizedValue
+        }, this.dispatchValue);
+      }
+    };
+    this.handleMouseDownTrack = (event) => {
+      if (event.button !== 0 || this.props.disabled) return;
+      event.preventDefault();
+      const clickXPosition = this.actualXPosition(event.clientX);
+      const {
+        value
+      } = this.state;
+      const distanceFromLowerThumb = Math.abs(value[0] - clickXPosition);
+      const distanceFromUpperThumb = Math.abs(value[1] - clickXPosition);
+      if (distanceFromLowerThumb <= distanceFromUpperThumb) {
+        this.setValue([clickXPosition, value[1]], Control.Upper);
+        registerMouseMoveHandler(this.handleMouseMoveThumbLower);
+        if (this.thumbLower.current != null) {
+          this.thumbLower.current.focus();
+        }
+      } else {
+        this.setValue([value[0], clickXPosition], Control.Lower);
+        registerMouseMoveHandler(this.handleMouseMoveThumbUpper);
+        if (this.thumbUpper.current != null) {
+          this.thumbUpper.current.focus();
+        }
+      }
+    };
+    this.handleTouchStartTrack = (event) => {
+      if (this.props.disabled) return;
+      event.preventDefault();
+      const clickXPosition = this.actualXPosition(event.touches[0].clientX);
+      const {
+        value
+      } = this.state;
+      const distanceFromLowerThumb = Math.abs(value[0] - clickXPosition);
+      const distanceFromUpperThumb = Math.abs(value[1] - clickXPosition);
+      if (distanceFromLowerThumb <= distanceFromUpperThumb) {
+        this.setValue([clickXPosition, value[1]], Control.Upper);
+        registerTouchMoveHandler(this.handleTouchMoveThumbLower);
+        if (this.thumbLower.current != null) {
+          this.thumbLower.current.focus();
+        }
+      } else {
+        this.setValue([value[0], clickXPosition], Control.Lower);
+        registerTouchMoveHandler(this.handleTouchMoveThumbUpper);
+        if (this.thumbUpper.current != null) {
+          this.thumbUpper.current.focus();
+        }
+      }
+    };
+    this.actualXPosition = (dirtyXPosition) => {
+      if (this.track.current) {
+        const {
+          min,
+          max
+        } = this.props;
+        const {
+          trackLeft,
+          trackWidth
+        } = this.state;
+        const relativeX = dirtyXPosition - trackLeft;
+        const percentageOfTrack = relativeX / trackWidth;
+        return percentageOfTrack * (max - min);
+      } else {
+        return 0;
+      }
+    };
+  }
+  static getDerivedStateFromProps(props, state) {
+    const {
+      min,
+      step,
+      max,
+      value,
+      onChange,
+      id
+    } = props;
+    const {
+      prevValue
+    } = state;
+    if (isTupleEqual(prevValue, value)) {
+      return null;
+    }
+    const sanitizedValue = sanitizeValue(value, min, max, step);
+    if (!isTupleEqual(value, sanitizedValue)) {
+      onChange(sanitizedValue, id);
+    }
+    return {
+      prevValue: value,
+      value: sanitizedValue
+    };
+  }
+  componentDidMount() {
+    this.setTrackPosition();
+    if (this.trackWrapper.current != null) {
+      this.trackWrapper.current.addEventListener("touchstart", this.handleTouchStartTrack, {
+        passive: false
+      });
+    }
+  }
+  componentWillUnmount() {
+    if (this.trackWrapper.current != null) {
+      this.trackWrapper.current.removeEventListener("touchstart", this.handleTouchStartTrack);
+    }
+  }
+  render() {
+    const {
+      id,
+      min,
+      max,
+      prefix,
+      suffix,
+      disabled,
+      output,
+      error,
+      onFocus,
+      onBlur,
+      label,
+      labelAction,
+      labelHidden,
+      helpText
+    } = this.props;
+    const {
+      value
+    } = this.state;
+    const idLower = id;
+    const idUpper = `${id}Upper`;
+    const describedBy = [];
+    if (error) {
+      describedBy.push(`${id}Error`);
+    }
+    const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
+    const trackWrapperClassName = classNames(styles$2.TrackWrapper, error && styles$2.error, disabled && styles$2.disabled);
+    const thumbLowerClassName = classNames(styles$2.Thumbs, styles$2.ThumbLower, disabled && styles$2.disabled);
+    const thumbUpperClassName = classNames(styles$2.Thumbs, styles$2.ThumbUpper, disabled && styles$2.disabled);
+    const trackWidth = this.state.trackWidth;
+    const range = max - min;
+    const minValuePosition = min / range * trackWidth;
+    const leftPositionThumbLower = value[0] / range * trackWidth - minValuePosition;
+    const leftPositionThumbUpper = value[1] / range * trackWidth - minValuePosition;
+    const outputLowerClassName = classNames(styles$2.Output, styles$2.OutputLower);
+    const outputMarkupLower = !disabled && output ? /* @__PURE__ */ React.createElement("output", {
+      htmlFor: idLower,
+      className: outputLowerClassName,
+      style: {
+        left: `${leftPositionThumbLower}px`
+      }
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: styles$2.OutputBubble
+    }, /* @__PURE__ */ React.createElement(Text, {
+      as: "span",
+      variant: "headingSm",
+      alignment: "center"
+    }, value[0]))) : null;
+    const outputUpperClassName = classNames(styles$2.Output, styles$2.OutputUpper);
+    const outputMarkupUpper = !disabled && output ? /* @__PURE__ */ React.createElement("output", {
+      htmlFor: idUpper,
+      className: outputUpperClassName,
+      style: {
+        left: `${leftPositionThumbUpper}px`
+      }
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: styles$2.OutputBubble
+    }, /* @__PURE__ */ React.createElement(Text, {
+      as: "span",
+      variant: "headingSm",
+      alignment: "center"
+    }, value[1]))) : null;
+    const cssVars = {
+      "--pc-range-slider-progress-lower": `${leftPositionThumbLower}px`,
+      "--pc-range-slider-progress-upper": `${leftPositionThumbUpper}px`
+    };
+    const prefixMarkup = prefix && /* @__PURE__ */ React.createElement("div", {
+      className: styles$2.Prefix
+    }, prefix);
+    const suffixMarkup = suffix && /* @__PURE__ */ React.createElement("div", {
+      className: styles$2.Suffix
+    }, suffix);
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(Labelled, {
+      id,
+      label,
+      error,
+      action: labelAction,
+      labelHidden,
+      helpText
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: classNames(styles$2.DualThumb, sharedStyles.RangeSlider)
+    }, prefixMarkup, /* @__PURE__ */ React.createElement("div", {
+      className: trackWrapperClassName,
+      onMouseDown: this.handleMouseDownTrack,
+      ref: this.trackWrapper
+    }, /* @__PURE__ */ React.createElement("div", {
+      className: styles$2.Track,
+      style: cssVars,
+      ref: this.track
+    }), /* @__PURE__ */ React.createElement("div", {
+      className: sharedStyles["Track--dashed"]
+    }), /* @__PURE__ */ React.createElement("div", {
+      id: idLower,
+      className: thumbLowerClassName,
+      style: {
+        left: `${leftPositionThumbLower}px`
+      },
+      role: "slider",
+      "aria-disabled": disabled,
+      "aria-valuemin": min,
+      "aria-valuemax": max,
+      "aria-valuenow": value[0],
+      "aria-invalid": Boolean(error),
+      "aria-describedby": ariaDescribedBy,
+      "aria-labelledby": labelID(id),
+      onFocus,
+      onBlur,
+      tabIndex: 0,
+      onKeyDown: this.handleKeypressLower,
+      onMouseDown: this.handleMouseDownThumbLower,
+      onTouchStart: this.handleTouchStartThumbLower,
+      ref: this.thumbLower
+    }), outputMarkupLower, /* @__PURE__ */ React.createElement("div", {
+      id: idUpper,
+      className: thumbUpperClassName,
+      style: {
+        left: `${leftPositionThumbUpper}px`
+      },
+      role: "slider",
+      "aria-disabled": disabled,
+      "aria-valuemin": min,
+      "aria-valuemax": max,
+      "aria-valuenow": value[1],
+      "aria-invalid": Boolean(error),
+      "aria-describedby": ariaDescribedBy,
+      "aria-labelledby": labelID(id),
+      onFocus,
+      onBlur,
+      tabIndex: 0,
+      onKeyDown: this.handleKeypressUpper,
+      onMouseDown: this.handleMouseDownThumbUpper,
+      onTouchStart: this.handleTouchStartThumbUpper,
+      ref: this.thumbUpper
+    }), outputMarkupUpper), suffixMarkup)), /* @__PURE__ */ React.createElement(EventListener, {
+      event: "resize",
+      handler: this.setTrackPosition
+    }));
+  }
+}
+DualThumb.contextType = FeaturesContext;
+function registerMouseMoveHandler(handler) {
+  document.addEventListener("mousemove", handler);
+  document.addEventListener("mouseup", () => {
+    document.removeEventListener("mousemove", handler);
+  }, {
+    once: true
+  });
+}
+function registerTouchMoveHandler(handler) {
+  const removeHandler = () => {
+    document.removeEventListener("touchmove", handler);
+    document.removeEventListener("touchend", removeHandler);
+    document.removeEventListener("touchcancel", removeHandler);
+  };
+  document.addEventListener("touchmove", handler, {
+    passive: false
+  });
+  document.addEventListener("touchend", removeHandler, {
+    once: true
+  });
+  document.addEventListener("touchcancel", removeHandler, {
+    once: true
+  });
+}
+function sanitizeValue(value, min, max, step, control = Control.Upper) {
+  let upperValue = inBoundsUpper(roundedToStep(value[1]));
+  let lowerValue = inBoundsLower(roundedToStep(value[0]));
+  const maxLowerValue = upperValue - step;
+  const minUpperValue = lowerValue + step;
+  if (control === Control.Upper && lowerValue > maxLowerValue) {
+    lowerValue = maxLowerValue;
+  } else if (control === Control.Lower && upperValue < minUpperValue) {
+    upperValue = minUpperValue;
+  }
+  return [lowerValue, upperValue];
+  function inBoundsUpper(value2) {
+    const lowerMin = min + step;
+    if (value2 < lowerMin) {
+      return lowerMin;
+    } else if (value2 > max) {
+      return max;
+    } else {
+      return value2;
+    }
+  }
+  function inBoundsLower(value2) {
+    const upperMax = max - step;
+    if (value2 < min) {
+      return min;
+    } else if (value2 > upperMax) {
+      return upperMax;
+    } else {
+      return value2;
+    }
+  }
+  function roundedToStep(value2) {
+    return Math.round(value2 / step) * step;
+  }
+}
+function isTupleEqual(a, b) {
+  if (a == null || b == null) {
+    return false;
+  }
+  return a[0] === b[0] && a[1] === b[1];
+}
+var styles$1 = {
+  "SingleThumb": "Polaris-RangeSlider-SingleThumb",
+  "disabled": "Polaris-RangeSlider-SingleThumb--disabled",
+  "InputWrapper": "Polaris-RangeSlider-SingleThumb__InputWrapper",
+  "Prefix": "Polaris-RangeSlider-SingleThumb__Prefix",
+  "Suffix": "Polaris-RangeSlider-SingleThumb__Suffix",
+  "Input": "Polaris-RangeSlider-SingleThumb__Input",
+  "error": "Polaris-RangeSlider-SingleThumb--error",
+  "Output": "Polaris-RangeSlider-SingleThumb__Output",
+  "OutputBubble": "Polaris-RangeSlider-SingleThumb__OutputBubble"
+};
+function invertNumber(number) {
+  if (Math.sign(number) === 1) {
+    return -Math.abs(number);
+  } else if (Math.sign(number) === -1) {
+    return Math.abs(number);
+  } else {
+    return 0;
+  }
+}
+function SingleThumb(props) {
+  const {
+    id,
+    error,
+    helpText,
+    value,
+    min,
+    max,
+    disabled,
+    output,
+    prefix,
+    suffix,
+    label,
+    labelAction,
+    labelHidden,
+    step,
+    onBlur,
+    onFocus
+  } = props;
+  const clampedValue = clamp(value, min, max);
+  const describedBy = [];
+  if (error) {
+    describedBy.push(`${id}Error`);
+  }
+  if (helpText) {
+    describedBy.push(helpTextID$1(id));
+  }
+  const ariaDescribedBy = describedBy.length ? describedBy.join(" ") : void 0;
+  const sliderProgress = (clampedValue - min) * 100 / (max - min);
+  const outputFactor = invertNumber((sliderProgress - 50) / 100);
+  const cssVars = {
+    "--pc-range-slider-min": min,
+    "--pc-range-slider-max": max,
+    "--pc-range-slider-current": clampedValue,
+    "--pc-range-slider-progress": `${sliderProgress}%`,
+    "--pc-range-slider-output-factor": `${outputFactor}`
+  };
+  const outputMarkup = !disabled && output && /* @__PURE__ */ React.createElement("output", {
+    htmlFor: id,
+    className: styles$1.Output
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: styles$1.OutputBubble
+  }, /* @__PURE__ */ React.createElement(Text, {
+    as: "span",
+    variant: "headingSm",
+    alignment: "center"
+  }, clampedValue)));
+  const prefixMarkup = prefix && /* @__PURE__ */ React.createElement("div", {
+    className: styles$1.Prefix
+  }, prefix);
+  const suffixMarkup = suffix && /* @__PURE__ */ React.createElement("div", {
+    className: styles$1.Suffix
+  }, suffix);
+  const className = classNames(styles$1.SingleThumb, sharedStyles.RangeSlider, error && styles$1.error, disabled && styles$1.disabled);
+  return /* @__PURE__ */ React.createElement(Labelled, {
+    id,
+    label,
+    error,
+    action: labelAction,
+    labelHidden,
+    helpText
+  }, /* @__PURE__ */ React.createElement("div", {
+    className,
+    style: cssVars
+  }, prefixMarkup, /* @__PURE__ */ React.createElement("div", {
+    className: classNames(styles$1.InputWrapper, sharedStyles["Track--dashed-after"])
+  }, /* @__PURE__ */ React.createElement("input", {
+    type: "range",
+    className: styles$1.Input,
+    id,
+    name: id,
+    min,
+    max,
+    step,
+    value: clampedValue,
+    disabled,
+    onChange: handleChange,
+    onFocus,
+    onBlur,
+    "aria-valuemin": min,
+    "aria-valuemax": max,
+    "aria-valuenow": clampedValue,
+    "aria-invalid": Boolean(error),
+    "aria-describedby": ariaDescribedBy
+  }), outputMarkup), suffixMarkup));
+  function handleChange(event) {
+    const {
+      onChange
+    } = props;
+    onChange && onChange(parseFloat(event.currentTarget.value), id);
+  }
+}
+function RangeSlider({
+  min = 0,
+  max = 100,
+  step = 1,
+  value,
+  ...rest
+}) {
+  const id = reactExports.useId();
+  const sharedProps = {
+    id,
+    min,
+    max,
+    step,
+    ...rest
+  };
+  return isDualThumb(value) ? /* @__PURE__ */ React.createElement(DualThumb, Object.assign({
+    value
+  }, sharedProps)) : /* @__PURE__ */ React.createElement(SingleThumb, Object.assign({
+    value
+  }, sharedProps));
+}
+function isDualThumb(value) {
+  return Array.isArray(value);
 }
 var styles = {
   "Select": "Polaris-Select",
@@ -25442,6 +26424,14 @@ function codPriceValues(price, codFee) {
   const p = Number(price);
   const fee = Number(codFee) || 0;
   return { price: p, cod_fee: fee, cod_price: Math.round((p + fee) * 100) / 100 };
+}
+const COD_LOGO_MAX_CHARS = 4e4;
+const LOGO_URL_RE = /^https:\/\/[^\s"'<>()\\]{1,500}$/;
+const LOGO_DATA_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+function isValidCodLogo(value) {
+  if (typeof value !== "string" || !value) return false;
+  if (value.startsWith("data:")) return value.length <= COD_LOGO_MAX_CHARS && LOGO_DATA_RE.test(value);
+  return LOGO_URL_RE.test(value);
 }
 function moneyFormatter(currencyCode = "INR") {
   let nf;
@@ -26457,9 +27447,8 @@ function GeneralSectionComponent({
       }
     );
   }
-  if (layout === "layout2" || layout === "layout5" || layout === "layout6") {
-    const isQuickShop = layout === "layout5" || layout === "layout6";
-    const isWeightBox = layout === "layout5";
+  if (layout === "layout2" || layout === "layout5" || layout === "layout6" || layout === "layout7") {
+    const isQuickShop = layout === "layout5" || layout === "layout6" || layout === "layout7";
     const tabCount = Number(config2.tab_count || 1);
     const addTab = () => updateConfig("tab_count", tabCount + 1);
     const removeTab = (i) => {
@@ -26469,12 +27458,12 @@ function GeneralSectionComponent({
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       SectionCard,
       {
-        title: isWeightBox ? "Box Collections" : isQuickShop ? "Shop Collections" : "Collections (Switching Tabs)",
+        title: isQuickShop ? "Box Collections" : "Collections (Switching Tabs)",
         expanded,
         onToggle,
         badge: `${tabCount} ${tabCount === 1 ? "collection" : "collections"}`,
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-          isQuickShop ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: isWeightBox ? "Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). Weight tiers and the max box weight are under Advanced → Offer." : "Products from these collections fill the page. With more than one, each becomes a filter chip (see Filters). Tiers are under Advanced → Offer." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          isQuickShop ? /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). The tiers are under Advanced → Offer." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-bundle-rule-box", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodyMd", as: "p", fontWeight: "bold", children: "Bundle Rule" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -26655,119 +27644,127 @@ function GeneralSectionComponent({
   ] }) });
 }
 const GeneralSection = reactExports.memo(GeneralSectionComponent);
-function BannerSectionComponent({ config: config2, expanded, onToggle, updateConfig, PxField: PxField2 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Banner Settings", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Checkbox,
-      {
-        label: "Show Banner",
-        checked: !!config2.show_banner,
-        onChange: (checked) => updateConfig("show_banner", checked)
-      }
-    ),
-    config2.show_banner && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Desktop Banner Image URL", value: config2.banner_image_url, onChange: (v) => updateConfig("banner_image_url", v), autoComplete: "off", placeholder: "https://example.com/desktop-banner.jpg" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Mobile Banner Image URL", value: config2.banner_image_mobile_url, onChange: (v) => updateConfig("banner_image_mobile_url", v), autoComplete: "off", placeholder: "https://example.com/mobile-banner.jpg", helpText: "Leave empty to use desktop banner on mobile" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        Select,
+const CLASSIC_DESIGNS = [
+  { layout: "layout1", name: "Guided Architect", short: "Step by step", description: "One collection per step, in order." },
+  { layout: "layout2", name: "Velocity Stream", short: "Collection tabs", description: "Collections as tabs, picked in any order." },
+  { layout: "layout4", name: "Editorial Split", short: "One grid", description: "One collection in a single grid." }
+];
+const CLASSIC_LAYOUTS = CLASSIC_DESIGNS.map((d) => d.layout);
+const MAX_STEPS = 5;
+const MAX_TABS = 8;
+function isClassicLayout(layout) {
+  return !layout || CLASSIC_LAYOUTS.includes(layout);
+}
+function classicDesignName(layout) {
+  return (CLASSIC_DESIGNS.find((d) => d.layout === layout) || CLASSIC_DESIGNS[0]).name;
+}
+const filled = (v) => typeof v === "string" && v.trim() !== "";
+function designCollections(config2, layout = config2 == null ? void 0 : config2.layout) {
+  const c = config2 || {};
+  const out = [];
+  const add = (h) => {
+    if (filled(h) && !out.includes(h)) out.push(h);
+  };
+  if (!layout || layout === "layout1") {
+    const steps = Math.min(MAX_STEPS, Math.max(1, Number(c.max_selections) || 1));
+    for (let i = 1; i <= steps; i++) add(c[`step_${i}_collection`]);
+  } else if (layout === "layout2") {
+    const tabs = Math.min(MAX_TABS, Math.max(1, Number(c.tab_count) || 1));
+    for (let i = 1; i <= tabs; i++) add(c[`col_${i}`]);
+  } else if (layout === "layout4") {
+    add(c.collection_handle);
+  }
+  return out;
+}
+function switchComboDesign(config2, toLayout) {
+  const c = config2 || {};
+  if (!CLASSIC_LAYOUTS.includes(toLayout)) return {};
+  const fromLayout = c.layout || "layout1";
+  const patch = { layout: toLayout };
+  if (fromLayout === toLayout) return patch;
+  const source = designCollections(c, fromLayout);
+  if (!source.length || designCollections(c, toLayout).length) return patch;
+  if (toLayout === "layout1") {
+    const steps = source.slice(0, MAX_STEPS);
+    steps.forEach((handle, i) => {
+      patch[`step_${i + 1}_collection`] = handle;
+    });
+    patch.max_selections = steps.length;
+  } else if (toLayout === "layout2") {
+    const tabs = source.slice(0, MAX_TABS);
+    tabs.forEach((handle, i) => {
+      patch[`col_${i + 1}`] = handle;
+    });
+    patch.tab_count = tabs.length;
+  } else if (toLayout === "layout4") {
+    patch.collection_handle = source[0];
+  }
+  return patch;
+}
+function DesignGlyph({ layout }) {
+  const stroke = "currentColor";
+  if (layout === "layout2") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 48 32", width: "48", height: "32", fill: "none", stroke, strokeWidth: "1.5", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "4", y: "3", width: "11", height: "5", rx: "2.5", fill: "currentColor", stroke: "none" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "18", y: "3", width: "11", height: "5", rx: "2.5" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "32", y: "3", width: "11", height: "5", rx: "2.5" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "4", y: "12", width: "12", height: "16", rx: "2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "18", y: "12", width: "12", height: "16", rx: "2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "32", y: "12", width: "12", height: "16", rx: "2" })
+    ] });
+  }
+  if (layout === "layout4") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 48 32", width: "48", height: "32", fill: "none", stroke, strokeWidth: "1.5", "aria-hidden": "true", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "4", y: "3", width: "40", height: "9", rx: "2", fill: "currentColor", stroke: "none", opacity: ".35" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "4", y: "15", width: "9", height: "13", rx: "2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "14.5", y: "15", width: "9", height: "13", rx: "2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "25", y: "15", width: "9", height: "13", rx: "2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "35.5", y: "15", width: "8.5", height: "13", rx: "2" })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 48 32", width: "48", height: "32", fill: "none", stroke, strokeWidth: "1.5", "aria-hidden": "true", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "6", r: "3.5", fill: "currentColor", stroke: "none" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 6h8" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "24", cy: "6", r: "3.5" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M28 6h8" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "40", cy: "6", r: "3.5" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "4", y: "13", width: "18", height: "15", rx: "2" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "26", y: "13", width: "18", height: "15", rx: "2" })
+  ] });
+}
+function DesignSectionComponent({ config: config2, applyConfigPatch, expanded, onToggle }) {
+  var _a;
+  const current = config2.layout || "layout1";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionCard, { title: "Design", expanded, onToggle, badge: classicDesignName(current), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-design-grid", role: "radiogroup", "aria-label": "Combo design", children: CLASSIC_DESIGNS.map((design) => {
+      const selected = design.layout === current;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
         {
-          label: "Banner Fit Mode",
-          options: [
-            { label: "Cover (Fill & Crop)", value: "cover" },
-            { label: "Contain (Show Full Image)", value: "contain" },
-            { label: "Adapt to Image (Natural Height)", value: "adapt" }
-          ],
-          value: config2.banner_fit_mode || "cover",
-          onChange: (v) => updateConfig("banner_fit_mode", v)
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Full Width", checked: !!config2.banner_full_width, onChange: (v) => updateConfig("banner_full_width", v), helpText: "Edge-to-edge ignoring container padding" }),
-      config2.layout === "layout3" && /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 16 }, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Enable Banner Slider (Rotates 3 images)", checked: !!config2.enable_banner_slider, onChange: (v) => updateConfig("enable_banner_slider", v) }),
-        config2.enable_banner_slider && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block", children: [
-          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Auto-Rotation Speed (Seconds)", value: config2.slider_speed || 5, onChange: (v) => updateConfig("slider_speed", v), min: 2, max: 15, suffix: "s" }),
-          [1, 2, 3].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-slider-item", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { variant: "headingSm", as: "h6", children: [
-              "Banner ",
-              i
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Image URL", value: config2[`banner_${i}_image`], onChange: (v) => updateConfig(`banner_${i}_image`, v), autoComplete: "off" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Title", value: config2[`banner_${i}_title`], onChange: (v) => updateConfig(`banner_${i}_title`, v), autoComplete: "off" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Subtitle", value: config2[`banner_${i}_subtitle`], onChange: (v) => updateConfig(`banner_${i}_subtitle`, v), autoComplete: "off" })
-          ] }, i))
-        ] })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-section-divider", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Desktop Sizing" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Width (%)", value: config2.banner_width_desktop, onChange: (v) => updateConfig("banner_width_desktop", v), min: 0, max: 100, suffix: "%" }),
-          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Height (px)", value: config2.banner_height_desktop, onChange: (v) => updateConfig("banner_height_desktop", v) })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-section-divider", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Mobile Sizing" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Width (%)", value: config2.banner_width_mobile || config2.banner_width_desktop, onChange: (v) => updateConfig("banner_width_mobile", v), min: 0, max: 100, suffix: "%" }),
-          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Height (px)", value: config2.banner_height_mobile || config2.banner_height_desktop, onChange: (v) => updateConfig("banner_height_mobile", v) })
-        ] })
-      ] })
-    ] })
-  ] }) });
+          type: "button",
+          role: "radio",
+          "aria-checked": selected,
+          "data-design": design.layout,
+          className: `cst-design-option${selected ? " is-selected" : ""}`,
+          onClick: () => {
+            if (!selected) applyConfigPatch(switchComboDesign(config2, design.layout));
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cst-design-glyph", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DesignGlyph, { layout: design.layout }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cst-design-name", children: design.name }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cst-design-short", children: design.short })
+          ]
+        },
+        design.layout
+      );
+    }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 10 }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", variant: "bodySm", tone: "subdued", children: [
+      (_a = CLASSIC_DESIGNS.find((d) => d.layout === current)) == null ? void 0 : _a.description,
+      " Switching keeps your collections, offer and styling."
+    ] }) })
+  ] });
 }
-const BannerSection = reactExports.memo(BannerSectionComponent);
-function ProductsSectionComponent({
-  config: config2,
-  expanded,
-  onToggle,
-  updateConfig,
-  PxField: PxField2,
-  ColorPickerField: ColorPickerField2
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Products & Grid", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show product grid", checked: !!config2.show_products_grid, onChange: (v) => updateConfig("show_products_grid", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show sold out products", checked: !!config2.show_sold_out_products, onChange: (v) => updateConfig("show_sold_out_products", v) }),
-    PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Grid Width (%)", value: config2.grid_width, onChange: (v) => updateConfig("grid_width", v), min: 10, max: 100, suffix: "%", helpText: "Adjust the overall width of the product grid" }),
-    config2.show_products_grid && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Desktop Columns", options: [{ label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }], value: config2.desktop_columns, onChange: (v) => updateConfig("desktop_columns", v) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Layout Type", options: [{ label: "Grid", value: "grid" }, { label: "Slider", value: "slider" }], value: config2.grid_layout_type, onChange: (v) => updateConfig("grid_layout_type", v) }),
-      config2.grid_layout_type === "slider" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block cst-full-width", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-nested-title", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingMd", as: "h5", children: "Slider Customization" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Navigation" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Navigation Arrows", checked: !!config2.show_nav_arrows, onChange: (v) => updateConfig("show_nav_arrows", v) }),
-          config2.show_nav_arrows && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-              ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Icon Color", value: config2.arrow_color || "#ffffff", onChange: (v) => updateConfig("arrow_color", v) }),
-              ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Background", value: config2.arrow_bg_color || "#000000", onChange: (v) => updateConfig("arrow_bg_color", v) }),
-              PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Size", value: config2.arrow_size || 40, onChange: (v) => updateConfig("arrow_size", v) }),
-              PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Radius (%)", value: config2.arrow_border_radius || 50, onChange: (v) => updateConfig("arrow_border_radius", v), suffix: "%", max: 50 })
-            ] }),
-            PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Opacity", value: config2.arrow_opacity ?? 0.9, onChange: (v) => updateConfig("arrow_opacity", v), min: 0, max: 1, step: 0.1, suffix: "" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Arrow Position", options: [{ label: "Inside Slider", value: "inside" }, { label: "Outside Slider", value: "outside" }], value: config2.arrow_position || "inside", onChange: (v) => updateConfig("arrow_position", v) })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Interaction" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Enable Touch/Swipe", checked: config2.enable_touch_swipe !== false, onChange: (v) => updateConfig("enable_touch_swipe", v) }),
-          config2.enable_touch_swipe !== false && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-nested-block", children: PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Sensitivity", value: config2.swipe_sensitivity || 5, onChange: (v) => updateConfig("swipe_sensitivity", v), min: 1, max: 10, suffix: "" }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Appearance" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Scrollbar", checked: !!config2.show_scrollbar, onChange: (v) => updateConfig("show_scrollbar", v) }),
-          config2.show_scrollbar && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-            ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Scroll Color", value: config2.scrollbar_color || "#dddddd", onChange: (v) => updateConfig("scrollbar_color", v) }),
-            PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Thickness", value: config2.scrollbar_thickness || 4, onChange: (v) => updateConfig("scrollbar_thickness", v) })
-          ] })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Mobile Columns", options: [{ label: "1", value: "1" }, { label: "2", value: "2" }], value: config2.mobile_columns, onChange: (v) => updateConfig("mobile_columns", v) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Image Ratio", options: [{ label: "Portrait (3:4)", value: "portrait" }, { label: "Square (1:1)", value: "square" }, { label: "Rectangle (4:3)", value: "rectangle" }], value: config2.product_image_ratio || "square", onChange: (v) => updateConfig("product_image_ratio", v) }),
-      PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Image Height (Desktop)", value: config2.product_image_height_desktop, onChange: (v) => updateConfig("product_image_height_desktop", v) }),
-      PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Image Height (Mobile)", value: config2.product_image_height_mobile, onChange: (v) => updateConfig("product_image_height_mobile", v) })
-    ] })
-  ] }) });
-}
-const ProductsSection = reactExports.memo(ProductsSectionComponent);
+const DesignSection = reactExports.memo(DesignSectionComponent);
 function createComboWeightCore() {
   var GRAMS_PER_UNIT = {
     GRAMS: 1,
@@ -26786,6 +27783,7 @@ function createComboWeightCore() {
   var MEASURES2 = ["weight", "quantity", "value"];
   var QUICK_SHOP_LAYOUT2 = "layout6";
   var WEIGHT_BOX_LAYOUT2 = "layout5";
+  var QUANTITY_BOX_LAYOUT2 = "layout7";
   var LIMITS2 = { tiers: 5, products: 50, collections: 100, label: 60, message: 160, maxGrams: 1e6, maxItems: 1e3, maxValue: 1e7 };
   var DEFAULT_MESSAGES2 = {
     locked: "Add {{remaining}} more to unlock {{tier}}",
@@ -26887,6 +27885,14 @@ function createComboWeightCore() {
     if (measure === "quantity") return formatItems2(min) + " box discount";
     if (measure === "value") return "Spend " + formatMoney2(min) + " discount";
     return formatWeight2(min, unit) + " box discount";
+  }
+  function offerLabel2(tier, measure, symbol) {
+    if (!tier) return "";
+    if (tier.label) return tier.label;
+    if (tier.type === "percentage") return tier.value + "% OFF";
+    if (tier.type === "fixed_amount") return formatMoney2(tier.value, symbol) + " OFF";
+    if (measure === "quantity") return "Any " + tier.min_grams + " for " + formatMoney2(tier.value, symbol);
+    return "Box at " + formatMoney2(tier.value, symbol);
   }
   function fillMessage2(template, vars) {
     return String(template || "").replace(/\{\{\s*(\w+)\s*\}\}/g, function(all, key) {
@@ -27228,7 +28234,7 @@ function createComboWeightCore() {
     if (c.layout === "layout2") {
       for (i = 1; i <= (c.tab_count || 8); i++) add(c["col_" + i]);
     }
-    if (c.layout === WEIGHT_BOX_LAYOUT2 || c.layout === QUICK_SHOP_LAYOUT2) {
+    if (usesQuickShop2(c.layout)) {
       for (i = 1; i <= (c.tab_count || 4); i++) add(c["col_" + i]);
     }
     if (!c.layout || c.layout === "layout3" || c.layout === "layout4") add(c.collection_handle || c.step_1_collection);
@@ -27238,11 +28244,12 @@ function createComboWeightCore() {
     return handles;
   }
   function usesQuickShop2(layout) {
-    return layout === QUICK_SHOP_LAYOUT2 || layout === WEIGHT_BOX_LAYOUT2;
+    return layout === QUICK_SHOP_LAYOUT2 || layout === WEIGHT_BOX_LAYOUT2 || layout === QUANTITY_BOX_LAYOUT2;
   }
   return {
     WEIGHT_BOX_LAYOUT: WEIGHT_BOX_LAYOUT2,
     QUICK_SHOP_LAYOUT: QUICK_SHOP_LAYOUT2,
+    QUANTITY_BOX_LAYOUT: QUANTITY_BOX_LAYOUT2,
     usesQuickShop: usesQuickShop2,
     MEASURES: MEASURES2,
     measureOf: measureOf2,
@@ -27263,6 +28270,7 @@ function createComboWeightCore() {
     nextTierAfter: nextTierAfter2,
     formatWeight: formatWeight2,
     tierLabel: tierLabel2,
+    offerLabel: offerLabel2,
     fillMessage: fillMessage2,
     pricingHash: pricingHash2,
     defaultWeightPricing: defaultWeightPricing2,
@@ -27276,6 +28284,7 @@ const core$1 = createComboWeightCore();
 const {
   WEIGHT_BOX_LAYOUT,
   QUICK_SHOP_LAYOUT,
+  QUANTITY_BOX_LAYOUT,
   usesQuickShop,
   MEASURES,
   measureOf,
@@ -27296,6 +28305,7 @@ const {
   nextTierAfter,
   formatWeight,
   tierLabel,
+  offerLabel,
   fillMessage,
   pricingHash,
   defaultWeightPricing,
@@ -27305,8 +28315,2002 @@ const {
   comboCollectionHandles
 } = core$1;
 function isWeightCombo(config2) {
-  return Boolean(config2 && (config2.pricing_mode === "weight" || config2.layout === WEIGHT_BOX_LAYOUT || config2.layout === QUICK_SHOP_LAYOUT));
+  return Boolean(config2 && (config2.pricing_mode === "weight" || usesQuickShop(config2.layout)));
 }
+const TEMPLATE_MEASURES = { [QUICK_SHOP_LAYOUT]: "value", [WEIGHT_BOX_LAYOUT]: "weight", [QUANTITY_BOX_LAYOUT]: "quantity", layout3: "weight" };
+function fixedMeasureFor(layout) {
+  return TEMPLATE_MEASURES[layout] || null;
+}
+function boxPricingFeature(layout) {
+  if (layout === QUANTITY_BOX_LAYOUT) return "combo_quantity_pricing";
+  if (layout === WEIGHT_BOX_LAYOUT) return "combo_weight_pricing";
+  if (layout === QUICK_SHOP_LAYOUT) return "combo_value_pricing";
+  return "combo_tier_pricing";
+}
+function createQuickShopKit(core2) {
+  var DEFAULTS2 = {
+    // Header
+    qs_show_header: true,
+    // Filters (the merchant picks which ones show)
+    qs_chips_source: "collections",
+    // collections | tags | none
+    qs_chip_tags: "",
+    // "Boneless, Curry Cut, Drumstick" when source = tags
+    qs_show_all_chip: true,
+    qs_all_label: "All",
+    // Collection chips drawn as pictures with the name under them (a bar the
+    // shopper swipes to switch collections). Picture: qs_chip_images[handle]
+    // (https link), else the collection's Shopify image, else its first
+    // product's image.
+    qs_chip_style: "text",
+    // text | images
+    qs_chip_image_size: 64,
+    // px on desktop; phones get 80% of it
+    qs_chip_image_shape: "circle",
+    // circle | rounded | square
+    qs_chip_images: null,
+    // { [collection handle]: 'https://…' }
+    qs_filter_type: true,
+    qs_filter_type_label: "Type",
+    qs_filter_brand: true,
+    qs_filter_brand_label: "Brand",
+    qs_filter_custom: false,
+    qs_filter_custom_label: "Cut",
+    qs_filter_custom_tags: "",
+    qs_filter_sort: true,
+    qs_filter_sort_label: "Sort By",
+    qs_filter_instock: false,
+    qs_filter_instock_label: "In stock",
+    // Cards
+    // quick_add = + button on the image that turns into a stepper; normal =
+    // a full-width Add button under the price (stepper there once added).
+    qs_card_layout: "quick_add",
+    // quick_add | normal
+    qs_add_label: "Add",
+    qs_columns_desktop: 4,
+    qs_columns_mobile: 2,
+    qs_card_eyebrow: "",
+    qs_show_subtitle: true,
+    qs_show_compare: true,
+    qs_show_off: true,
+    qs_show_weight: true,
+    qs_badge_tag: "bestseller",
+    qs_badge_text: "Bestseller",
+    qs_image_ratio: "square",
+    // square | portrait | landscape
+    qs_card_radius: 14,
+    qs_card_bg: "#ffffff",
+    qs_page_bg: "#f4f5f7",
+    qs_text_color: "#111827",
+    qs_accent: "#2563eb",
+    // + button, chips, links
+    qs_off_color: "#16a34a",
+    qs_badge_bg: "#3b82f6",
+    // Top progress
+    qs_top_style: "milestones",
+    // bar | steps | milestones | text | none
+    qs_top_title: "Unlock offers on your box",
+    qs_top_sticky: true,
+    qs_top_offset: 0,
+    qs_top_show_labels: true,
+    qs_top_height: 8,
+    qs_top_radius: 999,
+    qs_top_bg: "#ffffff",
+    qs_top_text: "#111827",
+    qs_top_track: "#e5e7eb",
+    qs_top_fill: "#2563eb",
+    qs_top_done: "#16a34a",
+    qs_tier_icons: "gift, truck, percent, star, trophy",
+    // built-in SVG icon names (ICONS) or https:// image links
+    // Bottom bar
+    qs_bar_style: "full",
+    // full | slim | ring | compact
+    qs_bar_bg: "#ffffff",
+    qs_bar_text: "#111827",
+    qs_bar_save: "#16a34a",
+    qs_bar_radius: 20,
+    qs_bar_show_message: true,
+    qs_bar_show_thumbs: true,
+    qs_bar_show_saved: true,
+    qs_bar_celebrate: true,
+    qs_bar_icon_done: "party",
+    qs_bar_icon_locked: "gift",
+    qs_bar_icon_bg: "#16a34a",
+    qs_saved_text: "{{saved}} saved, more coming up!",
+    qs_saved_done_text: "{{saved}} saved!",
+    qs_btn_label: "Go to Cart",
+    qs_btn_bg: "#2563eb",
+    qs_btn_text_color: "#ffffff",
+    qs_btn_radius: 14,
+    // Go to Cart button size (padding also applies to the COD button beside
+    // it; COD's text size is set under COD → Customize → Combo page button).
+    qs_btn_font_size: null,
+    // px; null = the theme's text size, as before this setting
+    qs_btn_font_size_m: 15,
+    qs_btn_pad_y: 14,
+    // phones: 2px less
+    qs_btn_pad_x: 26,
+    // phones: at most 16
+    qs_btn_action: "checkout",
+    // checkout | cart
+    // Checkout with: shopify | shiprocket (BRIX one-time code for the box discount)
+    // | shiprocket_own (the merchant's own Shiprocket offer). Shiprocket only on
+    // shops with it switched on (integrations_admin.php) and with qs_btn_action checkout.
+    qs_checkout_with: "shopify",
+    qs_require_first_tier: false
+  };
+  var SORTS = [
+    { value: "featured", label: "Featured" },
+    { value: "price_asc", label: "Price: low to high" },
+    { value: "price_desc", label: "Price: high to low" },
+    { value: "discount", label: "Biggest discount" },
+    { value: "name", label: "Name: A to Z" }
+  ];
+  function opt(config2, key) {
+    var v = config2 ? config2[key] : void 0;
+    return v === void 0 || v === null ? DEFAULTS2[key] : v;
+  }
+  function on(config2, key) {
+    var v = opt(config2, key);
+    return v === true || v === "true" || v === 1;
+  }
+  function esc(s) {
+    if (s === null || s === void 0) return "";
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function safeCss(value, fallback) {
+    var s = String(value === null || value === void 0 ? "" : value).trim();
+    return /^[#\w\s.,%()-]{1,60}$/.test(s) ? s : fallback;
+  }
+  function num(value, fallback, min, max) {
+    var n = Number(value);
+    if (!isFinite(n)) n = fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+  function money(amount, symbol) {
+    var n = Math.max(0, Number(amount) || 0);
+    var text = Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
+    return (symbol || "") + text;
+  }
+  function list(text) {
+    var out = [];
+    var parts = String(text || "").split(",");
+    for (var i = 0; i < parts.length; i++) {
+      var t = parts[i].replace(/\s+/g, " ").trim();
+      if (t && out.indexOf(t) === -1) out.push(t);
+    }
+    return out;
+  }
+  function iconList(text) {
+    var out = [];
+    var parts = String(text || "").split(",");
+    for (var i = 0; i < parts.length; i++) out.push(parts[i].trim());
+    while (out.length && !out[out.length - 1]) out.pop();
+    return out;
+  }
+  function lower(s) {
+    return String(s || "").toLowerCase();
+  }
+  function hasTag(product2, tag) {
+    var tags = product2.tags || [];
+    for (var i = 0; i < tags.length; i++) if (lower(tags[i]) === lower(tag)) return true;
+    return false;
+  }
+  function offerText2(tier, symbol, measure) {
+    if (tier.label) return tier.label;
+    if (tier.type === "percentage") return tier.value + "% OFF";
+    if (tier.type === "fixed_amount") return money(tier.value, symbol) + " OFF";
+    if (measure === "quantity") return "Any " + tier.min_grams + " for " + money(tier.value, symbol);
+    return "Box at " + money(tier.value, symbol);
+  }
+  function labelledTiers(tiers, symbol, measure) {
+    var out = [];
+    for (var i = 0; i < (tiers || []).length; i++) {
+      var t = tiers[i];
+      out.push({ id: t.id, min_grams: t.min_grams, type: t.type, value: t.value, label: offerText2(t, symbol, measure) });
+    }
+    return out;
+  }
+  function isIconUrl(icon) {
+    return /^https:\/\/[^\s"'<>]+$/.test(icon);
+  }
+  var ICON_PATHS = {
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+    truck: '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
+    trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+    crown: '<path d="m3 7 4.5 4L12 5l4.5 6L21 7l-2 11H5z"/>',
+    tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    coins: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+    party: '<path d="M4 20 8.5 7.5l8 8z"/><path d="M13 3.5v2M18.5 9h2M16 6l2.5-2.5M14 10l5-5"/>',
+    sparkles: '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
+    heart: '<path d="M12 20s-7-4.4-9-9a4.8 4.8 0 0 1 9-3 4.8 4.8 0 0 1 9 3c-2 4.6-9 9-9 9z"/>',
+    box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'
+  };
+  var ICON_NAMES = ["gift", "truck", "percent", "star", "trophy", "crown", "tag", "coins", "party", "sparkles", "heart", "box", "bolt", "check"];
+  var TIER_ICON_ORDER = ["gift", "truck", "percent", "star", "trophy", "crown"];
+  var EMOJI_ICONS = { "🎁": "gift", "🚚": "truck", "💰": "coins", "💸": "coins", "⭐": "star", "🌟": "star", "🏆": "trophy", "👑": "crown", "🎉": "party", "🥳": "party", "✨": "sparkles", "❤️": "heart", "📦": "box", "⚡": "bolt", "✅": "check", "🏷️": "tag", "%": "percent" };
+  function svgIcon(name) {
+    return '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">' + ICON_PATHS[name] + "</svg>";
+  }
+  function iconName(icon, fallback) {
+    var s = String(icon === null || icon === void 0 ? "" : icon).trim();
+    var lower2 = s.toLowerCase();
+    if (ICON_PATHS[lower2]) return lower2;
+    if (EMOJI_ICONS[s]) return EMOJI_ICONS[s];
+    if (typeof fallback === "string" && ICON_PATHS[fallback]) return fallback;
+    return TIER_ICON_ORDER[(Number(fallback) || 0) % TIER_ICON_ORDER.length];
+  }
+  function iconHtml(icon, cls, i) {
+    if (!icon) return "";
+    if (isIconUrl(icon)) return '<img class="' + cls + '" src="' + esc(icon) + '" alt="" />';
+    return '<span class="' + cls + '" aria-hidden="true">' + svgIcon(iconName(icon, i)) + "</span>";
+  }
+  function activeVariant(product2, pending) {
+    var variants = product2.variants || [];
+    var id = pending && pending[product2.id];
+    var i;
+    for (i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
+    for (i = 0; i < variants.length; i++) if (variants[i].available !== false) return variants[i];
+    return variants[0] || null;
+  }
+  function priceOf(product2, variant) {
+    var p = variant && variant.price !== null && variant.price !== void 0 ? parseFloat(variant.price) : parseFloat(product2.price || 0);
+    return isFinite(p) ? p : 0;
+  }
+  function compareOf(variant, price) {
+    var c = variant && variant.compareAtPrice !== null && variant.compareAtPrice !== void 0 ? parseFloat(variant.compareAtPrice) : 0;
+    return isFinite(c) && c > price ? c : 0;
+  }
+  function allProducts(productsByHandle, handles) {
+    var seen2 = {};
+    var out = [];
+    for (var h = 0; h < handles.length; h++) {
+      var prods = productsByHandle[handles[h]] || [];
+      for (var i = 0; i < prods.length; i++) {
+        if (seen2[prods[i].id]) continue;
+        seen2[prods[i].id] = true;
+        out.push(prods[i]);
+      }
+    }
+    return out;
+  }
+  function uniqueValues(products, field) {
+    var out = [];
+    for (var i = 0; i < products.length; i++) {
+      var v = String(products[i][field] || "").trim();
+      if (v && out.indexOf(v) === -1) out.push(v);
+    }
+    out.sort();
+    return out;
+  }
+  function httpsUrl(value) {
+    var s = String(value || "").trim();
+    return /^https:\/\/[^\s"'<>()\\]{1,500}$/.test(s) ? s : "";
+  }
+  function collectionImage(config2, handle, collectionImages, productsByHandle) {
+    var own = opt(config2, "qs_chip_images");
+    if (own && typeof own === "object" && httpsUrl(own[handle])) return httpsUrl(own[handle]);
+    if (collectionImages && httpsUrl(collectionImages[handle])) return httpsUrl(collectionImages[handle]);
+    var prods = productsByHandle && productsByHandle[handle] || [];
+    for (var i = 0; i < prods.length; i++) {
+      var img2 = prods[i].image && (prods[i].image.url || prods[i].image.src);
+      if (httpsUrl(img2)) return httpsUrl(img2);
+    }
+    return "";
+  }
+  function filterRow(config2, products, handles, collectionNames, ui, collectionImages, productsByHandle) {
+    var chips = [];
+    var source = opt(config2, "qs_chips_source");
+    var chipValues = [];
+    var pictures = opt(config2, "qs_chip_style") === "images";
+    if (source === "collections" && handles.length > 1) {
+      for (var h = 0; h < handles.length; h++) {
+        var chip = { value: "c:" + handles[h], label: collectionNames[handles[h]] || handles[h] };
+        if (pictures) {
+          chip.picture = true;
+          chip.image = collectionImage(config2, handles[h], collectionImages, productsByHandle);
+        }
+        chipValues.push(chip);
+      }
+    } else if (source === "tags") {
+      var tags = list(opt(config2, "qs_chip_tags"));
+      for (var t = 0; t < tags.length; t++) chipValues.push({ value: "t:" + tags[t], label: tags[t] });
+    }
+    if (chipValues.length) {
+      if (on(config2, "qs_show_all_chip")) chips.push({ value: "all", label: opt(config2, "qs_all_label"), on: !ui.chip || ui.chip === "all", picture: chipValues[0].picture === true, image: "" });
+      for (var c = 0; c < chipValues.length; c++) {
+        chipValues[c].on = ui.chip === chipValues[c].value;
+        chips.push(chipValues[c]);
+      }
+    }
+    if (on(config2, "qs_filter_instock")) chips.push({ value: "instock", label: opt(config2, "qs_filter_instock_label"), on: !!ui.instock, toggle: true });
+    var dd = ui.dd || {};
+    var menus = [];
+    function addMenu(id, label, values2) {
+      if (values2.length < 2) return;
+      var options = [{ value: "", label: "All" }];
+      for (var i = 0; i < values2.length; i++) options.push({ value: values2[i], label: values2[i] });
+      menus.push({ id, label, value: dd[id] || "", options, open: ui.menu === id });
+    }
+    if (on(config2, "qs_filter_type")) addMenu("type", opt(config2, "qs_filter_type_label"), uniqueValues(products, "productType"));
+    if (on(config2, "qs_filter_brand")) addMenu("brand", opt(config2, "qs_filter_brand_label"), uniqueValues(products, "vendor"));
+    if (on(config2, "qs_filter_custom")) {
+      var custom = list(opt(config2, "qs_filter_custom_tags"));
+      var present = [];
+      for (var k = 0; k < custom.length; k++) {
+        for (var p = 0; p < products.length; p++) if (hasTag(products[p], custom[k])) {
+          present.push(custom[k]);
+          break;
+        }
+      }
+      addMenu("custom", opt(config2, "qs_filter_custom_label"), present.length ? present : custom);
+    }
+    if (on(config2, "qs_filter_sort")) {
+      menus.push({ id: "sort", label: opt(config2, "qs_filter_sort_label"), value: dd.sort && dd.sort !== "featured" ? dd.sort : "", options: SORTS, open: ui.menu === "sort", isSort: true });
+    }
+    var active = ui.chip && ui.chip !== "all" || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || dd.sort && dd.sort !== "featured";
+    return { chips, menus, active: !!active };
+  }
+  function filterProducts(products, productsByHandle, ui, pending) {
+    var dd = ui.dd || {};
+    var inChip = null;
+    if (ui.chip && ui.chip.indexOf("c:") === 0) {
+      inChip = {};
+      var prods = productsByHandle[ui.chip.slice(2)] || [];
+      for (var i = 0; i < prods.length; i++) inChip[prods[i].id] = true;
+    }
+    var out = [];
+    for (var j = 0; j < products.length; j++) {
+      var p = products[j];
+      if (inChip && !inChip[p.id]) continue;
+      if (ui.chip && ui.chip.indexOf("t:") === 0 && !hasTag(p, ui.chip.slice(2))) continue;
+      if (dd.type && String(p.productType || "") !== dd.type) continue;
+      if (dd.brand && String(p.vendor || "") !== dd.brand) continue;
+      if (dd.custom && !hasTag(p, dd.custom)) continue;
+      if (ui.instock) {
+        var anyAvailable = false;
+        for (var v = 0; v < (p.variants || []).length; v++) if (p.variants[v].available !== false) anyAvailable = true;
+        if (!anyAvailable) continue;
+      }
+      out.push(p);
+    }
+    var sort = dd.sort || "featured";
+    if (sort !== "featured") {
+      var keyed = [];
+      for (var k = 0; k < out.length; k++) {
+        var variant = activeVariant(out[k], pending);
+        var price = priceOf(out[k], variant);
+        var cmp = compareOf(variant, price);
+        keyed.push({ p: out[k], i: k, price, off: cmp ? (cmp - price) / cmp : 0, name: lower(out[k].title) });
+      }
+      keyed.sort(function(a, b) {
+        var d = 0;
+        if (sort === "price_asc") d = a.price - b.price;
+        else if (sort === "price_desc") d = b.price - a.price;
+        else if (sort === "discount") d = b.off - a.off;
+        else if (sort === "name") d = a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+        return d || a.i - b.i;
+      });
+      out = [];
+      for (var s = 0; s < keyed.length; s++) out.push(keyed[s].p);
+    }
+    return out;
+  }
+  function canCheckout(config2, box, items, tiers) {
+    if (!(items > 0) || box.overMax) return false;
+    if (!on(config2, "qs_require_first_tier")) return true;
+    return !!box.tier || !(tiers && tiers.length);
+  }
+  function topMessage(view, box) {
+    if (!view.enabled) return { tone: "muted", text: "" };
+    if (box.overMax) return core2.boxMessage(view, box);
+    var now = barMessage(view, box);
+    if (!box.tier || !box.nextTier) return { tone: now.tone, text: now.text };
+    var next = barMessage(view, { overMax: false, tier: null, nextTier: box.nextTier, remaining: box.remaining, amount: box.amount, decimals: box.decimals });
+    return { tone: "success", text: now.text + " · " + next.text };
+  }
+  function barMessage(view, box) {
+    var msgs = view.messages || core2.DEFAULT_MESSAGES;
+    if (box.overMax) return core2.boxMessage(view, box);
+    if (!view.enabled) return { tone: "muted", text: "", tier: "" };
+    if (box.tier) return { tone: "success", text: core2.fillMessage(msgs.unlocked || core2.DEFAULT_MESSAGES.unlocked, { tier: box.tier.label }), tier: box.tier.label };
+    if (box.nextTier) {
+      return {
+        tone: "muted",
+        text: core2.fillMessage(msgs.locked || core2.DEFAULT_MESSAGES.locked, {
+          remaining: core2.formatAmount(view, box.remaining, box.decimals, true),
+          tier: box.nextTier.label,
+          weight: core2.formatAmount(view, box.amount, box.decimals),
+          amount: core2.formatAmount(view, box.amount, box.decimals)
+        }),
+        tier: box.nextTier.label
+      };
+    }
+    return { tone: "muted", text: "", tier: "" };
+  }
+  function buildModel(input) {
+    var config2 = input.config || {};
+    var ui = input.ui || {};
+    var symbol = input.symbol || "";
+    var decimals = input.decimals === void 0 ? 2 : input.decimals;
+    var pricing = input.pricing || { tiers: [], enabled: false };
+    var tiers = labelledTiers(pricing.tiers, symbol, pricing.measure);
+    var view = {
+      measure: pricing.measure || "weight",
+      unit: pricing.unit || "kg",
+      tiers,
+      maxGrams: pricing.maxGrams === void 0 ? null : pricing.maxGrams,
+      messages: pricing.messages,
+      enabled: !!pricing.enabled,
+      currencySymbol: symbol
+    };
+    var handles = input.handles || [];
+    var all = allProducts(input.productsByHandle || {}, handles);
+    if (!all.length && input.fallbackProducts) all = input.fallbackProducts;
+    var byId = {};
+    for (var a = 0; a < all.length; a++) byId[all[a].id] = all[a];
+    var extra = input.extraProducts || [];
+    for (var e = 0; e < extra.length; e++) if (!byId[extra[e].id]) byId[extra[e].id] = extra[e];
+    var selection = input.selection || {};
+    var lines = [];
+    var items = 0;
+    var total = 0;
+    var compareSavings = 0;
+    var thumbs = [];
+    var sheet = [];
+    var qtyByVariant = {};
+    for (var vid in selection) {
+      if (!Object.prototype.hasOwnProperty.call(selection, vid)) continue;
+      var sel = selection[vid];
+      var qty = Number(sel.qty) || 0;
+      if (qty <= 0) continue;
+      var product2 = byId[sel.productId];
+      var variant = null;
+      if (product2) {
+        for (var vi = 0; vi < (product2.variants || []).length; vi++) if (String(product2.variants[vi].id) === String(vid)) variant = product2.variants[vi];
+      }
+      var price = product2 ? priceOf(product2, variant) : 0;
+      var cmp = compareOf(variant, price);
+      qtyByVariant[vid] = qty;
+      items += qty;
+      total += price * qty;
+      if (cmp) compareSavings += (cmp - price) * qty;
+      var image = variant && variant.image && (variant.image.url || variant.image.src) || product2 && product2.image && (product2.image.url || product2.image.src) || "";
+      if (image && thumbs.length < 3) thumbs.push(image);
+      sheet.push({
+        variantId: vid,
+        productId: sel.productId,
+        qty,
+        image,
+        title: product2 ? product2.title : "",
+        variantTitle: variant && variant.title !== "Default Title" ? variant.title : "",
+        price: money(price * qty, symbol)
+      });
+      lines.push({
+        key: vid,
+        unitGrams: variant && variant.grams > 0 ? variant.grams : null,
+        quantity: qty,
+        subtotalMinor: core2.toMinor(price * qty, decimals),
+        qualifies: input.qualifies ? !!input.qualifies(sel.productId) : true
+      });
+    }
+    var box = core2.computeBox({ pricing: { measure: view.measure, tiers, max_grams: view.maxGrams, unit: view.unit }, lines, decimals, rate: 1 });
+    var boxDiscount = view.enabled ? box.discountMinor / Math.pow(10, decimals) : 0;
+    var saved = compareSavings + boxDiscount;
+    var finalPrice = Math.max(0, total - boxDiscount);
+    var progress = core2.progressOf(view, box, 1);
+    var icons = iconList(opt(config2, "qs_tier_icons"));
+    for (var m = 0; m < progress.marks.length; m++) {
+      var mark = progress.marks[m];
+      mark.label = mark.tier.label;
+      mark.at = core2.formatThreshold(view, mark.tier);
+      mark.icon = icons.length ? icons[m] || TIER_ICON_ORDER[m % TIER_ICON_ORDER.length] : "";
+      mark.iconIndex = m;
+    }
+    var row = filterRow(config2, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {});
+    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending);
+    var cards = [];
+    var badgeTag = String(opt(config2, "qs_badge_tag") || "").trim();
+    for (var c = 0; c < shown.length; c++) {
+      var p = shown[c];
+      var v = activeVariant(p, input.pending);
+      var pr = priceOf(p, v);
+      var cp = compareOf(v, pr);
+      var options = [];
+      for (var o = 0; o < (p.variants || []).length; o++) {
+        var pv = p.variants[o];
+        options.push({ id: pv.id, title: pv.title, on: v && String(pv.id) === String(v.id), available: pv.available !== false });
+      }
+      var weightText = "";
+      if (v && v.grams > 0) weightText = core2.formatWeight(v.grams, v.grams < 1e3 ? "g" : "kg");
+      var img2 = v && v.image && (v.image.url || v.image.src) || p.image && (p.image.url || p.image.src) || p.images && p.images[0] && p.images[0].url || "";
+      cards.push({
+        id: p.id,
+        title: p.title,
+        summary: p.summary || "",
+        image: img2,
+        badge: badgeTag && hasTag(p, badgeTag) ? opt(config2, "qs_badge_text") || badgeTag : "",
+        variants: options.length > 1 && !(options.length === 1 && options[0].title === "Default Title") ? options : [],
+        weightText,
+        price: money(pr, symbol),
+        compare: cp ? money(cp, symbol) : "",
+        off: cp ? Math.round((cp - pr) / cp * 100) : 0,
+        available: !v || v.available !== false,
+        variantId: v ? v.id : "",
+        qty: v ? qtyByVariant[v.id] || 0 : 0,
+        counts: input.qualifies ? !!input.qualifies(p.id) : true
+      });
+    }
+    var bar = barMessage(view, box);
+    var savedTemplate = box.nextTier && view.enabled ? opt(config2, "qs_saved_text") : opt(config2, "qs_saved_done_text");
+    return {
+      config: config2,
+      isMobile: !!input.isMobile,
+      symbol,
+      title: config2.collection_title || input.templateName || "",
+      description: config2.collection_description || "",
+      row,
+      cards,
+      empty: !all.length ? "No products yet. Choose collections for this combo." : !cards.length ? "Nothing matches these filters." : "",
+      view,
+      box,
+      progress,
+      topMessage: topMessage(view, box),
+      bar: {
+        items,
+        thumbs,
+        sheet,
+        message: bar,
+        saved: saved > 4e-3 ? core2.fillMessage(savedTemplate, { saved: money(saved, symbol) }) : "",
+        total: money(finalPrice, symbol),
+        canCheckout: canCheckout(config2, box, items, tiers) && !ui.checkingOut,
+        checkingOut: !!ui.checkingOut,
+        sheetOpen: !!ui.sheetOpen,
+        celebrate: !!ui.celebrate
+      },
+      totals: { total, discount: boxDiscount, finalPrice, saved, items },
+      cod: input.cod || { shown: false },
+      toast: ui.toast || ""
+    };
+  }
+  var ICON_PLUS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  var ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  var ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>';
+  var ICON_GRID = '<svg viewBox="0 0 24 24" width="40%" height="40%" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
+  var ICON_FILTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>';
+  function vars(config2) {
+    var pairs = [
+      ["--bxq-page", safeCss(opt(config2, "qs_page_bg"), DEFAULTS2.qs_page_bg)],
+      ["--bxq-card", safeCss(opt(config2, "qs_card_bg"), DEFAULTS2.qs_card_bg)],
+      ["--bxq-text", safeCss(opt(config2, "qs_text_color"), DEFAULTS2.qs_text_color)],
+      ["--bxq-accent", safeCss(opt(config2, "qs_accent"), DEFAULTS2.qs_accent)],
+      ["--bxq-off", safeCss(opt(config2, "qs_off_color"), DEFAULTS2.qs_off_color)],
+      ["--bxq-badge", safeCss(opt(config2, "qs_badge_bg"), DEFAULTS2.qs_badge_bg)],
+      ["--bxq-radius", num(opt(config2, "qs_card_radius"), 14, 0, 40) + "px"],
+      ["--bxq-ratio", { portrait: "4/5", landscape: "4/3" }[opt(config2, "qs_image_ratio")] || "1/1"],
+      ["--bxq-cols", String(num(opt(config2, "qs_columns_desktop"), 4, 2, 6))],
+      ["--bxq-cols-m", String(num(opt(config2, "qs_columns_mobile"), 2, 1, 3))],
+      ["--bxq-top-bg", safeCss(opt(config2, "qs_top_bg"), DEFAULTS2.qs_top_bg)],
+      ["--bxq-top-text", safeCss(opt(config2, "qs_top_text"), DEFAULTS2.qs_top_text)],
+      ["--bxq-track", safeCss(opt(config2, "qs_top_track"), DEFAULTS2.qs_top_track)],
+      ["--bxq-fill", safeCss(opt(config2, "qs_top_fill"), DEFAULTS2.qs_top_fill)],
+      ["--bxq-done", safeCss(opt(config2, "qs_top_done"), DEFAULTS2.qs_top_done)],
+      ["--bxq-top-h", num(opt(config2, "qs_top_height"), 8, 2, 24) + "px"],
+      ["--bxq-top-r", num(opt(config2, "qs_top_radius"), 999, 0, 999) + "px"],
+      ["--bxq-top-offset", num(opt(config2, "qs_top_offset"), 0, 0, 300) + "px"],
+      ["--bxq-bar-bg", safeCss(opt(config2, "qs_bar_bg"), DEFAULTS2.qs_bar_bg)],
+      ["--bxq-bar-text", safeCss(opt(config2, "qs_bar_text"), DEFAULTS2.qs_bar_text)],
+      ["--bxq-save", safeCss(opt(config2, "qs_bar_save"), DEFAULTS2.qs_bar_save)],
+      ["--bxq-bar-r", num(opt(config2, "qs_bar_radius"), 20, 0, 40) + "px"],
+      ["--bxq-icon-bg", safeCss(opt(config2, "qs_bar_icon_bg"), DEFAULTS2.qs_bar_icon_bg)],
+      ["--bxq-btn", safeCss(opt(config2, "qs_btn_bg"), DEFAULTS2.qs_btn_bg)],
+      ["--bxq-btn-text", safeCss(opt(config2, "qs_btn_text_color"), DEFAULTS2.qs_btn_text_color)],
+      ["--bxq-btn-r", num(opt(config2, "qs_btn_radius"), 14, 0, 40) + "px"],
+      ["--bxq-btn-fs-m", num(opt(config2, "qs_btn_font_size_m"), 15, 11, 22) + "px"],
+      ["--bxq-btn-py", num(opt(config2, "qs_btn_pad_y"), 14, 6, 28) + "px"],
+      ["--bxq-btn-px", num(opt(config2, "qs_btn_pad_x"), 26, 8, 48) + "px"],
+      ["--bxq-btn-py-m", Math.max(4, num(opt(config2, "qs_btn_pad_y"), 14, 6, 28) - 2) + "px"],
+      ["--bxq-btn-px-m", Math.min(16, num(opt(config2, "qs_btn_pad_x"), 26, 8, 48)) + "px"],
+      ["--bxq-col-size", num(opt(config2, "qs_chip_image_size"), 64, 40, 120) + "px"],
+      ["--bxq-col-size-m", Math.round(num(opt(config2, "qs_chip_image_size"), 64, 40, 120) * 0.8) + "px"],
+      ["--bxq-col-r", { rounded: "16px", square: "4px" }[opt(config2, "qs_chip_image_shape")] || "50%"]
+    ];
+    var btnFs = opt(config2, "qs_btn_font_size");
+    if (btnFs !== null && btnFs !== "" && isFinite(Number(btnFs))) pairs.push(["--bxq-btn-fs", num(btnFs, 16, 12, 24) + "px"]);
+    var out = "";
+    for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ":" + pairs[i][1] + ";";
+    return out;
+  }
+  function boldTier(text, tier) {
+    var html = esc(text);
+    if (!tier) return html;
+    var t = esc(tier);
+    var at = html.indexOf(t);
+    return at === -1 ? html : html.slice(0, at) + "<b>" + t + "</b>" + html.slice(at + t.length);
+  }
+  function renderCollectionBar(chips) {
+    var html = '<div class="bxq-colbar" role="tablist" aria-label="Collections">';
+    for (var i = 0; i < chips.length; i++) {
+      var chip = chips[i];
+      html += '<button type="button" role="tab" class="bxq-col' + (chip.on ? " is-on" : "") + '" aria-selected="' + (chip.on ? "true" : "false") + '" data-combo-action="qs-chip" data-value="' + esc(chip.value) + '"><span class="bxq-col-img">' + (chip.image ? '<img src="' + esc(chip.image) + '" alt="" loading="lazy" />' : chip.value === "all" ? ICON_GRID : '<span class="bxq-col-letter">' + esc(String(chip.label || "?").charAt(0).toUpperCase()) + "</span>") + '</span><span class="bxq-col-name">' + esc(chip.label) + "</span></button>";
+    }
+    return html + "</div>";
+  }
+  function renderFilters(model) {
+    var row = model.row;
+    var pictureChips = [];
+    var chips = [];
+    for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
+    var bar = pictureChips.length ? renderCollectionBar(pictureChips) : "";
+    if (!chips.length && !row.menus.length) return bar;
+    var html = bar + '<div class="bxq-filters">';
+    html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? " is-active" : "") + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + "</button>";
+    for (var i = 0; i < chips.length; i++) {
+      var chip = chips[i];
+      html += '<button type="button" class="bxq-chip' + (chip.on ? " is-on" : "") + '" aria-pressed="' + (chip.on ? "true" : "false") + '" data-combo-action="' + (chip.toggle ? "qs-instock" : "qs-chip") + '" data-value="' + esc(chip.value) + '">' + esc(chip.label) + "</button>";
+    }
+    for (var m = 0; m < row.menus.length; m++) {
+      var menu = row.menus[m];
+      var current = "";
+      for (var o = 0; o < menu.options.length; o++) if (menu.value && menu.options[o].value === menu.value) current = menu.options[o].label;
+      html += '<div class="bxq-dd' + (menu.open ? " is-open" : "") + '">';
+      html += '<button type="button" class="bxq-chip' + (menu.value ? " is-on" : "") + '" aria-expanded="' + (menu.open ? "true" : "false") + '" data-combo-action="qs-menu" data-menu="' + esc(menu.id) + '">' + esc(menu.isSort || !current ? menu.label : current) + ICON_DOWN + "</button>";
+      if (menu.open) {
+        html += '<div class="bxq-menu" role="listbox">';
+        for (var k = 0; k < menu.options.length; k++) {
+          var option = menu.options[k];
+          var selected = (option.value || "") === (menu.value || "") || menu.isSort && !menu.value && option.value === "featured";
+          html += '<button type="button" role="option" aria-selected="' + (selected ? "true" : "false") + '" class="bxq-opt' + (selected ? " is-on" : "") + '" data-combo-action="qs-pick" data-menu="' + esc(menu.id) + '" data-value="' + esc(option.value) + '">' + esc(option.label) + "</button>";
+        }
+        html += "</div>";
+      }
+      html += "</div>";
+    }
+    html += "</div>";
+    return html;
+  }
+  function renderTop(model) {
+    var config2 = model.config;
+    var style = opt(config2, "qs_top_style");
+    if (style === "none" || !model.view.enabled || !model.view.tiers.length) return "";
+    var progress = model.progress;
+    var msg = model.topMessage;
+    var labels = on(config2, "qs_top_show_labels");
+    var html = '<section class="bxq-top bxq-top--' + esc(style) + (on(config2, "qs_top_sticky") ? " is-sticky" : "") + '" aria-label="Offer progress">';
+    var title = opt(config2, "qs_top_title");
+    if (title) html += '<div class="bxq-top-title">' + esc(title) + "</div>";
+    html += '<p class="bxq-top-msg is-' + esc(msg.tone) + '" aria-live="polite">' + esc(msg.text) + "</p>";
+    var i;
+    if (style === "bar") {
+      html += '<div class="bxq-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(progress.percent) + '"><div class="bxq-fill' + (model.box.tier ? " is-done" : "") + '" style="width:' + progress.percent.toFixed(1) + '%"></div>';
+      for (i = 0; i < progress.marks.length; i++) {
+        html += '<span class="bxq-tick' + (progress.marks[i].hit ? " is-hit" : "") + '" style="left:' + progress.marks[i].percent.toFixed(1) + '%"></span>';
+      }
+      html += "</div>";
+      if (labels) {
+        html += '<div class="bxq-ticks">';
+        for (i = 0; i < progress.marks.length; i++) {
+          var mk = progress.marks[i];
+          html += '<span class="bxq-tick-label' + (mk.hit ? " is-hit" : "") + '" style="left:' + mk.percent.toFixed(1) + '%"><b>' + esc(mk.label) + "</b><small>" + esc(mk.at) + "</small></span>";
+        }
+        html += "</div>";
+      }
+    } else if (style === "steps") {
+      html += '<div class="bxq-steps">';
+      var prev = 0;
+      for (i = 0; i < progress.marks.length; i++) {
+        var step = progress.marks[i];
+        var span = Math.max(1e-4, step.percent - prev);
+        var fill2 = Math.max(0, Math.min(100, (progress.percent - prev) / span * 100));
+        html += '<div class="bxq-step' + (step.hit ? " is-hit" : "") + (step.next ? " is-next" : "") + '"><div class="bxq-step-track"><div class="bxq-step-fill" style="width:' + fill2.toFixed(1) + '%"></div></div>' + (labels ? '<div class="bxq-step-label"><b>' + esc(step.label) + "</b><small>" + esc(step.at) + "</small></div>" : "") + "</div>";
+        prev = step.percent;
+      }
+      html += "</div>";
+    } else if (style === "milestones") {
+      html += '<div class="bxq-miles"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
+      for (i = 0; i < progress.marks.length; i++) {
+        var ms = progress.marks[i];
+        html += '<div class="bxq-mile' + (ms.hit ? " is-hit" : "") + (ms.next ? " is-next" : "") + '" style="left:' + ms.percent.toFixed(1) + '%"><span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, "bxq-mile-icon", ms.iconIndex) : "") + "</span>" + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + "</b><small>" + esc(ms.at) + "</small></span>" : "") + "</div>";
+      }
+      html += "</div>";
+    }
+    html += "</section>";
+    return html;
+  }
+  function renderCardCta(model, card) {
+    var config2 = model.config;
+    if (!card.available) return '<button type="button" class="bxq-cta is-out" disabled>Out of stock</button>';
+    if (card.qty > 0) {
+      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+    }
+    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config2, "qs_add_label") || "Add") + "</button>";
+  }
+  function renderCard(model, card) {
+    var config2 = model.config;
+    var normal = opt(config2, "qs_card_layout") === "normal";
+    var html = '<article class="bxq-card' + (normal ? " bxq-card--normal" : "") + (card.qty ? " is-in" : "") + (card.available ? "" : " is-out") + '" data-product-id="' + esc(card.id) + '">';
+    html += '<div class="bxq-media">';
+    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy" />' : '<span class="bxq-noimg"></span>';
+    if (card.badge) html += '<span class="bxq-badge">' + esc(card.badge) + "</span>";
+    if (normal) {
+      if (!card.available) html += '<span class="bxq-soldout">Out of stock</span>';
+    } else if (!card.available) {
+      html += '<span class="bxq-soldout">Out of stock</span>';
+    } else if (card.qty > 0) {
+      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+    } else {
+      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + "</button>";
+    }
+    html += '</div><div class="bxq-info">';
+    var eyebrow = opt(config2, "qs_card_eyebrow");
+    if (eyebrow) html += '<div class="bxq-eyebrow">' + esc(eyebrow) + "</div>";
+    html += '<h3 class="bxq-name">' + esc(card.title) + "</h3>";
+    if (on(config2, "qs_show_subtitle") && card.summary) html += '<p class="bxq-sub">' + esc(card.summary) + "</p>";
+    if (card.variants.length) {
+      html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
+      for (var i = 0; i < card.variants.length; i++) {
+        var v = card.variants[i];
+        html += '<option value="' + esc(v.id) + '"' + (v.on ? " selected" : "") + (v.available ? "" : " disabled") + ">" + esc(v.title) + (v.available ? "" : " (sold out)") + "</option>";
+      }
+      html += "</select>" + ICON_DOWN + "</label>";
+    } else if (card.weightText && on(config2, "qs_show_weight")) {
+      html += '<div class="bxq-variant is-static">' + esc(card.weightText) + "</div>";
+    }
+    if (card.off && on(config2, "qs_show_off")) html += '<div class="bxq-off"><span>' + card.off + "% OFF</span></div>";
+    html += '<div class="bxq-price"><b>' + esc(card.price) + "</b>" + (card.compare && on(config2, "qs_show_compare") ? "<s>" + esc(card.compare) + "</s>" : "") + "</div>";
+    if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
+    if (normal) html += renderCardCta(model, card);
+    html += "</div></article>";
+    return html;
+  }
+  function renderBar(model) {
+    var config2 = model.config;
+    var bar = model.bar;
+    if (!bar.items) return "";
+    var style = opt(config2, "qs_bar_style");
+    var cod = model.cod || {};
+    var codPlacement = cod.placement === "replace" || cod.placement === "above" ? cod.placement : "below";
+    var disabled = !bar.canCheckout;
+    var html = '<div class="bxq-bar bxq-bar--' + esc(style) + (bar.celebrate ? " is-celebrate" : "") + '" role="region" aria-label="Your box">';
+    if (bar.sheetOpen) {
+      html += '<div class="bxq-sheet">';
+      for (var s = 0; s < bar.sheet.length; s++) {
+        var line = bar.sheet[s];
+        html += '<div class="bxq-line">' + (line.image ? '<img src="' + esc(line.image) + '" alt="" />' : '<span class="bxq-noimg"></span>') + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + "</div>" + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + "</div>" : "") + '</div><div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span><button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one">+</button></div><div class="bxq-line-price">' + esc(line.price) + "</div></div>";
+      }
+      html += '<button type="button" class="bxq-clear" data-combo-action="reset">Remove all</button></div>';
+    }
+    var msg = bar.message;
+    var showMessage = on(config2, "qs_bar_show_message") && msg.text;
+    var progress = model.progress;
+    if (style === "slim" && model.view.enabled && model.view.tiers.length) {
+      html += '<div class="bxq-slim"><div class="bxq-slim-fill' + (model.box.tier ? " is-done" : "") + '" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
+    }
+    if (showMessage && style !== "compact") {
+      var icon = model.box.tier ? opt(config2, "qs_bar_icon_done") : opt(config2, "qs_bar_icon_locked");
+      html += '<div class="bxq-msg is-' + esc(msg.tone) + '">';
+      if (style === "full" && icon) html += '<span class="bxq-msg-icon">' + iconHtml(icon, "bxq-msg-glyph", model.box.tier ? "party" : "gift") + "</span>";
+      html += '<span aria-live="polite">' + boldTier(msg.text, msg.tier) + "</span></div>";
+    }
+    html += '<div class="bxq-row">';
+    if (style === "ring") {
+      var r = 18;
+      var circ = 2 * Math.PI * r;
+      var pct = model.view.enabled && model.view.tiers.length ? progress.percent : 100;
+      html += '<span class="bxq-ring' + (model.box.tier ? " is-done" : "") + '"><svg viewBox="0 0 44 44" width="44" height="44"><circle cx="22" cy="22" r="' + r + '" class="bxq-ring-bg"/><circle cx="22" cy="22" r="' + r + '" class="bxq-ring-fg" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + (circ * (1 - pct / 100)).toFixed(2) + '"/></svg><b>' + bar.items + "</b></span>";
+    } else if (on(config2, "qs_bar_show_thumbs") && bar.thumbs.length && style !== "compact") {
+      html += '<span class="bxq-thumbs">';
+      for (var t = 0; t < bar.thumbs.length; t++) html += '<img src="' + esc(bar.thumbs[t]) + '" alt="" style="z-index:' + (3 - t) + '" />';
+      html += "</span>";
+    }
+    html += '<button type="button" class="bxq-count" data-combo-action="' + (bar.sheetOpen ? "box-close" : "box-open") + '" aria-expanded="' + (bar.sheetOpen ? "true" : "false") + '"><span class="bxq-count-top">' + bar.items + (bar.items === 1 ? " Item" : " Items") + (bar.sheetOpen ? ICON_DOWN : ICON_UP) + (style === "compact" ? "<i>·</i>" + esc(bar.total) : "") + "</span>";
+    if (on(config2, "qs_bar_show_saved") && bar.saved && style !== "compact") html += '<span class="bxq-saved">' + esc(bar.saved) + "</span>";
+    else if (style !== "compact") html += '<span class="bxq-total">' + esc(bar.total) + "</span>";
+    html += "</button>";
+    var label = bar.checkingOut ? "Adding…" : opt(config2, "qs_btn_label");
+    var checkoutBtn = cod.shown && codPlacement === "replace" ? "" : '<button type="button" class="bxq-go" data-combo-action="checkout"' + (disabled ? " disabled" : "") + ">" + esc(label) + "</button>";
+    var codBtn = cod.shown ? '<button type="button" class="bxq-cod" data-combo-action="cod"' + (disabled ? " disabled" : "") + (cod.css ? ' style="' + esc(cod.css) + '"' : "") + ">" + (cod.icon || "") + esc(cod.text || "Cash on Delivery") + "</button>" : "";
+    html += '<span class="bxq-actions' + (cod.shown ? " has-cod" : "") + '">' + (codPlacement === "below" ? checkoutBtn + codBtn : codBtn + checkoutBtn) + "</span>";
+    html += "</div></div>";
+    return html;
+  }
+  function pick(config2, key, isMobile) {
+    if (isMobile) {
+      var m = config2[key + "_mobile"];
+      if (m !== void 0 && m !== null && m !== "") return m;
+    }
+    return config2[key];
+  }
+  function isSet(v) {
+    return v !== void 0 && v !== null && v !== "";
+  }
+  function boxCss(config2, prefix, isMobile) {
+    var parts = ["padding_top", "padding_right", "padding_bottom", "padding_left", "margin_top", "margin_right", "margin_bottom", "margin_left"];
+    var css = "";
+    for (var i = 0; i < parts.length; i++) {
+      var v = pick(config2, prefix + "_" + parts[i], isMobile);
+      if (isSet(v)) css += parts[i].replace("_", "-") + ":" + num(v, 0, -200, 400) + "px;";
+    }
+    return css;
+  }
+  function textCss(config2, prefix, isMobile, defaults) {
+    var css = "";
+    var align = pick(config2, prefix + "_align", isMobile);
+    css += "text-align:" + (align === "center" || align === "right" ? align : "left") + ";";
+    var size = pick(config2, prefix + "_size", isMobile);
+    if (isSet(size)) css += "font-size:" + num(size, defaults.size, 10, 96) + "px;";
+    var color = pick(config2, prefix + "_color", isMobile);
+    if (isSet(color)) css += "color:" + safeCss(color, defaults.color) + ";";
+    var weight = String(pick(config2, prefix + "_font_weight", isMobile) || "");
+    if (/^[1-9]00$/.test(weight)) css += "font-weight:" + weight + ";";
+    return css;
+  }
+  function renderHead(model) {
+    var config2 = model.config;
+    if (!on(config2, "qs_show_header") || config2.show_title_description === false) return "";
+    if (!model.title && !model.description) return "";
+    var m = model.isMobile;
+    var html = '<header class="bxq-head">';
+    if (model.title) {
+      var titleCss = textCss(config2, "heading", m, { size: m ? 22 : 28, color: "inherit" });
+      var family = String(config2.heading_font_family || "");
+      if (family && family !== "inherit" && /^[\w -]{1,40}$/.test(family)) titleCss += "font-family:'" + family + "',sans-serif;";
+      if (isSet(config2.heading_letter_spacing)) titleCss += "letter-spacing:" + num(config2.heading_letter_spacing, 0, -10, 20) + "px;";
+      if (isSet(config2.heading_line_height)) titleCss += "line-height:" + num(config2.heading_line_height, 1.2, 0.5, 3) + ";";
+      var transform = config2.heading_text_transform;
+      if (transform === "uppercase" || transform === "lowercase" || transform === "capitalize") titleCss += "text-transform:" + transform + ";";
+      var wrapCss = boxCss(config2, "title_container", m);
+      if (config2.title_max_width_mode === "custom" && !m) {
+        var align = pick(config2, "heading_align", m);
+        wrapCss += "max-width:" + num(config2.title_max_width_custom, 400, 100, 2e3) + "px;" + (align === "center" ? "margin-left:auto;margin-right:auto;" : align === "right" ? "margin-left:auto;" : "");
+      }
+      html += '<div class="bxq-title-wrap" style="' + wrapCss + '"><h2 class="bxq-title" style="' + titleCss + '">' + esc(model.title) + "</h2></div>";
+    }
+    if (model.description) {
+      html += '<div class="bxq-desc-wrap" style="' + boxCss(config2, "description_container", m) + '"><p class="bxq-desc" style="' + textCss(config2, "description", m, { size: 15, color: "inherit" }) + '">' + esc(model.description) + "</p></div>";
+    }
+    return html + "</header>";
+  }
+  function renderBanner(model) {
+    var config2 = model.config;
+    if (config2.show_banner === false) return "";
+    var m = model.isMobile;
+    var url = m && isIconUrl(config2.banner_image_mobile_url) ? config2.banner_image_mobile_url : config2.banner_image_url;
+    if (!isIconUrl(url)) return "";
+    var fit = config2.banner_fit_mode;
+    var height = m ? num(config2.banner_height_mobile || config2.banner_height_desktop, 120, 40, 800) : num(config2.banner_height_desktop, 180, 40, 1e3);
+    var width = m ? num(config2.banner_width_mobile || config2.banner_width_desktop, 100, 20, 100) : num(config2.banner_width_desktop, 100, 20, 100);
+    var boxCssText = "width:" + (config2.banner_full_width ? "100%" : width + "%") + ";" + (fit === "adapt" ? "" : "height:" + height + "px;");
+    var imgCss = fit === "adapt" ? "height:auto;" : "height:100%;object-fit:" + (fit === "contain" ? "contain" : "cover") + ";";
+    return '<div class="bxq-banner' + (config2.banner_full_width ? " is-full" : "") + '" style="' + boxCssText + '"><img src="' + esc(url) + '" alt="' + esc(model.title || "Banner") + '" style="' + imgCss + '" /></div>';
+  }
+  function render(model) {
+    var config2 = model.config;
+    var html = '<div class="bxq' + (model.isMobile ? " bxq--m" : "") + '" style="' + vars(config2) + '">';
+    html += renderBanner(model);
+    html += renderHead(model);
+    html += renderTop(model);
+    html += renderFilters(model);
+    if (model.row.menus.length) {
+      for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
+    }
+    if (model.empty) html += '<div class="bxq-empty">' + esc(model.empty) + "</div>";
+    else {
+      html += '<div class="bxq-grid">';
+      for (var c = 0; c < model.cards.length; c++) html += renderCard(model, model.cards[c]);
+      html += "</div>";
+    }
+    html += renderBar(model);
+    if (model.toast) html += '<div class="bxq-toast" role="status">' + esc(model.toast) + "</div>";
+    html += "</div>";
+    return html;
+  }
+  function applyUiAction(ui, action, el) {
+    var value = el && el.getAttribute ? el.getAttribute("data-value") : null;
+    var menu = el && el.getAttribute ? el.getAttribute("data-menu") : null;
+    if (!ui.dd) ui.dd = {};
+    if (action === "qs-chip") {
+      ui.chip = value === "all" || value === ui.chip ? "all" : value;
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-instock") {
+      ui.instock = !ui.instock;
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-menu") {
+      ui.menu = ui.menu === menu ? null : menu;
+      return true;
+    }
+    if (action === "qs-menu-close") {
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-pick") {
+      ui.dd[menu] = value || "";
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-clear") {
+      ui.chip = "all";
+      ui.instock = false;
+      ui.dd = {};
+      ui.menu = null;
+      return true;
+    }
+    if (action === "box-open") {
+      ui.sheetOpen = true;
+      return true;
+    }
+    if (action === "box-close") {
+      ui.sheetOpen = false;
+      return true;
+    }
+    return false;
+  }
+  return {
+    DEFAULTS: DEFAULTS2,
+    SORTS,
+    opt,
+    on,
+    offerText: offerText2,
+    labelledTiers,
+    filterRow,
+    filterProducts,
+    canCheckout,
+    barMessage,
+    buildModel,
+    render,
+    applyUiAction,
+    ICON_NAMES,
+    TIER_ICON_ORDER,
+    iconName,
+    svgIcon,
+    httpsUrl,
+    collectionImage
+  };
+}
+const QUICK_SHOP_CSS = `
+.bxq{max-width:1280px;margin:0 auto;padding:16px 20px 24px;background:var(--bxq-page);color:var(--bxq-text);font-family:inherit;box-sizing:border-box;position:relative;}
+.bxq *{box-sizing:border-box;}
+.bxq button{font:inherit;color:inherit;}
+.bxq--m{padding:10px 12px 20px;}
+.bxq-head{margin:4px 0 14px;}
+.bxq-title{margin:0;font-size:28px;line-height:1.2;font-weight:800;color:var(--bxq-text);}
+.bxq--m .bxq-title{font-size:22px;}
+.bxq-banner{margin:0 auto 16px;overflow:hidden;border-radius:var(--bxq-radius);}
+.bxq-banner.is-full{border-radius:0;}
+.bxq-banner img{display:block;width:100%;}
+.bxq-desc{margin:6px 0 0;font-size:15px;line-height:1.5;opacity:.72;max-width:70ch;}
+.bxq-top{background:var(--bxq-top-bg);color:var(--bxq-top-text);border-radius:16px;padding:14px 18px 16px;margin:0 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;}
+.bxq--m .bxq-top{padding:10px 12px 8px;border-radius:14px;}
+.bxq--m .bxq-top.is-sticky .bxq-top-title{display:none;}
+.bxq--m .bxq-top-msg{font-size:13.5px;margin:0 0 8px;}
+.bxq-top-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.6;}
+.bxq-top-msg{margin:4px 0 10px;font-size:15px;font-weight:700;line-height:1.4;}
+.bxq-top-msg.is-success{color:var(--bxq-done);}
+.bxq-top-msg.is-error{color:#b91c1c;}
+.bxq-top--text .bxq-top-msg{margin-bottom:0;}
+.bxq-track{position:relative;height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
+/* Fills and the scrim are empty divs: themes like Dawn hide div:empty, so force them on. */
+.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim{display:block!important;}
+.bxq-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
+.bxq-fill.is-done{background:var(--bxq-done);}
+.bxq-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);}
+.bxq-tick.is-hit{border-color:var(--bxq-done);background:var(--bxq-done);}
+.bxq-ticks{position:relative;height:38px;margin-top:6px;}
+.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:12px;line-height:1.3;}
+.bxq-tick-label:last-child{transform:translateX(-100%);align-items:flex-end;}
+.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:11px;}
+.bxq-tick-label.is-hit b,.bxq-step.is-hit b,.bxq-mile.is-hit b{color:var(--bxq-done);}
+.bxq-steps{display:flex;gap:6px;}
+.bxq-step{flex:1;min-width:0;}
+.bxq-step-track{height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);overflow:hidden;}
+.bxq-step-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
+.bxq-step.is-hit .bxq-step-fill{background:var(--bxq-done);}
+.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:12px;line-height:1.3;}
+.bxq-miles{position:relative;height:74px;margin:0 50px;}
+.bxq--m .bxq-miles{margin:0 38px;}
+.bxq-miles-line{position:absolute;left:0;right:0;top:17px;height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
+.bxq-miles-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
+.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:110px;text-align:center;}
+.bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
+.bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
+.bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
+.bxq-mile-icon{width:18px;height:18px;object-fit:contain;display:block;}
+.bxq-mile-dot{color:#6b7280;}
+.bxq-mile.is-next .bxq-mile-dot{color:var(--bxq-fill);}
+.bxq-mile.is-hit .bxq-mile-dot{color:#fff;}
+.bxq-msg-icon{color:#fff;}
+.bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
+.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
+.bxq--m .bxq-mile{width:84px;}
+.bxq--m .bxq-mile-label{font-size:11px;}
+.bxq-filters{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 14px;scrollbar-width:none;align-items:center;}
+.bxq-filters::-webkit-scrollbar{display:none;}
+.bxq-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:9px 18px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--bxq-text) !important;}
+.bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
+.bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}
+.bxq-chip--icon{padding:9px 14px;position:relative;}
+.bxq-colbar{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 12px;margin-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.bxq-colbar::-webkit-scrollbar{display:none;}
+.bxq-col{flex:0 0 auto;width:calc(var(--bxq-col-size) + 16px);display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;margin:0;border:0;background:none;cursor:pointer;font:inherit;color:var(--bxq-text) !important;}
+.bxq-col-img{width:var(--bxq-col-size);height:var(--bxq-col-size);border-radius:var(--bxq-col-r);overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;color:var(--bxq-accent);transition:box-shadow .15s;}
+.bxq-col-img img{width:100%;height:100%;object-fit:cover;display:block;}
+.bxq-col-letter{font-size:calc(var(--bxq-col-size) * .38);font-weight:800;}
+.bxq-col.is-on .bxq-col-img{box-shadow:0 0 0 2.5px var(--bxq-accent);}
+.bxq-col-name{max-width:100%;font-size:13px;font-weight:600;line-height:1.25;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.bxq-col.is-on .bxq-col-name{color:var(--bxq-accent) !important;}
+.bxq--m .bxq-colbar{gap:10px;}
+.bxq--m .bxq-col{width:calc(var(--bxq-col-size-m) + 12px);}
+.bxq--m .bxq-col-img{width:var(--bxq-col-size-m);height:var(--bxq-col-size-m);}
+.bxq--m .bxq-col-letter{font-size:calc(var(--bxq-col-size-m) * .38);}
+.bxq--m .bxq-col-name{font-size:12px;}
+.bxq-chip--icon.is-active::after{content:"";position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bxq-accent);}
+.bxq-dd{position:relative;flex:0 0 auto;}
+.bxq-menu{position:fixed;z-index:1001;margin-top:6px;min-width:200px;max-height:300px;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;}
+.bxq-opt{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:9px;padding:10px 12px;font-size:14px;cursor:pointer;}
+.bxq-opt:hover{background:#f3f4f6;}
+.bxq-opt.is-on{color:var(--bxq-accent) !important;font-weight:700;}
+.bxq-scrim{position:fixed;inset:0;z-index:1000;}
+.bxq-grid{display:grid;grid-template-columns:repeat(var(--bxq-cols),minmax(0,1fr));gap:18px;}
+.bxq--m .bxq-grid{grid-template-columns:repeat(var(--bxq-cols-m),minmax(0,1fr));gap:10px;}
+.bxq-card{background:var(--bxq-card);border-radius:var(--bxq-radius);padding:12px;display:flex;flex-direction:column;min-width:0;}
+.bxq--m .bxq-card{padding:8px;}
+.bxq-card.is-out .bxq-media img{opacity:.5;}
+.bxq-media{position:relative;aspect-ratio:var(--bxq-ratio);border-radius:calc(var(--bxq-radius) - 2px);overflow:hidden;background:#fff;}
+.bxq-media img{width:100%;height:100%;object-fit:contain;display:block;}
+.bxq-noimg{display:block;width:100%;height:100%;background:#eef0f3;}
+.bxq-badge{position:absolute;left:0;right:0;bottom:0;padding:16px 10px 6px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(180deg,transparent,var(--bxq-badge) 70%);}
+.bxq-add{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:12px;border:2px solid var(--bxq-accent);background:#fff;color:var(--bxq-accent) !important;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.bxq-add:hover{background:color-mix(in srgb,var(--bxq-accent) 8%,#fff);}
+.bxq--m .bxq-add{width:36px;height:36px;border-radius:10px;}
+.bxq-stepper{position:absolute;top:8px;right:8px;display:flex;align-items:center;background:var(--bxq-accent);color:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+.bxq-stepper button{border:0;background:transparent;color:#fff !important;width:36px;height:40px;font-size:20px;font-weight:700;cursor:pointer;}
+.bxq-stepper span{min-width:22px;text-align:center;font-weight:800;}
+.bxq--m .bxq-stepper button{width:30px;height:34px;}
+.bxq-soldout{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.8);color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:5px 8px;}
+.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;}
+.bxq-eyebrow{font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;opacity:.6;}
+.bxq-name{margin:0;font-size:17px;line-height:1.3;font-weight:600;color:var(--bxq-text);}
+.bxq--m .bxq-name{font-size:14px;}
+.bxq-sub{margin:0;font-size:14px;line-height:1.4;opacity:.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.bxq--m .bxq-sub{font-size:12.5px;}
+.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;}
+.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;max-width:100%;}
+.bxq-variant svg{position:absolute;right:0;pointer-events:none;}
+.bxq-variant.is-static{color:var(--bxq-text);opacity:.75;}
+.bxq-off{display:flex;align-items:center;gap:8px;color:var(--bxq-off);font-size:15px;font-weight:800;}
+.bxq-off::after{content:"";flex:1;border-top:1.5px dashed rgba(0,0,0,.15);}
+.bxq-price{display:flex;align-items:baseline;gap:8px;}
+.bxq-price b{font-size:19px;font-weight:800;}
+.bxq-price s{font-size:14px;opacity:.45;}
+.bxq--m .bxq-price b{font-size:16px;}
+.bxq-nocount{font-size:12px;opacity:.55;}
+.bxq-cta{margin-top:auto;display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;border:0;border-radius:calc(var(--bxq-radius) - 4px);background:var(--bxq-accent);color:#fff !important;font:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+.bxq-card--normal .bxq-price{margin-bottom:6px;}
+.bxq-cta:hover{filter:brightness(.95);}
+.bxq-cta.is-out{background:#e5e7eb;color:#6b7280 !important;cursor:not-allowed;}
+.bxq-cta--stepper{justify-content:space-between;cursor:default;padding:0 4px;}
+.bxq-cta--stepper button{border:0;background:transparent;color:#fff !important;width:40px;height:42px;font-size:20px;font-weight:700;cursor:pointer;}
+.bxq-cta--stepper span{font-weight:800;}
+.bxq--m .bxq-cta{min-height:36px;font-size:14px;}
+.bxq--m .bxq-cta--stepper button{height:36px;width:34px;}
+.bxq-empty{padding:40px 16px;text-align:center;opacity:.65;font-size:15px;background:var(--bxq-card);border-radius:var(--bxq-radius);}
+.bxq-bar{position:sticky;bottom:12px;z-index:999;margin:18px auto 0;max-width:980px;background:var(--bxq-bar-bg);color:var(--bxq-bar-text);border-radius:var(--bxq-bar-r);box-shadow:0 -2px 24px rgba(0,0,0,.14);padding:12px 16px;overflow:hidden;}
+.bxq--m .bxq-bar{bottom:8px;padding:10px 12px;}
+.bxq-slim{height:4px;margin:-12px -16px 10px;background:rgba(0,0,0,.08);}
+.bxq-slim-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
+.bxq-slim-fill.is-done{background:var(--bxq-done);}
+.bxq-msg{display:flex;align-items:center;gap:12px;font-size:16px;padding:0 0 10px;margin:0 0 10px;border-bottom:1px solid rgba(0,0,0,.1);}
+.bxq--m .bxq-msg{font-size:14px;}
+.bxq-msg.is-error{color:#b91c1c;}
+.bxq-msg b{font-weight:800;}
+.bxq-msg-icon{width:42px;height:42px;flex:0 0 auto;border-radius:50%;background:var(--bxq-icon-bg);display:flex;align-items:center;justify-content:center;font-size:22px;}
+.bxq-msg-glyph{width:26px;height:26px;object-fit:contain;line-height:26px;text-align:center;}
+.bxq-bar.is-celebrate .bxq-msg-icon{animation:bxq-pop .7s ease;}
+.bxq-bar.is-celebrate .bxq-msg{animation:bxq-glow 1.2s ease;}
+@keyframes bxq-pop{0%{transform:scale(.6) rotate(-12deg);}55%{transform:scale(1.25) rotate(8deg);}100%{transform:none;}}
+@keyframes bxq-glow{0%,100%{background:transparent;}30%{background:color-mix(in srgb,var(--bxq-save) 14%,transparent);}}
+.bxq-row{display:flex;align-items:center;gap:12px;}
+.bxq-thumbs{display:flex;flex:0 0 auto;}
+.bxq-thumbs img{width:46px;height:46px;border-radius:12px;object-fit:cover;background:#fff;border:2px solid var(--bxq-bar-bg);margin-left:-26px;box-shadow:0 1px 4px rgba(0,0,0,.12);position:relative;}
+.bxq-thumbs img:first-child{margin-left:0;}
+.bxq--m .bxq-thumbs img{width:40px;height:40px;margin-left:-24px;}
+.bxq--m .bxq-thumbs img:first-child{margin-left:0;}
+.bxq-count{border:0;background:transparent;padding:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;min-width:0;flex:1;text-align:left;color:var(--bxq-bar-text) !important;}
+.bxq-count-top{display:inline-flex;align-items:center;gap:4px;font-size:17px;font-weight:700;white-space:nowrap;}
+.bxq-count-top svg{color:var(--bxq-accent);}
+.bxq-count-top i{font-style:normal;opacity:.5;margin:0 2px;}
+.bxq--m .bxq-count-top{font-size:15px;}
+.bxq-saved{font-size:14px;font-weight:700;color:var(--bxq-save);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.bxq-total{font-size:14px;font-weight:700;opacity:.75;}
+.bxq-actions{display:flex;gap:8px;flex:0 0 auto;}
+.bxq-go,.bxq-cod{border:0;border-radius:var(--bxq-btn-r);padding:var(--bxq-btn-py,14px) var(--bxq-btn-px,26px);font-size:17px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.bxq .bxq-go{font-size:var(--bxq-btn-fs);}
+.bxq-go{background:var(--bxq-btn);color:var(--bxq-btn-text) !important;}
+.bxq-cod{background:#fff;border:1.5px solid var(--bxq-btn);color:var(--bxq-btn);display:inline-flex;align-items:center;justify-content:center;gap:6px;}
+.bxq--m .bxq-row{flex-wrap:wrap;}
+.bxq--m .bxq-actions.has-cod{flex:1 1 100%;}
+.bxq--m .bxq-actions.has-cod button{flex:1;}
+.bxq--m .bxq-go,.bxq--m .bxq-cod{padding:var(--bxq-btn-py-m,12px) var(--bxq-btn-px-m,16px);font-size:var(--bxq-btn-fs-m,15px);}
+.bxq-go:disabled,.bxq-cod:disabled{opacity:.45;cursor:not-allowed;}
+.bxq-ring{position:relative;width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
+.bxq-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}
+.bxq-ring-bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:4;}
+.bxq-ring-fg{fill:none;stroke:var(--bxq-fill);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset .35s ease;}
+.bxq-ring.is-done .bxq-ring-fg{stroke:var(--bxq-done);}
+.bxq-ring b{font-size:15px;position:relative;}
+.bxq-sheet{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgba(0,0,0,.1);}
+.bxq-line{display:flex;align-items:center;gap:10px;}
+.bxq-line img,.bxq-line .bxq-noimg{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:0 0 auto;}
+.bxq-line-main{flex:1;min-width:0;}
+.bxq-line-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bxq-line-sub{font-size:12px;opacity:.6;}
+.bxq-line-price{font-size:14px;font-weight:700;min-width:64px;text-align:right;}
+.bxq-mini{display:flex;align-items:center;border:1.5px solid var(--bxq-accent);border-radius:9px;color:var(--bxq-accent);}
+.bxq-mini button{border:0;background:transparent;width:28px;height:28px;font-size:16px;font-weight:700;cursor:pointer;color:var(--bxq-accent) !important;}
+.bxq-mini span{min-width:18px;text-align:center;font-size:13px;font-weight:800;}
+.bxq-clear{align-self:flex-start;border:0;background:transparent;padding:0;font-size:13px;text-decoration:underline;opacity:.6;cursor:pointer;}
+.bxq-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10000;background:#111827;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:90vw;}
+@media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
+`;
+const kit$1 = createQuickShopKit(createComboWeightCore());
+const val$1 = (config2, key) => kit$1.opt(config2, key);
+const isOn = (config2, key) => kit$1.on(config2, key);
+function IconPicker({ label, value, onChange, fallback = "gift" }) {
+  const isUrl = /^https:\/\//.test(value || "");
+  const current = isUrl ? "" : kit$1.iconName(value, fallback);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, margin: "6px 0" }, role: "radiogroup", "aria-label": label, children: kit$1.ICON_NAMES.map((name) => {
+      const on = current === name;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          role: "radio",
+          "aria-checked": on,
+          "aria-label": name,
+          title: name,
+          onClick: () => onChange(name),
+          style: { width: 34, height: 34, padding: 7, borderRadius: 8, cursor: "pointer", border: `1px solid ${on ? "#2563eb" : "#d1d5db"}`, background: on ? "#eff6ff" : "#fff", color: on ? "#2563eb" : "#374151" },
+          dangerouslySetInnerHTML: { __html: kit$1.svgIcon(name) }
+        },
+        name
+      );
+    }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "Or an image link",
+        value: isUrl ? value : "",
+        placeholder: "https://… (optional)",
+        autoComplete: "off",
+        onChange: (v) => onChange(v.trim() ? v.trim() : current || fallback)
+      }
+    )
+  ] });
+}
+function TierIcons({ config: config2, updateConfig }) {
+  var _a;
+  const tiers = ((_a = config2.weight_pricing) == null ? void 0 : _a.tiers) || [];
+  const saved = String(val$1(config2, "qs_tier_icons") || "").split(",").map((s) => s.trim());
+  const enabled = saved.some(Boolean);
+  const count = Math.max(tiers.length, 1);
+  const iconAt = (i) => saved[i] || kit$1.TIER_ICON_ORDER[i % kit$1.TIER_ICON_ORDER.length];
+  const setAt = (i, icon) => {
+    const next = Array.from({ length: Math.max(count, saved.length) }, (_, j) => iconAt(j));
+    next[i] = icon;
+    updateConfig("qs_tier_icons", next.join(", "));
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Checkbox,
+      {
+        label: "Icons on the milestones",
+        checked: enabled,
+        onChange: (v) => updateConfig("qs_tier_icons", v ? kit$1.DEFAULTS.qs_tier_icons : "")
+      }
+    ),
+    enabled && Array.from({ length: count }, (_, i) => {
+      var _a2, _b;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        IconPicker,
+        {
+          fallback: i,
+          label: `Tier ${i + 1}${((_a2 = tiers[i]) == null ? void 0 : _a2.label) ? ` · ${tiers[i].label}` : ""}`,
+          value: iconAt(i),
+          onChange: (icon) => setAt(i, icon)
+        },
+        ((_b = tiers[i]) == null ? void 0 : _b.id) || i
+      );
+    })
+  ] });
+}
+function StylePicker({ label, value, options, onChange }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "150", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "span", variant: "bodyMd", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 8 }, role: "radiogroup", "aria-label": label, children: options.map((o) => {
+      const on = o.value === value;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          role: "radio",
+          "aria-checked": on,
+          onClick: () => onChange(o.value),
+          style: {
+            border: on ? "2px solid #2563eb" : "1px solid #d1d5db",
+            borderRadius: 10,
+            background: on ? "#eff6ff" : "#fff",
+            padding: "8px 6px 6px",
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "stretch",
+            gap: 6
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: 30, display: "flex", alignItems: "center", justifyContent: "center" }, children: o.preview }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 12, fontWeight: on ? 700 : 500, color: "#111827" }, children: o.label })
+          ]
+        },
+        o.value
+      );
+    }) })
+  ] });
+}
+const track = { height: 5, borderRadius: 9, background: "#e5e7eb", position: "relative", width: "100%" };
+const fill = (w, color = "#2563eb") => ({ position: "absolute", left: 0, top: 0, bottom: 0, width: w, borderRadius: 9, background: color });
+const dot = (left, on) => ({ position: "absolute", left, top: "50%", width: 11, height: 11, margin: "-5.5px 0 0 -5.5px", borderRadius: "50%", background: on ? "#16a34a" : "#fff", border: `2px solid ${on ? "#16a34a" : "#cbd5e1"}` });
+const TOP_STYLES = [
+  { value: "milestones", label: "Milestones", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: track, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("55%") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: dot("40%", true) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: dot("90%", false) })
+  ] }) },
+  { value: "bar", label: "Bar + ticks", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: track, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("60%") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { ...dot("50%", true), width: 7, height: 7, margin: "-3.5px 0 0 -3.5px" } })
+  ] }) },
+  { value: "steps", label: "Steps", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: 3, width: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { ...track, background: "#16a34a" } }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("40%") }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track })
+  ] }) },
+  { value: "text", label: "Text only", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 11, color: "#16a34a", fontWeight: 700 }, children: "Add 2 more…" }) },
+  { value: "none", label: "Hidden", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 11, color: "#9ca3af" }, children: "—" }) }
+];
+const BAR_STYLES = [
+  { value: "full", label: "Message + items", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: 9, textAlign: "left", display: "flex", alignItems: "center", gap: 3 }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 10, height: 10, borderRadius: "50%", background: "#16a34a" } }),
+      "You unlocked"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 Items" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
+    ] })
+  ] }) },
+  { value: "slim", label: "Slim line", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("60%") }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 5 }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 Items" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
+    ] })
+  ] }) },
+  { value: "ring", label: "Ring", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "space-between" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 20, height: 20, borderRadius: "50%", border: "3px solid #2563eb", borderRightColor: "#e5e7eb", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }, children: "5" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
+  ] }) },
+  { value: "compact", label: "Compact", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 · ₹999" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
+  ] }) }
+];
+function Colors({ config: config2, updateConfig, ColorPickerField: ColorPickerField2, fields }) {
+  if (!ColorPickerField2) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-grid-2", children: fields.map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label, value: val$1(config2, key), onChange: (v) => updateConfig(key, v) }, key)) });
+}
+function Px({ PxField: PxField2, config: config2, updateConfig, keyName, label, min = 0, max = 40 }) {
+  if (!PxField2) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label, value: Number(val$1(config2, keyName)), min, max, onChange: (v) => updateConfig(keyName, v) });
+}
+function pageHandles(config2) {
+  const out = [];
+  for (let i = 1; i <= Number(config2.tab_count || 1); i++) {
+    const h = config2[`col_${i}`];
+    if (h && !out.includes(h)) out.push(h);
+  }
+  return out;
+}
+function CollectionPictures({ config: config2, updateConfig, collections = [], PxField: PxField2 }) {
+  const own = config2.qs_chip_images && typeof config2.qs_chip_images === "object" ? config2.qs_chip_images : {};
+  const handles = pageHandles(config2);
+  const setImage = (handle, url) => {
+    const next = { ...own };
+    if (url) next[handle] = url;
+    else delete next[handle];
+    updateConfig("qs_chip_images", next);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Select,
+        {
+          label: "Picture shape",
+          options: [{ label: "Circle", value: "circle" }, { label: "Rounded square", value: "rounded" }, { label: "Square", value: "square" }],
+          value: val$1(config2, "qs_chip_image_shape"),
+          onChange: (v) => updateConfig("qs_chip_image_shape", v)
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_chip_image_size", label: "Picture size", min: 40, max: 120 })
+    ] }),
+    handles.map((h) => {
+      const col = collections.find((c) => c.handle === h);
+      const value = own[h] || "";
+      const bad = value && !kit$1.httpsUrl(value);
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TextField$1,
+        {
+          label: `${(col == null ? void 0 : col.title) || h} picture`,
+          value,
+          onChange: (v) => setImage(h, v.trim()),
+          placeholder: "https://… (optional)",
+          autoComplete: "off",
+          error: bad ? "Use an https:// image link." : void 0,
+          helpText: value ? void 0 : (col == null ? void 0 : col.image) ? "Empty = the collection's own image." : "Empty = the first product's image (this collection has no image in Shopify)."
+        },
+        h
+      );
+    })
+  ] });
+}
+function FiltersSectionComponent({ config: config2, updateConfig, expanded, onToggle, collections, PxField: PxField2 }) {
+  const source = val$1(config2, "qs_chips_source");
+  const toggleWithLabel = (key, labelKey, title, help) => /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: title, checked: isOn(config2, key), onChange: (v) => updateConfig(key, v), helpText: help }),
+    isOn(config2, key) && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Label", labelHidden: true, value: val$1(config2, labelKey), onChange: (v) => updateConfig(labelKey, v), autoComplete: "off" })
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Filters", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ChoiceList,
+      {
+        title: "Filter chips",
+        choices: [
+          { label: "One chip per collection", value: "collections", helpText: "Needs two or more collections." },
+          { label: "Chips from product tags I choose", value: "tags" },
+          { label: "No chips", value: "none" }
+        ],
+        selected: [source],
+        onChange: ([v]) => updateConfig("qs_chips_source", v)
+      }
+    ),
+    source === "collections" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ChoiceList,
+      {
+        title: "Collection chips look",
+        choices: [
+          { label: "Text chips", value: "text" },
+          { label: "Pictures with names", value: "images", helpText: "A row shoppers swipe to switch collections." }
+        ],
+        selected: [val$1(config2, "qs_chip_style")],
+        onChange: ([v]) => updateConfig("qs_chip_style", v)
+      }
+    ),
+    source === "collections" && val$1(config2, "qs_chip_style") === "images" && /* @__PURE__ */ jsxRuntimeExports.jsx(CollectionPictures, { config: config2, updateConfig, collections, PxField: PxField2 }),
+    source === "tags" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "Tags to show as chips",
+        value: config2.qs_chip_tags || "",
+        onChange: (v) => updateConfig("qs_chip_tags", v),
+        placeholder: "Boneless, Curry Cut, Drumstick",
+        helpText: "Separate with commas. A chip shows products with that Shopify tag.",
+        autoComplete: "off"
+      }
+    ),
+    source !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“All” chip first", checked: isOn(config2, "qs_show_all_chip"), onChange: (v) => updateConfig("qs_show_all_chip", v) }),
+      isOn(config2, "qs_show_all_chip") && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "All chip label", labelHidden: true, value: val$1(config2, "qs_all_label"), onChange: (v) => updateConfig("qs_all_label", v), autoComplete: "off" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Dropdown filters" }) }),
+    toggleWithLabel("qs_filter_type", "qs_filter_type_label", "Product type", "Lists the Shopify product types on the page."),
+    toggleWithLabel("qs_filter_brand", "qs_filter_brand_label", "Brand (vendor)", "Lists the vendors on the page."),
+    toggleWithLabel("qs_filter_custom", "qs_filter_custom_label", "Your own tag filter", "A dropdown of tags you choose, e.g. Cut: Boneless, With skin."),
+    isOn(config2, "qs_filter_custom") && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "Tags in this dropdown",
+        value: config2.qs_filter_custom_tags || "",
+        onChange: (v) => updateConfig("qs_filter_custom_tags", v),
+        placeholder: "Boneless, With skin",
+        helpText: "Separate with commas.",
+        autoComplete: "off"
+      }
+    ),
+    toggleWithLabel("qs_filter_sort", "qs_filter_sort_label", "Sort", "Price, biggest discount, name."),
+    toggleWithLabel("qs_filter_instock", "qs_filter_instock_label", "“In stock” chip", "Hides sold-out products when on."),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "A dropdown only shows when the products on the page have at least two values for it." })
+  ] }) });
+}
+const cardThumb = (children) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 34, height: 30, border: "1px solid #d1d5db", borderRadius: 5, position: "relative", background: "#fff", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 2, boxSizing: "border-box" }, children });
+const CARD_LAYOUTS = [
+  { value: "quick_add", label: "Quick add", preview: cardThumb(/* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { position: "absolute", top: 2, right: 2, width: 10, height: 10, borderRadius: 3, border: "1.5px solid #2563eb", color: "#2563eb", fontSize: 9, lineHeight: "8px", textAlign: "center", fontWeight: 800 }, children: "+" })) },
+  { value: "normal", label: "Add button", preview: cardThumb(/* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { height: 7, borderRadius: 2, background: "#2563eb" } })) }
+];
+function CardsSectionComponent({ config: config2, updateConfig, expanded, onToggle, PxField: PxField2 }) {
+  var _a;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Product cards", expanded, onToggle, badge: (_a = CARD_LAYOUTS.find((c) => c.value === val$1(config2, "qs_card_layout"))) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Card layout", value: val$1(config2, "qs_card_layout"), options: CARD_LAYOUTS, onChange: (v) => updateConfig("qs_card_layout", v) }),
+    val$1(config2, "qs_card_layout") === "normal" && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Add button text", value: config2.qs_add_label ?? val$1(config2, "qs_add_label"), onChange: (v) => updateConfig("qs_add_label", v), autoComplete: "off", maxLength: 24 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Columns (desktop)", options: ["2", "3", "4", "5", "6"].map((v) => ({ label: v, value: v })), value: String(val$1(config2, "qs_columns_desktop")), onChange: (v) => updateConfig("qs_columns_desktop", Number(v)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Columns (phone)", options: ["1", "2", "3"].map((v) => ({ label: v, value: v })), value: String(val$1(config2, "qs_columns_mobile")), onChange: (v) => updateConfig("qs_columns_mobile", Number(v)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Image shape",
+        options: [{ label: "Square", value: "square" }, { label: "Portrait (4:5)", value: "portrait" }, { label: "Landscape (4:3)", value: "landscape" }],
+        value: val$1(config2, "qs_image_ratio"),
+        onChange: (v) => updateConfig("qs_image_ratio", v)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "Small line above the title",
+        value: config2.qs_card_eyebrow || "",
+        onChange: (v) => updateConfig("qs_card_eyebrow", v),
+        placeholder: "e.g. 8 MINS or Freshly cut",
+        helpText: "Leave empty to hide.",
+        autoComplete: "off",
+        maxLength: 40
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Short description under the title", checked: isOn(config2, "qs_show_subtitle"), onChange: (v) => updateConfig("qs_show_subtitle", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“% OFF” from the compare-at price", checked: isOn(config2, "qs_show_off"), onChange: (v) => updateConfig("qs_show_off", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Struck-through compare-at price", checked: isOn(config2, "qs_show_compare"), onChange: (v) => updateConfig("qs_show_compare", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Weight when a product has one variant", checked: isOn(config2, "qs_show_weight"), onChange: (v) => updateConfig("qs_show_weight", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge for products tagged", value: val$1(config2, "qs_badge_tag"), onChange: (v) => updateConfig("qs_badge_tag", v), autoComplete: "off", helpText: "A Shopify tag. Empty = no badge." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge text", value: val$1(config2, "qs_badge_text"), onChange: (v) => updateConfig("qs_badge_text", v), autoComplete: "off" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_radius", label: "Card corners" })
+  ] }) });
+}
+function ProgressSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2 }) {
+  var _a;
+  const style = val$1(config2, "qs_top_style");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Top progress", expanded, onToggle, badge: (_a = TOP_STYLES.find((s) => s.value === style)) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: TOP_STYLES, onChange: (v) => updateConfig("qs_top_style", v) }),
+    style !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Heading", value: val$1(config2, "qs_top_title"), onChange: (v) => updateConfig("qs_top_title", v), autoComplete: "off", helpText: "Empty = no heading. The message under it comes from Advanced → Offer." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Stays at the top while scrolling", checked: isOn(config2, "qs_top_sticky"), onChange: (v) => updateConfig("qs_top_sticky", v) }),
+      isOn(config2, "qs_top_sticky") && /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_offset", label: "Space below your theme's sticky header", max: 300 }),
+      style !== "text" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Tier names under the bar", checked: isOn(config2, "qs_top_show_labels"), onChange: (v) => updateConfig("qs_top_show_labels", v) }),
+        style === "milestones" && /* @__PURE__ */ jsxRuntimeExports.jsx(TierIcons, { config: config2, updateConfig }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_height", label: "Bar thickness", min: 2, max: 24 }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_radius", label: "Bar corners", max: 999 })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Colors,
+        {
+          config: config2,
+          updateConfig,
+          ColorPickerField: ColorPickerField2,
+          fields: [["qs_top_bg", "Background"], ["qs_top_text", "Text"], ["qs_top_track", "Empty bar"], ["qs_top_fill", "Filled bar"], ["qs_top_done", "Unlocked"]]
+        }
+      )
+    ] })
+  ] }) });
+}
+function BarSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2, shiprocketEnabled = false }) {
+  var _a;
+  const style = val$1(config2, "qs_bar_style");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Bottom bar", expanded, onToggle, badge: (_a = BAR_STYLES.find((s) => s.value === style)) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: BAR_STYLES, onChange: (v) => updateConfig("qs_bar_style", v) }),
+    style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Unlock message", checked: isOn(config2, "qs_bar_show_message"), onChange: (v) => updateConfig("qs_bar_show_message", v) }),
+      style !== "ring" && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Item pictures", checked: isOn(config2, "qs_bar_show_thumbs"), onChange: (v) => updateConfig("qs_bar_show_thumbs", v) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Savings line", checked: isOn(config2, "qs_bar_show_saved"), onChange: (v) => updateConfig("qs_bar_show_saved", v), helpText: "Compare-at savings plus the box discount (only while the box discount is live)." })
+    ] }),
+    isOn(config2, "qs_bar_show_saved") && style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, more tiers to go", value: val$1(config2, "qs_saved_text"), onChange: (v) => updateConfig("qs_saved_text", v), autoComplete: "off", helpText: "{{saved}} = amount saved" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, all unlocked", value: val$1(config2, "qs_saved_done_text"), onChange: (v) => updateConfig("qs_saved_done_text", v), autoComplete: "off" })
+    ] }),
+    style === "full" && isOn(config2, "qs_bar_show_message") && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(IconPicker, { label: "Icon when unlocked", value: val$1(config2, "qs_bar_icon_done"), fallback: "party", onChange: (v) => updateConfig("qs_bar_icon_done", v) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(IconPicker, { label: "Icon before", value: val$1(config2, "qs_bar_icon_locked"), fallback: "gift", onChange: (v) => updateConfig("qs_bar_icon_locked", v) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Celebrate when a tier unlocks", checked: isOn(config2, "qs_bar_celebrate"), onChange: (v) => updateConfig("qs_bar_celebrate", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Button" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Button text", value: val$1(config2, "qs_btn_label"), onChange: (v) => updateConfig("qs_btn_label", v), autoComplete: "off", maxLength: 30 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Text size", value: Number(config2.qs_btn_font_size) || 16, min: 12, max: 24, onChange: (v) => updateConfig("qs_btn_font_size", v) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_btn_font_size_m", label: "Text size on phones", min: 11, max: 22 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_btn_pad_y", label: "Padding top and bottom", min: 6, max: 28 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_btn_pad_x", label: "Padding left and right", min: 8, max: 48 })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "The padding also sizes the COD button next to it. COD’s own text size and colours are under COD → Customize → Combo page button." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Button goes to",
+        options: [{ label: "Checkout", value: "checkout" }, { label: "Cart page", value: "cart" }],
+        value: val$1(config2, "qs_btn_action"),
+        onChange: (v) => updateConfig("qs_btn_action", v),
+        helpText: "The box discount applies at checkout either way."
+      }
+    ),
+    shiprocketEnabled && val$1(config2, "qs_btn_action") === "checkout" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Checkout with",
+        options: [
+          { label: "Shopify checkout", value: "shopify" },
+          { label: "Shiprocket, BRIX applies the box discount", value: "shiprocket" },
+          { label: "Shiprocket, my own Shiprocket offer", value: "shiprocket_own" }
+        ],
+        value: val$1(config2, "qs_checkout_with"),
+        onChange: (v) => updateConfig("qs_checkout_with", v),
+        helpText: val$1(config2, "qs_checkout_with") === "shiprocket" ? "BRIX makes a one-time code worth the box discount (single use, 2 hours) and opens Shiprocket with it." : val$1(config2, "qs_checkout_with") === "shiprocket_own" ? "Shiprocket opens with no BRIX code: set up a matching offer in Shiprocket yourself, or shoppers pay full price there." : "Shiprocket can't run the box discount itself, so Shopify checkout is the default."
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Checkbox,
+      {
+        label: "Only allow checkout once the first tier is unlocked",
+        checked: isOn(config2, "qs_require_first_tier"),
+        onChange: (v) => updateConfig("qs_require_first_tier", v)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Colors,
+      {
+        config: config2,
+        updateConfig,
+        ColorPickerField: ColorPickerField2,
+        fields: [["qs_bar_bg", "Bar background"], ["qs_bar_text", "Bar text"], ["qs_bar_save", "Savings text"], ["qs_bar_icon_bg", "Icon circle"], ["qs_btn_bg", "Button"], ["qs_btn_text_color", "Button text"]]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_bar_radius", label: "Bar corners" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_btn_radius", label: "Button corners" })
+    ] })
+  ] }) });
+}
+function ColorsSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2 }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Page colours", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsx(FormLayout, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Colors,
+    {
+      config: config2,
+      updateConfig,
+      ColorPickerField: ColorPickerField2,
+      fields: [["qs_page_bg", "Page background"], ["qs_card_bg", "Card background"], ["qs_text_color", "Text"], ["qs_accent", "Accent (+ button, chips)"], ["qs_off_color", "% OFF text"], ["qs_badge_bg", "Badge"]]
+    }
+  ) }) });
+}
+const QuickShopFiltersSection = reactExports.memo(FiltersSectionComponent);
+const QuickShopCardsSection = reactExports.memo(CardsSectionComponent);
+const QuickShopProgressSection = reactExports.memo(ProgressSectionComponent);
+const QuickShopBarSection = reactExports.memo(BarSectionComponent);
+const QuickShopColorsSection = reactExports.memo(ColorsSectionComponent);
+const ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
+function shrinkLogo(file) {
+  return new Promise((resolve, reject) => {
+    const src = URL.createObjectURL(file);
+    const img2 = new Image();
+    img2.onload = () => {
+      URL.revokeObjectURL(src);
+      const w0 = img2.naturalWidth || 320;
+      const h0 = img2.naturalHeight || 96;
+      const scale = Math.min(1, 320 / w0, 96 / h0);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(w0 * scale));
+      canvas.height = Math.max(1, Math.round(h0 * scale));
+      canvas.getContext("2d").drawImage(img2, 0, 0, canvas.width, canvas.height);
+      let out = "";
+      for (const quality of [0.92, 0.8, 0.65, 0.5]) {
+        out = canvas.toDataURL("image/webp", quality);
+        if (!out.startsWith("data:image/webp")) out = canvas.toDataURL("image/png");
+        if (out.length <= COD_LOGO_MAX_CHARS) break;
+      }
+      if (out.length > COD_LOGO_MAX_CHARS) reject(new Error("That logo is too detailed to store. Try a simpler PNG or a smaller file."));
+      else resolve(out);
+    };
+    img2.onerror = () => {
+      URL.revokeObjectURL(src);
+      reject(new Error("We couldn't read that image. Try a PNG, JPG, WebP or SVG."));
+    };
+    img2.src = src;
+  });
+}
+function LogoUploader({
+  value,
+  onChange,
+  error,
+  label = "Store logo",
+  helpText = "Shown on the left of the popup header. A wide logo on a transparent background looks best."
+}) {
+  const [busy, setBusy] = reactExports.useState(false);
+  const [problem, setProblem] = reactExports.useState("");
+  const [dialog, setDialog] = reactExports.useState(false);
+  const [url, setUrl] = reactExports.useState(value && value.startsWith("https://") ? value : "");
+  const onDrop = async (_all, accepted, rejected) => {
+    setProblem("");
+    if (rejected.length && !accepted.length) {
+      setProblem("Use a PNG, JPG, WebP or SVG image.");
+      return;
+    }
+    const file = accepted[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setProblem("That file is over 5 MB. Use a smaller image.");
+      return;
+    }
+    setBusy(true);
+    try {
+      onChange(await shrinkLogo(file));
+      setUrl("");
+    } catch (e) {
+      setProblem(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const applyUrl = () => {
+    const next = url.trim();
+    if (!isValidCodLogo(next)) {
+      setProblem("Use an image link that starts with https://");
+      return;
+    }
+    setProblem("");
+    onChange(next);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+    value ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cod-logo-box", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cod-logo-img", children: /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: value, alt: label }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: () => setDialog(true), loading: busy, children: "Replace" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { tone: "critical", variant: "plain", onClick: () => {
+          onChange("");
+          setUrl("");
+        }, children: "Remove" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "none" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(DropZone, { accept: ACCEPT, type: "image", allowMultiple: false, openFileDialog: dialog, onFileDialogClose: () => setDialog(false), onDrop }) })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cod-logo-drop", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DropZone, { accept: ACCEPT, type: "image", allowMultiple: false, onDrop, label, labelHidden: true, children: /* @__PURE__ */ jsxRuntimeExports.jsx(DropZone.FileUpload, { actionTitle: busy ? "Preparing…" : "Upload logo", actionHint: "PNG, JPG, WebP or SVG. We resize it for you." }) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "end", wrap: false, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Or use an image link", value: url, onChange: setUrl, placeholder: "https://cdn.shopify.com/…/logo.png", autoComplete: "off" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: applyUrl, disabled: !url.trim() || url.trim() === value, children: "Use link" })
+    ] }),
+    (problem || error) && /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: problem || error, fieldID: "cod-logo" }),
+    helpText && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: helpText })
+  ] });
+}
+function createComboLoader() {
+  var DEFAULTS2 = {
+    loader_enabled: true,
+    loader_style: "ring",
+    // ring | dots | pulse
+    loader_color: "#111827",
+    loader_track: "#e5e7eb",
+    loader_bg: "#ffffff",
+    loader_size: 44,
+    // px, the ring / dots
+    loader_logo: "",
+    // https link or a small raster data URL
+    loader_logo_size: 64,
+    // px
+    loader_logo_place: "inside",
+    // inside (the ring goes round it) | above
+    loader_text: "",
+    loader_text_color: "#6b7280",
+    loader_height: 60
+    // vh the loader area takes
+  };
+  var STYLES2 = ["ring", "dots", "pulse"];
+  var LOGO_MAX_CHARS = 4e4;
+  var HEX_RE2 = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
+  var LOGO_URL_RE2 = /^https:\/\/[^\s"'<>()\\]{1,500}$/;
+  var LOGO_DATA_RE2 = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+  function has(config2, key) {
+    return config2 && Object.prototype.hasOwnProperty.call(config2, key) && config2[key] !== null && config2[key] !== void 0;
+  }
+  function color(config2, key) {
+    var v = has(config2, key) ? String(config2[key]).trim() : "";
+    return HEX_RE2.test(v) ? v : DEFAULTS2[key];
+  }
+  function num(config2, key, min, max) {
+    var n = has(config2, key) ? Number(config2[key]) : NaN;
+    if (!isFinite(n)) n = DEFAULTS2[key];
+    return Math.max(min, Math.min(max, Math.round(n)));
+  }
+  function isValidLogo(value) {
+    if (typeof value !== "string" || !value) return false;
+    if (value.indexOf("data:") === 0) return value.length <= LOGO_MAX_CHARS && LOGO_DATA_RE2.test(value);
+    return LOGO_URL_RE2.test(value);
+  }
+  function pick(config2) {
+    var c = config2 || {};
+    var style = has(c, "loader_style") && STYLES2.indexOf(c.loader_style) !== -1 ? c.loader_style : DEFAULTS2.loader_style;
+    var logo = has(c, "loader_logo") && isValidLogo(c.loader_logo) ? c.loader_logo : "";
+    var text = has(c, "loader_text") ? String(c.loader_text).replace(/\s+/g, " ").trim().slice(0, 80) : "";
+    return {
+      enabled: !(has(c, "loader_enabled") && c.loader_enabled === false),
+      style,
+      color: color(c, "loader_color"),
+      track: color(c, "loader_track"),
+      bg: color(c, "loader_bg"),
+      size: num(c, "loader_size", 20, 120),
+      logo,
+      logoSize: num(c, "loader_logo_size", 24, 200),
+      logoPlace: c.loader_logo_place === "above" ? "above" : "inside",
+      text,
+      textColor: color(c, "loader_text_color"),
+      height: num(c, "loader_height", 20, 100)
+    };
+  }
+  function subset(config2) {
+    var out = {};
+    for (var key in DEFAULTS2) if (has(config2, key)) out[key] = config2[key];
+    return out;
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function html(s, opts) {
+    var o = opts || {};
+    var logo = s.logo ? '<img class="bxl-logo" src="' + esc(s.logo) + '" alt="" />' : "";
+    var inside = logo && s.logoPlace === "inside";
+    var ringSize = inside ? Math.max(s.size, s.logoSize + 28) : s.size;
+    var vars = "--bxl-color:" + s.color + ";--bxl-track:" + s.track + ";--bxl-bg:" + s.bg + ";--bxl-size:" + ringSize + "px;--bxl-dot:" + Math.max(6, Math.round(s.size / 4)) + "px;--bxl-logo:" + s.logoSize + "px;--bxl-text:" + s.textColor + ";" + (o.inline ? "min-height:" + (o.minHeight || 220) + "px;" : "min-height:" + s.height + "vh;");
+    var out = '<div class="bxl bxl--' + s.style + '" role="status" aria-live="polite" aria-label="' + esc(s.text || "Loading") + '" style="' + vars + '">';
+    if (logo && !inside) out += '<div class="bxl-above">' + logo + "</div>";
+    if (s.style === "dots") {
+      out += '<div class="bxl-dots">' + (inside ? '<div class="bxl-inside">' + logo + "</div>" : "") + "<span></span><span></span><span></span></div>";
+    } else if (s.style === "pulse") {
+      out += '<div class="bxl-pulse">' + (inside ? logo : '<span class="bxl-blob"></span>') + "</div>";
+    } else {
+      out += '<div class="bxl-ring-wrap"><span class="bxl-ring"></span>' + (inside ? '<div class="bxl-inside">' + logo + "</div>" : "") + "</div>";
+    }
+    if (s.text) out += '<div class="bxl-text">' + esc(s.text) + "</div>";
+    out += "</div>";
+    return out;
+  }
+  var CSS2 = ".bxl{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;width:100%;box-sizing:border-box;padding:32px 16px;background:var(--bxl-bg);}.bxl *{box-sizing:border-box;}.bxl-logo{display:block;max-width:var(--bxl-logo);max-height:var(--bxl-logo);width:auto;height:auto;object-fit:contain;}.bxl-above .bxl-logo{max-width:calc(var(--bxl-logo) * 2.5);}.bxl-ring-wrap{position:relative;width:var(--bxl-size);height:var(--bxl-size);}.bxl-ring{position:absolute;inset:0;border-radius:50%;border:max(3px,calc(var(--bxl-size) / 12)) solid var(--bxl-track);border-top-color:var(--bxl-color);animation:bxl-spin .8s linear infinite;}.bxl-inside{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}.bxl-dots{display:flex;align-items:center;gap:calc(var(--bxl-dot) * .8);flex-wrap:wrap;justify-content:center;}.bxl-dots .bxl-inside{position:static;flex-basis:100%;margin-bottom:8px;}.bxl-dots span{width:var(--bxl-dot);height:var(--bxl-dot);border-radius:50%;background:var(--bxl-color);animation:bxl-bounce 1s ease-in-out infinite;}.bxl-dots span:nth-of-type(2){animation-delay:.15s;}.bxl-dots span:nth-of-type(3){animation-delay:.3s;}.bxl-pulse{display:flex;align-items:center;justify-content:center;animation:bxl-pulse 1.2s ease-in-out infinite;}.bxl-blob{display:block;width:var(--bxl-size);height:var(--bxl-size);border-radius:50%;background:var(--bxl-color);}.bxl-text{font-size:14px;line-height:1.4;color:var(--bxl-text);text-align:center;max-width:320px;}@keyframes bxl-spin{to{transform:rotate(360deg);}}@keyframes bxl-bounce{0%,80%,100%{transform:scale(.55);opacity:.45;}40%{transform:scale(1);opacity:1;}}@keyframes bxl-pulse{0%,100%{transform:scale(.9);opacity:.6;}50%{transform:scale(1);opacity:1;}}@media (prefers-reduced-motion: reduce){.bxl-ring{animation-duration:2.4s;}.bxl-dots span,.bxl-pulse{animation:none;}}";
+  return { DEFAULTS: DEFAULTS2, STYLES: STYLES2, LOGO_MAX_CHARS, isValidLogo, pick, subset, html, CSS: CSS2 };
+}
+const Loader = createComboLoader();
+const D = Loader.DEFAULTS;
+const ring = { width: 22, height: 22, borderRadius: "50%", border: "3px solid #e5e7eb", borderTopColor: "#111827" };
+const STYLES = [
+  { value: "ring", label: "Round", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: ring }) },
+  { value: "dots", label: "Dots", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "flex", gap: 3 }, children: [0.45, 1, 0.45].map((o, i) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 7, height: 7, borderRadius: "50%", background: "#111827", opacity: o } }, i)) }) },
+  { value: "pulse", label: "Pulse", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 20, height: 20, borderRadius: "50%", background: "#111827", opacity: 0.7, boxShadow: "0 0 0 4px rgba(17,24,39,.15)" } }) }
+];
+const UPLOADER_CSS = `
+.cod-logo-box{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px;border-radius:12px;box-shadow:inset 0 0 0 1px #e3e3e3}
+.cod-logo-img{height:56px;min-width:120px;max-width:220px;padding:8px 12px;border-radius:8px;display:grid;place-items:center;background-color:#fff;background-image:linear-gradient(45deg,#f1f1f1 25%,transparent 25%,transparent 75%,#f1f1f1 75%),linear-gradient(45deg,#f1f1f1 25%,transparent 25%,transparent 75%,#f1f1f1 75%);background-size:12px 12px;background-position:0 0,6px 6px}
+.cod-logo-img img{max-height:40px;max-width:196px;object-fit:contain;display:block}
+.cod-logo-drop .Polaris-DropZone{min-height:96px}
+.cst-loader-preview{border:1px solid #e1e3e5;border-radius:10px;overflow:hidden}
+`;
+const val = (config2, key) => config2[key] === void 0 || config2[key] === null ? D[key] : config2[key];
+function Slider({ config: config2, updateConfig, keyName, label, min, max, suffix = "px" }) {
+  const value = Number(val(config2, keyName));
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    RangeSlider,
+    {
+      label,
+      min,
+      max,
+      value,
+      output: true,
+      suffix: /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "span", variant: "bodySm", children: [
+        value,
+        suffix
+      ] }),
+      onChange: (v) => updateConfig(keyName, Number(v))
+    }
+  );
+}
+function LoaderSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2 }) {
+  var _a;
+  const settings = reactExports.useMemo(() => Loader.pick(config2), [config2]);
+  const on = settings.enabled;
+  const preview = reactExports.useMemo(() => Loader.html({ ...settings, enabled: true }, { inline: true, minHeight: 200 }), [settings]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionCard, { title: "Page loader", expanded, onToggle, badge: on ? (_a = STYLES.find((s) => s.value === settings.style)) == null ? void 0 : _a.label : "Off", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: UPLOADER_CSS + Loader.CSS }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "400", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Checkbox,
+        {
+          label: "Show a loader while the page loads",
+          checked: on,
+          onChange: (v) => updateConfig("loader_enabled", v),
+          helpText: "Shoppers see it until the products appear. Off = nothing until the page is ready."
+        }
+      ),
+      on && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-loader-preview", "data-testid": "loader-preview", dangerouslySetInnerHTML: { __html: preview } }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: settings.style, options: STYLES, onChange: (v) => updateConfig("loader_style", v) }),
+        ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Loader colour", value: val(config2, "loader_color"), onChange: (v) => updateConfig("loader_color", v) }),
+          settings.style === "ring" && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Ring track", value: val(config2, "loader_track"), onChange: (v) => updateConfig("loader_track", v) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Background", value: val(config2, "loader_bg"), onChange: (v) => updateConfig("loader_bg", v) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Text colour", value: val(config2, "loader_text_color"), onChange: (v) => updateConfig("loader_text_color", v) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Slider, { config: config2, updateConfig, keyName: "loader_size", label: settings.style === "dots" ? "Dots size" : "Loader size", min: 20, max: 120 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h6", variant: "headingSm", children: "Your logo (optional)" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            LogoUploader,
+            {
+              label: "Loader logo",
+              value: config2.loader_logo || "",
+              onChange: (v) => updateConfig("loader_logo", v),
+              helpText: "A square logo on a transparent background looks best. We resize uploads for you."
+            }
+          )
+        ] }),
+        settings.logo && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Select,
+            {
+              label: "Logo position",
+              options: [
+                { label: settings.style === "ring" ? "Inside the ring" : "In the middle", value: "inside" },
+                { label: "Above the loader", value: "above" }
+              ],
+              value: settings.logoPlace,
+              onChange: (v) => updateConfig("loader_logo_place", v)
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Slider, { config: config2, updateConfig, keyName: "loader_logo_size", label: "Logo size", min: 24, max: 200 })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TextField$1,
+          {
+            label: "Text under the loader",
+            value: config2.loader_text || "",
+            onChange: (v) => updateConfig("loader_text", v),
+            placeholder: "e.g. Packing your box…",
+            maxLength: 80,
+            autoComplete: "off",
+            helpText: "Leave empty for no text."
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Slider, { config: config2, updateConfig, keyName: "loader_height", label: "Loader area height (of the screen)", min: 20, max: 100, suffix: "%" })
+      ] })
+    ] })
+  ] });
+}
+const LoaderSection = reactExports.memo(LoaderSectionComponent);
+function BannerSectionComponent({ config: config2, expanded, onToggle, updateConfig, PxField: PxField2 }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Banner Settings", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Checkbox,
+      {
+        label: "Show Banner",
+        checked: !!config2.show_banner,
+        onChange: (checked) => updateConfig("show_banner", checked)
+      }
+    ),
+    config2.show_banner && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Desktop Banner Image URL", value: config2.banner_image_url, onChange: (v) => updateConfig("banner_image_url", v), autoComplete: "off", placeholder: "https://example.com/desktop-banner.jpg" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Mobile Banner Image URL", value: config2.banner_image_mobile_url, onChange: (v) => updateConfig("banner_image_mobile_url", v), autoComplete: "off", placeholder: "https://example.com/mobile-banner.jpg", helpText: "Leave empty to use desktop banner on mobile" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Select,
+        {
+          label: "Banner Fit Mode",
+          options: [
+            { label: "Cover (Fill & Crop)", value: "cover" },
+            { label: "Contain (Show Full Image)", value: "contain" },
+            { label: "Adapt to Image (Natural Height)", value: "adapt" }
+          ],
+          value: config2.banner_fit_mode || "cover",
+          onChange: (v) => updateConfig("banner_fit_mode", v)
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Full Width", checked: !!config2.banner_full_width, onChange: (v) => updateConfig("banner_full_width", v), helpText: "Edge-to-edge ignoring container padding" }),
+      config2.layout === "layout3" && /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 16 }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Enable Banner Slider (Rotates 3 images)", checked: !!config2.enable_banner_slider, onChange: (v) => updateConfig("enable_banner_slider", v) }),
+        config2.enable_banner_slider && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block", children: [
+          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Auto-Rotation Speed (Seconds)", value: config2.slider_speed || 5, onChange: (v) => updateConfig("slider_speed", v), min: 2, max: 15, suffix: "s" }),
+          [1, 2, 3].map((i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-slider-item", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { variant: "headingSm", as: "h6", children: [
+              "Banner ",
+              i
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Image URL", value: config2[`banner_${i}_image`], onChange: (v) => updateConfig(`banner_${i}_image`, v), autoComplete: "off" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Title", value: config2[`banner_${i}_title`], onChange: (v) => updateConfig(`banner_${i}_title`, v), autoComplete: "off" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Subtitle", value: config2[`banner_${i}_subtitle`], onChange: (v) => updateConfig(`banner_${i}_subtitle`, v), autoComplete: "off" })
+          ] }, i))
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-section-divider", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Desktop Sizing" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Width (%)", value: config2.banner_width_desktop, onChange: (v) => updateConfig("banner_width_desktop", v), min: 0, max: 100, suffix: "%" }),
+          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Height (px)", value: config2.banner_height_desktop, onChange: (v) => updateConfig("banner_height_desktop", v) })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-section-divider", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Mobile Sizing" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Width (%)", value: config2.banner_width_mobile || config2.banner_width_desktop, onChange: (v) => updateConfig("banner_width_mobile", v), min: 0, max: 100, suffix: "%" }),
+          PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Height (px)", value: config2.banner_height_mobile || config2.banner_height_desktop, onChange: (v) => updateConfig("banner_height_mobile", v) })
+        ] })
+      ] })
+    ] })
+  ] }) });
+}
+const BannerSection = reactExports.memo(BannerSectionComponent);
+function ProductsSectionComponent({
+  config: config2,
+  expanded,
+  onToggle,
+  updateConfig,
+  PxField: PxField2,
+  ColorPickerField: ColorPickerField2
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Products & Grid", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show product grid", checked: !!config2.show_products_grid, onChange: (v) => updateConfig("show_products_grid", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show sold out products", checked: !!config2.show_sold_out_products, onChange: (v) => updateConfig("show_sold_out_products", v) }),
+    PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Grid Width (%)", value: config2.grid_width, onChange: (v) => updateConfig("grid_width", v), min: 10, max: 100, suffix: "%", helpText: "Adjust the overall width of the product grid" }),
+    config2.show_products_grid && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Desktop Columns", options: [{ label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }], value: config2.desktop_columns, onChange: (v) => updateConfig("desktop_columns", v) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Layout Type", options: [{ label: "Grid", value: "grid" }, { label: "Slider", value: "slider" }], value: config2.grid_layout_type, onChange: (v) => updateConfig("grid_layout_type", v) }),
+      config2.grid_layout_type === "slider" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block cst-full-width", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-nested-title", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingMd", as: "h5", children: "Slider Customization" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Navigation" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Navigation Arrows", checked: !!config2.show_nav_arrows, onChange: (v) => updateConfig("show_nav_arrows", v) }),
+          config2.show_nav_arrows && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-nested-block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+              ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Icon Color", value: config2.arrow_color || "#ffffff", onChange: (v) => updateConfig("arrow_color", v) }),
+              ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Background", value: config2.arrow_bg_color || "#000000", onChange: (v) => updateConfig("arrow_bg_color", v) }),
+              PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Size", value: config2.arrow_size || 40, onChange: (v) => updateConfig("arrow_size", v) }),
+              PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Radius (%)", value: config2.arrow_border_radius || 50, onChange: (v) => updateConfig("arrow_border_radius", v), suffix: "%", max: 50 })
+            ] }),
+            PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Opacity", value: config2.arrow_opacity ?? 0.9, onChange: (v) => updateConfig("arrow_opacity", v), min: 0, max: 1, step: 0.1, suffix: "" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Arrow Position", options: [{ label: "Inside Slider", value: "inside" }, { label: "Outside Slider", value: "outside" }], value: config2.arrow_position || "inside", onChange: (v) => updateConfig("arrow_position", v) })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Interaction" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Enable Touch/Swipe", checked: config2.enable_touch_swipe !== false, onChange: (v) => updateConfig("enable_touch_swipe", v) }),
+          config2.enable_touch_swipe !== false && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-nested-block", children: PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Sensitivity", value: config2.swipe_sensitivity || 5, onChange: (v) => updateConfig("swipe_sensitivity", v), min: 1, max: 10, suffix: "" }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-group", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Appearance" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Scrollbar", checked: !!config2.show_scrollbar, onChange: (v) => updateConfig("show_scrollbar", v) }),
+          config2.show_scrollbar && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+            ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Scroll Color", value: config2.scrollbar_color || "#dddddd", onChange: (v) => updateConfig("scrollbar_color", v) }),
+            PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Thickness", value: config2.scrollbar_thickness || 4, onChange: (v) => updateConfig("scrollbar_thickness", v) })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Mobile Columns", options: [{ label: "1", value: "1" }, { label: "2", value: "2" }], value: config2.mobile_columns, onChange: (v) => updateConfig("mobile_columns", v) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Image Ratio", options: [{ label: "Portrait (3:4)", value: "portrait" }, { label: "Square (1:1)", value: "square" }, { label: "Rectangle (4:3)", value: "rectangle" }], value: config2.product_image_ratio || "square", onChange: (v) => updateConfig("product_image_ratio", v) }),
+      PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Image Height (Desktop)", value: config2.product_image_height_desktop, onChange: (v) => updateConfig("product_image_height_desktop", v) }),
+      PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Image Height (Mobile)", value: config2.product_image_height_mobile, onChange: (v) => updateConfig("product_image_height_mobile", v) })
+    ] })
+  ] }) });
+}
+const ProductsSection = reactExports.memo(ProductsSectionComponent);
 const HEADING_FONT_OPTIONS = [
   { label: "Theme Font", value: "inherit" },
   { label: "Inter", value: "Inter" },
@@ -27738,7 +30742,7 @@ function BehaviorSectionComponent({
   ] });
 }
 const BehaviorSection = reactExports.memo(BehaviorSectionComponent);
-const PLAN_KEYS = ["free", "starter", "pro"];
+const PLAN_KEYS = ["free", "starter", "growth", "pro"];
 const PLANS = {
   free: {
     key: "free",
@@ -27769,12 +30773,25 @@ const PLANS = {
     comboTemplateLimit: 3,
     watermarkRemovable: true
   },
+  growth: {
+    key: "growth",
+    label: "Growth",
+    tagline: "Weight & value boxes",
+    price: { monthly: 59, annual: 590 },
+    rank: 2,
+    orderCap: 2e3,
+    overageRate: 0.02,
+    aiBrixCredits: 60,
+    aiBrixOverageRate: 0.02,
+    comboTemplateLimit: 10,
+    watermarkRemovable: true
+  },
   pro: {
     key: "pro",
     label: "Pro",
     tagline: "High-volume brands",
     price: { monthly: 79, annual: 790 },
-    rank: 2,
+    rank: 3,
     orderCap: null,
     overageRate: 0,
     aiBrixCredits: 90,
@@ -27784,30 +30801,35 @@ const PLANS = {
   }
 };
 const FEATURES = {
-  cart_drawer: { label: "Cart Drawer", states: { free: "enabled", starter: "enabled", pro: "enabled" } },
-  announcement_bar: { label: "Announcement Bar", states: { free: "enabled", starter: "enabled", pro: "enabled" } },
-  empty_cart_customization: { label: "Empty Cart Customization", states: { free: "enabled", starter: "enabled", pro: "enabled" } },
-  ai_brix: { label: "AI BRIX", states: { free: "enabled", starter: "enabled", pro: "enabled" } },
+  cart_drawer: { label: "Cart Drawer", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  announcement_bar: { label: "Announcement Bar", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  empty_cart_customization: { label: "Empty Cart Customization", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  ai_brix: { label: "AI BRIX", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
   // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
-  fbt: { label: "Frequently Bought Together", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  packs: { label: "Packs", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  cod_checkout: { label: "COD Checkout", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  coupon_lock_pro: { label: "Coupon Banner", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  progress_bar: { label: "Progress Bar", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  ai_cart_upsell: { label: "AI Cart Upsell", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  full_analytics: { label: "Full Analytics", states: { free: "locked", starter: "enabled", pro: "enabled" } },
-  confetti: { label: "Confetti", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  mobile_swipe_checkout: { label: "Mobile Swipe Checkout", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  build_a_combo: { label: "Build a Combo", states: { free: "locked", starter: "enabled", pro: "enabled" } },
+  fbt: { label: "Frequently Bought Together", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  packs: { label: "Packs", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  cod_checkout: { label: "COD Checkout", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  coupon_lock_pro: { label: "Coupon Banner", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  progress_bar: { label: "Progress Bar", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  ai_cart_upsell: { label: "AI Cart Upsell", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  full_analytics: { label: "Full Analytics", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  confetti: { label: "Confetti", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  mobile_swipe_checkout: { label: "Mobile Swipe Checkout", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  build_a_combo: { label: "Build a Combo", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
   // count-limited, see comboTemplateLimit
-  open_countdown: { label: "Open Countdown", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  custom_css: { label: "Custom CSS", states: { free: "preview", starter: "enabled", pro: "enabled" } },
-  priority_email_support: { label: "Priority Email Support", states: { free: "locked", starter: "enabled", pro: "enabled" } },
-  ai_support_247: { label: "24/7 AI Support", states: { free: "locked", starter: "enabled", pro: "enabled" } },
-  ai_analytics: { label: "AI Analytics", states: { free: "locked", starter: "locked", pro: "enabled" } },
-  advanced_ai_analytics: { label: "Advanced AI Analytics", states: { free: "locked", starter: "locked", pro: "enabled" } },
-  unlimited_ai_agents: { label: "Unlimited AI Agents", states: { free: "locked", starter: "locked", pro: "enabled" } },
-  combo_weight_pricing: { label: "Weight-based Combo Pricing", states: { free: "locked", starter: "locked", pro: "enabled" } }
+  open_countdown: { label: "Open Countdown", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  custom_css: { label: "Custom CSS", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  priority_email_support: { label: "Priority Email Support", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  ai_support_247: { label: "24/7 AI Support", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  ai_analytics: { label: "AI Analytics", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
+  advanced_ai_analytics: { label: "Advanced AI Analytics", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
+  unlimited_ai_agents: { label: "Unlimited AI Agents", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
+  // The three box combo templates (Build a Combo picker), see boxPricingFeature in combo-weight.shared.js.
+  combo_quantity_pricing: { label: "Quantity Box combos", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  combo_weight_pricing: { label: "Weight Box combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } },
+  combo_value_pricing: { label: "Value Box combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } },
+  combo_tier_pricing: { label: "Tiered pricing on older Classic combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } }
+  // Guided / Velocity / Editorial combos made before the box templates
 };
 function getFeatureState(planKey, featureKey) {
   const plan = PLANS[planKey] ? planKey : "free";
@@ -27940,6 +30962,7 @@ function ProBadge({ featureKey }) {
   const navigate = useNavigate();
   if (canPublishFeature2(featureKey)) return null;
   const isPreview = canPreviewFeature2(featureKey);
+  const label = getMinPlanForFeature(featureKey) === "growth" ? PLANS.growth.label : "Pro";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { content: "Visit plans", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
     {
@@ -27966,13 +30989,14 @@ function ProBadge({ featureKey }) {
       },
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { display: "flex", alignItems: "center", width: 13, height: 13, flexShrink: 0 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgLockIcon, tone: "inherit" }) }),
-        "Pro",
+        label,
         isPreview ? " · Try it for free" : ""
       ]
     }
   ) });
 }
-const FEATURE = "combo_weight_pricing";
+const TEMPLATE_NAMES = { [QUANTITY_BOX_LAYOUT]: "Quantity Box", [WEIGHT_BOX_LAYOUT]: "Weight Box", [QUICK_SHOP_LAYOUT]: "Value Box" };
+const MEASURE_WORDS = { quantity: "the number of items in the box", weight: "the weight of the box", value: "how much the box costs" };
 const TYPE_OPTIONS = [
   { label: "Percentage off", value: "percentage" },
   { label: "Amount off", value: "fixed_amount" },
@@ -28070,19 +31094,22 @@ function OfferSectionComponent({
   weightStatus = null,
   savedWeightHash = null
 }) {
-  var _a, _b, _c;
+  var _a, _b, _c, _d;
   const shopify2 = useAppBridge();
   const { canPublishFeature: canPublishFeature2 } = usePlan();
   const { symbol } = useCurrency();
   const auditFetcher = useFetcher();
   const isWeight = isWeightCombo(config2);
-  const isWeightBox = config2.layout === WEIGHT_BOX_LAYOUT;
-  const isQuickShop = config2.layout === QUICK_SHOP_LAYOUT;
-  const qsDesign = isQuickShop || isWeightBox;
+  const qsDesign = usesQuickShop(config2.layout);
+  const templateName = TEMPLATE_NAMES[config2.layout];
+  const FEATURE = boxPricingFeature(config2.layout);
+  const planName = ((_a = PLANS[getMinPlanForFeature(FEATURE)]) == null ? void 0 : _a.label) || "Pro";
   const canUseWeight = canPublishFeature2(FEATURE);
   const raw = config2.weight_pricing || defaultWeightPricing();
   const unit = raw.unit === "g" ? "g" : "kg";
-  const measure = isQuickShop ? measureOf(raw) : "weight";
+  const fixedMeasure = fixedMeasureFor(config2.layout);
+  const showMeasure = !fixedMeasure;
+  const measure = fixedMeasure || measureOf(raw);
   const byWeight = measure === "weight";
   const byValue = measure === "value";
   const [showMore, setShowMore] = reactExports.useState(false);
@@ -28095,7 +31122,19 @@ function OfferSectionComponent({
   const tiers = Array.isArray(raw.tiers) ? raw.tiers : [];
   const qualify = raw.qualify || { mode: "layout_collections", collection_ids: [], product_ids: [] };
   const setWeight = (patch) => updateConfig("weight_pricing", { ...raw, ...patch });
-  const setTier = (index, patch) => setWeight({ tiers: tiers.map((t, i) => i === index ? { ...t, ...patch } : t) });
+  const withMaxFor = (nextTiers) => !byValue && raw.max_grams == null && nextTiers.some((t) => t.type === "fixed_price") ? { tiers: nextTiers, max_grams: Math.max(...nextTiers.map((t) => Number(t.min_grams) || 0)) || null } : { tiers: nextTiers };
+  const setTier = (index, patch) => {
+    const next = tiers.map((t, i) => i === index ? { ...t, ...patch } : t);
+    setWeight(patch.type === "fixed_price" ? withMaxFor(next) : { tiers: next });
+  };
+  const addBoxPriceTier = () => {
+    const last = tiers[tiers.length - 1];
+    const n = last && Number(last.min_grams) > 0 ? Number(last.min_grams) + 1 : 2;
+    const next = [...tiers, { id: `t${Date.now().toString(36)}`, min_grams: n, type: "fixed_price", value: 999, label: "" }];
+    const patch = withMaxFor(next);
+    if (raw.max_grams != null && Number(raw.max_grams) < n) patch.max_grams = n;
+    setWeight(patch);
+  };
   const addTier = () => {
     const last = tiers[tiers.length - 1];
     const step = byWeight ? 1e3 : byValue ? 500 : 2;
@@ -28149,14 +31188,14 @@ function OfferSectionComponent({
     value: String(d.id)
   }));
   const modeChoices = [
-    { label: "Item count", value: "count", helpText: "Shoppers pick a number of items; you can add a coupon code." },
+    { label: "Single coupon", value: "count", helpText: "Shoppers pick a number of items; you can add one coupon code." },
     {
       label: /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "center", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Weight-based box" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tiered progress bar" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(ProBadge, { featureKey: FEATURE })
       ] }),
       value: "weight",
-      helpText: "Price the box by its weight: unlock a discount or a box price at weights you set.",
+      helpText: 'A progress bar unlocks better offers as the box grows: % off, amount off or "Buy 2 for 999", by number of items, box value or weight. Applied in Shopify checkout.',
       disabled: !canUseWeight && !isWeight
     }
   ];
@@ -28244,7 +31283,7 @@ function OfferSectionComponent({
         {
           label: "Before a tier is reached",
           autoComplete: "off",
-          value: ((_a = raw.messages) == null ? void 0 : _a.locked) ?? DEFAULT_MESSAGES.locked,
+          value: ((_b = raw.messages) == null ? void 0 : _b.locked) ?? DEFAULT_MESSAGES.locked,
           onChange: (v) => setMessage("locked", v),
           helpText: `{{remaining}} = ${byWeight ? "weight" : byValue ? "amount" : "items"} still to add, {{tier}} = the next tier's label`
         }
@@ -28254,7 +31293,7 @@ function OfferSectionComponent({
         {
           label: "When a tier is reached",
           autoComplete: "off",
-          value: ((_b = raw.messages) == null ? void 0 : _b.unlocked) ?? DEFAULT_MESSAGES.unlocked,
+          value: ((_c = raw.messages) == null ? void 0 : _c.unlocked) ?? DEFAULT_MESSAGES.unlocked,
           onChange: (v) => setMessage("unlocked", v),
           helpText: "{{tier}} = the tier's label"
         }
@@ -28264,7 +31303,7 @@ function OfferSectionComponent({
         {
           label: "When the box is full",
           autoComplete: "off",
-          value: ((_c = raw.messages) == null ? void 0 : _c.over_max) ?? value.messages.over_max,
+          value: ((_d = raw.messages) == null ? void 0 : _d.over_max) ?? value.messages.over_max,
           onChange: (v) => setMessage("over_max", v),
           helpText: `{{max}} = the max ${byWeight ? "weight" : "number of items"}`
         }
@@ -28277,10 +31316,10 @@ function OfferSectionComponent({
       unsaved && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "You have changed the pricing. Save to send it to checkout." })
     ] }),
     !weightStatus && isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "info", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Save this combo to set up its box discount in Shopify checkout." }) }),
-    isQuickShop && /* @__PURE__ */ jsxRuntimeExports.jsx(
+    showMeasure && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ChoiceList,
       {
-        title: "Box measured by",
+        title: qsDesign ? "Box measured by" : "Progress bar measured by",
         choices: MEASURE_CHOICES,
         selected: [measure],
         onChange: ([v]) => setMeasure(v)
@@ -28355,7 +31394,7 @@ function OfferSectionComponent({
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           TextField$1,
           {
-            label: qsDesign ? "Label on the page and at checkout" : "Label at checkout",
+            label: "Label on the page and at checkout",
             autoComplete: "off",
             maxLength: LIMITS.label,
             value: tier.label || "",
@@ -28366,7 +31405,10 @@ function OfferSectionComponent({
         )
       ] }) }, tier.id || index)),
       errorFor("tiers") && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", tone: "critical", variant: "bodySm", children: errorFor("tiers") }),
-      tiers.length < LIMITS.tiers && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: addTier, children: "Add tier" })
+      tiers.length < LIMITS.tiers && /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: addTier, children: "Add tier" }),
+        measure === "quantity" && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: addBoxPriceTier, children: `Add "Buy N for ${symbol}X"` })
+      ] })
     ] }),
     qsDesign && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", disclosure: showMore ? "up" : "down", onClick: () => setShowMore((v) => !v), children: "More options" }),
     (!qsDesign || showMore) && moreOptions,
@@ -28374,12 +31416,9 @@ function OfferSectionComponent({
     errors.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "critical", title: "Fix these before saving", children: /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { style: { margin: 0, paddingLeft: 18 }, children: errors.map((e) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: e.message }, e.field + e.message)) }) }),
     warnings.map((w) => /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", tone: "caution", variant: "bodySm", children: w.message }, w.field))
   ] });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Offer", expanded, onToggle, badge: isWeight ? isQuickShop ? { weight: "Weight", quantity: "Quantity", value: "Value" }[measure] : "Weight" : null, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    isQuickShop ? /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Quick Shop boxes unlock offers by weight, number of items or value, applied in Shopify checkout." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ProBadge, { featureKey: FEATURE })
-    ] }) : isWeightBox ? /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "The Weight Box is the Quick Shop design, always priced by the weight of the box." }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Offer", expanded, onToggle, badge: isWeight ? { weight: "Weight", quantity: "Quantity", value: "Value" }[measure] : null, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    qsDesign ? /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "200", blockAlign: "center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: `The ${templateName} is priced by ${MEASURE_WORDS[measure]}: each tier unlocks an offer, applied in Shopify checkout.` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ProBadge, { featureKey: FEATURE })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       ChoiceList,
@@ -28390,7 +31429,8 @@ function OfferSectionComponent({
         onChange: ([v]) => {
           updateConfig("pricing_mode", v);
           if (v === "weight") {
-            if (!config2.weight_pricing) updateConfig("weight_pricing", defaultWeightPricing());
+            const untouched = !config2.weight_pricing || normalizeWeightPricing(config2.weight_pricing).value.hash === normalizeWeightPricing(defaultWeightPricing()).value.hash;
+            if (untouched) updateConfig("weight_pricing", defaultWeightPricing("quantity"));
             updateConfig("has_discount_offer", false);
             updateConfig("selected_discount_id", null);
           }
@@ -28398,7 +31438,7 @@ function OfferSectionComponent({
       }
     ),
     isWeight ? canUseWeight ? weightEditor : /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "warning", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: isQuickShop ? "Quick Shop box pricing is part of the Pro plan. Upgrade to save this combo." : "Weight-based pricing is part of the Pro plan. This combo can't be saved with it on your plan; switch back to item count, or upgrade." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Banner, { tone: "warning", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: qsDesign ? `The ${templateName} is part of the ${planName} plan. Upgrade to save this combo.` : `The tiered progress bar is part of the ${planName} plan. This combo can't be saved with it on your plan; switch back to a single coupon, or upgrade.` }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(LockedOverlay, { featureKey: FEATURE, children: weightEditor })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -28446,9 +31486,22 @@ function AdvancedSectionComponent({
   const isQuickShop = usesQuickShop(config2.layout);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     !isQuickShop && /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Progress Bar", expanded: expandedSections == null ? void 0 : expandedSections.progressBar, onToggle: () => toggleSection == null ? void 0 : toggleSection("progressBar"), children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-      isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Weight-priced combos always show the weight meter instead, with the tiers and messages from Offer. Its colours and heading come from here." }),
-      isWeight && ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Meter Color", value: config2.progress_bar_color || "#111827", onChange: (v) => updateConfig("progress_bar_color", v) }),
-      isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Meter Heading", value: config2.progress_text || "", placeholder: "Your box", onChange: (v) => updateConfig("progress_text", v), autoComplete: "off" }),
+      isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "With a tiered progress bar (Offer), the bar shows each tier and what it unlocks, with the messages from Offer. Its style, colours and heading come from here." }),
+      isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Select,
+        {
+          label: "Progress style",
+          options: [
+            { label: "Milestones (a dot per tier with its offer)", value: "milestones" },
+            { label: "Bar (thresholds under the bar)", value: "bar" }
+          ],
+          value: config2.tier_progress_style === "bar" ? "bar" : "milestones",
+          onChange: (v) => updateConfig("tier_progress_style", v)
+        }
+      ),
+      isWeight && ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Bar Color", value: config2.progress_bar_color || "#111827", onChange: (v) => updateConfig("progress_bar_color", v) }),
+      isWeight && ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Unlocked Color", value: config2.progress_success_color || "#16a34a", onChange: (v) => updateConfig("progress_success_color", v) }),
+      isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Heading", value: config2.progress_text || "", placeholder: "Your box", onChange: (v) => updateConfig("progress_text", v), autoComplete: "off" }),
       !isWeight && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Show Progress Bar", checked: !!config2.show_progress_bar, onChange: (v) => updateConfig("show_progress_bar", v) }),
       !isWeight && config2.show_progress_bar && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Progress Bar Color", value: config2.progress_bar_color || "#000000", onChange: (v) => updateConfig("progress_bar_color", v) }),
@@ -28559,7 +31612,7 @@ function ColorField({ label, value, onChange, error, allowEmpty = false, fallbac
             "input",
             {
               type: "color",
-              "aria-label": `${label} picker`,
+              "aria-label": `Pick ${label}`,
               value: swatch2,
               onChange: (e) => handlePicker(e.target.value),
               style: {
@@ -28679,1401 +31732,14 @@ function ThemePresets({ config: config2, applyConfigPatch, updateConfig }) {
     ] })
   ] }) });
 }
-function createQuickShopKit(core2) {
-  var DEFAULTS2 = {
-    // Header
-    qs_show_header: true,
-    // Filters (the merchant picks which ones show)
-    qs_chips_source: "collections",
-    // collections | tags | none
-    qs_chip_tags: "",
-    // "Boneless, Curry Cut, Drumstick" when source = tags
-    qs_show_all_chip: true,
-    qs_all_label: "All",
-    qs_filter_type: true,
-    qs_filter_type_label: "Type",
-    qs_filter_brand: true,
-    qs_filter_brand_label: "Brand",
-    qs_filter_custom: false,
-    qs_filter_custom_label: "Cut",
-    qs_filter_custom_tags: "",
-    qs_filter_sort: true,
-    qs_filter_sort_label: "Sort By",
-    qs_filter_instock: false,
-    qs_filter_instock_label: "In stock",
-    // Cards
-    qs_columns_desktop: 4,
-    qs_columns_mobile: 2,
-    qs_card_eyebrow: "",
-    qs_show_subtitle: true,
-    qs_show_compare: true,
-    qs_show_off: true,
-    qs_show_weight: true,
-    qs_badge_tag: "bestseller",
-    qs_badge_text: "Bestseller",
-    qs_image_ratio: "square",
-    // square | portrait | landscape
-    qs_card_radius: 14,
-    qs_card_bg: "#ffffff",
-    qs_page_bg: "#f4f5f7",
-    qs_text_color: "#111827",
-    qs_accent: "#2563eb",
-    // + button, chips, links
-    qs_off_color: "#16a34a",
-    qs_badge_bg: "#3b82f6",
-    // Top progress
-    qs_top_style: "milestones",
-    // bar | steps | milestones | text | none
-    qs_top_title: "Unlock offers on your box",
-    qs_top_sticky: true,
-    qs_top_offset: 0,
-    qs_top_show_labels: true,
-    qs_top_height: 8,
-    qs_top_radius: 999,
-    qs_top_bg: "#ffffff",
-    qs_top_text: "#111827",
-    qs_top_track: "#e5e7eb",
-    qs_top_fill: "#2563eb",
-    qs_top_done: "#16a34a",
-    qs_tier_icons: "gift, truck, percent, star, trophy",
-    // built-in SVG icon names (ICONS) or https:// image links
-    // Bottom bar
-    qs_bar_style: "full",
-    // full | slim | ring | compact
-    qs_bar_bg: "#ffffff",
-    qs_bar_text: "#111827",
-    qs_bar_save: "#16a34a",
-    qs_bar_radius: 20,
-    qs_bar_show_message: true,
-    qs_bar_show_thumbs: true,
-    qs_bar_show_saved: true,
-    qs_bar_celebrate: true,
-    qs_bar_icon_done: "party",
-    qs_bar_icon_locked: "gift",
-    qs_bar_icon_bg: "#16a34a",
-    qs_saved_text: "{{saved}} saved, more coming up!",
-    qs_saved_done_text: "{{saved}} saved!",
-    qs_btn_label: "Go to Cart",
-    qs_btn_bg: "#2563eb",
-    qs_btn_text_color: "#ffffff",
-    qs_btn_radius: 14,
-    qs_btn_action: "checkout",
-    // checkout | cart
-    // Checkout with: shopify | shiprocket (BRIX one-time code for the box discount)
-    // | shiprocket_own (the merchant's own Shiprocket offer). Shiprocket only on
-    // shops with it switched on (integrations_admin.php) and with qs_btn_action checkout.
-    qs_checkout_with: "shopify",
-    qs_require_first_tier: false
-  };
-  var SORTS = [
-    { value: "featured", label: "Featured" },
-    { value: "price_asc", label: "Price: low to high" },
-    { value: "price_desc", label: "Price: high to low" },
-    { value: "discount", label: "Biggest discount" },
-    { value: "name", label: "Name: A to Z" }
-  ];
-  function opt(config2, key) {
-    var v = config2 ? config2[key] : void 0;
-    return v === void 0 || v === null ? DEFAULTS2[key] : v;
-  }
-  function on(config2, key) {
-    var v = opt(config2, key);
-    return v === true || v === "true" || v === 1;
-  }
-  function esc(s) {
-    if (s === null || s === void 0) return "";
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-  function safeCss(value, fallback) {
-    var s = String(value === null || value === void 0 ? "" : value).trim();
-    return /^[#\w\s.,%()-]{1,60}$/.test(s) ? s : fallback;
-  }
-  function num(value, fallback, min, max) {
-    var n = Number(value);
-    if (!isFinite(n)) n = fallback;
-    return Math.max(min, Math.min(max, n));
-  }
-  function money(amount, symbol) {
-    var n = Math.max(0, Number(amount) || 0);
-    var text = Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
-    return (symbol || "") + text;
-  }
-  function list(text) {
-    var out = [];
-    var parts = String(text || "").split(",");
-    for (var i = 0; i < parts.length; i++) {
-      var t = parts[i].replace(/\s+/g, " ").trim();
-      if (t && out.indexOf(t) === -1) out.push(t);
-    }
-    return out;
-  }
-  function iconList(text) {
-    var out = [];
-    var parts = String(text || "").split(",");
-    for (var i = 0; i < parts.length; i++) out.push(parts[i].trim());
-    while (out.length && !out[out.length - 1]) out.pop();
-    return out;
-  }
-  function lower(s) {
-    return String(s || "").toLowerCase();
-  }
-  function hasTag(product2, tag) {
-    var tags = product2.tags || [];
-    for (var i = 0; i < tags.length; i++) if (lower(tags[i]) === lower(tag)) return true;
-    return false;
-  }
-  function offerText2(tier, symbol) {
-    if (tier.label) return tier.label;
-    if (tier.type === "percentage") return tier.value + "% OFF";
-    if (tier.type === "fixed_amount") return money(tier.value, symbol) + " OFF";
-    return "Box at " + money(tier.value, symbol);
-  }
-  function labelledTiers(tiers, symbol) {
-    var out = [];
-    for (var i = 0; i < (tiers || []).length; i++) {
-      var t = tiers[i];
-      out.push({ id: t.id, min_grams: t.min_grams, type: t.type, value: t.value, label: offerText2(t, symbol) });
-    }
-    return out;
-  }
-  function isIconUrl(icon) {
-    return /^https:\/\/[^\s"'<>]+$/.test(icon);
-  }
-  var ICON_PATHS = {
-    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
-    truck: '<path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
-    percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
-    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
-    trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
-    crown: '<path d="m3 7 4.5 4L12 5l4.5 6L21 7l-2 11H5z"/>',
-    tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
-    coins: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
-    party: '<path d="M4 20 8.5 7.5l8 8z"/><path d="M13 3.5v2M18.5 9h2M16 6l2.5-2.5M14 10l5-5"/>',
-    sparkles: '<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
-    heart: '<path d="M12 20s-7-4.4-9-9a4.8 4.8 0 0 1 9-3 4.8 4.8 0 0 1 9 3c-2 4.6-9 9-9 9z"/>',
-    box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>',
-    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
-    check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'
-  };
-  var ICON_NAMES = ["gift", "truck", "percent", "star", "trophy", "crown", "tag", "coins", "party", "sparkles", "heart", "box", "bolt", "check"];
-  var TIER_ICON_ORDER = ["gift", "truck", "percent", "star", "trophy", "crown"];
-  var EMOJI_ICONS = { "🎁": "gift", "🚚": "truck", "💰": "coins", "💸": "coins", "⭐": "star", "🌟": "star", "🏆": "trophy", "👑": "crown", "🎉": "party", "🥳": "party", "✨": "sparkles", "❤️": "heart", "📦": "box", "⚡": "bolt", "✅": "check", "🏷️": "tag", "%": "percent" };
-  function svgIcon(name) {
-    return '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">' + ICON_PATHS[name] + "</svg>";
-  }
-  function iconName(icon, fallback) {
-    var s = String(icon === null || icon === void 0 ? "" : icon).trim();
-    var lower2 = s.toLowerCase();
-    if (ICON_PATHS[lower2]) return lower2;
-    if (EMOJI_ICONS[s]) return EMOJI_ICONS[s];
-    if (typeof fallback === "string" && ICON_PATHS[fallback]) return fallback;
-    return TIER_ICON_ORDER[(Number(fallback) || 0) % TIER_ICON_ORDER.length];
-  }
-  function iconHtml(icon, cls, i) {
-    if (!icon) return "";
-    if (isIconUrl(icon)) return '<img class="' + cls + '" src="' + esc(icon) + '" alt="" />';
-    return '<span class="' + cls + '" aria-hidden="true">' + svgIcon(iconName(icon, i)) + "</span>";
-  }
-  function activeVariant(product2, pending) {
-    var variants = product2.variants || [];
-    var id = pending && pending[product2.id];
-    for (var i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
-    return variants[0] || null;
-  }
-  function priceOf(product2, variant) {
-    var p = variant && variant.price !== null && variant.price !== void 0 ? parseFloat(variant.price) : parseFloat(product2.price || 0);
-    return isFinite(p) ? p : 0;
-  }
-  function compareOf(variant, price) {
-    var c = variant && variant.compareAtPrice !== null && variant.compareAtPrice !== void 0 ? parseFloat(variant.compareAtPrice) : 0;
-    return isFinite(c) && c > price ? c : 0;
-  }
-  function allProducts(productsByHandle, handles) {
-    var seen2 = {};
-    var out = [];
-    for (var h = 0; h < handles.length; h++) {
-      var prods = productsByHandle[handles[h]] || [];
-      for (var i = 0; i < prods.length; i++) {
-        if (seen2[prods[i].id]) continue;
-        seen2[prods[i].id] = true;
-        out.push(prods[i]);
-      }
-    }
-    return out;
-  }
-  function uniqueValues(products, field) {
-    var out = [];
-    for (var i = 0; i < products.length; i++) {
-      var v = String(products[i][field] || "").trim();
-      if (v && out.indexOf(v) === -1) out.push(v);
-    }
-    out.sort();
-    return out;
-  }
-  function filterRow(config2, products, handles, collectionNames, ui) {
-    var chips = [];
-    var source = opt(config2, "qs_chips_source");
-    var chipValues = [];
-    if (source === "collections" && handles.length > 1) {
-      for (var h = 0; h < handles.length; h++) chipValues.push({ value: "c:" + handles[h], label: collectionNames[handles[h]] || handles[h] });
-    } else if (source === "tags") {
-      var tags = list(opt(config2, "qs_chip_tags"));
-      for (var t = 0; t < tags.length; t++) chipValues.push({ value: "t:" + tags[t], label: tags[t] });
-    }
-    if (chipValues.length) {
-      if (on(config2, "qs_show_all_chip")) chips.push({ value: "all", label: opt(config2, "qs_all_label"), on: !ui.chip || ui.chip === "all" });
-      for (var c = 0; c < chipValues.length; c++) {
-        chipValues[c].on = ui.chip === chipValues[c].value;
-        chips.push(chipValues[c]);
-      }
-    }
-    if (on(config2, "qs_filter_instock")) chips.push({ value: "instock", label: opt(config2, "qs_filter_instock_label"), on: !!ui.instock, toggle: true });
-    var dd = ui.dd || {};
-    var menus = [];
-    function addMenu(id, label, values2) {
-      if (values2.length < 2) return;
-      var options = [{ value: "", label: "All" }];
-      for (var i = 0; i < values2.length; i++) options.push({ value: values2[i], label: values2[i] });
-      menus.push({ id, label, value: dd[id] || "", options, open: ui.menu === id });
-    }
-    if (on(config2, "qs_filter_type")) addMenu("type", opt(config2, "qs_filter_type_label"), uniqueValues(products, "productType"));
-    if (on(config2, "qs_filter_brand")) addMenu("brand", opt(config2, "qs_filter_brand_label"), uniqueValues(products, "vendor"));
-    if (on(config2, "qs_filter_custom")) {
-      var custom = list(opt(config2, "qs_filter_custom_tags"));
-      var present = [];
-      for (var k = 0; k < custom.length; k++) {
-        for (var p = 0; p < products.length; p++) if (hasTag(products[p], custom[k])) {
-          present.push(custom[k]);
-          break;
-        }
-      }
-      addMenu("custom", opt(config2, "qs_filter_custom_label"), present.length ? present : custom);
-    }
-    if (on(config2, "qs_filter_sort")) {
-      menus.push({ id: "sort", label: opt(config2, "qs_filter_sort_label"), value: dd.sort && dd.sort !== "featured" ? dd.sort : "", options: SORTS, open: ui.menu === "sort", isSort: true });
-    }
-    var active = ui.chip && ui.chip !== "all" || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || dd.sort && dd.sort !== "featured";
-    return { chips, menus, active: !!active };
-  }
-  function filterProducts(products, productsByHandle, ui, pending) {
-    var dd = ui.dd || {};
-    var inChip = null;
-    if (ui.chip && ui.chip.indexOf("c:") === 0) {
-      inChip = {};
-      var prods = productsByHandle[ui.chip.slice(2)] || [];
-      for (var i = 0; i < prods.length; i++) inChip[prods[i].id] = true;
-    }
-    var out = [];
-    for (var j = 0; j < products.length; j++) {
-      var p = products[j];
-      if (inChip && !inChip[p.id]) continue;
-      if (ui.chip && ui.chip.indexOf("t:") === 0 && !hasTag(p, ui.chip.slice(2))) continue;
-      if (dd.type && String(p.productType || "") !== dd.type) continue;
-      if (dd.brand && String(p.vendor || "") !== dd.brand) continue;
-      if (dd.custom && !hasTag(p, dd.custom)) continue;
-      if (ui.instock) {
-        var anyAvailable = false;
-        for (var v = 0; v < (p.variants || []).length; v++) if (p.variants[v].available !== false) anyAvailable = true;
-        if (!anyAvailable) continue;
-      }
-      out.push(p);
-    }
-    var sort = dd.sort || "featured";
-    if (sort !== "featured") {
-      var keyed = [];
-      for (var k = 0; k < out.length; k++) {
-        var variant = activeVariant(out[k], pending);
-        var price = priceOf(out[k], variant);
-        var cmp = compareOf(variant, price);
-        keyed.push({ p: out[k], i: k, price, off: cmp ? (cmp - price) / cmp : 0, name: lower(out[k].title) });
-      }
-      keyed.sort(function(a, b) {
-        var d = 0;
-        if (sort === "price_asc") d = a.price - b.price;
-        else if (sort === "price_desc") d = b.price - a.price;
-        else if (sort === "discount") d = b.off - a.off;
-        else if (sort === "name") d = a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-        return d || a.i - b.i;
-      });
-      out = [];
-      for (var s = 0; s < keyed.length; s++) out.push(keyed[s].p);
-    }
-    return out;
-  }
-  function canCheckout(config2, box, items, tiers) {
-    if (!(items > 0) || box.overMax) return false;
-    if (!on(config2, "qs_require_first_tier")) return true;
-    return !!box.tier || !(tiers && tiers.length);
-  }
-  function topMessage(view, box) {
-    if (!view.enabled) return { tone: "muted", text: "" };
-    if (box.overMax) return core2.boxMessage(view, box);
-    var now = barMessage(view, box);
-    if (!box.tier || !box.nextTier) return { tone: now.tone, text: now.text };
-    var next = barMessage(view, { overMax: false, tier: null, nextTier: box.nextTier, remaining: box.remaining, amount: box.amount, decimals: box.decimals });
-    return { tone: "success", text: now.text + " · " + next.text };
-  }
-  function barMessage(view, box) {
-    var msgs = view.messages || core2.DEFAULT_MESSAGES;
-    if (box.overMax) return core2.boxMessage(view, box);
-    if (!view.enabled) return { tone: "muted", text: "", tier: "" };
-    if (box.tier) return { tone: "success", text: core2.fillMessage(msgs.unlocked || core2.DEFAULT_MESSAGES.unlocked, { tier: box.tier.label }), tier: box.tier.label };
-    if (box.nextTier) {
-      return {
-        tone: "muted",
-        text: core2.fillMessage(msgs.locked || core2.DEFAULT_MESSAGES.locked, {
-          remaining: core2.formatAmount(view, box.remaining, box.decimals, true),
-          tier: box.nextTier.label,
-          weight: core2.formatAmount(view, box.amount, box.decimals),
-          amount: core2.formatAmount(view, box.amount, box.decimals)
-        }),
-        tier: box.nextTier.label
-      };
-    }
-    return { tone: "muted", text: "", tier: "" };
-  }
-  function buildModel(input) {
-    var config2 = input.config || {};
-    var ui = input.ui || {};
-    var symbol = input.symbol || "";
-    var decimals = input.decimals === void 0 ? 2 : input.decimals;
-    var pricing = input.pricing || { tiers: [], enabled: false };
-    var tiers = labelledTiers(pricing.tiers, symbol);
-    var view = {
-      measure: pricing.measure || "weight",
-      unit: pricing.unit || "kg",
-      tiers,
-      maxGrams: pricing.maxGrams === void 0 ? null : pricing.maxGrams,
-      messages: pricing.messages,
-      enabled: !!pricing.enabled,
-      currencySymbol: symbol
-    };
-    var handles = input.handles || [];
-    var all = allProducts(input.productsByHandle || {}, handles);
-    if (!all.length && input.fallbackProducts) all = input.fallbackProducts;
-    var byId = {};
-    for (var a = 0; a < all.length; a++) byId[all[a].id] = all[a];
-    var extra = input.extraProducts || [];
-    for (var e = 0; e < extra.length; e++) if (!byId[extra[e].id]) byId[extra[e].id] = extra[e];
-    var selection = input.selection || {};
-    var lines = [];
-    var items = 0;
-    var total = 0;
-    var compareSavings = 0;
-    var thumbs = [];
-    var sheet = [];
-    var qtyByVariant = {};
-    for (var vid in selection) {
-      if (!Object.prototype.hasOwnProperty.call(selection, vid)) continue;
-      var sel = selection[vid];
-      var qty = Number(sel.qty) || 0;
-      if (qty <= 0) continue;
-      var product2 = byId[sel.productId];
-      var variant = null;
-      if (product2) {
-        for (var vi = 0; vi < (product2.variants || []).length; vi++) if (String(product2.variants[vi].id) === String(vid)) variant = product2.variants[vi];
-      }
-      var price = product2 ? priceOf(product2, variant) : 0;
-      var cmp = compareOf(variant, price);
-      qtyByVariant[vid] = qty;
-      items += qty;
-      total += price * qty;
-      if (cmp) compareSavings += (cmp - price) * qty;
-      var image = variant && variant.image && (variant.image.url || variant.image.src) || product2 && product2.image && (product2.image.url || product2.image.src) || "";
-      if (image && thumbs.length < 3) thumbs.push(image);
-      sheet.push({
-        variantId: vid,
-        productId: sel.productId,
-        qty,
-        image,
-        title: product2 ? product2.title : "",
-        variantTitle: variant && variant.title !== "Default Title" ? variant.title : "",
-        price: money(price * qty, symbol)
-      });
-      lines.push({
-        key: vid,
-        unitGrams: variant && variant.grams > 0 ? variant.grams : null,
-        quantity: qty,
-        subtotalMinor: core2.toMinor(price * qty, decimals),
-        qualifies: input.qualifies ? !!input.qualifies(sel.productId) : true
-      });
-    }
-    var box = core2.computeBox({ pricing: { measure: view.measure, tiers, max_grams: view.maxGrams, unit: view.unit }, lines, decimals, rate: 1 });
-    var boxDiscount = view.enabled ? box.discountMinor / Math.pow(10, decimals) : 0;
-    var saved = compareSavings + boxDiscount;
-    var finalPrice = Math.max(0, total - boxDiscount);
-    var progress = core2.progressOf(view, box, 1);
-    var icons = iconList(opt(config2, "qs_tier_icons"));
-    for (var m = 0; m < progress.marks.length; m++) {
-      var mark = progress.marks[m];
-      mark.label = mark.tier.label;
-      mark.at = core2.formatThreshold(view, mark.tier);
-      mark.icon = icons.length ? icons[m] || TIER_ICON_ORDER[m % TIER_ICON_ORDER.length] : "";
-      mark.iconIndex = m;
-    }
-    var row = filterRow(config2, all, handles, input.collectionNames || {}, ui);
-    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending);
-    var cards = [];
-    var badgeTag = String(opt(config2, "qs_badge_tag") || "").trim();
-    for (var c = 0; c < shown.length; c++) {
-      var p = shown[c];
-      var v = activeVariant(p, input.pending);
-      var pr = priceOf(p, v);
-      var cp = compareOf(v, pr);
-      var options = [];
-      for (var o = 0; o < (p.variants || []).length; o++) {
-        var pv = p.variants[o];
-        options.push({ id: pv.id, title: pv.title, on: v && String(pv.id) === String(v.id), available: pv.available !== false });
-      }
-      var weightText = "";
-      if (v && v.grams > 0) weightText = core2.formatWeight(v.grams, v.grams < 1e3 ? "g" : "kg");
-      var img2 = v && v.image && (v.image.url || v.image.src) || p.image && (p.image.url || p.image.src) || p.images && p.images[0] && p.images[0].url || "";
-      cards.push({
-        id: p.id,
-        title: p.title,
-        summary: p.summary || "",
-        image: img2,
-        badge: badgeTag && hasTag(p, badgeTag) ? opt(config2, "qs_badge_text") || badgeTag : "",
-        variants: options.length > 1 && !(options.length === 1 && options[0].title === "Default Title") ? options : [],
-        weightText,
-        price: money(pr, symbol),
-        compare: cp ? money(cp, symbol) : "",
-        off: cp ? Math.round((cp - pr) / cp * 100) : 0,
-        available: !v || v.available !== false,
-        variantId: v ? v.id : "",
-        qty: v ? qtyByVariant[v.id] || 0 : 0,
-        counts: input.qualifies ? !!input.qualifies(p.id) : true
-      });
-    }
-    var bar = barMessage(view, box);
-    var savedTemplate = box.nextTier && view.enabled ? opt(config2, "qs_saved_text") : opt(config2, "qs_saved_done_text");
-    return {
-      config: config2,
-      isMobile: !!input.isMobile,
-      symbol,
-      title: config2.collection_title || input.templateName || "",
-      description: config2.collection_description || "",
-      row,
-      cards,
-      empty: !all.length ? "No products yet. Choose collections for this combo." : !cards.length ? "Nothing matches these filters." : "",
-      view,
-      box,
-      progress,
-      topMessage: topMessage(view, box),
-      bar: {
-        items,
-        thumbs,
-        sheet,
-        message: bar,
-        saved: saved > 4e-3 ? core2.fillMessage(savedTemplate, { saved: money(saved, symbol) }) : "",
-        total: money(finalPrice, symbol),
-        canCheckout: canCheckout(config2, box, items, tiers) && !ui.checkingOut,
-        checkingOut: !!ui.checkingOut,
-        sheetOpen: !!ui.sheetOpen,
-        celebrate: !!ui.celebrate
-      },
-      totals: { total, discount: boxDiscount, finalPrice, saved, items },
-      cod: input.cod || { shown: false },
-      toast: ui.toast || ""
-    };
-  }
-  var ICON_PLUS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
-  var ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
-  var ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>';
-  var ICON_FILTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>';
-  function vars(config2) {
-    var pairs = [
-      ["--bxq-page", safeCss(opt(config2, "qs_page_bg"), DEFAULTS2.qs_page_bg)],
-      ["--bxq-card", safeCss(opt(config2, "qs_card_bg"), DEFAULTS2.qs_card_bg)],
-      ["--bxq-text", safeCss(opt(config2, "qs_text_color"), DEFAULTS2.qs_text_color)],
-      ["--bxq-accent", safeCss(opt(config2, "qs_accent"), DEFAULTS2.qs_accent)],
-      ["--bxq-off", safeCss(opt(config2, "qs_off_color"), DEFAULTS2.qs_off_color)],
-      ["--bxq-badge", safeCss(opt(config2, "qs_badge_bg"), DEFAULTS2.qs_badge_bg)],
-      ["--bxq-radius", num(opt(config2, "qs_card_radius"), 14, 0, 40) + "px"],
-      ["--bxq-ratio", { portrait: "4/5", landscape: "4/3" }[opt(config2, "qs_image_ratio")] || "1/1"],
-      ["--bxq-cols", String(num(opt(config2, "qs_columns_desktop"), 4, 2, 6))],
-      ["--bxq-cols-m", String(num(opt(config2, "qs_columns_mobile"), 2, 1, 3))],
-      ["--bxq-top-bg", safeCss(opt(config2, "qs_top_bg"), DEFAULTS2.qs_top_bg)],
-      ["--bxq-top-text", safeCss(opt(config2, "qs_top_text"), DEFAULTS2.qs_top_text)],
-      ["--bxq-track", safeCss(opt(config2, "qs_top_track"), DEFAULTS2.qs_top_track)],
-      ["--bxq-fill", safeCss(opt(config2, "qs_top_fill"), DEFAULTS2.qs_top_fill)],
-      ["--bxq-done", safeCss(opt(config2, "qs_top_done"), DEFAULTS2.qs_top_done)],
-      ["--bxq-top-h", num(opt(config2, "qs_top_height"), 8, 2, 24) + "px"],
-      ["--bxq-top-r", num(opt(config2, "qs_top_radius"), 999, 0, 999) + "px"],
-      ["--bxq-top-offset", num(opt(config2, "qs_top_offset"), 0, 0, 300) + "px"],
-      ["--bxq-bar-bg", safeCss(opt(config2, "qs_bar_bg"), DEFAULTS2.qs_bar_bg)],
-      ["--bxq-bar-text", safeCss(opt(config2, "qs_bar_text"), DEFAULTS2.qs_bar_text)],
-      ["--bxq-save", safeCss(opt(config2, "qs_bar_save"), DEFAULTS2.qs_bar_save)],
-      ["--bxq-bar-r", num(opt(config2, "qs_bar_radius"), 20, 0, 40) + "px"],
-      ["--bxq-icon-bg", safeCss(opt(config2, "qs_bar_icon_bg"), DEFAULTS2.qs_bar_icon_bg)],
-      ["--bxq-btn", safeCss(opt(config2, "qs_btn_bg"), DEFAULTS2.qs_btn_bg)],
-      ["--bxq-btn-text", safeCss(opt(config2, "qs_btn_text_color"), DEFAULTS2.qs_btn_text_color)],
-      ["--bxq-btn-r", num(opt(config2, "qs_btn_radius"), 14, 0, 40) + "px"]
-    ];
-    var out = "";
-    for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ":" + pairs[i][1] + ";";
-    return out;
-  }
-  function boldTier(text, tier) {
-    var html = esc(text);
-    if (!tier) return html;
-    var t = esc(tier);
-    var at = html.indexOf(t);
-    return at === -1 ? html : html.slice(0, at) + "<b>" + t + "</b>" + html.slice(at + t.length);
-  }
-  function renderFilters(model) {
-    var row = model.row;
-    if (!row.chips.length && !row.menus.length) return "";
-    var html = '<div class="bxq-filters">';
-    html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? " is-active" : "") + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + "</button>";
-    for (var i = 0; i < row.chips.length; i++) {
-      var chip = row.chips[i];
-      html += '<button type="button" class="bxq-chip' + (chip.on ? " is-on" : "") + '" aria-pressed="' + (chip.on ? "true" : "false") + '" data-combo-action="' + (chip.toggle ? "qs-instock" : "qs-chip") + '" data-value="' + esc(chip.value) + '">' + esc(chip.label) + "</button>";
-    }
-    for (var m = 0; m < row.menus.length; m++) {
-      var menu = row.menus[m];
-      var current = "";
-      for (var o = 0; o < menu.options.length; o++) if (menu.value && menu.options[o].value === menu.value) current = menu.options[o].label;
-      html += '<div class="bxq-dd' + (menu.open ? " is-open" : "") + '">';
-      html += '<button type="button" class="bxq-chip' + (menu.value ? " is-on" : "") + '" aria-expanded="' + (menu.open ? "true" : "false") + '" data-combo-action="qs-menu" data-menu="' + esc(menu.id) + '">' + esc(menu.isSort || !current ? menu.label : current) + ICON_DOWN + "</button>";
-      if (menu.open) {
-        html += '<div class="bxq-menu" role="listbox">';
-        for (var k = 0; k < menu.options.length; k++) {
-          var option = menu.options[k];
-          var selected = (option.value || "") === (menu.value || "") || menu.isSort && !menu.value && option.value === "featured";
-          html += '<button type="button" role="option" aria-selected="' + (selected ? "true" : "false") + '" class="bxq-opt' + (selected ? " is-on" : "") + '" data-combo-action="qs-pick" data-menu="' + esc(menu.id) + '" data-value="' + esc(option.value) + '">' + esc(option.label) + "</button>";
-        }
-        html += "</div>";
-      }
-      html += "</div>";
-    }
-    html += "</div>";
-    return html;
-  }
-  function renderTop(model) {
-    var config2 = model.config;
-    var style = opt(config2, "qs_top_style");
-    if (style === "none" || !model.view.enabled || !model.view.tiers.length) return "";
-    var progress = model.progress;
-    var msg = model.topMessage;
-    var labels = on(config2, "qs_top_show_labels");
-    var html = '<section class="bxq-top bxq-top--' + esc(style) + (on(config2, "qs_top_sticky") ? " is-sticky" : "") + '" aria-label="Offer progress">';
-    var title = opt(config2, "qs_top_title");
-    if (title) html += '<div class="bxq-top-title">' + esc(title) + "</div>";
-    html += '<p class="bxq-top-msg is-' + esc(msg.tone) + '" aria-live="polite">' + esc(msg.text) + "</p>";
-    var i;
-    if (style === "bar") {
-      html += '<div class="bxq-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(progress.percent) + '"><div class="bxq-fill' + (model.box.tier ? " is-done" : "") + '" style="width:' + progress.percent.toFixed(1) + '%"></div>';
-      for (i = 0; i < progress.marks.length; i++) {
-        html += '<span class="bxq-tick' + (progress.marks[i].hit ? " is-hit" : "") + '" style="left:' + progress.marks[i].percent.toFixed(1) + '%"></span>';
-      }
-      html += "</div>";
-      if (labels) {
-        html += '<div class="bxq-ticks">';
-        for (i = 0; i < progress.marks.length; i++) {
-          var mk = progress.marks[i];
-          html += '<span class="bxq-tick-label' + (mk.hit ? " is-hit" : "") + '" style="left:' + mk.percent.toFixed(1) + '%"><b>' + esc(mk.label) + "</b><small>" + esc(mk.at) + "</small></span>";
-        }
-        html += "</div>";
-      }
-    } else if (style === "steps") {
-      html += '<div class="bxq-steps">';
-      var prev = 0;
-      for (i = 0; i < progress.marks.length; i++) {
-        var step = progress.marks[i];
-        var span = Math.max(1e-4, step.percent - prev);
-        var fill2 = Math.max(0, Math.min(100, (progress.percent - prev) / span * 100));
-        html += '<div class="bxq-step' + (step.hit ? " is-hit" : "") + (step.next ? " is-next" : "") + '"><div class="bxq-step-track"><div class="bxq-step-fill" style="width:' + fill2.toFixed(1) + '%"></div></div>' + (labels ? '<div class="bxq-step-label"><b>' + esc(step.label) + "</b><small>" + esc(step.at) + "</small></div>" : "") + "</div>";
-        prev = step.percent;
-      }
-      html += "</div>";
-    } else if (style === "milestones") {
-      html += '<div class="bxq-miles"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
-      for (i = 0; i < progress.marks.length; i++) {
-        var ms = progress.marks[i];
-        html += '<div class="bxq-mile' + (ms.hit ? " is-hit" : "") + (ms.next ? " is-next" : "") + '" style="left:' + ms.percent.toFixed(1) + '%"><span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, "bxq-mile-icon", ms.iconIndex) : "") + "</span>" + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + "</b><small>" + esc(ms.at) + "</small></span>" : "") + "</div>";
-      }
-      html += "</div>";
-    }
-    html += "</section>";
-    return html;
-  }
-  function renderCard(model, card) {
-    var config2 = model.config;
-    var html = '<article class="bxq-card' + (card.qty ? " is-in" : "") + (card.available ? "" : " is-out") + '" data-product-id="' + esc(card.id) + '">';
-    html += '<div class="bxq-media">';
-    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy" />' : '<span class="bxq-noimg"></span>';
-    if (card.badge) html += '<span class="bxq-badge">' + esc(card.badge) + "</span>";
-    if (!card.available) {
-      html += '<span class="bxq-soldout">Out of stock</span>';
-    } else if (card.qty > 0) {
-      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
-    } else {
-      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + "</button>";
-    }
-    html += '</div><div class="bxq-info">';
-    var eyebrow = opt(config2, "qs_card_eyebrow");
-    if (eyebrow) html += '<div class="bxq-eyebrow">' + esc(eyebrow) + "</div>";
-    html += '<h3 class="bxq-name">' + esc(card.title) + "</h3>";
-    if (on(config2, "qs_show_subtitle") && card.summary) html += '<p class="bxq-sub">' + esc(card.summary) + "</p>";
-    if (card.variants.length) {
-      html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
-      for (var i = 0; i < card.variants.length; i++) {
-        var v = card.variants[i];
-        html += '<option value="' + esc(v.id) + '"' + (v.on ? " selected" : "") + (v.available ? "" : " disabled") + ">" + esc(v.title) + (v.available ? "" : " (sold out)") + "</option>";
-      }
-      html += "</select>" + ICON_DOWN + "</label>";
-    } else if (card.weightText && on(config2, "qs_show_weight")) {
-      html += '<div class="bxq-variant is-static">' + esc(card.weightText) + "</div>";
-    }
-    if (card.off && on(config2, "qs_show_off")) html += '<div class="bxq-off"><span>' + card.off + "% OFF</span></div>";
-    html += '<div class="bxq-price"><b>' + esc(card.price) + "</b>" + (card.compare && on(config2, "qs_show_compare") ? "<s>" + esc(card.compare) + "</s>" : "") + "</div>";
-    if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
-    html += "</div></article>";
-    return html;
-  }
-  function renderBar(model) {
-    var config2 = model.config;
-    var bar = model.bar;
-    if (!bar.items) return "";
-    var style = opt(config2, "qs_bar_style");
-    var cod = model.cod || {};
-    var codPlacement = cod.placement === "replace" || cod.placement === "above" ? cod.placement : "below";
-    var disabled = !bar.canCheckout;
-    var html = '<div class="bxq-bar bxq-bar--' + esc(style) + (bar.celebrate ? " is-celebrate" : "") + '" role="region" aria-label="Your box">';
-    if (bar.sheetOpen) {
-      html += '<div class="bxq-sheet">';
-      for (var s = 0; s < bar.sheet.length; s++) {
-        var line = bar.sheet[s];
-        html += '<div class="bxq-line">' + (line.image ? '<img src="' + esc(line.image) + '" alt="" />' : '<span class="bxq-noimg"></span>') + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + "</div>" + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + "</div>" : "") + '</div><div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span><button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one">+</button></div><div class="bxq-line-price">' + esc(line.price) + "</div></div>";
-      }
-      html += '<button type="button" class="bxq-clear" data-combo-action="reset">Remove all</button></div>';
-    }
-    var msg = bar.message;
-    var showMessage = on(config2, "qs_bar_show_message") && msg.text;
-    var progress = model.progress;
-    if (style === "slim" && model.view.enabled && model.view.tiers.length) {
-      html += '<div class="bxq-slim"><div class="bxq-slim-fill' + (model.box.tier ? " is-done" : "") + '" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
-    }
-    if (showMessage && style !== "compact") {
-      var icon = model.box.tier ? opt(config2, "qs_bar_icon_done") : opt(config2, "qs_bar_icon_locked");
-      html += '<div class="bxq-msg is-' + esc(msg.tone) + '">';
-      if (style === "full" && icon) html += '<span class="bxq-msg-icon">' + iconHtml(icon, "bxq-msg-glyph", model.box.tier ? "party" : "gift") + "</span>";
-      html += '<span aria-live="polite">' + boldTier(msg.text, msg.tier) + "</span></div>";
-    }
-    html += '<div class="bxq-row">';
-    if (style === "ring") {
-      var r = 18;
-      var circ = 2 * Math.PI * r;
-      var pct = model.view.enabled && model.view.tiers.length ? progress.percent : 100;
-      html += '<span class="bxq-ring' + (model.box.tier ? " is-done" : "") + '"><svg viewBox="0 0 44 44" width="44" height="44"><circle cx="22" cy="22" r="' + r + '" class="bxq-ring-bg"/><circle cx="22" cy="22" r="' + r + '" class="bxq-ring-fg" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + (circ * (1 - pct / 100)).toFixed(2) + '"/></svg><b>' + bar.items + "</b></span>";
-    } else if (on(config2, "qs_bar_show_thumbs") && bar.thumbs.length && style !== "compact") {
-      html += '<span class="bxq-thumbs">';
-      for (var t = 0; t < bar.thumbs.length; t++) html += '<img src="' + esc(bar.thumbs[t]) + '" alt="" style="z-index:' + (3 - t) + '" />';
-      html += "</span>";
-    }
-    html += '<button type="button" class="bxq-count" data-combo-action="' + (bar.sheetOpen ? "box-close" : "box-open") + '" aria-expanded="' + (bar.sheetOpen ? "true" : "false") + '"><span class="bxq-count-top">' + bar.items + (bar.items === 1 ? " Item" : " Items") + (bar.sheetOpen ? ICON_DOWN : ICON_UP) + (style === "compact" ? "<i>·</i>" + esc(bar.total) : "") + "</span>";
-    if (on(config2, "qs_bar_show_saved") && bar.saved && style !== "compact") html += '<span class="bxq-saved">' + esc(bar.saved) + "</span>";
-    else if (style !== "compact") html += '<span class="bxq-total">' + esc(bar.total) + "</span>";
-    html += "</button>";
-    var label = bar.checkingOut ? "Adding…" : opt(config2, "qs_btn_label");
-    var checkoutBtn = cod.shown && codPlacement === "replace" ? "" : '<button type="button" class="bxq-go" data-combo-action="checkout"' + (disabled ? " disabled" : "") + ">" + esc(label) + "</button>";
-    var codBtn = cod.shown ? '<button type="button" class="bxq-cod" data-combo-action="cod"' + (disabled ? " disabled" : "") + (cod.css ? ' style="' + esc(cod.css) + '"' : "") + ">" + (cod.icon || "") + esc(cod.text || "Cash on Delivery") + "</button>" : "";
-    html += '<span class="bxq-actions' + (cod.shown ? " has-cod" : "") + '">' + (codPlacement === "below" ? checkoutBtn + codBtn : codBtn + checkoutBtn) + "</span>";
-    html += "</div></div>";
-    return html;
-  }
-  function pick(config2, key, isMobile) {
-    if (isMobile) {
-      var m = config2[key + "_mobile"];
-      if (m !== void 0 && m !== null && m !== "") return m;
-    }
-    return config2[key];
-  }
-  function isSet(v) {
-    return v !== void 0 && v !== null && v !== "";
-  }
-  function boxCss(config2, prefix, isMobile) {
-    var parts = ["padding_top", "padding_right", "padding_bottom", "padding_left", "margin_top", "margin_right", "margin_bottom", "margin_left"];
-    var css = "";
-    for (var i = 0; i < parts.length; i++) {
-      var v = pick(config2, prefix + "_" + parts[i], isMobile);
-      if (isSet(v)) css += parts[i].replace("_", "-") + ":" + num(v, 0, -200, 400) + "px;";
-    }
-    return css;
-  }
-  function textCss(config2, prefix, isMobile, defaults) {
-    var css = "";
-    var align = pick(config2, prefix + "_align", isMobile);
-    css += "text-align:" + (align === "center" || align === "right" ? align : "left") + ";";
-    var size = pick(config2, prefix + "_size", isMobile);
-    if (isSet(size)) css += "font-size:" + num(size, defaults.size, 10, 96) + "px;";
-    var color = pick(config2, prefix + "_color", isMobile);
-    if (isSet(color)) css += "color:" + safeCss(color, defaults.color) + ";";
-    var weight = String(pick(config2, prefix + "_font_weight", isMobile) || "");
-    if (/^[1-9]00$/.test(weight)) css += "font-weight:" + weight + ";";
-    return css;
-  }
-  function renderHead(model) {
-    var config2 = model.config;
-    if (!on(config2, "qs_show_header") || config2.show_title_description === false) return "";
-    if (!model.title && !model.description) return "";
-    var m = model.isMobile;
-    var html = '<header class="bxq-head">';
-    if (model.title) {
-      var titleCss = textCss(config2, "heading", m, { size: m ? 22 : 28, color: "inherit" });
-      var family = String(config2.heading_font_family || "");
-      if (family && family !== "inherit" && /^[\w -]{1,40}$/.test(family)) titleCss += "font-family:'" + family + "',sans-serif;";
-      if (isSet(config2.heading_letter_spacing)) titleCss += "letter-spacing:" + num(config2.heading_letter_spacing, 0, -10, 20) + "px;";
-      if (isSet(config2.heading_line_height)) titleCss += "line-height:" + num(config2.heading_line_height, 1.2, 0.5, 3) + ";";
-      var transform = config2.heading_text_transform;
-      if (transform === "uppercase" || transform === "lowercase" || transform === "capitalize") titleCss += "text-transform:" + transform + ";";
-      var wrapCss = boxCss(config2, "title_container", m);
-      if (config2.title_max_width_mode === "custom" && !m) {
-        var align = pick(config2, "heading_align", m);
-        wrapCss += "max-width:" + num(config2.title_max_width_custom, 400, 100, 2e3) + "px;" + (align === "center" ? "margin-left:auto;margin-right:auto;" : align === "right" ? "margin-left:auto;" : "");
-      }
-      html += '<div class="bxq-title-wrap" style="' + wrapCss + '"><h2 class="bxq-title" style="' + titleCss + '">' + esc(model.title) + "</h2></div>";
-    }
-    if (model.description) {
-      html += '<div class="bxq-desc-wrap" style="' + boxCss(config2, "description_container", m) + '"><p class="bxq-desc" style="' + textCss(config2, "description", m, { size: 15, color: "inherit" }) + '">' + esc(model.description) + "</p></div>";
-    }
-    return html + "</header>";
-  }
-  function renderBanner(model) {
-    var config2 = model.config;
-    if (config2.show_banner === false) return "";
-    var m = model.isMobile;
-    var url = m && isIconUrl(config2.banner_image_mobile_url) ? config2.banner_image_mobile_url : config2.banner_image_url;
-    if (!isIconUrl(url)) return "";
-    var fit = config2.banner_fit_mode;
-    var height = m ? num(config2.banner_height_mobile || config2.banner_height_desktop, 120, 40, 800) : num(config2.banner_height_desktop, 180, 40, 1e3);
-    var width = m ? num(config2.banner_width_mobile || config2.banner_width_desktop, 100, 20, 100) : num(config2.banner_width_desktop, 100, 20, 100);
-    var boxCssText = "width:" + (config2.banner_full_width ? "100%" : width + "%") + ";" + (fit === "adapt" ? "" : "height:" + height + "px;");
-    var imgCss = fit === "adapt" ? "height:auto;" : "height:100%;object-fit:" + (fit === "contain" ? "contain" : "cover") + ";";
-    return '<div class="bxq-banner' + (config2.banner_full_width ? " is-full" : "") + '" style="' + boxCssText + '"><img src="' + esc(url) + '" alt="' + esc(model.title || "Banner") + '" style="' + imgCss + '" /></div>';
-  }
-  function render(model) {
-    var config2 = model.config;
-    var html = '<div class="bxq' + (model.isMobile ? " bxq--m" : "") + '" style="' + vars(config2) + '">';
-    html += renderBanner(model);
-    html += renderHead(model);
-    html += renderTop(model);
-    html += renderFilters(model);
-    if (model.row.menus.length) {
-      for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
-    }
-    if (model.empty) html += '<div class="bxq-empty">' + esc(model.empty) + "</div>";
-    else {
-      html += '<div class="bxq-grid">';
-      for (var c = 0; c < model.cards.length; c++) html += renderCard(model, model.cards[c]);
-      html += "</div>";
-    }
-    html += renderBar(model);
-    if (model.toast) html += '<div class="bxq-toast" role="status">' + esc(model.toast) + "</div>";
-    html += "</div>";
-    return html;
-  }
-  function applyUiAction(ui, action, el) {
-    var value = el && el.getAttribute ? el.getAttribute("data-value") : null;
-    var menu = el && el.getAttribute ? el.getAttribute("data-menu") : null;
-    if (!ui.dd) ui.dd = {};
-    if (action === "qs-chip") {
-      ui.chip = value === "all" || value === ui.chip ? "all" : value;
-      ui.menu = null;
-      return true;
-    }
-    if (action === "qs-instock") {
-      ui.instock = !ui.instock;
-      ui.menu = null;
-      return true;
-    }
-    if (action === "qs-menu") {
-      ui.menu = ui.menu === menu ? null : menu;
-      return true;
-    }
-    if (action === "qs-menu-close") {
-      ui.menu = null;
-      return true;
-    }
-    if (action === "qs-pick") {
-      ui.dd[menu] = value || "";
-      ui.menu = null;
-      return true;
-    }
-    if (action === "qs-clear") {
-      ui.chip = "all";
-      ui.instock = false;
-      ui.dd = {};
-      ui.menu = null;
-      return true;
-    }
-    if (action === "box-open") {
-      ui.sheetOpen = true;
-      return true;
-    }
-    if (action === "box-close") {
-      ui.sheetOpen = false;
-      return true;
-    }
-    return false;
-  }
-  return {
-    DEFAULTS: DEFAULTS2,
-    SORTS,
-    opt,
-    on,
-    offerText: offerText2,
-    labelledTiers,
-    filterRow,
-    filterProducts,
-    canCheckout,
-    barMessage,
-    buildModel,
-    render,
-    applyUiAction,
-    ICON_NAMES,
-    TIER_ICON_ORDER,
-    iconName,
-    svgIcon
-  };
-}
-const QUICK_SHOP_CSS = `
-.bxq{max-width:1280px;margin:0 auto;padding:16px 20px 24px;background:var(--bxq-page);color:var(--bxq-text);font-family:inherit;box-sizing:border-box;position:relative;}
-.bxq *{box-sizing:border-box;}
-.bxq button{font:inherit;color:inherit;}
-.bxq--m{padding:10px 12px 20px;}
-.bxq-head{margin:4px 0 14px;}
-.bxq-title{margin:0;font-size:28px;line-height:1.2;font-weight:800;color:var(--bxq-text);}
-.bxq--m .bxq-title{font-size:22px;}
-.bxq-banner{margin:0 auto 16px;overflow:hidden;border-radius:var(--bxq-radius);}
-.bxq-banner.is-full{border-radius:0;}
-.bxq-banner img{display:block;width:100%;}
-.bxq-desc{margin:6px 0 0;font-size:15px;line-height:1.5;opacity:.72;max-width:70ch;}
-.bxq-top{background:var(--bxq-top-bg);color:var(--bxq-top-text);border-radius:16px;padding:14px 18px 16px;margin:0 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
-.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;}
-.bxq--m .bxq-top{padding:10px 12px 8px;border-radius:14px;}
-.bxq--m .bxq-top.is-sticky .bxq-top-title{display:none;}
-.bxq--m .bxq-top-msg{font-size:13.5px;margin:0 0 8px;}
-.bxq-top-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.6;}
-.bxq-top-msg{margin:4px 0 10px;font-size:15px;font-weight:700;line-height:1.4;}
-.bxq-top-msg.is-success{color:var(--bxq-done);}
-.bxq-top-msg.is-error{color:#b91c1c;}
-.bxq-top--text .bxq-top-msg{margin-bottom:0;}
-.bxq-track{position:relative;height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
-/* Fills and the scrim are empty divs: themes like Dawn hide div:empty, so force them on. */
-.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim{display:block!important;}
-.bxq-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
-.bxq-fill.is-done{background:var(--bxq-done);}
-.bxq-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);}
-.bxq-tick.is-hit{border-color:var(--bxq-done);background:var(--bxq-done);}
-.bxq-ticks{position:relative;height:38px;margin-top:6px;}
-.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:12px;line-height:1.3;}
-.bxq-tick-label:last-child{transform:translateX(-100%);align-items:flex-end;}
-.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:11px;}
-.bxq-tick-label.is-hit b,.bxq-step.is-hit b,.bxq-mile.is-hit b{color:var(--bxq-done);}
-.bxq-steps{display:flex;gap:6px;}
-.bxq-step{flex:1;min-width:0;}
-.bxq-step-track{height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);overflow:hidden;}
-.bxq-step-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
-.bxq-step.is-hit .bxq-step-fill{background:var(--bxq-done);}
-.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:12px;line-height:1.3;}
-.bxq-miles{position:relative;height:74px;margin:0 50px;}
-.bxq--m .bxq-miles{margin:0 38px;}
-.bxq-miles-line{position:absolute;left:0;right:0;top:17px;height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
-.bxq-miles-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
-.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:110px;text-align:center;}
-.bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
-.bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
-.bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
-.bxq-mile-icon{width:18px;height:18px;object-fit:contain;display:block;}
-.bxq-mile-dot{color:#6b7280;}
-.bxq-mile.is-next .bxq-mile-dot{color:var(--bxq-fill);}
-.bxq-mile.is-hit .bxq-mile-dot{color:#fff;}
-.bxq-msg-icon{color:#fff;}
-.bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
-.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
-.bxq--m .bxq-mile{width:84px;}
-.bxq--m .bxq-mile-label{font-size:11px;}
-.bxq-filters{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 14px;scrollbar-width:none;align-items:center;}
-.bxq-filters::-webkit-scrollbar{display:none;}
-.bxq-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:9px 18px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--bxq-text) !important;}
-.bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
-.bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}
-.bxq-chip--icon{padding:9px 14px;position:relative;}
-.bxq-chip--icon.is-active::after{content:"";position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:50%;background:var(--bxq-accent);}
-.bxq-dd{position:relative;flex:0 0 auto;}
-.bxq-menu{position:fixed;z-index:1001;margin-top:6px;min-width:200px;max-height:300px;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;}
-.bxq-opt{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:9px;padding:10px 12px;font-size:14px;cursor:pointer;}
-.bxq-opt:hover{background:#f3f4f6;}
-.bxq-opt.is-on{color:var(--bxq-accent) !important;font-weight:700;}
-.bxq-scrim{position:fixed;inset:0;z-index:1000;}
-.bxq-grid{display:grid;grid-template-columns:repeat(var(--bxq-cols),minmax(0,1fr));gap:18px;}
-.bxq--m .bxq-grid{grid-template-columns:repeat(var(--bxq-cols-m),minmax(0,1fr));gap:10px;}
-.bxq-card{background:var(--bxq-card);border-radius:var(--bxq-radius);padding:12px;display:flex;flex-direction:column;min-width:0;}
-.bxq--m .bxq-card{padding:8px;}
-.bxq-card.is-out .bxq-media img{opacity:.5;}
-.bxq-media{position:relative;aspect-ratio:var(--bxq-ratio);border-radius:calc(var(--bxq-radius) - 2px);overflow:hidden;background:#fff;}
-.bxq-media img{width:100%;height:100%;object-fit:contain;display:block;}
-.bxq-noimg{display:block;width:100%;height:100%;background:#eef0f3;}
-.bxq-badge{position:absolute;left:0;right:0;bottom:0;padding:16px 10px 6px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(180deg,transparent,var(--bxq-badge) 70%);}
-.bxq-add{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:12px;border:2px solid var(--bxq-accent);background:#fff;color:var(--bxq-accent) !important;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
-.bxq-add:hover{background:color-mix(in srgb,var(--bxq-accent) 8%,#fff);}
-.bxq--m .bxq-add{width:36px;height:36px;border-radius:10px;}
-.bxq-stepper{position:absolute;top:8px;right:8px;display:flex;align-items:center;background:var(--bxq-accent);color:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.15);}
-.bxq-stepper button{border:0;background:transparent;color:#fff !important;width:36px;height:40px;font-size:20px;font-weight:700;cursor:pointer;}
-.bxq-stepper span{min-width:22px;text-align:center;font-weight:800;}
-.bxq--m .bxq-stepper button{width:30px;height:34px;}
-.bxq-soldout{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.8);color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:5px 8px;}
-.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;}
-.bxq-eyebrow{font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;opacity:.6;}
-.bxq-name{margin:0;font-size:17px;line-height:1.3;font-weight:600;color:var(--bxq-text);}
-.bxq--m .bxq-name{font-size:14px;}
-.bxq-sub{margin:0;font-size:14px;line-height:1.4;opacity:.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.bxq--m .bxq-sub{font-size:12.5px;}
-.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;}
-.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;max-width:100%;}
-.bxq-variant svg{position:absolute;right:0;pointer-events:none;}
-.bxq-variant.is-static{color:var(--bxq-text);opacity:.75;}
-.bxq-off{display:flex;align-items:center;gap:8px;color:var(--bxq-off);font-size:15px;font-weight:800;}
-.bxq-off::after{content:"";flex:1;border-top:1.5px dashed rgba(0,0,0,.15);}
-.bxq-price{display:flex;align-items:baseline;gap:8px;}
-.bxq-price b{font-size:19px;font-weight:800;}
-.bxq-price s{font-size:14px;opacity:.45;}
-.bxq--m .bxq-price b{font-size:16px;}
-.bxq-nocount{font-size:12px;opacity:.55;}
-.bxq-empty{padding:40px 16px;text-align:center;opacity:.65;font-size:15px;background:var(--bxq-card);border-radius:var(--bxq-radius);}
-.bxq-bar{position:sticky;bottom:12px;z-index:999;margin:18px auto 0;max-width:980px;background:var(--bxq-bar-bg);color:var(--bxq-bar-text);border-radius:var(--bxq-bar-r);box-shadow:0 -2px 24px rgba(0,0,0,.14);padding:12px 16px;overflow:hidden;}
-.bxq--m .bxq-bar{bottom:8px;padding:10px 12px;}
-.bxq-slim{height:4px;margin:-12px -16px 10px;background:rgba(0,0,0,.08);}
-.bxq-slim-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
-.bxq-slim-fill.is-done{background:var(--bxq-done);}
-.bxq-msg{display:flex;align-items:center;gap:12px;font-size:16px;padding:0 0 10px;margin:0 0 10px;border-bottom:1px solid rgba(0,0,0,.1);}
-.bxq--m .bxq-msg{font-size:14px;}
-.bxq-msg.is-error{color:#b91c1c;}
-.bxq-msg b{font-weight:800;}
-.bxq-msg-icon{width:42px;height:42px;flex:0 0 auto;border-radius:50%;background:var(--bxq-icon-bg);display:flex;align-items:center;justify-content:center;font-size:22px;}
-.bxq-msg-glyph{width:26px;height:26px;object-fit:contain;line-height:26px;text-align:center;}
-.bxq-bar.is-celebrate .bxq-msg-icon{animation:bxq-pop .7s ease;}
-.bxq-bar.is-celebrate .bxq-msg{animation:bxq-glow 1.2s ease;}
-@keyframes bxq-pop{0%{transform:scale(.6) rotate(-12deg);}55%{transform:scale(1.25) rotate(8deg);}100%{transform:none;}}
-@keyframes bxq-glow{0%,100%{background:transparent;}30%{background:color-mix(in srgb,var(--bxq-save) 14%,transparent);}}
-.bxq-row{display:flex;align-items:center;gap:12px;}
-.bxq-thumbs{display:flex;flex:0 0 auto;}
-.bxq-thumbs img{width:46px;height:46px;border-radius:12px;object-fit:cover;background:#fff;border:2px solid var(--bxq-bar-bg);margin-left:-26px;box-shadow:0 1px 4px rgba(0,0,0,.12);position:relative;}
-.bxq-thumbs img:first-child{margin-left:0;}
-.bxq--m .bxq-thumbs img{width:40px;height:40px;margin-left:-24px;}
-.bxq--m .bxq-thumbs img:first-child{margin-left:0;}
-.bxq-count{border:0;background:transparent;padding:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;cursor:pointer;min-width:0;flex:1;text-align:left;color:var(--bxq-bar-text) !important;}
-.bxq-count-top{display:inline-flex;align-items:center;gap:4px;font-size:17px;font-weight:700;white-space:nowrap;}
-.bxq-count-top svg{color:var(--bxq-accent);}
-.bxq-count-top i{font-style:normal;opacity:.5;margin:0 2px;}
-.bxq--m .bxq-count-top{font-size:15px;}
-.bxq-saved{font-size:14px;font-weight:700;color:var(--bxq-save);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.bxq-total{font-size:14px;font-weight:700;opacity:.75;}
-.bxq-actions{display:flex;gap:8px;flex:0 0 auto;}
-.bxq-go,.bxq-cod{border:0;border-radius:var(--bxq-btn-r);padding:14px 26px;font-size:17px;font-weight:800;cursor:pointer;white-space:nowrap;}
-.bxq-go{background:var(--bxq-btn);color:var(--bxq-btn-text) !important;}
-.bxq-cod{background:#fff;border:1.5px solid var(--bxq-btn);color:var(--bxq-btn);display:inline-flex;align-items:center;justify-content:center;gap:6px;}
-.bxq--m .bxq-row{flex-wrap:wrap;}
-.bxq--m .bxq-actions.has-cod{flex:1 1 100%;}
-.bxq--m .bxq-actions.has-cod button{flex:1;}
-.bxq--m .bxq-go,.bxq--m .bxq-cod{padding:12px 16px;font-size:15px;}
-.bxq-go:disabled,.bxq-cod:disabled{opacity:.45;cursor:not-allowed;}
-.bxq-ring{position:relative;width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
-.bxq-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}
-.bxq-ring-bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:4;}
-.bxq-ring-fg{fill:none;stroke:var(--bxq-fill);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset .35s ease;}
-.bxq-ring.is-done .bxq-ring-fg{stroke:var(--bxq-done);}
-.bxq-ring b{font-size:15px;position:relative;}
-.bxq-sheet{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid rgba(0,0,0,.1);}
-.bxq-line{display:flex;align-items:center;gap:10px;}
-.bxq-line img,.bxq-line .bxq-noimg{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:0 0 auto;}
-.bxq-line-main{flex:1;min-width:0;}
-.bxq-line-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.bxq-line-sub{font-size:12px;opacity:.6;}
-.bxq-line-price{font-size:14px;font-weight:700;min-width:64px;text-align:right;}
-.bxq-mini{display:flex;align-items:center;border:1.5px solid var(--bxq-accent);border-radius:9px;color:var(--bxq-accent);}
-.bxq-mini button{border:0;background:transparent;width:28px;height:28px;font-size:16px;font-weight:700;cursor:pointer;color:var(--bxq-accent) !important;}
-.bxq-mini span{min-width:18px;text-align:center;font-size:13px;font-weight:800;}
-.bxq-clear{align-self:flex-start;border:0;background:transparent;padding:0;font-size:13px;text-decoration:underline;opacity:.6;cursor:pointer;}
-.bxq-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10000;background:#111827;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:90vw;}
-@media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
-`;
-const kit$1 = createQuickShopKit(createComboWeightCore());
-const val = (config2, key) => kit$1.opt(config2, key);
-const isOn = (config2, key) => kit$1.on(config2, key);
-function IconPicker({ label, value, onChange, fallback = "gift" }) {
-  const isUrl = /^https:\/\//.test(value || "");
-  const current = isUrl ? "" : kit$1.iconName(value, fallback);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, margin: "6px 0" }, role: "radiogroup", "aria-label": label, children: kit$1.ICON_NAMES.map((name) => {
-      const on = current === name;
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          role: "radio",
-          "aria-checked": on,
-          "aria-label": name,
-          title: name,
-          onClick: () => onChange(name),
-          style: { width: 34, height: 34, padding: 7, borderRadius: 8, cursor: "pointer", border: `1px solid ${on ? "#2563eb" : "#d1d5db"}`, background: on ? "#eff6ff" : "#fff", color: on ? "#2563eb" : "#374151" },
-          dangerouslySetInnerHTML: { __html: kit$1.svgIcon(name) }
-        },
-        name
-      );
-    }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      TextField$1,
-      {
-        label: "Or an image link",
-        value: isUrl ? value : "",
-        placeholder: "https://… (optional)",
-        autoComplete: "off",
-        onChange: (v) => onChange(v.trim() ? v.trim() : current || fallback)
-      }
-    )
-  ] });
-}
-function TierIcons({ config: config2, updateConfig }) {
-  var _a;
-  const tiers = ((_a = config2.weight_pricing) == null ? void 0 : _a.tiers) || [];
-  const saved = String(val(config2, "qs_tier_icons") || "").split(",").map((s) => s.trim());
-  const enabled = saved.some(Boolean);
-  const count = Math.max(tiers.length, 1);
-  const iconAt = (i) => saved[i] || kit$1.TIER_ICON_ORDER[i % kit$1.TIER_ICON_ORDER.length];
-  const setAt = (i, icon) => {
-    const next = Array.from({ length: Math.max(count, saved.length) }, (_, j) => iconAt(j));
-    next[i] = icon;
-    updateConfig("qs_tier_icons", next.join(", "));
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Checkbox,
-      {
-        label: "Icons on the milestones",
-        checked: enabled,
-        onChange: (v) => updateConfig("qs_tier_icons", v ? kit$1.DEFAULTS.qs_tier_icons : "")
-      }
-    ),
-    enabled && Array.from({ length: count }, (_, i) => {
-      var _a2, _b;
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        IconPicker,
-        {
-          fallback: i,
-          label: `Tier ${i + 1}${((_a2 = tiers[i]) == null ? void 0 : _a2.label) ? ` · ${tiers[i].label}` : ""}`,
-          value: iconAt(i),
-          onChange: (icon) => setAt(i, icon)
-        },
-        ((_b = tiers[i]) == null ? void 0 : _b.id) || i
-      );
-    })
-  ] });
-}
-function StylePicker({ label, value, options, onChange }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "150", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "span", variant: "bodyMd", children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 8 }, role: "radiogroup", "aria-label": label, children: options.map((o) => {
-      const on = o.value === value;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          role: "radio",
-          "aria-checked": on,
-          onClick: () => onChange(o.value),
-          style: {
-            border: on ? "2px solid #2563eb" : "1px solid #d1d5db",
-            borderRadius: 10,
-            background: on ? "#eff6ff" : "#fff",
-            padding: "8px 6px 6px",
-            cursor: "pointer",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "stretch",
-            gap: 6
-          },
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: 30, display: "flex", alignItems: "center", justifyContent: "center" }, children: o.preview }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 12, fontWeight: on ? 700 : 500, color: "#111827" }, children: o.label })
-          ]
-        },
-        o.value
-      );
-    }) })
-  ] });
-}
-const track = { height: 5, borderRadius: 9, background: "#e5e7eb", position: "relative", width: "100%" };
-const fill = (w, color = "#2563eb") => ({ position: "absolute", left: 0, top: 0, bottom: 0, width: w, borderRadius: 9, background: color });
-const dot = (left, on) => ({ position: "absolute", left, top: "50%", width: 11, height: 11, margin: "-5.5px 0 0 -5.5px", borderRadius: "50%", background: on ? "#16a34a" : "#fff", border: `2px solid ${on ? "#16a34a" : "#cbd5e1"}` });
-const TOP_STYLES = [
-  { value: "milestones", label: "Milestones", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: track, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("55%") }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: dot("40%", true) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: dot("90%", false) })
-  ] }) },
-  { value: "bar", label: "Bar + ticks", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: track, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("60%") }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { ...dot("50%", true), width: 7, height: 7, margin: "-3.5px 0 0 -3.5px" } })
-  ] }) },
-  { value: "steps", label: "Steps", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: 3, width: "100%" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { ...track, background: "#16a34a" } }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("40%") }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track })
-  ] }) },
-  { value: "text", label: "Text only", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 11, color: "#16a34a", fontWeight: 700 }, children: "Add 2 more…" }) },
-  { value: "none", label: "Hidden", preview: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 11, color: "#9ca3af" }, children: "—" }) }
-];
-const BAR_STYLES = [
-  { value: "full", label: "Message + items", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: 9, textAlign: "left", display: "flex", alignItems: "center", gap: 3 }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 10, height: 10, borderRadius: "50%", background: "#16a34a" } }),
-      "You unlocked"
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 Items" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
-    ] })
-  ] }) },
-  { value: "slim", label: "Slim line", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: track, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: fill("60%") }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 5 }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 Items" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
-    ] })
-  ] }) },
-  { value: "ring", label: "Ring", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "space-between" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 20, height: 20, borderRadius: "50%", border: "3px solid #2563eb", borderRightColor: "#e5e7eb", fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center" }, children: "5" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
-  ] }) },
-  { value: "compact", label: "Compact", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 · ₹999" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
-  ] }) }
-];
-function Colors({ config: config2, updateConfig, ColorPickerField: ColorPickerField2, fields }) {
-  if (!ColorPickerField2) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-grid-2", children: fields.map(([key, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label, value: val(config2, key), onChange: (v) => updateConfig(key, v) }, key)) });
-}
-function Px({ PxField: PxField2, config: config2, updateConfig, keyName, label, min = 0, max = 40 }) {
-  if (!PxField2) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label, value: Number(val(config2, keyName)), min, max, onChange: (v) => updateConfig(keyName, v) });
-}
-function FiltersSectionComponent({ config: config2, updateConfig, expanded, onToggle }) {
-  const source = val(config2, "qs_chips_source");
-  const toggleWithLabel = (key, labelKey, title, help) => /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: title, checked: isOn(config2, key), onChange: (v) => updateConfig(key, v), helpText: help }),
-    isOn(config2, key) && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Label", labelHidden: true, value: val(config2, labelKey), onChange: (v) => updateConfig(labelKey, v), autoComplete: "off" })
-  ] });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Filters", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ChoiceList,
-      {
-        title: "Filter chips",
-        choices: [
-          { label: "One chip per collection", value: "collections", helpText: "Needs two or more collections." },
-          { label: "Chips from product tags I choose", value: "tags" },
-          { label: "No chips", value: "none" }
-        ],
-        selected: [source],
-        onChange: ([v]) => updateConfig("qs_chips_source", v)
-      }
-    ),
-    source === "tags" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      TextField$1,
-      {
-        label: "Tags to show as chips",
-        value: config2.qs_chip_tags || "",
-        onChange: (v) => updateConfig("qs_chip_tags", v),
-        placeholder: "Boneless, Curry Cut, Drumstick",
-        helpText: "Separate with commas. A chip shows products with that Shopify tag.",
-        autoComplete: "off"
-      }
-    ),
-    source !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“All” chip first", checked: isOn(config2, "qs_show_all_chip"), onChange: (v) => updateConfig("qs_show_all_chip", v) }),
-      isOn(config2, "qs_show_all_chip") && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "All chip label", labelHidden: true, value: val(config2, "qs_all_label"), onChange: (v) => updateConfig("qs_all_label", v), autoComplete: "off" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Dropdown filters" }) }),
-    toggleWithLabel("qs_filter_type", "qs_filter_type_label", "Product type", "Lists the Shopify product types on the page."),
-    toggleWithLabel("qs_filter_brand", "qs_filter_brand_label", "Brand (vendor)", "Lists the vendors on the page."),
-    toggleWithLabel("qs_filter_custom", "qs_filter_custom_label", "Your own tag filter", "A dropdown of tags you choose, e.g. Cut: Boneless, With skin."),
-    isOn(config2, "qs_filter_custom") && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      TextField$1,
-      {
-        label: "Tags in this dropdown",
-        value: config2.qs_filter_custom_tags || "",
-        onChange: (v) => updateConfig("qs_filter_custom_tags", v),
-        placeholder: "Boneless, With skin",
-        helpText: "Separate with commas.",
-        autoComplete: "off"
-      }
-    ),
-    toggleWithLabel("qs_filter_sort", "qs_filter_sort_label", "Sort", "Price, biggest discount, name."),
-    toggleWithLabel("qs_filter_instock", "qs_filter_instock_label", "“In stock” chip", "Hides sold-out products when on."),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "A dropdown only shows when the products on the page have at least two values for it." })
-  ] }) });
-}
-function CardsSectionComponent({ config: config2, updateConfig, expanded, onToggle, PxField: PxField2 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Product cards", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Columns (desktop)", options: ["2", "3", "4", "5", "6"].map((v) => ({ label: v, value: v })), value: String(val(config2, "qs_columns_desktop")), onChange: (v) => updateConfig("qs_columns_desktop", Number(v)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Columns (phone)", options: ["1", "2", "3"].map((v) => ({ label: v, value: v })), value: String(val(config2, "qs_columns_mobile")), onChange: (v) => updateConfig("qs_columns_mobile", Number(v)) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Select,
-      {
-        label: "Image shape",
-        options: [{ label: "Square", value: "square" }, { label: "Portrait (4:5)", value: "portrait" }, { label: "Landscape (4:3)", value: "landscape" }],
-        value: val(config2, "qs_image_ratio"),
-        onChange: (v) => updateConfig("qs_image_ratio", v)
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      TextField$1,
-      {
-        label: "Small line above the title",
-        value: config2.qs_card_eyebrow || "",
-        onChange: (v) => updateConfig("qs_card_eyebrow", v),
-        placeholder: "e.g. 8 MINS or Freshly cut",
-        helpText: "Leave empty to hide.",
-        autoComplete: "off",
-        maxLength: 40
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Short description under the title", checked: isOn(config2, "qs_show_subtitle"), onChange: (v) => updateConfig("qs_show_subtitle", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“% OFF” from the compare-at price", checked: isOn(config2, "qs_show_off"), onChange: (v) => updateConfig("qs_show_off", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Struck-through compare-at price", checked: isOn(config2, "qs_show_compare"), onChange: (v) => updateConfig("qs_show_compare", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Weight when a product has one variant", checked: isOn(config2, "qs_show_weight"), onChange: (v) => updateConfig("qs_show_weight", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge for products tagged", value: val(config2, "qs_badge_tag"), onChange: (v) => updateConfig("qs_badge_tag", v), autoComplete: "off", helpText: "A Shopify tag. Empty = no badge." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge text", value: val(config2, "qs_badge_text"), onChange: (v) => updateConfig("qs_badge_text", v), autoComplete: "off" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_radius", label: "Card corners" })
-  ] }) });
-}
-function ProgressSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2 }) {
-  var _a;
-  const style = val(config2, "qs_top_style");
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Top progress", expanded, onToggle, badge: (_a = TOP_STYLES.find((s) => s.value === style)) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: TOP_STYLES, onChange: (v) => updateConfig("qs_top_style", v) }),
-    style !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Heading", value: val(config2, "qs_top_title"), onChange: (v) => updateConfig("qs_top_title", v), autoComplete: "off", helpText: "Empty = no heading. The message under it comes from Advanced → Offer." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Stays at the top while scrolling", checked: isOn(config2, "qs_top_sticky"), onChange: (v) => updateConfig("qs_top_sticky", v) }),
-      isOn(config2, "qs_top_sticky") && /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_offset", label: "Space below your theme's sticky header", max: 300 }),
-      style !== "text" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Tier names under the bar", checked: isOn(config2, "qs_top_show_labels"), onChange: (v) => updateConfig("qs_top_show_labels", v) }),
-        style === "milestones" && /* @__PURE__ */ jsxRuntimeExports.jsx(TierIcons, { config: config2, updateConfig }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_height", label: "Bar thickness", min: 2, max: 24 }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_radius", label: "Bar corners", max: 999 })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        Colors,
-        {
-          config: config2,
-          updateConfig,
-          ColorPickerField: ColorPickerField2,
-          fields: [["qs_top_bg", "Background"], ["qs_top_text", "Text"], ["qs_top_track", "Empty bar"], ["qs_top_fill", "Filled bar"], ["qs_top_done", "Unlocked"]]
-        }
-      )
-    ] })
-  ] }) });
-}
-function BarSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2, shiprocketEnabled = false }) {
-  var _a;
-  const style = val(config2, "qs_bar_style");
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Bottom bar", expanded, onToggle, badge: (_a = BAR_STYLES.find((s) => s.value === style)) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: BAR_STYLES, onChange: (v) => updateConfig("qs_bar_style", v) }),
-    style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Unlock message", checked: isOn(config2, "qs_bar_show_message"), onChange: (v) => updateConfig("qs_bar_show_message", v) }),
-      style !== "ring" && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Item pictures", checked: isOn(config2, "qs_bar_show_thumbs"), onChange: (v) => updateConfig("qs_bar_show_thumbs", v) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Savings line", checked: isOn(config2, "qs_bar_show_saved"), onChange: (v) => updateConfig("qs_bar_show_saved", v), helpText: "Compare-at savings plus the box discount (only while the box discount is live)." })
-    ] }),
-    isOn(config2, "qs_bar_show_saved") && style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, more tiers to go", value: val(config2, "qs_saved_text"), onChange: (v) => updateConfig("qs_saved_text", v), autoComplete: "off", helpText: "{{saved}} = amount saved" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, all unlocked", value: val(config2, "qs_saved_done_text"), onChange: (v) => updateConfig("qs_saved_done_text", v), autoComplete: "off" })
-    ] }),
-    style === "full" && isOn(config2, "qs_bar_show_message") && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(IconPicker, { label: "Icon when unlocked", value: val(config2, "qs_bar_icon_done"), fallback: "party", onChange: (v) => updateConfig("qs_bar_icon_done", v) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(IconPicker, { label: "Icon before", value: val(config2, "qs_bar_icon_locked"), fallback: "gift", onChange: (v) => updateConfig("qs_bar_icon_locked", v) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Celebrate when a tier unlocks", checked: isOn(config2, "qs_bar_celebrate"), onChange: (v) => updateConfig("qs_bar_celebrate", v) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Button" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Button text", value: val(config2, "qs_btn_label"), onChange: (v) => updateConfig("qs_btn_label", v), autoComplete: "off", maxLength: 30 }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Select,
-      {
-        label: "Button goes to",
-        options: [{ label: "Checkout", value: "checkout" }, { label: "Cart page", value: "cart" }],
-        value: val(config2, "qs_btn_action"),
-        onChange: (v) => updateConfig("qs_btn_action", v),
-        helpText: "The box discount applies at checkout either way."
-      }
-    ),
-    shiprocketEnabled && val(config2, "qs_btn_action") === "checkout" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Select,
-      {
-        label: "Checkout with",
-        options: [
-          { label: "Shopify checkout", value: "shopify" },
-          { label: "Shiprocket, BRIX applies the box discount", value: "shiprocket" },
-          { label: "Shiprocket, my own Shiprocket offer", value: "shiprocket_own" }
-        ],
-        value: val(config2, "qs_checkout_with"),
-        onChange: (v) => updateConfig("qs_checkout_with", v),
-        helpText: val(config2, "qs_checkout_with") === "shiprocket" ? "BRIX makes a one-time code worth the box discount (single use, 2 hours) and opens Shiprocket with it." : val(config2, "qs_checkout_with") === "shiprocket_own" ? "Shiprocket opens with no BRIX code: set up a matching offer in Shiprocket yourself, or shoppers pay full price there." : "Shiprocket can't run the box discount itself, so Shopify checkout is the default."
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Checkbox,
-      {
-        label: "Only allow checkout once the first tier is unlocked",
-        checked: isOn(config2, "qs_require_first_tier"),
-        onChange: (v) => updateConfig("qs_require_first_tier", v)
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      Colors,
-      {
-        config: config2,
-        updateConfig,
-        ColorPickerField: ColorPickerField2,
-        fields: [["qs_bar_bg", "Bar background"], ["qs_bar_text", "Bar text"], ["qs_bar_save", "Savings text"], ["qs_bar_icon_bg", "Icon circle"], ["qs_btn_bg", "Button"], ["qs_btn_text_color", "Button text"]]
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_bar_radius", label: "Bar corners" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_btn_radius", label: "Button corners" })
-    ] })
-  ] }) });
-}
-function ColorsSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Page colours", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsx(FormLayout, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-    Colors,
-    {
-      config: config2,
-      updateConfig,
-      ColorPickerField: ColorPickerField2,
-      fields: [["qs_page_bg", "Page background"], ["qs_card_bg", "Card background"], ["qs_text_color", "Text"], ["qs_accent", "Accent (+ button, chips)"], ["qs_off_color", "% OFF text"], ["qs_badge_bg", "Badge"]]
-    }
-  ) }) });
-}
-const QuickShopFiltersSection = reactExports.memo(FiltersSectionComponent);
-const QuickShopCardsSection = reactExports.memo(CardsSectionComponent);
-const QuickShopProgressSection = reactExports.memo(ProgressSectionComponent);
-const QuickShopBarSection = reactExports.memo(BarSectionComponent);
-const QuickShopColorsSection = reactExports.memo(ColorsSectionComponent);
 const SETTINGS_INDEX = [
+  { label: "Design (Guided / Tabs / Grid)", category: "layout", section: "design", kw: "design layout guided architect velocity stream editorial split tabs steps grid switch" },
   { label: "Steps & collections", category: "layout", section: "general", kw: "step collection bundle rule combo size" },
   { label: "Collection tabs", category: "layout", section: "general", kw: "tab switch collection" },
   { label: "Total products limit", category: "layout", section: "general", kw: "max products limit" },
   { label: "Banner image & slider", category: "layout", section: "banner", kw: "banner image slider hero rotate" },
   { label: "Products grid & columns", category: "layout", section: "products", kw: "grid columns image ratio arrows scrollbar" },
+  { label: "Page loader", category: "style", section: "loader", kw: "loader loading spinner preloader logo wait" },
   { label: "Title & description", category: "style", section: "content", kw: "title description heading copy text" },
   { label: "Product card style", category: "style", section: "productCard", kw: "card padding radius hover" },
   { label: "Collection tab styling", category: "style", section: "collectionTabsStyles", kw: "tab color active styling premium" },
@@ -30164,6 +31830,12 @@ function BuilderSidebarComponent({
 .cst-section-title{font-size:14.5px;font-weight:600;color:#202223;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cst-section-badge{flex-shrink:0;font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;background:#e8eaed;color:#5c5f62;letter-spacing:.3px;text-transform:uppercase}
 .cst-section-body{padding:16px;border-top:1px solid #e1e3e5}
+.cst-design-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cst-design-option{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border:1px solid #d2d5d8;border-radius:10px;background:#fff;cursor:pointer;font-family:inherit;color:#5c5f62;text-align:center;transition:border-color .15s ease,box-shadow .15s ease}
+.cst-design-option:hover{border-color:#8c9196}
+.cst-design-option.is-selected{border:2px solid #1a9de0;padding:9px 5px;color:#1a9de0;box-shadow:0 0 0 3px rgba(26,157,224,.12)}
+.cst-design-name{font-size:12.5px;font-weight:700;color:#202223;line-height:1.25}
+.cst-design-short{font-size:11.5px;color:#6d7175}
 .cst-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cst-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .cst-full-width{grid-column:1 / -1}
@@ -30260,6 +31932,15 @@ function BuilderSidebarComponent({
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-sidebar-content", children: [
         activeCategory === "layout" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          isClassicLayout(config2.layout) && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            DesignSection,
+            {
+              config: config2,
+              applyConfigPatch,
+              expanded: expandedSections.design,
+              onToggle: () => toggleSection("design")
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             GeneralSection,
             {
@@ -30287,7 +31968,7 @@ function BuilderSidebarComponent({
                 ColorPickerField: ColorPickerField2
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopFiltersSection, { config: config2, updateConfig, expanded: expandedSections.qsFilters, onToggle: () => toggleSection("qsFilters") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopFiltersSection, { config: config2, updateConfig, expanded: expandedSections.qsFilters, onToggle: () => toggleSection("qsFilters"), collections, PxField: PxField2 }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopCardsSection, { config: config2, updateConfig, expanded: expandedSections.qsCards, onToggle: () => toggleSection("qsCards"), PxField: PxField2 })
           ] }),
           !usesQuickShop(config2.layout) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -30362,6 +32043,16 @@ function BuilderSidebarComponent({
               generatingDescription,
               generateAiSuggestion,
               PxField: PxField2,
+              ColorPickerField: ColorPickerField2
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            LoaderSection,
+            {
+              config: config2,
+              updateConfig,
+              expanded: expandedSections.loader,
+              onToggle: () => toggleSection("loader"),
               ColorPickerField: ColorPickerField2
             }
           ),
@@ -31040,7 +32731,7 @@ function BrixSwatch({ hex, children }) {
 }
 const LazyMarkdown = reactExports.lazy(async () => {
   const [{ default: ReactMarkdown }, { default: remarkGfm }] = await Promise.all([
-    __vitePreload(() => import("./index-BNCr_M_G.js"), true ? __vite__mapDeps([0,1]) : void 0),
+    __vitePreload(() => import("./index-BCogkTGI.js"), true ? __vite__mapDeps([0,1]) : void 0),
     __vitePreload(() => import("./index-DjYGdUn3.js"), true ? __vite__mapDeps([2,1]) : void 0)
   ]);
   return {
@@ -32933,67 +34624,101 @@ function ComboSetupTour({ page, shop, beforeStep }) {
 function WeightMeter({ view, box, config: config2 = {}, style }) {
   var _a;
   const tiers = view.tiers || [];
-  const top = tiers.length ? tiers[tiers.length - 1].min_grams : 1e3;
-  const scale = view.maxGrams != null ? view.maxGrams : Math.round(top * 1.2);
-  const percent = scale > 0 ? Math.min(100, box.grams / scale * 100) : 0;
-  const msg = boxMessage(view, box);
+  const measure = measureOf(view);
+  const symbol = view.currencySymbol || "";
+  const fmtView = { ...view, measure, currencySymbol: symbol };
+  const progress = progressOf(fmtView, box);
+  const offered = (t) => t ? { ...t, label: offerLabel(t, measure, symbol) } : t;
+  const msg = boxMessage(fmtView, { ...box, tier: offered(box.tier), nextTier: offered(box.nextTier) });
+  const milestones = (config2.tier_progress_style || "milestones") !== "bar";
   const success = config2.progress_success_color || "#16a34a";
   const textColor = config2.progress_text_color || "#374151";
   const barColor = box.overMax ? "#dc2626" : box.tier && view.enabled ? success : config2.progress_bar_color || "#111827";
   const toneColor = msg.tone === "error" ? "#b91c1c" : msg.tone === "success" ? success : textColor;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: "16px 20px", background: "#fff", borderBottom: "1px solid #eee", ...style }, children: [
+  const amount = box.amount === void 0 ? box.grams : box.amount;
+  const showMax = view.maxGrams != null && measure !== "value";
+  const heading = config2.progress_text || "Your box";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-brix-tier-meter": milestones ? "milestones" : "bar", style: { padding: "16px 20px", background: "#fff", borderBottom: "1px solid #eee", ...style }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 10, color: textColor }, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 13, fontWeight: 700, letterSpacing: "0.4px", textTransform: "uppercase" }, children: config2.progress_text || "Your box" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 13, fontWeight: 700, letterSpacing: "0.4px", textTransform: "uppercase" }, children: heading }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums" }, children: [
-        formatWeight(box.grams, view.unit),
-        view.maxGrams != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 500, color: "#6b7280" }, children: [
+        formatAmount(fmtView, amount, box.decimals),
+        showMax && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { fontWeight: 500, color: "#6b7280" }, children: [
           " / ",
-          formatWeight(view.maxGrams, view.unit),
+          formatAmount(fmtView, view.maxGrams, box.decimals),
           " max"
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        role: "progressbar",
-        "aria-label": "Box weight",
-        "aria-valuemin": 0,
-        "aria-valuemax": scale,
-        "aria-valuenow": Math.round(box.grams),
-        style: { position: "relative", height: 10, borderRadius: 10, background: "#e5e7eb", overflow: "hidden" },
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "100%", width: `${percent}%`, background: barColor, borderRadius: 10, transition: "width 0.4s ease, background 0.3s" } })
-      }
-    ),
-    view.enabled && tiers.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "relative", height: 30, marginTop: 4 }, children: tiers.map((tier) => {
-      const left = scale > 0 ? Math.min(100, tier.min_grams / scale * 100) : 0;
-      const reached = box.grams >= tier.min_grams && !box.overMax;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { position: "relative", padding: milestones ? "0 9px" : 0 }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
-          title: tierLabel(tier, view.unit),
-          style: {
-            position: "absolute",
-            left: `${left}%`,
-            top: 0,
-            transform: left > 90 ? "translateX(-100%)" : left < 10 ? "none" : "translateX(-50%)",
-            fontSize: 11,
-            lineHeight: 1.3,
-            whiteSpace: "nowrap",
-            textAlign: "center",
-            color: reached ? success : "#6b7280",
-            fontWeight: reached ? 700 : 500
-          },
+          role: "progressbar",
+          "aria-label": heading,
+          "aria-valuemin": 0,
+          "aria-valuemax": 100,
+          "aria-valuenow": Math.round(progress.percent),
+          style: { position: "relative", height: milestones ? 8 : 10, borderRadius: 10, background: "#e5e7eb" },
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 2, height: 6, background: "currentColor", margin: "0 auto 2px" } }),
-            formatWeight(tier.min_grams, view.unit)
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { height: "100%", width: `${progress.percent}%`, background: barColor, borderRadius: 10, transition: "width 0.4s ease, background 0.3s" } }),
+            milestones && progress.marks.map((mark) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                style: {
+                  position: "absolute",
+                  top: "50%",
+                  left: `${mark.percent}%`,
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  transform: "translate(-50%, -50%)",
+                  boxSizing: "border-box",
+                  background: mark.hit && view.enabled ? success : "#fff",
+                  border: `2px solid ${mark.hit && view.enabled ? success : mark.next ? barColor : "#d1d5db"}`,
+                  color: "#fff",
+                  fontSize: 11,
+                  lineHeight: "14px",
+                  textAlign: "center",
+                  fontWeight: 800
+                },
+                children: mark.hit && view.enabled ? "✓" : ""
+              },
+              mark.tier.id || mark.tier.min_grams
+            ))
           ]
-        },
-        tier.id || tier.min_grams
-      );
-    }) }),
+        }
+      ),
+      tiers.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "relative", height: milestones ? 36 : 30, marginTop: milestones ? 10 : 4 }, children: progress.marks.map((mark) => {
+        const left = mark.percent;
+        const reached = mark.hit;
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            style: {
+              position: "absolute",
+              left: `${left}%`,
+              top: 0,
+              transform: left > 85 ? "translateX(-100%)" : left < 15 ? "none" : "translateX(-50%)",
+              fontSize: 11,
+              lineHeight: 1.3,
+              whiteSpace: "nowrap",
+              textAlign: left > 85 ? "right" : left < 15 ? "left" : "center",
+              color: reached ? success : "#6b7280",
+              fontWeight: reached ? 700 : 500
+            },
+            children: [
+              !milestones && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 2, height: 6, background: "currentColor", margin: "0 auto 2px" } }),
+              milestones && view.enabled && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 800, color: reached ? success : textColor }, children: offerLabel(mark.tier, measure, symbol) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: formatThreshold(fmtView, mark.tier) })
+            ]
+          },
+          mark.tier.id || mark.tier.min_grams
+        );
+      }) })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", style: { marginTop: 8, fontSize: 13, fontWeight: 600, color: toneColor }, children: msg.text }),
-    ((_a = box.unweighedKeys) == null ? void 0 : _a.length) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 4, fontSize: 12, color: "#6b7280" }, children: [
+    measure === "weight" && ((_a = box.unweighedKeys) == null ? void 0 : _a.length) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 4, fontSize: 12, color: "#6b7280" }, children: [
       box.unweighedKeys.length,
       " selected item",
       box.unweighedKeys.length === 1 ? " has" : "s have",
@@ -33066,6 +34791,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
   });
   const fallbackProducts = hasProducts ? null : SAMPLE_PRODUCTS;
   const collectionNames = reactExports.useMemo(() => Object.fromEntries((collections || []).map((c) => [c.handle, c.title])), [collections]);
+  const collectionImages = reactExports.useMemo(() => Object.fromEntries((collections || []).filter((c) => c.image).map((c) => [c.handle, c.image])), [collections]);
   const pricing = reactExports.useMemo(() => {
     const { value } = normalizeWeightPricing(config2.weight_pricing);
     const qualifies = (productId) => value.qualify.mode !== "selected" || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
@@ -33080,6 +34806,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     productsByHandle,
     handles,
     collectionNames,
+    collectionImages,
     fallbackProducts,
     selection: sel,
     pending,
@@ -33089,7 +34816,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     symbol,
     decimals,
     isMobile
-  }), [config2, productsByHandle, handles, collectionNames, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
+  }), [config2, productsByHandle, handles, collectionNames, collectionImages, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
   const model = buildFor(selection);
   const codShown = !!codEnabled && config2.show_cod_button !== false;
   model.cod = {
@@ -33173,11 +34900,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { background: "#eef1f5", padding: isMobile ? 0 : 12, minHeight: "100%" }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: QUICK_SHOP_CSS }),
-    !hasProducts && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { background: "#fff7ed", color: "#9a3412", fontSize: 13, padding: "8px 12px", borderRadius: 8, margin: isMobile ? 8 : "0 0 10px" }, children: [
-      "Sample products. Choose collections under Layout → ",
-      config2.layout === "layout5" ? "Box Collections" : "Shop Collections",
-      " to see yours."
-    ] }),
+    !hasProducts && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { background: "#fff7ed", color: "#9a3412", fontSize: 13, padding: "8px 12px", borderRadius: 8, margin: isMobile ? 8 : "0 0 10px" }, children: "Sample products. Choose collections under Layout → Box Collections to see yours." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "presentation", onClick, onChange, dangerouslySetInnerHTML: { __html: html } })
   ] });
 }
@@ -33804,10 +35527,16 @@ const LAYOUT_MAP = {
   combo_design_three: "layout3",
   combo_design_four: "layout4",
   combo_main: "layout1",
+  // The Classic Combo card: starts on Guided Architect; the builder's Design
+  // section switches it between layout1 / layout2 / layout4.
+  combo_classic: "layout1",
   custom_bundle_layout: "layout1",
   combo_weight_box: WEIGHT_BOX_LAYOUT,
-  combo_quick_shop: QUICK_SHOP_LAYOUT
+  combo_quick_shop: QUICK_SHOP_LAYOUT,
+  // the Value Box
+  combo_quantity_box: QUANTITY_BOX_LAYOUT
 };
+const BOX_MESSAGES = { locked: "Add {{remaining}} more to unlock {{tier}}", unlocked: "You unlocked {{tier}}" };
 const QUICK_SHOP_PRESET = {
   layout: QUICK_SHOP_LAYOUT,
   pricing_mode: "weight",
@@ -33817,15 +35546,45 @@ const QUICK_SHOP_PRESET = {
   collection_title: "Shop your box",
   collection_description: "",
   weight_pricing: {
-    ...defaultWeightPricing("quantity"),
+    ...defaultWeightPricing("value"),
     tiers: [
-      { id: "t1", min_grams: 3, type: "percentage", value: 5, label: "" },
-      { id: "t2", min_grams: 5, type: "percentage", value: 10, label: "" }
+      { id: "t1", min_grams: 999, type: "fixed_amount", value: 100, label: "" },
+      { id: "t2", min_grams: 1999, type: "percentage", value: 15, label: "" }
     ],
-    messages: { locked: "Add {{remaining}} more to unlock {{tier}}", unlocked: "You unlocked {{tier}}", over_max: "Your box can hold up to {{max}}. Remove something to add this." }
+    messages: { ...BOX_MESSAGES, over_max: "Your box is full. Remove something to add this." }
   }
 };
-const presetFor = (mapped, prev) => mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : mapped === QUICK_SHOP_LAYOUT ? { ...prev, ...QUICK_SHOP_PRESET } : { ...prev, layout: mapped };
+const QUANTITY_BOX_PRESET = {
+  layout: QUANTITY_BOX_LAYOUT,
+  pricing_mode: "weight",
+  has_discount_offer: false,
+  selected_discount_id: null,
+  tab_count: 1,
+  collection_title: "Build your box",
+  collection_description: "",
+  weight_pricing: {
+    ...defaultWeightPricing("quantity"),
+    tiers: [
+      { id: "t1", min_grams: 2, type: "percentage", value: 5, label: "" },
+      { id: "t2", min_grams: 4, type: "percentage", value: 10, label: "" }
+    ],
+    messages: { ...BOX_MESSAGES, over_max: "Your box can hold up to {{max}}. Remove something to add this." }
+  }
+};
+const presetFor = (mapped, prev) => mapped === WEIGHT_BOX_LAYOUT ? { ...prev, ...WEIGHT_BOX_PRESET } : mapped === QUICK_SHOP_LAYOUT ? { ...prev, ...QUICK_SHOP_PRESET } : mapped === QUANTITY_BOX_LAYOUT ? { ...prev, ...QUANTITY_BOX_PRESET } : { ...prev, layout: mapped };
+function asValueBox(config2) {
+  var _a, _b;
+  if (config2.layout !== QUICK_SHOP_LAYOUT || !config2.weight_pricing || measureOf(config2.weight_pricing) === "value") return config2;
+  const old = config2.weight_pricing;
+  return {
+    ...config2,
+    weight_pricing: {
+      ...QUICK_SHOP_PRESET.weight_pricing,
+      qualify: old.qualify || QUICK_SHOP_PRESET.weight_pricing.qualify,
+      messages: { ...QUICK_SHOP_PRESET.weight_pricing.messages, locked: ((_a = old.messages) == null ? void 0 : _a.locked) ?? BOX_MESSAGES.locked, unlocked: ((_b = old.messages) == null ? void 0 : _b.unlocked) ?? BOX_MESSAGES.unlocked }
+    }
+  };
+}
 const WEIGHT_BOX_PRESET = {
   layout: WEIGHT_BOX_LAYOUT,
   pricing_mode: "weight",
@@ -33846,86 +35605,43 @@ const WEIGHT_BOX_PRESET = {
 };
 const TEMPLATE_CATALOGUE = [
   {
-    id: "combo_main",
-    title: "The Guided Architect",
-    description: "Customers build their combo step by step — each step locked to one collection.",
-    img: "/FMCG.png",
-    fallbackImg: "/FMCG.png",
-    badge: "Step-by-Step",
+    id: "combo_quantity_box",
+    title: "Quantity Box",
+    description: 'Shoppers fill a box and the price drops by the number of items: 2 items → 5% off, or "any 2 for ₹999", right in Shopify checkout.',
+    img: "/quick-shop.svg",
+    fallbackImg: "/quick-shop.svg",
+    badge: "Priced by quantity",
     badgeTone: "success",
-    blockName: "combo_main",
-    howItWorks: "Step 1 → Step 2 → Step 3. Each step shows one collection. A progress bar tracks picks and auto-unlocks your discount at the set threshold.",
+    blockName: "combo_quantity_box",
+    featureKey: "combo_quantity_pricing",
+    howItWorks: 'Pick a card layout (Quick add: a + on each picture, or an Add button under each card) and a progress style. Each tier is a % off, an amount off or a price for the whole box ("Buy 2 at ₹999").',
     features: [
-      "Locked steps — one collection per step",
-      "Live progress bar with discount trigger",
-      "Tiered discount auto-unlocks as cart fills",
-      "Sticky checkout summary at the bottom"
+      "Tiers by number of items: % off, amount off or box price",
+      "Quick add (+) or Add-button product cards",
+      "Milestones, bar, steps or text progress, sticky bottom bar",
+      "Same price at Shopify checkout and BRIX COD"
     ],
-    bestFor: "FMCG kits, meal combos, multi-category sets",
+    bestFor: 'Kits, gift boxes, apparel, any "mix any N" offer',
     differentiators: [
-      "Only layout with enforced step order",
-      "Built-in progress-bar discount engine"
-    ]
-  },
-  {
-    id: "combo_design_two",
-    title: "The Velocity Stream",
-    description: "Products from multiple collections under switchable tabs — no fixed step order.",
-    img: "/velocity.png",
-    fallbackImg: "/velocity.png",
-    badge: "Tab Switcher",
-    badgeTone: "success",
-    blockName: "combo_design_two",
-    howItWorks: "Collections appear as tabs at the top. Click a tab to load its products below. Customers browse freely across tabs in any order.",
-    features: [
-      "Up to 8 switchable collection tabs",
-      "No enforced order — free selection",
-      "Swipeable tab strip on mobile",
-      "Shared cart counter across all tabs"
-    ],
-    bestFor: "Fashion, accessories, multi-category catalogues",
-    differentiators: [
-      "Tab-based — no locked sequence",
-      "No progress bar — full browsing freedom"
-    ]
-  },
-  {
-    id: "combo_design_four",
-    title: "The Editorial Split",
-    description: "One collection, one hero banner, one grid — no tabs, no steps.",
-    img: "/Editorial.png",
-    fallbackImg: "/Editorial.png",
-    badge: "Simple Grid",
-    badgeTone: "success",
-    blockName: "combo_design_four",
-    howItWorks: "Assign one collection. All products appear in a grid below a hero banner. Customers add directly — nothing else to configure.",
-    features: [
-      "Hero banner with image & text overlay",
-      "Full collection in one clean grid",
-      "Simplest flow — no steps or tabs",
-      "Dark-mode ready colour scheme"
-    ],
-    bestFor: "Gift sets, capsule collections, single-category combos",
-    differentiators: [
-      "No steps or tabs — one collection only",
-      "Hero image is the centrepiece"
+      "Buy N for a fixed price",
+      "Discount enforced at checkout, not just shown"
     ]
   },
   {
     id: "combo_weight_box",
-    title: "The Weight Box",
+    title: "Weight Box",
     description: "A quick-commerce style box priced by weight: shoppers tap + and keep shopping, and at 1 kg, 2 kg… the price drops, right in Shopify checkout.",
     img: "/quick-shop.svg",
     fallbackImg: "/quick-shop.svg",
     badge: "Priced by weight",
     badgeTone: "success",
     blockName: "combo_weight_box",
-    // Pro only: weight pricing is applied by the BRIX checkout discount.
+    // Growth+: weight pricing is applied by the BRIX checkout discount.
     featureKey: "combo_weight_pricing",
-    howItWorks: "The Quick Shop design (filters, a + on every card, a top progress bar and a sticky bottom bar), always priced by weight: each tier is a % off, an amount off or a fixed box price.",
+    howItWorks: "Same box design as the other templates (card layout, progress style, filters, sticky bottom bar), always priced by weight: each tier is a % off, an amount off or a fixed box price.",
     features: [
       "Weight tiers: % off, amount off or box price",
-      "Quick-commerce grid, filters and sticky bottom bar",
+      "Quick add (+) or Add-button product cards",
       "Max box weight, enforced on the page",
       "Same price at Shopify checkout and BRIX COD"
     ],
@@ -33937,18 +35653,19 @@ const TEMPLATE_CATALOGUE = [
   },
   {
     id: "combo_quick_shop",
-    title: "Quick Shop",
-    description: "A quick-commerce style grid with filters and a + on every card. A progress bar and a bottom bar unlock offers by quantity, value or weight.",
+    title: "Value Box",
+    description: "Shoppers fill a box and unlock offers by how much they spend: spend ₹999 → ₹100 off, spend ₹1999 → 15% off, right in Shopify checkout.",
     img: "/quick-shop.svg",
     fallbackImg: "/quick-shop.svg",
-    badge: "Quantity · Value · Weight",
+    badge: "Priced by value",
     badgeTone: "info",
     blockName: "combo_quick_shop",
-    // Pro only: the box price is applied by the BRIX checkout discount.
-    featureKey: "combo_weight_pricing",
-    howItWorks: 'Shoppers filter, tap + and keep shopping. A top progress bar and a sticky bottom bar ("You unlocked 10% OFF · 5 items · ₹132 saved · Go to Cart") show what the box has earned.',
+    // Growth+: the box discount is applied by the BRIX checkout discount.
+    featureKey: "combo_value_pricing",
+    howItWorks: 'Same box design as the other templates. A top progress bar and a sticky bottom bar ("You unlocked ₹100 OFF · 5 items · ₹132 saved · Go to Cart") show what the box has earned.',
     features: [
-      "Offers by number of items, box value or weight",
+      "Offers by box value: % off or amount off",
+      "Quick add (+) or Add-button product cards",
       "Filter chips, Type / Brand / your own tag filters, Sort",
       "5 top progress styles, 4 bottom bar styles",
       "Same price at Shopify checkout and BRIX COD"
@@ -33961,6 +35678,7 @@ const TEMPLATE_CATALOGUE = [
   }
 ];
 function Customize() {
+  var _a;
   const shopify2 = useAppBridge();
   const { symbol: currencySymbol } = useCurrency();
   const { canPublishFeature: canPublishFeature2 } = usePlan();
@@ -34033,14 +35751,14 @@ function Customize() {
     return () => clearTimeout(timer);
   }, [awaitingEmbedCheck, embedFetcher.state, embedFetcher.data, navigate]);
   reactExports.useEffect(() => {
-    var _a, _b, _c, _d;
+    var _a2, _b, _c, _d;
     if (saveFetcher.data !== void 0) {
       console.log(
         "[Customize] Server response from /api/bundle-templates:",
         JSON.stringify(saveFetcher.data)
       );
     }
-    if ((_a = saveFetcher.data) == null ? void 0 : _a.weightPricing) setWeightStatus(saveFetcher.data.weightPricing);
+    if ((_a2 = saveFetcher.data) == null ? void 0 : _a2.weightPricing) setWeightStatus(saveFetcher.data.weightPricing);
     if ((_b = saveFetcher.data) == null ? void 0 : _b.success) {
       setSaveStatus("saved");
       setSavedWeightHash(pendingWeightHashRef.current);
@@ -34069,16 +35787,20 @@ function Customize() {
       }
     }
   }, [saveFetcher.data, shopify2, navigate]);
-  const [config2, setConfig] = reactExports.useState(() => ({
+  const [config2, setConfig] = reactExports.useState(() => asValueBox({
     ...DEFAULT_COMBO_CONFIG,
     ...(initialTemplate == null ? void 0 : initialTemplate.config) || {}
   }));
+  const valueBoxMigrated = Boolean(((_a = initialTemplate == null ? void 0 : initialTemplate.config) == null ? void 0 : _a.layout) === QUICK_SHOP_LAYOUT && initialTemplate.config.weight_pricing && measureOf(initialTemplate.config.weight_pricing) !== "value");
+  reactExports.useEffect(() => {
+    if (valueBoxMigrated) shopify2.toast.show("This combo is now a Value Box, priced by how much the box costs. Check its tiers under Advanced → Offer, then save.", { duration: 1e4 });
+  }, []);
   const [previewDevice, setPreviewDevice] = reactExports.useState("desktop");
   const [saveModalOpen, setSaveModalOpen] = reactExports.useState(false);
   const [saveTitle, setSaveTitle] = reactExports.useState(
     (initialTemplate == null ? void 0 : initialTemplate.title) || "Untitled Template"
   );
-  const [saveStatus, setSaveStatus] = reactExports.useState((initialTemplate == null ? void 0 : initialTemplate.id) ? "saved" : null);
+  const [saveStatus, setSaveStatus] = reactExports.useState((initialTemplate == null ? void 0 : initialTemplate.id) ? valueBoxMigrated ? "unsaved" : "saved" : null);
   const skipDirtyEffectRef = reactExports.useRef(true);
   reactExports.useEffect(() => {
     if (skipDirtyEffectRef.current) {
@@ -34107,7 +35829,7 @@ function Customize() {
   const [isActive, setIsActive] = reactExports.useState((initialTemplate == null ? void 0 : initialTemplate.active) || false);
   const [initTemplateId, setInitTemplateId] = reactExports.useState(initialTemplate == null ? void 0 : initialTemplate.id);
   reactExports.useEffect(() => {
-    var _a;
+    var _a2;
     if (initialTemplate) {
       if (initialTemplate.id !== initTemplateId) {
         setInitTemplateId(initialTemplate.id);
@@ -34117,7 +35839,7 @@ function Customize() {
         }));
         setSaveTitle(initialTemplate.title || "Untitled Template");
         setIsActive(initialTemplate.active || false);
-        setPickedLayout(((_a = initialTemplate.config) == null ? void 0 : _a.layout) || "layout1");
+        setPickedLayout(((_a2 = initialTemplate.config) == null ? void 0 : _a2.layout) || "layout1");
         setPublishType(initialTemplate.page_id ? "existing" : "new");
         setSelectedPageId(initialTemplate.page_id || "");
         setTargetPageTitle(initialTemplate.title || "Untitled Template");
@@ -34281,7 +36003,10 @@ function Customize() {
   const [collectionAiLoading, setCollectionAiLoading] = reactExports.useState({});
   const [aiSuggestionNonce, setAiSuggestionNonce] = reactExports.useState(0);
   const [expandedSections, setExpandedSections] = reactExports.useState({
+    // Classic Combo (layout1/2/4): Guided Architect / Velocity Stream / Editorial Split
+    design: true,
     general: true,
+    loader: false,
     banner: false,
     content: false,
     products: false,
@@ -34438,8 +36163,8 @@ function Customize() {
     setLocalActiveDiscounts(activeDiscounts);
   }, [activeDiscounts]);
   const initPickedLayout = (() => {
-    var _a;
-    if (initialTemplate) return ((_a = initialTemplate.config) == null ? void 0 : _a.layout) || "layout1";
+    var _a2;
+    if (initialTemplate) return ((_a2 = initialTemplate.config) == null ? void 0 : _a2.layout) || "layout1";
     const lp = searchParams.get("layout");
     if (lp) return LAYOUT_MAP[lp] || "layout1";
     return null;
@@ -34452,6 +36177,7 @@ function Customize() {
       setPickedLayout((prev) => prev === mapped ? prev : mapped);
       setConfig((prev) => {
         if (prev.layout === mapped) return prev;
+        if (isClassicLayout(mapped) && isClassicLayout(prev.layout)) return prev;
         return presetFor(mapped, prev);
       });
     }
@@ -34474,7 +36200,7 @@ function Customize() {
       const h = config2[`step_${i}_collection`];
       if (h && h !== "" && !fetchedHandlesRef.current.has(h)) handles.push(h);
     }
-    if (config2.layout === WEIGHT_BOX_LAYOUT || config2.layout === QUICK_SHOP_LAYOUT) {
+    if (usesQuickShop(config2.layout)) {
       for (let i = 1; i <= Number(config2.tab_count || 1); i++) {
         const h = config2[`col_${i}`];
         if (h && !fetchedHandlesRef.current.has(h) && !handles.includes(h)) handles.push(h);
@@ -34617,7 +36343,7 @@ function Customize() {
   }, [setActiveCategory, onlyOpen, config2.layout]);
   const generateAiSuggestion = reactExports.useCallback(
     async (requestedTarget) => {
-      var _a, _b;
+      var _a2, _b;
       const currentTitle = String(config2.collection_title || "").trim();
       const currentDescription = String(
         config2.collection_description || ""
@@ -34671,7 +36397,7 @@ function Customize() {
             (payload == null ? void 0 : payload.error) || "Unable to generate AI suggestion right now."
           );
         }
-        if ((_a = payload == null ? void 0 : payload.data) == null ? void 0 : _a.title) {
+        if ((_a2 = payload == null ? void 0 : payload.data) == null ? void 0 : _a2.title) {
           updateConfig("collection_title", payload.data.title);
         }
         if ((_b = payload == null ? void 0 : payload.data) == null ? void 0 : _b.description) {
@@ -34695,10 +36421,10 @@ function Customize() {
   );
   const generateStepFieldSuggestion = reactExports.useCallback(
     async (step, field) => {
-      var _a, _b;
+      var _a2, _b;
       const loadingKey = `${step}_${field}`;
       const collectionHandle = config2[`step_${step}_collection`] || "";
-      const collectionTitle = ((_a = collections.find((col) => col.handle === collectionHandle)) == null ? void 0 : _a.title) || "";
+      const collectionTitle = ((_a2 = collections.find((col) => col.handle === collectionHandle)) == null ? void 0 : _a2.title) || "";
       const nonce = `${Date.now()}-${aiSuggestionNonce}`;
       setAiSuggestionNonce((prev) => prev + 1);
       setStepFieldAiLoading((prev) => ({ ...prev, [loadingKey]: true }));
@@ -34763,7 +36489,7 @@ function Customize() {
   );
   reactExports.useCallback(
     async (step) => {
-      var _a, _b;
+      var _a2, _b;
       setCollectionAiLoading((prev) => ({ ...prev, [step]: true }));
       try {
         const numSteps = Number(config2.num_steps) || 3;
@@ -34791,7 +36517,7 @@ function Customize() {
             (payload == null ? void 0 : payload.error) || "Unable to suggest a collection right now."
           );
         }
-        const suggestedHandle = (_a = payload == null ? void 0 : payload.data) == null ? void 0 : _a.handle;
+        const suggestedHandle = (_a2 = payload == null ? void 0 : payload.data) == null ? void 0 : _a2.handle;
         const suggestedTitle = (_b = payload == null ? void 0 : payload.data) == null ? void 0 : _b.title;
         if (!suggestedHandle) {
           throw new Error("AI did not return a collection suggestion.");
@@ -34952,7 +36678,9 @@ function Customize() {
       case "layout5":
         return "Weight Box";
       case "layout6":
-        return "Quick Shop";
+        return "Value Box";
+      case "layout7":
+        return "Quantity Box";
       case "layout1":
       default:
         return "Guided Architect";
@@ -35136,9 +36864,11 @@ function Customize() {
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrixBar, { size: "md", floating: true }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(ComboSetupTour, { page: "picker", shop }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: `
-.template-picker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
-.tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px}
-@media(max-width:1400px){.template-picker-grid{grid-template-columns:repeat(2,1fr)}}
+.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
+.tpl-pick-designs{display:flex;flex-wrap:wrap;gap:6px}
+.tpl-pick-design{background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.tpl-pick-pro.is-locked{background:#f1f2f4;color:#4b5563}
 .tpl-pick-card{border:1px solid #ebeef0;border-radius:16px;overflow:hidden;background:#fff;display:flex;flex-direction:column;transition:all .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 4px 12px rgba(0,0,0,.03)}
 .tpl-pick-card:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.08);border-color:#d2d5d8}
 .tpl-pick-media{position:relative;border-bottom:1px solid #f0f2f4}
@@ -35158,10 +36888,10 @@ function Customize() {
         ` }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: "12px 0 8px" }, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingLg", as: "h2", children: "Choose a Template to Get Started" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodyMd", tone: "subdued", children: "Each layout is a completely different shopping experience. Read the descriptions carefully — they behave differently, not just look different." }) })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodyMd", tone: "subdued", children: "Three box templates with the same design options: pick how the box is priced (by quantity, weight or value), then choose the card layout and progress style inside." }) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "template-picker-grid", children: TEMPLATE_CATALOGUE.map((tpl) => {
-            var _a;
+            var _a2, _b, _c;
             return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-pick-card", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-pick-media", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -35182,15 +36912,24 @@ function Customize() {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-pick-body", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }, children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingMd", as: "h3", fontWeight: "bold", children: tpl.title }),
-                  tpl.featureKey && /* @__PURE__ */ jsxRuntimeExports.jsx(ProBadge, { featureKey: tpl.featureKey }),
-                  tpl.featureKey && canPublishFeature2(tpl.featureKey) && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tpl-pick-pro", children: "Pro" })
+                  tpl.featureKey && (() => {
+                    const plan = PLANS[getMinPlanForFeature(tpl.featureKey)];
+                    const open = canPublishFeature2(tpl.featureKey);
+                    return plan && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `tpl-pick-pro${open ? "" : " is-locked"}`, children: [
+                      open ? "" : "🔒 ",
+                      plan.label,
+                      " · $",
+                      plan.price.monthly
+                    ] });
+                  })()
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "bodySm", tone: "subdued", children: tpl.description }),
+                ((_a2 = tpl.designs) == null ? void 0 : _a2.length) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tpl-pick-designs", children: tpl.designs.map((name) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tpl-pick-design", children: name }, name)) }),
                 tpl.howItWorks && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "tpl-pick-how", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tpl-pick-how-label", children: "How it works" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "tpl-pick-how-text", children: tpl.howItWorks })
                 ] }),
-                ((_a = tpl.features) == null ? void 0 : _a.length) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "tpl-pick-features", children: tpl.features.map((feature, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "tpl-pick-feature", children: [
+                ((_b = tpl.features) == null ? void 0 : _b.length) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "tpl-pick-features", children: tpl.features.map((feature, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "tpl-pick-feature", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tpl-pick-check", children: /* @__PURE__ */ jsxRuntimeExports.jsx(IconCheck, {}) }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: feature })
                 ] }, i)) }),
@@ -35198,7 +36937,7 @@ function Customize() {
                   "Best for: ",
                   /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: tpl.bestFor })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 6 }, children: tpl.featureKey && !canPublishFeature2(tpl.featureKey) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { fullWidth: true, onClick: () => navigate("/app/subscribe"), children: "Upgrade to Pro to use this template" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", fullWidth: true, onClick: () => handlePickLayout(tpl.blockName), children: "Use This Template" }) })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 6 }, children: tpl.featureKey && !canPublishFeature2(tpl.featureKey) ? /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { fullWidth: true, onClick: () => navigate("/app/subscribe"), children: `Upgrade to ${((_c = PLANS[getMinPlanForFeature(tpl.featureKey)]) == null ? void 0 : _c.label) || "Pro"} to use this template` }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "primary", fullWidth: true, onClick: () => handlePickLayout(tpl.blockName), children: "Use This Template" }) })
               ] })
             ] }, tpl.id);
           }) })
@@ -35216,10 +36955,10 @@ function Customize() {
         return;
       }
     }
-    if ((config2.layout === WEIGHT_BOX_LAYOUT || config2.layout === QUICK_SHOP_LAYOUT) && !Array.from({ length: Number(config2.tab_count || 1) }, (_, i) => config2[`col_${i + 1}`]).some(Boolean)) {
+    if (usesQuickShop(config2.layout) && !Array.from({ length: Number(config2.tab_count || 1) }, (_, i) => config2[`col_${i + 1}`]).some(Boolean)) {
       setActiveCategory("layout");
       setExpandedSections((prev) => ({ ...prev, general: true }));
-      shopify2.toast.show(config2.layout === QUICK_SHOP_LAYOUT ? "Choose at least one collection for the page" : "Choose at least one collection for the box", { isError: true });
+      shopify2.toast.show("Choose at least one collection for the box", { isError: true });
       return;
     }
     if (config2.layout === "layout1") {
@@ -37198,7 +38937,8 @@ function ComboPreview({
   const weightPreview = (() => {
     if (!isWeight) return null;
     const { value } = normalizeWeightPricing(rawConfig.weight_pricing);
-    const view = { tiers: value.tiers, unit: value.unit, maxGrams: value.max_grams, messages: value.messages, enabled: true };
+    const measure = value.measure || "weight";
+    const view = { tiers: value.tiers, unit: value.unit, maxGrams: value.max_grams, messages: value.messages, enabled: true, measure, currencySymbol };
     const gramsByVariant = {};
     [...products || [], ...Object.values(allStepProducts || {}).flat(), ...DEMO_PRODUCTS].forEach((p) => {
       ((p == null ? void 0 : p.variants) || []).forEach((v) => {
@@ -37208,7 +38948,7 @@ function ComboPreview({
     const qualifies = (productId) => value.qualify.mode !== "selected" || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
     const decimals = decimalsFor(null);
     const box = computeBox({
-      pricing: { tiers: value.tiers, max_grams: value.max_grams, unit: value.unit },
+      pricing: { tiers: value.tiers, max_grams: value.max_grams, unit: value.unit, measure },
       decimals,
       lines: selectedProducts.map((p, i) => ({
         key: `${p.source}:${p.variantId}:${i}`,
@@ -37223,6 +38963,15 @@ function ComboPreview({
   const finalPrice = weightPreview ? Math.max(0, totalPrice - weightPreview.box.discountMinor / 10 ** weightPreview.decimals) : hasDiscount ? discountedPrice : totalPrice;
   const blockedByMaxWeight = (productId, variantId, addQty) => {
     if (!weightPreview || weightPreview.view.maxGrams == null) return false;
+    if (weightPreview.view.measure === "value") return false;
+    if (weightPreview.view.measure === "quantity") {
+      if (!weightPreview.qualifies(productId) || weightPreview.box.items + addQty <= weightPreview.view.maxGrams) return false;
+      shopify.toast.show(fillMessage(weightPreview.view.messages.over_max, {
+        max: formatItems(weightPreview.view.maxGrams),
+        weight: formatItems(weightPreview.box.items)
+      }), { isError: true });
+      return true;
+    }
     const grams = weightPreview.qualifies(productId) ? weightPreview.gramsByVariant[variantId] : null;
     if (!(grams > 0) || weightPreview.box.grams + grams * addQty <= weightPreview.view.maxGrams) return false;
     shopify.toast.show(fillMessage(weightPreview.view.messages.over_max, {
@@ -37338,6 +39087,18 @@ function ComboPreview({
       }
     );
   };
+  const renderTierMeter = () => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      style: { margin: "12px 0", cursor: "pointer", borderRadius: 10, overflow: "hidden", border: "1px solid #eee" },
+      onClick: (e) => {
+        e.stopPropagation();
+        onRequestSection("discount");
+      },
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(WeightMeter, { view: weightPreview.view, box: weightPreview.box, config: rawConfig })
+    },
+    "tier-meter"
+  );
   const renderProgressBar = () => {
     if (!config2.show_progress_bar) return null;
     const percent = discountThreshold > 0 ? Math.min(100, Math.floor(totalItems / discountThreshold * 100)) : 0;
@@ -37600,17 +39361,6 @@ function ComboPreview({
   })() : config2;
   const renderPreviewBar = () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     renderAiSuggestions(),
-    weightPreview && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        style: { margin: "16px 0 0", cursor: "pointer", borderRadius: 10, overflow: "hidden", border: "1px solid #eee" },
-        onClick: (e) => {
-          e.stopPropagation();
-          onRequestSection("discount");
-        },
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx(WeightMeter, { view: weightPreview.view, box: weightPreview.box, config: rawConfig })
-      }
-    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
@@ -38349,7 +40099,7 @@ function ComboPreview({
     ] });
   };
   let sectionOrder;
-  const progressSec = config2.show_progress_bar ? [renderProgressBar] : [];
+  const progressSec = weightPreview ? [renderTierMeter] : config2.show_progress_bar ? [renderProgressBar] : [];
   if (config2.layout === "layout2") {
     sectionOrder = [
       renderBanner,
@@ -39161,6 +40911,7 @@ function ComboPreview({
           boxShadow: "0 4px 20px rgba(0,0,0,0.1)"
         },
         children: [
+          weightPreview && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "sticky", top: 0, zIndex: 100, boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }, children: renderTierMeter() }),
           config2.show_progress_bar && /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
@@ -39758,8 +41509,9 @@ const TEMPLATE = {
     step_3_title: "Protect",
     ...window.__WEIGHT ? { pricing_mode: "weight", weight_pricing: window.__WEIGHT } : {},
     // window.__QUICK_SHOP (tests/combo-weight/quickshop-builder-check.mjs): a
-    // Quick Shop template over two collections, priced by that weight_pricing.
-    ...window.__QUICK_SHOP ? { layout: "layout6", pricing_mode: "weight", tab_count: 2, col_1: "face-wash", col_2: "serums", weight_pricing: window.__QUICK_SHOP } : {}
+    // box template (window.__QUICK_SHOP_LAYOUT, default layout6 = Value Box)
+    // over two collections, priced by that weight_pricing.
+    ...window.__QUICK_SHOP ? { layout: window.__QUICK_SHOP_LAYOUT || "layout6", pricing_mode: "weight", tab_count: 2, col_1: "face-wash", col_2: "serums", weight_pricing: window.__QUICK_SHOP } : {}
   }
 };
 const router = createBrowserRouter([

@@ -9,11 +9,13 @@ import { LockedOverlay, ProBadge } from '../plan/PlanGate';
 import { usePlan } from '../PlanContext';
 import { useCurrency } from '../CurrencyContext';
 import {
-  DEFAULT_MESSAGES, LIMITS, QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, defaultWeightPricing, formatItems, formatMoney, formatWeight, isWeightCombo,
-  measureOf, normalizeWeightPricing, tierLabel,
+  DEFAULT_MESSAGES, LIMITS, QUANTITY_BOX_LAYOUT, QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, boxPricingFeature, defaultWeightPricing, fixedMeasureFor, formatItems, formatMoney, formatWeight, isWeightCombo,
+  measureOf, normalizeWeightPricing, tierLabel, usesQuickShop,
 } from '../../utils/combo-weight.shared.js';
+import { PLANS, getMinPlanForFeature } from '../../config/plans';
 
-const FEATURE = 'combo_weight_pricing';
+const TEMPLATE_NAMES = { [QUANTITY_BOX_LAYOUT]: 'Quantity Box', [WEIGHT_BOX_LAYOUT]: 'Weight Box', [QUICK_SHOP_LAYOUT]: 'Value Box' };
+const MEASURE_WORDS = { quantity: 'the number of items in the box', weight: 'the weight of the box', value: 'how much the box costs' };
 
 const TYPE_OPTIONS = [
   { label: 'Percentage off', value: 'percentage' },
@@ -21,7 +23,7 @@ const TYPE_OPTIONS = [
   { label: 'Box price', value: 'fixed_price' },
 ];
 
-// Quick Shop: what the box is measured by (weight_pricing.measure).
+// Quick Shop and the Classic Combo designs: what the box is measured by (weight_pricing.measure).
 const MEASURE_CHOICES = [
   { label: 'Weight', value: 'weight', helpText: 'e.g. 1 kg → 10% off. Uses each variant\'s Shopify weight.' },
   { label: 'Quantity', value: 'quantity', helpText: 'e.g. 3 items → 10% off, or any 3 for a box price.' },
@@ -95,16 +97,20 @@ function OfferSectionComponent({
   const { symbol } = useCurrency();
   const auditFetcher = useFetcher();
   const isWeight = isWeightCombo(config);
-  const isWeightBox = config.layout === WEIGHT_BOX_LAYOUT;
-  const isQuickShop = config.layout === QUICK_SHOP_LAYOUT;
-  // Drawn with the Quick Shop design (Quick Shop, or the Weight Box): tier
-  // labels show on the page, extra options folded away.
-  const qsDesign = isQuickShop || isWeightBox;
+  // The three box templates (Quantity / Weight / Value Box) share one design:
+  // tier labels show on the page, extra options folded away.
+  const qsDesign = usesQuickShop(config.layout);
+  const templateName = TEMPLATE_NAMES[config.layout];
+  // Quantity Box = Starter+, Weight / Value Box (and older Classic tiers) = Growth+.
+  const FEATURE = boxPricingFeature(config.layout);
+  const planName = PLANS[getMinPlanForFeature(FEATURE)]?.label || 'Pro';
   const canUseWeight = canPublishFeature(FEATURE);
   const raw = config.weight_pricing || defaultWeightPricing();
   const unit = raw.unit === 'g' ? 'g' : 'kg';
-  // Only Quick Shop offers quantity / value; every other layout is weighed.
-  const measure = isQuickShop ? measureOf(raw) : 'weight';
+  // Each box template has one measure; only the older Classic designs choose.
+  const fixedMeasure = fixedMeasureFor(config.layout);
+  const showMeasure = !fixedMeasure;
+  const measure = fixedMeasure || measureOf(raw);
   const byWeight = measure === 'weight';
   const byValue = measure === 'value';
   const [showMore, setShowMore] = useState(false);
@@ -115,7 +121,28 @@ function OfferSectionComponent({
   const qualify = raw.qualify || { mode: 'layout_collections', collection_ids: [], product_ids: [] };
 
   const setWeight = (patch) => updateConfig('weight_pricing', { ...raw, ...patch });
-  const setTier = (index, patch) => setWeight({ tiers: tiers.map((t, i) => (i === index ? { ...t, ...patch } : t)) });
+  // A box price needs a max (normalizeWeightPricing): when the first one is
+  // chosen with no max yet, the max becomes the biggest tier, e.g. "Buy 2
+  // for 999" = a box of at most 2.
+  const withMaxFor = (nextTiers) => (
+    !byValue && raw.max_grams == null && nextTiers.some((t) => t.type === 'fixed_price')
+      ? { tiers: nextTiers, max_grams: Math.max(...nextTiers.map((t) => Number(t.min_grams) || 0)) || null }
+      : { tiers: nextTiers }
+  );
+  const setTier = (index, patch) => {
+    const next = tiers.map((t, i) => (i === index ? { ...t, ...patch } : t));
+    setWeight(patch.type === 'fixed_price' ? withMaxFor(next) : { tiers: next });
+  };
+  // Quantity boxes: "Buy N for X" in one click.
+  const addBoxPriceTier = () => {
+    const last = tiers[tiers.length - 1];
+    const n = last && Number(last.min_grams) > 0 ? Number(last.min_grams) + 1 : 2;
+    const next = [...tiers, { id: `t${Date.now().toString(36)}`, min_grams: n, type: 'fixed_price', value: 999, label: '' }];
+    const patch = withMaxFor(next);
+    // A max below the new tier would be an error; grow it with the box.
+    if (raw.max_grams != null && Number(raw.max_grams) < n) patch.max_grams = n;
+    setWeight(patch);
+  };
   const addTier = () => {
     const last = tiers[tiers.length - 1];
     const step = byWeight ? 1000 : byValue ? 500 : 2;
@@ -174,16 +201,16 @@ function OfferSectionComponent({
   }));
 
   const modeChoices = [
-    { label: 'Item count', value: 'count', helpText: 'Shoppers pick a number of items; you can add a coupon code.' },
+    { label: 'Single coupon', value: 'count', helpText: 'Shoppers pick a number of items; you can add one coupon code.' },
     {
       label: (
         <InlineStack gap="200" blockAlign="center">
-          <span>Weight-based box</span>
+          <span>Tiered progress bar</span>
           <ProBadge featureKey={FEATURE} />
         </InlineStack>
       ),
       value: 'weight',
-      helpText: 'Price the box by its weight: unlock a discount or a box price at weights you set.',
+      helpText: 'A progress bar unlocks better offers as the box grows: % off, amount off or "Buy 2 for 999", by number of items, box value or weight. Applied in Shopify checkout.',
       disabled: !canUseWeight && !isWeight,
     },
   ];
@@ -279,9 +306,9 @@ function OfferSectionComponent({
         <Banner tone="info"><p>Save this combo to set up its box discount in Shopify checkout.</p></Banner>
       )}
 
-      {isQuickShop && (
+      {showMeasure && (
         <ChoiceList
-          title="Box measured by"
+          title={qsDesign ? 'Box measured by' : 'Progress bar measured by'}
           choices={MEASURE_CHOICES}
           selected={[measure]}
           onChange={([v]) => setMeasure(v)}
@@ -338,7 +365,7 @@ function OfferSectionComponent({
                 error={errorFor(`tiers.${index}.value`)}
               />
               <TextField
-                label={qsDesign ? 'Label on the page and at checkout' : 'Label at checkout'} autoComplete="off" maxLength={LIMITS.label}
+                label="Label on the page and at checkout" autoComplete="off" maxLength={LIMITS.label}
                 value={tier.label || ''}
                 placeholder={qsDesign ? (tier.type === 'percentage' ? `${tier.value}% OFF` : tier.type === 'fixed_amount' ? `${symbol}${tier.value} OFF` : `Box at ${symbol}${tier.value}`) : tierLabel({ ...tier, label: '' }, unit, measure)}
                 helpText={qsDesign ? 'e.g. FREE DELIVERY. Shoppers see it in the progress bars.' : undefined}
@@ -348,7 +375,12 @@ function OfferSectionComponent({
           </Box>
         ))}
         {errorFor('tiers') && <Text as="p" tone="critical" variant="bodySm">{errorFor('tiers')}</Text>}
-        {tiers.length < LIMITS.tiers && <Button onClick={addTier}>Add tier</Button>}
+        {tiers.length < LIMITS.tiers && (
+          <InlineStack gap="200">
+            <Button onClick={addTier}>Add tier</Button>
+            {measure === 'quantity' && <Button onClick={addBoxPriceTier}>{`Add "Buy N for ${symbol}X"`}</Button>}
+          </InlineStack>
+        )}
       </BlockStack>
 
       {qsDesign && (
@@ -373,16 +405,11 @@ function OfferSectionComponent({
   );
 
   return (
-    <SectionCard title="Offer" expanded={expanded} onToggle={onToggle} badge={isWeight ? (isQuickShop ? { weight: 'Weight', quantity: 'Quantity', value: 'Value' }[measure] : 'Weight') : null}>
+    <SectionCard title="Offer" expanded={expanded} onToggle={onToggle} badge={isWeight ? { weight: 'Weight', quantity: 'Quantity', value: 'Value' }[measure] : null}>
       <FormLayout>
-        {isQuickShop ? (
+        {qsDesign ? (
           <InlineStack gap="200" blockAlign="center">
-            <Text as="p" variant="bodySm" tone="subdued">Quick Shop boxes unlock offers by weight, number of items or value, applied in Shopify checkout.</Text>
-            <ProBadge featureKey={FEATURE} />
-          </InlineStack>
-        ) : isWeightBox ? (
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="p" variant="bodySm" tone="subdued">The Weight Box is the Quick Shop design, always priced by the weight of the box.</Text>
+            <Text as="p" variant="bodySm" tone="subdued">{`The ${templateName} is priced by ${MEASURE_WORDS[measure]}: each tier unlocks an offer, applied in Shopify checkout.`}</Text>
             <ProBadge featureKey={FEATURE} />
           </InlineStack>
         ) : (
@@ -393,7 +420,12 @@ function OfferSectionComponent({
             onChange={([v]) => {
               updateConfig('pricing_mode', v);
               if (v === 'weight') {
-                if (!config.weight_pricing) updateConfig('weight_pricing', defaultWeightPricing());
+                // Classic Combo tiers start by number of items (the merchant can
+                // switch the measure). The builder's defaults carry an untouched
+                // weight sample, which is replaced; tiers already edited are kept.
+                const untouched = !config.weight_pricing
+                  || normalizeWeightPricing(config.weight_pricing).value.hash === normalizeWeightPricing(defaultWeightPricing()).value.hash;
+                if (untouched) updateConfig('weight_pricing', defaultWeightPricing('quantity'));
                 // A weight box never also sends a coupon code.
                 updateConfig('has_discount_offer', false);
                 updateConfig('selected_discount_id', null);
@@ -406,7 +438,7 @@ function OfferSectionComponent({
           canUseWeight ? weightEditor : (
             <BlockStack gap="200">
               <Banner tone="warning">
-                <p>{isQuickShop ? 'Quick Shop box pricing is part of the Pro plan. Upgrade to save this combo.' : 'Weight-based pricing is part of the Pro plan. This combo can\'t be saved with it on your plan; switch back to item count, or upgrade.'}</p>
+                <p>{qsDesign ? `The ${templateName} is part of the ${planName} plan. Upgrade to save this combo.` : `The tiered progress bar is part of the ${planName} plan. This combo can't be saved with it on your plan; switch back to a single coupon, or upgrade.`}</p>
               </Banner>
               <LockedOverlay featureKey={FEATURE}>{weightEditor}</LockedOverlay>
             </BlockStack>

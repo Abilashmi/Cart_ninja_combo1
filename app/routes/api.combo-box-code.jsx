@@ -1,5 +1,6 @@
 import { unauthenticated } from '../shopify.server';
 import { getFeatureState } from '../config/plans';
+import { boxPricingFeature } from '../utils/combo-weight.shared.js';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { loadComboTemplateRow } from '../services/combo-page.server';
@@ -79,7 +80,8 @@ export async function action({ request }) {
     const result = await createBoxCode(admin, {
       templateId,
       items,
-      comboWeightLive: getFeatureState(planKey, 'combo_weight_pricing') === 'enabled',
+      // This template's box pricing is on the shop's plan (Quantity Box = Starter+, Weight / Value Box = Growth+).
+      comboWeightLive: getFeatureState(planKey, boxPricingFeature(config.layout)) === 'enabled',
       currencyCode: currency?.code || 'INR',
     });
     cleanupExpiredBoxCodes(admin, shop).catch(() => {});

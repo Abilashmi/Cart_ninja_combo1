@@ -36,7 +36,11 @@ function shrinkLogo(file) {
   });
 }
 
-export default function LogoUploader({ value, onChange, error }) {
+export default function LogoUploader({
+  value, onChange, error,
+  label = 'Store logo',
+  helpText = 'Shown on the left of the popup header. A wide logo on a transparent background looks best.',
+}) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
   const [dialog, setDialog] = useState(false);
@@ -69,7 +73,7 @@ export default function LogoUploader({ value, onChange, error }) {
     <BlockStack gap="200">
       {value ? (
         <div className="cod-logo-box">
-          <div className="cod-logo-img"><img src={value} alt="Your store logo" /></div>
+          <div className="cod-logo-img"><img src={value} alt={label} /></div>
           <InlineStack gap="200">
             <Button onClick={() => setDialog(true)} loading={busy}>Replace</Button>
             <Button tone="critical" variant="plain" onClick={() => { onChange(''); setUrl(''); }}>Remove</Button>
@@ -80,7 +84,7 @@ export default function LogoUploader({ value, onChange, error }) {
         </div>
       ) : (
         <div className="cod-logo-drop">
-          <DropZone accept={ACCEPT} type="image" allowMultiple={false} onDrop={onDrop} label="Store logo" labelHidden>
+          <DropZone accept={ACCEPT} type="image" allowMultiple={false} onDrop={onDrop} label={label} labelHidden>
             <DropZone.FileUpload actionTitle={busy ? 'Preparing…' : 'Upload logo'} actionHint="PNG, JPG, WebP or SVG. We resize it for you." />
           </DropZone>
         </div>
@@ -92,7 +96,7 @@ export default function LogoUploader({ value, onChange, error }) {
         <Button onClick={applyUrl} disabled={!url.trim() || url.trim() === value}>Use link</Button>
       </InlineStack>
       {(problem || error) && <InlineError message={problem || error} fieldID="cod-logo" />}
-      <Text as="p" variant="bodySm" tone="subdued">Shown on the left of the popup header. A wide logo on a transparent background looks best.</Text>
+      {helpText && <Text as="p" variant="bodySm" tone="subdued">{helpText}</Text>}
     </BlockStack>
   );
 }

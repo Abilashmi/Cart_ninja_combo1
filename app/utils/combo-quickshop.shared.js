@@ -1,6 +1,8 @@
 /**
- * Combo pages: the Quick Shop template (layout6, Pro) — one copy of its
- * filters, card data, progress and HTML.
+ * Combo pages: the box templates (Quantity Box layout7, Weight Box layout5,
+ * Value Box layout6, which was "Quick Shop") — one copy of their filters,
+ * card data, progress and HTML. Cards: quick add (+ on the image) or normal
+ * (Add button under the price), qs_card_layout.
  *
  * A shop-style grid (filter chips, Type / Brand / custom / Sort dropdowns,
  * cards with a + button) with a top progress bar and a sticky bottom bar
@@ -46,6 +48,10 @@ export function createQuickShopKit(core) {
     qs_filter_instock: false,
     qs_filter_instock_label: 'In stock',
     // Cards
+    // quick_add = + button on the image that turns into a stepper; normal =
+    // a full-width Add button under the price (stepper there once added).
+    qs_card_layout: 'quick_add', // quick_add | normal
+    qs_add_label: 'Add',
     qs_columns_desktop: 4,
     qs_columns_mobile: 2,
     qs_card_eyebrow: '',
@@ -180,20 +186,21 @@ export function createQuickShopKit(core) {
     return false;
   }
 
-  /** "10% OFF" / "₹100 OFF" / "Box at ₹499": what a tier gives, for the page. */
-  function offerText(tier, symbol) {
+  /** "10% OFF" / "₹100 OFF" / "Any 2 for ₹999" / "Box at ₹499": what a tier gives, for the page. */
+  function offerText(tier, symbol, measure) {
     if (tier.label) return tier.label;
     if (tier.type === 'percentage') return tier.value + '% OFF';
     if (tier.type === 'fixed_amount') return money(tier.value, symbol) + ' OFF';
+    if (measure === 'quantity') return 'Any ' + tier.min_grams + ' for ' + money(tier.value, symbol);
     return 'Box at ' + money(tier.value, symbol);
   }
 
   /** The tiers with their page labels (merchant label, else the offer). */
-  function labelledTiers(tiers, symbol) {
+  function labelledTiers(tiers, symbol, measure) {
     var out = [];
     for (var i = 0; i < (tiers || []).length; i++) {
       var t = tiers[i];
-      out.push({ id: t.id, min_grams: t.min_grams, type: t.type, value: t.value, label: offerText(t, symbol) });
+      out.push({ id: t.id, min_grams: t.min_grams, type: t.type, value: t.value, label: offerText(t, symbol, measure) });
     }
     return out;
   }
@@ -471,7 +478,7 @@ export function createQuickShopKit(core) {
     var symbol = input.symbol || '';
     var decimals = input.decimals === undefined ? 2 : input.decimals;
     var pricing = input.pricing || { tiers: [], enabled: false };
-    var tiers = labelledTiers(pricing.tiers, symbol);
+    var tiers = labelledTiers(pricing.tiers, symbol, pricing.measure);
     var view = {
       measure: pricing.measure || 'weight', unit: pricing.unit || 'kg', tiers: tiers,
       maxGrams: pricing.maxGrams === undefined ? null : pricing.maxGrams,
@@ -767,13 +774,28 @@ export function createQuickShopKit(core) {
     return html;
   }
 
+  /** Normal card layout: full-width Add button (or stepper) under the price. */
+  function renderCardCta(model, card) {
+    var config = model.config;
+    if (!card.available) return '<button type="button" class="bxq-cta is-out" disabled>Out of stock</button>';
+    if (card.qty > 0) {
+      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
+        + '<span aria-live="polite">' + card.qty + '</span>'
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+    }
+    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
+  }
+
   function renderCard(model, card) {
     var config = model.config;
-    var html = '<article class="bxq-card' + (card.qty ? ' is-in' : '') + (card.available ? '' : ' is-out') + '" data-product-id="' + esc(card.id) + '">';
+    var normal = opt(config, 'qs_card_layout') === 'normal';
+    var html = '<article class="bxq-card' + (normal ? ' bxq-card--normal' : '') + (card.qty ? ' is-in' : '') + (card.available ? '' : ' is-out') + '" data-product-id="' + esc(card.id) + '">';
     html += '<div class="bxq-media">';
     html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy" />' : '<span class="bxq-noimg"></span>';
     if (card.badge) html += '<span class="bxq-badge">' + esc(card.badge) + '</span>';
-    if (!card.available) {
+    if (normal) {
+      if (!card.available) html += '<span class="bxq-soldout">Out of stock</span>';
+    } else if (!card.available) {
       html += '<span class="bxq-soldout">Out of stock</span>';
     } else if (card.qty > 0) {
       html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
@@ -800,6 +822,7 @@ export function createQuickShopKit(core) {
     if (card.off && on(config, 'qs_show_off')) html += '<div class="bxq-off"><span>' + card.off + '% OFF</span></div>';
     html += '<div class="bxq-price"><b>' + esc(card.price) + '</b>' + (card.compare && on(config, 'qs_show_compare') ? '<s>' + esc(card.compare) + '</s>' : '') + '</div>';
     if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
+    if (normal) html += renderCardCta(model, card);
     html += '</div></article>';
     return html;
   }
@@ -1137,6 +1160,15 @@ export const QUICK_SHOP_CSS = `
 .bxq-price s{font-size:14px;opacity:.45;}
 .bxq--m .bxq-price b{font-size:16px;}
 .bxq-nocount{font-size:12px;opacity:.55;}
+.bxq-cta{margin-top:auto;display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;border:0;border-radius:calc(var(--bxq-radius) - 4px);background:var(--bxq-accent);color:#fff !important;font:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+.bxq-card--normal .bxq-price{margin-bottom:6px;}
+.bxq-cta:hover{filter:brightness(.95);}
+.bxq-cta.is-out{background:#e5e7eb;color:#6b7280 !important;cursor:not-allowed;}
+.bxq-cta--stepper{justify-content:space-between;cursor:default;padding:0 4px;}
+.bxq-cta--stepper button{border:0;background:transparent;color:#fff !important;width:40px;height:42px;font-size:20px;font-weight:700;cursor:pointer;}
+.bxq-cta--stepper span{font-weight:800;}
+.bxq--m .bxq-cta{min-height:36px;font-size:14px;}
+.bxq--m .bxq-cta--stepper button{height:36px;width:34px;}
 .bxq-empty{padding:40px 16px;text-align:center;opacity:.65;font-size:15px;background:var(--bxq-card);border-radius:var(--bxq-radius);}
 .bxq-bar{position:sticky;bottom:12px;z-index:999;margin:18px auto 0;max-width:980px;background:var(--bxq-bar-bg);color:var(--bxq-bar-text);border-radius:var(--bxq-bar-r);box-shadow:0 -2px 24px rgba(0,0,0,.14);padding:12px 16px;overflow:hidden;}
 .bxq--m .bxq-bar{bottom:8px;padding:10px 12px;}

@@ -14,6 +14,7 @@ import { getShopPlan } from './plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { CodError, getCodSettings, getCodSecrets, otpAvailable, rateLimit, clientIp } from './cod.server';
 import { COD_SURFACES } from '../utils/cod.shared.js';
+import { BOX_PRICING_FEATURES } from '../utils/combo-weight.shared.js';
 
 export const COD_CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -81,8 +82,11 @@ export async function loadCodContext(shop, { needAdmin = true } = {}) {
     // The store's own MSG91 keys, else the BRIX server's.
     otpRequired: settings.requireOtp && otpAvailable(await getCodSecrets(shop).catch(() => null)),
     currencyCode: currency?.code || 'INR',
-    // Weight-priced combo boxes get their box price in COD only on a plan that publishes it.
-    comboWeightLive: getFeatureState(planKey, 'combo_weight_pricing') === 'enabled',
+    // Box-priced combos get their box price in COD only on a plan that publishes
+    // some box pricing (Quantity Box on Starter+, Weight / Value Box on Growth+).
+    // The synced Function config, which COD reads, already holds only the
+    // templates the plan allows.
+    comboWeightLive: BOX_PRICING_FEATURES.some((feature) => getFeatureState(planKey, feature) === 'enabled'),
   };
 }
 

@@ -29,6 +29,7 @@
 // way and also used by the builder preview.
 import { createComboWeightCore } from '../utils/combo-weight.shared.js';
 import { createQuickShopKit, QUICK_SHOP_CSS } from '../utils/combo-quickshop.shared.js';
+import { createComboLoader } from '../utils/combo-loader.shared.js';
 
 const SCRIPT_BODY = String.raw`
 (function () {
@@ -36,6 +37,7 @@ const SCRIPT_BODY = String.raw`
   var API_ORIGIN = CURRENT_SCRIPT ? new URL(CURRENT_SCRIPT.src).origin : '';
   var WeightCore = (${createComboWeightCore.toString()})();
   var QuickShop = (${createQuickShopKit.toString()})(WeightCore);
+  var Loader = (${createComboLoader.toString()})();
 
   var instances = new Map(); // root element -> state object
 
@@ -173,6 +175,58 @@ const SCRIPT_BODY = String.raw`
     return fetchJson(API_ORIGIN + '/api/combo-page-data?shop=' + encodeURIComponent(shop) + '&templateId=' + encodeURIComponent(templateId));
   }
 
+  /* === PRELOADER (app/utils/combo-loader.shared.js) ===
+   * Shown the moment a combo page starts loading. The merchant's own look
+   * (loader_* keys) comes from this browser's copy of the last visit, else
+   * the small /api/combo-loader request (no products, so it lands well
+   * before the page data); until then, the default round spinner. */
+  var LOADER_CACHE = 'brixComboLoader:';
+
+  function loaderCacheGet(key) {
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(LOADER_CACHE + key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function loaderCacheSet(key, config) {
+    try { window.localStorage.setItem(LOADER_CACHE + key, JSON.stringify(Loader.subset(config))); } catch (e) { }
+  }
+
+  function showLoader(root, settings) {
+    if (!settings.enabled) {
+      if (root.dataset.brixLoading) { root.innerHTML = ''; delete root.dataset.brixLoading; }
+      return;
+    }
+    if (!document.getElementById('brix-combo-loader-css')) {
+      var st = document.createElement('style');
+      st.id = 'brix-combo-loader-css';
+      st.textContent = Loader.CSS;
+      (document.head || document.documentElement).appendChild(st);
+    }
+    root.dataset.brixLoading = '1';
+    root.innerHTML = Loader.html(settings);
+  }
+
+  // The merchant's loader, once known, replaces the default while still loading.
+  function fetchLoaderSettings(root, shop, templateId) {
+    fetchJson(API_ORIGIN + '/api/combo-loader?shop=' + encodeURIComponent(shop) + '&templateId=' + encodeURIComponent(templateId))
+      .then(function (json) {
+        if (json && json.success && json.loader && root.dataset.brixLoading) showLoader(root, Loader.pick(json.loader));
+      })
+      .catch(function () { });
+  }
+
+  // The page's own content, hidden early for the loader, comes back if the
+  // combo can't be shown after all.
+  function restorePageChrome() {
+    var hidden = document.querySelectorAll('[data-brix-combo-hidden]');
+    for (var i = 0; i < hidden.length; i++) {
+      hidden[i].removeAttribute('data-brix-combo-hidden');
+      hidden[i].style.display = '';
+    }
+  }
+
   function fetchComboDataByHandle(shop, handle) {
     return fetchJson(API_ORIGIN + '/api/combo-page-data?shop=' + encodeURIComponent(shop) + '&handle=' + encodeURIComponent(handle));
   }
@@ -219,7 +273,7 @@ const SCRIPT_BODY = String.raw`
       }
     }
     var cfg = data.config || {};
-    var weight = (cfg.pricing_mode === 'weight' || cfg.layout === WeightCore.WEIGHT_BOX_LAYOUT || cfg.layout === WeightCore.QUICK_SHOP_LAYOUT) && data.weightPricing ? data.weightPricing : null;
+    var weight = (cfg.pricing_mode === 'weight' || WeightCore.usesQuickShop(cfg.layout)) && data.weightPricing ? data.weightPricing : null;
     var qualifying = {};
     if (weight) {
       for (var q = 0; q < (weight.qualifyingProductIds || []).length; q++) qualifying[weight.qualifyingProductIds[q]] = true;
@@ -325,12 +379,12 @@ const SCRIPT_BODY = String.raw`
     state.selectedDiscount = null;
     state.discountApplicable = discount > 0;
     state.finalPrice = Math.max(0, totalPrice - discount);
-    // A Weight Box can be checked out once it weighs at least the first tier,
-    // and not over the max; Quick Shop lets any box through unless the
-    // merchant requires the first tier.
+    // A Classic Combo box can be checked out once it reaches the first tier
+    // (by weight, items or value), and not over the max; Quick Shop and the
+    // Weight Box let any box through unless the merchant requires the first tier.
     state.canCheckout = WeightCore.usesQuickShop(state.config.layout)
       ? QuickShop.canCheckout(state.config, box, totalSelected, tiers)
-      : totalSelected > 0 && !box.overMax && tiers.length > 0 && box.grams >= tiers[0].min_grams;
+      : totalSelected > 0 && !box.overMax && tiers.length > 0 && !!box.tier;
   }
 
   // Would this selection be over the max weight? Shows the merchant's message if so.
@@ -1024,8 +1078,9 @@ const SCRIPT_BODY = String.raw`
     html += '<div style="' + styleStr({ fontSize: sizing.productPriceSize + 'px', fontWeight: '600', color: primaryColor, marginBottom: '8px' }) + '">'
       + getCurrencySymbol(product.currency) + displayPrice.toFixed(2) + '</div>';
 
-    // Weight combos: what this item adds to the box, or that it doesn't count.
-    if (state.weightMode) {
+    // Weight boxes: what this item adds to the box, or that it doesn't count.
+    // (Boxes counted by items or value don't need a per-card badge.)
+    if (state.weightMode && WeightCore.measureOf(state.weight) === 'weight') {
       var unitGrams = state.variantGramsMap[activeVariantId];
       var counts = !!state.qualifying[product.id] && unitGrams > 0;
       html += '<div style="' + styleStr({
@@ -1084,57 +1139,106 @@ const SCRIPT_BODY = String.raw`
 
   // What the weight meter says right now (also announced to screen readers).
   function weightMessage(state) {
-    return WeightCore.boxMessage(state.weight, state.box);
+    var w = state.weight;
+    var symbol = getCurrencySymbol(shopCurrency(state));
+    var measure = WeightCore.measureOf(w);
+    var box = state.box;
+    // Names the offer ("10% OFF unlocked!") like the milestones, with the
+    // shop's currency symbol, so value boxes read "Add ₹200 more…".
+    var offered = function (t) {
+      if (!t) return t;
+      return { id: t.id, min_grams: t.min_grams, type: t.type, value: t.value, label: milestoneLabel(state, t, measure, symbol) };
+    };
+    var msgBox = {};
+    for (var k in box) msgBox[k] = box[k];
+    msgBox.tier = offered(box.tier);
+    msgBox.nextTier = offered(box.nextTier);
+    return WeightCore.boxMessage({
+      measure: w.measure, unit: w.unit, tiers: w.tiers, maxGrams: w.maxGrams, messages: w.messages, enabled: w.enabled,
+      currencySymbol: symbol,
+    }, msgBox);
   }
 
-  // Weight meter: replaces the item-count progress bar for weight combos.
-  // Tier ticks along the bar, the box weight, and what to add next.
+  // A tier's milestone text: the merchant's own label (the server fills empty
+  // labels with a checkout wording, so read it from the saved config), else
+  // the offer ("10% OFF", "Any 2 for ₹999").
+  function milestoneLabel(state, tier, measure, symbol) {
+    var saved = (state.config.weight_pricing && state.config.weight_pricing.tiers) || [];
+    var own = '';
+    for (var i = 0; i < saved.length; i++) if (saved[i] && saved[i].id === tier.id) own = saved[i].label || '';
+    return WeightCore.offerLabel({ id: tier.id, min_grams: tier.min_grams, type: tier.type, value: tier.value, label: own }, measure, symbol);
+  }
+
+  // Box meter: replaces the item-count progress bar for tier-priced combos
+  // (Classic Combo designs), measured by weight, items or value. Style
+  // 'milestones' (default: a dot per tier with its offer) or 'bar' (ticks).
+  // Mirrors components/customization/WeightMeter.jsx.
   function renderWeightMeter(state) {
     var config = state.config;
     var w = state.weight;
     var box = state.box;
     var tiers = w.tiers || [];
-    var unit = w.unit;
-    var top = tiers.length ? tiers[tiers.length - 1].min_grams : 1000;
-    var scale = w.maxGrams != null ? w.maxGrams : Math.round(top * 1.2);
-    var percent = scale > 0 ? Math.min(100, (box.grams / scale) * 100) : 0;
+    var measure = WeightCore.measureOf(w);
+    var symbol = getCurrencySymbol(shopCurrency(state));
+    var view = { measure: measure, unit: w.unit, tiers: tiers, maxGrams: w.maxGrams, messages: w.messages, enabled: w.enabled, currencySymbol: symbol };
+    var progress = WeightCore.progressOf(view, box);
+    var milestones = (config.tier_progress_style || 'milestones') !== 'bar';
     var msg = weightMessage(state);
     var success = config.progress_success_color || '#16a34a';
     var barColor = box.overMax ? '#dc2626' : (box.tier && w.enabled ? success : (config.progress_bar_color || '#111827'));
     var textColor = config.progress_text_color || '#374151';
     var toneColor = msg.tone === 'error' ? '#b91c1c' : msg.tone === 'success' ? success : textColor;
+    var amount = box.amount === undefined ? box.grams : box.amount;
+    var showMax = w.maxGrams != null && measure !== 'value';
+    var heading = config.progress_text || 'Your box';
+    var i;
 
-    var html = '<div class="brix-combo-weight" style="' + styleStr({ padding: '16px 20px', background: '#fff', borderBottom: '1px solid #eee' }) + '">';
+    var html = '<div class="brix-combo-weight" data-brix-tier-meter="' + (milestones ? 'milestones' : 'bar') + '" style="' + styleStr({ padding: '16px 20px', background: '#fff', borderBottom: '1px solid #eee' }) + '">';
     html += '<div style="' + styleStr({ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', marginBottom: '10px', color: textColor }) + '">';
-    html += '<span style="' + styleStr({ fontSize: '13px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase' }) + '">' + esc(config.progress_text || 'Your box') + '</span>';
-    html += '<span style="' + styleStr({ fontSize: '15px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }) + '">'
-      + esc(WeightCore.formatWeight(box.grams, unit))
-      + (w.maxGrams != null ? '<span style="font-weight:500;color:#6b7280;"> / ' + esc(WeightCore.formatWeight(w.maxGrams, unit)) + ' max</span>' : '')
+    html += '<span style="' + styleStr({ fontSize: '13px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase' }) + '">' + esc(heading) + '</span>';
+    html += '<span class="brix-combo-weight-amount" style="' + styleStr({ fontSize: '15px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }) + '">'
+      + esc(WeightCore.formatAmount(view, amount, box.decimals))
+      + (showMax ? '<span style="font-weight:500;color:#6b7280;"> / ' + esc(WeightCore.formatAmount(view, w.maxGrams, box.decimals)) + ' max</span>' : '')
       + '</span></div>';
 
-    html += '<div style="position:relative;height:10px;border-radius:10px;background:#e5e7eb;overflow:hidden;" role="progressbar" aria-valuemin="0" aria-valuemax="' + scale + '" aria-valuenow="' + Math.round(box.grams) + '" aria-label="Box weight">';
-    html += '<div style="' + styleStr({ height: '100%', width: percent + '%', background: barColor, borderRadius: '10px', transition: 'width 0.4s ease, background 0.3s' }) + '"></div>';
+    html += '<div style="position:relative;padding:' + (milestones ? '0 9px' : '0') + ';">';
+    html += '<div style="position:relative;height:' + (milestones ? 8 : 10) + 'px;border-radius:10px;background:#e5e7eb;" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(progress.percent) + '" aria-label="' + esc(heading) + '">';
+    html += '<div style="' + styleStr({ height: '100%', width: progress.percent + '%', background: barColor, borderRadius: '10px', transition: 'width 0.4s ease, background 0.3s' }) + '"></div>';
+    if (milestones) {
+      for (i = 0; i < progress.marks.length; i++) {
+        var mk = progress.marks[i];
+        var lit = mk.hit && w.enabled;
+        html += '<span class="brix-combo-milestone' + (lit ? ' is-hit' : '') + '" style="' + styleStr({
+          position: 'absolute', top: '50%', left: mk.percent + '%', width: '18px', height: '18px', borderRadius: '50%',
+          transform: 'translate(-50%, -50%)', boxSizing: 'border-box', background: lit ? success : '#fff',
+          border: '2px solid ' + (lit ? success : mk.next ? barColor : '#d1d5db'),
+          color: '#fff', fontSize: '11px', lineHeight: '14px', textAlign: 'center', fontWeight: '800',
+        }) + '">' + (lit ? '&#10003;' : '') + '</span>';
+      }
+    }
     html += '</div>';
 
-    if (w.enabled && tiers.length) {
-      html += '<div style="position:relative;height:30px;margin-top:4px;">';
-      for (var i = 0; i < tiers.length; i++) {
-        var t = tiers[i];
-        var left = scale > 0 ? Math.min(100, (t.min_grams / scale) * 100) : 0;
-        var reached = box.grams >= t.min_grams && !box.overMax;
-        html += '<div style="' + styleStr({
-          position: 'absolute', left: left + '%', top: '0', transform: left > 90 ? 'translateX(-100%)' : (left < 10 ? 'none' : 'translateX(-50%)'),
-          fontSize: '11px', lineHeight: '1.3', whiteSpace: 'nowrap', textAlign: 'center',
+    if (tiers.length) {
+      html += '<div style="position:relative;height:' + (milestones ? 36 : 30) + 'px;margin-top:' + (milestones ? 10 : 4) + 'px;">';
+      for (i = 0; i < progress.marks.length; i++) {
+        var m = progress.marks[i];
+        var left = m.percent;
+        var reached = m.hit;
+        html += '<div class="brix-combo-tier-label" style="' + styleStr({
+          position: 'absolute', left: left + '%', top: '0', transform: left > 85 ? 'translateX(-100%)' : (left < 15 ? 'none' : 'translateX(-50%)'),
+          fontSize: '11px', lineHeight: '1.3', whiteSpace: 'nowrap', textAlign: left > 85 ? 'right' : (left < 15 ? 'left' : 'center'),
           color: reached ? success : '#6b7280', fontWeight: reached ? '700' : '500',
-        }) + '" title="' + esc(t.label) + '">'
-          + '<div style="width:2px;height:6px;background:currentColor;margin:0 auto 2px;"></div>'
-          + esc(WeightCore.formatWeight(t.min_grams, unit)) + '</div>';
+        }) + '">'
+          + (milestones ? '' : '<div style="width:2px;height:6px;background:currentColor;margin:0 auto 2px;"></div>')
+          + (milestones && w.enabled ? '<div style="font-weight:800;color:' + (reached ? success : textColor) + ';">' + esc(milestoneLabel(state, m.tier, measure, symbol)) + '</div>' : '')
+          + '<div>' + esc(WeightCore.formatThreshold(view, m.tier)) + '</div></div>';
       }
       html += '</div>';
     }
+    html += '</div>';
 
     html += '<div aria-live="polite" style="' + styleStr({ marginTop: '8px', fontSize: '13px', fontWeight: '600', color: toneColor }) + '">' + esc(msg.text) + '</div>';
-    if (box.unweighedKeys && box.unweighedKeys.length) {
+    if (measure === 'weight' && box.unweighedKeys && box.unweighedKeys.length) {
       html += '<div style="margin-top:4px;font-size:12px;color:#6b7280;">' + box.unweighedKeys.length + ' selected item' + (box.unweighedKeys.length === 1 ? ' has' : 's have') + ' no weight and ' + (box.unweighedKeys.length === 1 ? 'doesn\'t' : 'don\'t') + ' count toward the box.</div>';
     }
     html += '</div>';
@@ -2640,19 +2744,29 @@ const SCRIPT_BODY = String.raw`
     }
   }
 
-  function mountDirect(root, shop, templateId, prefetchedData) {
+  function mountDirect(root, shop, templateId, prefetchedData, handle) {
     var dataPromise = prefetchedData
       ? Promise.resolve({ success: true, data: prefetchedData })
       : fetchComboData(shop, templateId);
 
     dataPromise.then(function (json) {
-      if (!json.success || !json.data) { root.innerHTML = ''; return; }
+      if (!json.success || !json.data) {
+        if (root.dataset.brixLoading) restorePageChrome();
+        root.innerHTML = '';
+        delete root.dataset.brixLoading;
+        return;
+      }
+      // Next visit shows the merchant's loader straight away.
+      var cfg = json.data.config || {};
+      loaderCacheSet(shop + ':' + (json.data.templateId || templateId), cfg);
+      if (handle) loaderCacheSet('h:' + shop + ':' + handle, cfg);
+      delete root.dataset.brixLoading;
 
       hidePageChrome(root);
       widenAncestorContainers(root);
 
       var layout = json.data.config && json.data.config.layout;
-      if (layout && !/^layout[1-6]$/.test(layout)) {
+      if (layout && !/^layout[1-7]$/.test(layout)) {
         mountIframe(root, shop, json.data.templateId || templateId);
         return;
       }
@@ -2678,7 +2792,9 @@ const SCRIPT_BODY = String.raw`
         });
       }
     }).catch(function () {
+      if (root.dataset.brixLoading) restorePageChrome();
       root.innerHTML = '';
+      delete root.dataset.brixLoading;
     });
   }
 
@@ -2697,6 +2813,15 @@ const SCRIPT_BODY = String.raw`
     var templateId = root.dataset.templateId;
     if (!shop || !templateId) return;
     root.dataset.brixComboMounted = '1';
+    // This is a combo page: the loader takes over right away.
+    var cached = loaderCacheGet(shop + ':' + templateId);
+    var settings = Loader.pick(cached || {});
+    if (settings.enabled) {
+      hidePageChrome(root);
+      widenAncestorContainers(root);
+      showLoader(root, settings);
+    }
+    if (!cached) fetchLoaderSettings(root, shop, templateId);
     mountDirect(root, shop, templateId, null);
   }
 
@@ -2729,16 +2854,28 @@ const SCRIPT_BODY = String.raw`
     root.style.display = 'none'; // hidden until we confirm this handle is actually a combo page
     container.appendChild(root);
 
+    // Seen as a combo page on an earlier visit: show its loader meanwhile.
+    var cached = loaderCacheGet('h:' + shop + ':' + handle);
+    if (cached && Loader.pick(cached).enabled) {
+      hidePageChrome(root);
+      root.style.display = '';
+      showLoader(root, Loader.pick(cached));
+    }
+    var giveUp = function () {
+      if (root.dataset.brixLoading) restorePageChrome();
+      root.remove(); // not a combo page — leave the theme's own content untouched
+    };
+
     fetchComboDataByHandle(shop, handle)
       .then(function (json) {
         if (json.success && json.data && json.data.templateId) {
-          mountDirect(root, shop, json.data.templateId, json.data);
+          mountDirect(root, shop, json.data.templateId, json.data, handle);
           root.style.display = '';
         } else {
-          root.remove(); // not a combo page — leave the theme's own content untouched
+          giveUp();
         }
       })
-      .catch(function () { root.remove(); });
+      .catch(giveUp);
   }
 
   function boot() {

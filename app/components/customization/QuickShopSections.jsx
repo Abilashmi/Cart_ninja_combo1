@@ -1,4 +1,4 @@
-// Sidebar sections of the Quick Shop combo template (layout6). Every setting
+// Sidebar sections of the box combo templates (Quantity / Weight / Value Box). Every setting
 // is a flat qs_* key on the combo config; a missing key shows the default
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
@@ -74,7 +74,7 @@ function TierIcons({ config, updateConfig }) {
 }
 
 /** A row of small visual thumbnails to pick a style from. */
-function StylePicker({ label, value, options, onChange }) {
+export function StylePicker({ label, value, options, onChange }) {
   return (
     <BlockStack gap="150">
       <Text as="span" variant="bodyMd">{label}</Text>
@@ -253,10 +253,20 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
   );
 }
 
+const cardThumb = (children) => <div style={{ width: 34, height: 30, border: '1px solid #d1d5db', borderRadius: 5, position: 'relative', background: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: 2, boxSizing: 'border-box' }}>{children}</div>;
+const CARD_LAYOUTS = [
+  { value: 'quick_add', label: 'Quick add', preview: cardThumb(<span style={{ position: 'absolute', top: 2, right: 2, width: 10, height: 10, borderRadius: 3, border: '1.5px solid #2563eb', color: '#2563eb', fontSize: 9, lineHeight: '8px', textAlign: 'center', fontWeight: 800 }}>+</span>) },
+  { value: 'normal', label: 'Add button', preview: cardThumb(<span style={{ height: 7, borderRadius: 2, background: '#2563eb' }} />) },
+];
+
 function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxField }) {
   return (
-    <SectionCard title="Product cards" expanded={expanded} onToggle={onToggle}>
+    <SectionCard title="Product cards" expanded={expanded} onToggle={onToggle} badge={CARD_LAYOUTS.find((c) => c.value === val(config, 'qs_card_layout'))?.label}>
       <FormLayout>
+        <StylePicker label="Card layout" value={val(config, 'qs_card_layout')} options={CARD_LAYOUTS} onChange={(v) => updateConfig('qs_card_layout', v)} />
+        {val(config, 'qs_card_layout') === 'normal' && (
+          <TextField label="Add button text" value={config.qs_add_label ?? val(config, 'qs_add_label')} onChange={(v) => updateConfig('qs_add_label', v)} autoComplete="off" maxLength={24} />
+        )}
         <div className="cst-grid-2">
           <Select label="Columns (desktop)" options={['2', '3', '4', '5', '6'].map((v) => ({ label: v, value: v }))} value={String(val(config, 'qs_columns_desktop'))} onChange={(v) => updateConfig('qs_columns_desktop', Number(v))} />
           <Select label="Columns (phone)" options={['1', '2', '3'].map((v) => ({ label: v, value: v }))} value={String(val(config, 'qs_columns_mobile'))} onChange={(v) => updateConfig('qs_columns_mobile', Number(v))} />

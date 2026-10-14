@@ -431,7 +431,8 @@ function comboQualifies(template, variant) {
 /**
  * Box discounts for the weight-combo lines of a COD order: the same price
  * Shopify checkout gives. `comboWeightLive` = the shop's plan publishes
- * combo_weight_pricing. Applies only while the checkout discount is ACTIVE.
+ * some box pricing (BOX_PRICING_FEATURES; the trusted config only holds the
+ * templates its plan allows). Applies only while the checkout discount is ACTIVE.
  * Returns { byLine: Map<lineIndex, amountMinor>, titles: Map<lineIndex, title>, boxes: [...] }.
  */
 export async function comboWeightAdjustments(admin, { lines, comboWeightLive = false, currencyCode = 'INR' }) {
