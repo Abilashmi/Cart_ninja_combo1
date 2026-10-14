@@ -104,6 +104,34 @@ const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerPr
   await page.close();
 }
 
+/* Start selected (a bundle) or let shoppers add each one */
+{
+  const btns = (page) => page.$$eval('ps-fbt-widget .ps-product-card button, ps-fbt-widget .ps-product-row button', (els) => els.map((b) => b.textContent.trim()));
+  const addAll = (page) => page.$eval('ps-fbt-widget .ps-fbt-addall', (b) => (getComputedStyle(b).display === 'none' ? 'hidden' : b.textContent.trim()));
+
+  const classicOff = await open({ condition: [rule()], temp1: { interactionType: 'classic', startSelected: false } });
+  check('Classic, start selected off: products show "Add", cart button hidden', (await btns(classicOff.page)).every((t) => t === 'Add') && (await addAll(classicOff.page)) === 'hidden', JSON.stringify(await btns(classicOff.page)));
+  await classicOff.page.locator('ps-fbt-widget .ps-product-card button', { hasText: 'Add' }).first().click();
+  check('…one tap adds just that product', (await addAll(classicOff.page)) === 'Add 1 to Cart');
+  await classicOff.page.close();
+
+  const classicDefault = await open({ condition: [rule()], temp1: { interactionType: 'classic' } });
+  check('Classic, not set: starts all "Added" as before', (await btns(classicDefault.page)).every((t) => t === 'Added') && (await addAll(classicDefault.page)) === 'Add 2 to Cart');
+  await classicDefault.page.close();
+
+  const quickOn = await open({ condition: [rule()], temp1: { interactionType: 'quickAdd', startSelected: true } });
+  check('Quick Add, start selected on: steppers at 1, "Add 2 to Cart"', (await addAll(quickOn.page)) === 'Add 2 to Cart');
+  await quickOn.page.close();
+
+  const quickDefault = await open({ condition: [rule()], temp1: { interactionType: 'quickAdd' } });
+  check('Quick Add, not set: starts with "Add" buttons as before', (await addAll(quickDefault.page)) === 'hidden');
+  await quickDefault.page.close();
+
+  const bundleOff = await open({ condition: [rule()], temp1: { interactionType: 'bundle', startSelected: false } });
+  check('Bundle always starts with everything ticked', (await addAll(bundleOff.page)) === 'Add 2 to Cart');
+  await bundleOff.page.close();
+}
+
 /* 6. Image and spacing settings */
 const measure = (page) => page.evaluate(() => {
   const w = document.querySelector('ps-fbt-widget');

@@ -134,3 +134,16 @@ test('function: no config, wrong class or tampered config = nothing', () => {
   assert.deepEqual(run(input(lines, [{ ...SET, v: 500 }])), { operations: [] }, 'over 100% is ignored');
   assert.deepEqual(run(input(lines, [{ ...SET, k: 'x' }])), { operations: [] });
 });
+
+// ── Start selected (widget setting) ──
+import { fbtStartsSelected, pickFbtLayout } from '../../app/utils/fbt-style.shared.js';
+test('start selected: style defaults unless the merchant chose; Bundle always', () => {
+  assert.equal(fbtStartsSelected('classic', null), true);
+  assert.equal(fbtStartsSelected('quick-add', null), false);
+  assert.equal(fbtStartsSelected('quickAdd', true), true);
+  assert.equal(fbtStartsSelected('classic', false), false);
+  assert.equal(fbtStartsSelected('bundle', false), true);
+  assert.equal(pickFbtLayout({}).startSelected, null);
+  assert.equal(pickFbtLayout({ startSelected: 'yes' }).startSelected, null);
+  assert.equal(pickFbtLayout({ startSelected: false }).startSelected, false);
+});

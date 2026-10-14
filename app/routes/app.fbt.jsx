@@ -31,7 +31,7 @@ import { resolveFbtInstructions } from '../services/pairing-assistant.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
-import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras, pickFbtLayout, fbtLayoutSizes } from '../utils/fbt-style.shared.js';
+import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras, pickFbtLayout, fbtLayoutSizes, fbtStartsSelected } from '../utils/fbt-style.shared.js';
 
 // Ceiling for a single Shopify Admin API call in this route. Generous enough
 // that a merely-slow response still succeeds, low enough that a stalled one
@@ -532,8 +532,8 @@ function RuleOfferPicker({ rule, onChange, currencySymbol }) {
 // What the storefront starts with (fbt-widget-render.liquid): Classic and
 // Bundle start with every product selected; Quick Add starts with "Add"
 // buttons and Checkbox + Quantity with empty checkboxes.
-const defaultProductStates = (style = 'classic') => {
-  const picked = style !== 'quick-add' && style !== 'checkbox-qty';
+const defaultProductStates = (style = 'classic', startSelected = null) => {
+  const picked = fbtStartsSelected(style, startSelected);
   return Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: picked, qty: 1, checked: picked }));
 };
 
@@ -867,7 +867,7 @@ export default function FBTPage() {
   const [aiConfigured,      setAiConfigured]      = useState(Boolean(fbtConfig.aiEnabled));
   const [placement,         setPlacement]         = useState('all');
   const [widgetPlacement,   setWidgetPlacement]   = useState(fbtConfig.widgetPlacement || 'above_cart');
-  const [productStates,     setProductStates]     = useState(() => defaultProductStates(interactionStyle));
+  const [productStates,     setProductStates]     = useState(() => defaultProductStates(interactionStyle, pickFbtLayout(fbtConfig).startSelected));
   const [hasChanges,        setHasChanges]        = useState(false);
   const [toastActive,       setToastActive]       = useState(false);
   const [manualRules,       setManualRules]       = useState(initialRules || []);
@@ -1155,7 +1155,7 @@ export default function FBTPage() {
     setBgColor(t.colors.bg); setTextColor(t.colors.text); setPriceColor(t.colors.price);
     setButtonColor(t.colors.button); setButtonTextColor(t.colors.buttonText);
     setBorderColor(t.colors.border); setBorderRadius(t.borderRadius);
-    setProductStates(defaultProductStates(interactionStyle));
+    setProductStates(defaultProductStates(interactionStyle, fbtLayout.startSelected));
     // Each template brings its own arrangement (Classic Grid = scrolling
     // row, Modern Cards = 2-column grid, Vertical List = stacked list), so
     // switching templates visibly changes the widget; Layout Alignment can
@@ -1979,10 +1979,22 @@ export default function FBTPage() {
                     <BlockStack gap="300">
                       <Select
                         label="Interaction Style" options={INTERACTION_OPTIONS} value={interactionStyle}
-                        onChange={(v) => { setInteractionStyle(v); setProductStates(defaultProductStates(v)); mark(); }}
-                        helpText={interactionStyle === 'quick-add' || interactionStyle === 'checkbox-qty'
-                          ? 'Shoppers start with nothing selected and pick what they want.'
-                          : 'Every product starts selected ("Added"); shoppers remove what they don\'t want.'}
+                        onChange={(v) => { setInteractionStyle(v); setProductStates(defaultProductStates(v, fbtLayout.startSelected)); mark(); }}
+                      />
+                      <Checkbox
+                        label="Start with every product selected (as a bundle)"
+                        checked={fbtStartsSelected(interactionStyle, fbtLayout.startSelected)}
+                        disabled={interactionStyle === 'bundle'}
+                        onChange={(v) => {
+                          setFbtLayout((prev) => ({ ...prev, startSelected: v }));
+                          setProductStates(defaultProductStates(interactionStyle, v));
+                          mark();
+                        }}
+                        helpText={interactionStyle === 'bundle'
+                          ? 'Bundle always starts with everything ticked; at least one stays selected.'
+                          : fbtStartsSelected(interactionStyle, fbtLayout.startSelected)
+                            ? 'Every product shows as added; one tap on the cart button takes the whole set. Shoppers remove what they don\'t want.'
+                            : 'Products start unselected; shoppers add each one they want.'}
                       />
                       <Select
                         label="Layout Alignment"

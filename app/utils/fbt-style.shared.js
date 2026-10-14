@@ -95,7 +95,23 @@ export function pickFbtLayout(tpl) {
   }
   if (FBT_IMAGE_FITS.includes(tpl?.imageFit)) out.imageFit = tpl.imageFit;
   out.imageBg = normalizeHex(tpl?.imageBg) || '';
+  // Start with every product selected (a bundle) or let shoppers add each:
+  // true / false, null = the interaction style's own default (fbtStartsSelected).
+  out.startSelected = tpl?.startSelected === true ? true : tpl?.startSelected === false ? false : null;
   return out;
+}
+
+/**
+ * Whether the widget opens with every product selected. Bundle always does
+ * (at least one must stay ticked); otherwise the merchant's choice, else the
+ * style's default (Classic yes, Quick Add / Checkbox + Quantity no).
+ * Mirrored by fbt-widget-render.liquid. style: classic | bundle | quick-add | checkbox-qty
+ * (or the stored quickAdd / checkboxQty).
+ */
+export function fbtStartsSelected(style, startSelected) {
+  if (style === 'bundle') return true;
+  if (startSelected === true || startSelected === false) return startSelected;
+  return !['quick-add', 'quickAdd', 'checkbox-qty', 'checkboxQty'].includes(style);
 }
 
 /** Sizes the widget draws from a layout (rows and phones are derived). */

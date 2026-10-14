@@ -313,6 +313,25 @@ await check('Preview starts like the store: Quick Add = "Add" buttons, nothing s
   await context.close();
 });
 
+await check('"Start with every product selected": Quick Add preview starts added; Save sends it; Bundle can\'t turn it off', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  await page.getByRole('button', { name: /Interaction & Layout/ }).first().click();
+  await page.getByLabel('Interaction Style').selectOption('quick-add');
+  const box = page.getByLabel('Start with every product selected (as a bundle)');
+  assert.equal(await box.isChecked(), false, 'Quick Add starts unselected by default');
+  await page.getByText('Start with every product selected (as a bundle)').click();
+  assert.equal(await box.isChecked(), true);
+  assert.ok((await page.locator('.fbtpv-widget').textContent()).includes('Total (3 items)'));
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(posts.fbt.at(-1).templates.fbt1.startSelected, true);
+  await page.getByLabel('Interaction Style').selectOption('bundle');
+  assert.equal(await box.isDisabled(), true);
+  assert.equal(await box.isChecked(), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await check('Templates bring their arrangement: Modern Cards = grid, Vertical List = list, Classic Grid = row', async () => {
   const { page, context, posts, errors } = await open('/app/fbt');
   const layoutOf = () => page.evaluate(() => {

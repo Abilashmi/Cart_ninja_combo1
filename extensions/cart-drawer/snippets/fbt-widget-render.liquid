@@ -264,6 +264,7 @@
       gap:fbtNum(config.gap,10,0,40),
       cardPadding:fbtNum(config.cardPadding,10,0,30),
       widgetPadding:fbtNum(config.widgetPadding,20,0,48),
+      startSelected:config.startSelected===true?true:config.startSelected===false?false:null,
       marginTop:fbtNum(config.marginTop,16,0,80),
       marginBottom:fbtNum(config.marginBottom,16,0,80)};
   }
@@ -608,8 +609,13 @@
     var cardEntries=new Map();
 
     var usesQuantityMap=config.interactionType==='quickAdd'||config.interactionType==='checkboxQty';
-    if(usesQuantityMap){products.forEach(function(p){productQuantities.set(String(p.id),0);});}
-    else{products.forEach(function(p){selectedProductIds.add(String(p.id));});}
+    /* Start with every product selected (a bundle) or let shoppers pick:
+       Bundle always; else the merchant's startSelected; else the style's
+       default (Classic yes, Quick Add / Checkbox + Quantity no).
+       app/utils/fbt-style.shared.js fbtStartsSelected. */
+    var startPicked=config.interactionType==='bundle'?true:(config.startSelected===true||config.startSelected===false?config.startSelected:!usesQuantityMap);
+    if(usesQuantityMap){products.forEach(function(p){productQuantities.set(String(p.id),startPicked?1:0);});}
+    else if(startPicked){products.forEach(function(p){selectedProductIds.add(String(p.id));});}
 
     function getProductQuantity(pid){var id=String(pid);if(usesQuantityMap)return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
     function getSelectedCount(){if(usesQuantityMap)return products.reduce(function(c,p){return c+(getProductQuantity(p.id)>0?1:0);},0);return selectedProductIds.size;}
