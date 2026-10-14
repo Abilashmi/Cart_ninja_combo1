@@ -412,6 +412,40 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+/* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books
+   box): evenly spaced on a phone, labels never overlap, the fill meets the dots. */
+{
+  const BOOKS = {
+    unit: 'kg', max_grams: 5000,
+    tiers: [t(1000, 'fixed_price', 999, '1kg Box at ₹999'), t(2000, 'fixed_price', 1999, '2kg Box at ₹1999'), t(5000, 'fixed_price', 2000, '5kg Box at ₹2000')],
+  };
+  const { page } = await openCombo({ ...baseConfig, qs_top_style: 'milestones' }, wp(BOOKS), { viewport: { width: 390, height: 844 } });
+  await page.waitForSelector('.bxq-mile');
+  const geo = () => page.evaluate(() => {
+    const r = (e) => e.getBoundingClientRect();
+    const labels = [...document.querySelectorAll('.bxq-mile-label')].map((e) => { const b = r(e); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; });
+    const dots = [...document.querySelectorAll('.bxq-mile-dot')].map((e) => { const b = r(e); return (b.left + b.right) / 2; });
+    const line = r(document.querySelector('.bxq-miles-line'));
+    const fill = r(document.querySelector('.bxq-miles-fill'));
+    const top = r(document.querySelector('.bxq-top'));
+    return { labels, dots, lineLeft: line.left, fillRight: fill.left + fill.width, topBottom: top.bottom };
+  });
+  let g = await geo();
+  const overlaps = g.labels.some((a, i) => g.labels.some((b, j) => j > i && a.r > b.l + 0.5 && b.r > a.l + 0.5 && a.b > b.t && b.b > a.t));
+  check('phone milestones (1 kg / 2 kg / 5 kg): no label overlaps another', !overlaps, JSON.stringify(g.labels.map((x) => [Math.round(x.l), Math.round(x.r)])));
+  const gaps = g.dots.slice(1).map((d, i) => Math.round(d - g.dots[i]));
+  check('phone milestones: evenly spaced', gaps.every((x) => Math.abs(x - gaps[0]) <= 2), JSON.stringify(gaps));
+  check('phone milestones: labels stay inside the progress box', g.labels.every((x) => x.b <= g.topBottom + 0.5), `${JSON.stringify(g.labels.map((x) => Math.round(x.b)))} vs ${Math.round(g.topBottom)}`);
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-milestones-phone.png') });
+  // 1 kg in the box (the chicken 1 kg variant): the fill reaches the first dot.
+  await page.selectOption(`${card(1)} select`, V(11));
+  await plus(page, 1);
+  await page.waitForTimeout(500);
+  g = await geo();
+  check('phone milestones: at 1 kg the fill ends on the first dot', Math.abs(g.fillRight - g.dots[0]) <= 3, `${Math.round(g.fillRight)} vs ${Math.round(g.dots[0])}`);
+  await page.close();
+}
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -763,10 +763,29 @@ export function createQuickShopKit(core) {
       }
       html += '</div>';
     } else if (style === 'milestones') {
-      html += '<div class="bxq-miles"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
-      for (i = 0; i < progress.marks.length; i++) {
+      // Evenly spaced, each label as wide as its share of the line: placed
+      // by weight, tiers close together (1 kg and 2 kg of 5 kg) overlapped on
+      // phones. The fill runs piecewise between the dots, so it still reaches
+      // a dot exactly when its tier unlocks.
+      var count = progress.marks.length;
+      var evenAt = function (k) { return ((k + 1) / count) * 100; };
+      var milesFill = 100;
+      var fromAt = 0;
+      var fromEven = 0;
+      for (i = 0; i < count; i++) {
+        var markAt = progress.marks[i].percent;
+        if (progress.percent <= markAt) {
+          milesFill = fromEven + ((progress.percent - fromAt) / Math.max(0.0001, markAt - fromAt)) * (evenAt(i) - fromEven);
+          break;
+        }
+        fromAt = markAt;
+        fromEven = evenAt(i);
+      }
+      milesFill = Math.max(0, Math.min(100, milesFill));
+      html += '<div class="bxq-miles" style="--bxq-mile-share:' + (100 / Math.max(1, count)).toFixed(2) + '%"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + milesFill.toFixed(1) + '%"></div></div>';
+      for (i = 0; i < count; i++) {
         var ms = progress.marks[i];
-        html += '<div class="bxq-mile' + (ms.hit ? ' is-hit' : '') + (ms.next ? ' is-next' : '') + '" style="left:' + ms.percent.toFixed(1) + '%">'
+        html += '<div class="bxq-mile' + (ms.hit ? ' is-hit' : '') + (ms.next ? ' is-next' : '') + '" style="left:' + evenAt(i).toFixed(1) + '%">'
           + '<span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, 'bxq-mile-icon', ms.iconIndex) : '') + '</span>'
           + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + '</b><small>' + esc(ms.at) + '</small></span>' : '')
           + '</div>';
@@ -1094,7 +1113,7 @@ export const QUICK_SHOP_CSS = `
 .bxq--m .bxq-miles{margin:0 38px;}
 .bxq-miles-line{position:absolute;left:0;right:0;top:17px;height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
 .bxq-miles-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
-.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:110px;text-align:center;}
+.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:min(110px,calc(var(--bxq-mile-share,100%) - 6px));text-align:center;}
 .bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
 .bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
@@ -1105,7 +1124,8 @@ export const QUICK_SHOP_CSS = `
 .bxq-msg-icon{color:#fff;}
 .bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
 .bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
-.bxq--m .bxq-mile{width:84px;}
+.bxq--m .bxq-mile{width:min(84px,calc(var(--bxq-mile-share,100%) - 4px));}
+.bxq-mile-label b{overflow-wrap:anywhere;}
 .bxq--m .bxq-mile-label{font-size:11px;}
 .bxq-filters{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 14px;scrollbar-width:none;align-items:center;}
 .bxq-filters::-webkit-scrollbar{display:none;}
