@@ -191,6 +191,7 @@ export function createQuickShopKit(core) {
     if (tier.label) return tier.label;
     if (tier.type === 'percentage') return tier.value + '% OFF';
     if (tier.type === 'fixed_amount') return money(tier.value, symbol) + ' OFF';
+    if (tier.type === 'unit_price') return money(tier.value, symbol) + (measure === 'quantity' ? ' EACH' : '/KG');
     if (measure === 'quantity') return 'Any ' + tier.min_grams + ' for ' + money(tier.value, symbol);
     return 'Box at ' + money(tier.value, symbol);
   }

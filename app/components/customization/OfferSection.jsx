@@ -21,6 +21,7 @@ const TYPE_OPTIONS = [
   { label: 'Percentage off', value: 'percentage' },
   { label: 'Amount off', value: 'fixed_amount' },
   { label: 'Box price', value: 'fixed_price' },
+  { label: 'Price per kg', value: 'unit_price' },
 ];
 
 // Quick Shop and the Classic Combo designs: what the box is measured by (weight_pricing.measure).
@@ -70,9 +71,10 @@ function WeightField({ label, grams, unit, onCommit, error, helpText, placeholde
   );
 }
 
-function offerText(tier, symbol) {
+function offerText(tier, symbol, measure) {
   if (tier.type === 'percentage') return `${tier.value}% off`;
   if (tier.type === 'fixed_amount') return `${symbol}${tier.value} off`;
+  if (tier.type === 'unit_price') return `${symbol}${tier.value}${measure === 'quantity' ? ' per item' : ' per kg'}`;
   return `box for ${symbol}${tier.value}`;
 }
 
@@ -190,7 +192,7 @@ function OfferSectionComponent({
   const audit = auditFetcher.data;
 
   const summary = value.tiers.length && !errors.length
-    ? value.tiers.map((t) => `${shownAmount(t.min_grams)}+: ${offerText(t, symbol)}`).join(' · ')
+    ? value.tiers.map((t) => `${shownAmount(t.min_grams)}+: ${offerText(t, symbol, measure)}`).join(' · ')
       + (value.max_grams != null ? ` (max ${shownAmount(value.max_grams)})` : '')
     : null;
   const unsaved = isWeight && savedWeightHash && savedWeightHash !== value.hash;
@@ -350,13 +352,18 @@ function OfferSectionComponent({
                   />
                 )}
                 <Select
-                  label="Shopper gets" options={byValue ? TYPE_OPTIONS.filter((o) => o.value !== 'fixed_price') : TYPE_OPTIONS} value={tier.type || 'percentage'}
+                  label="Shopper gets"
+                  options={byValue
+                    ? TYPE_OPTIONS.filter((o) => o.value !== 'fixed_price' && o.value !== 'unit_price')
+                    : TYPE_OPTIONS.map((o) => (o.value === 'unit_price' && measure === 'quantity' ? { ...o, label: 'Price per item' } : o))}
+                  value={tier.type || 'percentage'}
                   onChange={(v) => setTier(index, { type: v })}
                   error={errorFor(`tiers.${index}.type`)}
                 />
               </div>
               <TextField
-                label={tier.type === 'percentage' ? 'Percentage off' : tier.type === 'fixed_amount' ? 'Amount off the box' : 'Price of the whole box'}
+                label={tier.type === 'percentage' ? 'Percentage off' : tier.type === 'fixed_amount' ? 'Amount off the box' : tier.type === 'unit_price' ? (measure === 'quantity' ? 'Price per item' : 'Price per kg') : 'Price of the whole box'}
+                helpText={tier.type === 'unit_price' ? (measure === 'quantity' ? 'The box costs this × the number of items.' : 'The box costs this × its exact weight, e.g. 1.5 kg = 1.5 × this.') : undefined}
                 type="number" autoComplete="off"
                 value={tier.value === '' || tier.value == null ? '' : String(tier.value)}
                 onChange={(v) => setTier(index, { value: v === '' ? '' : Number(v) })}
@@ -367,7 +374,7 @@ function OfferSectionComponent({
               <TextField
                 label="Label on the page and at checkout" autoComplete="off" maxLength={LIMITS.label}
                 value={tier.label || ''}
-                placeholder={qsDesign ? (tier.type === 'percentage' ? `${tier.value}% OFF` : tier.type === 'fixed_amount' ? `${symbol}${tier.value} OFF` : `Box at ${symbol}${tier.value}`) : tierLabel({ ...tier, label: '' }, unit, measure)}
+                placeholder={qsDesign ? (tier.type === 'percentage' ? `${tier.value}% OFF` : tier.type === 'fixed_amount' ? `${symbol}${tier.value} OFF` : tier.type === 'unit_price' ? `${symbol}${tier.value}${measure === 'quantity' ? ' EACH' : '/KG'}` : `Box at ${symbol}${tier.value}`) : tierLabel({ ...tier, label: '' }, unit, measure)}
                 helpText={qsDesign ? 'e.g. FREE DELIVERY. Shoppers see it in the progress bars.' : undefined}
                 onChange={(v) => setTier(index, { label: v })}
               />

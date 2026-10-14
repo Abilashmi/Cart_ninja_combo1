@@ -214,3 +214,37 @@ test('layout collection handles and message placeholders', () => {
   assert.equal(formatWeight(0.4, 'kg', true), '0.001 kg', 'still to add rounds up');
   assert.equal(formatWeight(1050, 'g'), '1050 g');
 });
+
+// ── Price per kg / per item (unit_price) ──
+import { offerLabel } from '../../app/utils/combo-weight.shared.js';
+
+test('price per kg: the box costs the rate × its exact weight (1.02 kg at ₹999/kg = ₹1018.98)', () => {
+  const pricing = { tiers: tiers([1000, 'unit_price', 999]), max_grams: null, unit: 'kg' };
+  // 1.02 kg of books worth ₹1,970 → box ₹1,018.98 → ₹951.02 off
+  const b = box(pricing, [book('a', 340, 3, 656.67)]);
+  assert.equal(b.grams, 1020);
+  assert.equal(b.subtotalMinor - b.discountMinor, 101898);
+  const big = box(pricing, [book('a', 500, 3, 800)]);
+  assert.equal(big.subtotalMinor - big.discountMinor, 149850, '1.5 kg = ₹1,498.50');
+  const cheap = box(pricing, [book('a', 500, 2, 400)]);
+  assert.equal(cheap.discountMinor, 0, 'items already cheaper than the per-kg price: never charged more');
+  assert.equal(box(pricing, [book('a', 300, 3, 900)]).discountMinor, 0, 'below the 1 kg tier: no price');
+});
+
+test('price per item on a quantity box; not allowed on a spend (value) box', () => {
+  const pricing = { measure: 'quantity', tiers: tiers([3, 'unit_price', 250]), max_grams: null, unit: 'kg' };
+  const b = box(pricing, [book('a', 0, 4, 400)]);
+  assert.equal(b.subtotalMinor - b.discountMinor, 100000, '4 items × ₹250');
+  const { errors } = normalizeWeightPricing({ measure: 'value', tiers: tiers([999, 'unit_price', 100]) });
+  assert.ok(errors.some((e) => e.field.endsWith('.type')));
+  const ok = normalizeWeightPricing({ unit: 'kg', tiers: tiers([1000, 'unit_price', 999]) });
+  assert.deepEqual(ok.errors, [], 'no max weight needed: the price grows with the box');
+});
+
+test('price per kg: own hash, labels "₹999/kg" and "₹250 each"', () => {
+  const perKg = normalizeWeightPricing({ unit: 'kg', max_grams: 2000, tiers: tiers([1000, 'unit_price', 999]) }).value;
+  const flat = normalizeWeightPricing({ unit: 'kg', max_grams: 2000, tiers: tiers([1000, 'fixed_price', 999]) }).value;
+  assert.notEqual(perKg.hash, flat.hash, 'switching flat ↔ per-kg changes the live price, so the hash changes');
+  assert.equal(offerLabel({ type: 'unit_price', value: 999 }, 'weight', '₹'), '₹999/kg');
+  assert.equal(offerLabel({ type: 'unit_price', value: 250 }, 'quantity', '₹'), '₹250 each');
+});

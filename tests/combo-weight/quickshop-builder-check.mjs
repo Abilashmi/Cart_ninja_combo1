@@ -320,6 +320,22 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.close();
 }
 
+// ── Weight Box: "Price per kg" tier (1.5 kg at ₹999/kg = ₹1,498.50) ──
+{
+  const WEIGHT = { measure: 'weight', unit: 'kg', max_grams: null, tiers: [{ id: 't1', min_grams: 1000, type: 'unit_price', value: 999, label: '' }], messages: { unlocked: 'You unlocked {{tier}}' } };
+  const page = await open({ quickShop: WEIGHT, layout: 'layout5' });
+  await tab(page, 'Advanced');
+  await section(page, 'Offer');
+  const typeSel = page.getByLabel('Shopper gets').first();
+  const opts = await typeSel.locator('option').allTextContents();
+  check('Weight Box offer types include "Price per kg"', opts.includes('Price per kg'), opts.join(', '));
+  check('…and it is the saved tier\'s type', (await typeSel.inputValue()) === 'unit_price');
+  check('value field says "Price per kg" with the 1.5 × example', (await sidebar(page)).includes('Price per kg') && (await sidebar(page)).includes('1.5 kg = 1.5 × this'));
+  check('no max weight needed (no error)', !(await sidebar(page)).includes('needs a max weight'));
+  check('preview names the tier "₹999/KG"', /999\/KG/.test(await page.textContent('.bxq')));
+  await page.close();
+}
+
 await browser.close();
 server.close();
 const failed = results.filter((r) => !r.ok);

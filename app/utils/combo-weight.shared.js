@@ -28,7 +28,9 @@ export function createComboWeightCore() {
   };
   var ZERO_DECIMAL = ['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'UGX', 'XAF', 'XOF', 'XPF', 'PYG', 'RWF', 'KMF', 'DJF', 'GNF', 'VUV', 'BIF'];
   var THREE_DECIMAL = ['BHD', 'KWD', 'OMR', 'JOD', 'TND'];
-  var TIER_TYPES = ['percentage', 'fixed_amount', 'fixed_price'];
+  // unit_price = a price per kg (weight boxes) or per item (quantity boxes):
+  // the box costs value × its exact weight / item count.
+  var TIER_TYPES = ['percentage', 'fixed_amount', 'fixed_price', 'unit_price'];
   // What a box is measured by. 'weight' (the default, and every box saved
   // before measures existed) = Shopify variant weight in grams; 'quantity' =
   // number of items; 'value' = the box's subtotal. A tier's threshold is
@@ -182,6 +184,7 @@ export function createComboWeightCore() {
     if (tier.label) return tier.label;
     if (tier.type === 'percentage') return tier.value + '% OFF';
     if (tier.type === 'fixed_amount') return formatMoney(tier.value, symbol) + ' OFF';
+    if (tier.type === 'unit_price') return formatMoney(tier.value, symbol) + (measure === 'quantity' ? ' each' : '/kg');
     if (measure === 'quantity') return 'Any ' + tier.min_grams + ' for ' + formatMoney(tier.value, symbol);
     return 'Box at ' + formatMoney(tier.value, symbol);
   }
@@ -315,7 +318,7 @@ export function createComboWeightCore() {
       if (!type) {
         errors.push({ field: field + '.type', message: 'Tier ' + (i + 1) + ': choose percentage off, amount off or box price.' });
         type = 'percentage';
-      } else if (isValue && type === 'fixed_price') {
+      } else if (isValue && (type === 'fixed_price' || type === 'unit_price')) {
         errors.push({ field: field + '.type', message: 'Tier ' + (i + 1) + ': a spend-based offer can be percentage off or amount off, not a box price.' });
       }
 
@@ -453,6 +456,10 @@ export function createComboWeightCore() {
         parts = allocateMinor(Math.min(toMinor(tier.value * rate, decimals), subtotal), subtotals);
       } else if (tier.type === 'fixed_price') {
         parts = allocateMinor(Math.max(0, subtotal - toMinor(tier.value * rate, decimals)), subtotals);
+      } else if (tier.type === 'unit_price') {
+        // value per kg × the exact weight (1.02 kg at 999/kg = 1018.98), or per item × items.
+        var units = measure === 'quantity' ? items : grams / 1000;
+        parts = allocateMinor(Math.max(0, subtotal - toMinor(tier.value * rate * units, decimals)), subtotals);
       }
     }
     var discountMinor = 0;

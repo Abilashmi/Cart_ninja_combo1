@@ -116,3 +116,12 @@ test('an oversized or malformed config never throws', () => {
   assert.deepEqual(run(input([line({ quantity: 5, grams: 300, combo: '13' })], { cfg: weird })), NONE);
   assert.deepEqual(run({}), NONE);
 });
+
+test('checkout: price per kg — 1.5 kg at ₹999/kg costs ₹1,498.50', () => {
+  const perKg = { ...template, max_grams: null, tiers: [{ min_grams: 1000, type: 'unit_price', value: 999, label: '' }] };
+  const cfg = { version: 1, currency: 'INR', templates: { 12: perKg } };
+  // 1.5 kg: 6 × 250 g at ₹400 = ₹2,400
+  const all = candidates(run(input([line({ quantity: 6, grams: 250, price: 400 })], { cfg })));
+  const off = all.reduce((sum, c) => sum + Math.round(Number(c.value.fixedAmount.amount) * 100), 0);
+  assert.equal(240000 - off, 149850);
+});
