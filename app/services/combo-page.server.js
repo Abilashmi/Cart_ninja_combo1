@@ -8,6 +8,7 @@ import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
 import { comboCollectionHandles, isWeightCombo, toGrams } from '../utils/combo-weight.shared.js';
 import { storefrontWeightPricing } from './combo-weight-shopify.server';
+import { attachVariantStock } from './combo-stock.server';
 
 // ── Guaranteed combo-page theme template ────────────────────────────────────
 // Shopify Pages render page.body through whatever section layout the
@@ -259,6 +260,8 @@ export async function loadComboPageDataForRow(shop, row) {
       productsByHandle[handle] = [];
     }
   }
+
+  await attachVariantStock(admin, productsByHandle);
 
   const collectionNameMap = {};
   collections.forEach((c) => { collectionNameMap[c.handle] = c.title; });

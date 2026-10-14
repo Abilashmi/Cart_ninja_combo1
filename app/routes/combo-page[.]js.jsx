@@ -254,6 +254,7 @@ const SCRIPT_BODY = String.raw`
     var variantPriceMap = {};
     var variantGramsMap = {};
     var variantAvailableMap = {};
+    var variantStockMap = {};
     var handle;
     for (handle in data.productsByHandle) {
       if (!Object.prototype.hasOwnProperty.call(data.productsByHandle, handle)) continue;
@@ -269,6 +270,8 @@ const SCRIPT_BODY = String.raw`
           // Shopify's availableForSale (combo-page.server.js): false = sold out
           // and not sold past zero, so it can never go into the box.
           variantAvailableMap[v.id] = v.available !== false;
+          // How many Shopify will sell (null = no limit); see combo-page.server.js attachVariantStock.
+          variantStockMap[v.id] = typeof v.stock === 'number' && isFinite(v.stock) ? v.stock : null;
         }
       }
     }
@@ -295,6 +298,7 @@ const SCRIPT_BODY = String.raw`
       productMap: productMap,
       variantPriceMap: variantPriceMap,
       variantAvailableMap: variantAvailableMap,
+      variantStockMap: variantStockMap,
       // Weight pricing: grams per variant (null = no weight, doesn't count),
       // the tiers etc. from the server, and which products count toward the box.
       variantGramsMap: variantGramsMap,
@@ -507,7 +511,22 @@ const SCRIPT_BODY = String.raw`
   }
 
   function isVariantAvailable(state, variantId) {
-    return state.variantAvailableMap[variantId] !== false;
+    return state.variantAvailableMap[variantId] !== false && state.variantStockMap[variantId] !== 0;
+  }
+
+  // How many of a variant Shopify will sell, or null for no limit.
+  function stockLeft(state, variantId) {
+    var n = state.variantStockMap[variantId];
+    return typeof n === 'number' ? n : null;
+  }
+
+  // "Only 2 left: Socks" when a shopper asks for more than the stock.
+  function overStock(root, state, variantId, qty, product) {
+    var left = stockLeft(state, variantId);
+    if (left === null || qty <= left) return false;
+    var p = product || state.productMap[(state.selectedMap[variantId] || {}).productId];
+    showToast(root, state, String(state.config.stock_limit_text || 'Only {{count}} left').replace('{{count}}', left) + (p && p.title ? ': ' + p.title : ''));
+    return true;
   }
 
   function soldOutText(state) {
@@ -523,6 +542,7 @@ const SCRIPT_BODY = String.raw`
       showToast(root, state, soldOutText(state) + (product && product.title ? ': ' + product.title : ''));
       return;
     }
+    if (overStock(root, state, variantId, qty, product)) return;
     if (state.weightMode) {
       if (blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, product.id, qty))) return;
       state.selectedMap[variantId] = { productId: product.id, qty: qty };
@@ -543,6 +563,7 @@ const SCRIPT_BODY = String.raw`
   function onQtyChange(root, state, variantId, qty) {
     if (!state.selectedMap[variantId]) return;
     if (qty <= 0) { delete state.selectedMap[variantId]; render(root); return; }
+    if (qty > (state.selectedMap[variantId].qty || 0) && overStock(root, state, variantId, qty)) return;
     if (state.weightMode) {
       var current = state.selectedMap[variantId];
       if (qty > (current.qty || 0) && blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, current.productId, qty))) return;
@@ -915,6 +936,8 @@ const SCRIPT_BODY = String.raw`
     var isAdded = !!selection;
     var qty = selection ? (selection.qty || 0) : 0;
     var soldOut = !isAdded && !isVariantAvailable(state, activeVariantId);
+    var stockCap = stockLeft(state, activeVariantId);
+    var atStock = stockCap !== null && qty >= stockCap;
     var displayPrice = activeVariant && activeVariant.price != null ? parseFloat(activeVariant.price) : parseFloat(product.price || 0);
 
     var otherAdded = [];
@@ -1102,9 +1125,9 @@ const SCRIPT_BODY = String.raw`
         cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
       }) + '">−</button>';
       html += '<span style="' + styleStr({ width: '35px', textAlign: 'center', fontWeight: '700', fontSize: '14px', border: '1px solid #ddd', borderLeft: 'none', borderRight: 'none', padding: '6px 0' }) + '">' + qty + '</span>';
-      html += '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '"' + (soldOut ? ' disabled' : '') + ' style="' + styleStr({
+      html += '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(product.id) + '"' + (soldOut || atStock ? ' disabled' : '') + ' style="' + styleStr({
         width: '30px', height: '30px', border: '1px solid #ddd', background: '#f9f9f9', borderRadius: '0 6px 6px 0',
-        cursor: soldOut ? 'not-allowed' : 'pointer', opacity: soldOut ? '0.4' : '1', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
+        cursor: soldOut || atStock ? 'not-allowed' : 'pointer', opacity: soldOut || atStock ? '0.4' : '1', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1',
       }) + '">+</button>';
       html += '</div>';
     }

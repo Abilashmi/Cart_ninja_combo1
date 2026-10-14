@@ -125,6 +125,48 @@ const btnOf = (page, n) => page.locator(`${cardSel(n)} [data-combo-action="card-
   await page.close();
 }
 
+// ── Stock limits: never more in the box than Shopify will sell ──
+{
+  const limited = {
+    snacks: [
+      product(4, 'Two Left Cookies', [{ ...variant(40, 'Default Title', true), stock: 2 }]),
+      product(5, 'Zero Stock Chips', [{ ...variant(50, 'Default Title', true), stock: 0 }]),
+      product(6, 'Unlimited Bar', [{ ...variant(60, 'Default Title', true), stock: null }]),
+    ],
+  };
+  const saved = productsByHandle.snacks;
+  productsByHandle.snacks = limited.snacks;
+
+  const { value } = normalizeWeightPricing({ unit: 'kg', max_grams: 9000, tiers: [{ min_grams: 1000, type: 'percentage', value: 10, label: '' }] });
+  const pricing = { enabled: true, reason: null, hash: value.hash, measure: 'weight', unit: value.unit, maxGrams: value.max_grams, tiers: value.tiers, messages: value.messages, qualifyingProductIds: [4, 5, 6].map(P) };
+  const qs = await openCombo({ layout: 'layout6', pricing_mode: 'weight', tab_count: 1, col_1: 'snacks' }, pricing);
+  await qs.page.waitForSelector('.bxq-card');
+  const plus4 = `${cardSel(4, '.bxq-card')} [data-combo-action="qty-inc"]`;
+  await qs.page.click(plus4);
+  await qs.page.click(plus4);
+  check('Quick Shop: + stops at the 2 in stock (disabled)', await qs.page.locator(plus4).last().isDisabled());
+  const qty = await qs.page.locator(`${cardSel(4, '.bxq-card')} .bxq-stepper span`).textContent();
+  check('…box holds 2', qty.trim() === '2', qty);
+  await qs.page.evaluate((sel) => { const b = [...document.querySelectorAll(sel)].pop(); b.disabled = false; b.click(); }, plus4);
+  await qs.page.waitForTimeout(150);
+  check('…forcing a 3rd shows "Only 2 left: Two Left Cookies" and keeps 2', await qs.page.evaluate(() => document.body.innerText.includes('Only 2 left: Two Left Cookies')) && (await qs.page.locator(`${cardSel(4, '.bxq-card')} .bxq-stepper span`).textContent()).trim() === '2');
+  check('Quick Shop: a tracked variant with 0 left is out of stock', await qs.page.locator(`${cardSel(5, '.bxq-card')} .bxq-soldout`).count() === 1);
+  const plus6 = `${cardSel(6, '.bxq-card')} [data-combo-action="qty-inc"]`;
+  for (let i = 0; i < 4; i++) await qs.page.click(plus6);
+  check('Quick Shop: no limit when Shopify sells past 0 or doesn\'t track', (await qs.page.locator(`${cardSel(6, '.bxq-card')} .bxq-stepper span`).textContent()).trim() === '4');
+  await qs.page.close();
+
+  const classic = await openCombo({ layout: 'layout4', max_products: 6, col_1: 'snacks', tab_count: 1, show_preview_bar: true });
+  await classic.page.waitForSelector('.brix-combo-card');
+  await btnOf(classic.page, 4).click();
+  const inc = `${cardSel(4)} [data-combo-action="qty-inc"]`;
+  await classic.page.click(inc);
+  check('classic layout: + disabled at the 2 in stock', await classic.page.locator(inc).isDisabled());
+  check('classic layout: 0 left = "Sold out" button', (await btnOf(classic.page, 5).textContent()).trim() === 'Sold out');
+  await classic.page.close();
+  productsByHandle.snacks = saved;
+}
+
 await browser.close();
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} passed`);

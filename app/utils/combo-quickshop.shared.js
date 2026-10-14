@@ -569,7 +569,9 @@ export function createQuickShopKit(core) {
         variants: options.length > 1 && !(options.length === 1 && options[0].title === 'Default Title') ? options : [],
         weightText: weightText,
         price: money(pr, symbol), compare: cp ? money(cp, symbol) : '', off: cp ? Math.round(((cp - pr) / cp) * 100) : 0,
-        available: !v || v.available !== false,
+        available: !v || (v.available !== false && v.stock !== 0),
+        // How many Shopify will sell (null = no limit): + stops there.
+        stock: v && typeof v.stock === 'number' ? v.stock : null,
         variantId: v ? v.id : '',
         qty: v ? (qtyByVariant[v.id] || 0) : 0,
         counts: input.qualifies ? !!input.qualifies(p.id) : true,
@@ -781,9 +783,14 @@ export function createQuickShopKit(core) {
     if (card.qty > 0) {
       return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
         + '<span aria-live="polite">' + card.qty + '</span>'
-        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     }
     return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
+  }
+
+  // ' disabled' once the box holds all Shopify will sell of this variant.
+  function atStock(card) {
+    return card.stock !== null && card.stock !== undefined && card.qty >= card.stock ? ' disabled' : '';
   }
 
   function renderCard(model, card) {
@@ -800,7 +807,7 @@ export function createQuickShopKit(core) {
     } else if (card.qty > 0) {
       html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
         + '<span aria-live="polite">' + card.qty + '</span>'
-        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     } else {
       html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + '</button>';
     }
@@ -1142,6 +1149,7 @@ export const QUICK_SHOP_CSS = `
 .bxq-stepper button{border:0;background:transparent;color:#fff !important;width:36px;height:40px;font-size:20px;font-weight:700;cursor:pointer;}
 .bxq-stepper span{min-width:22px;text-align:center;font-weight:800;}
 .bxq--m .bxq-stepper button{width:30px;height:34px;}
+.bxq-card button[data-combo-action="qty-inc"]:disabled{opacity:.4;cursor:not-allowed;}
 .bxq-soldout{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.8);color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:5px 8px;}
 .bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;}
 .bxq-eyebrow{font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;opacity:.6;}
