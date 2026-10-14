@@ -49,14 +49,16 @@ export function parseJsonReply(text, fallback = { unclear: true }) {
   }
 }
 
-async function requestLlm(messages, { maxTokens = 150, temperature = 0 } = {}) {
-  const { apiKey, endpoint, model } = resolveProvider();
+// json: ask for a JSON object only (OpenAI's response_format; the NVIDIA
+// path relies on the prompt alone).
+async function requestLlm(messages, { maxTokens = 150, temperature = 0, json = false } = {}) {
+  const { apiKey, endpoint, model, mode } = resolveProvider();
   let res;
   try {
     res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature, ...(json && mode === 'native' ? { response_format: { type: 'json_object' } } : {}) }),
       // Without this, a stalled provider hangs the calling route
       // indefinitely instead of falling back — every AI feature in the app
       // routes through this one function.

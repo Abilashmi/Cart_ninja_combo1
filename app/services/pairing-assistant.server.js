@@ -10,7 +10,7 @@
 // manual rules and the merchant's Save publishes them as before.
 import { getDb } from './db.server';
 import { ensureAnalyticsTables } from './analytics-schema.server';
-import { callLlm, parseJsonReply } from './ai-llm.server';
+import { callLlmWithMeta, parseJsonReply } from './ai-llm.server';
 import { withTimeout } from '../utils/with-timeout';
 import {
   computeOrderPairs, buildRulesFromPlan, parsePromptHeuristically, numericId, productGid, instructionsHash,
@@ -232,16 +232,28 @@ export async function loadPairingCatalog(admin) {
 
 const PLAN_SHAPE = '{"rules":[{"trigger":{"allProducts":false,"products":[],"collections":[],"productTypes":[],"tags":[]},"offer":{"products":[],"collections":[],"productTypes":[],"tags":[],"fromOrderHistory":false,"count":null}}],"question":null}';
 
+// A title cut at a word, never mid-word (the model copies what it sees).
+function shortTitle(title, max = 110) {
+  const t = String(title || '');
+  return t.length <= max ? t : t.slice(0, max).replace(/\s+\S*$/, '');
+}
+
 export function buildPlanMessages(prompt, { catalog, collections }) {
   const productLines = catalog.slice(0, 300).map((p) => {
     const extra = [p.productType, ...(p.tags || []).slice(0, 4)].filter(Boolean).join(', ');
-    return `- ${String(p.title).slice(0, 80)}${extra ? ` (${extra})` : ''}`;
+    return `- ${shortTitle(p.title)}${extra ? ` (${extra})` : ''}`;
   });
-  const types = Array.from(new Set(catalog.map((p) => p.productType).filter(Boolean))).slice(0, 60);
+  const typeCounts = new Map();
+  catalog.forEach((p) => { if (p.productType) typeCounts.set(p.productType, (typeCounts.get(p.productType) || 0) + 1); });
+  const types = Array.from(typeCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 60).map(([t, n]) => `${t} (${n})`);
   const system = [
     'You turn a Shopify merchant\'s instructions about which products should be recommended together into JSON.',
     `Reply with ONLY this JSON shape, nothing else: ${PLAN_SHAPE}`,
-    'One entry in "rules" per pairing the merchant describes.',
+    'One entry in "rules" per pairing the merchant describes — NOT one per product: the server expands groups into per-product rules itself.',
+    'Prefer groups: product types (copy them exactly from the list, without the count), collections, tags, or a group word ("tops", "jeans"). Never list a group\'s products one by one.',
+    'Keep it short: at most 12 rules and at most 10 names in any list.',
+    'Ignore anything about layout, display, design or wording — only pairings matter.',
+    'The merchant may write steps ("first identify the category, if it is a top recommend bottoms"): turn each "if X recommend Y" into a rule X → Y.',
     '"trigger" = the product the shopper is looking at or has in the cart. "offer" = what to recommend with it.',
     'Copy product titles exactly from the catalog when the merchant clearly means one product.',
     'When they mean a group (e.g. "all joggers", "socks"), put that word in "products" as written (every product whose title contains it is used), or use a matching collection / product type / tag.',
@@ -258,7 +270,7 @@ export function buildPlanMessages(prompt, { catalog, collections }) {
     ...productLines,
     '',
     `Collections: ${collections.map((c) => c.title).slice(0, 80).join(' | ') || 'none'}`,
-    `Product types: ${types.join(' | ') || 'none'}`,
+    `Product types (with how many products): ${types.join(' | ') || 'none'}`,
     '',
     `Merchant: ${prompt}`,
   ].join('\n');
@@ -281,6 +293,40 @@ function cleanPlan(plan) {
   };
 }
 
+// The model's reply as a plan: plain JSON, JSON inside text, or — when the
+// reply was cut off — every complete rule before the cut.
+export function readPlanReply(text) {
+  const plain = parseJsonReply(text, null);
+  if (plain && typeof plain === 'object') return plain;
+  const t = String(text || '');
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(t.slice(start, end + 1)); } catch { /* cut off, below */ }
+  }
+  const at = t.indexOf('"rules"');
+  const open = at === -1 ? -1 : t.indexOf('[', at);
+  if (open === -1) return null;
+  const rules = [];
+  let depth = 0;
+  let from = -1;
+  let inString = false;
+  for (let i = open + 1; i < t.length; i++) {
+    const c = t[i];
+    if (inString) { if (c === '\\') i++; else if (c === '"') inString = false; continue; }
+    if (c === '"') inString = true;
+    else if (c === '{') { if (depth === 0) from = i; depth++; }
+    else if (c === '}') {
+      depth--;
+      if (depth === 0 && from !== -1) {
+        try { rules.push(JSON.parse(t.slice(from, i + 1))); } catch { /* skip */ }
+        from = -1;
+      }
+    } else if (c === ']' && depth === 0) break;
+  }
+  return rules.length ? { rules } : null;
+}
+
 function planWantsHistory(plan) {
   return plan.rules.some((r) => r.offer?.fromOrderHistory);
 }
@@ -298,10 +344,16 @@ export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 
   let usedAi = false;
   if (process.env.OPENAI_API_KEY) {
     if (consumeCredit) await consumeCredit();
-    const reply = await callLlm(buildPlanMessages(text, { catalog, collections }), { maxTokens: 1200, temperature: 0 });
-    if (reply) {
-      usedAi = true;
-      plan = cleanPlan(parseJsonReply(reply, { rules: [] }));
+    const reply = await callLlmWithMeta(buildPlanMessages(text, { catalog, collections }), { maxTokens: 2000, temperature: 0, json: true });
+    if (reply.content) {
+      const read = readPlanReply(reply.content);
+      if (!read) console.warn('[pairing-assistant] model reply not usable', reply.finishReason, String(reply.content).slice(0, 200));
+      if (read) {
+        usedAi = true;
+        plan = cleanPlan(read);
+      }
+    } else if (reply.errorStatus || reply.errorMessage) {
+      console.warn('[pairing-assistant] model call failed', reply.errorStatus, reply.errorMessage);
     }
   }
   if (!plan || (!plan.rules.length && !plan.question)) {
@@ -317,6 +369,12 @@ export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 
 
   const pairs = planWantsHistory(plan) ? await loadAllPairs(admin, shop, { days: 365 }) : [];
   const { rules, warnings } = buildRulesFromPlan(plan, { catalog, collections, pairs, maxOffers });
+  if (!rules.length && !usedAi) {
+    return {
+      rules: [], warnings: [], usedAi, catalogTruncated: truncated,
+      question: 'I couldn\'t turn that into pairings. Write one per line, e.g. "Tops with Jeans, Shorts, Skirts" or "If it\'s a top, recommend bottoms".',
+    };
+  }
   if (truncated) warnings.push(`Only your first ${CATALOG_CAP} products (A–Z) were searched.`);
   return { rules, warnings, question: rules.length ? null : plan.question, usedAi, catalogTruncated: truncated };
 }

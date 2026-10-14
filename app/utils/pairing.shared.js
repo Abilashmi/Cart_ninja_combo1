@@ -123,6 +123,12 @@ export function matchProducts(name, catalog) {
   if (!n) return { status: 'not_found', products: [] };
   const exact = (catalog || []).filter((p) => norm(p.title) === n);
   if (exact.length) return { status: 'found', products: [exact[0]] };
+  // A long title copied only in part ("Girls Denim Casual Shirt Full Sleeves, Dou").
+  if (n.length >= 20) {
+    const cut = n.replace(/\s+\S*$/, '');
+    const starts = (catalog || []).filter((p) => norm(p.title).startsWith(cut));
+    if (starts.length === 1) return { status: 'found', products: starts };
+  }
 
   const want = tokens(name);
   const byWords = (catalog || []).filter((p) => {
@@ -214,6 +220,19 @@ export function matchGroup(name, catalog, collections = []) {
 function resolveSide(side, catalog, collections, warnings, label) {
   const found = [];
   for (const name of side?.products || []) {
+    const n = norm(name);
+    // Exactly a product title first; then exactly one of the store's own
+    // product types / collections / tags ("Girls Jeans" = that type, not
+    // every title with "girls" and "jeans" in it, like co-ord sets).
+    const exactTitle = (catalog || []).find((p) => norm(p.title) === n);
+    if (exactTitle) { found.push(exactTitle); continue; }
+    const byType = (catalog || []).filter((p) => p.productType && norm(p.productType) === n);
+    if (byType.length) { found.push(...byType); continue; }
+    const col = (collections || []).find((c) => norm(c.title) === n);
+    const inCol = col ? (catalog || []).filter((p) => (p.collectionIds || []).includes(col.id)) : [];
+    if (inCol.length) { found.push(...inCol); continue; }
+    const byTag = (catalog || []).filter((p) => (p.tags || []).some((t) => norm(t) === n));
+    if (byTag.length) { found.push(...byTag); continue; }
     const m = matchProducts(name, catalog);
     if (m.status !== 'not_found') { found.push(...m.products); continue; }
     const group = matchGroup(name, catalog, collections);
@@ -236,6 +255,37 @@ function resolveSide(side, catalog, collections, warnings, label) {
   tags.missing.forEach((t) => warnings.push(`No products tagged "${t}" (${label}).`));
   found.push(...tags.products);
   return uniqueById(found);
+}
+
+const GENDER_WORDS = { girl: 'f', woman: 'f', women: 'f', ladie: 'f', lady: 'f', her: 'f', boy: 'm', man: 'm', men: 'm', his: 'm' };
+const RANK_STOP = new Set(['and', 'with', 'for', 'the', 'of', 'in', 'to', 'kid', 'kids', 'size', 'set', 'pack']);
+
+function genderOf(p) {
+  for (const t of tokens(`${p.title} ${p.productType || ''}`)) if (GENDER_WORDS[t]) return GENDER_WORDS[t];
+  return null;
+}
+
+/**
+ * The offers that suit one product best: bought together most, then the
+ * same gender (a girls' top never gets boys' jeans first), then words in
+ * common (colour, fabric), then a similar price; catalog order breaks ties.
+ */
+export function rankOffersFor(trigger, offers, pairs = []) {
+  const together = new Map(partnersOf(pairs, trigger.id, 500).map((x) => [x.id, x.together]));
+  const g = genderOf(trigger);
+  const words = new Set(tokens(trigger.title).filter((w) => w.length > 2 && !RANK_STOP.has(w)));
+  const price = Number(trigger.price) || 0;
+  return (offers || [])
+    .map((p, i) => {
+      const og = genderOf(p);
+      const shared = tokens(p.title).filter((w) => words.has(w)).length;
+      const op = Number(p.price) || 0;
+      const priceGap = price > 0 && op > 0 ? Math.abs(Math.log(op / price)) : 0;
+      const score = (together.get(numericId(p.id)) || 0) * 1000 + (g && og ? (g === og ? 50 : -500) : 0) + shared * 5 - priceGap;
+      return { p, i, score };
+    })
+    .sort((a, b) => b.score - a.score || a.i - b.i)
+    .map((x) => x.p);
 }
 
 function sideIsEmpty(side) {
@@ -297,16 +347,18 @@ export function buildRulesFromPlan(plan, { catalog = [], collections = [], pairs
       warnings.push(`Skipped "${ruleName(triggers, allProducts)}": nothing to recommend was found.`);
       continue;
     }
+    if (offers.length > count && triggers.length > 1) {
+      // A group to a bigger group ("tops" → "bottoms"): each product gets its
+      // own best picks instead of every top showing the same few bottoms.
+      for (const t of triggers) {
+        const picks = rankOffersFor(t, offers.filter((p) => numericId(p.id) !== numericId(t.id)), pairs).slice(0, count);
+        if (picks.length) rules.push({ name: t.title, allProducts: false, triggerProducts: [toRuleProduct(t)], offerProducts: picks.map(toRuleProduct), basis: 'prompt' });
+      }
+      continue;
+    }
     if (offers.length > count) {
-      // Several matches ("socks" → 6 socks): keep the ones bought most often
-      // with these triggers, then catalog order.
-      const score = new Map();
-      for (const t of triggers) for (const x of partnersOf(pairs, t.id, 50)) score.set(x.id, (score.get(x.id) || 0) + x.together);
-      offers = offers
-        .map((p, i) => ({ p, i, s: score.get(numericId(p.id)) || 0 }))
-        .sort((x, y) => y.s - x.s || x.i - y.i)
-        .map((x) => x.p);
-      warnings.push(`"${ruleName(triggers, allProducts)}": ${offers.length} products matched what to recommend; kept the top ${count}.`);
+      // Several matches ("socks" → 6 socks): the ones that suit this product best.
+      offers = triggers.length === 1 ? rankOffersFor(triggers[0], offers, pairs) : offers;
       offers = offers.slice(0, count);
     }
     rules.push({
@@ -329,8 +381,23 @@ export function buildRulesFromPlan(plan, { catalog = [], collections = [], pairs
 export function parsePromptHeuristically(text) {
   const rules = [];
   const parts = String(text || '').split(/\n|;/).map((s) => s.trim()).filter(Boolean);
-  const names = (s) => s.split(/,|\band\b|&|\+/i).map((x) => x.trim()).filter(Boolean);
-  for (const part of parts) {
+  const names = (s) => s.split(/,|\band\b|&|\+|\bor\b|\//i).map((x) => x.trim().replace(/^(the|a|an|some|any)\s+/i, '')).filter(Boolean);
+  // Product-ish phrases are short; anything longer is an instruction sentence.
+  const short = (x) => x.split(/\s+/).filter(Boolean).length <= 6;
+  for (const raw of parts) {
+    const part = raw.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim();
+    // Steps about how to think or how it looks, not pairings.
+    if (/^(?:first|then|next|finally|identify|display|make sure|ensure|always|never|note|use|keep|show (?:them|it|the recommendations|recommendations)|layout|design|sort)\b/i.test(part)) continue;
+    // "If it's a top, recommend bottoms like jeans and shorts"
+    const cond = part.replace(/[.!]+$/, '').match(/^(?:if|when|for)\s+(?:(?:it|the (?:main |viewed )?product|the item|they)\s+(?:is|are|'s)\s+)?(?:it's\s+)?(?:a|an)?\s*(.+?),?\s+(?:then\s+)?(?:recommend|show|suggest|offer|add|pair (?:it )?with|match (?:it )?with)\s+(?:some\s+|matching\s+)?(.+)$/i);
+    if (cond) {
+      const left = cond[1].replace(/\s*\(.*\)\s*/g, ' ').trim();
+      const right = cond[2].replace(/\b(?:like|such as|e\.g\.?|including)\b/gi, ',').replace(/[()]/g, ',');
+      if (short(left)) {
+        rules.push({ trigger: { products: names(left) }, offer: { products: names(right).filter(short) } });
+        continue;
+      }
+    }
     // "match the tops and bottoms", "pair A & B", "A and B together": both ways.
     const both = part.replace(/[.!]+$/, '').match(/^(?:please\s+)?(?:match|pair|combine|link|club|bundle)\s+(?:up\s+)?(?:the\s+)?(.+?)\s+(?:and|&|\+)\s+(?:the\s+)?(.+?)(?:\s+together)?$/i)
       || part.replace(/[.!]+$/, '').match(/^(?:the\s+)?(.+?)\s+(?:and|&|\+)\s+(?:the\s+)?(.+?)\s+(?:together|as a set|as a combo)$/i);
@@ -346,6 +413,7 @@ export function parsePromptHeuristically(text) {
     if (!m) continue;
     const left = m[1].trim();
     const right = m[2].trim().replace(/[.!]+$/, '');
+    if (!short(left) || !right.split(/,|\band\b/).every(short)) continue;
     const all = /^(all|every|any)\s*(products?|items?)?$|^everything$/i.test(left);
     const history = /(usually|often|frequently|customers|people)\s.*\b(buy|bought|order)|order history|past orders|bought together/i.test(right);
     rules.push({
