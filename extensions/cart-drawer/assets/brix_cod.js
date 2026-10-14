@@ -1747,8 +1747,25 @@
     else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
     else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
     // total: what the cart costs after its discounts (shown in price tags).
+    // codTotal: the same without the prepaid discount, which COD never gets.
     var total = isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : subtotal;
-    return reason ? { reason: reason, subtotal: subtotal, total: total } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal, total: total };
+    var codTotal = Math.round((total + prepaidInCart(cart)) * 100) / 100;
+    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal, total: total, codTotal: codTotal };
+  }
+
+  // The BRIX prepaid discount (product page payment options) is a Shopify
+  // order discount, so the cart's total already has it taken off, under the
+  // merchant's title (the Function's message). COD orders never get it
+  // (cod.server.js), so the drawer's COD price adds it back. Without a title
+  // from an older cod_storefront.php: the default title or the same percent.
+  function prepaidInCart(cart) {
+    var pre = paymentValue && paymentValue.prepaid;
+    if (!pre || !cart) return 0;
+    var title = pre.title || 'Prepaid discount';
+    return (cart.cart_level_discount_applications || []).reduce(function (sum, d) {
+      var mine = d.title === title || (!pre.title && d.value_type === 'percentage' && Number(d.value) === Number(pre.percent));
+      return mine ? sum + (Number(d.total_allocated_amount) || 0) : sum;
+    }, 0) / 100;
   }
 
   // "Replace Checkout" hides the drawer's Checkout with a stylesheet rule, so
@@ -1785,7 +1802,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
-    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, cartPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
+    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, codPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -1938,17 +1955,30 @@
 
   // Pay online for exactly these items (product page): Shiprocket with just
   // them, else a Shopify checkout with just them.
-  function payOnlineItems(items) {
+  // opts.prepaid: the product page's prepaid saving is on offer. Shopify
+  // checkout gives it by itself (the BRIX prepaid discount Function), but
+  // Shiprocket can't run Functions, so it gets a one-time Shopify code for it
+  // (app/services/prepaid-code.server.js). If the code can't be made, Shopify
+  // checkout, where the promised saving still applies.
+  var payingOnline = false;
+  function payOnlineItems(items, opts) {
     var url = ROOT + 'cart/' + items.map(function (it) { return it.variantId + ':' + it.quantity; }).join(',');
+    var list = items.map(function (it) { return { variantId: Number(it.variantId), quantity: Number(it.quantity) || 1 }; });
+    if (payingOnline) return;
+    payingOnline = true;
+    setTimeout(function () { payingOnline = false; }, 10000);
     whenCheckoutKnown(function () {
-      if (shiprocketOn()) {
+      if (!shiprocketOn()) { window.location.href = url; return; }
+      var code = opts && opts.prepaid ? api('prepaid-code', { items: list }) : Promise.resolve({ success: true, code: null });
+      code.then(function (json) {
+        if (!json || !json.success) { window.location.href = url; return; }
         window.BrixCheckout.checkoutItems({
-          items: items.map(function (it) { return { variantId: Number(it.variantId), quantity: Number(it.quantity) || 1 }; }),
-          fallbackUrl: url,
+          items: list,
+          coupon: json.code || null,
+          fallbackUrl: url, // Shopify checkout gives the saving through the Function
+          onOpen: function () { payingOnline = false; },
         });
-        return;
-      }
-      window.location.href = url;
+      });
     });
   }
 
@@ -1960,10 +1990,40 @@
   // scripted click on a hidden button).
   function themeCheckout(btn) {
     whenCheckoutKnown(function () {
-      if (shiprocketOn()) { window.BrixCheckout.checkoutCart({ fallbackUrl: ROOT + 'checkout' }); return; }
+      if (shiprocketOn()) {
+        prepaidCartCode().then(function (r) {
+          if (r.failed) { window.location.href = ROOT + 'checkout'; return; }
+          window.BrixCheckout.checkoutCart({ coupon: r.code, fallbackUrl: ROOT + 'checkout' });
+        });
+        return;
+      }
       if (btn && btn.isConnected && !btn.disabled) { btn.click(); return; }
       window.location.href = ROOT + 'checkout';
     });
+  }
+
+  // The whole cart to Shiprocket (cart drawers): Shopify already took the
+  // prepaid saving off in the cart (prepaidInCart), but Shiprocket can't run
+  // the Function, so it gets a one-time Shopify code for the same percent
+  // (api.cod.prepaid-code.jsx), on the paid lines like the Function (free
+  // reward gifts left out). Resolves { code } (null = no prepaid saving in
+  // this cart) or { failed: true }: then Shopify checkout, where the saving
+  // the drawer showed still applies.
+  function prepaidCartCode() {
+    return loadConfig().then(function () {
+      if (!paymentValue || !paymentValue.prepaid) return { code: null };
+      return fetchCart().then(function (cart) {
+        if (!(prepaidInCart(cart) > 0)) return { code: null };
+        var items = (cart.items || []).filter(function (it) {
+          var p = it.properties || {};
+          return p._brixReward !== 'true' && p._brixReward !== true;
+        }).map(function (it) { return { variantId: it.variant_id, quantity: it.quantity }; });
+        if (!items.length) return { code: null };
+        return api('prepaid-code', { items: items }).then(function (json) {
+          return json && json.success ? { code: json.code || null } : { failed: true };
+        });
+      });
+    }).catch(function () { return { failed: true }; });
   }
 
   // The cart's price for price tags: after its discounts when known.
@@ -1972,14 +2032,20 @@
     return state.total != null ? state.total : state.subtotal != null ? state.subtotal : null;
   }
 
+  // The same for Cash on Delivery: without the prepaid discount.
+  function codPrice(state) {
+    return state && state.codTotal != null ? state.codTotal : cartPrice(state);
+  }
+
   // The merchant's text on the theme drawer's own Checkout button (COD →
   // Customize → Cart drawer), with {price} = the cart total.
   function checkoutLabel(cfg, state) {
     var text = cfg && cfg.drawerCheckoutText;
     if (!text) return '';
     var price = state ? cartPrice(state) : null;
+    var cod = state ? codPrice(state) : null;
     var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
-    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
     return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
   }
 
@@ -2384,7 +2450,8 @@
   /* ---------- product page payment options (Pay Online / Cash on Delivery) ---------- */
 
   // The shopper picks how to pay before buying: Pay Online (Shopify checkout,
-  // where the BRIX prepaid discount Function gives the merchant's X% off) or
+  // where the BRIX prepaid discount Function gives the merchant's X% off;
+  // Shiprocket with a one-time code for it on Shiprocket shops) or
   // Cash on Delivery (the BRIX COD popup above, never discounted). Settings:
   // productPayment in the COD settings (app/utils/product-payment.shared.js),
   // served by cod_storefront.php, which only sends a prepaid offer the server
@@ -2866,14 +2933,15 @@
         if (!/^\d+$/.test(sel.variantId) || (cod && cod.disabled) || (online && online.disabled)) return;
         if (online) {
           if (v && v.pr.qualifies) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
-          // Buy now: a checkout with just this item, where Shopify applies the prepaid discount.
-          window.location.href = ROOT + 'cart/' + sel.variantId + ':' + sel.quantity;
+          // Buy now: a checkout with just this item, where Shopify applies the
+          // prepaid discount (Shiprocket shops: Shiprocket with a code for it).
+          payOnlineItems([sel], { prepaid: Boolean(v && v.pr.qualifies) });
           return;
         }
         open({
           surface: 'product',
           items: [sel],
-          onPayOnline: function () { payOnlineItems([sel]); },
+          onPayOnline: function () { payOnlineItems([sel], { prepaid: Boolean(st.last && st.last.pr.qualifies) }); },
         });
       });
     }
@@ -2919,11 +2987,23 @@
         place();
         refresh(true);
 
-        // A tap on Shopify's Buy it now while Pay Online shows the saving.
+        // A tap on Shopify's Buy it now while Pay Online is chosen. On shops
+        // that check out through Shiprocket, its text button (not Shop Pay /
+        // PayPal) goes to Shiprocket with the prepaid code instead of Shopify
+        // checkout; only when that's known at the tap, else Shopify as before.
         document.addEventListener('click', function (e) {
           var v = st.last;
-          if (!v || v.method !== 'online' || !v.pr.qualifies || !st.buyNow) return;
-          if (e.target.closest && e.target.closest(BUY_NOW) === st.buyNow) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
+          if (!v || v.method !== 'online' || !st.buyNow) return;
+          var path = e.composedPath ? e.composedPath() : [];
+          if (!(path.indexOf(st.buyNow) >= 0 || (e.target.closest && e.target.closest(BUY_NOW) === st.buyNow))) return;
+          if (v.pr.qualifies) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
+          var text = customBuyNow(st.cfg) ? st.buyNow : nativeButton(st.buyNow);
+          if (!shiprocketOn() || !text || path.indexOf(text) < 0 || v.soldOut) return;
+          var sel = selection();
+          if (!/^\d+$/.test(sel.variantId)) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          payOnlineItems([sel], { prepaid: v.pr.qualifies });
         }, true);
 
         // Variant and quantity changes: themes fire change/input, redraw the
@@ -2994,6 +3074,7 @@
     comboButton: comboButton,
     mountDrawerButton: mountDrawerButton,
     paymentSnapshot: Pay.snapshot,
+    prepaidCartCode: prepaidCartCode,
   };
 
   function init() {

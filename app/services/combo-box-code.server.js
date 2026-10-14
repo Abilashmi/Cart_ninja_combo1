@@ -27,9 +27,9 @@ export const BOX_CHECKOUT_VALUES = ['shopify', 'shiprocket', 'shiprocket_own'];
 // No 0/O/1/I so a shopper reading it aloud can't mix them up.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-export function newBoxCode(random = crypto.randomBytes) {
+export function newBoxCode(random = crypto.randomBytes, prefix = 'BX') {
   const bytes = random(10);
-  let out = 'BX';
+  let out = prefix;
   for (let i = 0; i < 10; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
   return out;
 }
@@ -111,21 +111,27 @@ export async function createBoxCode(admin, { templateId, items, comboWeightLive,
 // them now and then (at most once an hour per shop, never awaited).
 const lastCleanup = new Map();
 
-export async function cleanupExpiredBoxCodes(admin, shop, now = Date.now()) {
-  if (now - (lastCleanup.get(shop) || 0) < 60 * 60 * 1000) return { skipped: true };
-  lastCleanup.set(shop, now);
+export function cleanupExpiredBoxCodes(admin, shop, now = Date.now()) {
+  return cleanupExpiredCodes(admin, shop, BOX_CODE_TITLE_PREFIX, now);
+}
+
+/** Same clean-up for any of BRIX's one-time codes, by title prefix (also prepaid-code.server.js). */
+export async function cleanupExpiredCodes(admin, shop, titlePrefix, now = Date.now()) {
+  const key = `${shop} ${titlePrefix}`;
+  if (now - (lastCleanup.get(key) || 0) < 60 * 60 * 1000) return { skipped: true };
+  lastCleanup.set(key, now);
   try {
     const data = await gql(admin, `#graphql
       query BrixOldBoxCodes($query: String!) {
         codeDiscountNodes(first: 100, query: $query) {
           nodes { id codeDiscount { __typename ... on DiscountCodeBasic { title status } } }
         }
-      }`, { query: `status:expired title:${BOX_CODE_TITLE_PREFIX}*` });
+      }`, { query: `status:expired title:${titlePrefix}*` });
     // Re-checked here: only our own expired codes, whatever the search matched.
     const ids = (data?.codeDiscountNodes?.nodes || [])
       .filter((n) => n.codeDiscount?.__typename === 'DiscountCodeBasic'
         && n.codeDiscount.status === 'EXPIRED'
-        && String(n.codeDiscount.title || '').startsWith(`${BOX_CODE_TITLE_PREFIX} `))
+        && String(n.codeDiscount.title || '').startsWith(`${titlePrefix} `))
       .map((n) => n.id);
     if (!ids.length) return { deleted: 0 };
     await gql(admin, `#graphql

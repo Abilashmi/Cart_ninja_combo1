@@ -2324,12 +2324,23 @@
   // Shiprocket switch navigate to `href` exactly as they always have. Shops
   // with it hand off to Shiprocket's checkout via brix_checkout.js, which
   // itself falls back to `href` if Shiprocket isn't on the page or fails.
+  // Shiprocket gets the shopper's own drawer coupon, else the BRIX prepaid
+  // saving Shopify showed in the cart as a one-time code (brix_cod.js
+  // prepaidCartCode, Shiprocket can't run the Function); if that code can't
+  // be made, Shopify checkout, where the saving still applies.
   function ccGoToCheckout(href) {
     if (CONFIG && CONFIG.shiprocketEnabled && window.BrixCheckout) {
-      window.BrixCheckout.checkoutCart({
-        coupon: appliedCouponCodes[0] || null,
-        fallbackUrl: href,
-        onOpen: closeDrawer,
+      const own = appliedCouponCodes[0] || null;
+      const prepaid = !own && window.BrixCod && window.BrixCod.prepaidCartCode
+        ? window.BrixCod.prepaidCartCode()
+        : Promise.resolve({ code: null });
+      prepaid.then((r) => {
+        if (r && r.failed) { window.location.href = href; return; }
+        window.BrixCheckout.checkoutCart({
+          coupon: own || (r && r.code) || null,
+          fallbackUrl: href,
+          onOpen: closeDrawer,
+        });
       });
       return;
     }
@@ -2623,9 +2634,14 @@
   }
 
   // Subtotal / discounts / total: labels left, amounts right (brix_cart_ui.css .bxcd-summary).
-  function renderSummaryHtml(subtotal, totalDiscount, finalTotal) {
+  // cartDiscounts: Shopify's own order discounts already in the cart (e.g. the
+  // BRIX prepaid discount), one named row each.
+  function renderSummaryHtml(subtotal, totalDiscount, finalTotal, cartDiscounts) {
     return '<div class="bxcd-summary">' +
       '<span class="bxcd-summary__label">Subtotal</span><span class="bxcd-summary__value">' + formatMoney(subtotal) + '</span>' +
+      (cartDiscounts || []).map(function (d) {
+        return '<span class="bxcd-summary__label bxcd-summary__label--saving">' + escapeHtml(d.title) + '</span><span class="bxcd-summary__value bxcd-summary__value--saving">-' + formatMoney(d.amount) + '</span>';
+      }).join('') +
       (totalDiscount > 0
         ? '<span class="bxcd-summary__label bxcd-summary__label--saving">Discounts</span><span class="bxcd-summary__value bxcd-summary__value--saving">-' + formatMoney(totalDiscount) + '</span>'
         : '') +
@@ -3031,7 +3047,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
     <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
     <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
-      <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.items.length} ITEMS</span>
+      <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.item_count} ${cart.item_count === 1 ? 'ITEM' : 'ITEMS'}</span>
     </div>
   </div>
 `;
@@ -3073,7 +3089,17 @@
     // Pricing summary + checkout exist only when the cart has items. An empty
     // cart shows the empty state above and no checkout at all.
     if (hasCartItems) {
-      const subtotal = cart.total_price / 100; // what the cart really totals (gifts included)
+      // Subtotal = the lines as shown above (after their own discounts); order
+      // discounts Shopify already applied in the cart get their own rows, and
+      // the cart's total (gifts included) is after them.
+      const cartTotalNow = cart.total_price / 100;
+      const cartDiscounts = (cart.cart_level_discount_applications || [])
+        .filter((d) => Number(d.total_allocated_amount) > 0)
+        .map((d) => ({ title: d.title || 'Discount', amount: Number(d.total_allocated_amount) / 100 }));
+      const cartLevelOff = cartDiscounts.reduce((sum, d) => sum + d.amount, 0);
+      const itemsSubtotal = Number(cart.items_subtotal_price);
+      const shownSubtotal = Number.isFinite(itemsSubtotal) && cartLevelOff > 0 ? itemsSubtotal / 100 : cartTotalNow;
+      const subtotal = cartTotalNow; // base for the drawer's own coupon estimate below
       let totalDiscount = 0;
 
       // Calculate coupon discounts — check both API data (COUPONS) and saved details (allCouponDetails)
@@ -3107,7 +3133,7 @@
 
       drawerHtml += `
 <div id="cc-drawer-footer" style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
-  ${renderSummaryHtml(subtotal, totalDiscount, finalTotal)}
+  ${renderSummaryHtml(shownSubtotal, totalDiscount, finalTotal, cartLevelOff > 0 ? cartDiscounts : [])}
   <div id="cc-cod-slot"></div>
   <div id="cc-checkout-wrap">${renderCheckoutButton(appliedCouponCodes)}</div>
   <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">

@@ -43,6 +43,7 @@ let configStatus = 200;
 let prices = [110000, 150000];
 const posted = [];
 const navigations = [];
+let prepaidCodeReply = { status: 200, body: { success: true, code: 'PPABCDEFGHJK', percent: 10 } };
 
 const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-button"><shopify-accelerated-checkout><button type="button" class="shopify-payment-button__button shopify-payment-button__button--unbranded">Buy it now</button></shopify-accelerated-checkout></div>';
 
@@ -108,6 +109,7 @@ const handler = async (route) => {
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' } });
     const body = JSON.parse(req.postData());
     posted.push(body);
+    if (body.endpoint === 'prepaid-code') return json(prepaidCodeReply.body, prepaidCodeReply.status);
     return json({ success: true, quote: { currency: 'INR', lines: [{ title: 'Cold Brew Kit', variantTitle: 'M', quantity: 1, image: null, originalTotal: 1100, total: 1100, unitPrice: 1100, variantId: '21', productId: '1', sku: 'C' }], itemsTotal: 1100, subtotal: 1100, discounts: 0, shipping: 0, codFee: 50, tax: 0, taxesIncluded: true, total: 1150, coupon: null } });
   }
   return route.fulfill({ status: 404, body: '' });
@@ -115,8 +117,20 @@ const handler = async (route) => {
 
 const browser = await chromium.launch();
 const errors = [];
-async function openPage(query = '', viewport = { width: 1200, height: 900 }) {
+async function openPage(query = '', viewport = { width: 1200, height: 900 }, { shiprocket = false } = {}) {
   const page = await browser.newPage({ viewport });
+  // A shop that checks out through Shiprocket: cart_drawer_inline.js's flag
+  // plus a stand-in for brix_checkout.js that records what it was handed.
+  if (shiprocket) {
+    await page.addInitScript(() => {
+      window.__brixShiprocket = true;
+      window.__srCalls = [];
+      window.BrixCheckout = {
+        checkoutCart: (o) => window.__srCalls.push({ cart: true, coupon: o && o.coupon }),
+        checkoutItems: (o) => window.__srCalls.push({ items: o.items, coupon: o.coupon, fallbackUrl: o.fallbackUrl }),
+      };
+    });
+  }
   page.on('pageerror', (e) => errors.push(`${query}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`${query}: ${m.text()}`); });
   await page.route('**/*', handler);
@@ -350,6 +364,54 @@ s = await state(page);
 check('no Buy it now: BRIX "Buy it now · Save 10%" button', s.onlineBtn === 'Buy it now · Save 10%', s.onlineBtn);
 await Promise.all([page.waitForURL('**/cart/21:1'), page.locator('[data-brix-pay-online]').click()]);
 check('Pay Online: goes to Shopify checkout with this item (prepaid discount applied there)', navigations.includes('/cart/21:1'), navigations.join());
+await page.close();
+
+/* ── 14b. Shiprocket shop: Pay Online goes to Shiprocket with a prepaid code ── */
+const srCalls = (pg) => pg.evaluate(() => window.__srCalls);
+const codeRequests = () => posted.filter((b) => b.endpoint === 'prepaid-code');
+config = { ...COD, productPayment: PAYMENT };
+posted.length = 0;
+page = await openPage('?nobuynow=1', undefined, { shiprocket: true });
+await page.locator('[data-brix-pay-online]').waitFor({ timeout: 5000 });
+await page.locator('[data-brix-pay-online]').click();
+await page.waitForFunction(() => window.__srCalls.length > 0, null, { timeout: 5000 });
+let sr = await srCalls(page);
+check('Shiprocket: BRIX Pay Online asks the relay for a prepaid code for this item', codeRequests().length === 1 && codeRequests()[0].items[0].variantId === 21 && codeRequests()[0].shop === 'demo.myshopify.com', JSON.stringify(codeRequests()));
+check('Shiprocket: opens Shiprocket with the item and the code (Shopify checkout only as fallback)', sr.length === 1 && sr[0].coupon === 'PPABCDEFGHJK' && sr[0].items[0].variantId === 21 && sr[0].items[0].quantity === 1 && sr[0].fallbackUrl === '/cart/21:1', JSON.stringify(sr));
+await page.close();
+
+// Shopify's own Buy it now (relabelled "· Save 10%") is caught on a Shiprocket shop.
+posted.length = 0;
+const navBefore = navigations.length;
+page = await openPage('', undefined, { shiprocket: true });
+await page.locator('[data-brix-pay] .bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+await page.locator('#plus').click();
+await settle(page, 400);
+await page.locator('.shopify-payment-button__button--unbranded').click();
+await page.waitForFunction(() => window.__srCalls.length > 0, null, { timeout: 5000 });
+sr = await srCalls(page);
+check('Shiprocket: Buy it now goes to Shiprocket with the code and quantity, not Shopify checkout', sr.length === 1 && sr[0].coupon === 'PPABCDEFGHJK' && sr[0].items[0].quantity === 2 && navigations.length === navBefore, JSON.stringify({ sr, nav: navigations.slice(navBefore) }));
+await page.close();
+
+// The code can't be made: Shopify checkout, where the Function still gives the saving.
+prepaidCodeReply = { status: 503, body: { success: false, code: 'app_unavailable', error: 'x' } };
+page = await openPage('?nobuynow=1', undefined, { shiprocket: true });
+await page.locator('[data-brix-pay-online]').waitFor({ timeout: 5000 });
+await Promise.all([page.waitForURL('**/cart/21:1'), page.locator('[data-brix-pay-online]').click()]);
+check('Shiprocket: no code → Shopify checkout with this item', navigations[navigations.length - 1] === '/cart/21:1');
+await page.close();
+prepaidCodeReply = { status: 200, body: { success: true, code: 'PPABCDEFGHJK', percent: 10 } };
+
+// Below the minimum: no code asked for, Shiprocket at the normal price.
+posted.length = 0;
+config = { ...COD, productPayment: { ...PAYMENT, prepaid: { ...PAYMENT.prepaid, minSubtotal: 5000 } } };
+page = await openPage('?nobuynow=1', undefined, { shiprocket: true });
+await page.locator('[data-brix-pay-online]').waitFor({ timeout: 5000 });
+await page.locator('[data-brix-pay-online]').click();
+await page.waitForFunction(() => window.__srCalls.length > 0, null, { timeout: 5000 });
+sr = await srCalls(page);
+check('Shiprocket: no saving on this order → Shiprocket without a code, none requested', sr.length === 1 && !sr[0].coupon && codeRequests().length === 0, JSON.stringify({ sr, req: codeRequests() }));
 await page.close();
 
 /* ── 15. placements ───────────────────────────────────────────────────────── */

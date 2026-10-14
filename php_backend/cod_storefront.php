@@ -241,6 +241,9 @@ function cods_product_payment($s, $codLive) {
     if ($onlineOn && cods_bool($pre['enabled'] ?? null, false) && ($rt['verified'] ?? false) === true && $percent >= 1 && $percent <= 50) {
         $prepaid = [
             'percent' => $percent,
+            // The discount's name in the cart (the Function's message), so the
+            // drawer can tell it apart and leave it out of the COD price.
+            'title' => cods_text($pre['title'] ?? null, 'Prepaid discount', 40),
             'minSubtotal' => cods_num($rt['minSubtotal'] ?? 0),
             'currency' => is_string($rt['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', $rt['currency']) ? $rt['currency'] : '',
             'showBadge' => cods_bool($pre['showBadge'] ?? null, true),

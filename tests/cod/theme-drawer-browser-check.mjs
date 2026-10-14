@@ -93,12 +93,12 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket =
     await page.addInitScript(() => {
       window.__sr = [];
       window.BrixCheckout = {
-        checkoutCart: (o) => window.__sr.push({ kind: 'cart', fallbackUrl: o.fallbackUrl }),
+        checkoutCart: (o) => window.__sr.push({ kind: 'cart', fallbackUrl: o.fallbackUrl, coupon: o.coupon || null }),
         checkoutItems: (o) => window.__sr.push({ kind: 'items', items: o.items, fallbackUrl: o.fallbackUrl }),
       };
     });
   }
-  const net = { quotes: [], checkoutPosts: [], navigations: [], productReads: [] };
+  const net = { quotes: [], checkoutPosts: [], navigations: [], productReads: [], codeRequests: [] };
   const state = { cart: [...cart], cfg: { ...BASE_CFG, ...cfg, buttons: { ...BASE_CFG.buttons, ...(cfg.buttons || {}) } } };
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
@@ -110,7 +110,10 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket =
     if (url.href === 'https://cdn.test/cart_drawer_inline.js') return route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: DRAWER_JS });
     if (url.origin === 'https://shop.test') {
       if (url.pathname === '/' && req.method() === 'GET') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: themePage(theme) });
-      if (url.pathname === '/cart.js') return json({ items: state.cart, item_count: state.cart.length, total_price: state.cart.reduce((n, l) => n + l.final_line_price, 0) - (state.cartDiscount || 0), currency: 'INR' });
+      if (url.pathname === '/cart.js') {
+        const items = state.cart.reduce((n, l) => n + l.final_line_price, 0);
+        return json({ items: state.cart, item_count: state.cart.reduce((n, l) => n + (l.quantity || 1), 0), items_subtotal_price: items, total_price: items - (state.cartDiscount || 0), cart_level_discount_applications: state.cartLevel || [], currency: 'INR' });
+      }
       const m = /^\/products\/([^/]+)\.js$/.exec(url.pathname);
       if (m) { net.productReads.push(m[1]); return json({ handle: m[1], tags: TAGS[m[1]] || [] }); }
       if (url.pathname === '/cart' && req.method() === 'POST') { net.checkoutPosts.push(req.postData() || ''); return route.fulfill({ contentType: 'text/html', body: '<p>checkout</p>' }); }
@@ -121,6 +124,10 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket =
     if (url.origin === PHP && url.pathname === '/cod_checkout.php') {
       if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' } });
       const body = JSON.parse(req.postData() || '{}');
+      if (body.endpoint === 'prepaid-code') {
+        net.codeRequests.push(body);
+        return state.codeFails ? json({ success: false, code: 'app_unavailable', error: 'x' }, 503) : json({ success: true, code: 'PPTESTCODE01', percent: 10 });
+      }
       if (body.endpoint === 'quote') {
         net.quotes.push(body);
         if (state.quoteError) return json({ success: false, code: 'below_min', error: 'Cash on Delivery is available on orders from ₹2,000.' }, 422);
@@ -516,6 +523,99 @@ const done = async (page, name) => {
   check('BRIX drawer: empty COD text keeps the Cart Editor\'s own Checkout text', own === 'Checkout Now', own);
   allErrors.push(...plain.errors);
   await plain.context().close();
+}
+
+/* 17. The BRIX prepaid discount in the cart: the BRIX drawer's COD price leaves it out, the summary names it */
+{
+  const prepaidCart = (page, title = 'Prepaid discount') => {
+    page.state.cartDiscount = 12990; // 10% of ₹1,299
+    page.state.cartLevel = [{ type: '', title, value: '10.0', value_type: 'percentage', total_allocated_amount: 12990 }];
+  };
+  const seen = (page) => page.evaluate(() => ({
+    cod: document.querySelector('#cc-cod-slot [data-brix-cod-btn]')?.textContent.trim(),
+    checkout: document.querySelector('#cc-checkout-wrap [data-cc-checkout-label]')?.textContent,
+    summary: [...document.querySelectorAll('#cc-drawer .bxcd-summary > span')].map((e) => e.textContent.trim()).filter(Boolean),
+    count: [...document.querySelectorAll('#cc-drawer span')].map((e) => e.textContent.trim()).find((t) => /^\d+ ITEMS?$/.test(t)),
+  }));
+  const openDrawer = async (page) => {
+    await page.waitForFunction(() => window.__brixCartDrawerActive === true, null, { timeout: 5000 }).catch(() => null);
+    await page.evaluate(() => window.testCart());
+    await page.waitForSelector('#cc-cod-slot [data-brix-cod-btn]', { timeout: 6000 }).catch(() => null);
+    await settle(page, 600);
+  };
+  const cfg = { drawerPlacement: 'above', drawerCheckoutText: 'Pay Now {price}', buttons: { drawerText: 'Cash on Delivery {cod_price}' }, productPayment: { prepaid: { percent: 10, title: 'Prepaid discount' } } };
+
+  const page = await open('dawn', { brixOn: true, cfg });
+  prepaidCart(page);
+  await openDrawer(page);
+  let s = await seen(page);
+  check('prepaid in cart: COD button = ₹1,299 + ₹40 fee (no prepaid saving on COD), not ₹1,169.10 + ₹40', s.cod === 'Cash on Delivery ₹1,339', JSON.stringify(s));
+  check('prepaid in cart: Pay Now keeps the prepaid price ₹1,169.10', /^Pay Now ₹1,169\.1/.test(s.checkout || ''), s.checkout);
+  check('prepaid in cart: summary = Subtotal ₹1,299, Prepaid discount -₹129.90, Total ₹1,169.10',
+    s.summary[0] === 'Subtotal' && /1,299/.test(s.summary[1]) && s.summary[2] === 'Prepaid discount' && /^-.*129\.9/.test(s.summary[3]) && s.summary.includes('Total') && /1,169\.1/.test(s.summary[s.summary.length - 1]), JSON.stringify(s.summary));
+  check('item count: two lines of one unit = "2 ITEMS"', s.count === '2 ITEMS', s.count);
+  allErrors.push(...page.errors);
+  await page.context().close();
+
+  // cod_storefront.php from before this change sends no title: matched by the same percent.
+  const old = await open('dawn', { brixOn: true, cfg: { ...cfg, productPayment: { prepaid: { percent: 10 } } } });
+  prepaidCart(old, 'Pay online offer');
+  old.state.cart = old.state.cart.map((l) => ({ ...l, quantity: 2 }));
+  await openDrawer(old);
+  s = await seen(old);
+  check('prepaid in cart (no title sent): still left out of the COD price', s.cod === 'Cash on Delivery ₹1,339', JSON.stringify(s));
+  check('item count: units, not lines (2 lines × 2 = "4 ITEMS")', s.count === '4 ITEMS', s.count);
+  allErrors.push(...old.errors);
+  await old.context().close();
+
+  // Shiprocket shop: Checkout hands the cart to Shiprocket with a one-time
+  // code for the prepaid saving (Shiprocket can't run the Function).
+  const clickCheckout = (pg) => pg.evaluate(() => {
+    const b = document.querySelector('#cc-checkout-wrap #cc-standard-checkout-btn, #cc-checkout-wrap button, #cc-checkout-wrap a');
+    b.click();
+    return b.id || b.tagName;
+  });
+  const sr = await open('dawn', { brixOn: true, shiprocket: true, cfg });
+  prepaidCart(sr);
+  sr.state.cart = [{ ...sr.state.cart[0] }, { ...sr.state.cart[1] }, { ...sr.state.cart[0], variant_id: 999, final_line_price: 0, properties: { _brixReward: 'true' } }];
+  await openDrawer(sr);
+  await clickCheckout(sr);
+  await sr.waitForFunction(() => window.__sr.length > 0, null, { timeout: 5000 }).catch(() => null);
+  let calls = await sr.evaluate(() => window.__sr);
+  const req = sr.net.codeRequests[0];
+  check('Shiprocket: drawer Checkout sends the cart with the prepaid code', calls.length === 1 && calls[0].kind === 'cart' && calls[0].coupon === 'PPTESTCODE01', JSON.stringify(calls));
+  check('Shiprocket: the code covers the paid lines only (free reward gift left out)', req && req.items.length === 2 && !req.items.some((i) => i.variantId === 999), JSON.stringify(req));
+  allErrors.push(...sr.errors);
+  await sr.context().close();
+
+  const srFail = await open('dawn', { brixOn: true, shiprocket: true, cfg });
+  prepaidCart(srFail);
+  srFail.state.codeFails = true;
+  await openDrawer(srFail);
+  await clickCheckout(srFail);
+  await srFail.waitForFunction(() => location.pathname === '/checkout', null, { timeout: 5000 }).catch(() => null);
+  calls = await srFail.evaluate(() => window.__sr || []).catch(() => []);
+  check('Shiprocket: code can\'t be made → Shopify checkout (where the saving applies), not Shiprocket at full price', srFail.net.navigations.includes('/checkout') && calls.length === 0, JSON.stringify({ nav: srFail.net.navigations, calls }));
+  allErrors.push(...srFail.errors);
+  await srFail.context().close();
+
+  const srNone = await open('dawn', { brixOn: true, shiprocket: true, cfg });
+  await openDrawer(srNone);
+  await clickCheckout(srNone);
+  await srNone.waitForFunction(() => window.__sr.length > 0, null, { timeout: 5000 }).catch(() => null);
+  calls = await srNone.evaluate(() => window.__sr);
+  check('Shiprocket: no prepaid saving in the cart → no code asked, Shiprocket as before', calls.length === 1 && calls[0].coupon === null && srNone.net.codeRequests.length === 0, JSON.stringify(calls));
+  allErrors.push(...srNone.errors);
+  await srNone.context().close();
+
+  // Any other order discount (no prepaid offer live) stays in the COD price as before.
+  const other = await open('dawn', { brixOn: true, cfg: { ...cfg, productPayment: undefined } });
+  prepaidCart(other, 'Summer sale');
+  await openDrawer(other);
+  s = await seen(other);
+  check('other order discount: COD price after it (₹1,169.10 + ₹40), summary names it', s.cod === 'Cash on Delivery ₹1,209.10' && s.summary.includes('Summer sale'), JSON.stringify(s));
+  allErrors.push(...other.errors);
+  await other.context().close();
 }
 
 /* 15. Cart drawer COD button padding (COD → Customize → Cart drawer button → Button size) */
