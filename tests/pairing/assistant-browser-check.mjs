@@ -292,6 +292,49 @@ await check('Images and spacing: preview follows; Save sends them in the templat
   await context.close();
 });
 
+await check('Preview starts like the store: Quick Add = "Add" buttons, nothing selected, no Add-to-cart button', async () => {
+  const { page, context, errors } = await open('/app/fbt');
+  await page.getByRole('button', { name: /Interaction & Layout/ }).first().click();
+  await page.getByLabel('Interaction Style').selectOption('quick-add');
+  await page.waitForTimeout(150);
+  const before = await page.evaluate(() => {
+    const w = document.querySelector('.fbtpv-widget');
+    return { adds: [...w.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Add').length, text: w.textContent };
+  });
+  assert.equal(before.adds, 3, 'three Add buttons');
+  assert.ok(before.text.includes('Select items') && !/Add \d+ to Cart/.test(before.text), before.text.slice(-120));
+  await page.locator('.fbtpv-widget button', { hasText: /^Add$/ }).first().click();
+  const after = await page.locator('.fbtpv-widget').textContent();
+  assert.ok(after.includes('Total (1 item)') && after.includes('Add 1 to Cart'), after.slice(-120));
+  // Back to Classic: everything selected again.
+  await page.getByLabel('Interaction Style').selectOption('classic');
+  assert.ok((await page.locator('.fbtpv-widget').textContent()).includes('Total (3 items)'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('Templates bring their arrangement: Modern Cards = grid, Vertical List = list, Classic Grid = row', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  const layoutOf = () => page.evaluate(() => {
+    const w = document.querySelector('.fbtpv-widget');
+    if ([...w.querySelectorAll('div')].some((d) => getComputedStyle(d).display === 'grid' && getComputedStyle(d).gridTemplateColumns.split(' ').length === 2)) return 'grid';
+    if ([...w.querySelectorAll('div')].some((d) => d.style.overflowX === 'auto')) return 'carousel';
+    return 'vertical';
+  });
+  await page.getByRole('button', { name: 'Modern Cards', exact: true }).click();
+  assert.equal(await layoutOf(), 'grid');
+  await page.getByRole('button', { name: 'Vertical List', exact: true }).click();
+  assert.equal(await layoutOf(), 'vertical');
+  await page.getByRole('button', { name: 'Classic Grid', exact: true }).click();
+  assert.equal(await layoutOf(), 'carousel');
+  await page.getByRole('button', { name: 'Modern Cards', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(posts.fbt.at(-1).templates.fbt2.layout, 'grid');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 console.log('\nPairing Assistant — Cart Editor upsell');
 
 await check('Upsell manual rules: "Describe in words" opens the assistant; added rules use the upsell shape and the cart limit', async () => {

@@ -459,9 +459,9 @@ export const action = async ({ request }) => {
 
 /* ─── CONSTANTS ───────────────────────────────────────────────────────────── */
 const TEMPLATES = [
-  { id: 'classic-grid', name: 'Classic Grid',   apiKey: 'fbt1', colors: { bg: '#ffffff', text: '#111827', price: '#059669', button: '#111827', buttonText: '#ffffff', border: '#e5e7eb' }, borderRadius: 8  },
-  { id: 'modern-cards', name: 'Modern Cards',   apiKey: 'fbt2', colors: { bg: '#f9fafb', text: '#374151', price: '#dc2626', button: '#4f46e5', buttonText: '#ffffff', border: '#d1d5db' }, borderRadius: 12 },
-  { id: 'vertical-list',name: 'Vertical List',  apiKey: 'fbt3', colors: { bg: '#ffffff', text: '#111827', price: '#dc2626', button: '#111827', buttonText: '#ffffff', border: '#e5e7eb' }, borderRadius: 4  },
+  { id: 'classic-grid', name: 'Classic Grid',   apiKey: 'fbt1', layout: 'carousel', colors: { bg: '#ffffff', text: '#111827', price: '#059669', button: '#111827', buttonText: '#ffffff', border: '#e5e7eb' }, borderRadius: 8  },
+  { id: 'modern-cards', name: 'Modern Cards',   apiKey: 'fbt2', layout: 'grid', colors: { bg: '#f9fafb', text: '#374151', price: '#dc2626', button: '#4f46e5', buttonText: '#ffffff', border: '#d1d5db' }, borderRadius: 12 },
+  { id: 'vertical-list',name: 'Vertical List',  apiKey: 'fbt3', layout: 'vertical', colors: { bg: '#ffffff', text: '#111827', price: '#dc2626', button: '#111827', buttonText: '#ffffff', border: '#e5e7eb' }, borderRadius: 4  },
 ];
 
 const INTERACTION_OPTIONS = [
@@ -529,7 +529,13 @@ function RuleOfferPicker({ rule, onChange, currencySymbol }) {
   );
 }
 
-const defaultProductStates = () => Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: true, qty: 1, checked: true }));
+// What the storefront starts with (fbt-widget-render.liquid): Classic and
+// Bundle start with every product selected; Quick Add starts with "Add"
+// buttons and Checkbox + Quantity with empty checkboxes.
+const defaultProductStates = (style = 'classic') => {
+  const picked = style !== 'quick-add' && style !== 'checkbox-qty';
+  return Array.from({ length: PREVIEW_SLOT_COUNT }, () => ({ added: picked, qty: 1, checked: picked }));
+};
 
 // Style/layout preview must show the merchant's real store products, never
 // generic placeholder names — prefers the first rule's actual FBT picks
@@ -861,7 +867,7 @@ export default function FBTPage() {
   const [aiConfigured,      setAiConfigured]      = useState(Boolean(fbtConfig.aiEnabled));
   const [placement,         setPlacement]         = useState('all');
   const [widgetPlacement,   setWidgetPlacement]   = useState(fbtConfig.widgetPlacement || 'above_cart');
-  const [productStates,     setProductStates]     = useState(defaultProductStates());
+  const [productStates,     setProductStates]     = useState(() => defaultProductStates(interactionStyle));
   const [hasChanges,        setHasChanges]        = useState(false);
   const [toastActive,       setToastActive]       = useState(false);
   const [manualRules,       setManualRules]       = useState(initialRules || []);
@@ -1149,14 +1155,12 @@ export default function FBTPage() {
     setBgColor(t.colors.bg); setTextColor(t.colors.text); setPriceColor(t.colors.price);
     setButtonColor(t.colors.button); setButtonTextColor(t.colors.buttonText);
     setBorderColor(t.colors.border); setBorderRadius(t.borderRadius);
-    setProductStates(defaultProductStates());
-    // Templates are now purely a color/border "skin" — Layout Alignment is
-    // the one universal arrangement control (carousel/grid/vertical) across
-    // all 3 templates. Vertical List's whole identity used to BE the list
-    // arrangement, so clicking it still defaults Layout Alignment to
-    // "vertical" for a sensible first impression — merchants can still
-    // freely change it afterward like any other template.
-    if (id === 'vertical-list') setLayout('vertical');
+    setProductStates(defaultProductStates(interactionStyle));
+    // Each template brings its own arrangement (Classic Grid = scrolling
+    // row, Modern Cards = 2-column grid, Vertical List = stacked list), so
+    // switching templates visibly changes the widget; Layout Alignment can
+    // still be changed afterwards.
+    if (t.layout) setLayout(t.layout);
     mark();
   };
 
@@ -1960,6 +1964,7 @@ export default function FBTPage() {
                       </button>
                     ))}
                   </div>
+                  <Text as="p" variant="bodySm" tone="subdued">A template sets the colours, borders and a starting arrangement. Change the arrangement any time under Interaction &amp; Layout → Layout Alignment.</Text>
                 </BlockStack>
               </Card>
               </div>
@@ -1972,7 +1977,13 @@ export default function FBTPage() {
 
                   <AccordionSection id="interaction" icon={SettingsIcon} title="Interaction & Layout" isOpen={openSection === 'interaction'} onToggle={toggleSection} tip={SECTION_TIPS.interaction}>
                     <BlockStack gap="300">
-                      <Select label="Interaction Style" options={INTERACTION_OPTIONS} value={interactionStyle} onChange={(v) => { setInteractionStyle(v); mark(); }} />
+                      <Select
+                        label="Interaction Style" options={INTERACTION_OPTIONS} value={interactionStyle}
+                        onChange={(v) => { setInteractionStyle(v); setProductStates(defaultProductStates(v)); mark(); }}
+                        helpText={interactionStyle === 'quick-add' || interactionStyle === 'checkbox-qty'
+                          ? 'Shoppers start with nothing selected and pick what they want.'
+                          : 'Every product starts selected ("Added"); shoppers remove what they don\'t want.'}
+                      />
                       <Select
                         label="Layout Alignment"
                         options={LAYOUT_OPTIONS}
@@ -2144,7 +2155,7 @@ export default function FBTPage() {
                   {/* Price summary + CTA */}
                   <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: `1px solid ${borderColor}` }}>
                     <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
-                      {interactionStyle === 'quick-add' ? 'Select items' : `Total (${activeCount} items)`}
+                      {activeCount > 0 ? `Total (${activeCount} item${activeCount === 1 ? '' : 's'})` : 'Select items'}
                       <br />
                       {Math.round(compareTotal) > Math.round(total) && (
                         <s style={{ color: textColor, opacity: 0.5, fontSize: '14px', fontWeight: 500, marginRight: '6px' }}>{currencySymbol}{Math.round(compareTotal)}</s>
@@ -2156,7 +2167,7 @@ export default function FBTPage() {
                         {fbtOfferText(offer.text, { count: fbtPreviewProducts.length + 1, offer: { type: offer.type, value: Number(offer.value) }, symbol: currencySymbol })}
                       </div>
                     )}
-                    {showAddAll && (
+                    {showAddAll && (activeCount > 0 || addAllPreview !== 'idle') && (
                       <button
                         type="button"
                         className="fbtpv-btn"
@@ -2178,10 +2189,9 @@ export default function FBTPage() {
                         }}
                       >
                         {addAllPreview === 'loading' ? 'Adding...'
-                          : addAllPreview === 'success' ? `Added ${activeCount || fbtPreviewProducts.length}`
-                          : interactionStyle === 'quick-add' ? 'Add to Cart'
-                          : offer.enabled && Number(offer.value) > 0 && (activeCount || fbtPreviewProducts.length) === fbtPreviewProducts.length ? `Add all ${fbtPreviewProducts.length + 1} to Cart`
-                          : `Add ${activeCount || fbtPreviewProducts.length} to Cart`}
+                          : addAllPreview === 'success' ? `Added ${activeCount}`
+                          : offer.enabled && Number(offer.value) > 0 && activeCount === fbtPreviewProducts.length ? `Add all ${fbtPreviewProducts.length + 1} to Cart`
+                          : `Add ${activeCount} to Cart`}
                       </button>
                     )}
                     <style>{'.fbtpv-btn:not(:disabled):not(.is-selected):hover{background:var(--fbt-hover) !important}'}</style>
