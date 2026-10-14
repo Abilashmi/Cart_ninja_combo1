@@ -51,7 +51,7 @@ export function parseJsonReply(text, fallback = { unclear: true }) {
 
 // json: ask for a JSON object only (OpenAI's response_format; the NVIDIA
 // path relies on the prompt alone).
-async function requestLlm(messages, { maxTokens = 150, temperature = 0, json = false } = {}) {
+async function requestLlm(messages, { maxTokens = 150, temperature = 0, json = false, timeoutMs = 30_000 } = {}) {
   const { apiKey, endpoint, model, mode } = resolveProvider();
   let res;
   try {
@@ -62,7 +62,7 @@ async function requestLlm(messages, { maxTokens = 150, temperature = 0, json = f
       // Without this, a stalled provider hangs the calling route
       // indefinitely instead of falling back — every AI feature in the app
       // routes through this one function.
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     console.error('[ai-llm] request failed', err.message);

@@ -308,3 +308,63 @@ test('a long title copied only in part still finds the product', () => {
   const cat = [P(51, 'Knit N Knot Girls Denim Casual Shirt Full Sleeves, Stone-Washed Indigo Blue, Double Chest Pockets')];
   assert.equal(matchProducts('Knit N Knot Girls Denim Casual Shirt Full Sleeves, Stone-Washed Indigo Blue, Dou', cat).status, 'found');
 });
+
+// ── "2 topwear, 2 bottomwear and 1 dress/co-ord" for every kind (knitnknot.in) ──
+import { kindOfType, typesByKind, kindNamed, fillEveryType } from '../../app/utils/pairing.shared.js';
+
+const SHOP = [
+  { ...P(61, 'Girls Wide Leg Jeans'), productType: 'Girls Jeans', price: '899' },
+  { ...P(62, 'Girls Bell Bottom Jeans'), productType: 'Girls Jeans', price: '999' },
+  { ...P(63, 'Girls Denim Skirt'), productType: 'Girls Skirt', price: '799' },
+  { ...P(64, 'Girls Denim Palazzo'), productType: 'Girls Palazzo', price: '899' },
+  { ...P(65, 'Girls Peplum Top'), productType: 'Girls Top', price: '799' },
+  { ...P(66, 'Girls Denim Waistcoat'), productType: 'Girls Top', price: '799' },
+  { ...P(67, 'Girls Shirt Dress'), productType: 'Girls Dresses', price: '1199' },
+  { ...P(68, 'Girls Top & Palazzo Co-ord Set'), productType: 'Girls Co-Ord Set', price: '1299' },
+  { ...P(69, 'Boys Slim Jeans'), productType: 'Boys jeans', price: '899' },
+  { ...P(70, 'Boys Denim Shirt'), productType: 'Boys Shirt', price: '799' },
+];
+
+test('kinds: the store\'s own types sorted into topwear, bottomwear, dresses, co-ord sets, sets', () => {
+  assert.equal(kindOfType('Girls Co-Ord Set'), 'co-ord sets');
+  assert.equal(kindOfType('Boys T-Shirt Sets'), 'sets');
+  assert.equal(kindOfType('Girls Dresses'), 'dresses');
+  assert.equal(kindOfType('Blazer & Tshirt'), 'topwear');
+  assert.equal(kindOfType('Girls Cargo Jeans'), 'bottomwear');
+  assert.equal(kindOfType('Snap Cart Drawer - Shipping Protection'), null);
+  assert.deepEqual(typesByKind(SHOP).bottomwear.sort(), ['Boys jeans', 'Girls Jeans', 'Girls Palazzo', 'Girls Skirt']);
+  assert.equal(kindNamed('topwear'), 'topwear');
+  assert.equal(kindNamed('bottom wear'), 'bottomwear');
+  assert.equal(kindNamed('co-ords'), 'co-ord sets');
+  assert.equal(kindNamed('dresses'), 'dresses');
+});
+
+test('a mix for one product = one rule, offers in the order asked; picks alternate between the named types', () => {
+  const plan = { rules: [
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['topwear'], count: 2 } },
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['Girls Palazzo', 'Girls Skirt'], count: 2 } },
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['dresses', 'co-ord sets'], count: 1 } },
+  ] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: SHOP, maxOffers: 5 });
+  assert.equal(rules.length, 2, 'one rule per pair of jeans');
+  const types = rules[0].offerProducts.map((p) => SHOP.find((x) => x.id === p.id).productType);
+  assert.deepEqual(types, ['Girls Top', 'Girls Top', 'Girls Palazzo', 'Girls Skirt', 'Girls Dresses']);
+});
+
+test('a general idea with one example reaches every type; boys get boys\' items only', () => {
+  const plan = { rules: [
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['Girls Top'], count: 2 } },
+    { trigger: { productTypes: ['Girls Top'] }, offer: { products: ['Girls Jeans'], count: 2 } },
+  ] };
+  const filled = fillEveryType(plan, SHOP);
+  assert.deepEqual(filled.missingKinds.sort(), ['co-ord sets', 'dresses'], 'kinds with no example at all are left to the model');
+  const { rules } = buildRulesFromPlan({ rules: filled.rules }, { catalog: SHOP, maxOffers: 5 });
+  const byTitle = Object.fromEntries(rules.flatMap((r) => r.triggerProducts.map((t) => [t.title, r.offerProducts.map((p) => p.title)])));
+  assert.ok(byTitle['Girls Denim Skirt'].every((t) => /Top|Waistcoat/.test(t)), 'a skirt follows the jeans example: tops');
+  assert.deepEqual(byTitle['Boys Slim Jeans'], ['Boys Denim Shirt'], 'boys\' jeans get the boys\' top, never a girls\' one');
+  assert.ok(byTitle['Boys Denim Shirt'].every((t) => t.startsWith('Boys')));
+});
+
+test('"dresses" and "dress" are the same word', () => {
+  assert.equal(matchGroup('dresses', SHOP).products[0].title, 'Girls Shirt Dress');
+});

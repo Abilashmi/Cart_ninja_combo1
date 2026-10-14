@@ -110,8 +110,17 @@ function norm(s) {
 }
 
 // Plural-tolerant tokens: "socks" and "sock" match each other.
+// Singular, so "dresses" = "dress", "shorts" = "short", "accessories" = "accessory".
+function singular(t) {
+  if (t.length <= 3) return t;
+  if (/(ss|sh|ch|x)es$/.test(t)) return t.slice(0, -2);
+  if (t.endsWith('ies') && t.length > 4) return `${t.slice(0, -3)}y`;
+  if (t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1);
+  return t;
+}
+
 function tokens(s) {
-  return norm(s).split(' ').filter(Boolean).map((t) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t));
+  return norm(s).split(' ').filter(Boolean).map(singular);
 }
 
 // catalog: [{ id, title, ... }]. Returns { status: 'found'|'many'|'not_found', products }.
@@ -186,6 +195,52 @@ export const CATEGORY_WORDS = {
   innerwear: ['brief', 'boxer', 'trunk', 'bra', 'panty', 'vest', 'innerwear', 'underwear', 'lingerie'],
 };
 
+// What kind of clothing a product type is, so the model gets "topwear",
+// "bottomwear", "dresses" … from the store's own types instead of guessing.
+// Order matters: "Co-Ord Set" and "T-Shirt Sets" are sets, not tops.
+export function kindOfType(type) {
+  const t = tokens(type);
+  const has = (w) => t.includes(w);
+  if ((has('co') && has('ord')) || has('coord')) return 'co-ord sets';
+  if (['dress', 'dungaree', 'frock', 'gown', 'jumpsuit', 'romper', 'playsuit'].some(has)) return 'dresses';
+  if (['set', 'combo', 'outfit'].some(has)) return 'sets';
+  for (const kind of ['bottom', 'top', 'footwear', 'innerwear', 'accessory']) {
+    const words = CATEGORY_WORDS[kind].map((w) => tokens(w));
+    if (words.some((l) => l.every((w) => t.includes(w)))) return { top: 'topwear', bottom: 'bottomwear' }[kind] || kind;
+  }
+  return null;
+}
+
+const KIND_ALIASES = {
+  topwear: ['topwear', 'top', 'upperwear', 'upper'],
+  bottomwear: ['bottomwear', 'bottom', 'lowerwear', 'lower'],
+  dresses: ['dress', 'one piece', 'onepiece'],
+  'co-ord sets': ['co ord', 'coord', 'co ord set', 'coord set'],
+  sets: ['set', 'outfit set'],
+  footwear: ['footwear'],
+  accessory: ['accessory'],
+  innerwear: ['innerwear'],
+};
+
+/** The kind a merchant's word names ("tops", "bottom wear", "co-ords"), or null. */
+export function kindNamed(name) {
+  const joined = tokens(name).filter((w) => !['all', 'the', 'any', 'wear', 'item', 'product'].includes(w)).join(' ');
+  for (const [kind, aliases] of Object.entries(KIND_ALIASES)) {
+    if (tokens(kind).join(' ') === joined || aliases.some((a) => tokens(a).join(' ') === joined)) return kind;
+  }
+  return null;
+}
+
+/** { kind: [product types] } for the store's types (unknown kinds left out). */
+export function typesByKind(catalog) {
+  const out = {};
+  for (const type of new Set((catalog || []).map((p) => p.productType).filter(Boolean))) {
+    const kind = kindOfType(type);
+    if (kind) (out[kind] = out[kind] || []).push(type);
+  }
+  return out;
+}
+
 function hasWords(text, words) {
   const have = new Set(tokens(text));
   return words.every((w) => have.has(w));
@@ -195,7 +250,10 @@ function hasWords(text, words) {
 // a collection, product type or tag with that word, else the category's
 // usual title words (CATEGORY_WORDS). Returns { products, via } or null.
 export function matchGroup(name, catalog, collections = []) {
-  const want = tokens(name).filter((w) => !['all', 'every', 'the', 'my', 'our', 'any', 'wear', 'item', 'product'].includes(w));
+  // "topwear" / "bottom wear" = top / bottom.
+  const want = tokens(name)
+    .map((w) => (w.endsWith('wear') && CATEGORY_WORDS[w.slice(0, -4)] ? w.slice(0, -4) : w))
+    .filter((w) => !['all', 'every', 'the', 'my', 'our', 'any', 'wear', 'item', 'product', 'piece'].includes(w));
   if (!want.length) return null;
   const cols = (collections || []).filter((c) => hasWords(c.title, want));
   if (cols.length) {
@@ -217,27 +275,16 @@ export function matchGroup(name, catalog, collections = []) {
   return null;
 }
 
-function resolveSide(side, catalog, collections, warnings, label) {
-  const found = [];
+// Each name / type / collection / tag of one side as its own list of
+// products, so picks can alternate between them ("palazzos and skirts" →
+// one of each, not two palazzos).
+function resolveSideParts(side, catalog, collections, warnings, label) {
+  const parts = [];
+  const add = (list) => { if (list.length) parts.push(uniqueById(list)); };
   for (const name of side?.products || []) {
-    const n = norm(name);
-    // Exactly a product title first; then exactly one of the store's own
-    // product types / collections / tags ("Girls Jeans" = that type, not
-    // every title with "girls" and "jeans" in it, like co-ord sets).
-    const exactTitle = (catalog || []).find((p) => norm(p.title) === n);
-    if (exactTitle) { found.push(exactTitle); continue; }
-    const byType = (catalog || []).filter((p) => p.productType && norm(p.productType) === n);
-    if (byType.length) { found.push(...byType); continue; }
-    const col = (collections || []).find((c) => norm(c.title) === n);
-    const inCol = col ? (catalog || []).filter((p) => (p.collectionIds || []).includes(col.id)) : [];
-    if (inCol.length) { found.push(...inCol); continue; }
-    const byTag = (catalog || []).filter((p) => (p.tags || []).some((t) => norm(t) === n));
-    if (byTag.length) { found.push(...byTag); continue; }
-    const m = matchProducts(name, catalog);
-    if (m.status !== 'not_found') { found.push(...m.products); continue; }
-    const group = matchGroup(name, catalog, collections);
-    if (group) found.push(...group.products);
-    else warnings.push(`No product, collection, type or tag matches "${name}" in your store (${label}).`);
+    const found = [];
+    resolveName(name, found);
+    add(found);
   }
   for (const name of side?.collections || []) {
     const n = norm(name);
@@ -246,15 +293,108 @@ function resolveSide(side, catalog, collections, warnings, label) {
     if (!col) { warnings.push(`No collection called "${name}" (${label}).`); continue; }
     const members = (catalog || []).filter((p) => (p.collectionIds || []).includes(col.id));
     if (!members.length) warnings.push(`Collection "${col.title}" has no active products (${label}).`);
-    found.push(...members);
+    add(members);
   }
-  const types = matchByField(side?.productTypes, catalog, 'productType');
-  types.missing.forEach((t) => warnings.push(`No products of type "${t}" (${label}).`));
-  found.push(...types.products);
-  const tags = matchByField(side?.tags, catalog, 'tags');
-  tags.missing.forEach((t) => warnings.push(`No products tagged "${t}" (${label}).`));
-  found.push(...tags.products);
-  return uniqueById(found);
+  for (const t of side?.productTypes || []) {
+    const r = matchByField([t], catalog, 'productType');
+    r.missing.forEach((x) => warnings.push(`No products of type "${x}" (${label}).`));
+    add(r.products);
+  }
+  for (const t of side?.tags || []) {
+    const r = matchByField([t], catalog, 'tags');
+    r.missing.forEach((x) => warnings.push(`No products tagged "${x}" (${label}).`));
+    add(r.products);
+  }
+  return parts;
+
+  function resolveName(name, found) {
+    const n = norm(name);
+    // Exactly a product title first; then exactly one of the store's own
+    // product types / collections / tags ("Girls Jeans" = that type, not
+    // every title with "girls" and "jeans" in it, like co-ord sets).
+    const exactTitle = (catalog || []).find((p) => norm(p.title) === n);
+    if (exactTitle) { found.push(exactTitle); return; }
+    const byType = (catalog || []).filter((p) => p.productType && norm(p.productType) === n);
+    if (byType.length) { found.push(...byType); return; }
+    const col = (collections || []).find((c) => norm(c.title) === n);
+    const inCol = col ? (catalog || []).filter((p) => (p.collectionIds || []).includes(col.id)) : [];
+    if (inCol.length) { found.push(...inCol); return; }
+    const byTag = (catalog || []).filter((p) => (p.tags || []).some((t) => norm(t) === n));
+    if (byTag.length) { found.push(...byTag); return; }
+    // A kind ("topwear", "bottoms", "co-ord sets") = every product type of that kind.
+    const kind = kindNamed(name);
+    const ofKind = kind ? (catalog || []).filter((p) => p.productType && kindOfType(p.productType) === kind) : [];
+    if (ofKind.length) { found.push(...ofKind); return; }
+    const m = matchProducts(name, catalog);
+    if (m.status !== 'not_found') { found.push(...m.products); return; }
+    const group = matchGroup(name, catalog, collections);
+    if (group) found.push(...group.products);
+    else warnings.push(`No product, collection, type or tag matches "${name}" in your store (${label}).`);
+  }
+}
+
+function resolveSide(side, catalog, collections, warnings, label) {
+  return uniqueById(resolveSideParts(side, catalog, collections, warnings, label).flat());
+}
+
+/**
+ * A general idea ("complementary products, not the same category") given
+ * with one example ("on jeans: 2 tops, 2 bottoms, 1 dress") reaches every
+ * product type: a type no rule starts from copies the rules of a covered
+ * type of the same kind (same gender first), with the offers widened to
+ * their kinds so the gender filter can pick the right items.
+ * Returns { rules: [...plan.rules, ...copies], missingKinds } — kinds with
+ * no covered type at all (the caller may ask the model about those).
+ */
+export function fillEveryType(plan, catalog, collections = []) {
+  const byKind = typesByKind(catalog);
+  const rules = [...(plan?.rules || [])];
+  const typesOf = (side) => new Set(resolveSide(side, catalog, collections, [], '').map((p) => p.productType).filter(Boolean));
+  const ruleTypes = rules.map((r) => (r?.trigger?.allProducts && sideIsEmpty(r.trigger) ? new Set() : typesOf(r.trigger)));
+  const covered = new Set(ruleTypes.flatMap((t) => [...t]));
+  const widen = (side) => {
+    const names = [...(side?.products || []), ...(side?.productTypes || [])].map((n) => kindNamed(n) || kindOfType(n) || n);
+    return { ...side, products: [...new Set(names)], productTypes: [] };
+  };
+  const genderOfType = (type) => genderOf({ title: type, productType: '' });
+  const missingKinds = [];
+  for (const [kind, types] of Object.entries(byKind)) {
+    const done = types.filter((t) => covered.has(t));
+    if (!done.length) { missingKinds.push(kind); continue; }
+    for (const type of types) {
+      if (covered.has(type)) continue;
+      const g = genderOfType(type);
+      const template = done.find((t) => genderOfType(t) === g) || done[0];
+      const base = rules.slice(0, ruleTypes.length);
+      base.forEach((r, i) => {
+        if (ruleTypes[i].has(template)) rules.push({ trigger: { productTypes: [type] }, offer: widen(r.offer) });
+      });
+      covered.add(type);
+    }
+  }
+  return { rules, missingKinds };
+}
+
+// Up to `count` picks for one product from a side's parts: each part ranked
+// for this product (rankOffersFor), then taken in turn.
+function picksFor(trigger, parts, count, pairs) {
+  const tid = numericId(trigger.id);
+  const g = genderOf(trigger);
+  // Never a boys' item for a girls' product (or the other way round).
+  const fits = (p) => numericId(p.id) !== tid && !(g && genderOf(p) && genderOf(p) !== g);
+  const ranked = parts.map((part) => rankOffersFor(trigger, part.filter(fits), pairs));
+  const out = [];
+  const seen = new Set();
+  for (let round = 0; out.length < count && ranked.some((r) => r.length > round); round++) {
+    for (const r of ranked) {
+      const p = r[round];
+      if (!p || seen.has(numericId(p.id))) continue;
+      seen.add(numericId(p.id));
+      out.push(p);
+      if (out.length >= count) break;
+    }
+  }
+  return out;
 }
 
 const GENDER_WORDS = { girl: 'f', woman: 'f', women: 'f', ladie: 'f', lady: 'f', her: 'f', boy: 'm', man: 'm', men: 'm', his: 'm' };
@@ -342,24 +482,27 @@ export function buildRulesFromPlan(plan, { catalog = [], collections = [], pairs
     }
 
     const triggerIds = new Set(triggers.map((p) => numericId(p.id)));
-    let offers = resolveSide(raw?.offer, catalog, collections, warnings, 'recommend').filter((p) => !triggerIds.has(numericId(p.id)));
+    const parts = resolveSideParts(raw?.offer, catalog, collections, warnings, 'recommend')
+      .map((part) => part.filter((p) => !triggerIds.has(numericId(p.id))))
+      .filter((part) => part.length);
+    let offers = uniqueById(parts.flat());
     if (!offers.length) {
       warnings.push(`Skipped "${ruleName(triggers, allProducts)}": nothing to recommend was found.`);
       continue;
     }
-    if (offers.length > count && triggers.length > 1) {
+    // A count given ("2 tops") means a mix per product: always one rule each.
+    if (triggers.length > 1 && (offers.length > count || Number(raw?.offer?.count) > 0)) {
       // A group to a bigger group ("tops" → "bottoms"): each product gets its
       // own best picks instead of every top showing the same few bottoms.
       for (const t of triggers) {
-        const picks = rankOffersFor(t, offers.filter((p) => numericId(p.id) !== numericId(t.id)), pairs).slice(0, count);
+        const picks = picksFor(t, parts, count, pairs);
         if (picks.length) rules.push({ name: t.title, allProducts: false, triggerProducts: [toRuleProduct(t)], offerProducts: picks.map(toRuleProduct), basis: 'prompt' });
       }
       continue;
     }
     if (offers.length > count) {
       // Several matches ("socks" → 6 socks): the ones that suit this product best.
-      offers = triggers.length === 1 ? rankOffersFor(triggers[0], offers, pairs) : offers;
-      offers = offers.slice(0, count);
+      offers = triggers.length === 1 ? picksFor(triggers[0], parts, count, pairs) : offers.slice(0, count);
     }
     rules.push({
       name: ruleName(triggers, allProducts),
@@ -370,7 +513,29 @@ export function buildRulesFromPlan(plan, { catalog = [], collections = [], pairs
     });
   }
 
-  return { rules: mergeDuplicateRules(rules), warnings };
+  return { rules: mergeByTrigger(mergeDuplicateRules(rules)), warnings };
+}
+
+// Several rules for the same single product ("2 tops", "2 bottoms", "1 dress"
+// for one pair of jeans) become one rule, offers in the order asked.
+function mergeByTrigger(rules) {
+  const out = [];
+  const byTrigger = new Map();
+  for (const r of rules) {
+    const single = !r.allProducts && r.triggerProducts.length === 1;
+    const key = single ? numericId(r.triggerProducts[0].id) : null;
+    const prev = key ? byTrigger.get(key) : null;
+    if (!prev) {
+      const copy = { ...r, offerProducts: [...r.offerProducts] };
+      out.push(copy);
+      if (key) byTrigger.set(key, copy);
+      continue;
+    }
+    const have = new Set(prev.offerProducts.map((p) => numericId(p.id)));
+    for (const p of r.offerProducts) if (!have.has(numericId(p.id))) { prev.offerProducts.push(p); have.add(numericId(p.id)); }
+    if (prev.basis !== r.basis) prev.basis = 'prompt';
+  }
+  return out;
 }
 
 // ── Plain-text fallback when no AI is available ─────────────────────────────

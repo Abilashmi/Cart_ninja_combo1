@@ -13,7 +13,7 @@ import { ensureAnalyticsTables } from './analytics-schema.server';
 import { callLlmWithMeta, parseJsonReply } from './ai-llm.server';
 import { withTimeout } from '../utils/with-timeout';
 import {
-  computeOrderPairs, buildRulesFromPlan, parsePromptHeuristically, numericId, productGid, instructionsHash,
+  computeOrderPairs, buildRulesFromPlan, parsePromptHeuristically, numericId, productGid, instructionsHash, typesByKind, fillEveryType,
 } from '../utils/pairing.shared';
 
 const SHOPIFY_CALL_TIMEOUT_MS = 20_000;
@@ -230,7 +230,7 @@ export async function loadPairingCatalog(admin) {
   return { catalog: catalog.slice(0, CATALOG_CAP), collections: Array.from(collections.values()), truncated };
 }
 
-const PLAN_SHAPE = '{"rules":[{"trigger":{"allProducts":false,"products":[],"collections":[],"productTypes":[],"tags":[]},"offer":{"products":[],"collections":[],"productTypes":[],"tags":[],"fromOrderHistory":false,"count":null}}],"question":null}';
+const PLAN_SHAPE = '{"everyKind":false,"rules":[{"trigger":{"allProducts":false,"products":[],"collections":[],"productTypes":[],"tags":[]},"offer":{"products":[],"collections":[],"productTypes":[],"tags":[],"fromOrderHistory":false,"count":null}}],"question":null}';
 
 // A title cut at a word, never mid-word (the model copies what it sees).
 function shortTitle(title, max = 110) {
@@ -251,9 +251,14 @@ export function buildPlanMessages(prompt, { catalog, collections }) {
     `Reply with ONLY this JSON shape, nothing else: ${PLAN_SHAPE}`,
     'One entry in "rules" per pairing the merchant describes — NOT one per product: the server expands groups into per-product rules itself.',
     'Prefer groups: product types (copy them exactly from the list, without the count), collections, tags, or a group word ("tops", "jeans"). Never list a group\'s products one by one.',
-    'Keep it short: at most 12 rules and at most 10 names in any list.',
+    'Keep it short: at most 30 rules and at most 12 names in any list. A trigger may list several product types of the same kind and gender at once (e.g. all girls\' bottomwear types) to save rules.',
     'Ignore anything about layout, display, design or wording — only pairings matter.',
     'The merchant may write steps ("first identify the category, if it is a top recommend bottoms"): turn each "if X recommend Y" into a rule X → Y.',
+    'A mix for one product ("2 tops, 2 bottoms and 1 dress") = one rule per part, same trigger, each with its own count (2, 2, 1), in that order.',
+    'When the merchant talks about kinds of products, write the kind names from "Product types by kind" (e.g. "topwear", "bottomwear", "dresses", "co-ord sets") in "products"; the server turns each into its product types. Each list holds only its own kind: dresses and co-ord sets never go in a topwear or bottomwear list.',
+    'Set "everyKind": true when the merchant states a general idea that should apply to every kind of product (e.g. "recommend complementary products, not the same category"); then write rules with every kind in "Product types by kind" as a trigger.',
+    'If the merchant states a general idea (e.g. "recommend complementary products, not the same category", "at least 2 from other categories") and gives an example for only one category, write rules in the same spirit for EVERY main product type in the store (tops, bottoms, dresses, co-ord sets, ...), recommending other kinds that are worn or used with it.',
+    'Boys\' and girls\' products are kept apart by the server, so kind names are enough.',
     '"trigger" = the product the shopper is looking at or has in the cart. "offer" = what to recommend with it.',
     'Copy product titles exactly from the catalog when the merchant clearly means one product.',
     'When they mean a group (e.g. "all joggers", "socks"), put that word in "products" as written (every product whose title contains it is used), or use a matching collection / product type / tag.',
@@ -271,6 +276,7 @@ export function buildPlanMessages(prompt, { catalog, collections }) {
     '',
     `Collections: ${collections.map((c) => c.title).slice(0, 80).join(' | ') || 'none'}`,
     `Product types (with how many products): ${types.join(' | ') || 'none'}`,
+    `Product types by kind (use these for topwear / bottomwear / dresses / co-ord sets …): ${Object.entries(typesByKind(catalog)).map(([k, list]) => `${k}: ${list.join(', ')}`).join(' | ') || 'none'}`,
     '',
     `Merchant: ${prompt}`,
   ].join('\n');
@@ -280,7 +286,8 @@ export function buildPlanMessages(prompt, { catalog, collections }) {
 function cleanPlan(plan) {
   const list = (v) => (Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 50) : []);
   const side = (s, offer) => ({
-    allProducts: !offer && Boolean(s?.allProducts),
+    // "All products" only when nothing is named (a named type always wins).
+    allProducts: !offer && Boolean(s?.allProducts) && !['products', 'collections', 'productTypes', 'tags'].some((k) => list(s?.[k]).length),
     products: list(s?.products),
     collections: list(s?.collections),
     productTypes: list(s?.productTypes),
@@ -288,7 +295,8 @@ function cleanPlan(plan) {
     ...(offer ? { fromOrderHistory: Boolean(s?.fromOrderHistory), count: Number(s?.count) || null } : {}),
   });
   return {
-    rules: (Array.isArray(plan?.rules) ? plan.rules : []).slice(0, 30).map((r) => ({ trigger: side(r?.trigger, false), offer: side(r?.offer, true) })),
+    everyKind: Boolean(plan?.everyKind),
+    rules: (Array.isArray(plan?.rules) ? plan.rules : []).slice(0, 40).map((r) => ({ trigger: side(r?.trigger, false), offer: side(r?.offer, true) })),
     question: typeof plan?.question === 'string' && plan.question.trim() ? plan.question.trim() : null,
   };
 }
@@ -331,6 +339,9 @@ function planWantsHistory(plan) {
   return plan.rules.some((r) => r.offer?.fromOrderHistory);
 }
 
+// Wording that means "do this for every product", not one pairing.
+const GENERAL_IDEA = /\b(complementary|complement|ideally|in general|generally|always|every (?:product|item|category|page)|all (?:products|items|categories|product pages)|any product|should (?:show|recommend|suggest|display)|at least \d)/i;
+
 // consumeCredit: async () => void, called only when the model is actually used.
 // Returns { rules, warnings, question, usedAi, catalogTruncated }.
 export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 3, consumeCredit } = {}) {
@@ -344,13 +355,30 @@ export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 
   let usedAi = false;
   if (process.env.OPENAI_API_KEY) {
     if (consumeCredit) await consumeCredit();
-    const reply = await callLlmWithMeta(buildPlanMessages(text, { catalog, collections }), { maxTokens: 2000, temperature: 0, json: true });
+    const messages = buildPlanMessages(text, { catalog, collections });
+    const reply = await callLlmWithMeta(messages, { maxTokens: 2500, temperature: 0, json: true, timeoutMs: 45_000 });
     if (reply.content) {
       const read = readPlanReply(reply.content);
       if (!read) console.warn('[pairing-assistant] model reply not usable', reply.finishReason, String(reply.content).slice(0, 200));
       if (read) {
         usedAi = true;
         plan = cleanPlan(read);
+        // A general idea must reach every kind: ask once more for any kind the
+        // model left out as a trigger (same idea, only the new rules).
+        // A general idea, flagged by the model or plain in the wording.
+        const general = plan.everyKind || GENERAL_IDEA.test(text);
+        const filled = general ? fillEveryType(plan, catalog, collections) : { rules: plan.rules, missingKinds: [] };
+        plan.rules = filled.rules;
+        const missing = filled.missingKinds;
+        if (missing.length) {
+          const more = await callLlmWithMeta([
+            ...messages,
+            { role: 'assistant', content: reply.content },
+            { role: 'user', content: `Now write rules in the same spirit with these kinds as the trigger: ${missing.join(', ')}. Reply with the same JSON shape holding only the new rules.` },
+          ], { maxTokens: 2000, temperature: 0, json: true, timeoutMs: 30_000 });
+          const extra = more.content ? readPlanReply(more.content) : null;
+          if (extra) plan.rules = fillEveryType({ rules: [...plan.rules, ...cleanPlan(extra).rules] }, catalog, collections).rules;
+        }
       }
     } else if (reply.errorStatus || reply.errorMessage) {
       console.warn('[pairing-assistant] model call failed', reply.errorStatus, reply.errorMessage);
