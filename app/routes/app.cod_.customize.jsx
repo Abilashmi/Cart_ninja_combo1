@@ -26,7 +26,7 @@ import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discoun
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, codButtonLook, hasPriceTags } from '../utils/cod.shared';
+import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, codButtonLook, hasPriceTags } from '../utils/cod.shared';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
 import { buildCodScreen, cartSliderMax, suggestedValue } from '../components/cod/CodPreview';
@@ -243,7 +243,7 @@ const GROUPS = [
   {
     title: 'Charges & rules',
     items: [
-      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel'], toggle: 'codFeeEnabled' },
+      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom'], toggle: 'codFeeEnabled' },
       { id: 'shipping', label: 'Shipping', icon: DeliveryIcon, preview: 'sheet', fields: ['shippingFee', 'freeShippingAbove'] },
       { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder'] },
       { id: 'fraud', label: 'Fraud protection', icon: ShieldCheckMarkIcon, preview: 'sheet', fields: ['dailyLimitPerPhone', 'blockedPincodes'] },
@@ -663,6 +663,36 @@ export default function CodCustomizePage() {
                   <FormLayout.Group>
                     <TextField label="Fee amount" type="number" min={0} value={form.codFee} onChange={set('codFee')} placeholder="40" prefix={data.currencyCode} error={errors.codFee} autoComplete="off" />
                     <TextField label="Fee title" value={form.codFeeLabel} onChange={set('codFeeLabel')} placeholder={COD_FEE_LABEL_DEFAULT} maxLength={40} error={errors.codFeeLabel} autoComplete="off" />
+                  </FormLayout.Group>
+                  <FormLayout.Group>
+                    <TextField
+                      label="For larger orders, charge"
+                      type="number"
+                      min={0}
+                      max={COD_FEE_PERCENT_MAX}
+                      suffix="% of the order"
+                      value={form.codFeePercent}
+                      onChange={set('codFeePercent')}
+                      placeholder="Off"
+                      error={errors.codFeePercent}
+                      helpText="Instead of the fee amount. Leave empty to always charge the amount."
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label="From order value"
+                      type="number"
+                      min={0}
+                      prefix={data.currencyCode}
+                      value={form.codFeePercentFrom}
+                      onChange={set('codFeePercentFrom')}
+                      placeholder="0"
+                      error={errors.codFeePercentFrom}
+                      disabled={!(Number(form.codFeePercent) > 0)}
+                      helpText={Number(form.codFeePercent) > 0
+                        ? `Orders from ${money(Number(form.codFeePercentFrom) || 0)} pay ${Number(form.codFeePercent)}% of the order (after discounts); smaller ones pay ${money(Number(form.codFee) || 0)}.`
+                        : 'Order value after discounts.'}
+                      autoComplete="off"
+                    />
                   </FormLayout.Group>
                   <Checkbox
                     label="Show fee to customers"

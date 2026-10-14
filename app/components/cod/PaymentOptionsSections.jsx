@@ -5,12 +5,12 @@
 // of the COD settings, and the prepaid discount is synced to Shopify on save.
 import { hasPriceTags } from '../../utils/price-tags.shared.js';
 import {
-  Banner, BlockStack, Button, ButtonGroup, Card, Checkbox, FormLayout, InlineStack, Select, Text, TextField, Badge,
+  Banner, BlockStack, Button, ButtonGroup, Card, Checkbox, FormLayout, InlineStack, Select, Tag, Text, TextField, Badge,
 } from '@shopify/polaris';
 import { ColorField } from '../sections/ColorField';
 import { SliderField } from '../shared/SliderField';
 import { PAY_COLORS, contrastRatio, HEX } from './codSettingsForm';
-import { PAY_RADIUS_MAX, PAY_TEXT_LIMITS, PREPAID_PERCENT_MAX, PREPAID_PERCENT_MIN } from '../../utils/product-payment.shared';
+import { PAY_RADIUS_MAX, PAY_TEXT_LIMITS, PREPAID_EXCLUDE_MAX, PREPAID_PERCENT_MAX, PREPAID_PERCENT_MIN } from '../../utils/product-payment.shared';
 
 const PLACEMENT_OPTIONS = [
   { label: 'Above the purchase buttons (recommended)', value: 'before_purchase_buttons' },
@@ -147,6 +147,39 @@ export function PaymentOptionsSection({ form, set, setPP, errors, money }) {
   );
 }
 
+// Collections left out of the prepaid discount: [{ id: gid, title }].
+function ExcludedCollections({ value, onChange }) {
+  const list = Array.isArray(value) ? value : [];
+  // App Bridge's global, read on click (rendering never depends on it).
+  const pick = async () => {
+    const shopify = typeof window !== 'undefined' ? window.shopify : null;
+    if (!shopify?.resourcePicker) return;
+    try {
+      const selected = await shopify.resourcePicker({ type: 'collection', multiple: true, selectionIds: list.map((c) => ({ id: c.id })) });
+      if (!selected) return;
+      onChange(selected.slice(0, PREPAID_EXCLUDE_MAX).map((c) => ({ id: c.id, title: c.title || '' })));
+    } catch {
+      shopify.toast.show('Could not open the picker. Please try again.', { isError: true });
+    }
+  };
+  return (
+    <BlockStack gap="200">
+      <Text as="p">Leave out these collections</Text>
+      {list.length > 0 && (
+        <InlineStack gap="200">
+          {list.map((c) => (
+            <Tag key={c.id} onRemove={() => onChange(list.filter((x) => x.id !== c.id))}>{c.title || `Collection ${c.id.split('/').pop()}`}</Tag>
+          ))}
+        </InlineStack>
+      )}
+      <InlineStack><Button onClick={pick}>{list.length ? 'Change collections' : 'Choose collections'}</Button></InlineStack>
+      <Text as="p" variant="bodySm" tone="subdued">
+        Products in these collections never get the prepaid discount: no offer on their product page, and checkout (Shopify or Shiprocket) leaves them out. Other products in the same order still get it. Use collections that are on your Online Store; product pages can&apos;t see hidden ones.
+      </Text>
+    </BlockStack>
+  );
+}
+
 function PrepaidStatus({ status, dirty, enabled }) {
   if (!enabled) return null;
   if (dirty) return <Banner tone="info">Save to set up these changes in Shopify checkout.</Banner>;
@@ -154,7 +187,7 @@ function PrepaidStatus({ status, dirty, enabled }) {
   if (status.verified) {
     return (
       <Banner tone="success" title="Active in Shopify checkout">
-        {`${status.percent}% off online payments${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}. Shoppers see the offer on product pages.`}
+        {`${status.percent}% off online payments${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}${status.excludedCollections?.length ? `, not on ${status.excludedCollections.length} excluded collection${status.excludedCollections.length === 1 ? '' : 's'}` : ''}. Shoppers see the offer on product pages.`}
       </Banner>
     );
   }
@@ -216,6 +249,7 @@ export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirt
                 />
               </FormLayout.Group>
               <TextField label="Discount title" value={p.title} onChange={setPP(['prepaid', 'title'])} maxLength={PAY_TEXT_LIMITS.title} error={errors.ppTitle} helpText="Its name in Shopify checkout and on the order." autoComplete="off" />
+              <ExcludedCollections value={p.excludedCollections} onChange={setPP(['prepaid', 'excludedCollections'])} />
               <Checkbox label={'Show a "Save X%" badge'} checked={p.showBadge} onChange={setPP(['prepaid', 'showBadge'])} helpText="On the Pay Online card and its Buy button." />
               <Checkbox label="Show the exact savings amount" checked={p.showSavingsAmount} onChange={setPP(['prepaid', 'showSavingsAmount'])} helpText={'"(save ₹110)" next to the online price.'} />
             </>
@@ -244,7 +278,7 @@ export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirt
         </Card>
       )}
       <Banner tone="info">
-        It applies to every online payment in Shopify checkout (cart, drawer and Buy it now), not only orders from product pages. Third-party checkouts (for example Shiprocket) may not run Shopify discounts: test one order first. If Shopify&apos;s own &quot;Cash on Delivery (COD)&quot; payment method is on in your checkout, shoppers who pick it there would still get this discount, so use BRIX COD instead.
+        It applies to every online payment in Shopify checkout (cart, drawer and Buy it now), not only orders from product pages. Shiprocket can&apos;t run Shopify discounts, so on Shiprocket stores Pay Online passes the saving there as a one-time code. If Shopify&apos;s own &quot;Cash on Delivery (COD)&quot; payment method is on in your checkout, shoppers who pick it there would still get this discount, so use BRIX COD instead.
       </Banner>
     </BlockStack>
   );

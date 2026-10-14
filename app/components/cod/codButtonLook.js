@@ -40,8 +40,8 @@ export function codFeeLabel(settings) {
 }
 
 /** "+₹40 Cash on Delivery Fee" under the button, or '' when there's no fee or it's hidden. */
-export function codFeeHint(settings, money) {
-  const fee = codFeeOf(settings);
+export function codFeeHint(settings, money, subtotal = null) {
+  const fee = codFeeOf(settings, subtotal);
   return fee > 0 && settings.showCodFee !== false ? `+${money(fee)} ${codFeeLabel(settings)}` : '';
 }
 

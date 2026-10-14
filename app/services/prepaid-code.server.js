@@ -40,13 +40,19 @@ async function gql(admin, query, variables) {
   return json.data;
 }
 
-/** The offer a code may carry: { percent, minSubtotal } only when saved, on the plan and verified in Shopify; else null. */
+/**
+ * The offer a code may carry: { percent, minSubtotal, excludedCollections }
+ * only when saved, on the plan and verified in Shopify; else null.
+ * excludedCollections: numeric ids of the collections left out (verified).
+ */
 export function prepaidOffer(settings, runtime, planLive) {
   const verified = runtime?.prepaid;
   if (!prepaidDiscountLive(settings?.productPayment, planLive) || verified?.verified !== true) return null;
   const percent = Number(verified.percent);
   if (!Number.isFinite(percent) || percent < 1 || percent > 50) return null;
-  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0) };
+  const excludedCollections = (Array.isArray(verified.excludedCollections) ? verified.excludedCollections : [])
+    .map(String).filter((id) => /^\d+$/.test(id));
+  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0), excludedCollections };
 }
 
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
@@ -67,14 +73,18 @@ export async function createPrepaidCode(admin, { offer, items, now = Date.now(),
   // Prices from Shopify, never the browser (2 decimals: COD is INR-only).
   const priced = await gql(admin, `#graphql
     query BrixPrepaidPrices($ids: [ID!]!) {
-      nodes(ids: $ids) { ... on ProductVariant { id price } }
+      nodes(ids: $ids) { ... on ProductVariant { id price product { collections(first: 250) { nodes { id } } } } }
     }`, { ids: [...quantities.keys()].map(toVariantGid) });
+  // Like the Function: products in an excluded collection get nothing.
+  const excluded = new Set((offer.excludedCollections || []).map(String));
+  const isExcluded = (node) => (node?.product?.collections?.nodes || [])
+    .some((c) => excluded.has(String(c?.id || '').split('/').pop()));
   let subtotalMinor = 0;
   const variantIds = [];
   for (const node of priced?.nodes || []) {
     const id = String(node?.id || '').split('/').pop();
     const price = Number(node?.price);
-    if (!quantities.has(id) || !Number.isFinite(price) || price <= 0) continue;
+    if (!quantities.has(id) || !Number.isFinite(price) || price <= 0 || isExcluded(node)) continue;
     subtotalMinor += Math.round(price * 100) * quantities.get(id);
     variantIds.push(id);
   }

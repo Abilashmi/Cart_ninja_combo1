@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, normalizeIndianPhone, checkCodRules, codCharges, normalizeLines,
   validateAddress, provinceCodeFor, isCheckoutOnlyLine, maskPhone, splitName, parsePincodes, moneyFormatter,
-  isValidCodLogo, parseCodOffers, sanitizeCodTrack, codButtonLook,
+  isValidCodLogo, parseCodOffers, sanitizeCodTrack, codButtonLook, codFeeOf,
 } from '../../app/utils/cod.shared.js';
 
 const on = (patch = {}) => sanitizeCodSettings({ enabled: true, ...patch });
@@ -109,6 +109,22 @@ test('COD rules: off, surface off, min, max, blocked PIN, excluded tag, allowed'
   assert.equal(checkCodRules({ settings: s, subtotal: 1000, pincode: '744101' }).code, 'pincode_blocked');
   assert.equal(checkCodRules({ settings: s, subtotal: 1000, productTags: ['Sale', 'NO-COD'] }).code, 'product_excluded');
   assert.equal(checkCodRules({ settings: s, subtotal: 1000, pincode: '560001', productTags: ['Sale'], surface: 'drawer' }), null);
+});
+
+test('charges: a % COD fee from an order value, the fixed fee below it (₹80 below ₹1,000, 10% from ₹1,000)', () => {
+  const s = on({ codFee: 80, codFeePercent: 10, codFeePercentFrom: 1000 });
+  assert.equal(s.codFeePercent, 10);
+  assert.equal(s.codFeePercentFrom, 1000);
+  assert.deepEqual(codCharges(s, 999), { shipping: 0, codFee: 80, total: 80 });
+  assert.deepEqual(codCharges(s, 1000), { shipping: 0, codFee: 100, total: 100 });
+  assert.deepEqual(codCharges(s, 1499.5), { shipping: 0, codFee: 149.95, total: 149.95 });
+  assert.equal(codFeeOf(s), 80, 'no order value known → the fixed fee');
+  assert.deepEqual(codCharges(on({ codFee: 0, codFeePercent: 5, codFeePercentFrom: 2000 }), 1500).codFee, 0, 'below the start with no fixed fee → none');
+  assert.deepEqual(codCharges({ ...s, codFeeEnabled: false }, 1500).codFee, 0, 'fee switch off → nothing');
+  assert.equal(sanitizeCodSettings({ codFeePercent: 70 }).codFeePercent, 0, 'over 50% is refused');
+  assert.equal(sanitizeCodSettings({ codFeePercent: 12 }, s).codFeePercent, 12);
+  assert.equal(sanitizeCodSettings({ codFee: 90 }, s).codFeePercent, 10, 'kept when not in the patch');
+  assert.equal(sanitizeCodSettings({}).codFeePercent, 0, 'off by default');
 });
 
 test('rule messages use the store currency', () => {

@@ -30,6 +30,30 @@ export const PAY_SPACINGS = ['small', 'medium', 'large'];
 export const PAY_BANNER_PLACEMENTS = ['above_selector', 'in_online_card', 'below_price'];
 export const PAY_METHODS = ['online', 'cod'];
 
+export const PREPAID_EXCLUDE_MAX = 50;
+const COLLECTION_GID_RE = /^gid:\/\/shopify\/Collection\/(\d+)$/;
+
+/** The excluded collections, cleaned: [{ id: gid, title }], unique, at most PREPAID_EXCLUDE_MAX. */
+export function cleanExcludedCollections(list) {
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    const raw = typeof item === 'string' ? item : item?.id;
+    const id = /^\d+$/.test(String(raw ?? '')) ? `gid://shopify/Collection/${raw}` : String(raw ?? '');
+    if (!COLLECTION_GID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, title: cleanText(typeof item === 'object' ? item?.title : '', '', 80) });
+    if (out.length >= PREPAID_EXCLUDE_MAX) break;
+  }
+  return out;
+}
+
+/** Numeric ids of the excluded collections (what the storefront compares with). */
+export function excludedCollectionIds(prepaid) {
+  return (cleanExcludedCollections(prepaid?.excludedCollections) || []).map((c) => COLLECTION_GID_RE.exec(c.id)[1]);
+}
+
 export const PREPAID_PERCENT_MIN = 1;
 export const PREPAID_PERCENT_MAX = 50;
 export const PAY_RADIUS_MAX = 24;
@@ -78,6 +102,8 @@ export const DEFAULT_PRODUCT_PAYMENT = Object.freeze({
     offerTitle: '{percent}% off when you pay online',
     offerDescription: 'Pay online and save {amount}',
     minNotMetText: 'Get {percent}% off on orders above {min}',
+    // Products in these collections never get it: [{ id: 'gid://shopify/Collection/1', title }].
+    excludedCollections: Object.freeze([]),
   }),
   layout: Object.freeze({
     placement: 'before_purchase_buttons',
@@ -178,6 +204,7 @@ export function sanitizeProductPayment(patch, base = DEFAULT_PRODUCT_PAYMENT) {
     offerTitle: cleanText(pp.offerTitle ?? prepaid.offerTitle, d.prepaid.offerTitle, L.offerTitle),
     offerDescription: cleanText(pp.offerDescription ?? prepaid.offerDescription, '', L.offerDescription),
     minNotMetText: cleanText(pp.minNotMetText ?? prepaid.minNotMetText, '', L.minNotMetText),
+    excludedCollections: cleanExcludedCollections(pp.excludedCollections) ?? cleanExcludedCollections(prepaid.excludedCollections) ?? [],
   };
 
   const layout = sub('layout');

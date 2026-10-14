@@ -50,7 +50,7 @@ const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-
 // A Dawn-like product page. The theme's own JS sets the hidden variant id
 // WITHOUT firing an event and redraws the price (like Dawn), and its quantity
 // buttons fire `change`.
-function productPage({ buyNow = true, block = false, pageType = 'product', custom = false } = {}) {
+function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '' } = {}) {
   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
   <style>body{font-family:Arial,sans-serif;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}
   .product{display:grid;grid-template-columns:1fr 1fr;gap:32px}@media (max-width:749px){.product{grid-template-columns:1fr}}
@@ -83,7 +83,7 @@ function productPage({ buyNow = true, block = false, pageType = 'product', custo
     document.getElementById('plus').onclick=function(){q.value=Number(q.value)+1;q.dispatchEvent(new Event('change',{bubbles:true}));};
     document.getElementById('minus').onclick=function(){q.value=Math.max(1,Number(q.value)-1);q.dispatchEvent(new Event('change',{bubbles:true}));};
   </script>
-  <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"></script></body></html>`;
+  <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"${collections ? ` data-product-collections="${collections}"` : ''}></script></body></html>`;
 }
 
 const handler = async (route) => {
@@ -94,7 +94,7 @@ const handler = async (route) => {
     return json({ tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/')) {
-    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom') }) });
+    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '' }) });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/cart/')) {
     navigations.push(url.pathname);
@@ -322,6 +322,42 @@ await settle(page);
 s = await state(page);
 check('no verified prepaid: no "Save", no banner, Buy it now untouched', !/Save/.test(s.online.text) && !s.banner && s.nativeText === 'Buy it now', JSON.stringify({ t: s.online.text, b: s.banner, n: s.nativeText }));
 await page.close();
+
+/* ── 11b. product in a collection left out of the prepaid discount ────────── */
+config = { ...COD, productPayment: { ...PAYMENT, prepaid: { ...PREPAID, excludedCollections: ['77'] } } };
+page = await openPage('?collections=5,77');
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('excluded collection: no "Save", no banner, Buy it now untouched, COD still offered', !/Save/.test(s.online.text) && !s.banner && s.nativeText === 'Buy it now' && Boolean(s.cod), JSON.stringify({ t: s.online.text, b: s.banner, n: s.nativeText }));
+await page.close();
+page = await openPage('?collections=5,78');
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('other collections: the saving still shows', /Save 10%/.test(s.online.text) && s.nativeText === 'Buy it now · Save 10%', `${s.online.text} | ${s.nativeText}`);
+await page.close();
+
+/* ── 11c. a % COD fee from an order value (₹50 below ₹1,000, 10% from it) ── */
+config = { ...COD, codFee: 50, codFeePercent: 10, codFeePercentFrom: 1000, productPayment: PAYMENT };
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('% COD fee: ₹1,100 product → "Pay ₹1,100 + ₹110 Cash on Delivery Fee"', /Pay ₹1,100 \+ ₹110 Cash on Delivery Fee/.test(s.cod.text), s.cod.text);
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+s = await state(page);
+check('% COD fee follows the variant (₹1,500 → + ₹150)', /Pay ₹1,500 \+ ₹150 Cash on Delivery Fee/.test(s.cod.text), s.cod.text);
+await page.close();
+prices = [79900, 150000];
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('% COD fee: below the start (₹799) → the fixed ₹50', /Pay ₹799 \+ ₹50 Cash on Delivery Fee/.test(s.cod.text), s.cod.text);
+await page.close();
+prices = [110000, 150000];
 
 /* ── 12. online only / COD only / both off ────────────────────────────────── */
 config = { ...COD, productPayment: { ...PAYMENT, cod: { ...PAYMENT.cod, enabled: false } } };

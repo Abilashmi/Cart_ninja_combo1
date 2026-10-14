@@ -195,6 +195,17 @@ function cods_tracking($tracking) {
 }
 
 // Merchant text: no control characters, trimmed, at most $max characters.
+function cods_collection_ids($list) {
+    $out = [];
+    if (!is_array($list)) return $out;
+    foreach ($list as $id) {
+        $id = (string)$id;
+        if (preg_match('/^\d{1,20}$/', $id) && !in_array($id, $out, true)) $out[] = $id;
+        if (count($out) >= 50) break;
+    }
+    return $out;
+}
+
 function cods_text($value, $default, $max) {
     if (!is_string($value)) return $default;
     $t = trim(preg_replace('/\s+/u', ' ', preg_replace('/[\x00-\x1F\x7F]/u', ' ', $value)));
@@ -244,6 +255,9 @@ function cods_product_payment($s, $codLive) {
             // The discount's name in the cart (the Function's message), so the
             // drawer can tell it apart and leave it out of the COD price.
             'title' => cods_text($pre['title'] ?? null, 'Prepaid discount', 40),
+            // Collections left out of it (numeric ids, as Shopify verified on
+            // save): product pages in them show no prepaid offer.
+            'excludedCollections' => cods_collection_ids($rt['excludedCollections'] ?? []),
             'minSubtotal' => cods_num($rt['minSubtotal'] ?? 0),
             'currency' => is_string($rt['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', $rt['currency']) ? $rt['currency'] : '',
             'showBadge' => cods_bool($pre['showBadge'] ?? null, true),
@@ -348,6 +362,10 @@ if ($action === 'config') {
         'drawerCheckoutText' => cods_text($s['drawerCheckoutText'] ?? '', '', 60),
         // The fee actually charged (0 while the fee switch is off).
         'codFee' => $feeOn ? cods_num($s['codFee'] ?? 0) : 0,
+        // From codFeePercentFrom on, the fee is codFeePercent % of the order
+        // instead (cod.shared.js codFeeOf). 0 = always codFee.
+        'codFeePercent' => $feeOn ? min(50, cods_num($s['codFeePercent'] ?? 0)) : 0,
+        'codFeePercentFrom' => cods_num($s['codFeePercentFrom'] ?? 0),
         'showCodFee' => ($s['showCodFee'] ?? true) !== false,
         'codFeeLabel' => $feeLabel !== '' ? $feeLabel : 'Cash on Delivery Fee',
         'shippingFee' => cods_num($s['shippingFee'] ?? 0),

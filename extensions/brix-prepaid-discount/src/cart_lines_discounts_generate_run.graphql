@@ -1,10 +1,20 @@
-query Input {
+query Input($collectionIds: [ID!]) {
   cart {
     cod: attribute(key: "_brixCod") { value }
     lines {
       id
       cod: attribute(key: "_brixCod") { value }
       reward: attribute(key: "_brixReward") { value }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          product {
+            inCollections(ids: $collectionIds) {
+              isMember
+            }
+          }
+        }
+      }
       cost {
         subtotalAmount {
           amount

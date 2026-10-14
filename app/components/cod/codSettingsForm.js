@@ -1,7 +1,7 @@
 // Form state for the COD customizer (app.cod_.customize.jsx):
 // settings <-> form fields, validation, and the shared constants.
 import {
-  isValidCodLogo, isValidDrawerSelector, isValidTermsUrl, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE,
+  isValidCodLogo, isValidDrawerSelector, isValidTermsUrl, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE, COD_FEE_PERCENT_MAX,
 } from '../../utils/cod.shared';
 import {
   DEFAULT_PRODUCT_PAYMENT, parsePrepaidPercent, parseMinSubtotal, PREPAID_PERCENT_MIN, PREPAID_PERCENT_MAX, PAY_HEX_RE,
@@ -109,6 +109,8 @@ export function toForm(s) {
     drawerCheckoutText: s.drawerCheckoutText || '',
     codFeeEnabled: s.codFeeEnabled,
     codFee: numText(s.codFee),
+    codFeePercent: numText(s.codFeePercent),
+    codFeePercentFrom: numText(s.codFeePercentFrom),
     showCodFee: s.showCodFee !== false,
     codFeeLabel: s.codFeeLabel,
     shippingFee: numText(s.shippingFee),
@@ -176,6 +178,8 @@ export function toSettings(f) {
     drawerCheckoutText: f.drawerCheckoutText,
     codFeeEnabled: f.codFeeEnabled,
     codFee: Number(f.codFee) || 0,
+    codFeePercent: Number(f.codFeePercent) || 0,
+    codFeePercentFrom: Number(f.codFeePercentFrom) || 0,
     showCodFee: f.showCodFee,
     codFeeLabel: f.codFeeLabel,
     shippingFee: Number(f.shippingFee) || 0,
@@ -246,9 +250,10 @@ export function toSettings(f) {
 export function formErrors(f) {
   const e = {};
   const money = (key) => { if (f[key] !== '' && !(Number(f[key]) >= 0)) e[key] = 'Enter an amount of 0 or more.'; };
-  ['codFee', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder'].forEach(money);
+  ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder'].forEach(money);
+  if (f.codFeePercent !== '' && !(Number(f.codFeePercent) >= 0 && Number(f.codFeePercent) <= COD_FEE_PERCENT_MAX)) e.codFeePercent = `Enter 0 to ${COD_FEE_PERCENT_MAX}%, or leave it empty.`;
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
-  if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
+  if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0) && !(Number(f.codFeePercent) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
   if (f.pbBuyNowSelector.trim() && !isValidDrawerSelector(f.pbBuyNowSelector)) e.pbBuyNowSelector = 'That doesn\'t look like a CSS selector, e.g. .product-form__buy-now';
   if (f.sheetTermsUrl.trim() && !isValidTermsUrl(f.sheetTermsUrl)) e.sheetTermsUrl = 'Use a link starting with https:// or a page on your store, like /pages/terms.';
   if (f.codFeeEnabled && !f.codFeeLabel.trim()) e.codFeeLabel = 'Enter the name shoppers see for this fee.';

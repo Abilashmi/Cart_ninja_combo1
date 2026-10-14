@@ -12,6 +12,13 @@ description = "Gives the merchant's prepaid (pay online) percentage off at Shopi
   input_query = "src/cart_lines_discounts_generate_run.graphql"
   export = "cart-lines-discounts-generate-run"
 
+  # $collectionIds for the input query: the collections the merchant left out
+  # of the prepaid discount, written to the discount by
+  # app/services/prepaid-discount-shopify.server.js.
+  [extensions.input.variables]
+  namespace = "$app"
+  key = "prepaid_discount_vars"
+
   [extensions.build]
   command = ""
   path = "dist/function.wasm"

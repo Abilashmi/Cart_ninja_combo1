@@ -39,6 +39,10 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   drawerCheckoutText: '',
   codFeeEnabled: false, // codFee is charged only while this is on
   codFee: 0,
+  // From this order value on, the fee is codFeePercent % of the order instead
+  // of codFee (e.g. ₹80 below ₹1,000, 10% from ₹1,000). 0 % = always codFee.
+  codFeePercent: 0,
+  codFeePercentFrom: 0,
   showCodFee: true, // false = fee is still charged, but folded into one "Delivery charges" line
   codFeeLabel: COD_FEE_LABEL_DEFAULT,
   shippingFee: 0,
@@ -177,6 +181,16 @@ export function isValidDrawerSelector(value) {
 }
 const PIN_RE = /^[1-9]\d{5}$/;
 const TAG_RE = /^[\w\- .:/]{1,40}$/;
+
+export const COD_FEE_PERCENT_MAX = 50;
+
+/** A COD fee percentage: 0 (off) to COD_FEE_PERCENT_MAX, 2 decimals; invalid = fallback. */
+function feePercent(value, fallback = 0) {
+  if (value === '' || value === null || value === undefined) return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > COD_FEE_PERCENT_MAX) return Number(fallback) || 0;
+  return Math.round(n * 100) / 100;
+}
 
 function money(value, fallback = 0) {
   const n = Number(value);
@@ -347,6 +361,8 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
       : String(b.drawerCheckoutText || ''),
     codFeeEnabled: has('codFeeEnabled') ? Boolean(p.codFeeEnabled) : has('codFee') ? codFee > 0 : baseFeeFlag ?? codFee > 0,
     codFee,
+    codFeePercent: has('codFeePercent') ? feePercent(p.codFeePercent, b.codFeePercent) : feePercent(b.codFeePercent, 0),
+    codFeePercentFrom: has('codFeePercentFrom') ? money(p.codFeePercentFrom, b.codFeePercentFrom) : money(b.codFeePercentFrom),
     showCodFee: has('showCodFee') ? Boolean(p.showCodFee) : b.showCodFee !== false,
     codFeeLabel: text(has('codFeeLabel') ? p.codFeeLabel : b.codFeeLabel, COD_FEE_LABEL_DEFAULT, 40),
     shippingFee: has('shippingFee') ? money(p.shippingFee, b.shippingFee) : money(b.shippingFee),
@@ -433,9 +449,20 @@ export function isCheckoutOnlyLine(properties) {
   return props._brixReward === 'true' || props._brixReward === true;
 }
 
-/** The COD fee actually charged: the amount, while the fee switch is on. */
-export function codFeeOf(settings) {
-  return settings.codFeeEnabled === false ? 0 : money(settings.codFee);
+/**
+ * The COD fee actually charged for an order of `subtotal` (0 while the fee
+ * switch is off): codFeePercent % of it from codFeePercentFrom on, else the
+ * fixed codFee. Without a subtotal, the fixed fee. brix_cod.js codFeeFor
+ * mirrors this exactly (same rounding).
+ */
+export function codFeeOf(settings, subtotal = null) {
+  if (settings.codFeeEnabled === false) return 0;
+  const pct = Number(settings.codFeePercent) || 0;
+  const value = Number(subtotal);
+  if (pct > 0 && subtotal != null && Number.isFinite(value) && value >= (Number(settings.codFeePercentFrom) || 0)) {
+    return Math.round(value * pct) / 100;
+  }
+  return money(settings.codFee);
 }
 
 /** Shipping + COD fee charged as the order's shipping line. */
@@ -443,7 +470,7 @@ export function codCharges(settings, subtotal) {
   const shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
     ? settings.shippingFee
     : 0;
-  const codFee = codFeeOf(settings);
+  const codFee = codFeeOf(settings, subtotal);
   return { shipping, codFee, total: money(shipping + codFee) };
 }
 

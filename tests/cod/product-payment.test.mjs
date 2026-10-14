@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment, parsePrepaidPercent, parseMinSubtotal, productPaymentPricing,
-  fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, prepaidDiscountLive, PAY_TEXT_LIMITS,
+  fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, prepaidDiscountLive, PAY_TEXT_LIMITS, excludedCollectionIds,
 } from '../../app/utils/product-payment.shared.js';
 import { sanitizeCodSettings, DEFAULT_COD_SETTINGS } from '../../app/utils/cod.shared.js';
 import { cartLinesDiscountsGenerateRun as run } from '../../extensions/brix-prepaid-discount/src/cart_lines_discounts_generate_run.js';
@@ -202,9 +202,11 @@ test('merchant text: {percent} {amount} {min} {price} filled in', () => {
 /* ── the Discount Function (logic only) ───────────────────────────────────── */
 
 const cfg = (patch = {}) => ({ version: 1, enabled: true, percent: 10, minSubtotal: 0, currency: 'INR', title: 'Prepaid discount', ...patch });
-const line = (id, amount, { cod = null, reward = null, currency = 'INR' } = {}) => ({
+const line = (id, amount, { cod = null, reward = null, currency = 'INR', excluded = null } = {}) => ({
   id, cod: cod == null ? null : { value: cod }, reward: reward == null ? null : { value: reward },
   cost: { subtotalAmount: { amount: String(amount), currencyCode: currency } },
+  // Shopify answers inCollections for the excluded collections ($collectionIds).
+  merchandise: { __typename: 'ProductVariant', product: { inCollections: excluded == null ? [] : [{ isMember: excluded }] } },
 });
 const fnInput = (lines, config, { cartCod = null, classes = ['ORDER'] } = {}) => ({
   cart: { cod: cartCod == null ? null : { value: cartCod }, lines },
@@ -243,6 +245,28 @@ test('Function: free gifts are left out of the subtotal and the minimum', () => 
   assert.deepEqual(ok.candidates[0].targets[0].orderSubtotal.excludedCartLineIds, ['G1']);
 });
 
+test('Function: products in an excluded collection are left out of the discount and the minimum', () => {
+  const op = order(run(fnInput([line('L1', 1100), line('X1', 500, { excluded: true }), line('L2', 300, { excluded: false })], cfg())));
+  assert.deepEqual(op.candidates[0].targets[0].orderSubtotal.excludedCartLineIds, ['X1']);
+  assert.deepEqual(run(fnInput([line('X1', 500, { excluded: true })], cfg())), { operations: [] }, 'only excluded products → nothing');
+  assert.deepEqual(run(fnInput([line('L1', 800), line('X1', 500, { excluded: true })], cfg({ minSubtotal: 999 }))), { operations: [] }, 'excluded products do not help reach the minimum');
+  const both = order(run(fnInput([line('L1', 1100), line('G1', 200, { reward: 'true', excluded: true }), line('X1', 50, { excluded: true })], cfg())));
+  assert.deepEqual(both.candidates[0].targets[0].orderSubtotal.excludedCartLineIds, ['G1', 'X1'], 'a gift in an excluded collection is listed once');
+  const old = { ...line('L1', 1100) };
+  delete old.merchandise;
+  assert.equal(order(run(fnInput([old], cfg()))).candidates.length, 1, 'no collection data (no exclusions) → as before');
+});
+
+test('settings: excluded collections are cleaned (collection ids only, unique, at most 50)', () => {
+  const pp = sanitizeProductPayment({ prepaid: { excludedCollections: [{ id: 'gid://shopify/Collection/12', title: 'Toys' }, '34', { id: 'gid://shopify/Product/1' }, { id: 'gid://shopify/Collection/12' }] } });
+  assert.deepEqual(pp.prepaid.excludedCollections, [{ id: 'gid://shopify/Collection/12', title: 'Toys' }, { id: 'gid://shopify/Collection/34', title: '' }]);
+  assert.deepEqual(excludedCollectionIds(pp.prepaid), ['12', '34']);
+  assert.deepEqual(sanitizeProductPayment({}).prepaid.excludedCollections, [], 'none by default');
+  assert.deepEqual(sanitizeProductPayment({ prepaid: { percent: 12 } }, pp).prepaid.excludedCollections, pp.prepaid.excludedCollections, 'kept when not in the patch');
+  const many = Array.from({ length: 60 }, (_, i) => `gid://shopify/Collection/${i + 1}`);
+  assert.equal(sanitizeProductPayment({ prepaid: { excludedCollections: many } }).prepaid.excludedCollections.length, 50);
+});
+
 test('Function: off, missing, or tampered config → nothing; never a shopper-chosen percentage', () => {
   const lines = [line('L1', 1100)];
   assert.deepEqual(run(fnInput(lines, null)), { operations: [] });
@@ -266,6 +290,7 @@ function fakeShopify({ existing = null, createErrors = [], status = 'ACTIVE' } =
       if (op === 'PrepaidShopId') data = { shop: { id: 'gid://shopify/Shop/1' } };
       else if (op === 'PrepaidConfig') data = { metafieldsSet: { metafields: [{ id: 'm1' }], userErrors: [] } };
       else if (op === 'PrepaidDiscounts') data = { discountNodes: { nodes: existing ? [{ id: 'd1', discount: { __typename: 'DiscountAutomaticApp', title: PREPAID_DISCOUNT_TITLE, status: existing } }] : [] } };
+      else if (op === 'PrepaidDiscountVars') data = { metafieldsSet: { metafields: [{ id: 'm2' }], userErrors: [] } };
       else if (op === 'PrepaidDiscountCreate') data = { discountAutomaticAppCreate: { automaticAppDiscount: createErrors.length ? null : { discountId: 'd1', status }, userErrors: createErrors } };
       else throw new Error(`unhandled ${op}`);
       return new Response(JSON.stringify({ data }));
@@ -299,9 +324,18 @@ test('sync: writes the metafield, creates the automatic ORDER discount once, ver
   assert.deepEqual(create.discountClasses, ['ORDER']);
   assert.deepEqual(prepaidRuntime(result, result.config).percent, 10);
 
+  assert.deepEqual(JSON.parse(create.metafields[0].value), { collectionIds: [] }, 'input variables on the new discount');
+  assert.equal(create.metafields[0].key, 'prepaid_discount_vars');
+
   const again = fakeShopify({ existing: 'ACTIVE' });
-  assert.equal((await syncPrepaidDiscount(again, settingsWith({}), { currencyCode: 'INR', planLive: true })).verified, true);
+  const ex = settingsWith({ prepaid: { enabled: true, percent: 10, excludedCollections: [{ id: 'gid://shopify/Collection/77', title: 'Books' }] } });
+  const r2 = await syncPrepaidDiscount(again, ex, { currencyCode: 'INR', planLive: true });
+  assert.equal(r2.verified, true);
   assert.equal(again.calls.some((c) => c.op === 'PrepaidDiscountCreate'), false, 'never a second discount');
+  const vars = again.calls.find((c) => c.op === 'PrepaidDiscountVars').variables.metafields[0];
+  assert.equal(vars.ownerId, 'd1');
+  assert.deepEqual(JSON.parse(vars.value), { collectionIds: ['gid://shopify/Collection/77'] }, 'the existing discount gets the excluded collections');
+  assert.deepEqual(prepaidRuntime(r2, r2.config).excludedCollections, ['77'], 'the storefront and Shiprocket code get the verified numeric ids');
 });
 
 test('sync: honest states — not deployed, inactive, plan locked, off; never throws', async () => {

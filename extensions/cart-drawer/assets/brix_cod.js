@@ -33,6 +33,9 @@
   var PHP_API = ((script && script.getAttribute('data-php')) || 'https://int.thebrix.io').replace(/\/$/, '');
   var SHOP = (script && script.getAttribute('data-shop')) || (window.Shopify && window.Shopify.shop) || '';
   var CURRENCY = (script && script.getAttribute('data-currency')) || 'INR';
+  // Product pages: the collections this product is in (the app embed writes
+  // them), for the prepaid offer's excluded collections.
+  var PRODUCT_COLLECTIONS = String((script && script.getAttribute('data-product-collections')) || '').split(',').filter(function (id) { return /^\d+$/.test(id); });
   var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
   var CONFIG_KEY = 'brix_cod_config_v6'; // bump when the config shape changes (v6: product page payment options)
@@ -100,10 +103,22 @@
       return n == null || !isFinite(Number(n)) ? '' : fmt(Number(n));
     }).replace(/\s+/g, ' ').trim();
   }
+  // The COD fee for an order of `price` (cod.shared.js codFeeOf, same
+  // rounding): codFeePercent % of it from codFeePercentFrom on, else the
+  // fixed codFee (also when the price isn't known yet).
+  function codFeeFor(cfg, price) {
+    var fixed = cfg && cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var pct = cfg && cfg.codFeePercent > 0 ? Number(cfg.codFeePercent) : 0;
+    var value = Number(price);
+    if (!pct || price == null || !isFinite(value) || value < (Number(cfg.codFeePercentFrom) || 0)) return fixed;
+    return Math.round(value * pct) / 100;
+  }
+  function hasCodFee(cfg) { return Boolean(cfg && (cfg.codFee > 0 || cfg.codFeePercent > 0)); }
+
   // A COD button's text for this price (null = not known yet).
   function codLabel(cfg, text, price) {
     if (!hasPriceTags(text)) return text;
-    var fee = cfg && cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var fee = codFeeFor(cfg, price);
     var values = price == null || !isFinite(Number(price)) ? { cod_fee: fee }
       : { price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 };
     return priceTags(text, values, shopperMoney());
@@ -898,7 +913,7 @@
     var count = q.lines.reduce(function (n, li) { return n + (Number(li.quantity) || 0); }, 0);
     var thumbs = q.lines.slice(0, 3).map(function (li) { return li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<span class="ph"></span>'; }).join('');
     var open = Boolean(this.summaryOpen);
-    var extra = !(this.cfg.codFee > 0) ? 'Shipping is added at review.'
+    var extra = !hasCodFee(this.cfg) ? 'Shipping is added at review.'
       : this.cfg.showCodFee === false ? 'Delivery charges are added at review.'
         : 'Shipping and the ' + feeLabel(this.cfg) + ' are added at review.';
     return '<div class="sum' + (open ? ' open' : '') + '"><button type="button" class="sum-h" data-act="summary" aria-expanded="' + open + '">' +
@@ -1648,7 +1663,7 @@
       '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' +
       (iconName ? icon(iconName, 18, ' style="flex:none;width:18px;height:18px"') : '') +
       '<span data-brix-cod-label style="' + important('color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' + esc(label) + '</span></span>' +
-      (sub ? '<span style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit;text-transform:none;letter-spacing:normal') + '">' + esc(sub) + '</span>' : '') + '</button>';
+      (sub ? '<span data-brix-cod-sub style="' + important('font-size:11.5px;font-weight:500;opacity:.85;color:inherit;text-transform:none;letter-spacing:normal') + '">' + esc(sub) + '</span>' : '') + '</button>';
   }
 
   // The combo page's COD button, for combo-page.js (it draws its own button
@@ -1667,15 +1682,19 @@
         // Where it goes next to the combo's Checkout: replace | above | below.
         placement: PLACEMENTS.indexOf(cfg.comboPlacement) !== -1 ? cfg.comboPlacement : 'below',
         codFee: cfg.codFee > 0 ? Number(cfg.codFee) : 0,
+        // The fee for the combo's price (a % of it on large orders, if set).
+        feeFor: function (price) { return codFeeFor(cfg, price); },
         icon: look.icon !== false ? icon('cash', 16, ' style="flex:none;width:16px;height:16px"') : '',
         css: buttonPaint(look) + 'border:none;border-radius:' + r + 'px;' + buttonType(look),
       };
     });
   }
 
-  // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides the fee.
-  function feeHint(cfg, fmt) {
-    return cfg.codFee > 0 && cfg.showCodFee !== false ? '+' + fmt(cfg.codFee) + ' ' + feeLabel(cfg) : '';
+  // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides
+  // the fee; `price` = the order it's for (a % fee needs it).
+  function feeHint(cfg, fmt, price) {
+    var fee = codFeeFor(cfg, price);
+    return fee > 0 && cfg.showCodFee !== false ? '+' + fmt(fee) + ' ' + feeLabel(cfg) : '';
   }
 
   var PLACEMENTS = ['replace', 'above', 'below'];
@@ -1750,7 +1769,7 @@
     // codTotal: the same without the prepaid discount, which COD never gets.
     var total = isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : subtotal;
     var codTotal = Math.round((total + prepaidInCart(cart)) * 100) / 100;
-    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt), subtotal: subtotal, total: total, codTotal: codTotal };
+    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal), subtotal: subtotal, total: total, codTotal: codTotal };
   }
 
   // The BRIX prepaid discount (product page payment options) is a Shopify
@@ -2044,7 +2063,7 @@
     if (!text) return '';
     var price = state ? cartPrice(state) : null;
     var cod = state ? codPrice(state) : null;
-    var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var fee = codFeeFor(cfg, cod);
     var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
     return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
   }
@@ -2359,7 +2378,7 @@
     var btn = textTarget(findBuyNow(form, cfg));
     if (!btn) return;
     var price = productPrice(form, info);
-    var fee = cfg.codFee > 0 ? Number(cfg.codFee) : 0;
+    var fee = codFeeFor(cfg, price);
     var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
     setButtonText(btn, next);
@@ -2412,14 +2431,19 @@
     var fmt = moneyFormatter(cfg.currency);
     var text = cfg.buttons.productText;
     var label = codLabel(cfg, text, productPrice(form, info));
-    var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt);
+    var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info));
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     var keepsBuyNow = !replacing;
     productMount.relabel = function () {
       var el = slot.querySelector('[data-brix-cod-label]');
-      var next = codLabel(cfg, text, productPrice(form, info));
+      var price = productPrice(form, info);
+      var next = codLabel(cfg, text, price);
       if (el && el.textContent !== next) el.textContent = next;
+      // A % COD fee follows the variant and quantity too.
+      var subEl = slot.querySelector('[data-brix-cod-sub]');
+      var nextSub = excluded || showsCodFee(text) ? null : feeHint(cfg, fmt, price);
+      if (subEl && nextSub && subEl.textContent !== nextSub) subEl.textContent = nextSub;
       if (keepsBuyNow) relabelBuyNow(cfg, form, info);
     };
     productMount.relabel();
@@ -2711,13 +2735,21 @@
       return Boolean(b && (b.disabled || b.getAttribute('aria-disabled') === 'true'));
     }
 
+    // This product is in a collection the merchant left out of the prepaid
+    // discount: no offer on this page (Shopify won't give it at checkout).
+    function prepaidExcludedHere(prepaid) {
+      var ids = prepaid && Array.isArray(prepaid.excludedCollections) ? prepaid.excludedCollections : [];
+      for (var i = 0; i < ids.length; i++) if (PRODUCT_COLLECTIONS.indexOf(String(ids[i])) !== -1) return true;
+      return false;
+    }
+
     function view() {
       var pp = st.pp;
       var sel = selection();
       var unit = priceOf(sel.variantId);
-      var prepaid = pp.online.enabled ? pp.prepaid : null;
+      var prepaid = pp.online.enabled && !prepaidExcludedHere(pp.prepaid) ? pp.prepaid : null;
       var active = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY;
-      var codFee = st.cfg && st.cfg.codFee > 0 ? st.cfg.codFee : 0;
+      var codFee = codFeeFor(st.cfg, unit != null ? Math.round(unit * sel.quantity * 100) / 100 : null);
       var pr = unit != null
         ? pricing(unit, sel.quantity, prepaid, codFee, Boolean(prepaid && prepaid.currency && prepaid.currency === active))
         // Price unknown: promise the percentage only when there's no minimum to check.
@@ -2777,7 +2809,7 @@
         if (conf.description) rest += '<span class="bxpay-d">' + esc(conf.description) + '</span>';
         if (disabled) rest += '<span class="bxpay-why">' + esc(v.cod.reason) + '</span>';
         else if (v.pr.cod != null) {
-          var fee = st.cfg && st.cfg.codFee > 0 && st.cfg.showCodFee !== false ? ' + ' + st.fmt(st.cfg.codFee) + ' ' + feeLabel(st.cfg) : '';
+          var fee = v.pr.codFee > 0 && st.cfg.showCodFee !== false ? ' + ' + st.fmt(v.pr.codFee) + ' ' + feeLabel(st.cfg) : '';
           rest += '<span class="bxpay-p">Pay <b>' + esc(st.fmt(v.pr.cod)) + '</b>' + esc(fee) + '</span>';
         }
       }
@@ -3047,7 +3079,7 @@
         mountProductButton(cfg, info, excluded);
         // Price tags in the button text follow the chosen variant and quantity
         // (themes fire change/input, or set the hidden variant id silently).
-        if (hasPriceTags(cfg.buttons.productText) || (cfg.productButton && cfg.productButton.buyNowText)) {
+        if (hasPriceTags(cfg.buttons.productText) || (cfg.productButton && cfg.productButton.buyNowText) || cfg.codFeePercent > 0) {
           var relabel = function () { if (productMount && productMount.relabel) productMount.relabel(); };
           var later = null;
           var soon = function () { clearTimeout(later); later = setTimeout(relabel, 120); };

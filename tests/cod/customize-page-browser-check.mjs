@@ -372,6 +372,7 @@ if (scenario === 'live') {
   let t = await pvText();
   check('Prepaid 10%: preview shows Save 10%, ₹990 online, ₹1,100 COD, "Buy it now · Save 10%"', t.includes('Save 10%') && t.includes('990') && t.includes('Buy it now · Save 10%') && t.includes('10% off when you pay online'), t.slice(0, 300));
   check('Prepaid: honest status — not live until saved and verified', (await page.locator('.bcz-body').textContent()).includes('Save to set up'));
+  check('Prepaid: "Leave out these collections" with a Choose collections button', (await page.locator('.bcz-body').textContent()).includes('Leave out these collections') && await page.getByRole('button', { name: 'Choose collections' }).count() === 1);
   await page.getByLabel('Discount', { exact: true }).fill('60');
   await page.waitForTimeout(150);
   check('Prepaid: 60% refused (1–50)', await badge('Prepaid discount') === '1 error');
@@ -419,6 +420,21 @@ if (scenario === 'live') {
   await page.waitForTimeout(150);
   check('Show fee off: the preview shows one "Delivery charges" line', (await page.locator('.bcz-screen .cod-pv-rows').textContent()).includes('Delivery charges'));
   await page.getByLabel('Show fee to customers').check();
+  // A % of the order from an order value (sample cart ₹1,299): 10% from ₹1,000 → ₹129.90.
+  check('% fee: "From order value" waits for a percentage', await page.getByLabel('From order value').isDisabled());
+  await page.getByLabel('For larger orders, charge').fill('10');
+  await page.getByLabel('From order value').fill('1000');
+  await page.waitForTimeout(300);
+  const pctRows = await page.evaluate(() => [...document.querySelectorAll('.bcod-sum-r')].map((r) => r.textContent));
+  check('% fee: ₹1,299 sample → Handling fee ₹129.90, Total ₹1,428.90', pctRows.some((r) => r.startsWith('Handling fee') && r.includes('129.90')) && pctRows.some((r) => r.startsWith('Total') && r.includes('1,428.90')), pctRows.join(' | '));
+  check('% fee: the help text spells out both rules', /Orders from ₹1,000(\.00)? pay 10% of the order.*smaller ones pay ₹40/.test(await page.locator('.bcz-body').textContent()));
+  await page.getByLabel('For larger orders, charge').fill('60');
+  await page.waitForTimeout(150);
+  check('% fee: over 50% refused', await badge('COD fee') === '1 error');
+  await page.getByLabel('For larger orders, charge').fill('10');
+  await page.getByLabel('From order value').fill('');
+  await page.getByLabel('For larger orders, charge').fill('');
+  await page.waitForTimeout(150);
   await shot('fee');
 
   // Eligibility

@@ -18,6 +18,8 @@
 //
 // Config shape:
 //   { version: 1, enabled: true, percent: 10, minSubtotal: 0, currency: "INR", title: "Prepaid discount" }
+// Excluded collections come as the input variable $collectionIds (a metafield
+// on the discount, see shopify.extension.toml).
 
 const NONE = { operations: [] };
 
@@ -42,9 +44,15 @@ export function cartLinesDiscountsGenerateRun(input) {
   // Cash on Delivery: never discounted.
   if (marked(cart.cod) || lines.some((line) => marked(line.cod))) return NONE;
 
-  // Free reward gifts (BRIX Progress Bar) are already free; leave them out.
+  // Free reward gifts (BRIX Progress Bar) are already free, and products in
+  // a collection the merchant left out never get it: both are left out of
+  // the discount and of the minimum.
   const gifts = lines.filter((line) => String(line.reward?.value ?? '') === 'true').map((line) => line.id);
-  const paid = lines.filter((line) => !gifts.includes(line.id));
+  const excluded = lines
+    .filter((line) => (line.merchandise?.product?.inCollections || []).some((membership) => membership.isMember))
+    .map((line) => line.id);
+  const left = gifts.concat(excluded.filter((id) => !gifts.includes(id)));
+  const paid = lines.filter((line) => !left.includes(line.id));
   if (paid.length === 0) return NONE;
 
   const min = Number(config.minSubtotal) || 0;
@@ -69,7 +77,7 @@ export function cartLinesDiscountsGenerateRun(input) {
       orderDiscountsAdd: {
         candidates: [{
           message: title,
-          targets: [{ orderSubtotal: { excludedCartLineIds: gifts } }],
+          targets: [{ orderSubtotal: { excludedCartLineIds: left } }],
           value: { percentage: { value: String(percent) } },
         }],
         selectionStrategy: 'FIRST',

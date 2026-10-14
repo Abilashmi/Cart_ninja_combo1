@@ -17,11 +17,31 @@
  * php_backend/cod_storefront.php), so shoppers are never promised a discount
  * Shopify won't give.
  */
-import { prepaidDiscountLive } from '../utils/product-payment.shared.js';
+import { excludedCollectionIds, prepaidDiscountLive } from '../utils/product-payment.shared.js';
 
 export const PREPAID_FUNCTION_HANDLE = 'brix-prepaid-discount';
 export const PREPAID_DISCOUNT_TITLE = 'BRIX Prepaid Discount';
 export const PREPAID_CONFIG_KEY = 'prepaid_discount_config';
+// $collectionIds for the Function's input query (the collections the merchant
+// left out), a metafield on the discount itself like combo weight's.
+export const PREPAID_VARS_KEY = 'prepaid_discount_vars';
+
+/** The Function's input variables: { collectionIds: [gid] } of the excluded collections. */
+export function buildPrepaidVariables(settings) {
+  const ids = excludedCollectionIds(settings?.productPayment?.prepaid);
+  return { collectionIds: ids.map((id) => `gid://shopify/Collection/${id}`) };
+}
+
+const varsMetafield = (variables) => ({ namespace: '$app', key: PREPAID_VARS_KEY, type: 'json', value: JSON.stringify(variables) });
+
+async function writePrepaidVariables(admin, discountId, variables) {
+  const data = await gql(admin, `#graphql
+    mutation PrepaidDiscountVars($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message code } }
+    }`, { metafields: [{ ownerId: discountId, ...varsMetafield(variables) }] });
+  const errors = data?.metafieldsSet?.userErrors || [];
+  if (errors.length) throw new Error(`Could not save the prepaid discount's excluded collections: ${errors[0].message}`);
+}
 
 async function gql(admin, query, variables) {
   const response = await admin.graphql(query, { variables });
@@ -68,10 +88,13 @@ async function findInstalledDiscount(admin) {
   return node ? { id: node.id, automaticDiscount: node.discount } : null;
 }
 
-/** Create the automatic app discount that runs the Function, if it isn't there yet. */
-async function ensurePrepaidDiscount(admin) {
+/** Create the automatic app discount that runs the Function, if it isn't there yet, and (re)write its input variables. */
+async function ensurePrepaidDiscount(admin, variables) {
   const existing = await findInstalledDiscount(admin);
-  if (existing) return { created: false, status: existing.automaticDiscount.status };
+  if (existing) {
+    await writePrepaidVariables(admin, existing.id, variables);
+    return { created: false, status: existing.automaticDiscount.status };
+  }
   const data = await gql(admin, `#graphql
     mutation PrepaidDiscountCreate($discount: DiscountAutomaticAppInput!) {
       discountAutomaticAppCreate(automaticAppDiscount: $discount) {
@@ -87,6 +110,7 @@ async function ensurePrepaidDiscount(admin) {
       // Stacks with product discounts (Packs, free gifts) and free shipping;
       // against another order discount (e.g. a 15% code) Shopify keeps the better one.
       combinesWith: { productDiscounts: true, orderDiscounts: false, shippingDiscounts: true },
+      metafields: [varsMetafield(variables)],
     },
   });
   const errors = data?.discountAutomaticAppCreate?.userErrors || [];
@@ -102,7 +126,7 @@ async function ensurePrepaidDiscount(admin) {
 /** What the storefront may show: only a verified discount, with the numbers Shopify really has. */
 export function prepaidRuntime(result, config) {
   return result.verified
-    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, currency: config.currency, state: result.state, at: new Date().toISOString() }
+    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() }
     : { verified: false, state: result.state, at: new Date().toISOString() };
 }
 
@@ -126,11 +150,15 @@ export async function syncPrepaidDiscount(admin, settings, { currencyCode = null
       }
       return { ok: true, verified: false, state: 'not_needed', message: 'The prepaid discount is off.', config };
     }
-    const discount = await ensurePrepaidDiscount(admin);
+    const variables = buildPrepaidVariables(settings);
+    const discount = await ensurePrepaidDiscount(admin, variables);
     if (discount.status && discount.status !== 'ACTIVE') {
       return { ok: false, verified: false, state: 'inactive', message: `The prepaid discount is ${String(discount.status).toLowerCase()} in Shopify (Discounts → ${PREPAID_DISCOUNT_TITLE}).`, config };
     }
-    return { ok: true, verified: true, state: 'active', message: `The ${config.percent}% prepaid discount is active in Shopify checkout.`, config };
+    // Numeric ids, for the storefront (cod_storefront.php) and the Shiprocket code.
+    const excludedCollections = excludedCollectionIds(settings.productPayment.prepaid);
+    const left = excludedCollections.length ? ` Not on ${excludedCollections.length} excluded collection${excludedCollections.length === 1 ? '' : 's'}.` : '';
+    return { ok: true, verified: true, state: 'active', message: `The ${config.percent}% prepaid discount is active in Shopify checkout.${left}`, config, excludedCollections };
   } catch (error) {
     if (error?.code === 'not_deployed') {
       return {

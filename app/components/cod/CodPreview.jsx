@@ -14,7 +14,7 @@ const SURFACES = [
 
 // A COD button's text with its price tags filled in for `price`, as the storefront does.
 function codText(settings, text, price, money) {
-  return fillPriceTags(text, codPriceValues(price, codFeeOf(settings)), tagMoney(money));
+  return fillPriceTags(text, codPriceValues(price, codFeeOf(settings, price)), tagMoney(money));
 }
 
 const COMBO_PLACEMENT_NOTE = {
@@ -183,7 +183,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
   const minMaxReason = rule && (rule.code === 'below_min' || rule.code === 'above_max')
     ? (rule.code === 'below_min' ? `Available on orders from ${money(settings.minOrder)}` : `Available on orders up to ${money(settings.maxOrder)}`)
     : '';
-  const feeHint = codFeeHint(settings, money);
+  const feeHint = codFeeHint(settings, money, cart);
   const feeShown = settings.showCodFee !== false;
   const toFreeShipping = settings.shippingFee > 0 && settings.freeShippingAbove > 0 && cart < settings.freeShippingAbove
     ? settings.freeShippingAbove - cart : 0;
@@ -233,7 +233,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
               // Buy it now is only hidden while a usable COD button replaces it, as on the storefront.
               const bin = (codHidden || excluded || place !== 'replace') && (
                 <div key="bin" className="cod-scr-bin">
-                  {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
+                  {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings, cart)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
                 </div>
               );
               return place === 'below' ? [bin, cod] : [cod, bin];

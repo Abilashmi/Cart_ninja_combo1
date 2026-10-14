@@ -10,7 +10,7 @@ import { useState } from 'react';
 import {
   productPaymentPricing, fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, PAY_SPACING_PX,
 } from '../../utils/product-payment.shared';
-import { checkCodRules, codButtonLook, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
+import { checkCodRules, codButtonLook, codFeeOf, DEFAULT_COD_SETTINGS } from '../../utils/cod.shared';
 import { codButtonColors, codButtonType, codFeeLabel } from './codButtonLook';
 
 export const SAMPLE_PRODUCT = Object.freeze({
@@ -115,7 +115,7 @@ export function PaymentOptionsScreen({ settings, money, phone }) {
   const [picked, setPicked] = useState(null);
 
   const unit = SAMPLE_PRODUCT.variants.find((v) => v.id === variant).price;
-  const codFee = settings.codFeeEnabled !== false && settings.codFee > 0 ? settings.codFee : 0;
+  const codFee = codFeeOf(settings, Math.round(unit * qty * 100) / 100);
   const codOn = settings.enabled && settings.surfaces.product !== false;
   const prepaid = pp.online.enabled && pp.prepaid.enabled ? pp.prepaid : null;
   const pr = productPaymentPricing({ unitPrice: unit, quantity: qty, prepaid, codFee });

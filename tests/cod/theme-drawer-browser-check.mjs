@@ -618,6 +618,29 @@ const done = async (page, name) => {
   await other.context().close();
 }
 
+/* 18. A % COD fee from an order value: the drawer button follows the cart */
+{
+  // ₹1,299 cart: 10% from ₹1,000 → ₹129.90; ₹999 cart → the fixed ₹80.
+  const page = await open('dawn', { cfg: { codFee: 80, codFeePercent: 10, codFeePercentFrom: 1000, buttons: { drawerText: 'Buy it for {cod_price} COD' } } });
+  await waitButton(page);
+  let s = await look(page, DAWN_CO);
+  check('% fee: ₹1,299 cart → "Buy it for ₹1,428.90 COD"', /^Buy it for ₹1,428\.9/.test(s.text), s.text);
+  page.state.cart = [line('tee', 999)];
+  await page.evaluate(() => { window.rerender('₹999.00'); document.dispatchEvent(new CustomEvent('cart:updated')); });
+  await settle(page, 1500);
+  s = await look(page, DAWN_CO);
+  check('% fee: below ₹1,000 → the fixed ₹80 (₹1,079)', s.text === 'Buy it for ₹1,079 COD', s.text);
+  allErrors.push(...page.errors);
+  await page.context().close();
+
+  const hint = await open('dawn', { cfg: { codFee: 80, codFeePercent: 10, codFeePercentFrom: 1000 } });
+  await waitButton(hint);
+  s = await look(hint, DAWN_CO);
+  check('% fee: the fee line under the button shows the % amount (+₹129.90)', /\+₹129\.9/.test(s.text), s.text);
+  allErrors.push(...hint.errors);
+  await hint.context().close();
+}
+
 /* 15. Cart drawer COD button padding (COD → Customize → Cart drawer button → Button size) */
 {
   const padOf = (page) => page.evaluate(() => {
