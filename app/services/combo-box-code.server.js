@@ -96,8 +96,12 @@ export async function createBoxCode(admin, { templateId, items, comboWeightLive,
         items: { products: { productVariantsToAdd: variantIds.map(toVariantGid) } },
       },
       minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: minimum } },
-      // Same as the box Function: never with another product discount.
-      combinesWith: { productDiscounts: false, orderDiscounts: true, shippingDiscounts: true },
+      // Same as the box Function: never with another product discount. A
+      // fixed box price ("Box at ₹999") is the final price, so it doesn't
+      // combine with order discounts either: a store-wide "10% off" would
+      // otherwise take the ₹999 box to ₹899 (seen in Shiprocket). Shopify
+      // then applies whichever gives the shopper more.
+      combinesWith: { productDiscounts: false, orderDiscounts: box.tierType !== 'fixed_price', shippingDiscounts: true },
     },
   });
   const errors = data?.discountCodeBasicCreate?.userErrors || [];

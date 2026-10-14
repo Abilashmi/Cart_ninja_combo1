@@ -96,6 +96,9 @@ test('fixed box price: the code is the difference to the box price', async () =>
   const result = await make(admin, [{ variantId: '25', quantity: 4 }]);
   assert.equal(result.amount, '2300.00');
   assert.equal(created(admin).minimumRequirement.subtotal.greaterThanOrEqualToSubtotal, '4000.00');
+  // "Box at ₹1700" is the final price: a store-wide order discount (e.g. 10%)
+  // must not take it lower (seen in Shiprocket: ₹999 box shown as ₹899.10).
+  assert.deepEqual(created(admin).combinesWith, { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true });
 });
 
 test('only the lines that count toward the box are on the code', async () => {
