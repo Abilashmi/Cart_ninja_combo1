@@ -548,6 +548,41 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+/* Popup on a theme that animates page content with a transform (Dawn's
+   scroll-trigger, knitnknot.in) under a sticky header: still on screen,
+   above the header, and it still works. */
+{
+  const { page } = await openCombo(baseConfig, wp(QUANTITY), {
+    viewport: { width: 390, height: 844 },
+    themeCss: '.rte{transform:matrix(1,0,0,1,0,0)} .section-header{position:sticky;top:0;z-index:50;background:#fff} .section-header .header{height:120px;display:block}',
+  });
+  await page.waitForSelector(card(2));
+  await page.evaluate(() => window.scrollTo(0, 600));
+  await page.waitForTimeout(300);
+  await page.click(`${card(2)} .bxq-media img`);
+  await page.waitForSelector('.bxq-pop');
+  await page.waitForTimeout(400);
+  const g = await page.evaluate(() => {
+    const box = document.querySelector('.bxq-pop-box').getBoundingClientRect();
+    const close = document.querySelector('.bxq-pop-close').getBoundingClientRect();
+    const top = document.elementFromPoint(close.left + close.width / 2, close.top + close.height / 2);
+    return {
+      box: [Math.round(box.left), Math.round(box.top), Math.round(box.right), Math.round(box.bottom)], h: window.innerHeight, w: window.innerWidth,
+      closeOnTop: Boolean(top && top.closest('.bxq-pop-close')), onBody: document.querySelector('.bxq-pop').closest('[data-brix-combo-popup]')?.parentElement === document.body,
+    };
+  });
+  check('transformed theme: the popup is on screen (a sheet at the bottom), not lost in the page', g.box[0] === 0 && g.box[2] === g.w && Math.abs(g.box[3] - g.h) <= 1 && g.box[1] >= 0, JSON.stringify(g));
+  check('transformed theme: above the sticky header (its close button is what you tap)', g.closeOnTop && g.onBody, JSON.stringify(g));
+  await page.click('.bxq-pop-thumb:nth-child(2)');
+  const fits = await page.evaluate(() => { const m = document.querySelector('.bxq-pop-main').getBoundingClientRect(); return m.right <= window.innerWidth; });
+  check('popup on a phone: the big picture stays inside the screen', fits);
+  check('transformed theme: thumbnails still work', decodeURIComponent(await page.$eval('.bxq-pop-main img', (e) => e.getAttribute('src'))).includes('Breast 2'));
+  await page.click('.bxq-pop-cta [data-combo-action="qty-inc"]');
+  await page.waitForTimeout(300);
+  check('transformed theme: Add works and closes it', !(await page.$('.bxq-pop')) && (await text(page, '.bxq-bar')).includes('1 Item'));
+  await page.close();
+}
+
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books
    box): evenly spaced on a phone, labels never overlap, the fill meets the dots. */
 {

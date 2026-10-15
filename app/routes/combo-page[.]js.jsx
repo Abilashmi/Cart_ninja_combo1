@@ -2409,10 +2409,13 @@ const SCRIPT_BODY = String.raw`
     var app = root.querySelector('.brix-combo-app');
     if (app) app.innerHTML = html;
 
-    if (WeightCore.usesQuickShop(config.layout)) keepBelowStickyHeader(root, state);
+    if (WeightCore.usesQuickShop(config.layout)) {
+      hostQuickShopPopup(root, state);
+      keepBelowStickyHeader(root, state);
+    }
 
     // Quick Shop product popup: the page behind doesn't scroll while it's open.
-    var popupOpen = Boolean(state.qsUi && state.qsUi.popup && root.querySelector('.bxq-pop'));
+    var popupOpen = Boolean(state.qsUi && state.qsUi.popup && state.qsPopHost && state.qsPopHost.querySelector('.bxq-pop'));
     if (popupOpen !== Boolean(state.qsPopupLock)) {
       state.qsPopupLock = popupOpen;
       document.documentElement.style.overflow = popupOpen ? 'hidden' : '';
@@ -2429,6 +2432,45 @@ const SCRIPT_BODY = String.raw`
     var phone = config[prefix + '_align_mobile'];
     if (valid(phone) && (config[prefix + '_align_mobile_set'] === true || phone !== 'left')) return phone;
     return desktop;
+  }
+
+  /* === QUICK SHOP: PRODUCT POPUP ON <body> === */
+
+  // Is this element part of the combo page (the page itself or its popup)?
+  function insideCombo(root, el) {
+    var state = instances.get(root);
+    return root.contains(el) || Boolean(state && state.qsPopHost && state.qsPopHost.contains(el));
+  }
+
+  // The product popup is moved out of the page to the end of <body>. Themes
+  // wrap page content in transformed boxes (slide-in animations): inside
+  // one, a position:fixed popup is pinned to that box (centred on the whole
+  // long page, off screen) and stays under the theme's header. The host keeps
+  // the page's classes and colour variables (display:contents adds no box),
+  // and taps on it go through the page's own handlers.
+  function hostQuickShopPopup(root, state) {
+    var pop = root.querySelector('.bxq-pop');
+    var host = state.qsPopHost;
+    if (!pop) {
+      if (host) host.innerHTML = '';
+      return;
+    }
+    if (!host || !host.isConnected) {
+      host = document.createElement('div');
+      host.setAttribute('data-brix-combo-popup', '');
+      document.body.appendChild(host);
+      state.qsPopHost = host;
+      var events = root.__brixComboEvents;
+      if (events) {
+        host.addEventListener('click', events.click);
+        host.addEventListener('change', events.change);
+      }
+    }
+    var page = root.querySelector('.bxq');
+    host.className = page ? page.className : 'bxq';
+    host.setAttribute('style', (page ? page.getAttribute('style') || '' : '') + ';display:contents;');
+    host.innerHTML = '';
+    host.appendChild(pop);
   }
 
   /* === QUICK SHOP: STICKY PROGRESS BELOW THE THEME'S HEADER === */
@@ -2561,13 +2603,13 @@ const SCRIPT_BODY = String.raw`
       if (e.key === 'Escape') { QuickShop.applyUiAction(state.qsUi, 'qs-view-close', null); render(root); return; }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         if (t && t.tagName === 'SELECT') return;
-        var nav = root.querySelector('.bxq-pop-nav.' + (e.key === 'ArrowLeft' ? 'is-prev' : 'is-next'));
+        var nav = (state.qsPopHost || root).querySelector('.bxq-pop-nav.' + (e.key === 'ArrowLeft' ? 'is-prev' : 'is-next'));
         if (nav) nav.click();
       }
     });
-    root.addEventListener('click', function (e) {
+    var onClick = function (e) {
       var el = e.target.closest('[data-combo-action]');
-      if (!el || !root.contains(el)) return;
+      if (!el || !insideCombo(root, el)) return;
       var state = instances.get(root);
       if (!state) return;
       var action = el.getAttribute('data-combo-action');
@@ -2662,17 +2704,22 @@ const SCRIPT_BODY = String.raw`
       if (action === 'reset') { onReset(root, state); return; }
       if (action === 'cart-drawer-open') { state.cartDrawerOpen = true; render(root); return; }
       if (action === 'cart-drawer-close') { state.cartDrawerOpen = false; render(root); return; }
-    });
+    };
 
-    root.addEventListener('change', function (e) {
+    var onChange = function (e) {
       var el = e.target.closest('[data-combo-action="variant-select"]');
-      if (!el || !root.contains(el)) return;
+      if (!el || !insideCombo(root, el)) return;
       var state = instances.get(root);
       if (!state) return;
       var productId = el.getAttribute('data-product-id');
       state.pendingVariant[productId] = el.value;
       render(root);
-    });
+    };
+    root.addEventListener('click', onClick);
+    root.addEventListener('change', onChange);
+    // The Quick Shop product popup is moved to <body> (hostQuickShopPopup);
+    // its taps go through these same handlers.
+    root.__brixComboEvents = { click: onClick, change: onChange };
 
     if (typeof window.matchMedia === 'function') {
       var mq = window.matchMedia('(max-width: 767px)');
