@@ -56,6 +56,7 @@ import QuickShopPreview from '../components/customization/QuickShopPreview';
 import { isClassicLayout } from '../utils/combo-design.shared.js';
 import { PLANS, getMinPlanForFeature } from '../config/plans';
 import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, measureOf, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatItems, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
+import { comboAlign } from '../utils/combo-align.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -1537,8 +1538,8 @@ const DEFAULT_COMBO_CONFIG = {
   // Responsive Typography Overrides
   heading_size_mobile: 22,
   description_size_mobile: 13,
-  heading_align_mobile: 'left',
-  description_align_mobile: 'left',
+  heading_align_mobile: '', // '' = same as desktop (comboAlign)
+  description_align_mobile: '',
   product_title_size_desktop: 16,
   product_title_size_mobile: 14,
   product_price_size_desktop: 16,
@@ -4705,12 +4706,8 @@ function ComboPreview({
     400
     : config.description_font_weight || 400;
 
-  const headingAlign = isMobile
-    ? config.heading_align_mobile || config.heading_align || 'left'
-    : config.heading_align || 'left';
-  const descriptionAlign = isMobile
-    ? config.description_align_mobile || config.description_align || 'left'
-    : config.description_align || 'left';
+  const headingAlign = comboAlign(config, 'heading', isMobile);
+  const descriptionAlign = comboAlign(config, 'description', isMobile);
 
   const headingFontFamily = config.heading_font_family && config.heading_font_family !== 'inherit'
     ? `'${config.heading_font_family}', sans-serif`

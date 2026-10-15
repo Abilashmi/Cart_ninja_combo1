@@ -1558,8 +1558,8 @@ const SCRIPT_BODY = String.raw`
     var config = state.config;
     var headingSize = isMobile ? firstSet(config.heading_size_mobile, config.heading_size, 22) : firstSet(config.heading_size, 32);
     var descriptionSize = isMobile ? firstSet(config.description_size_mobile, config.description_size, 13) : firstSet(config.description_size, 16);
-    var headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
-    var descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+    var headingAlign = alignFor(config, 'heading', isMobile);
+    var descriptionAlign = alignFor(config, 'description', isMobile);
     var titleBox = getBoxSpacing(config, 'title_container', isMobile);
     var descBox = getBoxSpacing(config, 'description_container', isMobile);
     var pad = getContainerPadding(config, isMobile);
@@ -1684,8 +1684,8 @@ const SCRIPT_BODY = String.raw`
     var activeBg = config.tab_active_bg_color || config.selection_highlight_color || '#5e1c5f';
     var headingSize = isMobile ? firstSet(config.heading_size_mobile, config.heading_size, 22) : firstSet(config.heading_size, 32);
     var descriptionSize = isMobile ? firstSet(config.description_size_mobile, config.description_size, 13) : firstSet(config.description_size, 16);
-    var headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
-    var descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+    var headingAlign = alignFor(config, 'heading', isMobile);
+    var descriptionAlign = alignFor(config, 'description', isMobile);
     var titleBox = getBoxSpacing(config, 'title_container', isMobile);
     var descBox = getBoxSpacing(config, 'description_container', isMobile);
     var pad = getContainerPadding(config, isMobile);
@@ -2417,6 +2417,18 @@ const SCRIPT_BODY = String.raw`
       state.qsPopupLock = popupOpen;
       document.documentElement.style.overflow = popupOpen ? 'hidden' : '';
     }
+  }
+
+  // Title / description alignment (app/utils/combo-align.shared.js
+  // comboAlign): a saved phone 'left' is the builder's old default unless set
+  // in the phone view, so phones follow desktop.
+  function alignFor(config, prefix, isMobile) {
+    var valid = function (v) { return v === 'left' || v === 'center' || v === 'right'; };
+    var desktop = valid(config[prefix + '_align']) ? config[prefix + '_align'] : 'left';
+    if (!isMobile) return desktop;
+    var phone = config[prefix + '_align_mobile'];
+    if (valid(phone) && (config[prefix + '_align_mobile_set'] === true || phone !== 'left')) return phone;
+    return desktop;
   }
 
   /* === QUICK SHOP: STICKY PROGRESS BELOW THE THEME'S HEADER === */

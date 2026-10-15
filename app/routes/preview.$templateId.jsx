@@ -5,6 +5,7 @@ import { loadComboPageData } from '../services/combo-page.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import WeightMeter from '../components/customization/WeightMeter';
 import { boxMessage, computeBox, decimalsFor, fillMessage, formatItems, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
+import { comboAlign } from '../utils/combo-align.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
 // ⚠) — 1em/currentColor so each inherits the calling element's own
@@ -746,8 +747,8 @@ function Layout2Preview({ config, productsByHandle, collectionNameMap, templateN
   const descriptionColor = config.description_color || '#666';
   const headingSize = isMobile ? (config.heading_size_mobile ?? config.heading_size ?? 22) : (config.heading_size ?? 32);
   const descriptionSize = isMobile ? (config.description_size_mobile ?? config.description_size ?? 13) : (config.description_size ?? 16);
-  const headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
-  const descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+  const headingAlign = comboAlign(config, 'heading', isMobile);
+  const descriptionAlign = comboAlign(config, 'description', isMobile);
   const headingFontWeight = config.heading_font_weight || '700';
   const descriptionFontWeight = config.description_font_weight || '400';
   const titleBox = getBoxSpacing(config, 'title_container', isMobile);
@@ -1127,8 +1128,8 @@ function Layout4Preview({ config, productsByHandle, collectionNameMap, templateN
   const descriptionColor = config.description_color || '#666';
   const headingSize = isMobile ? (config.heading_size_mobile ?? config.heading_size ?? 22) : (config.heading_size ?? 32);
   const descriptionSize = isMobile ? (config.description_size_mobile ?? config.description_size ?? 13) : (config.description_size ?? 16);
-  const headingAlign = isMobile ? (config.heading_align_mobile || config.heading_align || 'left') : (config.heading_align || 'left');
-  const descriptionAlign = isMobile ? (config.description_align_mobile || config.description_align || 'left') : (config.description_align || 'left');
+  const headingAlign = comboAlign(config, 'heading', isMobile);
+  const descriptionAlign = comboAlign(config, 'description', isMobile);
   const headingFontWeight = config.heading_font_weight || '700';
   const descriptionFontWeight = config.description_font_weight || '400';
   const titleBox = getBoxSpacing(config, 'title_container', isMobile);

@@ -64,7 +64,10 @@ export function createQuickShopKit(core) {
     qs_show_weight: true,
     qs_badge_tag: 'bestseller',
     qs_badge_text: 'Bestseller',
-    qs_image_ratio: 'square', // square | portrait | landscape
+    qs_image_ratio: 'square', // square | portrait (4:5) | tall (2:3) | landscape
+    // contain = the whole picture (bands where its shape differs from the
+    // frame); cover = fills the frame, trimming the edges.
+    qs_image_fit: 'contain',
     qs_card_radius: 14,
     qs_card_bg: '#ffffff',
     qs_page_bg: '#f4f5f7',
@@ -662,7 +665,8 @@ export function createQuickShopKit(core) {
       ['--bxq-off', safeCss(opt(config, 'qs_off_color'), DEFAULTS.qs_off_color)],
       ['--bxq-badge', safeCss(opt(config, 'qs_badge_bg'), DEFAULTS.qs_badge_bg)],
       ['--bxq-radius', num(opt(config, 'qs_card_radius'), 14, 0, 40) + 'px'],
-      ['--bxq-ratio', { portrait: '4/5', landscape: '4/3' }[opt(config, 'qs_image_ratio')] || '1/1'],
+      ['--bxq-ratio', { portrait: '4/5', tall: '2/3', landscape: '4/3' }[opt(config, 'qs_image_ratio')] || '1/1'],
+      ['--bxq-fit', opt(config, 'qs_image_fit') === 'cover' ? 'cover' : 'contain'],
       ['--bxq-cols', String(num(opt(config, 'qs_columns_desktop'), 4, 2, 6))],
       ['--bxq-cols-m', String(num(opt(config, 'qs_columns_mobile'), 2, 1, 3))],
       ['--bxq-top-bg', safeCss(opt(config, 'qs_top_bg'), DEFAULTS.qs_top_bg)],
@@ -972,9 +976,20 @@ export function createQuickShopKit(core) {
     return css;
   }
 
+  // Same rule as combo-align.shared.js comboAlign: a saved phone 'left' is
+  // the builder's old default unless set in the phone view.
+  function alignOf(config, prefix, isMobile) {
+    var valid = function (v) { return v === 'left' || v === 'center' || v === 'right'; };
+    var desktop = valid(config[prefix + '_align']) ? config[prefix + '_align'] : 'left';
+    if (!isMobile) return desktop;
+    var phone = config[prefix + '_align_mobile'];
+    if (valid(phone) && (config[prefix + '_align_mobile_set'] === true || phone !== 'left')) return phone;
+    return desktop;
+  }
+
   function textCss(config, prefix, isMobile, defaults) {
     var css = '';
-    var align = pick(config, prefix + '_align', isMobile);
+    var align = alignOf(config, prefix, isMobile);
     css += 'text-align:' + (align === 'center' || align === 'right' ? align : 'left') + ';';
     var size = pick(config, prefix + '_size', isMobile);
     if (isSet(size)) css += 'font-size:' + num(size, defaults.size, 10, 96) + 'px;';
@@ -1001,7 +1016,7 @@ export function createQuickShopKit(core) {
       if (transform === 'uppercase' || transform === 'lowercase' || transform === 'capitalize') titleCss += 'text-transform:' + transform + ';';
       var wrapCss = boxCss(config, 'title_container', m);
       if (config.title_max_width_mode === 'custom' && !m) {
-        var align = pick(config, 'heading_align', m);
+        var align = alignOf(config, 'heading', m);
         wrapCss += 'max-width:' + num(config.title_max_width_custom, 400, 100, 2000) + 'px;'
           + (align === 'center' ? 'margin-left:auto;margin-right:auto;' : align === 'right' ? 'margin-left:auto;' : '');
       }
@@ -1158,6 +1173,7 @@ export function createQuickShopKit(core) {
     svgIcon: svgIcon,
     httpsUrl: httpsUrl,
     collectionImage: collectionImage,
+    alignOf: alignOf,
   };
 }
 
@@ -1259,7 +1275,7 @@ export const QUICK_SHOP_CSS = `
 .bxq--m .bxq-card{padding:8px;}
 .bxq-card.is-out .bxq-media img{opacity:.5;}
 .bxq-media{position:relative;aspect-ratio:var(--bxq-ratio);border-radius:calc(var(--bxq-radius) - 2px);overflow:hidden;background:#fff;}
-.bxq-media img{width:100%;height:100%;object-fit:contain;display:block;}
+.bxq-media img{width:100%;height:100%;object-fit:var(--bxq-fit,contain);display:block;}
 .bxq-noimg{display:block;width:100%;height:100%;background:#eef0f3;}
 .bxq-badge{position:absolute;left:0;right:0;bottom:0;padding:16px 10px 6px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(180deg,transparent,var(--bxq-badge) 70%);}
 .bxq-add{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:12px;border:2px solid var(--bxq-accent);background:#fff;color:var(--bxq-accent) !important;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
@@ -1271,14 +1287,14 @@ export const QUICK_SHOP_CSS = `
 .bxq--m .bxq-stepper button{width:30px;height:34px;}
 .bxq-card button[data-combo-action="qty-inc"]:disabled{opacity:.4;cursor:not-allowed;}
 .bxq-soldout{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.8);color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:5px 8px;}
-.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;}
+.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;min-width:0;}
 .bxq-eyebrow{font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;opacity:.6;}
 .bxq-name{margin:0;font-size:17px;line-height:1.3;font-weight:600;color:var(--bxq-text);}
 .bxq--m .bxq-name{font-size:14px;}
 .bxq-sub{margin:0;font-size:14px;line-height:1.4;opacity:.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .bxq--m .bxq-sub{font-size:12.5px;}
-.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;}
-.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;max-width:100%;}
+.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;max-width:100%;min-width:0;}
+.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;flex:0 1 auto;width:auto !important;min-width:0 !important;max-width:100% !important;height:auto;margin:0;box-shadow:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bxq-variant svg{position:absolute;right:0;pointer-events:none;}
 .bxq-variant.is-static{color:var(--bxq-text);opacity:.75;}
 .bxq-off{display:flex;align-items:center;gap:8px;color:var(--bxq-off);font-size:15px;font-weight:800;}

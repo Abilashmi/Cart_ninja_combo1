@@ -39,7 +39,14 @@ const productsByHandle = {
       price: '259.00', grams: 450, summary: 'Clean, lean and boneless chicken breast pieces', tags: ['Boneless'],
       images: [img('Breast 1', '#e3eef6'), img('Breast 2', '#e6f6e3'), img('Breast 3', '#f6f0e3')],
     }),
-    product(3, 'Licious Chicken Curry Cut (Large Pieces)', { price: '199.00', compare: '229.00', grams: 450, vendor: 'Licious', tags: ['Curry Cut'] }),
+    product(3, 'Licious Chicken Curry Cut (Large Pieces)', {
+      price: '199.00', compare: '229.00', grams: 450, vendor: 'Licious', tags: ['Curry Cut'],
+      // A long option name, like "Light Blue / 5-6 Y" on clothing stores.
+      variants: [
+        { id: V(30), title: 'Large Family Pack / Skin On / 12-14 Pieces', price: '199.00', compareAtPrice: '229.00', grams: 450, available: true, image: null },
+        { id: V(31), title: 'Small / Skinless', price: '149.00', compareAtPrice: null, grams: 300, available: true, image: null },
+      ],
+    }),
   ],
   mutton: [
     product(4, 'Mutton Drumstick Pack', { price: '399.00', grams: 500, type: 'Mutton', vendor: 'Licious', tags: ['Drumstick'] }),
@@ -512,6 +519,33 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await own.page.waitForTimeout(600);
   check('sticky progress: no sticky header → the merchant\'s own space (60px) still applies', Math.abs((await own.page.evaluate(() => document.querySelector('.bxq-top').getBoundingClientRect().top)) - 60) <= 2);
   await own.page.close();
+}
+
+/* Phone layout on a theme that styles every <select> (display:block, its
+   own width): a long option name stays inside the card, nothing scrolls
+   sideways; the title follows desktop's Center on phones (builder's old
+   saved phone "left"); tall photos fill a Tall (2:3) frame. */
+{
+  const { page } = await openCombo({
+    ...baseConfig, show_title_description: true, collection_title: 'Create Your Perfect Combo Box',
+    heading_align: 'center', heading_align_mobile: 'left', qs_image_ratio: 'tall', qs_image_fit: 'cover',
+  }, wp(QUANTITY), { viewport: { width: 390, height: 844 }, themeCss: 'select{display:block;font-size:16px;padding:0 12px}' });
+  await page.waitForSelector(card(3));
+  const g = await page.evaluate(() => {
+    const c = document.querySelector('.bxq-card[data-product-id$="/3"]').getBoundingClientRect();
+    const sel = document.querySelector('.bxq-card[data-product-id$="/3"] .bxq-variant select').getBoundingClientRect();
+    const media = document.querySelector('.bxq-media').getBoundingClientRect();
+    return {
+      docW: document.documentElement.scrollWidth, W: window.innerWidth, selRight: Math.round(sel.right), cardRight: Math.round(c.right),
+      title: getComputedStyle(document.querySelector('.bxq-title')).textAlign,
+      ratio: Math.round((media.height / media.width) * 100) / 100, fit: getComputedStyle(document.querySelector('.bxq-media img')).objectFit,
+    };
+  });
+  check('phone: a long option name stays inside its card', g.selRight <= g.cardRight + 1, JSON.stringify(g));
+  check('phone: nothing scrolls sideways', g.docW <= g.W, `${g.docW} > ${g.W}`);
+  check('phone: title follows desktop Center (old saved phone "left" ignored)', g.title === 'center', g.title);
+  check('Tall (2:3) frame, filled', Math.abs(g.ratio - 1.5) < 0.02 && g.fit === 'cover', JSON.stringify(g));
+  await page.close();
 }
 
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books

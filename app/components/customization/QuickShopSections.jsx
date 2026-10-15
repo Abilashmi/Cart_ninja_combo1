@@ -273,8 +273,15 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
         </div>
         <Select
           label="Image shape"
-          options={[{ label: 'Square', value: 'square' }, { label: 'Portrait (4:5)', value: 'portrait' }, { label: 'Landscape (4:3)', value: 'landscape' }]}
+          options={[{ label: 'Square', value: 'square' }, { label: 'Portrait (4:5)', value: 'portrait' }, { label: 'Tall (2:3)', value: 'tall' }, { label: 'Landscape (4:3)', value: 'landscape' }]}
           value={val(config, 'qs_image_ratio')} onChange={(v) => updateConfig('qs_image_ratio', v)}
+          helpText="Pick the shape of your product photos so they fill the card. Most clothing photos are Tall (2:3)."
+        />
+        <Select
+          label="Picture fit"
+          options={[{ label: 'Show the whole picture', value: 'contain' }, { label: 'Fill the frame (trims the edges)', value: 'cover' }]}
+          value={val(config, 'qs_image_fit')} onChange={(v) => updateConfig('qs_image_fit', v)}
+          helpText="Whole picture leaves empty bands when the photo's shape differs from the card's."
         />
         <TextField
           label="Small line above the title" value={config.qs_card_eyebrow || ''} onChange={(v) => updateConfig('qs_card_eyebrow', v)}
