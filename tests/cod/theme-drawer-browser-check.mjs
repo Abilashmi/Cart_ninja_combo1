@@ -86,9 +86,11 @@ const browser = await chromium.launch();
 
 // shiprocket: the shop has Shiprocket on (integrations_admin.php); BRIX's
 // hand-off (brix_checkout.js) is stubbed and records its calls in window.__sr.
-async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket = false, viewport = { width: 1280, height: 800 } } = {}) {
+async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket = false, viewport = { width: 1280, height: 800 }, wholePrices = false } = {}) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
+  // Account → Price display → "Hide decimals in prices" (printed by the app embed).
+  if (wholePrices) await page.addInitScript(() => { window.__brixWholePrices = true; });
   if (shiprocket) {
     await page.addInitScript(() => {
       window.__sr = [];
@@ -607,6 +609,15 @@ const done = async (page, name) => {
   check('Shiprocket: no prepaid saving in the cart → no code asked, Shiprocket as before', calls.length === 1 && calls[0].coupon === null && srNone.net.codeRequests.length === 0, JSON.stringify(calls));
   allErrors.push(...srNone.errors);
   await srNone.context().close();
+
+  // "Hide decimals in prices": the drawer's summary and Pay Now are whole rupees.
+  const whole = await open('dawn', { brixOn: true, cfg, wholePrices: true });
+  prepaidCart(whole);
+  await openDrawer(whole);
+  s = await seen(whole);
+  check('hide decimals: summary ₹1,299 / -₹130 / ₹1,169, Pay Now ₹1,169, COD ₹1,339', s.summary.join('|') === 'Subtotal|₹1,299|Prepaid discount|-₹130|Total|₹1,169' && /^Pay Now ₹1,169$/.test(s.checkout || '') && s.cod === 'Cash on Delivery ₹1,339', JSON.stringify(s));
+  allErrors.push(...whole.errors);
+  await whole.context().close();
 
   // Any other order discount (no prepaid offer live) stays in the COD price as before.
   const other = await open('dawn', { brixOn: true, cfg: { ...cfg, productPayment: undefined } });

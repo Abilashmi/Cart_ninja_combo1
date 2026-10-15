@@ -232,7 +232,7 @@
   /* "Buy all {count} together and save {discount}" (app/utils/fbt-offer.shared.js fbtOfferText). */
   function fbtOfferText(offer,symbol){
     var v=Number(offer.value);
-    var discount=offer.type==='percentage'?v+'%':symbol+(v%1===0?String(v):v.toFixed(2));
+    var discount=offer.type==='percentage'?v+'%':symbol+(v%1===0?String(v):window.__brixWholePrices===true?String(Math.round(v)):v.toFixed(2));
     return String(offer.text||'Buy all {count} together and save {discount}').replace(/\{\{?\s*count\s*\}?\}/g,String(offer.count)).replace(/\{\{?\s*discount\s*\}?\}/g,discount);
   }
 
@@ -266,7 +266,26 @@
       widgetPadding:fbtNum(config.widgetPadding,20,0,48),
       startSelected:config.startSelected===true?true:config.startSelected===false?false:null,
       marginTop:fbtNum(config.marginTop,16,0,80),
-      marginBottom:fbtNum(config.marginBottom,16,0,80)};
+      marginBottom:fbtNum(config.marginBottom,16,0,80),
+      /* "Buy all together" text look (app/utils/fbt-style.shared.js pickFbtOfferStyle); '' = price colour / its tint. */
+      offerTextColor:fbtHex(config.offerTextColor)||'',
+      offerBgColor:fbtHex(config.offerBgColor)||'',
+      offerFontSize:fbtNum(config.offerFontSize,13,10,24),
+      offerFontWeight:[400,500,600,700,800].indexOf(Number(config.offerFontWeight))!==-1?Number(config.offerFontWeight):700,
+      offerItalic:config.offerItalic===true,
+      offerAlign:['left','center','right'].indexOf(config.offerAlign)!==-1?config.offerAlign:'center',
+      offerFontFamily:typeof config.offerFontFamily==='string'&&config.offerFontFamily!=='inherit'&&/^[A-Za-z0-9 -]{1,40}$/.test(config.offerFontFamily.trim())?config.offerFontFamily.trim():''};
+  }
+
+  /* The offer text's inline style; a Google font is loaded once when chosen. */
+  function fbtOfferCss(config){
+    var family=config.offerFontFamily;
+    if(family&&!document.getElementById('ps-fbt-font-'+family.replace(/[^a-z0-9]/gi,'-'))){
+      var link=document.createElement('link');link.id='ps-fbt-font-'+family.replace(/[^a-z0-9]/gi,'-');link.rel='stylesheet';
+      link.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(family)+':wght@400;500;600;700;800&display=swap';
+      document.head.appendChild(link);
+    }
+    return 'background:'+(config.offerBgColor||config.priceColor+'14')+';color:'+(config.offerTextColor||config.priceColor)+';font-size:'+config.offerFontSize+'px;font-weight:'+config.offerFontWeight+';font-style:'+(config.offerItalic?'italic':'normal')+';text-align:'+config.offerAlign+';'+(family?"font-family:'"+family+"',sans-serif;":'');
   }
 
   function toPriceNumber(v){var p=parseFloat(v);return isNaN(p)?0:p;}
@@ -541,7 +560,8 @@
        a skin flourish, shown only in the carousel arrangement — a true
        2-col grid has no natural slot for an inline connector between cells. */
     // Price with the compare-at price struck through before it, when higher.
-    function money(n){return currencySymbol+n.toLocaleString('en-IN');}
+    /* Account → Price display → "Hide decimals in prices" (window.__brixWholePrices). */
+    function money(n){return currencySymbol+(window.__brixWholePrices===true?Math.round(n):n).toLocaleString('en-IN');}
     function priceHtml(price,compareAt,strikeSize){
       return (compareAt>price?'<s class="ps-compare-price" style="color:'+config.textColor+';opacity:.5;font-weight:500;margin-right:4px;'+(strikeSize?'font-size:'+strikeSize+'px;':'')+'">'+money(compareAt)+'</s>':'')+money(price);
     }
@@ -564,7 +584,7 @@
           ):'')
         +'</div>'
         +'<div class="ps-fbt-products"></div>'
-        +(config.offer?'<div class="ps-fbt-offer" style="margin-top:14px;padding:9px 12px;border-radius:'+Math.min(config.borderRadius,12)+'px;background:'+config.priceColor+'14;color:'+config.priceColor+';font-size:13px;font-weight:700;text-align:center;">'+escapeHtml(fbtOfferText(config.offer,currencySymbol))+'</div>':'')
+        +(config.offer?'<div class="ps-fbt-offer" style="margin-top:14px;padding:9px 12px;border-radius:'+Math.min(config.borderRadius,12)+'px;'+fbtOfferCss(config)+'">'+escapeHtml(fbtOfferText(config.offer,currencySymbol))+'</div>':'')
         +'<div class="ps-fbt-footer" style="border-color:'+config.borderColor+';justify-content:'+(config.showPrices?'space-between':'flex-end')+';">'
           +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">Select items</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
           +(config.showAddAllButton?'<button class="ps-fbt-addall" style="background:'+config.buttonColor+';color:'+config.buttonTextColor+';display:none;">Add to Cart</button>':'')

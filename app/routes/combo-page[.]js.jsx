@@ -1099,7 +1099,7 @@ const SCRIPT_BODY = String.raw`
     }
 
     html += '<div style="' + styleStr({ fontSize: sizing.productPriceSize + 'px', fontWeight: '600', color: primaryColor, marginBottom: '8px' }) + '">'
-      + getCurrencySymbol(product.currency) + displayPrice.toFixed(2) + '</div>';
+      + getCurrencySymbol(product.currency) + priceText(displayPrice) + '</div>';
 
     // Weight boxes: what this item adds to the box, or that it doesn't count.
     // (Boxes counted by items or value don't need a per-card badge.)
@@ -1151,10 +1151,10 @@ const SCRIPT_BODY = String.raw`
     var html = '<div style="' + styleStr({ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '8px', margin: '0 0 8px', fontSize: '15px' }) + '">';
     var symbol = getBarCurrencySymbol(state);
     if (state.discountApplicable) {
-      html += '<span style="' + styleStr({ textDecoration: 'line-through', color: '#999', fontSize: '13px' }) + '">' + symbol + state.totalPrice.toFixed(2) + '</span>';
-      html += '<span style="' + styleStr({ color: '#22c55e', fontWeight: '800' }) + '">' + symbol + state.finalPrice.toFixed(2) + '</span>';
+      html += '<span style="' + styleStr({ textDecoration: 'line-through', color: '#999', fontSize: '13px' }) + '">' + symbol + priceText(state.totalPrice) + '</span>';
+      html += '<span style="' + styleStr({ color: '#22c55e', fontWeight: '800' }) + '">' + symbol + priceText(state.finalPrice) + '</span>';
     } else {
-      html += '<span style="' + styleStr({ fontWeight: '700' }) + '">' + symbol + state.totalPrice.toFixed(2) + '</span>';
+      html += '<span style="' + styleStr({ fontWeight: '700' }) + '">' + symbol + priceText(state.totalPrice) + '</span>';
     }
     html += '</div>';
     return html;
@@ -2053,7 +2053,7 @@ const SCRIPT_BODY = String.raw`
         fontSize: '13px', fontWeight: '600', lineHeight: '1.3', color: textColor, overflow: 'hidden',
         display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical', minHeight: '34px',
       }) + '">' + esc(p.title) + '</div>';
-      html += '<div style="font-size:13px;font-weight:700;color:' + esc(textColor) + ';">' + (hasVariants ? 'From ' : '') + symbol + price.toFixed(2) + '</div>';
+      html += '<div style="font-size:13px;font-weight:700;color:' + esc(textColor) + ';">' + (hasVariants ? 'From ' : '') + symbol + priceText(price) + '</div>';
       html += '<button type="button" data-combo-action="ai-pick" data-product-id="' + esc(p.id) + '" style="' + styleStr({
         marginTop: 'auto', width: '100%', padding: '8px 10px', border: 'none', borderRadius: btnRadius + 'px',
         background: btnBg, color: btnTextColor, fontSize: '13px', fontWeight: '700', cursor: 'pointer',
@@ -2192,13 +2192,13 @@ const SCRIPT_BODY = String.raw`
     html += '<div style="' + styleStr({ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', gap: isMobile ? '15px' : '20px', width: isMobile ? '100%' : 'auto' }) + '">';
     html += '<div style="' + styleStr({ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'center' : 'flex-start', justifyContent: 'center', whiteSpace: 'nowrap', flexShrink: '0', width: isMobile ? '100%' : 'auto' }) + '">';
     if (hasDiscount) {
-      html += '<span style="' + styleStr({ fontSize: (config.original_price_size || 14) + 'px', color: config.preview_original_price_color || '#999', textDecoration: 'line-through', lineHeight: '1' }) + '">Total: ' + symbol + state.totalPrice.toFixed(2) + '</span>';
+      html += '<span style="' + styleStr({ fontSize: (config.original_price_size || 14) + 'px', color: config.preview_original_price_color || '#999', textDecoration: 'line-through', lineHeight: '1' }) + '">Total: ' + symbol + priceText(state.totalPrice) + '</span>';
     }
     html += '<span style="' + styleStr({
       fontSize: (config.discounted_price_size || 18) + 'px',
       color: config.preview_discount_price_color || config.selection_highlight_color || '#000',
       fontWeight: '800', marginTop: hasDiscount ? '4px' : '0', lineHeight: '1',
-    }) + '">Final: ' + symbol + state.finalPrice.toFixed(2) + '</span>';
+    }) + '">Final: ' + symbol + priceText(state.finalPrice) + '</span>';
     html += '</div>';
 
     html += '<div style="' + styleStr({ display: 'flex', flexDirection: 'row', gap: '10px', alignItems: 'center', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end' }) + '">';
@@ -2277,11 +2277,11 @@ const SCRIPT_BODY = String.raw`
           html += '<img src="' + esc(item2.image || '') + '" alt="' + esc(item2.title || 'Product') + '" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #eee;" />';
           html += '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(item2.title || 'Selected product') + '</div>';
           html += '<div style="font-size:12px;color:#666;margin-top:3px;">Qty: ' + (item2.quantity || 0) + '</div>';
-          html += '<div style="font-size:12px;color:#222;margin-top:3px;">' + symbol + ((item2.price || 0) * (item2.quantity || 0)).toFixed(2) + '</div></div></div>';
+          html += '<div style="font-size:12px;color:#222;margin-top:3px;">' + symbol + priceText((item2.price || 0) * (item2.quantity || 0)) + '</div></div></div>';
         }
       }
       html += '</div>';
-      html += '<div style="border-top:1px solid #ececec;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-weight:700;"><span>Total</span><span>' + symbol + state.finalPrice.toFixed(2) + '</span></div>';
+      html += '<div style="border-top:1px solid #ececec;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-weight:700;"><span>Total</span><span>' + symbol + priceText(state.finalPrice) + '</span></div>';
       html += '</div>';
     }
 
@@ -2338,7 +2338,8 @@ const SCRIPT_BODY = String.raw`
     var w = state.weight;
     var cb = state.codButton;
     var model = QuickShop.buildModel({
-      config: config,
+      // The store-wide "Hide decimals in prices" also hides them on box pages.
+      config: window.__brixWholePrices === true ? Object.assign({}, config, { qs_hide_decimals: true }) : config,
       templateName: state.templateName,
       productsByHandle: state.productsByHandle,
       handles: weightBoxHandles(config),
@@ -2434,6 +2435,14 @@ const SCRIPT_BODY = String.raw`
     var phone = config[prefix + '_align_mobile'];
     if (valid(phone) && (config[prefix + '_align_mobile_set'] === true || phone !== 'left')) return phone;
     return desktop;
+  }
+
+  // Prices on the older combo layouts: two decimals, or whole amounts with
+  // Account → Price display → "Hide decimals in prices" (window.__brixWholePrices,
+  // printed by the app embed). Display only.
+  function priceText(n) {
+    var v = Number(n) || 0;
+    return window.__brixWholePrices === true ? String(Math.round(v)) : v.toFixed(2);
   }
 
   /* === QUICK SHOP: PRODUCT POPUP ON <body> === */

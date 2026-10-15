@@ -31,7 +31,8 @@ import { resolveFbtInstructions } from '../services/pairing-assistant.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
-import { FBT_EXTRA_COLOR_KEYS, fbtEffectiveColors, pickFbtExtras, pickFbtLayout, fbtLayoutSizes, fbtStartsSelected } from '../utils/fbt-style.shared.js';
+import { FBT_EXTRA_COLOR_KEYS, FBT_OFFER_WEIGHTS, fbtEffectiveColors, fbtOfferCss, pickFbtExtras, pickFbtLayout, fbtLayoutSizes, fbtStartsSelected } from '../utils/fbt-style.shared.js';
+import { HEADING_FONT_OPTIONS } from '../components/customization/ContentSection';
 
 // Ceiling for a single Shopify Admin API call in this route. Generous enough
 // that a merely-slow response still succeeds, low enough that a stalled one
@@ -2075,6 +2076,25 @@ export default function FBTPage() {
                             placeholder={FBT_OFFER_TEXT_DEFAULT}
                             helpText="{count} = number of products including the one being viewed, {discount} = the saving (10% or an amount)."
                           />
+                          <Text as="h4" variant="headingSm">Offer text style</Text>
+                          <InlineGrid columns={2} gap="300">
+                            <ColorField label="Text color" value={fbtLayout.offerTextColor} fallback={priceColor} allowEmpty onChange={setLayoutKey('offerTextColor')} helpText="Empty = price color" />
+                            <ColorField label="Background" value={fbtLayout.offerBgColor} fallback={priceColor} allowEmpty onChange={setLayoutKey('offerBgColor')} helpText="Empty = a light tint of the price color" />
+                          </InlineGrid>
+                          <InlineGrid columns={2} gap="300">
+                            <Select label="Font" options={HEADING_FONT_OPTIONS} value={fbtLayout.offerFontFamily} onChange={setLayoutKey('offerFontFamily')} helpText="Theme Font = your store's font" />
+                            <Select
+                              label="Weight"
+                              options={FBT_OFFER_WEIGHTS.map((w) => ({ label: { 400: 'Normal', 500: 'Medium', 600: 'Semi-bold', 700: 'Bold', 800: 'Extra bold' }[w], value: String(w) }))}
+                              value={String(fbtLayout.offerFontWeight)}
+                              onChange={(v) => setLayoutKey('offerFontWeight')(Number(v))}
+                            />
+                          </InlineGrid>
+                          <SliderField label="Text size" value={fbtLayout.offerFontSize} min={10} max={24} suffix="px" onChange={setLayoutKey('offerFontSize')} />
+                          <InlineGrid columns={2} gap="300">
+                            <Select label="Alignment" options={[{ label: 'Left', value: 'left' }, { label: 'Center', value: 'center' }, { label: 'Right', value: 'right' }]} value={fbtLayout.offerAlign} onChange={setLayoutKey('offerAlign')} />
+                            <div style={{ paddingTop: 24 }}><Checkbox label="Italic" checked={fbtLayout.offerItalic} onChange={setLayoutKey('offerItalic')} /></div>
+                          </InlineGrid>
                           <Text as="p" variant="bodySm" tone="subdued">Manual rules can use their own offer, or none, under Configure → Saved rules. Save to apply.</Text>
                         </>
                       )}
@@ -2175,7 +2195,10 @@ export default function FBTPage() {
                       <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
                     {offer.enabled && Number(offer.value) > 0 && (
-                      <div className="fbtpv-offer" style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: '8px', background: `${priceColor}14`, color: priceColor, fontSize: '12px', fontWeight: 700, textAlign: 'center' }}>
+                      <div className="fbtpv-offer" style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: '8px', ...fbtOfferCss(fbtLayout, priceColor) }}>
+                        {fbtLayout.offerFontFamily !== 'inherit' && (
+                          <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fbtLayout.offerFontFamily)}:wght@400;500;600;700;800&display=swap`} />
+                        )}
                         {fbtOfferText(offer.text, { count: fbtPreviewProducts.length + 1, offer: { type: offer.type, value: Number(offer.value) }, symbol: currencySymbol })}
                       </div>
                     )}

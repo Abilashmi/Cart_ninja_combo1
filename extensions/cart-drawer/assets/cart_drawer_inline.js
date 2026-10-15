@@ -129,9 +129,17 @@
     var options = { minimumFractionDigits: CURRENCY_DECIMALS, maximumFractionDigits: CURRENCY_DECIMALS };
     try { return new Intl.NumberFormat(document.documentElement.lang || undefined, options); } catch (e) { return new Intl.NumberFormat('en', options); }
   })();
+  // Account → Price display → "Hide decimals in prices" (window.__brixWholePrices,
+  // printed by the app embed): whole amounts, display only.
+  const WHOLE_NUMBER = (function () {
+    var options = { minimumFractionDigits: 0, maximumFractionDigits: 0 };
+    try { return new Intl.NumberFormat(document.documentElement.lang || undefined, options); } catch (e) { return new Intl.NumberFormat('en', options); }
+  })();
   function formatMoney(amount) {
     var value = Number(amount);
-    return CURRENCY_SYMBOL + MONEY_NUMBER.format(isFinite(value) ? value : 0);
+    if (!isFinite(value)) value = 0;
+    if (window.__brixWholePrices === true) return CURRENCY_SYMBOL + WHOLE_NUMBER.format(Math.round(value));
+    return CURRENCY_SYMBOL + MONEY_NUMBER.format(value);
   }
 
   // Inline SVG paths matching Polaris icons used in the admin preview

@@ -86,6 +86,55 @@ export const FBT_LAYOUT_LIMITS = Object.freeze({
 
 export const FBT_IMAGE_FITS = ['contain', 'cover'];
 
+// The "Buy all together" offer text's look (also in the template JSON).
+// '' colours = follow the price colour (text) / a light tint of it (background),
+// which is how it always looked. Mirrored by fbt-widget-render.liquid
+// normalizeConfig and fbtOfferCss there.
+export const FBT_OFFER_STYLE_DEFAULTS = Object.freeze({
+  offerTextColor: '',
+  offerBgColor: '',
+  offerFontSize: 13,
+  offerFontWeight: 700,
+  offerItalic: false,
+  offerAlign: 'center',
+  offerFontFamily: 'inherit', // the theme's font, or a Google font name
+});
+export const FBT_OFFER_WEIGHTS = [400, 500, 600, 700, 800];
+export const FBT_OFFER_ALIGNS = ['left', 'center', 'right'];
+const FONT_NAME_RE = /^[A-Za-z0-9 -]{1,40}$/;
+
+/** The offer text style keys of a template, each valid (bad or missing = default). */
+export function pickFbtOfferStyle(tpl) {
+  const d = FBT_OFFER_STYLE_DEFAULTS;
+  const size = Math.round(Number(tpl?.offerFontSize));
+  const weight = Number(tpl?.offerFontWeight);
+  const family = String(tpl?.offerFontFamily || '').trim();
+  return {
+    offerTextColor: normalizeHex(tpl?.offerTextColor) || '',
+    offerBgColor: normalizeHex(tpl?.offerBgColor) || '',
+    offerFontSize: tpl?.offerFontSize !== '' && tpl?.offerFontSize != null && Number.isFinite(size) ? Math.max(10, Math.min(24, size)) : d.offerFontSize,
+    offerFontWeight: FBT_OFFER_WEIGHTS.includes(weight) ? weight : d.offerFontWeight,
+    offerItalic: tpl?.offerItalic === true,
+    offerAlign: FBT_OFFER_ALIGNS.includes(tpl?.offerAlign) ? tpl.offerAlign : d.offerAlign,
+    offerFontFamily: family && family !== 'inherit' && FONT_NAME_RE.test(family) ? family : 'inherit',
+  };
+}
+
+/** The offer text's CSS values (React style keys) for a style and the widget's price colour. */
+export function fbtOfferCss(style, priceColor = '#059669') {
+  const s = pickFbtOfferStyle(style);
+  const price = normalizeHex(priceColor) || '#059669';
+  return {
+    color: s.offerTextColor || price,
+    background: s.offerBgColor || `${price}14`,
+    fontSize: `${s.offerFontSize}px`,
+    fontWeight: s.offerFontWeight,
+    fontStyle: s.offerItalic ? 'italic' : 'normal',
+    textAlign: s.offerAlign,
+    ...(s.offerFontFamily !== 'inherit' ? { fontFamily: `'${s.offerFontFamily}', sans-serif` } : {}),
+  };
+}
+
 /** The image / spacing keys of a template, each valid (bad or missing = default). */
 export function pickFbtLayout(tpl) {
   const out = { ...FBT_LAYOUT_DEFAULTS };
@@ -98,7 +147,8 @@ export function pickFbtLayout(tpl) {
   // Start with every product selected (a bundle) or let shoppers add each:
   // true / false, null = the interaction style's own default (fbtStartsSelected).
   out.startSelected = tpl?.startSelected === true ? true : tpl?.startSelected === false ? false : null;
-  return out;
+  // The offer text's look rides along (loaded and saved with the layout).
+  return { ...out, ...pickFbtOfferStyle(tpl) };
 }
 
 /**

@@ -218,11 +218,15 @@
     var shopDecimals = 2;
     try { shopDecimals = new Intl.NumberFormat('en', { style: 'currency', currency: shopCode }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
     try { fmt = new Intl.NumberFormat(locale, { style: 'currency', currency: active }); } catch (e) { fmt = null; }
+    // Account → Price display → "Hide decimals in prices" (window.__brixWholePrices).
+    var whole = null;
+    try { whole = new Intl.NumberFormat(locale, { style: 'currency', currency: active, minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
     return {
       hidden: hidden,
       decimals: shopDecimals,
       format: function (value) {
         var amount = Number(value) * rate;
+        if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
         return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
       },
     };

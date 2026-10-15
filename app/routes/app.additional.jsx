@@ -1,8 +1,10 @@
-import { useLoaderData, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useFetcher, useLoaderData, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 import {
-  Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon,
+  Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon, Checkbox,
 } from '@shopify/polaris';
+import { getPriceDisplay, savePriceDisplay } from '../services/price-display.server';
 import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { ExternalIcon, CheckCircleIcon, LockIcon } from '@shopify/polaris-icons';
@@ -14,7 +16,7 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [planKey, subscriptionId, shopInfo] = await Promise.all([
+  const [planKey, subscriptionId, shopInfo, priceDisplay] = await Promise.all([
     getShopPlan(shop),
     (async () => {
       try {
@@ -52,10 +54,58 @@ export const loader = async ({ request }) => {
         return null;
       }
     })(),
+    getPriceDisplay(admin),
   ]);
 
-  return { shop, shopInfo, planKey, subscriptionId };
+  return { shop, shopInfo, planKey, subscriptionId, priceDisplay };
 };
+
+// Price display (services/price-display.server.js): saved when the box is ticked.
+export const action = async ({ request }) => {
+  const { admin } = await authenticate.admin(request);
+  const form = await request.formData();
+  if (form.get('intent') !== 'price-display') return { ok: false, error: 'Unknown request.' };
+  try {
+    const saved = await savePriceDisplay(admin, { wholePrices: form.get('wholePrices') === 'true' });
+    return { ok: true, priceDisplay: saved };
+  } catch (e) {
+    console.error('[Account] price display save failed:', e);
+    return { ok: false, error: 'Could not save. Please try again.' };
+  }
+};
+
+function PriceDisplayCard({ initial }) {
+  const fetcher = useFetcher();
+  const [whole, setWhole] = useState(Boolean(initial?.wholePrices));
+  const saving = fetcher.state !== 'idle';
+  useEffect(() => {
+    if (fetcher.state !== 'idle' || !fetcher.data) return;
+    if (fetcher.data.ok) {
+      setWhole(Boolean(fetcher.data.priceDisplay?.wholePrices));
+      if (typeof shopify !== 'undefined') shopify.toast.show('Price display saved');
+    } else if (typeof shopify !== 'undefined') {
+      shopify.toast.show(fetcher.data.error || 'Could not save', { isError: true });
+    }
+  }, [fetcher.state, fetcher.data]);
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">Price display</Text>
+        <Divider />
+        <Checkbox
+          label="Hide decimals in prices"
+          helpText="Everywhere BRIX shows a price on your store: cart drawer, upsells, COD buttons and payment options, Frequently Bought Together, Packs and combo pages (₹595 instead of ₹594.70). Display only: checkout charges the exact price, and the COD checkout's bill keeps the exact amount to pay."
+          checked={whole}
+          disabled={saving}
+          onChange={(v) => {
+            setWhole(v);
+            fetcher.submit({ intent: 'price-display', wholePrices: String(v) }, { method: 'post' });
+          }}
+        />
+      </BlockStack>
+    </Card>
+  );
+}
 
 function InfoRow({ label, value }) {
   return (
@@ -71,7 +121,7 @@ function InfoRow({ label, value }) {
 }
 
 export default function AccountPage() {
-  const { shop, shopInfo, planKey, subscriptionId } = useLoaderData();
+  const { shop, shopInfo, planKey, subscriptionId, priceDisplay } = useLoaderData();
   const navigate = useNavigate();
   const { canAccessFeature } = usePlan();
 
@@ -156,6 +206,8 @@ export default function AccountPage() {
             </InlineStack>
           </BlockStack>
         </Card>
+
+        <PriceDisplayCard initial={priceDisplay} />
 
         {/* Support */}
         <Card>

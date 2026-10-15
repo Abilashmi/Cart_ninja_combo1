@@ -147,3 +147,16 @@ test('start selected: style defaults unless the merchant chose; Bundle always', 
   assert.equal(pickFbtLayout({ startSelected: 'yes' }).startSelected, null);
   assert.equal(pickFbtLayout({ startSelected: false }).startSelected, false);
 });
+
+test('offer text style: defaults look as before, merchant values validated', async () => {
+  const { pickFbtOfferStyle, fbtOfferCss, pickFbtLayout } = await import('../../app/utils/fbt-style.shared.js');
+  assert.deepEqual(fbtOfferCss({}, '#059669'), { color: '#059669', background: '#05966914', fontSize: '13px', fontWeight: 700, fontStyle: 'normal', textAlign: 'center' });
+  const s = pickFbtOfferStyle({ offerTextColor: '#B91C1C', offerFontSize: '30', offerFontWeight: 650, offerItalic: true, offerAlign: 'right', offerFontFamily: 'Poppins' });
+  assert.equal(s.offerTextColor, '#b91c1c');
+  assert.equal(s.offerFontSize, 24, 'at most 24px');
+  assert.equal(s.offerFontWeight, 700, 'only 400-800 in steps of 100');
+  assert.equal(s.offerAlign, 'right');
+  assert.equal(fbtOfferCss(s).fontFamily, "'Poppins', sans-serif");
+  assert.equal(pickFbtOfferStyle({ offerFontFamily: "x';}body{" }).offerFontFamily, 'inherit', 'no CSS through the font name');
+  assert.equal(pickFbtLayout({ offerFontSize: 15 }).offerFontSize, 15, 'saved and loaded with the template layout');
+});

@@ -3,6 +3,8 @@
 
   {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
   {{ 'brix_cart_ui.css' | asset_url | stylesheet_tag }}
+  {%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
+  <script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
   <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
   <!-- BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
        product pages and combo pages. Shows nothing unless the merchant turned

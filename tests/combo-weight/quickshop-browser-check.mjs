@@ -91,8 +91,9 @@ const browser = await chromium.launch();
 // shiprocket: { code } = Shiprocket on for the shop, BrixCheckout stubbed, the
 // box-code API answers with that code ('fail' = a 502).
 // loader: { dataDelay, loaderDelay, loader (the /api/combo-loader answer's loader keys), dataStatus, wait = false }
-async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null, themeCss = '' } = {}) {
+async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null, themeCss = '', wholePrices = false } = {}) {
   const page = await browser.newPage({ viewport });
+  if (wholePrices) await page.addInitScript(() => { window.__brixWholePrices = true; });
   const log = { add: [], update: [], navigations: [], cod: [], boxCode: [], loader: 0 };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms || 0));
   page.on('pageerror', (e) => check('no page errors', false, e.message));
@@ -631,6 +632,13 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await plain.page.waitForTimeout(300);
   check('decimals shown by default (₹72.30 saved)', (await text(plain.page, '.bxq-bar')).includes('₹72.30 saved'));
   await plain.page.close();
+  // The store-wide switch (Account → Price display) hides them too.
+  const store = await openCombo(baseConfig, wp(QUANTITY), { wholePrices: true });
+  await store.page.waitForSelector(card(1));
+  await plus(store.page, 1); await plus(store.page, 2); await plus(store.page, 3);
+  await store.page.waitForTimeout(300);
+  check('store-wide "Hide decimals" also applies to box pages (₹72 saved)', (await text(store.page, '.bxq-bar')).includes('₹72 saved'));
+  await store.page.close();
 }
 
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books

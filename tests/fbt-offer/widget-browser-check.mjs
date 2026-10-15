@@ -33,8 +33,10 @@ const catalog = (capAvailable = true) => ({ products: [
 
 const browser = await chromium.launch();
 
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100 }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
+  // Account → Price display → "Hide decimals in prices" (printed by the block).
+  if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
   const log = { added: [] };
   page.on('pageerror', (e) => check('no page errors', false, e.message));
   const config = { status: 'success', data: { selectedTemp: 'fbt1', isEnabled: true, temp1: { layout: 'carousel', interactionType: 'classic', showPrices: true, showAddAllButton: true, widgetPlacement: 'below_cart', ...temp1 }, condition } };
@@ -102,6 +104,35 @@ const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerPr
   const { page } = await open({ condition: [rule({ offer: { type: 'fixed_amount', value: 150, text: 'Save {discount} when you take all {count}' } })] });
   check('amount offer: "Save ₹150 when you take all 3"', (await page.locator('ps-fbt-widget .ps-fbt-offer').textContent()) === 'Save ₹150 when you take all 3');
   await page.close();
+}
+
+/* 6. Offer text style: colours, font, size, weight, italic, alignment */
+{
+  const css = (page) => page.$eval('ps-fbt-widget .ps-fbt-offer', (e) => { const c = getComputedStyle(e); return { color: c.color, bg: c.backgroundColor, size: c.fontSize, weight: c.fontWeight, style: c.fontStyle, align: c.textAlign, family: c.fontFamily }; });
+  const styled = await open({ condition: [rule({ offer: OFFER })], temp1: { priceColor: '#059669', offerTextColor: '#b91c1c', offerBgColor: '#fef3c7', offerFontSize: 17, offerFontWeight: 500, offerItalic: true, offerAlign: 'left', offerFontFamily: 'Poppins' } });
+  const c = await css(styled.page);
+  check('offer style: the merchant\'s colours, size, weight, italic, left, Poppins', c.color === 'rgb(185, 28, 28)' && c.bg === 'rgb(254, 243, 199)' && c.size === '17px' && c.weight === '500' && c.style === 'italic' && c.align === 'left' && /Poppins/.test(c.family), JSON.stringify(c));
+  check('offer style: the Google font is loaded once', await styled.page.$$eval('link[href*="fonts.googleapis.com"][href*="Poppins"]', (l) => l.length) === 1);
+  await styled.page.close();
+  const plain = await open({ condition: [rule({ offer: OFFER })], temp1: { priceColor: '#059669' } });
+  const d = await css(plain.page);
+  check('offer style: unset = as before (price colour, 13px bold, centred)', d.color === 'rgb(5, 150, 105)' && d.size === '13px' && d.weight === '700' && d.style === 'normal' && d.align === 'center', JSON.stringify(d));
+  await plain.page.close();
+  const bad = await open({ condition: [rule({ offer: OFFER })], temp1: { offerFontSize: 99, offerFontWeight: 950, offerAlign: 'middle', offerFontFamily: 'x;}body{', offerTextColor: 'red;}' } });
+  const e = await css(bad.page);
+  check('offer style: bad values clamped / ignored', e.size === '24px' && e.weight === '700' && e.align === 'center' && !/body/.test(e.family), JSON.stringify(e));
+  await bad.page.close();
+}
+
+/* 7. "Hide decimals in prices": the offer's amount is whole */
+{
+  const AMOUNT = { type: 'fixed_amount', value: 150.5, text: 'Save {discount} on all {count}' };
+  const exact = await open({ condition: [rule({ offer: AMOUNT })] });
+  check('amount offer with paise: "Save ₹150.50 on all 3"', (await exact.page.locator('ps-fbt-widget .ps-fbt-offer').textContent()) === 'Save ₹150.50 on all 3');
+  await exact.page.close();
+  const whole = await open({ condition: [rule({ offer: AMOUNT })], whole: true });
+  check('hide decimals: "Save ₹151 on all 3"', (await whole.page.locator('ps-fbt-widget .ps-fbt-offer').textContent()) === 'Save ₹151 on all 3');
+  await whole.page.close();
 }
 
 /* Start selected (a bundle) or let shoppers add each one */

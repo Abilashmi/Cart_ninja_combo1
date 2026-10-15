@@ -80,11 +80,24 @@
   }
 
   // Like moneyFormatter, but whole amounts without ".00" (990, not 990.00).
+  // With Account → Price display → "Hide decimals in prices" on
+  // (window.__brixWholePrices), every amount is whole (display only; the COD
+  // popup's bill uses moneyFormatter and stays exact).
   function shortMoney(code) {
     var full = moneyFormatter(code);
     var whole = null;
     try { whole = new Intl.NumberFormat(document.documentElement.lang || 'en-IN', { style: 'currency', currency: code || 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
-    return function (n) { n = Number(n) || 0; return whole && Math.round(n * 100) % 100 === 0 ? whole.format(n) : full(n); };
+    return function (n) {
+      n = Number(n) || 0;
+      if (whole && window.__brixWholePrices === true) return whole.format(Math.round(n));
+      return whole && Math.round(n * 100) % 100 === 0 ? whole.format(n) : full(n);
+    };
+  }
+
+  // Amounts on buttons and their fee lines: like shortMoney when prices are
+  // shown whole, else the exact amount.
+  function buttonMoney(code) {
+    return window.__brixWholePrices === true ? shortMoney(code) : moneyFormatter(code);
   }
 
   // The shopper's currency, as the theme shows prices.
@@ -1842,7 +1855,7 @@
     function paint(cfg, excluded) {
       if (!slot.isConnected) return;
       if (!cfg || cfg.surfaces.drawer === false) { slot.innerHTML = ''; setReplaced(checkout, false); return; }
-      var state = drawerState(cfg, opts.cart, excluded, moneyFormatter(cfg.currency));
+      var state = drawerState(cfg, opts.cart, excluded, buttonMoney(cfg.currency));
       relabelBrixCheckout(checkout, cfg, state);
       paintDrawerSlot(slot, cfg, state, checkout ? { anchor: checkout, checkout: checkout } : null, function () {
         open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
@@ -2086,7 +2099,7 @@
   }
 
   function paintTheme(cfg) {
-    var fmt = moneyFormatter(cfg.currency);
+    var fmt = buttonMoney(cfg.currency);
     themeMounts.forEach(function (m) {
       if (!m.checkout.isConnected) return;
       var state = drawerState(cfg, themeCart, themeExcluded, fmt);
@@ -2428,7 +2441,7 @@
     }
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
-    var fmt = moneyFormatter(cfg.currency);
+    var fmt = buttonMoney(cfg.currency);
     var text = cfg.buttons.productText;
     var label = codLabel(cfg, text, productPrice(form, info));
     var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info));
