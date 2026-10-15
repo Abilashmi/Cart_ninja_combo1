@@ -1181,7 +1181,7 @@ export const QUICK_SHOP_CSS = `
 .bxq-banner img{display:block;width:100%;}
 .bxq-desc{margin:6px 0 0;font-size:15px;line-height:1.5;opacity:.72;max-width:70ch;}
 .bxq-top{background:var(--bxq-top-bg);color:var(--bxq-top-text);border-radius:16px;padding:14px 18px 16px;margin:0 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
-.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;}
+.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;transition:top .2s ease;}
 .bxq--m .bxq-top{padding:10px 12px 8px;border-radius:14px;}
 .bxq--m .bxq-top.is-sticky .bxq-top-title{display:none;}
 .bxq--m .bxq-top-msg{font-size:13.5px;margin:0 0 8px;}

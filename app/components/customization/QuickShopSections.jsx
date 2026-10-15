@@ -312,7 +312,12 @@ function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, Co
           <>
             <TextField label="Heading" value={val(config, 'qs_top_title')} onChange={(v) => updateConfig('qs_top_title', v)} autoComplete="off" helpText="Empty = no heading. The message under it comes from Advanced → Offer." />
             <Checkbox label="Stays at the top while scrolling" checked={isOn(config, 'qs_top_sticky')} onChange={(v) => updateConfig('qs_top_sticky', v)} />
-            {isOn(config, 'qs_top_sticky') && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_offset" label="Space below your theme's sticky header" max={300} />}
+            {isOn(config, 'qs_top_sticky') && (
+              <>
+                <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_offset" label="Space from the top of the screen" max={300} />
+                <Text as="p" variant="bodySm" tone="subdued">On your store it stays just below your theme&apos;s sticky header by itself (also when the header hides while scrolling). This is the least space it keeps; leave 0 unless something still covers it.</Text>
+              </>
+            )}
             {style !== 'text' && (
               <>
                 <Checkbox label="Tier names under the bar" checked={isOn(config, 'qs_top_show_labels')} onChange={(v) => updateConfig('qs_top_show_labels', v)} />

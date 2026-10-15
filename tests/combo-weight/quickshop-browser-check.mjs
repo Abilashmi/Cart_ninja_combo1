@@ -84,7 +84,7 @@ const browser = await chromium.launch();
 // shiprocket: { code } = Shiprocket on for the shop, BrixCheckout stubbed, the
 // box-code API answers with that code ('fail' = a 502).
 // loader: { dataDelay, loaderDelay, loader (the /api/combo-loader answer's loader keys), dataStatus, wait = false }
-async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null } = {}) {
+async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null, themeCss = '' } = {}) {
   const page = await browser.newPage({ viewport });
   const log = { add: [], update: [], navigations: [], cod: [], boxCode: [], loader: 0 };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms || 0));
@@ -97,7 +97,7 @@ async function openCombo(config, pricing, { cod = false, shiprocket = null, view
       if (url.pathname === '/pages/box') {
         const srStub = shiprocket ? 'window.__sr = []; window.BrixCheckout = { checkoutItems: function (o) { window.__sr.push(o); } };' : '';
         const stubs = srStub + (cod ? `window.__cod = []; window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function (o) { window.__cod.push(o); }, comboButton: function () { return Promise.resolve({ text: "Pay cash", icon: "", css: "background:#be185d;color:#ffffff;", placement: ${JSON.stringify(cod.placement || 'below')} }); } };` : '');
-        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100}</style></head><body style="margin:0">${DAWN_PAGE}<script src="${API}/combo-page.js"></script></body></html>` });
+        return route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"><script>${stubs}</script><style>/* Dawn hides empty divs; the progress fills are empty divs */ div:empty{display:none} .theme-fixed{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:100} ${themeCss}</style></head><body style="margin:0">${DAWN_PAGE}<script src="${API}/combo-page.js"></script></body></html>` });
       }
       if (url.pathname === '/cart.js') return json({ items: [] });
       if (url.pathname === '/cart/update.js') { log.update.push(JSON.parse(req.postData())); return json({ items: [] }); }
@@ -470,6 +470,36 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await off.page.waitForTimeout(200);
   check('popup switched off: pictures and names are not clickable', !(await off.page.$('.bxq-pop')) && await off.page.$eval(`${card(2)} .bxq-name`, (e) => e.getAttribute('data-combo-action')) === null);
   await off.page.close();
+}
+
+/* Sticky progress stays below the theme's sticky header (here 120px), and
+   moves up when the theme slides its header away while scrolling. */
+{
+  const { page } = await openCombo({ ...baseConfig, qs_top_style: 'milestones', qs_top_sticky: true }, wp(QUANTITY), {
+    viewport: { width: 390, height: 640 },
+    themeCss: '.section-header{position:sticky;top:0;z-index:50;background:#fff;transition:transform .15s} .section-header .header{height:120px;display:block} .section-header.is-hidden{transform:translateY(-100%)}',
+  });
+  await page.waitForSelector('.bxq-top.is-sticky');
+  await page.evaluate(() => window.scrollTo(0, 700));
+  await page.waitForTimeout(600);
+  const at = () => page.evaluate(() => Math.round(document.querySelector('.bxq-top').getBoundingClientRect().top));
+  let top = await at();
+  check('sticky progress: stays just below a 120px sticky theme header, not behind it', Math.abs(top - 120) <= 2, String(top));
+  await page.evaluate(() => { document.querySelector('.section-header').classList.add('is-hidden'); window.scrollBy(0, 40); });
+  await page.waitForTimeout(700);
+  top = await at();
+  check('sticky progress: moves up to the top when the theme hides its header', Math.abs(top) <= 2, String(top));
+  await page.evaluate(() => { document.querySelector('.section-header').classList.remove('is-hidden'); window.scrollBy(0, -20); });
+  await page.waitForTimeout(700);
+  check('sticky progress: back under the header when it comes back', Math.abs((await at()) - 120) <= 2, String(await at()));
+  await page.close();
+
+  const own = await openCombo({ ...baseConfig, qs_top_sticky: true, qs_top_offset: 60 }, wp(QUANTITY), { viewport: { width: 390, height: 640 } });
+  await own.page.waitForSelector('.bxq-top.is-sticky');
+  await own.page.evaluate(() => window.scrollTo(0, 700));
+  await own.page.waitForTimeout(600);
+  check('sticky progress: no sticky header → the merchant\'s own space (60px) still applies', Math.abs((await own.page.evaluate(() => document.querySelector('.bxq-top').getBoundingClientRect().top)) - 60) <= 2);
+  await own.page.close();
 }
 
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books

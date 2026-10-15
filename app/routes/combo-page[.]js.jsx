@@ -2409,12 +2409,75 @@ const SCRIPT_BODY = String.raw`
     var app = root.querySelector('.brix-combo-app');
     if (app) app.innerHTML = html;
 
+    if (WeightCore.usesQuickShop(config.layout)) keepBelowStickyHeader(root, state);
+
     // Quick Shop product popup: the page behind doesn't scroll while it's open.
     var popupOpen = Boolean(state.qsUi && state.qsUi.popup && root.querySelector('.bxq-pop'));
     if (popupOpen !== Boolean(state.qsPopupLock)) {
       state.qsPopupLock = popupOpen;
       document.documentElement.style.overflow = popupOpen ? 'hidden' : '';
     }
+  }
+
+  /* === QUICK SHOP: STICKY PROGRESS BELOW THE THEME'S HEADER === */
+
+  // The bottom edge of the theme's sticky/fixed header (and announcement
+  // bar) at the top of the screen right now, 0 when there is none or the
+  // theme has slid it away. Found by what sits at the top edge of the screen,
+  // so it works on any theme without knowing its markup.
+  function stickyHeaderBottom(root) {
+    if (!document.elementsFromPoint) return 0;
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    var xs = [Math.round(w * 0.15), Math.round(w * 0.5), Math.round(w * 0.85)];
+    var seen = [];
+    var bottom = 0;
+    for (var i = 0; i < xs.length; i++) {
+      var hits = document.elementsFromPoint(xs[i], 2);
+      for (var j = 0; j < hits.length; j++) {
+        for (var el = hits[j]; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+          if (seen.indexOf(el) !== -1) break;
+          seen.push(el);
+          if (root.contains(el) || el.contains(root)) continue; // the combo page itself
+          var pos = window.getComputedStyle(el).position;
+          if (pos !== 'fixed' && pos !== 'sticky') continue;
+          var r = el.getBoundingClientRect();
+          // A bar across the top, not a drawer, popup or full-screen layer.
+          if (r.top <= 4 && r.bottom > bottom && r.height < h * 0.45 && r.width >= w * 0.5) bottom = r.bottom;
+        }
+      }
+    }
+    return Math.max(0, Math.min(Math.round(bottom), Math.round(h * 0.45)));
+  }
+
+  // Quick Shop's sticky progress sits under the theme's sticky header
+  // instead of behind it: --bxq-top-offset = the header's bottom edge, kept
+  // up to date while scrolling (themes hide/show the header) and resizing.
+  // The merchant's own "Space below your theme's sticky header" is a minimum.
+  function keepBelowStickyHeader(root, state) {
+    var apply = function () {
+      var page = root.querySelector('.bxq');
+      if (!page || !root.querySelector('.bxq-top.is-sticky')) return;
+      var own = Math.max(0, Math.min(300, Number(state.config.qs_top_offset) || 0));
+      var px = Math.max(own, stickyHeaderBottom(root));
+      if (state.qsHeaderOffset !== px || page.style.getPropertyValue('--bxq-top-offset') !== px + 'px') {
+        state.qsHeaderOffset = px;
+        page.style.setProperty('--bxq-top-offset', px + 'px');
+      }
+    };
+    apply();
+    if (state.qsHeaderWatch) return;
+    state.qsHeaderWatch = true;
+    var queued = false;
+    var settle = null;
+    var onMove = function () {
+      if (!queued) { queued = true; window.requestAnimationFrame(function () { queued = false; apply(); }); }
+      // Headers slide in/out with a CSS transition after the scroll stops.
+      clearTimeout(settle);
+      settle = setTimeout(apply, 350);
+    };
+    window.addEventListener('scroll', onMove, { passive: true });
+    window.addEventListener('resize', onMove);
   }
 
   /* === GLOBAL STYLES (injected once) === */
