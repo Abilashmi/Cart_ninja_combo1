@@ -293,6 +293,12 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
           checked={isOn(config, 'qs_product_popup')}
           onChange={(v) => updateConfig('qs_product_popup', v)}
         />
+        <Checkbox
+          label="Hide decimals in prices"
+          helpText="₹1708 instead of ₹1708.20 on cards, the popup, the bottom bar and offer messages. Display only: checkout charges the exact price."
+          checked={isOn(config, 'qs_hide_decimals')}
+          onChange={(v) => updateConfig('qs_hide_decimals', v)}
+        />
         <Checkbox label="Short description under the title" checked={isOn(config, 'qs_show_subtitle')} onChange={(v) => updateConfig('qs_show_subtitle', v)} />
         <Checkbox label="“% OFF” from the compare-at price" checked={isOn(config, 'qs_show_off')} onChange={(v) => updateConfig('qs_show_off', v)} />
         <Checkbox label="Struck-through compare-at price" checked={isOn(config, 'qs_show_compare')} onChange={(v) => updateConfig('qs_show_compare', v)} />

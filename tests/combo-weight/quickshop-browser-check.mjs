@@ -611,6 +611,28 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+/* "Hide decimals in prices": whole rupees everywhere on the page (display only). */
+{
+  const { page } = await openCombo({ ...baseConfig, qs_hide_decimals: true }, wp(QUANTITY));
+  await page.waitForSelector(card(1));
+  await plus(page, 1); await plus(page, 2); await plus(page, 3);
+  await page.waitForTimeout(300);
+  // 168 + 259 + 199 = 626; 5% = 31.30 → ₹594.70 total, ₹72.30 saved
+  const bar = await text(page, '.bxq-bar');
+  check('hide decimals: bar shows ₹72 saved, no paise anywhere', bar.includes('₹72 saved') && !/\d\.\d\d/.test(bar), bar);
+  await page.click('.bxq-bar [data-combo-action="box-open"]');
+  await page.waitForTimeout(200);
+  const all = await page.evaluate(() => document.body.innerText);
+  check('hide decimals: no prices with paise on the page', !/₹\d+\.\d\d/.test(all), (all.match(/₹\d+\.\d\d/) || [''])[0]);
+  await page.close();
+  const plain = await openCombo(baseConfig, wp(QUANTITY));
+  await plain.page.waitForSelector(card(1));
+  await plus(plain.page, 1); await plus(plain.page, 2); await plus(plain.page, 3);
+  await plain.page.waitForTimeout(300);
+  check('decimals shown by default (₹72.30 saved)', (await text(plain.page, '.bxq-bar')).includes('₹72.30 saved'));
+  await plain.page.close();
+}
+
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books
    box): evenly spaced on a phone, labels never overlap, the fill meets the dots. */
 {

@@ -52,6 +52,9 @@ export function createQuickShopKit(core) {
     // a full-width Add button under the price (stepper there once added).
     qs_card_layout: 'quick_add', // quick_add | normal
     qs_add_label: 'Add',
+    // Prices as whole amounts (₹1,708 not ₹1,708.20): display only, checkout
+    // charges the exact price.
+    qs_hide_decimals: false,
     // A tap on a card's picture or name opens the product in a popup: its
     // pictures with thumbnails, full description, options and Add.
     qs_product_popup: true,
@@ -158,10 +161,23 @@ export function createQuickShopKit(core) {
     return Math.max(min, Math.min(max, n));
   }
 
+  // qs_hide_decimals of the template being built/rendered (set by
+  // buildModel and render, which always run with one config at a time).
+  var wholeMoney = false;
+
   function money(amount, symbol) {
     var n = Math.max(0, Number(amount) || 0);
-    var text = Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
+    var text = wholeMoney || Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
     return (symbol || '') + text;
+  }
+
+  // An amount in minor units for "Add ₹X more" with decimals hidden: rounded
+  // up to whole rupees for what's still needed (so adding it is enough),
+  // rounded for everything else. Other measures are untouched.
+  function wholeMinor(view, amount, decimals, roundUp) {
+    if (!wholeMoney || !view || view.measure !== 'value') return amount;
+    var unit = Math.pow(10, decimals === undefined ? 2 : decimals);
+    return (roundUp ? Math.ceil(Number(amount) / unit - 1e-9) : Math.round(Number(amount) / unit)) * unit;
   }
 
   function list(text) {
@@ -457,10 +473,10 @@ export function createQuickShopKit(core) {
       return {
         tone: 'muted',
         text: core.fillMessage(msgs.locked || core.DEFAULT_MESSAGES.locked, {
-          remaining: core.formatAmount(view, box.remaining, box.decimals, true),
+          remaining: core.formatAmount(view, wholeMinor(view, box.remaining, box.decimals, true), box.decimals, true),
           tier: box.nextTier.label,
-          weight: core.formatAmount(view, box.amount, box.decimals),
-          amount: core.formatAmount(view, box.amount, box.decimals),
+          weight: core.formatAmount(view, wholeMinor(view, box.amount, box.decimals), box.decimals),
+          amount: core.formatAmount(view, wholeMinor(view, box.amount, box.decimals), box.decimals),
         }),
         tier: box.nextTier.label,
       };
@@ -481,6 +497,7 @@ export function createQuickShopKit(core) {
    */
   function buildModel(input) {
     var config = input.config || {};
+    wholeMoney = on(config, 'qs_hide_decimals');
     var ui = input.ui || {};
     var symbol = input.symbol || '';
     var decimals = input.decimals === undefined ? 2 : input.decimals;
@@ -1119,6 +1136,7 @@ export function createQuickShopKit(core) {
   /** The whole page as HTML (attributes data-combo-action drive it). */
   function render(model) {
     var config = model.config;
+    wholeMoney = on(config, 'qs_hide_decimals');
     var html = '<div class="bxq' + (model.isMobile ? ' bxq--m' : '') + '" style="' + vars(config) + '">';
     html += renderBanner(model);
     html += renderHead(model);
