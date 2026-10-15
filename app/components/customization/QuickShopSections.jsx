@@ -2,8 +2,9 @@
 // is a flat qs_* key on the combo config; a missing key shows the default
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
-import { memo } from 'react';
-import { BlockStack, Button, Checkbox, ChoiceList, FormLayout, InlineStack, Select, Text, TextField } from '@shopify/polaris';
+import { memo, useState } from 'react';
+import { BlockStack, Button, Checkbox, ChoiceList, Combobox, FormLayout, Icon, InlineStack, Listbox, Select, Text, TextField } from '@shopify/polaris';
+import { SearchIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
 import { createComboWeightCore } from '../../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../../utils/combo-quickshop.shared.js';
@@ -190,6 +191,38 @@ const GROUP_STYLES = [{ label: 'Dropdown', value: 'dropdown' }, { label: 'Row of
 const GROUP_MAX = 5;
 const GROUP_OPTION_MAX = 15;
 
+/** Search the store's collections by name (or handle) and pick one. */
+function CollectionSearch({ collections, onPick, placeholder }) {
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const matches = (q
+    ? collections.filter((c) => String(c.title || '').toLowerCase().includes(q) || String(c.handle || '').includes(q))
+    : collections).slice(0, 50);
+  return (
+    <Combobox
+      activator={(
+        <Combobox.TextField
+          prefix={<Icon source={SearchIcon} tone="subdued" />}
+          label="Add a collection" labelHidden placeholder={placeholder}
+          value={query} onChange={setQuery} autoComplete="off"
+        />
+      )}
+    >
+      <Listbox onSelect={(handle) => { if (handle) { onPick(handle); setQuery(''); } }}>
+        {matches.length ? matches.map((c) => (
+          <Listbox.Option key={c.handle} value={c.handle} accessibilityLabel={c.title || c.handle}>
+            <Listbox.TextOption>{c.title || c.handle}</Listbox.TextOption>
+          </Listbox.Option>
+        )) : (
+          <Listbox.Option value="" disabled>
+            <Listbox.TextOption disabled>{q ? 'No collection matches' : 'No more collections'}</Listbox.TextOption>
+          </Listbox.Option>
+        )}
+      </Listbox>
+    </Combobox>
+  );
+}
+
 /**
  * Collection filter groups (qs_filter_groups): each is one filter, e.g.
  * "Weight" with the 250 g / 500 g / 1 kg / 2 kg collections, "Years" with
@@ -238,10 +271,10 @@ function CollectionFilterGroups({ config, updateConfig, collections = [] }) {
                 </InlineStack>
               ))}
               {options.length < GROUP_OPTION_MAX && (
-                <Select
-                  label="Add a collection" labelHidden
-                  options={[{ label: options.length ? 'Add another collection…' : 'Add a collection…', value: '' }, ...unused.map((c) => ({ label: c.title, value: c.handle }))]}
-                  value="" onChange={(handle) => { if (handle) setOptions([...options, { handle, label: '' }]); }}
+                <CollectionSearch
+                  collections={unused}
+                  placeholder={options.length ? 'Search to add another collection…' : 'Search collections to add…'}
+                  onPick={(handle) => setOptions([...options, { handle, label: '' }])}
                 />
               )}
               {!options.length && <Text as="p" variant="bodySm" tone="critical">Add at least one collection, or this filter won&apos;t show.</Text>}
