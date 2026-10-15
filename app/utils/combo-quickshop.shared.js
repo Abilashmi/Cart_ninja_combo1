@@ -52,6 +52,9 @@ export function createQuickShopKit(core) {
     // a full-width Add button under the price (stepper there once added).
     qs_card_layout: 'quick_add', // quick_add | normal
     qs_add_label: 'Add',
+    // A tap on a card's picture or name opens the product in a popup: its
+    // pictures with thumbnails, full description, options and Add.
+    qs_product_popup: true,
     qs_columns_desktop: 4,
     qs_columns_mobile: 2,
     qs_card_eyebrow: '',
@@ -565,7 +568,7 @@ export function createQuickShopKit(core) {
       if (v && v.grams > 0) weightText = core.formatWeight(v.grams, v.grams < 1000 ? 'g' : 'kg');
       var img = (v && v.image && (v.image.url || v.image.src)) || (p.image && (p.image.url || p.image.src)) || (p.images && p.images[0] && p.images[0].url) || '';
       cards.push({
-        id: p.id, title: p.title, summary: p.summary || '', image: img,
+        id: p.id, title: p.title, summary: p.summary || '', image: img, images: productImages(p, img),
         badge: badgeTag && hasTag(p, badgeTag) ? (opt(config, 'qs_badge_text') || badgeTag) : '',
         variants: options.length > 1 && !(options.length === 1 && options[0].title === 'Default Title') ? options : [],
         weightText: weightText,
@@ -577,6 +580,18 @@ export function createQuickShopKit(core) {
         qty: v ? (qtyByVariant[v.id] || 0) : 0,
         counts: input.qualifies ? !!input.qualifies(p.id) : true,
       });
+    }
+
+    // The product popup (ui.popup = product id), while that card is shown.
+    var popup = null;
+    if (ui.popup && on(config, 'qs_product_popup')) {
+      for (var pc = 0; pc < cards.length; pc++) {
+        if (String(cards[pc].id) !== String(ui.popup)) continue;
+        var count = cards[pc].images.length;
+        var at = Math.max(0, Math.min(count - 1, Math.round(Number(ui.popupImage) || 0)));
+        popup = { card: cards[pc], index: count ? at : 0 };
+        break;
+      }
     }
 
     var bar = barMessage(view, box);
@@ -609,7 +624,25 @@ export function createQuickShopKit(core) {
       totals: { total: total, discount: boxDiscount, finalPrice: finalPrice, saved: saved, items: items },
       cod: input.cod || { shown: false },
       toast: ui.toast || '',
+      popup: popup,
     };
+  }
+
+  // A product's pictures for the popup: the chosen variant's first, then the
+  // product's own (https only, no repeats, at most 10).
+  function productImages(p, first) {
+    var list = [];
+    var push = function (url, alt) {
+      url = String(url || '');
+      if (!/^https:\/\//i.test(url) && !/^data:image\//i.test(url)) return;
+      for (var k = 0; k < list.length; k++) if (list[k].url === url) return;
+      if (list.length < 10) list.push({ url: url, alt: alt || p.title || '' });
+    };
+    push(first, p.title);
+    var imgs = p.images || [];
+    for (var n = 0; n < imgs.length; n++) push(imgs[n] && (imgs[n].url || imgs[n].src), imgs[n] && imgs[n].altText);
+    if (p.image) push(p.image.url || p.image.src, p.image.altText);
+    return list;
   }
 
   /* ── HTML ───────────────────────────────────────────────────────────── */
@@ -818,7 +851,8 @@ export function createQuickShopKit(core) {
     var normal = opt(config, 'qs_card_layout') === 'normal';
     var html = '<article class="bxq-card' + (normal ? ' bxq-card--normal' : '') + (card.qty ? ' is-in' : '') + (card.available ? '' : ' is-out') + '" data-product-id="' + esc(card.id) + '">';
     html += '<div class="bxq-media">';
-    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy" />' : '<span class="bxq-noimg"></span>';
+    var opens = on(config, 'qs_product_popup') ? ' data-combo-action="qs-view" data-product-id="' + esc(card.id) + '" role="button" tabindex="0"' : '';
+    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy"' + opens + ' />' : '<span class="bxq-noimg"' + opens + '></span>';
     if (card.badge) html += '<span class="bxq-badge">' + esc(card.badge) + '</span>';
     if (normal) {
       if (!card.available) html += '<span class="bxq-soldout">Out of stock</span>';
@@ -834,7 +868,7 @@ export function createQuickShopKit(core) {
     html += '</div><div class="bxq-info">';
     var eyebrow = opt(config, 'qs_card_eyebrow');
     if (eyebrow) html += '<div class="bxq-eyebrow">' + esc(eyebrow) + '</div>';
-    html += '<h3 class="bxq-name">' + esc(card.title) + '</h3>';
+    html += '<h3 class="bxq-name"' + opens + '>' + esc(card.title) + '</h3>';
     if (on(config, 'qs_show_subtitle') && card.summary) html += '<p class="bxq-sub">' + esc(card.summary) + '</p>';
     if (card.variants.length) {
       html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
@@ -997,6 +1031,64 @@ export function createQuickShopKit(core) {
       + '<img src="' + esc(url) + '" alt="' + esc(model.title || 'Banner') + '" style="' + imgCss + '" /></div>';
   }
 
+  var ICON_X = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  var ICON_PREV = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>';
+  var ICON_NEXT = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+
+  /** The product popup: big picture with thumbnails, then name, price, options, description and Add. */
+  function renderPopup(model) {
+    var pop = model.popup;
+    if (!pop) return '';
+    var config = model.config;
+    var card = pop.card;
+    var imgs = card.images;
+    var n = imgs.length;
+    var html = '<div class="bxq-pop" role="dialog" aria-modal="true" aria-label="' + esc(card.title) + '">'
+      + '<div class="bxq-pop-scrim" data-combo-action="qs-view-close"></div>'
+      + '<div class="bxq-pop-box">'
+      + '<button type="button" class="bxq-pop-close" data-combo-action="qs-view-close" aria-label="Close">' + ICON_X + '</button>'
+      + '<div class="bxq-pop-gallery"><div class="bxq-pop-main">';
+    if (n) {
+      html += '<img src="' + esc(imgs[pop.index].url) + '" alt="' + esc(imgs[pop.index].alt) + '" />';
+      if (n > 1) {
+        html += '<button type="button" class="bxq-pop-nav is-prev" data-combo-action="qs-view-img" data-value="' + ((pop.index - 1 + n) % n) + '" aria-label="Previous picture">' + ICON_PREV + '</button>'
+          + '<button type="button" class="bxq-pop-nav is-next" data-combo-action="qs-view-img" data-value="' + ((pop.index + 1) % n) + '" aria-label="Next picture">' + ICON_NEXT + '</button>'
+          + '<span class="bxq-pop-count">' + (pop.index + 1) + ' / ' + n + '</span>';
+      }
+    } else {
+      html += '<span class="bxq-noimg"></span>';
+    }
+    html += '</div>';
+    if (n > 1) {
+      html += '<div class="bxq-pop-thumbs">';
+      for (var i = 0; i < n; i++) {
+        html += '<button type="button" class="bxq-pop-thumb' + (i === pop.index ? ' is-on' : '') + '" data-combo-action="qs-view-img" data-value="' + i + '" aria-label="Picture ' + (i + 1) + '"' + (i === pop.index ? ' aria-current="true"' : '') + '>'
+          + '<img src="' + esc(imgs[i].url) + '" alt="" loading="lazy" /></button>';
+      }
+      html += '</div>';
+    }
+    html += '</div><div class="bxq-pop-info">';
+    if (card.badge) html += '<span class="bxq-pop-badge">' + esc(card.badge) + '</span>';
+    html += '<h3 class="bxq-pop-name">' + esc(card.title) + '</h3>';
+    html += '<div class="bxq-price"><b>' + esc(card.price) + '</b>' + (card.compare && on(config, 'qs_show_compare') ? '<s>' + esc(card.compare) + '</s>' : '') + '</div>';
+    if (card.off && on(config, 'qs_show_off')) html += '<div class="bxq-off"><span>' + card.off + '% OFF</span></div>';
+    if (card.variants.length) {
+      html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
+      for (var j = 0; j < card.variants.length; j++) {
+        var v = card.variants[j];
+        html += '<option value="' + esc(v.id) + '"' + (v.on ? ' selected' : '') + (v.available ? '' : ' disabled') + '>' + esc(v.title) + (v.available ? '' : ' (sold out)') + '</option>';
+      }
+      html += '</select>' + ICON_DOWN + '</label>';
+    } else if (card.weightText && on(config, 'qs_show_weight')) {
+      html += '<div class="bxq-variant is-static">' + esc(card.weightText) + '</div>';
+    }
+    if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
+    html += '<div class="bxq-pop-cta">' + renderCardCta(model, card) + '</div>';
+    if (card.summary) html += '<p class="bxq-pop-desc">' + esc(card.summary) + '</p>';
+    html += '</div></div></div>';
+    return html;
+  }
+
   /** The whole page as HTML (attributes data-combo-action drive it). */
   function render(model) {
     var config = model.config;
@@ -1015,6 +1107,7 @@ export function createQuickShopKit(core) {
       html += '</div>';
     }
     html += renderBar(model);
+    html += renderPopup(model);
     if (model.toast) html += '<div class="bxq-toast" role="status">' + esc(model.toast) + '</div>';
     html += '</div>';
     return html;
@@ -1034,6 +1127,9 @@ export function createQuickShopKit(core) {
     if (action === 'qs-menu-close') { ui.menu = null; return true; }
     if (action === 'qs-pick') { ui.dd[menu] = value || ''; ui.menu = null; return true; }
     if (action === 'qs-clear') { ui.chip = 'all'; ui.instock = false; ui.dd = {}; ui.menu = null; return true; }
+    if (action === 'qs-view') { ui.popup = el && el.getAttribute ? el.getAttribute('data-product-id') : null; ui.popupImage = 0; ui.menu = null; return true; }
+    if (action === 'qs-view-close') { ui.popup = null; ui.popupImage = 0; return true; }
+    if (action === 'qs-view-img') { ui.popupImage = Math.max(0, Math.round(Number(value)) || 0); return true; }
     if (action === 'box-open') { ui.sheetOpen = true; return true; }
     if (action === 'box-close') { ui.sheetOpen = false; return true; }
     return false;
@@ -1093,7 +1189,7 @@ export const QUICK_SHOP_CSS = `
 .bxq-top--text .bxq-top-msg{margin-bottom:0;}
 .bxq-track{position:relative;height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
 /* Fills and the scrim are empty divs: themes like Dawn hide div:empty, so force them on. */
-.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim{display:block!important;}
+.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim,.bxq-pop-scrim{display:block!important;}
 .bxq-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
 .bxq-fill.is-done{background:var(--bxq-done);}
 .bxq-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);}
@@ -1255,5 +1351,36 @@ export const QUICK_SHOP_CSS = `
 .bxq-mini span{min-width:18px;text-align:center;font-size:13px;font-weight:800;}
 .bxq-clear{align-self:flex-start;border:0;background:transparent;padding:0;font-size:13px;text-decoration:underline;opacity:.6;cursor:pointer;}
 .bxq-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10000;background:#111827;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:90vw;}
+.bxq-media img[data-combo-action],.bxq-media .bxq-noimg[data-combo-action],.bxq-name[data-combo-action]{cursor:pointer;}
+.bxq-name[data-combo-action]:hover{text-decoration:underline;text-underline-offset:3px;}
+.bxq-pop{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:24px;}
+.bxq-pop-scrim{position:absolute;inset:0;background:rgba(17,24,39,.55);animation:bxq-pop-fade .2s ease;}
+.bxq-pop-box{position:relative;width:100%;max-width:900px;max-height:calc(100vh - 48px);overflow:auto;overscroll-behavior:contain;background:var(--bxq-card);color:var(--bxq-text);border-radius:var(--bxq-radius);box-shadow:0 20px 50px rgba(0,0,0,.25);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;padding:22px;animation:bxq-pop-in .22s ease;}
+.bxq-pop-close{position:absolute;top:10px;right:10px;z-index:2;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.94);color:#111827 !important;box-shadow:0 1px 4px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.bxq-pop-main{position:relative;aspect-ratio:var(--bxq-ratio);background:#f3f4f6;border-radius:calc(var(--bxq-radius) - 4px);overflow:hidden;}
+.bxq-pop-main img{display:block;width:100%;height:100%;object-fit:contain;}
+.bxq-pop-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#111827 !important;box-shadow:0 1px 4px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.bxq-pop-nav.is-prev{left:10px;}
+.bxq-pop-nav.is-next{right:10px;}
+.bxq-pop-count{position:absolute;bottom:10px;right:10px;background:rgba(17,24,39,.65);color:#fff;font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;}
+.bxq-pop-thumbs{display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;}
+.bxq-pop-thumb{flex:none;width:64px;height:64px;padding:0;border-radius:8px;border:2px solid transparent;background:#f3f4f6;overflow:hidden;cursor:pointer;opacity:.75;}
+.bxq-pop-thumb.is-on{border-color:var(--bxq-accent);opacity:1;}
+.bxq-pop-thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+.bxq-pop-info{display:flex;flex-direction:column;gap:10px;min-width:0;padding-top:4px;}
+.bxq-pop-badge{align-self:flex-start;background:var(--bxq-badge);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.bxq-pop-name{margin:0;padding-right:40px;font-size:22px;line-height:1.3;font-weight:700;color:var(--bxq-text);}
+.bxq-pop-info .bxq-price b{font-size:22px;}
+.bxq-pop-cta{margin-top:4px;}
+.bxq-pop-cta .bxq-cta{min-height:46px;}
+.bxq-pop-desc{margin:4px 0 0;font-size:14.5px;line-height:1.6;opacity:.8;white-space:pre-line;overflow-wrap:anywhere;}
+.bxq--m .bxq-pop{align-items:flex-end;padding:0;}
+.bxq--m .bxq-pop-box{grid-template-columns:1fr;gap:14px;max-height:92vh;border-radius:18px 18px 0 0;padding:14px 14px 20px;animation:bxq-pop-up .25s ease;}
+.bxq--m .bxq-pop-name{font-size:18px;}
+.bxq--m .bxq-pop-thumb{width:54px;height:54px;}
+@keyframes bxq-pop-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes bxq-pop-in{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:none;}}
+@keyframes bxq-pop-up{from{transform:translateY(40px);opacity:.6;}to{transform:none;opacity:1;}}
+@media (prefers-reduced-motion: reduce){.bxq-pop-scrim,.bxq-pop-box{animation:none !important;}}
 @media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
 `;

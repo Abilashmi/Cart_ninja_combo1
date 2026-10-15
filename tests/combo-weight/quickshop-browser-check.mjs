@@ -20,8 +20,8 @@ fs.mkdirSync(SHOTS, { recursive: true });
 const P = (n) => `gid://shopify/Product/${n}`;
 const V = (n) => `gid://shopify/ProductVariant/${n}`;
 const img = (label, fill = '#f6e3e3') => ({ url: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="${fill}"/><text x="100" y="105" font-size="18" text-anchor="middle" fill="#555">${label}</text></svg>`)}`, altText: label });
-const product = (n, title, { price, compare = null, grams = null, vendor = 'Nandus', type = 'Chicken', tags = [], summary = '', variants = null, available = true } = {}) => ({
-  id: P(n), title, handle: `p${n}`, price, currency: 'INR', image: img(title.split(' ')[1] || title), images: [img(title)],
+const product = (n, title, { price, compare = null, grams = null, vendor = 'Nandus', type = 'Chicken', tags = [], summary = '', variants = null, available = true, images = null } = {}) => ({
+  id: P(n), title, handle: `p${n}`, price, currency: 'INR', image: images ? images[0] : img(title.split(' ')[1] || title), images: images || [img(title)],
   summary, vendor, productType: type, tags,
   variants: variants || [{ id: V(n * 10), title: 'Default Title', price, compareAtPrice: compare, grams, available, image: null }],
   variantId: V(n * 10),
@@ -35,7 +35,10 @@ const productsByHandle = {
         { id: V(11), title: '1 kg', price: '320.00', compareAtPrice: '358.00', grams: 1000, available: true, image: null },
       ],
     }),
-    product(2, 'Nandus Chicken Breast Boneless', { price: '259.00', grams: 450, summary: 'Clean, lean and boneless chicken breast pieces', tags: ['Boneless'] }),
+    product(2, 'Nandus Chicken Breast Boneless', {
+      price: '259.00', grams: 450, summary: 'Clean, lean and boneless chicken breast pieces', tags: ['Boneless'],
+      images: [img('Breast 1', '#e3eef6'), img('Breast 2', '#e6f6e3'), img('Breast 3', '#f6f0e3')],
+    }),
     product(3, 'Licious Chicken Curry Cut (Large Pieces)', { price: '199.00', compare: '229.00', grams: 450, vendor: 'Licious', tags: ['Curry Cut'] }),
   ],
   mutton: [
@@ -410,6 +413,55 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('phone: no sideways scroll', !overflow);
   await page.screenshot({ path: path.join(SHOTS, 'quickshop-phone.png'), fullPage: false });
   await page.close();
+}
+
+/* Product popup: a tap on a card's picture or name opens it, with thumbnails. */
+{
+  const { page, log } = await openCombo(baseConfig, wp(QUANTITY));
+  await page.waitForSelector(card(2));
+  check('popup: card picture and name open it (marked clickable)', await page.$eval(`${card(2)} .bxq-media img`, (e) => e.getAttribute('data-combo-action')) === 'qs-view'
+    && await page.$eval(`${card(2)} .bxq-name`, (e) => e.getAttribute('data-combo-action')) === 'qs-view');
+  await page.click(`${card(2)} .bxq-media img`);
+  await page.waitForSelector('.bxq-pop');
+  const mainSrc = () => page.$eval('.bxq-pop-main img', (e) => decodeURIComponent(e.getAttribute('src')));
+  let pop = await page.$eval('.bxq-pop', (e) => ({ text: e.textContent, thumbs: e.querySelectorAll('.bxq-pop-thumb').length, on: e.querySelector('.bxq-pop-thumb.is-on') ? [...e.querySelectorAll('.bxq-pop-thumb')].indexOf(e.querySelector('.bxq-pop-thumb.is-on')) : -1 }));
+  check('popup: name, price, full description, 1 / 3 and three thumbnails (first selected)', pop.text.includes('Nandus Chicken Breast Boneless') && pop.text.includes('₹259') && pop.text.includes('Clean, lean and boneless chicken breast pieces') && pop.text.includes('1 / 3') && pop.thumbs === 3 && pop.on === 0, JSON.stringify(pop));
+  check('popup: the page behind stops scrolling', await page.evaluate(() => document.documentElement.style.overflow) === 'hidden');
+  await page.click('.bxq-pop-thumb:nth-child(3)');
+  check('popup: a thumbnail switches the big picture', (await mainSrc()).includes('Breast 3') && (await page.$eval('.bxq-pop', (e) => e.textContent)).includes('3 / 3'));
+  await page.click('.bxq-pop-nav.is-next');
+  check('popup: next wraps round to the first picture', (await mainSrc()).includes('Breast 1'));
+  await page.keyboard.press('ArrowLeft');
+  check('popup: ← goes back (to the last picture)', (await mainSrc()).includes('Breast 3'));
+  await page.click('.bxq-pop-cta [data-combo-action="qty-inc"]');
+  await page.waitForTimeout(300);
+  check('popup: Add puts it in the box and the popup shows the stepper', (await page.$eval('.bxq-pop-cta', (e) => e.textContent)).includes('1') && (await text(page, '.bxq-bar')).includes('1 Item'), await text(page, '.bxq-bar'));
+  await page.keyboard.press('Escape');
+  check('popup: Esc closes it and the page scrolls again', !(await page.$('.bxq-pop')) && await page.evaluate(() => document.documentElement.style.overflow) === '');
+  await page.click(`${card(2)} .bxq-name`);
+  await page.waitForSelector('.bxq-pop');
+  await page.click('.bxq-pop-scrim', { position: { x: 5, y: 5 } });
+  check('popup: tapping outside closes it', !(await page.$('.bxq-pop')));
+  void log;
+  await page.close();
+
+  const phone = await openCombo(baseConfig, wp(QUANTITY), { viewport: { width: 390, height: 844 } });
+  await phone.page.waitForSelector(card(2));
+  await phone.page.click(`${card(2)} .bxq-name`);
+  await phone.page.waitForSelector('.bxq-pop');
+  await phone.page.waitForTimeout(400); // the sheet slides up
+  const sheet = await phone.page.$eval('.bxq-pop-box', (e) => { const r = e.getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), w: window.innerWidth, h: window.innerHeight }; });
+  check('popup on a phone: a full-width sheet from the bottom', sheet.left === 0 && sheet.right === sheet.w && Math.abs(sheet.bottom - sheet.h) <= 1, JSON.stringify(sheet));
+  check('popup on a phone: no sideways scroll', !(await phone.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
+  await phone.page.screenshot({ path: path.join(SHOTS, 'quickshop-popup-phone.png') });
+  await phone.page.close();
+
+  const off = await openCombo({ ...baseConfig, qs_product_popup: false }, wp(QUANTITY));
+  await off.page.waitForSelector(card(2));
+  await off.page.click(`${card(2)} .bxq-media img`);
+  await off.page.waitForTimeout(200);
+  check('popup switched off: pictures and names are not clickable', !(await off.page.$('.bxq-pop')) && await off.page.$eval(`${card(2)} .bxq-name`, (e) => e.getAttribute('data-combo-action')) === null);
+  await off.page.close();
 }
 
 /* Milestones close together by weight (1 kg, 2 kg of 5 kg, as on a live books

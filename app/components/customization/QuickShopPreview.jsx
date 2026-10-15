@@ -3,7 +3,7 @@
 // buildModel + render, same CSS), so the merchant sees exactly what shoppers
 // get. The preview keeps its own cart; clicking a part of the page that
 // isn't a button opens that part's settings in the sidebar.
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLoaderData } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { useCurrency } from '../CurrencyContext';
@@ -47,6 +47,13 @@ export default function QuickShopPreview({ config, device, products = [], collec
   const [pending, setPending] = useState({}); // { [productId]: variantId }
   const [ui, setUi] = useState({ chip: 'all', dd: {}, instock: false, menu: null, sheetOpen: false });
   const lastTier = useRef(null);
+  const frame = useRef(null);
+  // The product popup is position:fixed on the store; here the wrapper's
+  // transform keeps it inside the preview, so bring it into view on open.
+  useEffect(() => {
+    if (!ui.popup) return;
+    frame.current?.querySelector('.bxq-pop-box')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [ui.popup]);
   const isMobile = device === 'mobile';
 
   const handles = useMemo(() => {
@@ -155,6 +162,8 @@ export default function QuickShopPreview({ config, device, products = [], collec
     }
     const action = el.getAttribute('data-combo-action');
     const nextUi = { ...ui, dd: { ...(ui.dd || {}) } };
+    // A card's picture or name: the product popup, and its settings open too.
+    if (action === 'qs-view') onRequestSection('qsCards');
     if (kit.applyUiAction(nextUi, action, el)) { setUi(nextUi); return; }
     const product = productById.get(String(el.getAttribute('data-product-id')));
     if ((action === 'qty-inc' || action === 'qty-dec') && product) {
@@ -178,7 +187,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
   };
 
   return (
-    <div style={{ background: '#eef1f5', padding: isMobile ? 0 : 12, minHeight: '100%' }}>
+    <div ref={frame} style={{ background: '#eef1f5', padding: isMobile ? 0 : 12, minHeight: '100%', transform: 'translateZ(0)' }}>
       <style>{QUICK_SHOP_CSS}</style>
       {!hasProducts && (
         <div style={{ background: '#fff7ed', color: '#9a3412', fontSize: 13, padding: '8px 12px', borderRadius: 8, margin: isMobile ? 8 : '0 0 10px' }}>

@@ -2346,7 +2346,7 @@ const SCRIPT_BODY = String.raw`
       collectionImages: state.collectionImageMap,
       selection: state.selectedMap,
       pending: state.pendingVariant,
-      ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, checkingOut: state.checkingOut },
+      ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, popup: state.qsUi.popup, popupImage: state.qsUi.popupImage, checkingOut: state.checkingOut },
       // Not live (plan, inactive, checkout discount not active): no offer is shown.
       pricing: w ? { measure: w.measure, unit: w.unit, tiers: w.tiers, maxGrams: w.maxGrams, messages: w.messages, enabled: !!w.enabled } : { tiers: [], enabled: false },
       qualifies: function (productId) { return !w || !!state.qualifying[productId]; },
@@ -2408,6 +2408,13 @@ const SCRIPT_BODY = String.raw`
 
     var app = root.querySelector('.brix-combo-app');
     if (app) app.innerHTML = html;
+
+    // Quick Shop product popup: the page behind doesn't scroll while it's open.
+    var popupOpen = Boolean(state.qsUi && state.qsUi.popup && root.querySelector('.bxq-pop'));
+    if (popupOpen !== Boolean(state.qsPopupLock)) {
+      state.qsPopupLock = popupOpen;
+      document.documentElement.style.overflow = popupOpen ? 'hidden' : '';
+    }
   }
 
   /* === GLOBAL STYLES (injected once) === */
@@ -2458,6 +2465,25 @@ const SCRIPT_BODY = String.raw`
   /* === EVENT WIRING (delegated, bound once per root) === */
 
   function wireEvents(root) {
+    // Quick Shop product popup from the keyboard: Esc closes it, ←/→ change
+    // the picture, Enter/Space on a card's picture or name opens it.
+    document.addEventListener('keydown', function (e) {
+      var state = instances.get(root);
+      if (!state || !state.qsUi || !WeightCore.usesQuickShop(state.config.layout)) return;
+      var t = e.target;
+      if ((e.key === 'Enter' || e.key === ' ') && t && t.getAttribute && t.getAttribute('data-combo-action') === 'qs-view' && root.contains(t)) {
+        e.preventDefault();
+        t.click();
+        return;
+      }
+      if (!state.qsUi.popup) return;
+      if (e.key === 'Escape') { QuickShop.applyUiAction(state.qsUi, 'qs-view-close', null); render(root); return; }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (t && t.tagName === 'SELECT') return;
+        var nav = root.querySelector('.bxq-pop-nav.' + (e.key === 'ArrowLeft' ? 'is-prev' : 'is-next'));
+        if (nav) nav.click();
+      }
+    });
     root.addEventListener('click', function (e) {
       var el = e.target.closest('[data-combo-action]');
       if (!el || !root.contains(el)) return;

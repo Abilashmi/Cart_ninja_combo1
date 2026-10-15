@@ -280,6 +280,12 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
           label="Small line above the title" value={config.qs_card_eyebrow || ''} onChange={(v) => updateConfig('qs_card_eyebrow', v)}
           placeholder="e.g. 8 MINS or Freshly cut" helpText="Leave empty to hide." autoComplete="off" maxLength={40}
         />
+        <Checkbox
+          label="Open a product popup on tap"
+          helpText="Tapping a card's picture or name shows the product's pictures with thumbnails, full description, options and Add."
+          checked={isOn(config, 'qs_product_popup')}
+          onChange={(v) => updateConfig('qs_product_popup', v)}
+        />
         <Checkbox label="Short description under the title" checked={isOn(config, 'qs_show_subtitle')} onChange={(v) => updateConfig('qs_show_subtitle', v)} />
         <Checkbox label="“% OFF” from the compare-at price" checked={isOn(config, 'qs_show_off')} onChange={(v) => updateConfig('qs_show_off', v)} />
         <Checkbox label="Struck-through compare-at price" checked={isOn(config, 'qs_show_compare')} onChange={(v) => updateConfig('qs_show_compare', v)} />

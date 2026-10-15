@@ -15,6 +15,7 @@ const PRODUCT_FRAGMENT = `
     productType
     tags
     featuredImage { url altText width height }
+    images(first: 10) { nodes { url altText } }
     priceRangeV2 { minVariantPrice { amount currencyCode } }
     variants(first: 10) { nodes { id title price compareAtPrice availableForSale image { url } inventoryItem { measurement { weight { value unit } } } } }
   }
@@ -104,6 +105,8 @@ function formatProduct(node) {
       width: node.featuredImage.width,
       height: node.featuredImage.height,
     } : null,
+    // The Quick Shop product popup's pictures.
+    images: (node.images?.nodes || []).map((img) => ({ url: img.url, altText: img.altText })),
     price: node.priceRangeV2?.minVariantPrice?.amount || '0.00',
     currency: node.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
     variants: (node.variants?.nodes || []).map((v) => ({

@@ -99,6 +99,11 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.click('.bxq-card .bxq-name');
   await page.waitForTimeout(150);
   check('clicking a card opens Product cards', (await sidebar(page)).includes('Columns (desktop)'));
+  check('…and previews the product popup, inside the preview', (await page.$('.bxq-pop')) !== null
+    && await page.evaluate(() => { const box = document.querySelector('.bxq-pop').getBoundingClientRect(); const pane = document.querySelector('.bxq').getBoundingClientRect(); return box.left >= pane.left - 30 && box.right <= pane.right + 30; }));
+  check('the builder has the popup switch', (await sidebar(page)).includes('Open a product popup on tap'));
+  await page.click('.bxq-pop-close');
+  check('the popup closes', (await page.$('.bxq-pop')) === null);
 
   // Layout tab: filters
   await section(page, 'Filters');
