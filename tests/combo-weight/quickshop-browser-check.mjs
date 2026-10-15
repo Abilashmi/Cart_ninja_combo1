@@ -485,6 +485,18 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   const at = () => page.evaluate(() => Math.round(document.querySelector('.bxq-top').getBoundingClientRect().top));
   let top = await at();
   check('sticky progress: stays just below a 120px sticky theme header, not behind it', Math.abs(top - 120) <= 2, String(top));
+  // Adding redraws the page: the bar must not flash to the top and slide back.
+  const tops = await page.evaluate(() => new Promise((done) => {
+    const seen = [];
+    const t0 = performance.now();
+    const tick = () => {
+      seen.push(Math.round(document.querySelector('.bxq-top').getBoundingClientRect().top));
+      if (performance.now() - t0 < 700) requestAnimationFrame(tick); else done(seen);
+    };
+    requestAnimationFrame(tick);
+    setTimeout(() => document.querySelector('.bxq-add').click(), 60);
+  }));
+  check('sticky progress: adding a product never moves the bar (no flash to the top)', tops.every((y) => Math.abs(y - 120) <= 2) && (await text(page, '.bxq-bar')).includes('1 Item'), JSON.stringify([...new Set(tops)]));
   await page.evaluate(() => { document.querySelector('.section-header').classList.add('is-hidden'); window.scrollBy(0, 40); });
   await page.waitForTimeout(700);
   top = await at();

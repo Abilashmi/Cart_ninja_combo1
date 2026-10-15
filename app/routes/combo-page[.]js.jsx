@@ -2458,6 +2458,12 @@ const SCRIPT_BODY = String.raw`
     var apply = function () {
       var page = root.querySelector('.bxq');
       if (!page || !root.querySelector('.bxq-top.is-sticky')) return;
+      // A re-render (every add/remove) draws a new page with the default
+      // offset: put it back where it was before anything measures layout, or
+      // the bar flashes to the top and slides down again on every add.
+      if (state.qsHeaderOffset != null && page.style.getPropertyValue('--bxq-top-offset') !== state.qsHeaderOffset + 'px') {
+        page.style.setProperty('--bxq-top-offset', state.qsHeaderOffset + 'px');
+      }
       var own = Math.max(0, Math.min(300, Number(state.config.qs_top_offset) || 0));
       var px = Math.max(own, stickyHeaderBottom(root));
       if (state.qsHeaderOffset !== px || page.style.getPropertyValue('--bxq-top-offset') !== px + 'px') {
