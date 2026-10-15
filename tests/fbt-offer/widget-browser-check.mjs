@@ -135,6 +135,22 @@ const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerPr
   await whole.page.close();
 }
 
+/* 8. knitnknot.in's saved template: vertical + Quick Add (image 107px) draws the list */
+{
+  for (const width of [1100, 390]) {
+    const { page } = await open({ condition: [rule()], temp1: { layout: 'vertical', interactionType: 'quickAdd', imageSize: 107 }, width });
+    const g = await page.evaluate(() => {
+      const w = document.querySelector('ps-fbt-widget [data-layout]');
+      const rows = [...document.querySelectorAll('ps-fbt-widget .ps-product-row')].map((r) => { const b = r.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width)]; });
+      return { layout: w && w.dataset.layout, cls: w && w.className, rows, cards: document.querySelectorAll('ps-fbt-widget .ps-product-card').length };
+    });
+    const stacked = g.rows.length >= 2 && g.rows.every((r, i) => i === 0 || r[1] > g.rows[i - 1][1]);
+    check(`vertical + Quick Add at ${width}px: rows one under the other`, g.layout === 'vertical' && g.cards === 0 && stacked, JSON.stringify(g));
+    await page.screenshot({ path: path.join(shotDir, `vertical-quickadd-${width}.png`) });
+    await page.close();
+  }
+}
+
 /* Start selected (a bundle) or let shoppers add each one */
 {
   const btns = (page) => page.$$eval('ps-fbt-widget .ps-product-card button, ps-fbt-widget .ps-product-row button', (els) => els.map((b) => b.textContent.trim()));
