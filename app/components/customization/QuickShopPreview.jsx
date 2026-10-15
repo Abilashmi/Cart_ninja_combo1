@@ -78,6 +78,27 @@ export default function QuickShopPreview({ config, device, products = [], collec
   const collectionNames = useMemo(() => Object.fromEntries((collections || []).map((c) => [c.handle, c.title])), [collections]);
   const collectionImages = useMemo(() => Object.fromEntries((collections || []).filter((c) => c.image).map((c) => [c.handle, c.image])), [collections]);
 
+  // Collection filter groups: which preview products are in each filter
+  // collection (same lookup as the storefront, combo-page.server.js). Until it
+  // answers, the options show and don't filter.
+  const [collectionMembers, setCollectionMembers] = useState({});
+  const membersKey = useMemo(() => {
+    const filterHandles = kit.filterGroupHandles(config);
+    const ids = [...new Set(Object.values(productsByHandle).flat().map((p) => String(p.id)))].filter((id) => id.startsWith('gid://shopify/Product/'));
+    return filterHandles.length && ids.length ? JSON.stringify({ handles: filterHandles, productIds: ids }) : '';
+  }, [config, productsByHandle]);
+  useEffect(() => {
+    if (!membersKey) return undefined;
+    let live = true;
+    const timer = setTimeout(() => {
+      fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: membersKey })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => { if (live && data?.members) setCollectionMembers(data.members); })
+        .catch(() => {});
+    }, 400);
+    return () => { live = false; clearTimeout(timer); };
+  }, [membersKey]);
+
   const pricing = useMemo(() => {
     const { value } = normalizeWeightPricing(config.weight_pricing);
     // "Only products I choose" by collection can't be checked here (products
@@ -98,6 +119,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
     handles,
     collectionNames,
     collectionImages,
+    collectionMembers,
     fallbackProducts,
     selection: sel,
     pending,
@@ -107,7 +129,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
     symbol,
     decimals,
     isMobile,
-  }), [config, productsByHandle, handles, collectionNames, collectionImages, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
+  }), [config, productsByHandle, handles, collectionNames, collectionImages, collectionMembers, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
 
   const model = buildFor(selection);
   const codShown = !!codEnabled && config.show_cod_button !== false;

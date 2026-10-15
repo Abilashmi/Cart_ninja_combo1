@@ -1,5 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { toGrams } from '../utils/combo-weight.shared.js';
+import { loadCollectionMembers } from '../services/collection-members.server';
 
 // Variants (with Shopify weights) let the builder preview add real variants
 // and price weight-priced boxes (The Weight Box / weight pricing); summary,
@@ -88,6 +89,20 @@ export async function loader({ request }) {
   }
 
   return Response.json(result);
+}
+
+// Builder preview of the box templates' collection filter groups: which of
+// the preview's products are in each filter collection. POST JSON
+// { handles: [...], productIds: [...] } → { members: { handle: [productId] } }.
+export async function action({ request }) {
+  const { admin } = await authenticate.admin(request);
+  let body = {};
+  try { body = await request.json(); } catch { /* empty body */ }
+  const members = await loadCollectionMembers(admin, {
+    handles: Array.isArray(body.handles) ? body.handles : [],
+    productIds: Array.isArray(body.productIds) ? body.productIds : [],
+  });
+  return Response.json({ members });
 }
 
 function formatProduct(node) {

@@ -47,6 +47,12 @@ export function createQuickShopKit(core) {
     qs_filter_sort_label: 'Sort By',
     qs_filter_instock: false,
     qs_filter_instock_label: 'In stock',
+    // Collection filter groups: each group is one filter ("Weight", "Years")
+    // whose options are store collections (any collection, not only the
+    // page's), shown as a dropdown or a chip row; one option per group.
+    // [{ id, label, style: 'dropdown' | 'chips', options: [{ handle, label }] }]
+    // (option label '' = the collection's title). See filterGroups().
+    qs_filter_groups: null,
     // Cards
     // quick_add = + button on the image that turns into a stepper; normal =
     // a full-width Add button under the price (stepper there once added).
@@ -84,8 +90,18 @@ export function createQuickShopKit(core) {
     qs_top_sticky: true,
     qs_top_offset: 0,
     qs_top_show_labels: true,
+    // What the text under the bar shows and how big (bar, steps, milestones).
+    qs_top_show_name: true, // the offer name ("10% OFF")
+    qs_top_show_amount: true, // what's needed for it ("₹999", "2 kg", "3 items")
+    qs_top_label_size: 12, // px
+    qs_top_label_size_m: null, // phones; null = as before (milestones 1px smaller)
+    qs_top_sub_size: 11, // the amount line, px
     qs_top_height: 8,
     qs_top_radius: 999,
+    // Milestone icon size (px); its circle is 16px bigger. Phones: null = the
+    // desktop size. Many tiers on a narrow page shrink both (mileSizes).
+    qs_mile_icon_size: 18,
+    qs_mile_icon_size_m: null,
     qs_top_bg: '#ffffff',
     qs_top_text: '#111827',
     qs_top_track: '#e5e7eb',
@@ -348,7 +364,114 @@ export function createQuickShopKit(core) {
     return '';
   }
 
-  function filterRow(config, products, handles, collectionNames, ui, collectionImages, productsByHandle) {
+  var GROUP_MAX = 5;
+  var GROUP_OPTION_MAX = 15;
+
+  function cleanText(value, max) {
+    return String(value === null || value === undefined ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+
+  // A collection handle as Shopify makes them (no spaces, quotes or markup).
+  function cleanHandle(value) {
+    var s = String(value === null || value === undefined ? '' : value).trim();
+    return /^[^\s"'<>&\\]{1,255}$/.test(s) ? s : '';
+  }
+
+  /**
+   * The merchant's collection filter groups, checked: at most 5 groups of 15
+   * collections, no repeated collection inside a group, no group without a
+   * name or a collection.
+   */
+  function filterGroups(config) {
+    var raw = opt(config, 'qs_filter_groups');
+    var out = [];
+    if (!raw || typeof raw.length !== 'number') return out;
+    var ids = {};
+    for (var g = 0; g < raw.length && out.length < GROUP_MAX; g++) {
+      var group = raw[g];
+      if (!group || typeof group !== 'object') continue;
+      var label = cleanText(group.label, 40);
+      var options = [];
+      var seen = {};
+      var rawOptions = group.options && typeof group.options.length === 'number' ? group.options : [];
+      for (var o = 0; o < rawOptions.length && options.length < GROUP_OPTION_MAX; o++) {
+        var handle = cleanHandle(rawOptions[o] && rawOptions[o].handle);
+        if (!handle || seen[handle]) continue;
+        seen[handle] = true;
+        options.push({ handle: handle, label: cleanText(rawOptions[o].label, 40) });
+      }
+      if (!label || !options.length) continue;
+      var id = /^[A-Za-z0-9_-]{1,32}$/.test(String(group.id || '')) && !ids['g' + group.id] ? String(group.id) : 'g' + g;
+      ids['g' + id] = true;
+      out.push({ id: id, label: label, style: group.style === 'chips' ? 'chips' : 'dropdown', options: options });
+    }
+    return out;
+  }
+
+  /** Every collection the filter groups use (the server loads which page products are in them). */
+  function filterGroupHandles(config) {
+    var groups = filterGroups(config);
+    var out = [];
+    for (var g = 0; g < groups.length; g++) {
+      for (var o = 0; o < groups[g].options.length; o++) if (out.indexOf(groups[g].options[o].handle) === -1) out.push(groups[g].options[o].handle);
+    }
+    return out;
+  }
+
+  /**
+   * { [handle]: { [productId]: true } } for the groups' collections: what the
+   * server found (collectionMembers = { handle: [productId] }) plus the
+   * page's own collections. A handle with neither is left out = not known
+   * yet (the builder before its fetch): its option shows and doesn't filter.
+   */
+  function groupMembers(groups, collectionMembers, productsByHandle) {
+    var out = {};
+    for (var g = 0; g < groups.length; g++) {
+      for (var o = 0; o < groups[g].options.length; o++) {
+        var h = groups[g].options[o].handle;
+        if (out[h]) continue;
+        var ids = collectionMembers && collectionMembers[h];
+        var page = productsByHandle && productsByHandle[h];
+        if (!ids && !page) continue;
+        var set = {};
+        var i;
+        for (i = 0; ids && i < ids.length; i++) set[ids[i]] = true;
+        for (i = 0; page && i < page.length; i++) set[page[i].id] = true;
+        out[h] = set;
+      }
+    }
+    return out;
+  }
+
+  // The groups with the options that have products on the page (the picked
+  // one always stays, so the shopper can see and change it).
+  function groupFilters(groups, members, products, collectionNames, ui) {
+    var dd = ui.dd || {};
+    var out = [];
+    for (var g = 0; g < groups.length; g++) {
+      var key = 'g:' + groups[g].id;
+      var value = dd[key] || '';
+      var options = [];
+      for (var o = 0; o < groups[g].options.length; o++) {
+        var opt0 = groups[g].options[o];
+        var set = members[opt0.handle];
+        var present = !set || value === opt0.handle;
+        for (var p = 0; !present && p < products.length; p++) if (set[products[p].id]) present = true;
+        if (!present) continue;
+        options.push({ value: opt0.handle, label: opt0.label || (collectionNames && collectionNames[opt0.handle]) || opt0.handle, on: value === opt0.handle });
+      }
+      if (!options.length) continue;
+      out.push({ id: key, label: groups[g].label, style: groups[g].style, value: value, options: options, open: ui.menu === key });
+    }
+    return out;
+  }
+
+  /**
+   * groupInfo (optional) = { groups, members } from filterGroups() /
+   * groupMembers(): dropdown groups join the menus, chip groups come back
+   * as row.groups.
+   */
+  function filterRow(config, products, handles, collectionNames, ui, collectionImages, productsByHandle, groupInfo) {
     var chips = [];
     var source = opt(config, 'qs_chips_source');
     var chipValues = [];
@@ -380,6 +503,15 @@ export function createQuickShopKit(core) {
       for (var i = 0; i < values.length; i++) options.push({ value: values[i], label: values[i] });
       menus.push({ id: id, label: label, value: dd[id] || '', options: options, open: ui.menu === id });
     }
+    var groups = groupInfo ? groupFilters(groupInfo.groups, groupInfo.members, products, collectionNames, ui) : [];
+    var chipGroups = [];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var grp = groups[gi];
+      if (grp.style === 'chips') { chipGroups.push(grp); continue; }
+      var groupOptions = [{ value: '', label: 'All' }];
+      for (var go = 0; go < grp.options.length; go++) groupOptions.push({ value: grp.options[go].value, label: grp.options[go].label });
+      menus.push({ id: grp.id, label: grp.label, value: grp.value, options: groupOptions, open: grp.open });
+    }
     if (on(config, 'qs_filter_type')) addMenu('type', opt(config, 'qs_filter_type_label'), uniqueValues(products, 'productType'));
     if (on(config, 'qs_filter_brand')) addMenu('brand', opt(config, 'qs_filter_brand_label'), uniqueValues(products, 'vendor'));
     if (on(config, 'qs_filter_custom')) {
@@ -395,10 +527,12 @@ export function createQuickShopKit(core) {
       menus.push({ id: 'sort', label: opt(config, 'qs_filter_sort_label'), value: dd.sort && dd.sort !== 'featured' ? dd.sort : '', options: SORTS, open: ui.menu === 'sort', isSort: true });
     }
     var active = (ui.chip && ui.chip !== 'all') || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || (dd.sort && dd.sort !== 'featured');
-    return { chips: chips, menus: menus, active: !!active };
+    for (var ga = 0; ga < groups.length; ga++) if (groups[ga].value) active = true;
+    return { chips: chips, menus: menus, groups: chipGroups, active: !!active };
   }
 
-  function filterProducts(products, productsByHandle, ui, pending) {
+  /** groupInfo (optional) = { groups, members }: a picked group option keeps only its collection's products. */
+  function filterProducts(products, productsByHandle, ui, pending, groupInfo) {
     var dd = ui.dd || {};
     var inChip = null;
     if (ui.chip && ui.chip.indexOf('c:') === 0) {
@@ -406,10 +540,22 @@ export function createQuickShopKit(core) {
       var prods = productsByHandle[ui.chip.slice(2)] || [];
       for (var i = 0; i < prods.length; i++) inChip[prods[i].id] = true;
     }
+    // Picked group options with known members (a group removed since, or a
+    // collection not loaded yet, doesn't filter).
+    var inGroups = [];
+    if (groupInfo) {
+      for (var g = 0; g < groupInfo.groups.length; g++) {
+        var picked = dd['g:' + groupInfo.groups[g].id];
+        if (picked && groupInfo.members[picked]) inGroups.push(groupInfo.members[picked]);
+      }
+    }
     var out = [];
     for (var j = 0; j < products.length; j++) {
       var p = products[j];
       if (inChip && !inChip[p.id]) continue;
+      var outOfGroup = false;
+      for (var ig = 0; ig < inGroups.length; ig++) if (!inGroups[ig][p.id]) outOfGroup = true;
+      if (outOfGroup) continue;
       if (ui.chip && ui.chip.indexOf('t:') === 0 && !hasTag(p, ui.chip.slice(2))) continue;
       if (dd.type && String(p.productType || '') !== dd.type) continue;
       if (dd.brand && String(p.vendor || '') !== dd.brand) continue;
@@ -488,6 +634,7 @@ export function createQuickShopKit(core) {
    * Everything the page shows, from plain data (both the storefront and the
    * builder call this, then render()):
    *   config, productsByHandle, handles, collectionNames
+   *   collectionMembers { [handle]: [productId] } (the filter groups' collections)
    *   selection  { [variantId]: { productId, qty } }
    *   pending    { [productId]: variantId } (card dropdowns)
    *   ui         { chip, dd, instock, menu, sheetOpen, celebrate, checkingOut, toast }
@@ -570,8 +717,10 @@ export function createQuickShopKit(core) {
     }
 
     // Cards.
-    var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {});
-    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending);
+    var groups = filterGroups(config);
+    var groupInfo = groups.length ? { groups: groups, members: groupMembers(groups, input.collectionMembers, input.productsByHandle) } : null;
+    var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {}, groupInfo);
+    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending, groupInfo);
     var cards = [];
     var badgeTag = String(opt(config, 'qs_badge_tag') || '').trim();
     for (var c = 0; c < shown.length; c++) {
@@ -697,6 +846,8 @@ export function createQuickShopKit(core) {
       ['--bxq-top-h', num(opt(config, 'qs_top_height'), 8, 2, 24) + 'px'],
       ['--bxq-top-r', num(opt(config, 'qs_top_radius'), 999, 0, 999) + 'px'],
       ['--bxq-top-offset', num(opt(config, 'qs_top_offset'), 0, 0, 300) + 'px'],
+      ['--bxq-lbl-fs', num(opt(config, 'qs_top_label_size'), 12, 9, 22) + 'px'],
+      ['--bxq-lbl-sub', num(opt(config, 'qs_top_sub_size'), 11, 8, 20) + 'px'],
       ['--bxq-bar-bg', safeCss(opt(config, 'qs_bar_bg'), DEFAULTS.qs_bar_bg)],
       ['--bxq-bar-text', safeCss(opt(config, 'qs_bar_text'), DEFAULTS.qs_bar_text)],
       ['--bxq-save', safeCss(opt(config, 'qs_bar_save'), DEFAULTS.qs_bar_save)],
@@ -718,6 +869,14 @@ export function createQuickShopKit(core) {
     // theme's size (what pages showed before the setting existed).
     var btnFs = opt(config, 'qs_btn_font_size');
     if (btnFs !== null && btnFs !== '' && isFinite(Number(btnFs))) pairs.push(['--bxq-btn-fs', num(btnFs, 16, 12, 24) + 'px']);
+    // Phones: the merchant's size for every style, else as before (milestones 1px smaller).
+    var lblPhone = opt(config, 'qs_top_label_size_m');
+    if (lblPhone !== null && lblPhone !== '' && isFinite(Number(lblPhone))) {
+      pairs.push(['--bxq-lbl-fs-m', num(lblPhone, 12, 9, 22) + 'px']);
+      pairs.push(['--bxq-lbl-fs-mile-m', num(lblPhone, 12, 9, 22) + 'px']);
+    } else {
+      pairs.push(['--bxq-lbl-fs-mile-m', Math.max(9, num(opt(config, 'qs_top_label_size'), 12, 9, 22) - 1) + 'px']);
+    }
     var out = '';
     for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ':' + pairs[i][1] + ';';
     return out;
@@ -744,13 +903,30 @@ export function createQuickShopKit(core) {
     return html + '</div>';
   }
 
+  // Collection filter groups shown as chips: one labelled row per group; a
+  // tap picks that option, a tap on the picked one clears the group.
+  function renderChipGroups(groups) {
+    var html = '';
+    for (var g = 0; g < groups.length; g++) {
+      var group = groups[g];
+      html += '<div class="bxq-filters bxq-gchips" role="group" aria-label="' + esc(group.label) + '"><span class="bxq-gchips-label">' + esc(group.label) + '</span>';
+      for (var o = 0; o < group.options.length; o++) {
+        var option = group.options[o];
+        html += '<button type="button" class="bxq-chip' + (option.on ? ' is-on' : '') + '" aria-pressed="' + (option.on ? 'true' : 'false') + '" data-combo-action="qs-group" data-menu="' + esc(group.id) + '" data-value="' + esc(option.value) + '">' + esc(option.label) + '</button>';
+      }
+      html += '</div>';
+    }
+    return html;
+  }
+
   function renderFilters(model) {
     var row = model.row;
     var pictureChips = [];
     var chips = [];
     for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
     var bar = pictureChips.length ? renderCollectionBar(pictureChips) : '';
-    if (!chips.length && !row.menus.length) return bar;
+    var groupRows = renderChipGroups(row.groups || []);
+    if (!chips.length && !row.menus.length) return bar + groupRows;
     var html = bar + '<div class="bxq-filters">';
     html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? ' is-active' : '') + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + '</button>';
     for (var i = 0; i < chips.length; i++) {
@@ -776,7 +952,51 @@ export function createQuickShopKit(core) {
       html += '</div>';
     }
     html += '</div>';
-    return html;
+    return html + groupRows;
+  }
+
+  /** The text under the bar: which lines show and their sizes (px). */
+  function labelLook(config, isMobile) {
+    var size = num(opt(config, 'qs_top_label_size'), 12, 9, 22);
+    var phone = opt(config, 'qs_top_label_size_m');
+    var phoneSet = phone !== null && phone !== '' && isFinite(Number(phone));
+    var look = {
+      labels: on(config, 'qs_top_show_labels'),
+      name: on(config, 'qs_top_show_name'),
+      amount: on(config, 'qs_top_show_amount'),
+      size: size,
+      sub: num(opt(config, 'qs_top_sub_size'), 11, 8, 20),
+      phone: phoneSet ? num(phone, size, 9, 22) : null,
+    };
+    look.any = look.labels && (look.name || look.amount);
+    // The size used on this screen (milestones were 1px smaller on phones).
+    look.mileSize = isMobile ? (look.phone !== null ? look.phone : Math.max(9, size - 1)) : size;
+    look.barSize = isMobile && look.phone !== null ? look.phone : size;
+    return look;
+  }
+
+  function labelText(mark, look) {
+    return (look.name ? '<b>' + esc(mark.label) + '</b>' : '') + (look.amount ? '<small>' + esc(mark.at) + '</small>' : '');
+  }
+
+  /**
+   * Milestone icon and circle sizes (px) for count milestones: the merchant's
+   * icon size (phones: its own, else the desktop one), circle = icon + 16.
+   * When the tiers don't fit side by side (7+ on a phone) both shrink in step,
+   * so circles never overlap; up to 6 tiers on a phone keep the default size.
+   */
+  function mileSizes(config, isMobile, count) {
+    var icon = num(opt(config, 'qs_mile_icon_size'), 18, 12, 48);
+    var phone = opt(config, 'qs_mile_icon_size_m');
+    if (isMobile && phone !== null && phone !== '' && isFinite(Number(phone))) icon = num(phone, icon, 12, 48);
+    var dot = icon + 16;
+    var room = Math.floor((isMobile ? 260 : 640) / Math.max(1, count)) - 8;
+    if (dot > room) {
+      var fit = Math.max(22, room);
+      icon = Math.max(10, Math.round((icon * fit) / dot));
+      dot = fit;
+    }
+    return { icon: icon, dot: dot };
   }
 
   function renderTop(model) {
@@ -785,7 +1005,8 @@ export function createQuickShopKit(core) {
     if (style === 'none' || !model.view.enabled || !model.view.tiers.length) return '';
     var progress = model.progress;
     var msg = model.topMessage;
-    var labels = on(config, 'qs_top_show_labels');
+    var look = labelLook(config, model.isMobile);
+    var labels = look.any;
     var html = '<section class="bxq-top bxq-top--' + esc(style) + (on(config, 'qs_top_sticky') ? ' is-sticky' : '') + '" aria-label="Offer progress">';
     var title = opt(config, 'qs_top_title');
     if (title) html += '<div class="bxq-top-title">' + esc(title) + '</div>';
@@ -798,10 +1019,12 @@ export function createQuickShopKit(core) {
       }
       html += '</div>';
       if (labels) {
-        html += '<div class="bxq-ticks">';
+        // Room for the lines shown (38px at the default sizes).
+        var ticksH = Math.round((look.name ? look.barSize * 1.3 : 0) + (look.amount ? look.sub * 1.3 : 0)) + 8;
+        html += '<div class="bxq-ticks" style="height:' + ticksH + 'px">';
         for (i = 0; i < progress.marks.length; i++) {
           var mk = progress.marks[i];
-          html += '<span class="bxq-tick-label' + (mk.hit ? ' is-hit' : '') + '" style="left:' + mk.percent.toFixed(1) + '%"><b>' + esc(mk.label) + '</b><small>' + esc(mk.at) + '</small></span>';
+          html += '<span class="bxq-tick-label' + (mk.hit ? ' is-hit' : '') + '" style="left:' + mk.percent.toFixed(1) + '%">' + labelText(mk, look) + '</span>';
         }
         html += '</div>';
       }
@@ -814,7 +1037,7 @@ export function createQuickShopKit(core) {
         var fill = Math.max(0, Math.min(100, ((progress.percent - prev) / span) * 100));
         html += '<div class="bxq-step' + (step.hit ? ' is-hit' : '') + (step.next ? ' is-next' : '') + '">'
           + '<div class="bxq-step-track"><div class="bxq-step-fill" style="width:' + fill.toFixed(1) + '%"></div></div>'
-          + (labels ? '<div class="bxq-step-label"><b>' + esc(step.label) + '</b><small>' + esc(step.at) + '</small></div>' : '')
+          + (labels ? '<div class="bxq-step-label">' + labelText(step, look) + '</div>' : '')
           + '</div>';
         prev = step.percent;
       }
@@ -839,12 +1062,15 @@ export function createQuickShopKit(core) {
         fromEven = evenAt(i);
       }
       milesFill = Math.max(0, Math.min(100, milesFill));
-      html += '<div class="bxq-miles" style="--bxq-mile-share:' + (100 / Math.max(1, count)).toFixed(2) + '%"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + milesFill.toFixed(1) + '%"></div></div>';
+      var mile = mileSizes(config, model.isMobile, count);
+      // Under the circle: up to two lines of name + the amount (40px at the default sizes).
+      var below = labels ? Math.round(4 + (look.name ? look.mileSize * 1.85 : 0) + (look.amount ? look.sub * 1.25 : 0)) : 4;
+      html += '<div class="bxq-miles" style="--bxq-mile-share:' + (100 / Math.max(1, count)).toFixed(2) + '%;--bxq-mile-dot:' + mile.dot + 'px;--bxq-mile-icon:' + mile.icon + 'px;height:' + (mile.dot + below) + 'px"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + milesFill.toFixed(1) + '%"></div></div>';
       for (i = 0; i < count; i++) {
         var ms = progress.marks[i];
         html += '<div class="bxq-mile' + (ms.hit ? ' is-hit' : '') + (ms.next ? ' is-next' : '') + '" style="left:' + evenAt(i).toFixed(1) + '%">'
           + '<span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, 'bxq-mile-icon', ms.iconIndex) : '') + '</span>'
-          + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + '</b><small>' + esc(ms.at) + '</small></span>' : '')
+          + (labels ? '<span class="bxq-mile-label">' + labelText(ms, look) + '</span>' : '')
           + '</div>';
       }
       html += '</div>';
@@ -1171,6 +1397,7 @@ export function createQuickShopKit(core) {
     if (action === 'qs-menu') { ui.menu = ui.menu === menu ? null : menu; return true; }
     if (action === 'qs-menu-close') { ui.menu = null; return true; }
     if (action === 'qs-pick') { ui.dd[menu] = value || ''; ui.menu = null; return true; }
+    if (action === 'qs-group') { ui.dd[menu] = value && ui.dd[menu] !== value ? value : ''; ui.menu = null; return true; }
     if (action === 'qs-clear') { ui.chip = 'all'; ui.instock = false; ui.dd = {}; ui.menu = null; return true; }
     if (action === 'qs-view') { ui.popup = el && el.getAttribute ? el.getAttribute('data-product-id') : null; ui.popupImage = 0; ui.menu = null; return true; }
     if (action === 'qs-view-close') { ui.popup = null; ui.popupImage = 0; return true; }
@@ -1189,6 +1416,11 @@ export function createQuickShopKit(core) {
     labelledTiers: labelledTiers,
     filterRow: filterRow,
     filterProducts: filterProducts,
+    filterGroups: filterGroups,
+    filterGroupHandles: filterGroupHandles,
+    groupMembers: groupMembers,
+    mileSizes: mileSizes,
+    labelLook: labelLook,
     canCheckout: canCheckout,
     barMessage: barMessage,
     buildModel: buildModel,
@@ -1241,36 +1473,40 @@ export const QUICK_SHOP_CSS = `
 .bxq-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);}
 .bxq-tick.is-hit{border-color:var(--bxq-done);background:var(--bxq-done);}
 .bxq-ticks{position:relative;height:38px;margin-top:6px;}
-.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:12px;line-height:1.3;}
+.bxq--m .bxq-tick-label,.bxq--m .bxq-step-label{font-size:var(--bxq-lbl-fs-m,var(--bxq-lbl-fs,12px));}
+.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:var(--bxq-lbl-fs,12px);line-height:1.3;}
 .bxq-tick-label:last-child{transform:translateX(-100%);align-items:flex-end;}
-.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:11px;}
+.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:var(--bxq-lbl-sub,11px);}
 .bxq-tick-label.is-hit b,.bxq-step.is-hit b,.bxq-mile.is-hit b{color:var(--bxq-done);}
 .bxq-steps{display:flex;gap:6px;}
 .bxq-step{flex:1;min-width:0;}
 .bxq-step-track{height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);overflow:hidden;}
 .bxq-step-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
 .bxq-step.is-hit .bxq-step-fill{background:var(--bxq-done);}
-.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:12px;line-height:1.3;}
-.bxq-miles{position:relative;height:74px;margin:0 50px;}
-.bxq--m .bxq-miles{margin:0 38px;}
-.bxq-miles-line{position:absolute;left:0;right:0;top:17px;height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
+.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:var(--bxq-lbl-fs,12px);line-height:1.3;}
+.bxq-miles{position:relative;height:calc(var(--bxq-mile-dot,34px) + 40px);margin:0 max(50px,calc(var(--bxq-mile-dot,34px) / 2 + 4px));}
+.bxq--m .bxq-miles{margin:0 max(38px,calc(var(--bxq-mile-dot,34px) / 2 + 4px));}
+.bxq-miles-line{position:absolute;left:0;right:0;top:calc(var(--bxq-mile-dot,34px) / 2);height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
 .bxq-miles-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
-.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:min(110px,calc(var(--bxq-mile-share,100%) - 6px));text-align:center;}
-.bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
+.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:max(var(--bxq-mile-dot,34px),min(110px,calc(var(--bxq-mile-share,100%) - 6px)));text-align:center;}
+.bxq-mile-dot{width:var(--bxq-mile-dot,34px);height:var(--bxq-mile-dot,34px);flex:0 0 auto;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
 .bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
-.bxq-mile-icon{width:18px;height:18px;object-fit:contain;display:block;}
+.bxq-mile-icon{width:var(--bxq-mile-icon,18px);height:var(--bxq-mile-icon,18px);object-fit:contain;display:block;}
 .bxq-mile-dot{color:#6b7280;}
 .bxq-mile.is-next .bxq-mile-dot{color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{color:#fff;}
 .bxq-msg-icon{color:#fff;}
 .bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
-.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
-.bxq--m .bxq-mile{width:min(84px,calc(var(--bxq-mile-share,100%) - 4px));}
+.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:var(--bxq-lbl-fs,12px);line-height:1.25;}
+.bxq--m .bxq-mile{width:max(var(--bxq-mile-dot,34px),min(84px,calc(var(--bxq-mile-share,100%) - 4px)));}
 .bxq-mile-label b{overflow-wrap:anywhere;}
-.bxq--m .bxq-mile-label{font-size:11px;}
+.bxq--m .bxq-mile-label{font-size:var(--bxq-lbl-fs-mile-m,11px);}
 .bxq-filters{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 14px;scrollbar-width:none;align-items:center;}
 .bxq-filters::-webkit-scrollbar{display:none;}
+.bxq-filters + .bxq-gchips{margin-top:-8px;}
+.bxq-gchips-label{flex:0 0 auto;font-size:13px;font-weight:700;opacity:.7;}
+.bxq--m .bxq-gchips-label{font-size:12px;}
 .bxq-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:9px 18px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--bxq-text) !important;}
 .bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
 .bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}

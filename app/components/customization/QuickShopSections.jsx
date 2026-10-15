@@ -3,7 +3,7 @@
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
 import { memo } from 'react';
-import { BlockStack, Checkbox, ChoiceList, FormLayout, Select, Text, TextField } from '@shopify/polaris';
+import { BlockStack, Button, Checkbox, ChoiceList, FormLayout, InlineStack, Select, Text, TextField } from '@shopify/polaris';
 import { SectionCard } from './SectionCard';
 import { createComboWeightCore } from '../../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../../utils/combo-quickshop.shared.js';
@@ -186,6 +186,80 @@ function CollectionPictures({ config, updateConfig, collections = [], PxField })
   );
 }
 
+const GROUP_STYLES = [{ label: 'Dropdown', value: 'dropdown' }, { label: 'Row of chips', value: 'chips' }];
+const GROUP_MAX = 5;
+const GROUP_OPTION_MAX = 15;
+
+/**
+ * Collection filter groups (qs_filter_groups): each is one filter, e.g.
+ * "Weight" with the 250 g / 500 g / 1 kg / 2 kg collections, "Years" with
+ * age collections. Any store collection can be an option; the page shows an
+ * option only when some of its products are in that collection.
+ */
+function CollectionFilterGroups({ config, updateConfig, collections = [] }) {
+  const groups = Array.isArray(config.qs_filter_groups) ? config.qs_filter_groups : [];
+  const save = (next) => updateConfig('qs_filter_groups', next);
+  const setGroup = (i, patch) => save(groups.map((g, j) => (j === i ? { ...g, ...patch } : g)));
+  const titleOf = (handle) => collections.find((c) => c.handle === handle)?.title || handle;
+  const addGroup = () => save([...groups, { id: `g${Date.now().toString(36)}`, label: '', style: 'dropdown', options: [] }]);
+  return (
+    <BlockStack gap="300">
+      {groups.map((group, i) => {
+        const options = Array.isArray(group.options) ? group.options : [];
+        const setOptions = (next) => setGroup(i, { options: next });
+        const move = (k, by) => {
+          const next = [...options];
+          const [item] = next.splice(k, 1);
+          next.splice(k + by, 0, item);
+          setOptions(next);
+        };
+        const unused = collections.filter((c) => !options.some((o) => o.handle === c.handle));
+        return (
+          <div key={group.id || i} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12 }}>
+            <BlockStack gap="200">
+              <div className="cst-grid-2">
+                <TextField
+                  label="Filter name" value={group.label || ''} onChange={(v) => setGroup(i, { label: v })}
+                  placeholder="e.g. Weight" autoComplete="off" maxLength={40}
+                  error={!String(group.label || '').trim() ? 'Name it, e.g. Weight or Age' : undefined}
+                />
+                <Select label="Shown as" options={GROUP_STYLES} value={group.style === 'chips' ? 'chips' : 'dropdown'} onChange={(v) => setGroup(i, { style: v })} />
+              </div>
+              {options.map((option, k) => (
+                <InlineStack key={option.handle} gap="150" blockAlign="end" wrap={false}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <TextField
+                      label={titleOf(option.handle)} value={option.label || ''} placeholder={`Shown as: ${titleOf(option.handle)}`} autoComplete="off" maxLength={40}
+                      onChange={(v) => setOptions(options.map((o, m) => (m === k ? { ...o, label: v } : o)))}
+                    />
+                  </div>
+                  <Button variant="plain" disabled={k === 0} onClick={() => move(k, -1)} accessibilityLabel={`Move ${titleOf(option.handle)} up`}>↑</Button>
+                  <Button variant="plain" tone="critical" onClick={() => setOptions(options.filter((_, m) => m !== k))}>Remove</Button>
+                </InlineStack>
+              ))}
+              {options.length < GROUP_OPTION_MAX && (
+                <Select
+                  label="Add a collection" labelHidden
+                  options={[{ label: options.length ? 'Add another collection…' : 'Add a collection…', value: '' }, ...unused.map((c) => ({ label: c.title, value: c.handle }))]}
+                  value="" onChange={(handle) => { if (handle) setOptions([...options, { handle, label: '' }]); }}
+                />
+              )}
+              {!options.length && <Text as="p" variant="bodySm" tone="critical">Add at least one collection, or this filter won&apos;t show.</Text>}
+              <InlineStack align="end">
+                <Button variant="plain" tone="critical" onClick={() => save(groups.filter((_, j) => j !== i))}>Delete this filter</Button>
+              </InlineStack>
+            </BlockStack>
+          </div>
+        );
+      })}
+      {groups.length < GROUP_MAX && <Button onClick={addGroup}>Add a collection filter</Button>}
+      <Text as="p" variant="bodySm" tone="subdued">
+        Each filter lists collections you pick, e.g. Weight: 250 g, 500 g, 1 kg, 2 kg. Shoppers pick one per filter; picking in two filters shows products in both. An option shows only when products on this page are in that collection.
+      </Text>
+    </BlockStack>
+  );
+}
+
 function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
   const source = val(config, 'qs_chips_source');
   const toggleWithLabel = (key, labelKey, title, help) => (
@@ -235,6 +309,8 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
             {isOn(config, 'qs_show_all_chip') && <TextField label="All chip label" labelHidden value={val(config, 'qs_all_label')} onChange={(v) => updateConfig('qs_all_label', v)} autoComplete="off" />}
           </BlockStack>
         )}
+        <div className="cst-section-divider"><Text variant="headingSm" as="h6">Collection filters</Text></div>
+        <CollectionFilterGroups config={config} updateConfig={updateConfig} collections={collections} />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Dropdown filters</Text></div>
         {toggleWithLabel('qs_filter_type', 'qs_filter_type_label', 'Product type', 'Lists the Shopify product types on the page.')}
         {toggleWithLabel('qs_filter_brand', 'qs_filter_brand_label', 'Brand (vendor)', 'Lists the vendors on the page.')}
@@ -315,6 +391,31 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
 
 /* ── Style tab ──────────────────────────────────────────────────────────── */
 
+/** What the text under the bar shows (offer name, amount needed) and its sizes. */
+function LabelOptions({ config, updateConfig, PxField }) {
+  const name = isOn(config, 'qs_top_show_name');
+  const amount = isOn(config, 'qs_top_show_amount');
+  return (
+    <BlockStack gap="200">
+      <Checkbox label="Offer name (e.g. 10% OFF)" checked={name} onChange={(v) => updateConfig('qs_top_show_name', v)} />
+      <Checkbox label="Amount needed (e.g. ₹999, 2 kg, 3 items)" checked={amount} onChange={(v) => updateConfig('qs_top_show_amount', v)} />
+      {(name || amount) && (
+        <div className="cst-grid-2">
+          {name && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_label_size" label="Name text size" min={9} max={22} />}
+          {name && PxField && (
+            <PxField
+              label="Name text size on phones" min={9} max={22}
+              value={Number(config.qs_top_label_size_m) || Number(val(config, 'qs_top_label_size'))}
+              onChange={(v) => updateConfig('qs_top_label_size_m', v)}
+            />
+          )}
+          {amount && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_sub_size" label="Amount text size" min={8} max={20} />}
+        </div>
+      )}
+    </BlockStack>
+  );
+}
+
 function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, ColorPickerField, PxField }) {
   const style = val(config, 'qs_top_style');
   return (
@@ -333,8 +434,18 @@ function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, Co
             )}
             {style !== 'text' && (
               <>
-                <Checkbox label="Tier names under the bar" checked={isOn(config, 'qs_top_show_labels')} onChange={(v) => updateConfig('qs_top_show_labels', v)} />
+                <Checkbox label="Text under the bar" checked={isOn(config, 'qs_top_show_labels')} onChange={(v) => updateConfig('qs_top_show_labels', v)} />
+                {isOn(config, 'qs_top_show_labels') && <LabelOptions config={config} updateConfig={updateConfig} PxField={PxField} />}
                 {style === 'milestones' && <TierIcons config={config} updateConfig={updateConfig} />}
+                {style === 'milestones' && (
+                  <>
+                    <div className="cst-grid-2">
+                      <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_mile_icon_size" label="Icon size" min={12} max={48} />
+                      {PxField && <PxField label="Icon size on phones" value={Number(config.qs_mile_icon_size_m) || Number(val(config, 'qs_mile_icon_size'))} min={12} max={48} onChange={(v) => updateConfig('qs_mile_icon_size_m', v)} />}
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">The circle is 16px bigger than the icon. With many tiers on a small screen, circles shrink so they never overlap.</Text>
+                  </>
+                )}
                 <div className="cst-grid-2">
                   <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_height" label="Bar thickness" min={2} max={24} />
                   <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_radius" label="Bar corners" max={999} />

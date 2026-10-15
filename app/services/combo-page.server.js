@@ -6,9 +6,13 @@
 // resolve.
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
-import { comboCollectionHandles, isWeightCombo, toGrams } from '../utils/combo-weight.shared.js';
+import { comboCollectionHandles, createComboWeightCore, isWeightCombo, toGrams, usesQuickShop } from '../utils/combo-weight.shared.js';
+import { createQuickShopKit } from '../utils/combo-quickshop.shared.js';
 import { storefrontWeightPricing } from './combo-weight-shopify.server';
 import { attachVariantStock } from './combo-stock.server';
+import { loadCollectionMembers } from './collection-members.server';
+
+const quickShopKit = createQuickShopKit(createComboWeightCore());
 
 // ── Guaranteed combo-page theme template ────────────────────────────────────
 // Shopify Pages render page.body through whatever section layout the
@@ -263,6 +267,16 @@ export async function loadComboPageDataForRow(shop, row) {
 
   await attachVariantStock(admin, productsByHandle);
 
+  // Box templates' collection filter groups: which page products are in each
+  // filter collection (kept apart from allHandles, which also decides what the
+  // box price counts).
+  let collectionMembers = {};
+  const filterHandles = usesQuickShop(config.layout) ? quickShopKit.filterGroupHandles(config) : [];
+  if (filterHandles.length) {
+    const productIds = Object.values(productsByHandle).flat().map((p) => p.id);
+    collectionMembers = await loadCollectionMembers(admin, { handles: filterHandles, productIds });
+  }
+
   const collectionNameMap = {};
   collections.forEach((c) => { collectionNameMap[c.handle] = c.title; });
   // Quick Shop's picture collection bar (qs_chip_style: images), only for this page's collections.
@@ -331,5 +345,5 @@ export async function loadComboPageDataForRow(shop, row) {
     ? await storefrontWeightPricing({ shop, admin, templateId: row.id, active: Number(row.is_active) === 1 || row.is_active === true, config, productsByHandle })
     : null;
 
-  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, collectionImageMap, shop, activeDiscounts, weightPricing };
+  return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, collectionImageMap, collectionMembers, shop, activeDiscounts, weightPricing };
 }
