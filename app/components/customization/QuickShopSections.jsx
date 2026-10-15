@@ -293,6 +293,79 @@ function CollectionFilterGroups({ config, updateConfig, collections = [] }) {
   );
 }
 
+const WEIGHT_RANGE_MAX = 8;
+const STARTER_RANGES = [{ min: 0, max: 500, label: '' }, { min: 500, max: 1000, label: '' }, { min: 1000, max: null, label: '' }];
+
+/**
+ * Weight filter (qs_filter_weight*): from the products' Shopify variant
+ * weights, one option per weight on the page or the merchant's ranges (grams).
+ */
+function WeightFilterOptions({ config, updateConfig }) {
+  const mode = val(config, 'qs_filter_weight_mode');
+  const ranges = Array.isArray(config.qs_filter_weight_ranges) ? config.qs_filter_weight_ranges : [];
+  const setRanges = (next) => updateConfig('qs_filter_weight_ranges', next);
+  const setRange = (i, patch) => setRanges(ranges.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const grams = (v) => (v === '' ? '' : Math.max(0, Math.round(Number(v)) || 0));
+  const named = kit.weightRanges(config);
+  return (
+    <BlockStack gap="200">
+      <div className="cst-grid-2">
+        <Select
+          label="Options"
+          options={[
+            { label: 'Each weight on the page', value: 'auto' },
+            { label: 'Weight ranges I set', value: 'ranges' },
+            { label: 'Slider (from – to)', value: 'slider' },
+          ]}
+          value={mode}
+          onChange={(v) => {
+            updateConfig('qs_filter_weight_mode', v);
+            if (v === 'ranges' && !ranges.length) setRanges(STARTER_RANGES);
+          }}
+        />
+        {mode !== 'slider' && <Select label="Shown as" options={GROUP_STYLES} value={val(config, 'qs_filter_weight_style')} onChange={(v) => updateConfig('qs_filter_weight_style', v)} />}
+      </div>
+      {mode === 'slider' && (
+        <Text as="p" variant="bodySm" tone="subdued">Shoppers drag two handles between the lightest and heaviest variant on the page (e.g. 500 g – 2 kg). Each product shows its variant in that span.</Text>
+      )}
+      {mode === 'auto' && (
+        <Text as="p" variant="bodySm" tone="subdued">Lists every variant weight of the products on the page (e.g. 250 g, 500 g, 1 kg). Picking one shows each product&apos;s variant of that weight.</Text>
+      )}
+      {mode === 'ranges' && (
+        <BlockStack gap="200">
+          {ranges.map((r, i) => {
+            const bad = r.max !== null && r.max !== '' && r.max !== undefined && Number(r.max) <= Number(r.min || 0);
+            return (
+              // eslint-disable-next-line react/no-array-index-key -- ranges have no ids; rows only change at the end or by Remove
+              <InlineStack key={i} gap="150" blockAlign="end" wrap={false}>
+                <div style={{ width: 84 }}><TextField label="From (g)" type="number" min={0} value={String(r.min ?? 0)} onChange={(v) => setRange(i, { min: grams(v) || 0 })} autoComplete="off" /></div>
+                <div style={{ width: 84 }}>
+                  <TextField
+                    label="To (g)" type="number" min={0} placeholder="and up" value={r.max === null || r.max === undefined ? '' : String(r.max)}
+                    onChange={(v) => setRange(i, { max: v === '' ? null : grams(v) })} autoComplete="off" error={bad ? 'Above From' : undefined}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <TextField
+                    label="Shown as" value={r.label || ''} maxLength={40} autoComplete="off"
+                    placeholder={named.find((n) => n.min === Number(r.min || 0) && n.max === (r.max === '' || r.max === undefined ? null : r.max))?.label || ''}
+                    onChange={(v) => setRange(i, { label: v })}
+                  />
+                </div>
+                <Button variant="plain" tone="critical" onClick={() => setRanges(ranges.filter((_, j) => j !== i))}>Remove</Button>
+              </InlineStack>
+            );
+          })}
+          {ranges.length < WEIGHT_RANGE_MAX && (
+            <InlineStack><Button onClick={() => setRanges([...ranges, { min: 0, max: null, label: '' }])}>Add a range</Button></InlineStack>
+          )}
+          <Text as="p" variant="bodySm" tone="subdued">In grams (1 kg = 1000 g). From is included, To is not, so 500–1000 holds 500 g but not 1 kg. Empty To = and above. A range shows only when products on the page have a variant in it.</Text>
+        </BlockStack>
+      )}
+    </BlockStack>
+  );
+}
+
 function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
   const source = val(config, 'qs_chips_source');
   const toggleWithLabel = (key, labelKey, title, help) => (
@@ -354,6 +427,9 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
             placeholder="Boneless, With skin" helpText="Separate with commas." autoComplete="off"
           />
         )}
+        {toggleWithLabel('qs_filter_weight', 'qs_filter_weight_label', 'Weight', 'From your products\' Shopify variant weights, e.g. 250 g, 500 g, 1 kg.')}
+        {isOn(config, 'qs_filter_weight') && <WeightFilterOptions config={config} updateConfig={updateConfig} />}
+        {toggleWithLabel('qs_filter_price', 'qs_filter_price_label', 'Price slider', 'Shoppers drag from – to between the cheapest and dearest product on the page.')}
         {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.')}
         {toggleWithLabel('qs_filter_instock', 'qs_filter_instock_label', '“In stock” chip', 'Hides sold-out products when on.')}
         <Text as="p" variant="bodySm" tone="subdued">A dropdown only shows when the products on the page have at least two values for it.</Text>
@@ -409,6 +485,7 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
           onChange={(v) => updateConfig('qs_hide_decimals', v)}
         />
         <Checkbox label="Short description under the title" checked={isOn(config, 'qs_show_subtitle')} onChange={(v) => updateConfig('qs_show_subtitle', v)} />
+        <Checkbox label="Selling price" helpText="Untick to hide the price on the cards (the product popup still shows it)." checked={isOn(config, 'qs_show_price')} onChange={(v) => updateConfig('qs_show_price', v)} />
         <Checkbox label="“% OFF” from the compare-at price" checked={isOn(config, 'qs_show_off')} onChange={(v) => updateConfig('qs_show_off', v)} />
         <Checkbox label="Struck-through compare-at price" checked={isOn(config, 'qs_show_compare')} onChange={(v) => updateConfig('qs_show_compare', v)} />
         <Checkbox label="Weight when a product has one variant" checked={isOn(config, 'qs_show_weight')} onChange={(v) => updateConfig('qs_show_weight', v)} />

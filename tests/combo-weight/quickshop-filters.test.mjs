@@ -236,3 +236,114 @@ test('loadCollectionMembers pages products and never throws', async () => {
   assert.deepEqual(await loadCollectionMembers(failing, { handles: ['a'], productIds: many }), {}, 'failure = unknown, not empty');
   assert.deepEqual(await loadCollectionMembers(admin, { handles: [], productIds: many }), {});
 });
+
+/* ── weight filter (variant weights) ────────────────────────────────── */
+
+const variant = (id, grams, extra = {}) => ({ id, title: `${grams} g`, price: '100.00', grams, available: true, ...extra });
+const W = [
+  product(11, { variants: [variant('v11a', 500), variant('v11b', 1000)] }),
+  product(12, { variants: [variant('v12a', 250)] }),
+  product(13, { variants: [variant('v13a', 1000, { available: false }), variant('v13b', 2000)] }),
+  product(14, { variants: [variant('v14a', null)] }), // no weight in Shopify
+];
+function weightModel(config, ui = {}, extra = {}) {
+  return kit.buildModel({
+    config: { layout: 'layout5', qs_filter_weight: true, qs_filter_type: false, qs_filter_brand: false, qs_filter_sort: false, ...config },
+    productsByHandle: { kids: W },
+    handles: ['kids'],
+    ui: { chip: 'all', dd: {}, ...ui },
+    pricing: { tiers: [], enabled: false },
+    symbol: '₹',
+    ...extra,
+  });
+}
+
+test('weight filter, automatic: one option per variant weight on the page', () => {
+  const m = weightModel({});
+  const menu = m.row.menus.find((x) => x.id === 'weight');
+  assert.ok(menu);
+  assert.equal(menu.label, 'Weight');
+  assert.deepEqual(menu.options.map((o) => o.value), ['', 'w:250', 'w:500', 'w:1000', 'w:2000']);
+  assert.equal(weightModel({ qs_filter_weight: false }).row.menus.length, 0, 'off by default');
+  const one = kit.buildModel({ config: { qs_filter_weight: true }, productsByHandle: { k: [W[1]] }, handles: ['k'], ui: {}, pricing: { tiers: [] } });
+  assert.equal(one.row.menus.find((x) => x.id === 'weight'), undefined, 'one weight only = no filter');
+});
+
+test('picking a weight keeps products with that variant and shows that variant', () => {
+  const m = weightModel({}, { dd: { weight: 'w:1000' } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[0].id, W[2].id], 'sold-out 1 kg variant still means the product has it');
+  assert.equal(m.cards[0].variantId, 'v11b', 'the card switches to its 1 kg variant');
+  assert.equal(m.cards[1].variantId, 'v13b', 'never a sold-out variant');
+  assert.equal(m.row.active, true);
+  const picked = weightModel({}, { dd: { weight: 'w:1000' } }, { pending: { [W[0].id]: 'v11a' } });
+  assert.equal(picked.cards[0].variantId, 'v11a', "the shopper's own pick wins");
+});
+
+test('the + and − buttons name the variant the card shows', () => {
+  const html = kit.render(weightModel({}, { dd: { weight: 'w:1000' } }, { selection: { v11b: { productId: W[0].id, qty: 1 } } }));
+  assert.match(html, /data-combo-action="qty-dec" data-product-id="gid:\/\/shopify\/Product\/11" data-variant-id="v11b"/);
+  assert.match(html, /data-combo-action="qty-inc" data-product-id="gid:\/\/shopify\/Product\/13" data-variant-id="v13b"/);
+});
+
+test('weight filter, ranges: named, checked, only ranges with products', () => {
+  const ranges = [
+    { min: 0, max: 500 }, { min: 500, max: 1000, label: 'Medium' }, { min: 1000, max: null },
+    { min: 5000, max: 9000 }, // nothing that heavy
+    { min: 800, max: 300 }, { min: 0, max: null }, // invalid
+  ];
+  assert.deepEqual(kit.weightRanges({ qs_filter_weight_ranges: ranges }).map((r) => r.label), ['Under 500 g', 'Medium', '1 kg+', '5 kg – 9 kg']);
+  const m = weightModel({ qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: ranges, qs_filter_weight_style: 'chips', qs_filter_weight_label: 'Pack size' });
+  assert.equal(m.row.menus.length, 0);
+  assert.equal(m.row.groups[0].label, 'Pack size');
+  assert.deepEqual(m.row.groups[0].options.map((o) => o.label), ['Under 500 g', 'Medium', '1 kg+']);
+  const medium = weightModel({ qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: ranges }, { dd: { weight: 'r:1' } });
+  assert.deepEqual(medium.cards.map((c) => c.id), [W[0].id], '500 g is in 500–1000, 1 kg is not');
+  assert.equal(medium.cards[0].variantId, 'v11a');
+  assert.equal(kit.weightFilter({ qs_filter_weight: true, qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: [] }), null, 'ranges mode without a range = off');
+});
+
+test('weight works next to collection groups', () => {
+  const m = weightModel({ qs_filter_groups: [{ id: 'y', label: 'Years', options: [{ handle: 'age' }] }] }, { dd: { weight: 'w:1000', 'g:y': 'age' } }, { collectionMembers: { age: [W[2].id, W[1].id] } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[2].id]);
+});
+
+test('the card selling price can be hidden; the popup keeps it', () => {
+  const priced = [product(21, { variants: [{ id: 'v21', title: 'Default Title', price: '168.00', compareAtPrice: '179.00', grams: 500, available: true }] })];
+  const draw = (config, ui = {}) => kit.render(kit.buildModel({
+    config, productsByHandle: { k: priced }, handles: ['k'], ui: { dd: {}, ...ui }, pricing: { tiers: [] }, symbol: '₹',
+  }));
+  assert.match(draw({}), /<div class="bxq-price"><b>₹168<\/b><s>₹179<\/s><\/div>/, 'shown by default');
+  assert.match(draw({ qs_show_price: false }), /<div class="bxq-price"><s>₹179<\/s><\/div>/);
+  assert.ok(!draw({ qs_show_price: false, qs_show_compare: false }).includes('bxq-price'), 'nothing left = no empty price row');
+  assert.match(draw({ qs_show_price: false }, { popup: priced[0].id }), /<b>₹168<\/b>/, 'popup still shows it');
+});
+
+test('weight and price sliders: ends on round steps, picked span filters and picks the variant', () => {
+  let m = weightModel({ qs_filter_weight_mode: 'slider', qs_filter_price: true, qs_filter_price_label: 'Budget' });
+  assert.equal(m.row.menus.length, 0);
+  const [w] = m.row.sliders;
+  assert.deepEqual([w.id, w.min, w.max, w.step, w.lo, w.hi, w.text], ['weight', 250, 2000, 25, 250, 2000, '250 g – 2 kg']);
+  assert.equal(m.row.sliders.length, 1, 'every product costs ₹100: no price slider');
+  m = weightModel({ qs_filter_weight_mode: 'slider' }, { dd: { weight: 's:900-1500' } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[0].id, W[2].id]);
+  assert.equal(m.cards[0].variantId, 'v11b');
+  assert.equal(m.row.sliders[0].text, '900 g – 1.5 kg');
+  assert.equal(m.row.active, true);
+  m = weightModel({ qs_filter_weight_mode: 'slider' }, { dd: { weight: 's:x-y' } });
+  assert.equal(m.cards.length, 4, 'a broken span filters nothing');
+  m = weightModel({ qs_filter_weight_mode: 'auto' }, { dd: { weight: 'r:5' } });
+  assert.equal(m.cards.length, 4, 'a range pick left over after switching to automatic filters nothing');
+});
+
+test('price slider uses each variant price', () => {
+  const priced = [
+    product(31, { variants: [{ id: 'a', title: 'S', price: '149.00', available: true }, { id: 'b', title: 'L', price: '399.00', available: true }] }),
+    product(32, { variants: [{ id: 'c', title: 'Default Title', price: '250.00', available: true }] }),
+  ];
+  const build = (ui = {}) => kit.buildModel({ config: { qs_filter_price: true }, productsByHandle: { k: priced }, handles: ['k'], ui: { dd: {}, ...ui }, pricing: { tiers: [] }, symbol: '₹' });
+  const sl = build().row.sliders[0];
+  assert.deepEqual([sl.min, sl.max, sl.step, sl.text], [145, 400, 5, '₹145 – ₹400']);
+  const m = build({ dd: { price: 's:300-400' } });
+  assert.deepEqual(m.cards.map((c) => [c.id, c.variantId]), [[priced[0].id, 'b']]);
+  assert.equal(kit.buildModel({ config: { qs_filter_price: true }, productsByHandle: { k: [priced[1]] }, handles: ['k'], ui: {}, pricing: { tiers: [] } }).row.sliders.length, 0, 'one price = no slider');
+});

@@ -53,6 +53,19 @@ export function createQuickShopKit(core) {
     // [{ id, label, style: 'dropdown' | 'chips', options: [{ handle, label }] }]
     // (option label '' = the collection's title). See filterGroups().
     qs_filter_groups: null,
+    // Weight filter, from the products' own Shopify variant weights (no
+    // collections needed). auto = one option per weight on the page (250 g,
+    // 500 g, 1 kg); ranges = qs_filter_weight_ranges [{ min, max, label }] in
+    // grams, min included, max not (null = and above); slider = the shopper
+    // drags from–to between the lightest and heaviest. See weightFilter().
+    qs_filter_weight: false,
+    qs_filter_weight_label: 'Weight',
+    qs_filter_weight_mode: 'auto', // auto | ranges | slider
+    qs_filter_weight_ranges: null,
+    qs_filter_weight_style: 'dropdown', // dropdown | chips (auto and ranges)
+    // Price slider: from–to between the cheapest and dearest variant on the page.
+    qs_filter_price: false,
+    qs_filter_price_label: 'Price',
     // Cards
     // quick_add = + button on the image that turns into a stepper; normal =
     // a full-width Add button under the price (stepper there once added).
@@ -69,6 +82,7 @@ export function createQuickShopKit(core) {
     qs_card_eyebrow: '',
     qs_show_subtitle: true,
     qs_show_compare: true,
+    qs_show_price: true, // the card's selling price (the popup always shows it)
     qs_show_off: true,
     qs_show_weight: true,
     qs_badge_tag: 'bestseller',
@@ -297,11 +311,14 @@ export function createQuickShopKit(core) {
 
   // The shopper's pick, else the first in-stock variant (variants[0] is often
   // a sold-out size), else the first one (the card then shows Out of stock).
-  function activeVariant(product, pending) {
+  // prefer (optional): a variant test, e.g. the weight the shopper filtered
+  // by, so a "1 kg" filter shows (and adds) each product's 1 kg variant.
+  function activeVariant(product, pending, prefer) {
     var variants = product.variants || [];
     var id = pending && pending[product.id];
     var i;
     for (i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
+    if (prefer) for (i = 0; i < variants.length; i++) if (variants[i].available !== false && prefer(variants[i], product)) return variants[i];
     for (i = 0; i < variants.length; i++) if (variants[i].available !== false) return variants[i];
     return variants[0] || null;
   }
@@ -408,6 +425,180 @@ export function createQuickShopKit(core) {
     return out;
   }
 
+  var WEIGHT_RANGE_MAX = 8;
+  var WEIGHT_AUTO_MAX = 20;
+
+  function weightText(grams) {
+    return core.formatWeight(grams, grams < 1000 ? 'g' : 'kg');
+  }
+
+  /** The merchant's weight ranges, checked (grams; unnamed ranges get a name). */
+  function weightRanges(config) {
+    var raw = opt(config, 'qs_filter_weight_ranges');
+    var out = [];
+    if (!raw || typeof raw.length !== 'number') return out;
+    for (var i = 0; i < raw.length && out.length < WEIGHT_RANGE_MAX; i++) {
+      var r = raw[i];
+      if (!r || typeof r !== 'object') continue;
+      var min = Number(r.min);
+      if (!isFinite(min) || min < 0) min = 0;
+      var max = r.max === null || r.max === undefined || r.max === '' ? null : Number(r.max);
+      if (max !== null && (!isFinite(max) || max <= min)) continue;
+      if (min === 0 && max === null) continue;
+      var label = cleanText(r.label, 40)
+        || (max === null ? weightText(min) + '+' : min === 0 ? 'Under ' + weightText(max) : weightText(min) + ' – ' + weightText(max));
+      out.push({ min: min, max: max, label: label });
+    }
+    return out;
+  }
+
+  /** The weight filter's settings, or null when it's off (or has no valid range). */
+  function weightFilter(config) {
+    if (!on(config, 'qs_filter_weight')) return null;
+    var mode = opt(config, 'qs_filter_weight_mode');
+    if (mode !== 'ranges' && mode !== 'slider') mode = 'auto';
+    var spec = {
+      label: cleanText(opt(config, 'qs_filter_weight_label'), 40) || 'Weight',
+      style: opt(config, 'qs_filter_weight_style') === 'chips' ? 'chips' : 'dropdown',
+      mode: mode,
+      ranges: mode === 'ranges' ? weightRanges(config) : [],
+    };
+    return mode === 'ranges' && !spec.ranges.length ? null : spec;
+  }
+
+  /* Sliders (weight, price): the picked span is 's:<from>-<to>', both included. */
+
+  function parseSpan(value) {
+    var m = /^s:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(String(value || ''));
+    return m ? { lo: Number(m[1]), hi: Number(m[2]) } : null;
+  }
+
+  function inSpan(value, n) {
+    var span = parseSpan(value);
+    return !!span && n >= span.lo && n <= span.hi;
+  }
+
+  // About 100 stops or fewer between the ends, on round numbers.
+  function niceStep(span) {
+    var steps = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000];
+    for (var i = 0; i < steps.length; i++) if (span / steps[i] <= 100) return steps[i];
+    return 10000;
+  }
+
+  // A slider from the smallest to the largest of values (null when they're all the same).
+  function sliderGroup(id, label, kind, values, picked, symbol) {
+    var lowest = Infinity;
+    var highest = -Infinity;
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] < lowest) lowest = values[i];
+      if (values[i] > highest) highest = values[i];
+    }
+    if (!(highest > lowest)) return null;
+    var step = niceStep(highest - lowest);
+    var min = Math.floor(lowest / step) * step;
+    var max = Math.ceil(highest / step) * step;
+    var span = parseSpan(picked);
+    var lo = span ? Math.max(min, Math.min(max, span.lo)) : min;
+    var hi = span ? Math.max(lo, Math.min(max, span.hi)) : max;
+    return {
+      id: id, kind: 'slider', unit: kind, label: label, style: 'slider', value: picked || '',
+      min: min, max: max, step: step, lo: lo, hi: hi, text: spanText(kind, lo, hi, symbol), symbol: symbol || '',
+    };
+  }
+
+  function spanText(kind, lo, hi, symbol) {
+    var f = function (n) { return kind === 'price' ? money(n, symbol) : weightText(n); };
+    return f(lo) + ' – ' + f(hi);
+  }
+
+  function productFitsPrice(value, product) {
+    var variants = product.variants || [];
+    if (!variants.length) return inSpan(value, priceOf(product, null));
+    for (var i = 0; i < variants.length; i++) if (inSpan(value, priceOf(product, variants[i]))) return true;
+    return false;
+  }
+
+  function priceGroup(label, products, ui, symbol) {
+    var prices = [];
+    for (var p = 0; p < products.length; p++) {
+      var variants = products[p].variants || [];
+      if (!variants.length) prices.push(priceOf(products[p], null));
+      for (var i = 0; i < variants.length; i++) prices.push(priceOf(products[p], variants[i]));
+    }
+    return sliderGroup('price', label, 'price', prices, (ui.dd && ui.dd.price) || '', symbol);
+  }
+
+  // Does a weight (grams) fit the picked option ('w:<grams>', 'r:<range index>' or 's:<from>-<to>')?
+  function weightFits(spec, value, grams) {
+    if (!value || !(grams > 0)) return false;
+    if (value.indexOf('s:') === 0) return inSpan(value, grams);
+    if (value.indexOf('w:') === 0) return Math.round(grams) === Number(value.slice(2));
+    if (value.indexOf('r:') === 0) {
+      var r = spec.ranges[Number(value.slice(2))];
+      return !!r && grams >= r.min && (r.max === null || grams < r.max);
+    }
+    return false;
+  }
+
+  // A pick this filter understands (an old or broken one, e.g. a range after
+  // the merchant switched to sliders, filters nothing instead of everything).
+  function weightValueOk(spec, value) {
+    if (/^w:\d+$/.test(value)) return true;
+    if (/^r:\d+$/.test(value)) return !!spec.ranges[Number(value.slice(2))];
+    return !!parseSpan(value);
+  }
+
+  function productFitsWeight(spec, value, product) {
+    var variants = product.variants || [];
+    for (var i = 0; i < variants.length; i++) if (weightFits(spec, value, variants[i].grams)) return true;
+    return false;
+  }
+
+  // The weight filter as a group (same shape as the collection groups):
+  // auto lists the weights on the page (needs two), ranges the ranges with
+  // products in them; the picked option always stays.
+  function weightGroup(spec, products, ui) {
+    var value = (ui.dd && ui.dd.weight) || '';
+    var options = [];
+    var i;
+    var p;
+    if (spec.mode === 'slider') {
+      var all = [];
+      for (p = 0; p < products.length; p++) {
+        for (i = 0; i < (products[p].variants || []).length; i++) {
+          var grams = Number(products[p].variants[i].grams);
+          if (grams > 0) all.push(grams);
+        }
+      }
+      return sliderGroup('weight', spec.label, 'weight', all, value);
+    }
+    if (spec.mode === 'auto') {
+      var weights = [];
+      for (p = 0; p < products.length; p++) {
+        var variants = products[p].variants || [];
+        for (i = 0; i < variants.length; i++) {
+          var g = Math.round(Number(variants[i].grams));
+          if (g > 0 && weights.indexOf(g) === -1) weights.push(g);
+        }
+      }
+      weights.sort(function (a, b) { return a - b; });
+      weights = weights.slice(0, WEIGHT_AUTO_MAX);
+      var picked = value.indexOf('w:') === 0 ? Number(value.slice(2)) : 0;
+      if (picked > 0 && weights.indexOf(picked) === -1) { weights.push(picked); weights.sort(function (a, b) { return a - b; }); }
+      if (weights.length < 2) return null;
+      for (i = 0; i < weights.length; i++) options.push({ value: 'w:' + weights[i], label: weightText(weights[i]), on: value === 'w:' + weights[i] });
+    } else {
+      for (i = 0; i < spec.ranges.length; i++) {
+        var key = 'r:' + i;
+        var present = value === key;
+        for (p = 0; !present && p < products.length; p++) if (productFitsWeight(spec, key, products[p])) present = true;
+        if (present) options.push({ value: key, label: spec.ranges[i].label, on: value === key });
+      }
+      if (!options.length) return null;
+    }
+    return { id: 'weight', label: spec.label, style: spec.style, value: value, options: options, open: ui.menu === 'weight' };
+  }
+
   /** Every collection the filter groups use (the server loads which page products are in them). */
   function filterGroupHandles(config) {
     var groups = filterGroups(config);
@@ -504,10 +695,16 @@ export function createQuickShopKit(core) {
       menus.push({ id: id, label: label, value: dd[id] || '', options: options, open: ui.menu === id });
     }
     var groups = groupInfo ? groupFilters(groupInfo.groups, groupInfo.members, products, collectionNames, ui) : [];
+    var byWeight = groupInfo && groupInfo.weight ? weightGroup(groupInfo.weight, products, ui) : null;
+    if (byWeight) groups.push(byWeight);
+    var byPrice = groupInfo && groupInfo.price ? priceGroup(groupInfo.price, products, ui, groupInfo.symbol) : null;
+    if (byPrice) groups.push(byPrice);
     var chipGroups = [];
+    var sliders = [];
     for (var gi = 0; gi < groups.length; gi++) {
       var grp = groups[gi];
       if (grp.style === 'chips') { chipGroups.push(grp); continue; }
+      if (grp.kind === 'slider') { sliders.push(grp); continue; }
       var groupOptions = [{ value: '', label: 'All' }];
       for (var go = 0; go < grp.options.length; go++) groupOptions.push({ value: grp.options[go].value, label: grp.options[go].label });
       menus.push({ id: grp.id, label: grp.label, value: grp.value, options: groupOptions, open: grp.open });
@@ -528,10 +725,14 @@ export function createQuickShopKit(core) {
     }
     var active = (ui.chip && ui.chip !== 'all') || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || (dd.sort && dd.sort !== 'featured');
     for (var ga = 0; ga < groups.length; ga++) if (groups[ga].value) active = true;
-    return { chips: chips, menus: menus, groups: chipGroups, active: !!active };
+    return { chips: chips, menus: menus, groups: chipGroups, sliders: sliders, active: !!active };
   }
 
-  /** groupInfo (optional) = { groups, members }: a picked group option keeps only its collection's products. */
+  /**
+   * groupInfo (optional) = { groups, members, weight }: a picked group option
+   * keeps only its collection's products, a picked weight only products with
+   * a variant of that weight.
+   */
   function filterProducts(products, productsByHandle, ui, pending, groupInfo) {
     var dd = ui.dd || {};
     var inChip = null;
@@ -549,6 +750,8 @@ export function createQuickShopKit(core) {
         if (picked && groupInfo.members[picked]) inGroups.push(groupInfo.members[picked]);
       }
     }
+    var weightPick = groupInfo && groupInfo.weight && dd.weight && weightValueOk(groupInfo.weight, dd.weight) ? dd.weight : '';
+    var pricePick = groupInfo && groupInfo.price && parseSpan(dd.price) ? dd.price : '';
     var out = [];
     for (var j = 0; j < products.length; j++) {
       var p = products[j];
@@ -556,6 +759,8 @@ export function createQuickShopKit(core) {
       var outOfGroup = false;
       for (var ig = 0; ig < inGroups.length; ig++) if (!inGroups[ig][p.id]) outOfGroup = true;
       if (outOfGroup) continue;
+      if (weightPick && !productFitsWeight(groupInfo.weight, weightPick, p)) continue;
+      if (pricePick && !productFitsPrice(pricePick, p)) continue;
       if (ui.chip && ui.chip.indexOf('t:') === 0 && !hasTag(p, ui.chip.slice(2))) continue;
       if (dd.type && String(p.productType || '') !== dd.type) continue;
       if (dd.brand && String(p.vendor || '') !== dd.brand) continue;
@@ -571,7 +776,7 @@ export function createQuickShopKit(core) {
     if (sort !== 'featured') {
       var keyed = [];
       for (var k = 0; k < out.length; k++) {
-        var variant = activeVariant(out[k], pending);
+        var variant = activeVariant(out[k], pending, groupInfo ? groupInfo.prefer : null);
         var price = priceOf(out[k], variant);
         var cmp = compareOf(variant, price);
         keyed.push({ p: out[k], i: k, price: price, off: cmp ? (cmp - price) / cmp : 0, name: lower(out[k].title) });
@@ -718,14 +923,28 @@ export function createQuickShopKit(core) {
 
     // Cards.
     var groups = filterGroups(config);
-    var groupInfo = groups.length ? { groups: groups, members: groupMembers(groups, input.collectionMembers, input.productsByHandle) } : null;
+    var weightSpec = weightFilter(config);
+    var priceLabel = on(config, 'qs_filter_price') ? (cleanText(opt(config, 'qs_filter_price_label'), 40) || 'Price') : '';
+    var pickedWeight = weightSpec && ui.dd && ui.dd.weight && weightValueOk(weightSpec, ui.dd.weight) ? ui.dd.weight : '';
+    var pickedPrice = priceLabel && ui.dd && parseSpan(ui.dd.price) ? ui.dd.price : '';
+    var groupInfo = groups.length || weightSpec || priceLabel ? {
+      groups: groups,
+      members: groups.length ? groupMembers(groups, input.collectionMembers, input.productsByHandle) : {},
+      weight: weightSpec,
+      price: priceLabel,
+      symbol: symbol,
+      // A filtered card shows (and adds) its variant that fits the filters.
+      prefer: pickedWeight || pickedPrice ? function (variant, product) {
+        return (!pickedWeight || weightFits(weightSpec, pickedWeight, variant.grams)) && (!pickedPrice || inSpan(pickedPrice, priceOf(product, variant)));
+      } : null,
+    } : null;
     var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {}, groupInfo);
     var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending, groupInfo);
     var cards = [];
     var badgeTag = String(opt(config, 'qs_badge_tag') || '').trim();
     for (var c = 0; c < shown.length; c++) {
       var p = shown[c];
-      var v = activeVariant(p, input.pending);
+      var v = activeVariant(p, input.pending, groupInfo ? groupInfo.prefer : null);
       var pr = priceOf(p, v);
       var cp = compareOf(v, pr);
       var options = [];
@@ -919,13 +1138,70 @@ export function createQuickShopKit(core) {
     return html;
   }
 
+  // Weight / price sliders: two range inputs over one track. Dragging only
+  // updates the text and the fill (rangeInput); letting go filters
+  // (applyRange), so the page isn't redrawn under the shopper's finger.
+  function renderSliders(sliders) {
+    var html = '';
+    for (var i = 0; i < sliders.length; i++) {
+      var sl = sliders[i];
+      var span = sl.max - sl.min;
+      var left = ((sl.lo - sl.min) / span) * 100;
+      var right = ((sl.max - sl.hi) / span) * 100;
+      var attrs = ' min="' + sl.min + '" max="' + sl.max + '" step="' + sl.step + '" data-combo-range="' + esc(sl.id) + '"';
+      html += '<div class="bxq-filters bxq-gchips bxq-range" role="group" aria-label="' + esc(sl.label) + '" data-unit="' + esc(sl.unit) + '" data-symbol="' + esc(sl.symbol) + '">'
+        + '<span class="bxq-gchips-label">' + esc(sl.label) + '</span>'
+        + '<div class="bxq-range-box"><div class="bxq-range-track"><div class="bxq-range-fill" style="left:' + left.toFixed(2) + '%;right:' + right.toFixed(2) + '%"></div></div>'
+        + '<input type="range" class="bxq-range-in"' + attrs + ' value="' + sl.lo + '" aria-label="' + esc(sl.label) + ' from" />'
+        + '<input type="range" class="bxq-range-in"' + attrs + ' value="' + sl.hi + '" aria-label="' + esc(sl.label) + ' to" />'
+        + '</div><span class="bxq-range-val' + (sl.value ? ' is-on' : '') + '">' + esc(sl.text) + '</span></div>';
+    }
+    return html;
+  }
+
+  function rangeParts(input) {
+    var box = input.closest ? input.closest('.bxq-range') : null;
+    if (!box) return null;
+    var ins = box.querySelectorAll('input[data-combo-range]');
+    if (ins.length !== 2) return null;
+    var a = Number(ins[0].value);
+    var b = Number(ins[1].value);
+    return { box: box, ins: ins, lo: Math.min(a, b), hi: Math.max(a, b), min: Number(ins[0].min), max: Number(ins[0].max) };
+  }
+
+  /** While a slider moves: keep the handles from crossing, move the fill, update the text. */
+  function rangeInput(input) {
+    var r = rangeParts(input);
+    if (!r) return;
+    if (Number(r.ins[0].value) > Number(r.ins[1].value)) {
+      if (input === r.ins[0]) r.ins[0].value = r.ins[1].value; else r.ins[1].value = r.ins[0].value;
+      r = rangeParts(input);
+    }
+    var span = r.max - r.min || 1;
+    var fill = r.box.querySelector('.bxq-range-fill');
+    if (fill) { fill.style.left = (((r.lo - r.min) / span) * 100).toFixed(2) + '%'; fill.style.right = (((r.max - r.hi) / span) * 100).toFixed(2) + '%'; }
+    var text = r.box.querySelector('.bxq-range-val');
+    if (text) text.textContent = spanText(r.box.getAttribute('data-unit'), r.lo, r.hi, r.box.getAttribute('data-symbol'));
+  }
+
+  /** A slider let go: its span into ui.dd (the whole span = no filter). Returns true when it was one. */
+  function applyRange(ui, input) {
+    var key = input && input.getAttribute ? input.getAttribute('data-combo-range') : null;
+    var r = key ? rangeParts(input) : null;
+    if (!r) return false;
+    if (!ui.dd) ui.dd = {};
+    ui.dd[key] = r.lo <= r.min && r.hi >= r.max ? '' : 's:' + r.lo + '-' + r.hi;
+    ui.menu = null;
+    return true;
+  }
+
   function renderFilters(model) {
     var row = model.row;
     var pictureChips = [];
     var chips = [];
     for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
     var bar = pictureChips.length ? renderCollectionBar(pictureChips) : '';
-    var groupRows = renderChipGroups(row.groups || []);
+    var groupRows = renderChipGroups(row.groups || []) + renderSliders(row.sliders || []);
     if (!chips.length && !row.menus.length) return bar + groupRows;
     var html = bar + '<div class="bxq-filters">';
     html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? ' is-active' : '') + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + '</button>';
@@ -1084,11 +1360,11 @@ export function createQuickShopKit(core) {
     var config = model.config;
     if (!card.available) return '<button type="button" class="bxq-cta is-out" disabled>Out of stock</button>';
     if (card.qty > 0) {
-      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
+      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Remove one">−</button>'
         + '<span aria-live="polite">' + card.qty + '</span>'
-        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     }
-    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
+    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
   }
 
   // ' disabled' once the box holds all Shopify will sell of this variant.
@@ -1109,11 +1385,11 @@ export function createQuickShopKit(core) {
     } else if (!card.available) {
       html += '<span class="bxq-soldout">Out of stock</span>';
     } else if (card.qty > 0) {
-      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button>'
+      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Remove one">−</button>'
         + '<span aria-live="polite">' + card.qty + '</span>'
-        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
+        + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     } else {
-      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + '</button>';
+      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + '</button>';
     }
     html += '</div><div class="bxq-info">';
     var eyebrow = opt(config, 'qs_card_eyebrow');
@@ -1131,7 +1407,8 @@ export function createQuickShopKit(core) {
       html += '<div class="bxq-variant is-static">' + esc(card.weightText) + '</div>';
     }
     if (card.off && on(config, 'qs_show_off')) html += '<div class="bxq-off"><span>' + card.off + '% OFF</span></div>';
-    html += '<div class="bxq-price"><b>' + esc(card.price) + '</b>' + (card.compare && on(config, 'qs_show_compare') ? '<s>' + esc(card.compare) + '</s>' : '') + '</div>';
+    var priceHtml = (on(config, 'qs_show_price') ? '<b>' + esc(card.price) + '</b>' : '') + (card.compare && on(config, 'qs_show_compare') ? '<s>' + esc(card.compare) + '</s>' : '');
+    if (priceHtml) html += '<div class="bxq-price">' + priceHtml + '</div>';
     if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
     if (normal) html += renderCardCta(model, card);
     html += '</div></article>';
@@ -1420,6 +1697,10 @@ export function createQuickShopKit(core) {
     filterGroupHandles: filterGroupHandles,
     groupMembers: groupMembers,
     mileSizes: mileSizes,
+    weightFilter: weightFilter,
+    rangeInput: rangeInput,
+    applyRange: applyRange,
+    weightRanges: weightRanges,
     labelLook: labelLook,
     canCheckout: canCheckout,
     barMessage: barMessage,
@@ -1507,6 +1788,19 @@ export const QUICK_SHOP_CSS = `
 .bxq-filters + .bxq-gchips{margin-top:-8px;}
 .bxq-gchips-label{flex:0 0 auto;font-size:13px;font-weight:700;opacity:.7;}
 .bxq--m .bxq-gchips-label{font-size:12px;}
+.bxq-range{gap:12px;overflow:visible;}
+.bxq-range-box{position:relative;flex:1 1 220px;min-width:140px;max-width:420px;height:28px;}
+.bxq-range-track{position:absolute;left:10px;right:10px;top:12px;height:4px;border-radius:4px;background:rgba(0,0,0,.12);}
+.bxq-range-fill{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--bxq-accent);display:block!important;}
+.bxq-range-in{position:absolute;left:0;top:0;width:100%;height:28px;margin:0;padding:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none;}
+.bxq-range-in:focus{outline:none;}
+.bxq-range-in::-webkit-slider-runnable-track{height:28px;background:none;border:none;}
+.bxq-range-in::-moz-range-track{background:none;border:none;}
+.bxq-range-in::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:20px;height:20px;margin-top:4px;border-radius:50%;background:#fff;border:2px solid var(--bxq-accent);box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;}
+.bxq-range-in::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--bxq-accent);box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;}
+.bxq-range-in:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px color-mix(in srgb,var(--bxq-accent) 30%,transparent);}
+.bxq-range-val{flex:0 0 auto;font-size:13px;font-weight:700;white-space:nowrap;opacity:.75;}
+.bxq-range-val.is-on{opacity:1;color:var(--bxq-accent);}
 .bxq-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:9px 18px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--bxq-text) !important;}
 .bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
 .bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}

@@ -91,7 +91,7 @@ const browser = await chromium.launch();
 // shiprocket: { code } = Shiprocket on for the shop, BrixCheckout stubbed, the
 // box-code API answers with that code ('fail' = a 502).
 // loader: { dataDelay, loaderDelay, loader (the /api/combo-loader answer's loader keys), dataStatus, wait = false }
-async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null, themeCss = '', wholePrices = false } = {}) {
+async function openCombo(config, pricing, { cod = false, shiprocket = null, viewport = { width: 1280, height: 900 }, loader = null, themeCss = '', wholePrices = false, data = {} } = {}) {
   const page = await browser.newPage({ viewport });
   if (wholePrices) await page.addInitScript(() => { window.__brixWholePrices = true; });
   const log = { add: [], update: [], navigations: [], cod: [], boxCode: [], loader: 0 };
@@ -122,7 +122,7 @@ async function openCombo(config, pricing, { cod = false, shiprocket = null, view
     if (url.pathname === '/api/combo-page-data') {
       await sleep(loader?.dataDelay);
       if (loader?.dataStatus) return json({ success: false }, loader.dataStatus);
-      return json({ success: true, data: { templateId: 9, templateName: 'Meat Box', config, productsByHandle, collectionNameMap: { chicken: 'Chicken', mutton: 'Mutton' }, activeDiscounts: [], weightPricing: pricing, shiprocketEnabled: Boolean(shiprocket) } });
+      return json({ success: true, data: { templateId: 9, templateName: 'Meat Box', config, productsByHandle, collectionNameMap: { chicken: 'Chicken', mutton: 'Mutton' }, activeDiscounts: [], weightPricing: pricing, shiprocketEnabled: Boolean(shiprocket), ...data } });
     }
     if (url.pathname === '/api/combo-box-code') {
       log.boxCode.push({ body: JSON.parse(req.postData()), contentType: req.headers()['content-type'] });
@@ -672,6 +672,80 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.waitForTimeout(500);
   g = await geo();
   check('phone milestones: at 1 kg the fill ends on the first dot', Math.abs(g.fillRight - g.dots[0]) <= 3, `${Math.round(g.fillRight)} vs ${Math.round(g.dots[0])}`);
+  await page.close();
+}
+
+/* Filters by variant weight (dropdown, slider), price slider and collection
+   filter groups; milestone icon size, label lines; hidden card price. */
+{
+  const slide = (page, id, end, value) => page.evaluate(([sel, i, v]) => {
+    const input = document.querySelectorAll(sel)[i];
+    input.value = String(v);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return document.querySelector(`.bxq-range[aria-label] input[data-combo-range="${input.getAttribute('data-combo-range')}"]`).closest('.bxq-range').querySelector('.bxq-range-val').textContent;
+  }, [`input[data-combo-range="${id}"]`, end, value]);
+  const letGo = (page, id, end) => page.evaluate(([sel, i]) => { document.querySelectorAll(sel)[i].dispatchEvent(new Event('change', { bubbles: true })); }, [`input[data-combo-range="${id}"]`, end]);
+  const qty = { qs_filter_type: false, qs_filter_brand: false, qs_filter_custom: false, qs_filter_sort: false, qs_chips_source: 'none' };
+
+  // Weight dropdown: 1 kg shows the curry cut with its 1 kg variant, and + adds that variant.
+  let { page } = await openCombo({ ...baseConfig, ...qty, qs_filter_weight: true }, wp(QUANTITY));
+  const weights = await page.$$eval('[data-menu="weight"]', (els) => els.length);
+  check('weight dropdown shown', weights === 1);
+  await page.click('[data-combo-action="qs-menu"][data-menu="weight"]');
+  check('weight options = the page\'s variant weights', (await page.$$eval('[data-combo-action="qs-pick"][data-menu="weight"]', (els) => els.map((e) => e.textContent))).join('|') === 'All|300 g|450 g|500 g|1 kg');
+  await page.click('[data-combo-action="qs-pick"][data-menu="weight"][data-value="w:1000"]');
+  check('1 kg: only the product with a 1 kg variant', (await titles(page)).join('|') === 'Nandus Chicken Curry Cut - Skinless', (await titles(page)).join('|'));
+  check('1 kg: the card shows its 1 kg variant and price', (await page.$eval(`${card(1)} select`, (e) => e.value)) === V(11) && (await text(page, card(1))).includes('₹320'));
+  await plus(page, 1);
+  await page.waitForSelector('.bxq-bar');
+  await page.click('[data-combo-action="qs-clear"]');
+  check('+ added the 1 kg variant; it stays picked after clearing', (await page.$eval(`${card(1)} select`, (e) => e.value)) === V(11) && (await text(page, `${card(1)} .bxq-stepper`)).includes('1'));
+  await page.close();
+
+  // Weight + price sliders.
+  ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_weight: true, qs_filter_weight_mode: 'slider', qs_filter_price: true, qs_filter_price_label: 'Budget' }, wp(QUANTITY), { viewport: { width: 390, height: 844 } }));
+  check('two sliders: weight and price', (await page.$$eval('.bxq-range .bxq-gchips-label', (els) => els.map((e) => e.textContent))).join('|') === 'Weight|Budget');
+  check('weight slider spans the lightest to heaviest', (await text(page, '.bxq-range[aria-label="Weight"] .bxq-range-val')) === '300 g – 1 kg');
+  const live = await slide(page, 'weight', 0, 900);
+  check('dragging updates the text only (no filtering yet)', live === '900 g – 1 kg' && (await titles(page)).length === 5, live);
+  await letGo(page, 'weight', 0);
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-card').length === 1);
+  check('letting go filters: 900 g – 1 kg', (await titles(page)).join('|') === 'Nandus Chicken Curry Cut - Skinless' && (await page.$eval(`${card(1)} select`, (e) => e.value)) === V(11));
+  check('handles can\'t cross', (await slide(page, 'weight', 1, 400)) === '900 g – 900 g');
+  // Dragged back to the full span = no weight filter.
+  await slide(page, 'weight', 1, 1000);
+  await slide(page, 'weight', 0, 300);
+  await letGo(page, 'weight', 0);
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-card').length === 5);
+  check('price slider spans ₹145 – ₹450 (round steps)', (await text(page, '.bxq-range[aria-label="Budget"] .bxq-range-val')) === '₹145 – ₹450', await text(page, '.bxq-range[aria-label="Budget"] .bxq-range-val'));
+  await slide(page, 'price', 1, 200);
+  await letGo(page, 'price', 1);
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-card').length === 2);
+  check('price ₹145 – ₹200: two products', (await titles(page)).join('|') === 'Nandus Chicken Curry Cut - Skinless|Licious Chicken Curry Cut (Large Pieces)', (await titles(page)).join('|'));
+  check('the large-pieces card shows its ₹199 variant (in budget)', (await text(page, card(3))).includes('₹199'));
+  const box = await page.$eval('.bxq-range-box', (e) => { const r = e.getBoundingClientRect(); return { w: r.width, right: r.right }; });
+  check('phone: slider fits the screen', box.w >= 120 && box.right <= 390, JSON.stringify(box));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-sliders-phone.png') });
+  await page.close();
+
+  // Collection filter groups (members from the server), as chips.
+  ({ page } = await openCombo({
+    ...baseConfig, ...qty,
+    qs_filter_groups: [{ id: 'age', label: 'Years', style: 'chips', options: [{ handle: 'age-1', label: '1-2 Y' }, { handle: 'age-3', label: '3-4 Y' }, { handle: 'age-9', label: '9 Y' }] }],
+  }, wp(QUANTITY), { data: { collectionMembers: { 'age-1': [P(1), P(2)], 'age-3': [P(4)], 'age-9': [] } } }));
+  check('collection group chips: options with products only', (await page.$$eval('.bxq-gchips [data-combo-action="qs-group"]', (els) => els.map((e) => e.textContent))).join('|') === '1-2 Y|3-4 Y');
+  await page.click('[data-combo-action="qs-group"][data-value="age-1"]');
+  check('collection group filters', (await titles(page)).length === 2);
+  await page.click('[data-combo-action="qs-group"][data-value="age-1"]');
+  check('tap again clears', (await titles(page)).length === 5);
+  await page.close();
+
+  // Milestone look and hidden card price.
+  ({ page } = await openCombo({ ...baseConfig, ...qty, qs_top_style: 'milestones', qs_mile_icon_size: 30, qs_top_show_amount: false, qs_top_label_size: 16, qs_show_price: false }, wp(QUANTITY)));
+  const mile = await page.$eval('.bxq-mile-dot', (e) => { const r = e.getBoundingClientRect(); const icon = e.querySelector('.bxq-mile-icon').getBoundingClientRect(); return { dot: Math.round(r.width), icon: Math.round(icon.width) }; });
+  check('milestone icon 30px in a 46px circle', mile.dot === 46 && mile.icon === 30, JSON.stringify(mile));
+  check('milestone amount hidden, name 16px', (await page.$('.bxq-mile-label small')) === null && (await page.$eval('.bxq-mile-label b', (e) => getComputedStyle(e).fontSize)) === '16px');
+  check('card selling price hidden, MRP kept', !(await text(page, `${card(1)} .bxq-price`)).includes('₹168') && (await text(page, `${card(1)} .bxq-price`)).includes('₹179'));
   await page.close();
 }
 

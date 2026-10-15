@@ -2644,6 +2644,11 @@ const SCRIPT_BODY = String.raw`
       if (action === 'checkout-locked') { showToast(root, state, el.getAttribute('data-value') || 'Add more items to check out.'); return; }
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
       if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
+      // Box cards' + / − name the variant the card shows (a weight filter may
+      // show a product's 1 kg variant): act on that one.
+      if ((action === 'qty-inc' || action === 'qty-dec') && product && el.getAttribute('data-variant-id')) {
+        state.pendingVariant[productId] = el.getAttribute('data-variant-id');
+      }
       if (action === 'qty-inc' && product) {
         // Quick Shop popup: its Add puts the product in the box and closes it.
         if (el.hasAttribute('data-close-popup') && state.qsUi) { state.qsUi.popup = null; state.qsUi.popupImage = 0; }
@@ -2731,6 +2736,12 @@ const SCRIPT_BODY = String.raw`
     };
 
     var onChange = function (e) {
+      // Box filters' weight / price slider let go: filter.
+      if (e.target && e.target.getAttribute && e.target.getAttribute('data-combo-range') && insideCombo(root, e.target)) {
+        var rangeState = instances.get(root);
+        if (rangeState && rangeState.qsUi && QuickShop.applyRange(rangeState.qsUi, e.target)) render(root);
+        return;
+      }
       var el = e.target.closest('[data-combo-action="variant-select"]');
       if (!el || !insideCombo(root, el)) return;
       var state = instances.get(root);
@@ -2739,8 +2750,13 @@ const SCRIPT_BODY = String.raw`
       state.pendingVariant[productId] = el.value;
       render(root);
     };
+    // While a slider moves: only its text and fill (no redraw under the finger).
+    var onInput = function (e) {
+      if (e.target && e.target.getAttribute && e.target.getAttribute('data-combo-range')) QuickShop.rangeInput(e.target);
+    };
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
+    root.addEventListener('input', onInput);
     // The Quick Shop product popup is moved to <body> (hostQuickShopPopup);
     // its taps go through these same handlers.
     root.__brixComboEvents = { click: onClick, change: onChange };

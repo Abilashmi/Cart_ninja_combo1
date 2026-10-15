@@ -191,7 +191,9 @@ export default function QuickShopPreview({ config, device, products = [], collec
     if ((action === 'qty-inc' || action === 'qty-dec') && product) {
       // The popup's Add puts it in the box and closes the popup.
       if (el.hasAttribute('data-close-popup')) setUi({ ...ui, popup: null, popupImage: 0 });
-      const vid = activeVariantId(product);
+      // The variant the card shows (a weight filter may show its 1 kg one).
+      const vid = el.getAttribute('data-variant-id') || activeVariantId(product);
+      if (String(pending[product.id] || '') !== String(vid)) setPending({ ...pending, [product.id]: vid });
       setQty(vid, product.id, (selection[vid]?.qty || 0) + (action === 'qty-inc' ? 1 : -1));
       return;
     }
@@ -211,6 +213,26 @@ export default function QuickShopPreview({ config, device, products = [], collec
     if (el) setPending((prev) => ({ ...prev, [el.getAttribute('data-product-id')]: el.value }));
   };
 
+  // Weight / price sliders, with native listeners (React's onChange fires on
+  // every step of a range input): while moving only the text and fill change,
+  // letting go filters, like the storefront.
+  const pageRef = useRef(null);
+  useEffect(() => {
+    const node = pageRef.current;
+    if (!node) return undefined;
+    const isRange = (e) => e.target?.getAttribute?.('data-combo-range');
+    const onInput = (e) => { if (isRange(e)) kit.rangeInput(e.target); };
+    const onRangeChange = (e) => {
+      if (!isRange(e)) return;
+      const picked = { dd: {} };
+      if (!kit.applyRange(picked, e.target)) return;
+      setUi((prev) => ({ ...prev, menu: null, dd: { ...(prev.dd || {}), ...picked.dd } }));
+    };
+    node.addEventListener('input', onInput);
+    node.addEventListener('change', onRangeChange);
+    return () => { node.removeEventListener('input', onInput); node.removeEventListener('change', onRangeChange); };
+  }, []);
+
   return (
     <div ref={frame} style={{ background: '#eef1f5', padding: isMobile ? 0 : 12, minHeight: '100%', transform: 'translateZ(0)' }}>
       <style>{QUICK_SHOP_CSS}</style>
@@ -220,7 +242,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
         </div>
       )}
       {/* The kit escapes every text it puts in the HTML. */}
-      <div role="presentation" onClick={onClick} onChange={onChange} dangerouslySetInnerHTML={{ __html: html }} />
+      <div ref={pageRef} role="presentation" onClick={onClick} onChange={onChange} dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }
