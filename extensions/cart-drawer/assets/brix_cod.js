@@ -2225,6 +2225,14 @@
     return best;
   }
 
+  // The product form on this page (the one the COD button is on, if mounted).
+  function productForm() {
+    if (productMount && productMount.form && productMount.form.isConnected) return productMount.form;
+    var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+    var ids = meta && Array.isArray(meta.variants) ? meta.variants.map(function (v) { return String(v.id); }) : [];
+    return findProductForm(ids);
+  }
+
   // form.id is shadowed by an <input name="id">, which every product form has.
   function formIdOf(form) {
     return form.getAttribute('id') || '';
@@ -2326,10 +2334,30 @@
   // The theme's Buy it now: the merchant's selector (COD → Customize →
   // Product page) when set, else Shopify's dynamic checkout
   // button in the product form, else anywhere in the product's section.
+  // The merchant's own Buy it now (Product page → Buy it now selector). A
+  // class can match more than the product page's button: Shiprocket puts
+  // .shiprocket-headless on its product Buy Now (data-type="product") and on
+  // the cart drawer's checkout (data-type="mini-cart"), which comes first and
+  // is hidden. So: never one inside a cart drawer or marked for the cart; the
+  // one in the product's own section first, else the first other match.
+  var CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer]';
   function customBuyNow(cfg) {
     var sel = cfg && cfg.productButton && cfg.productButton.buyNowSelector;
     if (!sel) return null;
-    try { return document.querySelector(sel); } catch (e) { return null; }
+    var list;
+    try { list = document.querySelectorAll(sel); } catch (e) { return null; }
+    var form = productForm();
+    var section = form && (form.closest('.shopify-section') || form.parentNode);
+    var first = null;
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      var kind = String(el.getAttribute('data-type') || '').toLowerCase();
+      if (kind === 'mini-cart' || kind === 'cart') continue;
+      if (el.closest && el.closest(CART_PLACES)) continue;
+      if (section && section.contains(el)) return el;
+      if (!first) first = el;
+    }
+    return first;
   }
   function findBuyNow(form, cfg) {
     var custom = customBuyNow(cfg);

@@ -50,12 +50,12 @@ const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-
 // A Dawn-like product page. The theme's own JS sets the hidden variant id
 // WITHOUT firing an event and redraws the price (like Dawn), and its quantity
 // buttons fire `change`.
-function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '' } = {}) {
+function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '', shiprocket = false } = {}) {
   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
   <style>body{font-family:Arial,sans-serif;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}
   .product{display:grid;grid-template-columns:1fr 1fr;gap:32px}@media (max-width:749px){.product{grid-template-columns:1fr}}
   .media{background:#eee;aspect-ratio:1}button{text-transform:uppercase;letter-spacing:2px;min-height:48px;width:100%}
-  .product-form__buttons>*{margin-bottom:10px}</style></head><body><main>
+  .product-form__buttons>*{margin-bottom:10px}</style></head><body>${shiprocket ? '<cart-drawer style="display:none"><div class="shiprocket-headless" data-type="mini-cart"><button type="button" class="sr-headless-checkout">Checkout</button></div></cart-drawer>' : ''}<main>
   <section class="shopify-section"><div class="product">
     <div class="media"></div>
     <div class="product__info-wrapper grid__item">
@@ -65,7 +65,7 @@ function productPage({ buyNow = true, block = false, pageType = 'product', custo
       <variant-selects><label>Size <select id="opt"><option value="21">M</option><option value="22">L</option></select></label></variant-selects>
       <div class="product-form__input product-form__quantity"><quantity-input class="quantity"><button type="button" id="minus" style="width:40px">-</button><input id="qty" name="quantity" form="product-form-main" value="1" style="width:50px"><button type="button" id="plus" style="width:40px">+</button></quantity-input></div>
       <form action="/cart/add" id="product-form-main"><input type="hidden" name="id" value="21">
-        <div class="product-form__buttons"><button type="submit" name="add">Add to cart</button>${buyNow ? BUY_NOW_HTML : ''}</div>
+        <div class="product-form__buttons"><button type="submit" name="add">Add to cart</button>${buyNow ? BUY_NOW_HTML : ''}${shiprocket ? '<div class="shiprocket-headless" data-type="product"><button type="button" class="sr-headless-checkout">Buy Now</button></div>' : ''}</div>
       </form>
       ${custom ? '<div class="hk-actions"><button type="button" class="hk-buy-now"><svg width="10" height="10"></svg><span class="hk-label">Buy it now</span></button></div>' : ''}
     </div>
@@ -94,7 +94,7 @@ const handler = async (route) => {
     return json({ tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/')) {
-    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '' }) });
+    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom') && !url.searchParams.has('sr'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '', shiprocket: url.searchParams.has('sr') }) });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/cart/')) {
     navigations.push(url.pathname);
@@ -577,6 +577,20 @@ page = await openPage('?custom=1');
 await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
 await settle(page, 800);
 check('custom theme Buy it now + selector + Replace: hidden, COD in its place', (await customBtn(page)).shown === false);
+await page.close();
+
+// Shiprocket's Buy Now as the merchant's selector (.shiprocket-headless): the
+// cart drawer's hidden Shiprocket checkout matches first and must be skipped.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowPlacement: 'below', buyNowSelector: '.shiprocket-headless' }, productPayment: null };
+page = await openPage('?sr=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 800);
+const srOrder = await page.evaluate(() => {
+  const slot = document.querySelector('[data-brix-cod-slot]');
+  const sr = document.querySelector('.shiprocket-headless[data-type="product"]');
+  return { inDrawer: Boolean(slot.closest('cart-drawer')), afterBuyNow: sr && sr.nextElementSibling === slot, visible: slot.getBoundingClientRect().height > 0 };
+});
+check('Shiprocket Buy Now as the selector: COD goes below the product\'s Buy Now, not into the cart drawer', !srOrder.inDrawer && srOrder.afterBuyNow && srOrder.visible, JSON.stringify(srOrder));
 await page.close();
 
 // Above / Below Shopify's Buy it now.
