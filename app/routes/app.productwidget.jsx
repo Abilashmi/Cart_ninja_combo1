@@ -1150,7 +1150,7 @@ export default function ProductWidgetPage() {
                                                 options={[
                                                     { label: "List — stacked", value: "list" },
                                                     { label: "Carousel — horizontal slider", value: "carousel" },
-                                                    { label: "Grid — 2 columns", value: "grid" },
+                                                    { label: "Grid — 2 columns (1 on phones)", value: "grid" },
                                                 ]}
                                             />
                                             <Divider />
@@ -1233,10 +1233,32 @@ export default function ProductWidgetPage() {
                                             {sectionTitle.text}
                                         </div>
                                     )}
-                                    <div style={{ width: selectedCouponIds.length > 1 ? `${cardWidth}px` : "100%", maxWidth: "100%", display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
-                                        <div style={{ flex: 1, display: "grid" }}>{renderPreview()}</div>
-                                    </div>
+                                    {(() => {
+                                        // The banner layout (storefront: coupon-slider-render.liquid ps-slider--*):
+                                        // one card per selected coupon, up to 4, arranged as the store will.
+                                        const count = Math.min(Math.max(selectedCouponIds.length, 1), 4);
+                                        const many = count > 1;
+                                        const card = (i) => (
+                                            <div key={i} style={{ width: many && couponLayout === "carousel" ? `${cardWidth}px` : "100%", maxWidth: many && couponLayout === "carousel" ? "85%" : "100%", flex: many && couponLayout === "carousel" ? "0 0 auto" : undefined, display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
+                                                <div style={{ flex: 1, display: "grid" }}>{renderPreview()}</div>
+                                            </div>
+                                        );
+                                        const box = !many ? { display: "block" }
+                                            : couponLayout === "grid" ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }
+                                                : couponLayout === "list" ? { display: "flex", flexDirection: "column", gap: "12px" }
+                                                    : { display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "4px" };
+                                        return (
+                                            <div className="pw-layout" data-layout={many ? couponLayout : "single"} style={box}>
+                                                {Array.from({ length: count }, (_, i) => card(i))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
+                                {selectedCouponIds.length > 1 && (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                        {`${{ list: "List", carousel: "Carousel", grid: "Grid" }[couponLayout] || "Carousel"} layout: the preview repeats the coupon picked above to show how ${Math.min(selectedCouponIds.length, 4)} coupons are arranged.${couponLayout === "grid" ? " Phones show one column." : ""}`}
+                                    </Text>
+                                )}
                                 <Text as="p" variant="bodySm" tone="subdued">
                                     The preview updates in real-time as you change settings. This is how the widget will appear on your product pages.
                                 </Text>

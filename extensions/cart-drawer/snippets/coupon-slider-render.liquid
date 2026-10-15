@@ -417,13 +417,18 @@ function renderSlider(el,data,ctx){
 
   /* One coupon: nothing to slide, so no side arrows and the card fills the row */
   var single=itemsToRender.length===1;
+  /* Banner layout (Coupon Banner → Layout): carousel = the sliding row,
+     list = stacked full width, grid = 2 columns (1 on phones). Not saved =
+     carousel, how it always looked here. */
+  var layout=['list','carousel','grid'].indexOf(data.layout)!==-1?data.layout:'carousel';
+  var slides=layout==='carousel'&&!single;
   el.innerHTML=
-    '<div class="ps-slider'+(single?' ps-slider--single':'')+'">'
+    '<div class="ps-slider'+(single?' ps-slider--single':'')+' ps-slider--'+layout+'">'
       +(String(titleText).trim()===''?'':'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+escapeHtmlJs(titleText)+'</div>')
       +'<div class="ps-slider-row">'
-        +(single?'':'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>')
+        +(slides?'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>':'')
         +'<div class="ps-coupon-wrapper"></div>'
-        +(single?'':'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>')
+        +(slides?'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>':'')
       +'</div>'
     +'</div>';
 
@@ -611,4 +616,11 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 }
 .ps-nav:hover:not(:disabled){background:#f1f5f9;border-color:#94a3b8;transform:scale(1.08)}
 .ps-nav:disabled{opacity:0.35;cursor:default}
+/* List: coupons stacked, each the full width */
+.ps-slider--list .ps-coupon-wrapper{flex-direction:column;overflow:visible;scroll-snap-type:none}
+/* Grid: two columns, one on phones */
+.ps-slider--grid .ps-coupon-wrapper{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;scroll-snap-type:none}
+@media (max-width:480px){.ps-slider--grid .ps-coupon-wrapper{grid-template-columns:minmax(0,1fr)}}
+/* Both beat the cards' fixed inline widths */
+.ps-slider--list .ps-card,.ps-slider--grid .ps-card{flex:none !important;width:100% !important;min-width:0 !important;max-width:100% !important}
 </style>

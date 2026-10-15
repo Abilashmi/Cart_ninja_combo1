@@ -128,4 +128,28 @@ await page.goto('http://shop.test/products/tee');
 await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
 assert.equal((await titleOf()).length, 0, 'empty title: no heading at all');
 console.log('  ✓ section title: default, the merchant\'s text / size / colour / alignment, empty = none, escaped');
+// Banner layout (Coupon Banner → Layout): list = stacked full width, grid = 2
+// columns (1 on phones), carousel = the sliding row with arrows; not saved =
+// carousel, as before.
+const arrange = () => page.evaluate(() => {
+  const cards = [...document.querySelectorAll('ps-coupon-slider .ps-card')].map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width)]; });
+  return { cards, arrows: document.querySelectorAll('ps-coupon-slider .ps-nav').length, wrapW: Math.round(document.querySelector('ps-coupon-slider .ps-coupon-wrapper').getBoundingClientRect().width) };
+});
+config.data.temp1DefaultStyle = { headingText: 'Deal' };
+for (const [layout, width] of [['list', 1000], ['grid', 1000], ['grid', 390], ['carousel', 1000], [undefined, 1000]]) {
+  if (layout === undefined) delete config.data.layout; else config.data.layout = layout;
+  await page.setViewportSize({ width, height: 800 });
+  await page.goto('http://shop.test/products/tee');
+  await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+  const a = await arrange();
+  const [c1, c2] = a.cards;
+  if (layout === 'list' || (layout === 'grid' && width < 480)) {
+    assert.ok(c2[1] > c1[1] && c1[0] === c2[0] && Math.abs(c1[2] - a.wrapW) <= 4 && a.arrows === 0, `${layout} ${width}: stacked full width, no arrows ${JSON.stringify(a)}`);
+  } else if (layout === 'grid') {
+    assert.ok(c1[1] === c2[1] && c2[0] > c1[0] && Math.abs(c1[2] * 2 + 12 - a.wrapW) <= 4 && a.arrows === 0, `grid: two columns, no arrows ${JSON.stringify(a)}`);
+  } else {
+    assert.ok(c1[1] === c2[1] && c2[0] > c1[0] && a.arrows === 2, `${layout || 'not saved'}: a sliding row with arrows ${JSON.stringify(a)}`);
+  }
+}
+console.log('  ✓ layout: list stacked, grid 2 columns (1 on phones), carousel / not saved = sliding row');
 await browser.close();

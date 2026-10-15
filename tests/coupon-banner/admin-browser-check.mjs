@@ -240,6 +240,27 @@ await check('reopening the page shows each coupon\'s saved heading / subtext / b
   }
 });
 
+await check('banner layout: the preview arranges the coupons as the store will (list / grid / carousel)', async () => {
+  const data = pageData({ selected: ['gid://shopify/DiscountCodeNode/1', 'gid://shopify/DiscountCodeNode/2', 'gid://shopify/DiscountCodeNode/3'] });
+  const { page, context } = await open({ data });
+  await page.getByRole('button', { name: 'Layout' }).click();
+  const shape = () => page.evaluate(() => {
+    const box = document.querySelector('.pw-layout');
+    const kids = [...box.children].map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; });
+    return { layout: box.dataset.layout, kids };
+  });
+  await page.getByLabel('Banner layout').selectOption('list');
+  let g = await shape();
+  assert.ok(g.layout === 'list' && g.kids.length === 3 && g.kids.every((k, i) => i === 0 || (k[1] > g.kids[i - 1][1] && k[0] === g.kids[0][0])), `list stacked ${JSON.stringify(g)}`);
+  await page.getByLabel('Banner layout').selectOption('grid');
+  g = await shape();
+  assert.ok(g.layout === 'grid' && g.kids[0][1] === g.kids[1][1] && g.kids[2][1] > g.kids[0][1], `grid 2 columns ${JSON.stringify(g)}`);
+  await page.getByLabel('Banner layout').selectOption('carousel');
+  g = await shape();
+  assert.ok(g.layout === 'carousel' && g.kids[0][1] === g.kids[1][1] && g.kids[1][0] > g.kids[0][0], `carousel one row ${JSON.stringify(g)}`);
+  await context.close();
+});
+
 await check('Add a text offer: selected, editable, saved with no code; preview has no button', async () => {
   const { page, context, posts } = await open();
   await page.getByRole('button', { name: 'Add a text offer with no code' }).click();
