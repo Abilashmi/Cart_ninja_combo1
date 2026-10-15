@@ -2291,7 +2291,7 @@ const SCRIPT_BODY = String.raw`
 
   function renderToast(state) {
     if (!state.toast) return '';
-    return '<div role="alert" style="' + styleStr({
+    return '<div role="alert" data-brix-combo-toast style="' + styleStr({
       position: 'fixed', top: '20px', left: '50%', transform: 'translate(-50%, 0)', zIndex: '10000',
       background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c',
       fontSize: '13px', fontWeight: '600', padding: '12px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
@@ -2410,8 +2410,10 @@ const SCRIPT_BODY = String.raw`
     if (app) app.innerHTML = html;
 
     if (WeightCore.usesQuickShop(config.layout)) {
-      hostQuickShopPopup(root, state);
+      // Sticky offset first: it puts the redrawn progress back before
+      // anything measures layout (the bar move below measures its height).
       keepBelowStickyHeader(root, state);
+      hostQuickShopOverlays(root, state);
     }
 
     // Quick Shop product popup: the page behind doesn't scroll while it's open.
@@ -2442,17 +2444,24 @@ const SCRIPT_BODY = String.raw`
     return root.contains(el) || Boolean(state && state.qsPopHost && state.qsPopHost.contains(el));
   }
 
-  // The product popup is moved out of the page to the end of <body>. Themes
-  // wrap page content in transformed boxes (slide-in animations): inside
-  // one, a position:fixed popup is pinned to that box (centred on the whole
-  // long page, off screen) and stays under the theme's header. The host keeps
-  // the page's classes and colour variables (display:contents adds no box),
-  // and taps on it go through the page's own handlers.
-  function hostQuickShopPopup(root, state) {
+  // The bottom bar, the product popup and messages are moved out of the
+  // page to the end of <body>. Themes wrap page content in transformed boxes
+  // (slide-in animations): inside one, position:fixed is pinned to that box
+  // (a popup centred on the whole long page, off screen) and nothing can rise
+  // above the theme's header or chat widgets (knitnknot.in's chat frame
+  // covered Go to Cart). On <body> the bar is fixed to the bottom of the
+  // screen above them; the page gets room at its end so it never hides the
+  // last cards. The host keeps the page's classes and colour variables
+  // (display:contents adds no box), and taps go through the page's handlers.
+  function hostQuickShopOverlays(root, state) {
+    var bar = root.querySelector('.bxq-bar');
     var pop = root.querySelector('.bxq-pop');
+    var toasts = root.querySelectorAll('.bxq-toast, [data-brix-combo-toast]');
     var host = state.qsPopHost;
-    if (!pop) {
+    var page = root.querySelector('.bxq');
+    if (!bar && !pop && !toasts.length) {
       if (host) host.innerHTML = '';
+      if (page) page.style.paddingBottom = '';
       return;
     }
     if (!host || !host.isConnected) {
@@ -2466,11 +2475,13 @@ const SCRIPT_BODY = String.raw`
         host.addEventListener('change', events.change);
       }
     }
-    var page = root.querySelector('.bxq');
     host.className = page ? page.className : 'bxq';
     host.setAttribute('style', (page ? page.getAttribute('style') || '' : '') + ';display:contents;');
     host.innerHTML = '';
-    host.appendChild(pop);
+    if (bar) host.appendChild(bar);
+    if (pop) host.appendChild(pop);
+    for (var i = 0; i < toasts.length; i++) host.appendChild(toasts[i]);
+    if (page) page.style.paddingBottom = bar ? (Math.ceil(bar.getBoundingClientRect().height) + 32) + 'px' : '';
   }
 
   /* === QUICK SHOP: STICKY PROGRESS BELOW THE THEME'S HEADER === */
@@ -2618,6 +2629,8 @@ const SCRIPT_BODY = String.raw`
       // Quick Shop filters, menus and the bar's item list.
       if (WeightCore.usesQuickShop(state.config.layout) && QuickShop.applyUiAction(state.qsUi, action, el)) { render(root); return; }
 
+      // Checkout locked (the first offer is required, or over the max): say why.
+      if (action === 'checkout-locked') { showToast(root, state, el.getAttribute('data-value') || 'Add more items to check out.'); return; }
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
       if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
       if (action === 'qty-inc' && product) {

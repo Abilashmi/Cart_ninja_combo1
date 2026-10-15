@@ -180,6 +180,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
       return;
     }
     if (action === 'reset') { setSelection({}); setUi({ ...ui, sheetOpen: false }); return; }
+    if (action === 'checkout-locked') { shopify.toast.show(el.getAttribute('data-value') || 'Add more items to check out.'); return; }
     if (action === 'checkout' || action === 'cod') shopify.toast.show('Checkout works on your live combo page.');
   };
 

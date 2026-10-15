@@ -191,7 +191,7 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('savings = compare-at + box discount, "more coming up"', bar3.includes('₹72.30 saved, more coming up!'), bar3);
   const fills = await page.$$eval('.bxq-miles-fill, .bxq-fill, .bxq-step-fill, .bxq-slim-fill', (els) => els.map((e) => [getComputedStyle(e).display, e.getBoundingClientRect().width]));
   check('progress fill shows on a theme that hides div:empty', fills.length > 0 && fills.every(([d, w]) => d !== 'none' && w > 0), JSON.stringify(fills));
-  check('bottom bar sits above theme sticky/fixed bits (z-index 999)', (await page.$eval('.bxq-bar', (e) => getComputedStyle(e).zIndex)) === '999');
+  check('bottom bar sits above theme sticky/fixed bits and chat widgets (on <body>, top layer)', (await page.$eval('.bxq-bar', (e) => Number(getComputedStyle(e).zIndex) >= 2147483646 && e.closest('[data-brix-combo-popup]')?.parentElement === document.body)));
   check('milestone 1 hit, 2 is next', (await page.$$eval('.bxq-mile', (els) => els.map((e) => e.className))).join('|').match(/is-hit.*\|.*is-next/) !== null);
   await plus(page, 3);
   check('celebrates once, not on every render', (await page.$('.bxq-bar.is-celebrate')) === null);
@@ -580,6 +580,34 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.click('.bxq-pop-cta [data-combo-action="qty-inc"]');
   await page.waitForTimeout(300);
   check('transformed theme: Add works and closes it', !(await page.$('.bxq-pop')) && (await text(page, '.bxq-bar')).includes('1 Item'));
+  await page.close();
+}
+
+/* A chat widget frame over the bottom-right (knitnknot.in: 230×84, z-index
+   2147483640) inside a transformed theme: Go to Cart stays tappable; locked
+   checkout (first offer required) explains itself instead of doing nothing. */
+{
+  const { page, log } = await openCombo({ ...baseConfig, qs_require_first_tier: true }, wp(QUANTITY), {
+    viewport: { width: 390, height: 664 },
+    themeCss: '.rte{transform:matrix(1,0,0,1,0,0)}',
+  });
+  await page.evaluate(() => { const f = document.createElement('iframe'); f.id = 'chat'; f.setAttribute('style', 'position:fixed !important;bottom:0;right:0;width:230px;height:84px;border:0;background:transparent;z-index:2147483640 !important'); document.body.appendChild(f); });
+  await page.waitForSelector(card(1));
+  await plus(page, 1);
+  await page.waitForTimeout(300);
+  const go = '.bxq-bar [data-combo-action="checkout-locked"], .bxq-bar .bxq-go';
+  const hit = () => page.evaluate((sel) => { const b = document.querySelector(sel); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return Boolean(t && t.closest('.bxq-go')); }, go);
+  check('chat widget over the corner: Go to Cart is what you tap', await hit());
+  check('locked (1 item, first offer at 3): dimmed but not dead', await page.$eval(go, (e) => e.classList.contains('is-locked') && !e.disabled && e.getAttribute('aria-disabled') === 'true'));
+  await page.click(go, { force: true }); // aria-disabled: Playwright won't tap it, shoppers can
+  await page.waitForTimeout(200);
+  const toast = await page.evaluate(() => (document.querySelector('[data-brix-combo-toast]') || {}).textContent || '');
+  check('locked: a tap says why ("Add 2 items more to unlock 5% OFF")', toast.includes('Add 2 items more to unlock 5% OFF') && log.navigations.length === 0, toast);
+  check('the message shows on screen (not lost inside the transformed page)', await page.evaluate(() => { const t = document.querySelector('[data-brix-combo-toast]'); const r = t.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; }));
+  await plus(page, 2); await plus(page, 3);
+  await page.waitForTimeout(300);
+  check('first offer reached: a real Go to Cart, still on top of the chat frame', await page.$eval('.bxq-bar .bxq-go', (e) => e.getAttribute('data-combo-action') === 'checkout' && !e.disabled) && await hit());
+  check('the page keeps room at its end for the bar', await page.evaluate(() => parseInt(document.querySelector('.bxq').style.paddingBottom, 10) > 40));
   await page.close();
 }
 

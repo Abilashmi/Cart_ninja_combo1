@@ -620,6 +620,9 @@ export function createQuickShopKit(core) {
         saved: saved > 0.004 ? core.fillMessage(savedTemplate, { saved: money(saved, symbol) }) : '',
         total: money(finalPrice, symbol),
         canCheckout: canCheckout(config, box, items, tiers) && !ui.checkingOut,
+        // Why checkout is locked (first offer required, or over the max), shown
+        // when the shopper taps the dimmed button instead of nothing happening.
+        lockedWhy: items > 0 && !ui.checkingOut && !canCheckout(config, box, items, tiers) ? (bar.text || 'Add more items to check out.') : '',
         checkingOut: !!ui.checkingOut,
         sheetOpen: !!ui.sheetOpen,
         celebrate: !!ui.celebrate,
@@ -946,8 +949,14 @@ export function createQuickShopKit(core) {
     html += '</button>';
 
     var label = bar.checkingOut ? 'Adding…' : opt(config, 'qs_btn_label');
-    var checkoutBtn = cod.shown && codPlacement === 'replace' ? '' : '<button type="button" class="bxq-go" data-combo-action="checkout"' + (disabled ? ' disabled' : '') + '>' + esc(label) + '</button>';
-    var codBtn = cod.shown ? '<button type="button" class="bxq-cod" data-combo-action="cod"' + (disabled ? ' disabled' : '') + (cod.css ? ' style="' + esc(cod.css) + '"' : '') + '>' + (cod.icon || '') + esc(cod.text || 'Cash on Delivery') + '</button>' : '';
+    // Locked (not busy): looks dimmed but still answers a tap with the reason.
+    var lockAttrs = bar.lockedWhy
+      ? ' aria-disabled="true" data-value="' + esc(bar.lockedWhy) + '"'
+      : (disabled ? ' disabled' : '');
+    var goAction = bar.lockedWhy ? 'checkout-locked' : 'checkout';
+    var codAction = bar.lockedWhy ? 'checkout-locked' : 'cod';
+    var checkoutBtn = cod.shown && codPlacement === 'replace' ? '' : '<button type="button" class="bxq-go' + (bar.lockedWhy ? ' is-locked' : '') + '" data-combo-action="' + goAction + '"' + lockAttrs + '>' + esc(label) + '</button>';
+    var codBtn = cod.shown ? '<button type="button" class="bxq-cod' + (bar.lockedWhy ? ' is-locked' : '') + '" data-combo-action="' + codAction + '"' + lockAttrs + (cod.css ? ' style="' + esc(cod.css) + '"' : '') + '>' + (cod.icon || '') + esc(cod.text || 'Cash on Delivery') + '</button>' : '';
     html += '<span class="bxq-actions' + (cod.shown ? ' has-cod' : '') + '">' + (codPlacement === 'below' ? checkoutBtn + codBtn : codBtn + checkoutBtn) + '</span>';
     html += '</div></div>';
     return html;
@@ -1351,7 +1360,7 @@ export const QUICK_SHOP_CSS = `
 .bxq--m .bxq-actions.has-cod{flex:1 1 100%;}
 .bxq--m .bxq-actions.has-cod button{flex:1;}
 .bxq--m .bxq-go,.bxq--m .bxq-cod{padding:var(--bxq-btn-py-m,12px) var(--bxq-btn-px-m,16px);font-size:var(--bxq-btn-fs-m,15px);}
-.bxq-go:disabled,.bxq-cod:disabled{opacity:.45;cursor:not-allowed;}
+.bxq-go:disabled,.bxq-cod:disabled,.bxq-go.is-locked,.bxq-cod.is-locked{opacity:.45;cursor:not-allowed;}
 .bxq-ring{position:relative;width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
 .bxq-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}
 .bxq-ring-bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:4;}
@@ -1402,5 +1411,7 @@ export const QUICK_SHOP_CSS = `
 @keyframes bxq-pop-in{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:none;}}
 @keyframes bxq-pop-up{from{transform:translateY(40px);opacity:.6;}to{transform:none;opacity:1;}}
 @media (prefers-reduced-motion: reduce){.bxq-pop-scrim,.bxq-pop-box{animation:none !important;}}
+[data-brix-combo-popup] .bxq-bar{position:fixed;left:12px;right:12px;bottom:12px;margin:0 auto;z-index:2147483646;}
+.bxq--m[data-brix-combo-popup] .bxq-bar{left:8px;right:8px;bottom:8px;}
 @media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
 `;
