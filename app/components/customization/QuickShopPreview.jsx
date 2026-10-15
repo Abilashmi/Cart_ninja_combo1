@@ -167,6 +167,8 @@ export default function QuickShopPreview({ config, device, products = [], collec
     if (kit.applyUiAction(nextUi, action, el)) { setUi(nextUi); return; }
     const product = productById.get(String(el.getAttribute('data-product-id')));
     if ((action === 'qty-inc' || action === 'qty-dec') && product) {
+      // The popup's Add puts it in the box and closes the popup.
+      if (el.hasAttribute('data-close-popup')) setUi({ ...ui, popup: null, popupImage: 0 });
       const vid = activeVariantId(product);
       setQty(vid, product.id, (selection[vid]?.qty || 0) + (action === 'qty-inc' ? 1 : -1));
       return;

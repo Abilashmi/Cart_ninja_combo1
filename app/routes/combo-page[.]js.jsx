@@ -2497,7 +2497,12 @@ const SCRIPT_BODY = String.raw`
 
       if (action === 'card-add' && product) { onCardAddClick(root, state, product); return; }
       if (action === 'ai-pick' && product) { onAiPick(root, state, product); return; }
-      if (action === 'qty-inc' && product) { onCardInc(root, state, product); return; }
+      if (action === 'qty-inc' && product) {
+        // Quick Shop popup: its Add puts the product in the box and closes it.
+        if (el.hasAttribute('data-close-popup') && state.qsUi) { state.qsUi.popup = null; state.qsUi.popupImage = 0; }
+        onCardInc(root, state, product);
+        return;
+      }
       if (action === 'qty-dec' && product) { onCardDec(root, state, product); return; }
       if (action === 'popup-close') { state.popupOpenProductId = null; render(root); return; }
       if (action === 'tab-pick') { state.activeTab = el.getAttribute('data-tab') || 'all'; render(root); return; }

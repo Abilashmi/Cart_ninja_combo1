@@ -1083,7 +1083,10 @@ export function createQuickShopKit(core) {
       html += '<div class="bxq-variant is-static">' + esc(card.weightText) + '</div>';
     }
     if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
-    html += '<div class="bxq-pop-cta">' + renderCardCta(model, card) + '</div>';
+    // Add closes the popup (data-close-popup); once in the box, the stepper stays.
+    var cta = renderCardCta(model, card);
+    if (card.available && !card.qty) cta = cta.replace('<button type="button" class="bxq-cta"', '<button type="button" class="bxq-cta" data-close-popup="1"');
+    html += '<div class="bxq-pop-cta">' + cta + '</div>';
     if (card.summary) html += '<p class="bxq-pop-desc">' + esc(card.summary) + '</p>';
     html += '</div></div></div>';
     return html;
