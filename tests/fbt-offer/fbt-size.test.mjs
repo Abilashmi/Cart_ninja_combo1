@@ -51,3 +51,18 @@ test('pick: the exact size beats a range; the default colour is kept when it has
   assert.deepEqual(pickSizeVariant({ optionNames: ['Title'], variants: [{ id: 'x', available: true, opts: ['Default Title'] }] }, '12 Years'), { status: 'none' }, 'one-size products are left as they are');
   assert.deepEqual(pickSizeVariant(top, ''), { status: 'none' }, 'no size on the page = no matching');
 });
+
+test('replace: a suggestion without the size gives its place to a spare in that size', async () => {
+  const { applySizeMatch } = await import('../../app/utils/fbt-size.shared.js');
+  const sized = (id, sizes) => ({ id, optionNames: ['Size'], variants: sizes.map((s, i) => ({ id: `${id}-${i}`, available: true, price: 100 + i, compareAt: 0, opts: [s] })) });
+  const toy = { id: 'toy', optionNames: ['Title'], variants: [{ id: 'toy-0', available: true, price: 50, opts: ['Default Title'] }] };
+  const products = [sized('top', ['10 Y', '12 Y']), sized('jeans', ['8 Y']), sized('skirt', ['12 Y'])];
+  const spares = [sized('dress', ['6 Y']), sized('shorts', ['11-12 Y']), toy, sized('top', ['12 Y'])];
+  const out = applySizeMatch(products, '12 Years', {}, spares);
+  assert.deepEqual(out.map((p) => [p.id, p.variantId, Boolean(p.replacement)]), [['top', 'top-1', false], ['shorts', 'shorts-0', true], ['skirt', 'skirt-0', false]], 'shorts take the jeans\' place; dress (no 12) and the shown top are skipped');
+  const noSpareInSize = applySizeMatch(products, '12 Years', {}, [toy]);
+  assert.deepEqual(noSpareInSize.map((p) => p.id), ['top', 'toy', 'skirt'], 'no spare in the size: a sizeless spare');
+  assert.deepEqual(applySizeMatch(products, '12 Years', {}, []).map((p) => p.id), ['top', 'skirt'], 'no spares (rules made before): like hide');
+  assert.deepEqual(applySizeMatch(products, '12 Years', { missing: 'hide' }, spares).map((p) => p.id), ['top', 'skirt']);
+  assert.equal(applySizeMatch(products, '12 Years', { missing: 'note' }, spares)[1].sizeMissing, '12 Years');
+});

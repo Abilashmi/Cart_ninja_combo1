@@ -1711,9 +1711,14 @@ export default function FBTPage() {
                           <InlineGrid columns={2} gap="300">
                             <Select
                               label="Suggestion without that size in stock"
-                              options={[{ label: 'Hide it', value: 'hide' }, { label: 'Show it greyed: "Not in 12 Years"', value: 'note' }]}
+                              options={[
+                                { label: 'Replace it with another suggestion in that size', value: 'replace' },
+                                { label: 'Hide it', value: 'hide' },
+                                { label: 'Show it greyed: "Not in 12 Years"', value: 'note' },
+                              ]}
                               value={fbtLayout.sizeMatchMissing}
                               onChange={setLayoutKey('sizeMatchMissing')}
+                              helpText={fbtLayout.sizeMatchMissing === 'replace' ? "Uses spare suggestions saved by Configure AI / Regenerate Suggestions (run it once after turning this on). No spare in that size: one with no sizes (e.g. a toy) takes the slot, else it's left out." : undefined}
                             />
                             <TextField
                               label="Size option name"

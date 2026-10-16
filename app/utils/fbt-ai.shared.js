@@ -37,8 +37,10 @@ export function toFbtOfferShape(p) {
 // A product with no offers from any tier gets no rule at all — never a
 // pairing invented just to fill the slot; see the note in
 // ai-product-knowledge.js for why that matters more than covering 100%.
-export function buildAiFbtRules(catalog, coPurchaseMap, countPerProduct) {
-  const n = Math.max(1, Math.min(10, Number(countPerProduct) || 3));
+// maxCount: a higher cap for callers that keep spare picks past what's shown
+// (FBT "Match the shopper's size" → Replace).
+export function buildAiFbtRules(catalog, coPurchaseMap, countPerProduct, { maxCount = 10 } = {}) {
+  const n = Math.max(1, Math.min(maxCount, Number(countPerProduct) || 3));
 
   const byNumericId = new Map(catalog.map((p) => [p.numericId, p]));
   const byProductType = new Map();

@@ -40,30 +40,68 @@ const browser = await chromium.launch();
 
 // products: a whole /products.json catalog instead of catalog(); pageProduct:
 // the viewed product's /products/joggers.js (its options and variants).
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '' }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
-  const log = { added: [] };
+  const log = { added: [], hits: { config: 0, catalog: 0 } };
   page.on('pageerror', (e) => check('no page errors', false, e.message));
   const config = { status: 'success', data: { selectedTemp: 'fbt1', isEnabled: true, temp1: { layout: 'carousel', interactionType: 'classic', showPrices: true, showAddAllButton: true, widgetPlacement: 'below_cart', ...temp1 }, condition } };
-  await page.route('https://int.thebrix.io/**', (r) => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
-  await page.route('http://shop.test/**', (r) => {
+  await page.route('https://int.thebrix.io/**', (r) => (log.hits.config += 1) && r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
+  await page.route('http://shop.test/**', async (r) => {
     const url = new URL(r.request().url());
+    if (url.pathname === '/products.json') { log.hits.catalog += 1; if (catalogDelay) await new Promise((res) => setTimeout(res, catalogDelay)); }
     if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(products ? { products } : catalog(capAvailable, socksVariants)) });
     if (url.pathname === '/products/joggers.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(pageProduct || { options: [], variants: [] }) });
     if (url.pathname === '/cart.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cart }) });
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
     if (url.hostname === 'img.test' || url.pathname.endsWith('.svg')) return r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#16a34a"/></svg>' });
     // The product page form: variant 1005 of the viewed product (id 100) is selected.
-    return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;font-family:Arial"><form action="/cart/add"><input type="hidden" name="id" value="1005"><button name="add" type="submit">Add to cart</button></form>${fbt}</body></html>` });
+    return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>${themeCss}</style></head><body style="margin:0;font-family:Arial"><form action="/cart/add"><input type="hidden" name="id" value="1005"><button name="add" type="submit">Add to cart</button></form>${fbt}</body></html>` });
   });
   await page.goto('http://shop.test/products/joggers');
+  if (catalogDelay) return { page, log };
   await page.waitForSelector('ps-fbt-widget .ps-product-card, ps-fbt-widget .ps-product-row', { timeout: 10000 });
   return { page, log };
 }
 
 const OFFER = { type: 'percentage', value: 10, text: 'Buy all {count} together and save {discount}' };
+
+/* L. Loading: placeholders while products load; a widget the theme re-creates
+   (Dawn re-renders the product section on every size click) draws again at
+   once from what this visit already downloaded, never hidden in between. */
+{
+  // Dawn hides every empty div: the placeholders must still show.
+  const { page, log } = await open({ condition: [{ id: 'rl', displayScope: 'per_product', triggerProducts: [{ id: 'gid://shopify/Product/100' }], fbtProducts: [SOCKS, CAP] }], catalogDelay: 2500, themeCss: 'div:empty{display:none}' });
+  await page.waitForSelector('ps-fbt-widget .ps-fbt-skel', { timeout: 5000 });
+  const blocks = await page.$$eval('ps-fbt-widget .ps-fbt-skel', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), getComputedStyle(e).backgroundColor]; }));
+  check('loading: grey blocks visible on a theme that hides empty divs', blocks.length >= 10 && blocks.every(([w, h, bg]) => w > 0 && h > 0 && bg === 'rgb(230, 232, 236)'), JSON.stringify(blocks.slice(0, 3)));
+  check('loading: the real heading shows at once', (await page.textContent('ps-fbt-widget .ps-fbt-title')) === 'Frequently Bought Together');
+  await page.screenshot({ path: path.join(shotDir, 'skeleton.png') });
+  const skel = await page.evaluate(() => { const w = document.querySelector('ps-fbt-widget'); return { shown: getComputedStyle(w).display, cards: w.querySelectorAll('.ps-product-card').length, busy: !!w.querySelector('[aria-busy="true"]') }; });
+  check('loading: placeholders shown in place (no empty gap, no pop-in)', skel.shown === 'block' && skel.cards === 0 && skel.busy, JSON.stringify(skel));
+  await page.waitForSelector('ps-fbt-widget .ps-product-card', { timeout: 6000 });
+  check('loading: real cards replace them', (await page.$$('ps-fbt-widget .ps-fbt-skel')).length === 0);
+  const hitsBefore = { ...log.hits };
+  // What a Dawn-style theme does on a size click: the section's HTML (with a new widget) replaces the old.
+  const samples = await page.evaluate(async () => {
+    const old = document.querySelector('ps-fbt-widget');
+    const fresh = document.createElement('ps-fbt-widget');
+    for (const a of old.attributes) fresh.setAttribute(a.name, a.value);
+    fresh.style.display = 'none';
+    const out = [];
+    old.replaceWith(fresh);
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      const w = document.querySelector('ps-fbt-widget');
+      out.push(`${getComputedStyle(w).display}:${w.querySelectorAll('.ps-product-card').length}`);
+    }
+    return out;
+  });
+  check('re-created widget: cards on the next frames, never hidden', samples.slice(1).every((x) => x === 'block:2'), samples.join(' | '));
+  check('re-created widget: nothing downloaded again', log.hits.config === hitsBefore.config && log.hits.catalog === hitsBefore.catalog, JSON.stringify({ before: hitsBefore, after: log.hits }));
+  await page.close();
+}
 
 /* S. Match the shopper's size (AI-Powered mode) */
 {
@@ -101,6 +139,22 @@ const OFFER = { type: 'percentage', value: 10, text: 'Buy all {count} together a
   await page.locator('ps-fbt-widget .ps-fbt-addall').click();
   await page.waitForFunction(() => /Added/.test(document.querySelector('ps-fbt-widget .ps-fbt-addall').textContent));
   check('note mode: Add all skips the greyed jeans', (log.added[0]?.items || []).map((i) => String(i.id)).join(',') === '9302,9201', JSON.stringify(log.added[0]));
+  await page.close();
+
+  // Replace (the default): a spare AI pick in that size takes the jeans' place.
+  const SHORTS = { id: 'gid://shopify/Product/205', title: 'Shorts', handle: 'shorts', price: '400' };
+  const DRESS = { id: 'gid://shopify/Product/206', title: 'Dress', handle: 'dress', price: '900' };
+  const withSpares = [...products,
+    { id: 205, options: [{ name: 'Size', position: 1 }], variants: [v(9501, '11-12 Y', true, '420.00')] },
+    { id: 206, options: [{ name: 'Size', position: 1 }], variants: [v(9601, '6 Y')] }];
+  ({ page, log } = await open({ condition: [sizeRule({ backupProducts: [DRESS, SHORTS] })], temp1: { sizeMatchLive: true, showVariantPicker: true }, products: withSpares, pageProduct }));
+  check('replace: shorts (in 11-12 Y) take the jeans\' place, dress (no 12) skipped', (await titles(page)).join('|') === 'Top|Shorts|Socks', (await titles(page)).join('|'));
+  await page.locator('ps-fbt-widget .ps-fbt-addall').click();
+  await page.waitForFunction(() => /Added/.test(document.querySelector('ps-fbt-widget .ps-fbt-addall').textContent));
+  check('replace: Add all adds the shorts in 11-12 Y', (log.added[0]?.items || []).map((i) => String(i.id)).join(',') === '9302,9501,9201', JSON.stringify(log.added[0]));
+  await page.evaluate(() => { document.querySelector('form[action*="/cart/add"] [name="id"]').value = '1006'; });
+  await page.waitForFunction(() => [...document.querySelectorAll('ps-fbt-widget .ps-product-title')].map((e) => e.textContent).join('|') === 'Top|Jeans|Socks', null, { timeout: 4000 }).catch(() => {});
+  check('replace: at 10 Years the jeans come back (no spare needed)', (await titles(page)).join('|') === 'Top|Jeans|Socks', (await titles(page)).join('|'));
   await page.close();
 
   ({ page } = await open({ condition: [sizeRule()], temp1: { sizeMatch: true, sizeMatchLive: false }, products, pageProduct }));

@@ -129,3 +129,12 @@ test('shapeAiUpsellRules ids are unique per rule (no accidental collisions when 
   const ids = upsellRules.map((r) => r.id);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('maxCount: spare picks past 10 for size matching, ranked the same way; the default cap stays 10', () => {
+  const catalog = Array.from({ length: 15 }, (_, i) => product(String(i + 1), `Tee ${i + 1}`, 'Tops', String(100 + i)));
+  const first = (out) => out.rules.find((r) => r.trigger_products[0].id === catalog[0].gid).fbt_products;
+  assert.equal(first(buildAiFbtRules(catalog, new Map(), 14)).length, 10, 'default: at most 10');
+  const spares = first(buildAiFbtRules(catalog, new Map(), 14, { maxCount: 20 }));
+  assert.equal(spares.length, 14);
+  assert.deepEqual(spares.slice(0, 3).map((p) => p.id), first(buildAiFbtRules(catalog, new Map(), 3)).map((p) => p.id), 'the first n are what n alone picks');
+});

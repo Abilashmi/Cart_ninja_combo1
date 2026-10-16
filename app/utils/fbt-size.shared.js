@@ -69,3 +69,40 @@ export function pickSizeVariant(product, pageSize, preferredName = '') {
   }
   return best ? { status: 'match', variant: best } : { status: 'missing' };
 }
+
+/**
+ * The suggestions for the shopper's size.
+ *   products: the shown suggestions; spares: the rule's backup picks (AI mode)
+ *   missing: 'replace' (default) | 'hide' | 'note'
+ * Each product in that size gets it picked (variantId / price follow); one
+ * without it is, by `missing`: replaced in its place by the next spare that
+ * comes in that size (else a spare with no size option, e.g. a toy), else
+ * dropped; dropped; or kept with sizeMissing set (shown greyed). Products
+ * with no size option stay as they are. Spares are never part of a bundle
+ * offer (replacement: true).
+ */
+export function applySizeMatch(products, size, { missing = 'replace', option = '' } = {}, spares = []) {
+  const take = (p, r) => ({ ...p, variantId: r.variant.id, liveVariantId: r.variant.id, price: r.variant.price, compareAt: r.variant.compareAt });
+  const shownIds = new Set((products || []).map((p) => String(p.id)));
+  const queue = { match: [], none: [] };
+  if (missing === 'replace') {
+    for (const s of spares || []) {
+      if (shownIds.has(String(s.id))) continue;
+      const r = pickSizeVariant(s, size, option);
+      if (r.status === 'match') queue.match.push({ ...take(s, r), replacement: true });
+      else if (r.status === 'none') queue.none.push({ ...s, replacement: true });
+    }
+  }
+  const out = [];
+  for (const p of products || []) {
+    const r = pickSizeVariant(p, size, option);
+    if (r.status === 'match') out.push(take(p, r));
+    else if (r.status === 'none') out.push(p);
+    else if (missing === 'note') out.push({ ...p, sizeMissing: size });
+    else if (missing === 'replace') {
+      const next = queue.match.shift() || queue.none.shift();
+      if (next) out.push(next);
+    }
+  }
+  return out;
+}

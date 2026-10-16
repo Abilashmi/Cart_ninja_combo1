@@ -161,7 +161,7 @@ export function pickFbtLayout(tpl) {
   // AI-Powered mode → "Match the shopper's size" (app/utils/fbt-size.shared.js):
   // the merchant's choice; the widget follows sizeMatchLive, saved true only in AI mode.
   out.sizeMatch = tpl?.sizeMatch === true;
-  out.sizeMatchMissing = tpl?.sizeMatchMissing === 'note' ? 'note' : 'hide';
+  out.sizeMatchMissing = ['hide', 'note'].includes(tpl?.sizeMatchMissing) ? tpl.sizeMatchMissing : 'replace';
   out.sizeMatchOption = typeof tpl?.sizeMatchOption === 'string' ? tpl.sizeMatchOption.trim().slice(0, 40) : '';
   // The offer text's look rides along (loaded and saved with the layout).
   return { ...out, ...pickFbtOfferStyle(tpl) };

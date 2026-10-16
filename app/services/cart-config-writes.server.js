@@ -1138,6 +1138,14 @@ export async function ensureFbtOfferColumns(db) {
   ]);
 }
 
+// AI rules' spare picks (FBT size matching → Replace). Self-healing column.
+const FBT_SPARE_PICKS = 6;
+export async function ensureFbtBackupColumn(db) {
+  await ensureColumns(db, 'fbt_rules.backup_products', 'fbt_rules', [
+    { name: 'backup_products', ddl: '`backup_products` TEXT NULL' },
+  ]);
+}
+
 export async function ensureFbtRulesSourceColumn(db) {
   await ensureColumns(db, 'fbt_rules.source', 'fbt_rules', [
     { name: 'source', ddl: "`source` VARCHAR(10) NOT NULL DEFAULT 'manual'" },
@@ -1165,6 +1173,8 @@ export async function rebuildFbtLegacyConditionForMode(shop, mode) {
     triggerCollections: parseJsonSafe(r.trigger_collections, []),
     fbtProducts: parseJsonSafe(r.fbt_products, []),
     aiGenerated: mode === 'ai',
+    // Spare picks for size matching (AI rules only; absent elsewhere).
+    ...(r.backup_products ? { backupProducts: parseJsonSafe(r.backup_products, []) } : {}),
   }));
   await writeFbtLegacyCondition(db, shop, condition);
   await db.execute('UPDATE fbt_widget SET selectedMode = ? WHERE shopDomain = ?', [mode, shop]);
@@ -1280,16 +1290,24 @@ async function fetchCoPurchaseMap(db, shop, countPerProduct) {
 // decision logic itself lives in the pure, unit-tested
 // app/utils/fbt-ai.shared.js so it can be tested without a live DB pool or
 // Admin GraphQL client.
-async function computeAiPairingRules(admin, shop, countPerProduct) {
+// spares: extra picks per product past the n shown, ranked the same way, kept
+// as backup_products (FBT size matching swaps them in for a suggestion that
+// doesn't come in the shopper's size).
+async function computeAiPairingRules(admin, shop, countPerProduct, { spares = 0 } = {}) {
   const db = getDb();
   const n = Math.max(1, Math.min(10, Number(countPerProduct) || 3));
+  const total = n + Math.max(0, Math.min(10, spares));
 
   const [catalog, coPurchaseMap] = await Promise.all([
     fetchCatalogForAiFbt(admin),
-    fetchCoPurchaseMap(db, shop, n),
+    fetchCoPurchaseMap(db, shop, total),
   ]);
 
-  const { rules, covered } = buildAiFbtRules(catalog, coPurchaseMap, n);
+  const built = buildAiFbtRules(catalog, coPurchaseMap, total, { maxCount: 20 });
+  const { covered } = built;
+  const rules = built.rules.map((r) => (total > n
+    ? { ...r, fbt_products: r.fbt_products.slice(0, n), backup_products: r.fbt_products.slice(n) }
+    : r));
 
   return {
     rules,
@@ -1315,7 +1333,9 @@ export async function generateAiFbtRules(admin, shop, countPerProduct, { pinned 
   const db = getDb();
   await ensureFbtRulesSourceColumn(db);
 
-  const auto = await computeAiPairingRules(admin, shop, countPerProduct);
+  await ensureFbtBackupColumn(db);
+
+  const auto = await computeAiPairingRules(admin, shop, countPerProduct, { spares: FBT_SPARE_PICKS });
   const { n, totalProducts, truncated } = auto;
   let { rules, covered, productsSkipped } = auto;
   let pinnedProducts = 0;
@@ -1324,6 +1344,14 @@ export async function generateAiFbtRules(admin, shop, countPerProduct, { pinned 
     covered = rules.length;
     productsSkipped = Math.max(0, totalProducts - covered);
   }
+  // Spares per product: the automatic picks not already shown (after the
+  // merchant's instructions took their places).
+  const picksByTrigger = new Map(auto.rules.map((r) => [String(r.trigger_products[0]?.id), [...r.fbt_products, ...(r.backup_products || [])]]));
+  rules = rules.map((r) => {
+    const shown = new Set([String(r.trigger_products[0]?.id), ...r.fbt_products.map((p) => String(p.id))]);
+    const backups = (picksByTrigger.get(String(r.trigger_products[0]?.id)) || []).filter((p) => !shown.has(String(p.id))).slice(0, FBT_SPARE_PICKS);
+    return { ...r, backup_products: backups };
+  });
 
   await db.execute('DELETE FROM fbt_rules WHERE shop_domain = ? AND source = ?', [shop, 'ai']);
 
@@ -1343,12 +1371,12 @@ export async function generateAiFbtRules(admin, shop, countPerProduct, { pinned 
       params.push(
         shop, r.name, 'specific_products',
         JSON.stringify(r.trigger_products), null, JSON.stringify(r.fbt_products),
-        start + idx, 'ai'
+        start + idx, 'ai', r.backup_products?.length ? JSON.stringify(r.backup_products) : null
       );
     });
     await db.execute(
-      `INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source)
-       VALUES ${chunk.map(() => '(?,?,?,?,?,?,1,?,?)').join(',')}`,
+      `INSERT INTO fbt_rules (shop_domain, name, trigger_scope, trigger_products, trigger_collections, fbt_products, is_active, sort_order, source, backup_products)
+       VALUES ${chunk.map(() => '(?,?,?,?,?,?,1,?,?,?)').join(',')}`,
       params
     );
   }

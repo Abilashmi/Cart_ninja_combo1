@@ -5,6 +5,58 @@
 (function(){
   if(customElements.get('ps-fbt-widget'))return;
 
+  /* Downloads shared by every copy of the widget for this page visit. Themes
+     that re-render the product section on a size change (Dawn and its kin)
+     throw the widget away and create a new one; with these it draws again at
+     once instead of hiding, re-downloading and popping back in. Stock and
+     prices are kept 60 s; the Add button always checks stock fresh. */
+  var CACHE=window.__brixFbtCache||(window.__brixFbtCache={});
+  function cachedJson(url,ttl){
+    var hit=CACHE[url];
+    if(hit&&Date.now()-hit.at<(ttl||60000))return hit.promise;
+    var promise=fetch(url,{headers:{Accept:'application/json'}}).then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();});
+    CACHE[url]={at:Date.now(),promise:promise};
+    promise.catch(function(){if(CACHE[url]&&CACHE[url].promise===promise)delete CACHE[url];});
+    return promise;
+  }
+
+  /* Placeholder cards while the products load, shaped like the widget that's
+     coming: the real heading, cards (picture, title, price, button) or list
+     rows, and the total + Add bar. The grey blocks are spans styled as blocks
+     with !important: themes such as Dawn hide every empty div (div:empty),
+     which left only a white box. */
+  function renderSkeleton(el,config,count,isList){
+    if(!document.getElementById('ps-fbt-skel-css')){
+      var st=document.createElement('style');st.id='ps-fbt-skel-css';
+      st.textContent='@keyframes ps-fbt-shimmer{0%{background-position:150% 0}100%{background-position:-50% 0}}'
+        +'.ps-fbt-skel{display:block!important;visibility:visible!important;background-color:#e6e8ec!important;background-image:linear-gradient(100deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.75) 50%,rgba(255,255,255,0) 70%)!important;background-size:200% 100%!important;background-repeat:no-repeat!important;animation:ps-fbt-shimmer 1.2s ease-in-out infinite;border-radius:6px;}'
+        +'@media (prefers-reduced-motion:reduce){.ps-fbt-skel{animation:none}}';
+      document.head.appendChild(st);
+    }
+    var bar=function(css){return '<span class="ps-fbt-skel" aria-hidden="true" style="'+css+'"></span>';};
+    var n=Math.max(1,Math.min(count,isList?3:4));
+    var cards='';
+    for(var i=0;i<n;i++){
+      cards+=isList
+        ?'<span style="display:flex!important;align-items:center;gap:12px;padding:'+(config.cardPadding+2)+'px 4px;'+(i<n-1?'border-bottom:1px solid '+config.borderColor+';':'')+'">'
+          +bar('width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;flex-shrink:0;border-radius:'+config.imageRadius+'px;')
+          +'<span style="display:block!important;flex:1;min-width:0;">'+bar('height:12px;width:75%;')+bar('height:12px;width:45%;margin-top:8px;')+'</span>'
+          +bar('width:58px;height:28px;flex-shrink:0;')+'</span>'
+        :'<span style="display:flex!important;flex-direction:column;align-items:center;gap:8px;flex:0 0 '+config.cardWidth+'px;width:'+config.cardWidth+'px;padding:'+config.cardPadding+'px;border:1px solid '+config.borderColor+';border-radius:'+config.borderRadius+'px;box-sizing:border-box;background:'+config.bgColor+';">'
+          +bar('width:100%;height:'+config.imageSize+'px;border-radius:'+config.imageRadius+'px;')
+          +bar('height:11px;width:85%;')+bar('height:11px;width:55%;')
+          +bar('height:13px;width:40%;margin-top:2px;')
+          +bar('height:26px;width:60%;margin-top:4px;')+'</span>';
+    }
+    el.innerHTML='<div class="ps-fbt-wrapper" aria-busy="true" aria-label="Loading suggestions" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';padding:var(--ps-fbt-pad,'+config.widgetPadding+'px);">'
+      +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:16px;">Frequently Bought Together</div>'
+      +'<span style="display:flex!important;'+(isList?'flex-direction:column;':'gap:'+config.gap+'px;overflow:hidden;')+'">'+cards+'</span>'
+      +'<span style="display:flex!important;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid '+config.borderColor+';">'
+        +'<span style="display:block!important;">'+bar('height:10px;width:70px;')+bar('height:18px;width:90px;margin-top:6px;')+'</span>'
+        +bar('height:40px;width:150px;border-radius:999px;')+'</span>'
+      +'</div>';
+  }
+
   // Drawn checkmark (the text glyph renders thin and uneven across fonts).
   function checkIcon(size,gap){
     return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="display:inline-block;vertical-align:-0.15em;flex-shrink:0;'+(gap?'margin-right:'+gap+'px;':'')+'"><path d="M3.5 8.4l2.9 2.9 6.1-6.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -22,7 +74,7 @@
     return parsed.filter(function(r){return r&&typeof r==='object';}).map(function(rule,i){
       /* offer: only on rules the BRIX server confirmed live at checkout (fbt-offer-shopify.server.js). */
       var offer=rule.offer&&typeof rule.offer==='object'&&(rule.offer.type==='percentage'||rule.offer.type==='fixed_amount')&&Number(rule.offer.value)>0?{type:rule.offer.type,value:Number(rule.offer.value),text:String(rule.offer.text||'')}:null;
-      return{id:rule.id||rule.ruleId||('rule-'+i),displayScope:rule.displayScope||'all',triggerProducts:Array.isArray(rule.triggerProducts)?rule.triggerProducts:[],triggerProductId:rule.triggerProductId||null,fbtProducts:Array.isArray(rule.fbtProducts)?rule.fbtProducts:[],offer:offer};
+      return{id:rule.id||rule.ruleId||('rule-'+i),displayScope:rule.displayScope||'all',triggerProducts:Array.isArray(rule.triggerProducts)?rule.triggerProducts:[],triggerProductId:rule.triggerProductId||null,fbtProducts:Array.isArray(rule.fbtProducts)?rule.fbtProducts:[],backupProducts:Array.isArray(rule.backupProducts)?rule.backupProducts:[],offer:offer};
     }).filter(function(r){return r.fbtProducts.length>0;});
   }
 
@@ -93,7 +145,7 @@
       showVariantPicker:config.showVariantPicker===true,
       /* "Match the shopper's size": saved live only in AI-Powered mode (sizeMatchLive). */
       sizeMatch:config.sizeMatchLive===true,
-      sizeMatchMissing:config.sizeMatchMissing==='note'?'note':'hide',
+      sizeMatchMissing:config.sizeMatchMissing==='note'||config.sizeMatchMissing==='hide'?config.sizeMatchMissing:'replace',
       sizeMatchOption:typeof config.sizeMatchOption==='string'?config.sizeMatchOption.trim().slice(0,40):'',
       offerAlign:['left','center','right'].indexOf(config.offerAlign)!==-1?config.offerAlign:'center',
       offerFontFamily:typeof config.offerFontFamily==='string'&&config.offerFontFamily!=='inherit'&&/^[A-Za-z0-9 -]{1,40}$/.test(config.offerFontFamily.trim())?config.offerFontFamily.trim():''};
@@ -205,15 +257,12 @@
     var variantsById=new Map();
     var optionsById=new Map();
     try{
-      var res=await fetch('/products.json?limit=250');
-      if(res.ok){
-        var json=await res.json();
-        var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
-        ajaxProducts.forEach(function(ap){
-          var pid=String(ap&&ap.id||'');
-          if(pid){variantsById.set(pid,Array.isArray(ap&&ap.variants)?ap.variants:[]);optionsById.set(pid,ap&&ap.options);}
-        });
-      }
+      var json=await cachedJson('/products.json?limit=250');
+      var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
+      ajaxProducts.forEach(function(ap){
+        var pid=String(ap&&ap.id||'');
+        if(pid){variantsById.set(pid,Array.isArray(ap&&ap.variants)?ap.variants:[]);optionsById.set(pid,ap&&ap.options);}
+      });
     }catch(e){}
 
     function isAvailable(variants){return variants.some(function(v){return v&&v.available;});}
@@ -230,9 +279,7 @@
       var handle=String(product&&product.handle||'').trim();
       if(!handle){out.push(product);continue;}
       try{
-        var hr=await fetch('/products/'+encodeURIComponent(handle)+'.js');
-        if(!hr.ok){out.push(product);continue;}
-        var hj=await hr.json();
+        var hj=await cachedJson('/products/'+encodeURIComponent(handle)+'.js');
         var hvariants=Array.isArray(hj&&hj.variants)?hj.variants:[];
         if(isAvailable(hvariants))out.push(withLivePrice(product,hvariants,true,hj&&hj.options));
       }catch(e){out.push(product);}
@@ -290,10 +337,9 @@
   async function currentPageSize(el,config){
     var handle=el.dataset.productHandle;
     if(!handle)return null;
-    if(!el.__psPageProduct){
-      try{var r=await fetch('/products/'+encodeURIComponent(handle)+'.js');el.__psPageProduct=r.ok?await r.json():{};}catch(e){el.__psPageProduct={};}
-    }
-    var p=el.__psPageProduct||{};
+    var p;
+    try{p=await cachedJson('/products/'+encodeURIComponent(handle)+'.js');}catch(e){p={};}
+    p=p||{};
     var variants=Array.isArray(p.variants)?p.variants:[];
     var idx=sizeOptionIndex(p.options,config.sizeMatchOption);
     if(idx<0||!variants.length)return null;
@@ -306,14 +352,28 @@
     return{value:String(value),variantId:normalizeVariantId(v.id)};
   }
   /* Each product in the shopper's size: that size picked (in stock); without
-     it hidden, or marked "Not in <size>"; products with no size option as they are. */
-  function applySizeMatch(products,size,config){
+     it replaced in its place by a spare AI pick in that size (else one with no
+     size option), hidden, or marked "Not in <size>"; products with no size
+     option as they are. Spares never join a bundle offer. */
+  function applySizeMatch(products,size,config,spares){
+    var take=function(p,r){return Object.assign({},p,{variantId:r.variant.id,liveVariantId:r.variant.id,price:r.variant.price,compareAt:r.variant.compareAt});};
+    var shown={};products.forEach(function(p){shown[String(p.id)]=true;});
+    var queue={match:[],none:[]};
+    if(config.sizeMatchMissing==='replace'){
+      (spares||[]).forEach(function(s){
+        if(shown[String(s.id)])return;
+        var r=pickSizeVariant(s,size,config.sizeMatchOption);
+        if(r.status==='match')queue.match.push(Object.assign(take(s,r),{replacement:true}));
+        else if(r.status==='none')queue.none.push(Object.assign({},s,{replacement:true}));
+      });
+    }
     var out=[];
     products.forEach(function(p){
       var r=pickSizeVariant(p,size,config.sizeMatchOption);
-      if(r.status==='match')out.push(Object.assign({},p,{variantId:r.variant.id,liveVariantId:r.variant.id,price:r.variant.price,compareAt:r.variant.compareAt}));
-      else if(r.status==='missing'){if(config.sizeMatchMissing==='note')out.push(Object.assign({},p,{sizeMissing:size}));}
-      else out.push(p);
+      if(r.status==='match')out.push(take(p,r));
+      else if(r.status==='none')out.push(p);
+      else if(config.sizeMatchMissing==='note')out.push(Object.assign({},p,{sizeMissing:size}));
+      else if(config.sizeMatchMissing==='replace'){var next=queue.match.shift()||queue.none.shift();if(next)out.push(next);}
     });
     return out;
   }
@@ -394,8 +454,7 @@
          config.php's Access-Control-Allow-Origin: * — no custom headers here,
          since those trigger a CORS preflight config.php doesn't allowlist. */
       var API_URL='https://int.thebrix.io/save_fbt_widget.php?shopdomain='+encodeURIComponent(shop);
-      fetch(API_URL)
-        .then(function(r){return r.json();})
+      cachedJson(API_URL,300000)
         .then(async function(response){
           if(!response||response.status!=='success')return;
           var data=response.data;
@@ -423,32 +482,55 @@
           var rules=normalizeRules(data.condition||data.manualRules||data.manualConfiguration||[]);
           var currentNumId=extractNumericId(productId);
           var matchedProducts=[];
+          var matchedSpares=[]; /* AI rules' spare picks, for size matching → Replace */
           var offerRule=null; /* the rule whose "buy all together" offer the widget shows */
           rules.forEach(function(rule){
             var triggerCandidates=(rule.triggerProducts||[]).length?(rule.triggerProducts||[]):(rule.triggerProductId?[{id:rule.triggerProductId}]:[]);
             var scope=rule.displayScope||'all';
-            if(scope==='all'){matchedProducts=matchedProducts.concat(rule.fbtProducts);if(rule.offer&&!offerRule)offerRule=rule;return;}
+            if(scope==='all'){matchedProducts=matchedProducts.concat(rule.fbtProducts);matchedSpares=matchedSpares.concat(rule.backupProducts);if(rule.offer&&!offerRule)offerRule=rule;return;}
             /* single / specific / per_product → only on the trigger product's page.
                Compare by numeric id since GID formats vary across sources. */
             var match=triggerCandidates.some(function(p){return extractNumericId(p.id)===currentNumId;});
-            if(match){matchedProducts=matchedProducts.concat(rule.fbtProducts);if(rule.offer&&(!offerRule||offerRule.displayScope==='all'))offerRule=rule;}
+            if(match){matchedProducts=matchedProducts.concat(rule.fbtProducts);matchedSpares=matchedSpares.concat(rule.backupProducts);if(rule.offer&&(!offerRule||offerRule.displayScope==='all'))offerRule=rule;}
           });
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
+          var placed=false,drawToken=0;
+          var placeOnce=function(){
+            if(placed)return;
+            placed=true;
+            el.__psMargin=config.marginTop+'px 0 '+config.marginBottom+'px';
+            placeWidget(apiPlacement);
+            el.style.margin=el.__psMargin;
+          };
+          /* Placeholders in place while stock and prices load (with everything
+             already downloaded this visit, the real widget replaces them before
+             the screen even paints). */
+          renderSkeleton(el,config,matchedProducts.length,config.interactionType==='checkboxQty'||config.layout==='vertical');
+          placeOnce();
           var liveProducts=await filterAvailableFbtProducts(matchedProducts);
-          if(!liveProducts.length)return;
+          if(!liveProducts.length){el.style.display='none';el.innerHTML='';return;}
           config.currentProductId=currentNumId;
           /* The viewed product's price (cents, from Liquid): it's part of the offer's set. */
           var viewedCents=Number(el.dataset.productPrice);
           config.viewedPrice=isFinite(viewedCents)&&viewedCents>0?viewedCents/100:0;
-          var placed=false,drawToken=0;
+          var liveSpares=null;
           async function draw(){
             var token=++drawToken;
             var products=liveProducts;
             if(config.sizeMatch){
               var pageSize=await currentPageSize(el,config);
               if(token!==drawToken)return;
-              if(pageSize)products=applySizeMatch(liveProducts,pageSize.value,config);
+              if(pageSize){
+                /* Spares (stock and sizes) are loaded once, only when a suggestion needs replacing. */
+                var spares=[];
+                if(config.sizeMatchMissing==='replace'&&matchedSpares.length&&liveProducts.some(function(p){return pickSizeVariant(p,pageSize.value,config.sizeMatchOption).status==='missing';})){
+                  if(!liveSpares)liveSpares=filterAvailableFbtProducts(dedupe(matchedSpares).filter(function(s){return extractNumericId(s.id)!==currentNumId;}));
+                  spares=await liveSpares;
+                  if(token!==drawToken)return;
+                }
+                products=applySizeMatch(liveProducts,pageSize.value,config,spares);
+              }
             }
             /* The offer needs every one of its products shown (sold out, or not
                in the shopper's size = no offer). */
@@ -459,13 +541,13 @@
               if(setIds.length&&setIds.every(function(id){return shownIds.indexOf(id)!==-1;}))config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text,count:setIds.length+1,productIds:setIds};
             }
             if(!products.length){el.style.display='none';el.innerHTML='';return;}
+            /* Keep the height while it redraws (a new size), so the page doesn't jump. */
+            var keepHeight=el.offsetHeight;
+            if(keepHeight)el.style.minHeight=keepHeight+'px';
             renderFBT(el,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
-            if(!placed){
-              placed=true;
-              el.__psMargin=config.marginTop+'px 0 '+config.marginBottom+'px';
-              placeWidget(apiPlacement);
-              el.style.margin=el.__psMargin;
-            }else el.style.display='block';
+            el.style.display='block';
+            placeOnce();
+            if(keepHeight)requestAnimationFrame(function(){el.style.minHeight='';});
           }
           await draw();
           /* A new size picked on the page: draw again for it (themes change the
