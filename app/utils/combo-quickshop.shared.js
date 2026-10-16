@@ -66,6 +66,13 @@ export function createQuickShopKit(core) {
     // Price slider: from–to between the cheapest and dearest variant on the page.
     qs_filter_price: false,
     qs_filter_price_label: 'Price',
+    // Sliders as their own row, or behind a chip like the dropdowns.
+    qs_slider_look: 'row', // row | dropdown
+    // Desktop: filters above the products, or in a column on the left
+    // (phones always above).
+    qs_filter_position: 'top', // top | left
+    qs_filter_font_size: null, // px; null = as before (15, phones 13.5)
+    qs_filter_font_size_m: null,
     // Cards
     // quick_add = + button on the image that turns into a stepper; normal =
     // a full-width Add button under the price (stepper there once added).
@@ -77,6 +84,13 @@ export function createQuickShopKit(core) {
     // A tap on a card's picture or name opens the product in a popup: its
     // pictures with thumbnails, full description, options and Add.
     qs_product_popup: true,
+    // Card text sizes (px); null = as before. Phones have their own.
+    qs_card_title_size: null, // 17, phones 14
+    qs_card_title_size_m: null,
+    qs_card_text_size: null, // subtitle, option / weight, % OFF (14-15, phones 12.5-15)
+    qs_card_text_size_m: null,
+    qs_card_price_size: null, // 19, phones 16
+    qs_card_price_size_m: null,
     qs_columns_desktop: 4,
     qs_columns_mobile: 2,
     qs_card_eyebrow: '',
@@ -599,6 +613,35 @@ export function createQuickShopKit(core) {
     return { id: 'weight', label: spec.label, style: spec.style, value: value, options: options, open: ui.menu === 'weight' };
   }
 
+  // Products added to the page beyond its collections (weight_pricing.qualify
+  // .extra_product_ids, loaded by the server) arrive under this handle.
+  var EXTRA_HANDLE = '__brix_extra';
+
+  /**
+   * What the merchant left off the page: products (box_hide_product_ids) and
+   * every product also in a collection (box_hide_collections [{ id, handle, title }]).
+   */
+  function pageExclusions(config) {
+    var ids = {};
+    var raw = (config && config.box_hide_product_ids) || [];
+    for (var i = 0; i < raw.length && i < 200; i++) if (typeof raw[i] === 'string') ids[raw[i]] = true;
+    var handles = [];
+    var cols = (config && config.box_hide_collections) || [];
+    for (var c = 0; c < cols.length && c < 20; c++) {
+      var h = cleanHandle(cols[c] && cols[c].handle);
+      if (h && handles.indexOf(h) === -1) handles.push(h);
+    }
+    return { productIds: ids, collectionHandles: handles };
+  }
+
+  /** Collections whose page products the server looks up: filter groups + hidden collections. */
+  function memberHandles(config) {
+    var out = filterGroupHandles(config);
+    var hidden = pageExclusions(config).collectionHandles;
+    for (var i = 0; i < hidden.length; i++) if (out.indexOf(hidden[i]) === -1) out.push(hidden[i]);
+    return out;
+  }
+
   /** Every collection the filter groups use (the server loads which page products are in them). */
   function filterGroupHandles(config) {
     var groups = filterGroups(config);
@@ -704,7 +747,11 @@ export function createQuickShopKit(core) {
     for (var gi = 0; gi < groups.length; gi++) {
       var grp = groups[gi];
       if (grp.style === 'chips') { chipGroups.push(grp); continue; }
-      if (grp.kind === 'slider') { sliders.push(grp); continue; }
+      if (grp.kind === 'slider') {
+        if (opt(config, 'qs_slider_look') === 'dropdown') menus.push({ id: grp.id, label: grp.label, value: grp.value, options: [], open: ui.menu === grp.id, slider: grp });
+        else sliders.push(grp);
+        continue;
+      }
       var groupOptions = [{ value: '', label: 'All' }];
       for (var go = 0; go < grp.options.length; go++) groupOptions.push({ value: grp.options[go].value, label: grp.options[go].label });
       menus.push({ id: grp.id, label: grp.label, value: grp.value, options: groupOptions, open: grp.open });
@@ -861,8 +908,25 @@ export function createQuickShopKit(core) {
       messages: pricing.messages, enabled: !!pricing.enabled, currencySymbol: symbol,
     };
     var handles = input.handles || [];
-    var all = allProducts(input.productsByHandle || {}, handles);
-    if (!all.length && input.fallbackProducts) all = input.fallbackProducts;
+    var pageHandles = handles.indexOf(EXTRA_HANDLE) === -1 && input.productsByHandle && input.productsByHandle[EXTRA_HANDLE] ? handles.concat([EXTRA_HANDLE]) : handles;
+    var all = allProducts(input.productsByHandle || {}, pageHandles);
+    // Left off the page by the merchant (a hidden collection only once its
+    // members are known).
+    var hide = pageExclusions(config);
+    var hadProducts = all.length > 0;
+    if (all.length) {
+      var kept = [];
+      for (var k = 0; k < all.length; k++) {
+        var gone = !!hide.productIds[all[k].id];
+        for (var hc = 0; !gone && hc < hide.collectionHandles.length; hc++) {
+          var hm = input.collectionMembers && input.collectionMembers[hide.collectionHandles[hc]];
+          if (hm && hm.indexOf(all[k].id) !== -1) gone = true;
+        }
+        if (!gone) kept.push(all[k]);
+      }
+      all = kept;
+    }
+    if (!hadProducts && input.fallbackProducts) all = input.fallbackProducts;
     var byId = {};
     for (var a = 0; a < all.length; a++) byId[all[a].id] = all[a];
     var extra = input.extraProducts || [];
@@ -1044,6 +1108,13 @@ export function createQuickShopKit(core) {
   var ICON_GRID = '<svg viewBox="0 0 24 24" width="40%" height="40%" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
   var ICON_FILTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>';
 
+  // A text size the merchant set (6-40px), else null (= the stylesheet's own).
+  function sizePx(config, key) {
+    var v = opt(config, key);
+    if (v === null || v === undefined || v === '' || !isFinite(Number(v))) return null;
+    return num(v, 14, 6, 40);
+  }
+
   function vars(config) {
     var pairs = [
       ['--bxq-page', safeCss(opt(config, 'qs_page_bg'), DEFAULTS.qs_page_bg)],
@@ -1065,8 +1136,8 @@ export function createQuickShopKit(core) {
       ['--bxq-top-h', num(opt(config, 'qs_top_height'), 8, 2, 24) + 'px'],
       ['--bxq-top-r', num(opt(config, 'qs_top_radius'), 999, 0, 999) + 'px'],
       ['--bxq-top-offset', num(opt(config, 'qs_top_offset'), 0, 0, 300) + 'px'],
-      ['--bxq-lbl-fs', num(opt(config, 'qs_top_label_size'), 12, 9, 22) + 'px'],
-      ['--bxq-lbl-sub', num(opt(config, 'qs_top_sub_size'), 11, 8, 20) + 'px'],
+      ['--bxq-lbl-fs', num(opt(config, 'qs_top_label_size'), 12, 6, 22) + 'px'],
+      ['--bxq-lbl-sub', num(opt(config, 'qs_top_sub_size'), 11, 6, 20) + 'px'],
       ['--bxq-bar-bg', safeCss(opt(config, 'qs_bar_bg'), DEFAULTS.qs_bar_bg)],
       ['--bxq-bar-text', safeCss(opt(config, 'qs_bar_text'), DEFAULTS.qs_bar_text)],
       ['--bxq-save', safeCss(opt(config, 'qs_bar_save'), DEFAULTS.qs_bar_save)],
@@ -1091,10 +1162,25 @@ export function createQuickShopKit(core) {
     // Phones: the merchant's size for every style, else as before (milestones 1px smaller).
     var lblPhone = opt(config, 'qs_top_label_size_m');
     if (lblPhone !== null && lblPhone !== '' && isFinite(Number(lblPhone))) {
-      pairs.push(['--bxq-lbl-fs-m', num(lblPhone, 12, 9, 22) + 'px']);
-      pairs.push(['--bxq-lbl-fs-mile-m', num(lblPhone, 12, 9, 22) + 'px']);
+      pairs.push(['--bxq-lbl-fs-m', num(lblPhone, 12, 6, 22) + 'px']);
+      pairs.push(['--bxq-lbl-fs-mile-m', num(lblPhone, 12, 6, 22) + 'px']);
     } else {
-      pairs.push(['--bxq-lbl-fs-mile-m', Math.max(9, num(opt(config, 'qs_top_label_size'), 12, 9, 22) - 1) + 'px']);
+      pairs.push(['--bxq-lbl-fs-mile-m', Math.max(6, num(opt(config, 'qs_top_label_size'), 12, 6, 22) - 1) + 'px']);
+    }
+    // Card and filter text sizes, only once the merchant sets them.
+    var sizes = [
+      ['qs_card_title_size', '--bxq-title-fs'], ['qs_card_title_size_m', '--bxq-title-fs-m'],
+      ['qs_card_text_size', '--bxq-ctext-fs'], ['qs_card_text_size_m', '--bxq-ctext-fs-m'],
+      ['qs_card_price_size', '--bxq-price-fs'], ['qs_card_price_size_m', '--bxq-price-fs-m'],
+      ['qs_filter_font_size', '--bxq-chip-fs'], ['qs_filter_font_size_m', '--bxq-chip-fs-m'],
+    ];
+    for (var sz = 0; sz < sizes.length; sz++) {
+      var px = sizePx(config, sizes[sz][0]);
+      if (px === null) continue;
+      pairs.push([sizes[sz][1], px + 'px']);
+      // The struck compare-at price follows the price (14px next to 19px before).
+      if (sizes[sz][1] === '--bxq-price-fs') pairs.push(['--bxq-cmp-fs', Math.max(6, Math.round(px * 0.74)) + 'px']);
+      if (sizes[sz][1] === '--bxq-price-fs-m') pairs.push(['--bxq-cmp-fs-m', Math.max(6, Math.round(px * 0.74)) + 'px']);
     }
     var out = '';
     for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ':' + pairs[i][1] + ';';
@@ -1184,6 +1270,37 @@ export function createQuickShopKit(core) {
     if (text) text.textContent = spanText(r.box.getAttribute('data-unit'), r.lo, r.hi, r.box.getAttribute('data-symbol'));
   }
 
+  /**
+   * Pins each open dropdown under its chip. The menu is position:fixed (so the
+   * filter row's horizontal scroll can't clip it), and a fixed box with no
+   * coordinates lands wherever the theme's layout puts it, often far from the
+   * chip. This gives it real coordinates, measured after the theme has had its
+   * say (a transformed theme wrapper shifts fixed boxes: the shift is measured
+   * and taken out), opening above the chip when there's no room below. Call
+   * after every render and on scroll / resize.
+   */
+  function placeMenus(scope) {
+    if (!scope || !scope.querySelectorAll || typeof window === 'undefined') return;
+    var open = scope.querySelectorAll('.bxq-dd.is-open');
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    for (var i = 0; i < open.length; i++) {
+      var chip = open[i].querySelector('[data-combo-action="qs-menu"]');
+      var menu = open[i].querySelector('.bxq-menu');
+      if (!chip || !menu) continue;
+      var r = chip.getBoundingClientRect();
+      menu.style.margin = '0';
+      menu.style.top = '0px';
+      menu.style.left = '0px';
+      var at = menu.getBoundingClientRect(); // where (0, 0) really lands
+      var left = Math.max(8, Math.min(r.left, vw - at.width - 8));
+      var top = r.bottom + 6;
+      if (top + at.height > vh - 8 && r.top - 6 - at.height >= 8) top = r.top - 6 - at.height;
+      menu.style.left = Math.round(left - at.left) + 'px';
+      menu.style.top = Math.round(top - at.top) + 'px';
+    }
+  }
+
   /** A slider let go: its span into ui.dd (the whole span = no filter). Returns true when it was one. */
   function applyRange(ui, input) {
     var key = input && input.getAttribute ? input.getAttribute('data-combo-range') : null;
@@ -1191,8 +1308,65 @@ export function createQuickShopKit(core) {
     if (!r) return false;
     if (!ui.dd) ui.dd = {};
     ui.dd[key] = r.lo <= r.min && r.hi >= r.max ? '' : 's:' + r.lo + '-' + r.hi;
-    ui.menu = null;
+    // A slider inside a dropdown stays open, so the shopper can keep adjusting.
     return true;
+  }
+
+  // Desktop filters in a left column: every filter open as a list (no
+  // dropdowns), sliders inline, Clear at the top.
+  function filtersOnLeft(model) {
+    var row = model.row;
+    if (model.isMobile || opt(model.config, 'qs_filter_position') !== 'left') return false;
+    for (var i = 0; i < row.chips.length; i++) if (!row.chips[i].picture) return true;
+    return row.menus.length > 0 || (row.groups || []).length > 0 || (row.sliders || []).length > 0;
+  }
+
+  function sideOption(action, menu, value, label, on) {
+    return '<button type="button" class="bxq-side-opt' + (on ? ' is-on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" data-combo-action="' + action + '"'
+      + (menu ? ' data-menu="' + esc(menu) + '"' : '') + ' data-value="' + esc(value) + '"><span class="bxq-side-radio" aria-hidden="true"></span>' + esc(label) + '</button>';
+  }
+
+  function renderSideFilters(model) {
+    var row = model.row;
+    var html = '<div class="bxq-side-head"><span>Filters</span>'
+      + (row.active ? '<button type="button" class="bxq-side-clear" data-combo-action="qs-clear">Clear all</button>' : '') + '</div>';
+    var chips = [];
+    var toggles = [];
+    for (var c = 0; c < row.chips.length; c++) {
+      if (row.chips[c].picture) continue;
+      (row.chips[c].toggle ? toggles : chips).push(row.chips[c]);
+    }
+    var i;
+    if (chips.length) {
+      html += '<div class="bxq-side-sec" role="group">';
+      for (i = 0; i < chips.length; i++) html += sideOption('qs-chip', '', chips[i].value, chips[i].label, chips[i].on);
+      html += '</div>';
+    }
+    for (var m = 0; m < row.menus.length; m++) {
+      var menu = row.menus[m];
+      html += '<div class="bxq-side-sec" role="group" aria-label="' + esc(menu.label) + '"><p class="bxq-side-title">' + esc(menu.label) + '</p>';
+      if (menu.slider) html += renderSliders([menu.slider]);
+      for (i = 0; i < menu.options.length; i++) {
+        var option = menu.options[i];
+        var on = (option.value || '') === (menu.value || '') || (menu.isSort && !menu.value && option.value === 'featured');
+        html += sideOption('qs-pick', menu.id, option.value, option.label, on);
+      }
+      html += '</div>';
+    }
+    var groups = row.groups || [];
+    for (var g = 0; g < groups.length; g++) {
+      html += '<div class="bxq-side-sec" role="group" aria-label="' + esc(groups[g].label) + '"><p class="bxq-side-title">' + esc(groups[g].label) + '</p>';
+      for (i = 0; i < groups[g].options.length; i++) html += sideOption('qs-group', groups[g].id, groups[g].options[i].value, groups[g].options[i].label, groups[g].options[i].on);
+      html += '</div>';
+    }
+    var sliders = row.sliders || [];
+    for (var sl = 0; sl < sliders.length; sl++) {
+      html += '<div class="bxq-side-sec"><p class="bxq-side-title">' + esc(sliders[sl].label) + '</p>' + renderSliders([sliders[sl]]) + '</div>';
+    }
+    for (i = 0; i < toggles.length; i++) {
+      html += '<div class="bxq-side-sec">' + '<button type="button" class="bxq-side-opt bxq-side-check' + (toggles[i].on ? ' is-on' : '') + '" aria-pressed="' + (toggles[i].on ? 'true' : 'false') + '" data-combo-action="qs-instock" data-value="instock"><span class="bxq-side-radio" aria-hidden="true"></span>' + esc(toggles[i].label) + '</button></div>';
+    }
+    return html;
   }
 
   function renderFilters(model) {
@@ -1214,9 +1388,13 @@ export function createQuickShopKit(core) {
       var current = '';
       for (var o = 0; o < menu.options.length; o++) if (menu.value && menu.options[o].value === menu.value) current = menu.options[o].label;
       html += '<div class="bxq-dd' + (menu.open ? ' is-open' : '') + '">';
+      // A slider behind a chip: the chip names the picked span.
+      if (menu.slider) current = menu.value ? menu.slider.text : '';
       html += '<button type="button" class="bxq-chip' + (menu.value ? ' is-on' : '') + '" aria-expanded="' + (menu.open ? 'true' : 'false') + '" data-combo-action="qs-menu" data-menu="' + esc(menu.id) + '">'
         + esc(menu.isSort || !current ? menu.label : current) + ICON_DOWN + '</button>';
-      if (menu.open) {
+      if (menu.open && menu.slider) {
+        html += '<div class="bxq-menu bxq-menu--range">' + renderSliders([menu.slider]) + '</div>';
+      } else if (menu.open) {
         html += '<div class="bxq-menu" role="listbox">';
         for (var k = 0; k < menu.options.length; k++) {
           var option = menu.options[k];
@@ -1233,7 +1411,7 @@ export function createQuickShopKit(core) {
 
   /** The text under the bar: which lines show and their sizes (px). */
   function labelLook(config, isMobile) {
-    var size = num(opt(config, 'qs_top_label_size'), 12, 9, 22);
+    var size = num(opt(config, 'qs_top_label_size'), 12, 6, 22);
     var phone = opt(config, 'qs_top_label_size_m');
     var phoneSet = phone !== null && phone !== '' && isFinite(Number(phone));
     var look = {
@@ -1241,12 +1419,12 @@ export function createQuickShopKit(core) {
       name: on(config, 'qs_top_show_name'),
       amount: on(config, 'qs_top_show_amount'),
       size: size,
-      sub: num(opt(config, 'qs_top_sub_size'), 11, 8, 20),
-      phone: phoneSet ? num(phone, size, 9, 22) : null,
+      sub: num(opt(config, 'qs_top_sub_size'), 11, 6, 20),
+      phone: phoneSet ? num(phone, size, 6, 22) : null,
     };
     look.any = look.labels && (look.name || look.amount);
     // The size used on this screen (milestones were 1px smaller on phones).
-    look.mileSize = isMobile ? (look.phone !== null ? look.phone : Math.max(9, size - 1)) : size;
+    look.mileSize = isMobile ? (look.phone !== null ? look.phone : Math.max(6, size - 1)) : size;
     look.barSize = isMobile && look.phone !== null ? look.phone : size;
     return look;
   }
@@ -1644,9 +1822,18 @@ export function createQuickShopKit(core) {
     html += renderBanner(model);
     html += renderHead(model);
     html += renderTop(model);
-    html += renderFilters(model);
-    if (model.row.menus.length) {
-      for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
+    var left = filtersOnLeft(model);
+    if (left) {
+      // Picture collection bar stays above; the rest in the left column.
+      var pictures = [];
+      for (var pc = 0; pc < model.row.chips.length; pc++) if (model.row.chips[pc].picture) pictures.push(model.row.chips[pc]);
+      if (pictures.length) html += renderCollectionBar(pictures);
+      html += '<div class="bxq-layout"><aside class="bxq-side" aria-label="Filters">' + renderSideFilters(model) + '</aside><div class="bxq-main">';
+    } else {
+      html += renderFilters(model);
+      if (model.row.menus.length) {
+        for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
+      }
     }
     if (model.empty) html += '<div class="bxq-empty">' + esc(model.empty) + '</div>';
     else {
@@ -1654,6 +1841,7 @@ export function createQuickShopKit(core) {
       for (var c = 0; c < model.cards.length; c++) html += renderCard(model, model.cards[c]);
       html += '</div>';
     }
+    if (left) html += '</div></div>';
     html += renderBar(model);
     html += renderPopup(model);
     if (model.toast) html += '<div class="bxq-toast" role="status">' + esc(model.toast) + '</div>';
@@ -1695,10 +1883,14 @@ export function createQuickShopKit(core) {
     filterProducts: filterProducts,
     filterGroups: filterGroups,
     filterGroupHandles: filterGroupHandles,
+    memberHandles: memberHandles,
+    pageExclusions: pageExclusions,
+    EXTRA_HANDLE: EXTRA_HANDLE,
     groupMembers: groupMembers,
     mileSizes: mileSizes,
     weightFilter: weightFilter,
     rangeInput: rangeInput,
+    placeMenus: placeMenus,
     applyRange: applyRange,
     weightRanges: weightRanges,
     labelLook: labelLook,
@@ -1961,5 +2153,50 @@ export const QUICK_SHOP_CSS = `
 @media (prefers-reduced-motion: reduce){.bxq-pop-scrim,.bxq-pop-box{animation:none !important;}}
 [data-brix-combo-popup] .bxq-bar{position:fixed;left:12px;right:12px;bottom:12px;margin:0 auto;z-index:2147483646;}
 .bxq--m[data-brix-combo-popup] .bxq-bar{left:8px;right:8px;bottom:8px;}
+/* Icons keep their size on every theme. Themes often size every svg
+   (svg{width:1em}) or anything with "icon" in its class, which shrank the
+   milestone icons to a few px inside their circles. */
+.bxq-mile-icon{width:var(--bxq-mile-icon,18px) !important;height:var(--bxq-mile-icon,18px) !important;min-width:0 !important;max-width:none !important;flex:0 0 auto;}
+.bxq-msg-glyph{width:26px !important;height:26px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-mile-icon > svg,.bxq-msg-glyph > svg{display:block !important;width:100% !important;height:100% !important;min-width:0 !important;max-width:none !important;max-height:none !important;}
+.bxq-add > svg{width:22px !important;height:22px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-chip > svg{width:16px !important;height:16px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-chip--icon > svg{width:20px !important;height:20px !important;}
+/* Card and filter text sizes (merchant settings; unset = the sizes above). */
+.bxq-card .bxq-name{font-size:var(--bxq-title-fs,17px);}
+.bxq--m .bxq-card .bxq-name{font-size:var(--bxq-title-fs-m,14px);}
+.bxq-card .bxq-sub{font-size:var(--bxq-ctext-fs,14px);}
+.bxq--m .bxq-card .bxq-sub{font-size:var(--bxq-ctext-fs-m,12.5px);}
+.bxq-card .bxq-variant,.bxq-card .bxq-off{font-size:var(--bxq-ctext-fs,15px);}
+.bxq--m .bxq-card .bxq-variant,.bxq--m .bxq-card .bxq-off{font-size:var(--bxq-ctext-fs-m,15px);}
+.bxq-card .bxq-price b{font-size:var(--bxq-price-fs,19px);}
+.bxq--m .bxq-card .bxq-price b{font-size:var(--bxq-price-fs-m,16px);}
+.bxq-card .bxq-price s{font-size:var(--bxq-cmp-fs,14px);}
+.bxq--m .bxq-card .bxq-price s{font-size:var(--bxq-cmp-fs-m,14px);}
+.bxq-chip{font-size:var(--bxq-chip-fs,15px);}
+.bxq--m .bxq-chip{font-size:var(--bxq-chip-fs-m,13.5px);}
+.bxq-opt{font-size:var(--bxq-chip-fs,14px);}
+.bxq--m .bxq-opt{font-size:var(--bxq-chip-fs-m,14px);}
+/* A slider behind a chip. */
+.bxq-menu--range{min-width:280px;padding:10px 14px;overflow:visible;}
+.bxq-menu--range .bxq-range{padding:0;flex-wrap:wrap;gap:6px 12px;}
+.bxq-menu--range .bxq-gchips-label{display:none;}
+.bxq-menu--range .bxq-range-box{flex:1 1 100%;max-width:none;}
+/* Filters in a left column (desktop). */
+.bxq-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;align-items:start;}
+.bxq-side{background:var(--bxq-card);border-radius:var(--bxq-radius);padding:14px 14px 8px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.bxq-side-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;margin:0 0 8px;}
+.bxq-side-clear{border:0;background:none;padding:0;color:var(--bxq-accent) !important;font-weight:700;font-size:13px;cursor:pointer;}
+.bxq-side-sec{border-top:1px solid rgba(0,0,0,.08);padding:10px 0 8px;}
+.bxq-side-title{margin:0 0 6px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.6;}
+.bxq-side-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:6px 4px;border-radius:8px;font-size:var(--bxq-chip-fs,14px);cursor:pointer;color:var(--bxq-text) !important;}
+.bxq-side-opt:hover{background:rgba(0,0,0,.04);}
+.bxq-side-radio{flex:0 0 auto;width:16px;height:16px;border-radius:50%;border:2px solid rgba(0,0,0,.25);background:#fff;}
+.bxq-side-check .bxq-side-radio{border-radius:4px;}
+.bxq-side-opt.is-on{font-weight:700;color:var(--bxq-accent) !important;}
+.bxq-side-opt.is-on .bxq-side-radio{border-color:var(--bxq-accent);background:var(--bxq-accent);box-shadow:inset 0 0 0 3px #fff;}
+.bxq-side .bxq-range{padding:0;flex-wrap:wrap;gap:4px 10px;}
+.bxq-side .bxq-range .bxq-gchips-label{display:none;}
+.bxq-side .bxq-range-box{flex:1 1 100%;max-width:none;min-width:0;}
 @media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
 `;

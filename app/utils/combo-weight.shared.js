@@ -221,7 +221,13 @@ export function createComboWeightCore() {
       (q.collection_ids || []).slice().sort(),
       (q.product_ids || []).slice().sort(),
       tiers,
-    ]));
+    ].concat(
+      // Extra / no-offer products only when set, so every box saved before
+      // they existed keeps its exact hash.
+      (q.extra_product_ids && q.extra_product_ids.length) || (q.exclude_product_ids && q.exclude_product_ids.length)
+        ? [['x', (q.extra_product_ids || []).slice().sort(), (q.exclude_product_ids || []).slice().sort()]]
+        : []
+    )));
     return fnv1a(canonical, 2166136261) + fnv1a(canonical, 374761393);
   }
 
@@ -361,6 +367,12 @@ export function createComboWeightCore() {
       collectionIds = [];
       productIds = [];
     }
+    // Extra products: shown on the page beyond its collections, and they
+    // count toward the box. No-offer products: shown, never counted.
+    var extraIds = uniqueGids('Product', q.extra_product_ids);
+    var excludeIds = uniqueGids('Product', q.exclude_product_ids);
+    if (extraIds.length > LIMITS.products) errors.push({ field: 'qualify.extra_product_ids', message: 'Add at most ' + LIMITS.products + ' extra products.' });
+    if (excludeIds.length > LIMITS.products) errors.push({ field: 'qualify.exclude_product_ids', message: 'Leave out at most ' + LIMITS.products + ' products.' });
 
     var msgs = src.messages && typeof src.messages === 'object' ? src.messages : {};
     var messages = {
@@ -383,6 +395,9 @@ export function createComboWeightCore() {
       tiers: tiers,
       messages: messages,
     };
+    // Only when set, so older boxes' normalized value is unchanged.
+    if (extraIds.length) value2.qualify.extra_product_ids = extraIds.slice(0, LIMITS.products);
+    if (excludeIds.length) value2.qualify.exclude_product_ids = excludeIds.slice(0, LIMITS.products);
     // Only non-weight boxes carry the key, so a weight box's normalized value
     // (and everything built from it) is exactly what it was before.
     if (!isWeight) value2.measure = measure;

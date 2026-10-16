@@ -740,12 +740,88 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('tap again clears', (await titles(page)).length === 5);
   await page.close();
 
+  // Filters in a left column (desktop) and a slider inside a dropdown.
+  ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_position: 'left', qs_filter_weight: true, qs_filter_price: true, qs_filter_brand: true }, wp(QUANTITY)));
+  const side = await page.$eval('.bxq-side', (e) => { const r = e.getBoundingClientRect(); const g = document.querySelector('.bxq-grid').getBoundingClientRect(); return { w: Math.round(r.width), left: r.left < g.left, top: Math.abs(r.top - g.top) < 4 }; });
+  check('left column beside the grid', side.w === 240 && side.left && side.top, JSON.stringify(side));
+  await page.click('.bxq-side [data-combo-action="qs-pick"][data-menu="weight"][data-value="w:1000"]');
+  check('left column: picking 1 kg filters', (await titles(page)).length === 1);
+  await page.click('.bxq-side-clear');
+  check('left column: Clear all', (await titles(page)).length === 5);
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-filters-left.png') });
+  await page.close();
+
+  ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_weight: true, qs_filter_weight_mode: 'slider', qs_slider_look: 'dropdown' }, wp(QUANTITY), { viewport: { width: 390, height: 844 } }));
+  await page.click('[data-combo-action="qs-menu"][data-menu="weight"]');
+  await page.waitForSelector('.bxq-menu--range input[data-combo-range="weight"]');
+  await slide(page, 'weight', 0, 900);
+  await letGo(page, 'weight', 0);
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-card').length === 1);
+  check('slider dropdown: filters and stays open', !!(await page.$('.bxq-menu--range')));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-slider-dropdown-phone.png') });
+  await page.click('.bxq-scrim');
+  check('slider dropdown: chip shows the span', (await text(page, '[data-combo-action="qs-menu"][data-menu="weight"]')) === '900 g – 1 kg');
+  await page.close();
+
+  // Dropdowns stay under their chip: a theme wrapper with a transform (which
+  // moves position:fixed boxes) and a scrolled page, as on a live store.
+  // Plain themes (a fixed box doesn't scroll: the list used to stay put while
+  // the chip scrolled away) and themes with a transformed wrapper.
+  for (const [viewport, themeCss] of [
+    [{ width: 1280, height: 900 }, '.bxq{padding-top:60px} footer.footer{height:1500px}'],
+    [{ width: 390, height: 844 }, '.bxq{padding-top:60px} footer.footer{height:1500px}'],
+    [{ width: 1280, height: 900 }, 'main{transform:translateZ(0);margin-top:120px} .bxq{padding-top:60px} footer.footer{height:1500px}'],
+  ]) {
+    ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_weight: true, qs_filter_brand: true }, wp(QUANTITY), { viewport, themeCss }));
+    await page.evaluate(() => window.scrollTo(0, 150));
+    await page.click('[data-combo-action="qs-menu"][data-menu="weight"]');
+    await page.waitForSelector('.bxq-dd.is-open .bxq-menu');
+    const gap = () => page.evaluate(() => {
+      const chip = document.querySelector('.bxq-dd.is-open [data-combo-action="qs-menu"]').getBoundingClientRect();
+      const menu = document.querySelector('.bxq-dd.is-open .bxq-menu').getBoundingClientRect();
+      return { dy: Math.round(menu.top - chip.bottom), dx: Math.round(menu.left - Math.max(8, Math.min(chip.left, innerWidth - menu.width - 8))) };
+    });
+    let g = await gap();
+    const theme = themeCss.includes('transform') ? ', transformed theme' : '';
+    check(`${viewport.width}px${theme}: the Weight list opens right under its chip`, g.dy === 6 && Math.abs(g.dx) <= 1, JSON.stringify(g));
+    await page.evaluate(() => window.scrollBy(0, 120));
+    await page.waitForTimeout(150);
+    g = await gap();
+    check(`${viewport.width}px${theme}: and stays there while the page scrolls`, g.dy === 6 && Math.abs(g.dx) <= 1, JSON.stringify(g));
+    if (viewport.width === 390 && !theme) await page.screenshot({ path: path.join(SHOTS, 'quickshop-dropdown-phone.png') });
+    await page.close();
+  }
+
   // Milestone look and hidden card price.
   ({ page } = await openCombo({ ...baseConfig, ...qty, qs_top_style: 'milestones', qs_mile_icon_size: 30, qs_top_show_amount: false, qs_top_label_size: 16, qs_show_price: false }, wp(QUANTITY)));
   const mile = await page.$eval('.bxq-mile-dot', (e) => { const r = e.getBoundingClientRect(); const icon = e.querySelector('.bxq-mile-icon').getBoundingClientRect(); return { dot: Math.round(r.width), icon: Math.round(icon.width) }; });
   check('milestone icon 30px in a 46px circle', mile.dot === 46 && mile.icon === 30, JSON.stringify(mile));
   check('milestone amount hidden, name 16px', (await page.$('.bxq-mile-label small')) === null && (await page.$eval('.bxq-mile-label b', (e) => getComputedStyle(e).fontSize)) === '16px');
   check('card selling price hidden, MRP kept', !(await text(page, `${card(1)} .bxq-price`)).includes('₹168') && (await text(page, `${card(1)} .bxq-price`)).includes('₹179'));
+  await page.close();
+}
+
+/* Icons on a theme that sizes every svg and every "*icon*" class (seen on a
+   live mobile theme: milestone icons drawn a few px wide inside their circles). */
+{
+  const FIVE = {
+    unit: 'kg', max_grams: 5000,
+    tiers: [1, 2, 3, 4, 5].map((kg) => t(kg * 1000, 'fixed_price', kg * 500, `${kg}kg Box`)),
+  };
+  const themeCss = 'svg{width:6px;height:6px} [class*="icon"]{width:9px;height:9px} span svg{width:.5em}';
+  const { page } = await openCombo({ ...baseConfig, qs_top_style: 'milestones', qs_bar_style: 'full' }, wp(FIVE), { viewport: { width: 390, height: 844 }, themeCss });
+  await page.waitForSelector('.bxq-mile-icon svg');
+  const sizes = await page.$$eval('.bxq-mile-icon', (els) => els.map((e) => { const s = e.querySelector('svg').getBoundingClientRect(); return [Math.round(e.getBoundingClientRect().width), Math.round(s.width), Math.round(s.height)]; }));
+  check('theme svg rules: every milestone icon is 18px, its svg fills it', sizes.length === 5 && sizes.every((x) => x.join() === '18,18,18'), JSON.stringify(sizes));
+  const plus = await page.$eval(`${card(2)} .bxq-add svg`, (e) => Math.round(e.getBoundingClientRect().width));
+  check('theme svg rules: + icon keeps 22px', plus === 22, String(plus));
+  const chevron = await page.$eval('.bxq-dd .bxq-chip svg', (e) => Math.round(e.getBoundingClientRect().width));
+  check('theme svg rules: dropdown arrows keep 16px', chevron === 16, String(chevron));
+  await page.click(`${card(2)} [data-combo-action="qty-inc"]`);
+  await page.waitForSelector('.bxq-msg-glyph svg');
+  const glyph = await page.$eval('.bxq-msg-glyph svg', (e) => Math.round(e.getBoundingClientRect().width));
+  check('theme svg rules: bottom bar icon keeps 26px', glyph === 26, String(glyph));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-icons-theme-phone.png') });
   await page.close();
 }
 

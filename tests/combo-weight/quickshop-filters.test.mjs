@@ -347,3 +347,44 @@ test('price slider uses each variant price', () => {
   assert.deepEqual(m.cards.map((c) => [c.id, c.variantId]), [[priced[0].id, 'b']]);
   assert.equal(kit.buildModel({ config: { qs_filter_price: true }, productsByHandle: { k: [priced[1]] }, handles: ['k'], ui: {}, pricing: { tiers: [] } }).row.sliders.length, 0, 'one price = no slider');
 });
+
+test('filters on the left (desktop only): every filter open as a list', () => {
+  const config = { qs_filter_position: 'left', qs_filter_weight: true, qs_filter_price: true, qs_filter_type: false, qs_filter_brand: false, qs_filter_sort: false };
+  const html = kit.render(weightModel(config, { dd: { weight: 'w:500' } }));
+  assert.match(html, /<div class="bxq-layout"><aside class="bxq-side" aria-label="Filters">/);
+  assert.match(html, /<button type="button" class="bxq-side-clear" data-combo-action="qs-clear">Clear all<\/button>/);
+  assert.match(html, /<p class="bxq-side-title">Weight<\/p>/);
+  assert.match(html, /class="bxq-side-opt is-on" aria-pressed="true" data-combo-action="qs-pick" data-menu="weight" data-value="w:500"/);
+  assert.ok(!html.includes('class="bxq-filters"'), 'no top row');
+  assert.match(html, /<div class="bxq-main"><div class="bxq-grid">/);
+  const phone = kit.render(weightModel(config, {}, { isMobile: true }));
+  assert.ok(!phone.includes('bxq-side'), 'phones keep filters on top');
+  assert.ok(phone.includes('class="bxq-filters"'));
+});
+
+test('slider inside a dropdown: chip names the span, stays open after letting go', () => {
+  const config = { qs_filter_weight_mode: 'slider', qs_slider_look: 'dropdown' };
+  let m = weightModel(config, { dd: { weight: 's:500-1000' } });
+  assert.equal(m.row.sliders.length, 0);
+  const menu = m.row.menus.find((x) => x.id === 'weight');
+  assert.ok(menu.slider);
+  let html = kit.render(m);
+  assert.match(html, /data-combo-action="qs-menu" data-menu="weight">500 g – 1 kg/);
+  html = kit.render(weightModel(config, { menu: 'weight' }));
+  assert.match(html, /<div class="bxq-menu bxq-menu--range"><div class="bxq-filters bxq-gchips bxq-range"/);
+  assert.match(html, /bxq-scrim/);
+});
+
+test('text sizes: only set ones become CSS variables; 6px allowed', () => {
+  const draw = (config) => kit.render(weightModel(config));
+  const plain = draw({});
+  assert.ok(!/--bxq-(title|price|ctext|chip)-fs/.test(plain), 'unset = the old sizes');
+  const set = draw({ qs_card_title_size: 12, qs_card_title_size_m: 6, qs_card_price_size: 20, qs_card_text_size_m: 2, qs_filter_font_size: 7 });
+  assert.match(set, /--bxq-title-fs:12px;--bxq-title-fs-m:6px;/);
+  assert.match(set, /--bxq-ctext-fs-m:6px;/, 'clamped to 6');
+  assert.match(set, /--bxq-price-fs:20px;--bxq-cmp-fs:15px;/);
+  assert.match(set, /--bxq-chip-fs:7px;/);
+  const mile = draw({ qs_top_label_size: 6, qs_top_label_size_m: 6, qs_top_sub_size: 6 });
+  assert.match(mile, /--bxq-lbl-fs:6px;--bxq-lbl-sub:6px;/);
+  assert.match(mile, /--bxq-lbl-fs-m:6px;/);
+});

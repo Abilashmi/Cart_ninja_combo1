@@ -105,6 +105,8 @@ export function buildComboWeightFunctionConfig({ templates, planLive, currencyCo
     } else {
       collectionGids = comboCollectionHandles(template.config).map((handle) => collectionIdsByHandle[handle]).filter(Boolean);
     }
+    // Extra products added to the page count too.
+    for (const id of (pricing.qualify.extra_product_ids || []).map(numericId).filter(Boolean)) if (!productIds.includes(id)) productIds.push(id);
     if (!collectionGids.length && !productIds.length) { skipped.push({ id: template.id, reason: 'no_products' }); continue; }
     collectionGids.forEach((gid) => variableIds.add(gid));
     entries[String(template.id)] = {
@@ -118,6 +120,8 @@ export function buildComboWeightFunctionConfig({ templates, planLive, currencyCo
     };
     // Weight boxes leave it out (the Function's default), so their config is byte-for-byte unchanged.
     if (pricing.measure) entries[String(template.id)].measure = pricing.measure;
+    const excludeIds = (pricing.qualify.exclude_product_ids || []).map(numericId).filter(Boolean);
+    if (excludeIds.length) entries[String(template.id)].exclude_ids = excludeIds;
     included.push(template.id);
   }
   const config = { version: 1, currency: currencyCode, templates: entries };
@@ -379,8 +383,11 @@ export async function storefrontWeightPricing({ shop, admin, templateId, active,
   let qualifyingProductIds = shown;
   if (pricing.qualify.mode === 'selected') {
     const members = await selectedCollectionProductIds(admin, shop, pricing);
-    qualifyingProductIds = shown.filter((id) => pricing.qualify.product_ids.includes(id) || members.has(id));
+    const extra = pricing.qualify.extra_product_ids || [];
+    qualifyingProductIds = shown.filter((id) => pricing.qualify.product_ids.includes(id) || extra.includes(id) || members.has(id));
   }
+  const noOffer = pricing.qualify.exclude_product_ids || [];
+  if (noOffer.length) qualifyingProductIds = qualifyingProductIds.filter((id) => !noOffer.includes(id));
 
   return {
     enabled,

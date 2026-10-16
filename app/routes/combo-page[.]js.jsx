@@ -2417,6 +2417,7 @@ const SCRIPT_BODY = String.raw`
       // anything measures layout (the bar move below measures its height).
       keepBelowStickyHeader(root, state);
       hostQuickShopOverlays(root, state);
+      keepMenusOnChips(root, state);
     }
 
     // Quick Shop product popup: the page behind doesn't scroll while it's open.
@@ -2530,6 +2531,23 @@ const SCRIPT_BODY = String.raw`
   // instead of behind it: --bxq-top-offset = the header's bottom edge, kept
   // up to date while scrolling (themes hide/show the header) and resizing.
   // The merchant's own "Space below your theme's sticky header" is a minimum.
+  // An open filter dropdown stays under its chip: placed after each render
+  // and again when the page or the filter row scrolls, or the window resizes.
+  function keepMenusOnChips(root, state) {
+    QuickShop.placeMenus(root);
+    if (state.qsMenuWatch) return;
+    state.qsMenuWatch = true;
+    var queued = false;
+    var onMove = function () {
+      if (queued || !state.qsUi || !state.qsUi.menu) return;
+      queued = true;
+      window.requestAnimationFrame(function () { queued = false; QuickShop.placeMenus(root); });
+    };
+    // Capture: the filter row's own sideways scroll doesn't bubble.
+    window.addEventListener('scroll', onMove, { passive: true, capture: true });
+    window.addEventListener('resize', onMove);
+  }
+
   function keepBelowStickyHeader(root, state) {
     var apply = function () {
       var page = root.querySelector('.bxq');

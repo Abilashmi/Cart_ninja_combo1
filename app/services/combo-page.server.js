@@ -6,7 +6,7 @@
 // resolve.
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
-import { comboCollectionHandles, createComboWeightCore, isWeightCombo, toGrams, usesQuickShop } from '../utils/combo-weight.shared.js';
+import { comboCollectionHandles, createComboWeightCore, isWeightCombo, normalizeWeightPricing, toGrams, usesQuickShop } from '../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../utils/combo-quickshop.shared.js';
 import { storefrontWeightPricing } from './combo-weight-shopify.server';
 import { attachVariantStock } from './combo-stock.server';
@@ -129,6 +129,39 @@ const PRODUCT_FRAGMENT = `
   }
 `;
 
+// One page product from Shopify's ProductInfo (collection products and the
+// box templates' extra products look the same).
+function pageProduct(node) {
+  return {
+    id: node.id, title: node.title, handle: node.handle,
+    descriptionHtml: node.descriptionHtml || '',
+    // Quick Shop cards and filters: one-line subtitle, Brand / Type
+    // dropdowns, tag chips and badges.
+    summary: node.description || '',
+    vendor: node.vendor || '',
+    productType: node.productType || '',
+    tags: (node.tags || []).slice(0, 40),
+    secondImageSrc: node.images?.nodes?.length > 1 ? node.images.nodes[1].url : null,
+    image: node.featuredImage ? { url: node.featuredImage.url, altText: node.featuredImage.altText } : null,
+    images: (node.images?.nodes || []).map((img) => ({
+      url: img.url, altText: img.altText,
+    })),
+    variants: (node.variants?.nodes || []).map((v) => ({
+      id: v.id,
+      title: v.title,
+      price: v.price,
+      compareAtPrice: v.compareAtPrice || null,
+      available: v.availableForSale !== false,
+      image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
+      // Weight-priced combos: grams per unit, null when the variant has no weight.
+      grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
+    })),
+    variantId: node.variants?.nodes?.[0]?.id || null,
+    price: node.priceRangeV2?.minVariantPrice?.amount || '0.00',
+    currency: node.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
+  };
+}
+
 async function ensureComboTemplatesTable() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS combo_templates (
@@ -231,37 +264,30 @@ export async function loadComboPageDataForRow(shop, row) {
       `, { variables: { handle } });
       const json = await res.json();
       const edges = json.data?.collectionByHandle?.products?.edges || [];
-      productsByHandle[handle] = edges.map((e) => ({
-        id: e.node.id, title: e.node.title, handle: e.node.handle,
-        descriptionHtml: e.node.descriptionHtml || '',
-        // Quick Shop cards and filters: one-line subtitle, Brand / Type
-        // dropdowns, tag chips and badges.
-        summary: e.node.description || '',
-        vendor: e.node.vendor || '',
-        productType: e.node.productType || '',
-        tags: (e.node.tags || []).slice(0, 40),
-        secondImageSrc: e.node.images?.nodes?.length > 1 ? e.node.images.nodes[1].url : null,
-        image: e.node.featuredImage ? { url: e.node.featuredImage.url, altText: e.node.featuredImage.altText } : null,
-        images: (e.node.images?.nodes || []).map((img) => ({
-          url: img.url, altText: img.altText,
-        })),
-        variants: (e.node.variants?.nodes || []).map((v) => ({
-          id: v.id,
-          title: v.title,
-          price: v.price,
-          compareAtPrice: v.compareAtPrice || null,
-          available: v.availableForSale !== false,
-          image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
-          // Weight-priced combos: grams per unit, null when the variant has no weight.
-          grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
-        })),
-        variantId: e.node.variants?.nodes?.[0]?.id || null,
-        price: e.node.priceRangeV2?.minVariantPrice?.amount || '0.00',
-        currency: e.node.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
-      }));
+      productsByHandle[handle] = edges.map((e) => pageProduct(e.node));
     } catch (e) {
       console.error(`[ComboPage] Products fetch error for "${handle}":`, e);
       productsByHandle[handle] = [];
+    }
+  }
+
+  // Box templates: products added beyond the page's collections (they also
+  // count toward the box, weight_pricing.qualify.extra_product_ids).
+  const extraIds = usesQuickShop(config.layout) ? (normalizeWeightPricing(config.weight_pricing).value.qualify.extra_product_ids || []) : [];
+  if (extraIds.length) {
+    try {
+      const res = await admin.graphql(`
+        query BrixBoxExtraProducts($ids: [ID!]!) {
+          nodes(ids: $ids) { ... on Product { status ...ProductInfo } }
+        }
+        ${PRODUCT_FRAGMENT}
+      `, { variables: { ids: extraIds } });
+      const json = await res.json();
+      productsByHandle[quickShopKit.EXTRA_HANDLE] = (json.data?.nodes || [])
+        .filter((n) => n?.id && (!n.status || n.status === 'ACTIVE'))
+        .map(pageProduct);
+    } catch (e) {
+      console.error('[ComboPage] Extra products fetch error:', e);
     }
   }
 
@@ -271,7 +297,7 @@ export async function loadComboPageDataForRow(shop, row) {
   // filter collection (kept apart from allHandles, which also decides what the
   // box price counts).
   let collectionMembers = {};
-  const filterHandles = usesQuickShop(config.layout) ? quickShopKit.filterGroupHandles(config) : [];
+  const filterHandles = usesQuickShop(config.layout) ? quickShopKit.memberHandles(config) : [];
   if (filterHandles.length) {
     const productIds = Object.values(productsByHandle).flat().map((p) => p.id);
     collectionMembers = await loadCollectionMembers(admin, { handles: filterHandles, productIds });

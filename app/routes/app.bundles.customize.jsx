@@ -937,14 +937,22 @@ function PxField({
   step = 1,
   suffix = 'px',
 }) {
+  // What's typed is kept as typed: clamping on every key turned "12" into 6
+  // (the "1") then 40 ("62") whenever the minimum was above 1. In-range
+  // numbers save at once; the rest is clamped when the field loses focus.
+  const [draft, setDraft] = useState(null);
   const handle = (v) => {
+    setDraft(v);
     const num = Number(v);
-    if (Number.isNaN(num)) {
-      onChange(0);
-      return;
-    }
+    if (v !== '' && !Number.isNaN(num) && num >= min && num <= max) onChange(num);
+  };
+  const commit = () => {
+    if (draft === null) return;
+    const num = Number(draft);
+    setDraft(null);
+    if (draft === '' || Number.isNaN(num)) return;
     const clamped = Math.max(min, Math.min(max, num));
-    onChange(clamped);
+    if (clamped !== value) onChange(clamped);
   };
   return (
     <div className="compact-field">
@@ -960,8 +968,9 @@ function PxField({
       </div>
       <TextField
         type="number"
-        value={String(value ?? 0)}
+        value={draft !== null ? draft : String(value ?? 0)}
         onChange={handle}
+        onBlur={commit}
         suffix={suffix}
         autoComplete="off"
         inputMode="numeric"

@@ -3,10 +3,11 @@
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
 import { memo, useState } from 'react';
-import { BlockStack, Button, Checkbox, ChoiceList, Combobox, FormLayout, Icon, InlineStack, Listbox, Select, Text, TextField } from '@shopify/polaris';
+import { useAppBridge } from '@shopify/app-bridge-react';
+import { BlockStack, Button, Checkbox, ChoiceList, Combobox, FormLayout, Icon, InlineStack, Listbox, Select, Tag, Text, TextField } from '@shopify/polaris';
 import { SearchIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
-import { createComboWeightCore } from '../../utils/combo-weight.shared.js';
+import { createComboWeightCore, defaultWeightPricing, fixedMeasureFor } from '../../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../../utils/combo-quickshop.shared.js';
 
 const kit = createQuickShopKit(createComboWeightCore());
@@ -293,6 +294,88 @@ function CollectionFilterGroups({ config, updateConfig, collections = [] }) {
   );
 }
 
+/* ── Products on the page (include / exclude) ───────────────────────────── */
+
+const PICK_MAX = 50;
+
+/** A titled list of picked products or collections with Add (Shopify picker) and remove. */
+function PickedList({ title, help, items, type, onChange, shopify, max = PICK_MAX }) {
+  const pick = async () => {
+    try {
+      const selected = await shopify.resourcePicker({ type, multiple: true, selectionIds: items.map((x) => ({ id: x.id })) });
+      if (!selected) return;
+      onChange(selected.slice(0, max).map((r) => ({ id: r.id, title: r.title, handle: r.handle })));
+    } catch {
+      shopify.toast.show('Could not open the picker. Please try again.', { isError: true });
+    }
+  };
+  return (
+    <BlockStack gap="150">
+      <InlineStack align="space-between" blockAlign="center">
+        <Text as="h6" variant="headingSm">{title}</Text>
+        <Button size="slim" onClick={pick}>{items.length ? 'Change' : type === 'collection' ? 'Choose collections' : 'Choose products'}</Button>
+      </InlineStack>
+      <Text as="p" variant="bodySm" tone="subdued">{help}</Text>
+      {items.length > 0 && (
+        <InlineStack gap="100">
+          {items.map((x) => <Tag key={x.id} onRemove={() => onChange(items.filter((y) => y.id !== x.id))}>{x.title || x.handle || x.id}</Tag>)}
+        </InlineStack>
+      )}
+    </BlockStack>
+  );
+}
+
+/**
+ * Include / exclude on the box page. Extra products and "not part of the box
+ * offer" live in weight_pricing.qualify (they change the price, so the
+ * checkout discount syncs them); hidden products / collections only change
+ * the page (box_hide_product_ids, box_hide_collections).
+ */
+function ProductsSectionComponent({ config, updateConfig, expanded, onToggle }) {
+  const shopify = useAppBridge();
+  const titles = config.weight_qualify_titles || {};
+  const named = (ids) => (ids || []).map((id) => ({ id, title: titles[id] || '' }));
+  const pricing = config.weight_pricing || defaultWeightPricing(fixedMeasureFor(config.layout) || 'weight');
+  const qualify = pricing.qualify || {};
+  const remember = (list) => updateConfig('weight_qualify_titles', { ...titles, ...Object.fromEntries(list.map((x) => [x.id, x.title])) });
+  const setQualify = (key, list) => {
+    updateConfig('weight_pricing', { ...pricing, qualify: { ...qualify, [key]: list.map((x) => x.id) } });
+    remember(list);
+  };
+  const extra = named(qualify.extra_product_ids);
+  const noOffer = named(qualify.exclude_product_ids);
+  const hidden = named(config.box_hide_product_ids);
+  const hiddenCols = Array.isArray(config.box_hide_collections) ? config.box_hide_collections : [];
+  const count = extra.length + noOffer.length + hidden.length + hiddenCols.length;
+  return (
+    <SectionCard title="Products on the page" expanded={expanded} onToggle={onToggle} badge={count ? String(count) : undefined}>
+      <BlockStack gap="400">
+        <PickedList
+          title="Add more products" type="product" items={extra} shopify={shopify}
+          help="Shown on the page beyond its collections, and they count toward the box offer."
+          onChange={(list) => setQualify('extra_product_ids', list)}
+        />
+        <PickedList
+          title="Hide products" type="product" items={hidden} shopify={shopify} max={200}
+          help="Left off the page even though they're in its collections."
+          onChange={(list) => { updateConfig('box_hide_product_ids', list.map((x) => x.id)); remember(list); }}
+        />
+        <PickedList
+          title="Hide collections" type="collection" items={hiddenCols} shopify={shopify} max={20}
+          help="Every product that's also in one of these collections is left off the page (e.g. a Damaged or Gift card collection)."
+          onChange={(list) => updateConfig('box_hide_collections', list.map((x) => ({ id: x.id, handle: x.handle, title: x.title })))}
+        />
+        <PickedList
+          title="Not part of the box offer" type="product" items={noOffer} shopify={shopify}
+          help="Still on the page and can be added, but never count toward the box price (cards say “Not part of the box offer”)."
+          onChange={(list) => setQualify('exclude_product_ids', list)}
+        />
+        <Text as="p" variant="bodySm" tone="subdued">Changes to “Add more products” and “Not part of the box offer” update the checkout discount when you save.</Text>
+      </BlockStack>
+    </SectionCard>
+  );
+}
+
 const WEIGHT_RANGE_MAX = 8;
 const STARTER_RANGES = [{ min: 0, max: 500, label: '' }, { min: 500, max: 1000, label: '' }, { min: 1000, max: null, label: '' }];
 
@@ -366,6 +449,14 @@ function WeightFilterOptions({ config, updateConfig }) {
   );
 }
 
+/** A text size field: unset shows the old size (what the page draws), any change saves it. */
+function SizeField({ PxField, config, updateConfig, keyName, label, fallback, min = 6, max = 40 }) {
+  if (!PxField) return null;
+  const v = config[keyName];
+  const value = v === null || v === undefined || v === '' ? fallback : Number(v);
+  return <PxField label={label} value={value} min={min} max={max} onChange={(n) => updateConfig(keyName, n)} />;
+}
+
 function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
   const source = val(config, 'qs_chips_source');
   const toggleWithLabel = (key, labelKey, title, help) => (
@@ -433,6 +524,24 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.')}
         {toggleWithLabel('qs_filter_instock', 'qs_filter_instock_label', '“In stock” chip', 'Hides sold-out products when on.')}
         <Text as="p" variant="bodySm" tone="subdued">A dropdown only shows when the products on the page have at least two values for it.</Text>
+        <div className="cst-section-divider"><Text variant="headingSm" as="h6">Filter look</Text></div>
+        <Select
+          label="Where filters show on desktop"
+          options={[{ label: 'Above the products', value: 'top' }, { label: 'In a column on the left', value: 'left' }]}
+          value={val(config, 'qs_filter_position')} onChange={(v) => updateConfig('qs_filter_position', v)}
+          helpText="Phones always show them above the products."
+        />
+        {(isOn(config, 'qs_filter_price') || (isOn(config, 'qs_filter_weight') && val(config, 'qs_filter_weight_mode') === 'slider')) && (
+          <Select
+            label="Sliders shown as"
+            options={[{ label: 'Their own row', value: 'row' }, { label: 'A dropdown with the slider inside', value: 'dropdown' }]}
+            value={val(config, 'qs_slider_look')} onChange={(v) => updateConfig('qs_slider_look', v)}
+          />
+        )}
+        <div className="cst-grid-2">
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_filter_font_size" label="Filter text size" fallback={15} max={24} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_filter_font_size_m" label="On phones" fallback={14} max={24} />
+        </div>
       </FormLayout>
     </SectionCard>
   );
@@ -494,6 +603,16 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
           <TextField label="Badge text" value={val(config, 'qs_badge_text')} onChange={(v) => updateConfig('qs_badge_text', v)} autoComplete="off" />
         </div>
         <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_radius" label="Card corners" />
+        <div className="cst-section-divider"><Text variant="headingSm" as="h6">Text sizes</Text></div>
+        <div className="cst-grid-2">
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_title_size" label="Title" fallback={17} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_title_size_m" label="Title on phones" fallback={14} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_price_size" label="Price" fallback={19} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_price_size_m" label="Price on phones" fallback={16} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_text_size" label="Other text" fallback={14} />
+          <SizeField PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_text_size_m" label="Other text on phones" fallback={13} />
+        </div>
+        <Text as="p" variant="bodySm" tone="subdued">Other text = the short description, option / weight and % OFF. The struck-through price follows the price size.</Text>
       </FormLayout>
     </SectionCard>
   );
@@ -511,15 +630,15 @@ function LabelOptions({ config, updateConfig, PxField }) {
       <Checkbox label="Amount needed (e.g. ₹999, 2 kg, 3 items)" checked={amount} onChange={(v) => updateConfig('qs_top_show_amount', v)} />
       {(name || amount) && (
         <div className="cst-grid-2">
-          {name && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_label_size" label="Name text size" min={9} max={22} />}
+          {name && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_label_size" label="Name text size" min={6} max={22} />}
           {name && PxField && (
             <PxField
-              label="Name text size on phones" min={9} max={22}
+              label="Name text size on phones" min={6} max={22}
               value={Number(config.qs_top_label_size_m) || Number(val(config, 'qs_top_label_size'))}
               onChange={(v) => updateConfig('qs_top_label_size_m', v)}
             />
           )}
-          {amount && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_sub_size" label="Amount text size" min={8} max={20} />}
+          {amount && <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_top_sub_size" label="Amount text size" min={6} max={20} />}
         </div>
       )}
     </BlockStack>
@@ -660,6 +779,7 @@ function ColorsSectionComponent({ config, updateConfig, expanded, onToggle, Colo
   );
 }
 
+export const QuickShopProductsSection = memo(ProductsSectionComponent);
 export const QuickShopFiltersSection = memo(FiltersSectionComponent);
 export const QuickShopCardsSection = memo(CardsSectionComponent);
 export const QuickShopProgressSection = memo(ProgressSectionComponent);

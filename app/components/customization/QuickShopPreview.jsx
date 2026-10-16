@@ -65,15 +65,29 @@ export default function QuickShopPreview({ config, device, products = [], collec
     return out;
   }, [config]);
 
+  // Box templates' extra products (beyond the collections), fetched by id.
+  const extraIds = useMemo(() => normalizeWeightPricing(config.weight_pricing).value.qualify.extra_product_ids || [], [config.weight_pricing]);
+  const [extraProducts, setExtraProducts] = useState([]);
+  useEffect(() => {
+    if (!extraIds.length) { setExtraProducts([]); return undefined; }
+    let live = true;
+    fetch(`/api/products?ids=${encodeURIComponent(extraIds.join(','))}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => { if (live && Array.isArray(list)) setExtraProducts(list); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [extraIds]);
+
   const productsByHandle = useMemo(() => {
     const map = {};
     handles.forEach((h) => {
       const fetched = allStepProducts[h];
       map[h] = fetched && fetched.length ? fetched : (products || []).filter((p) => (p.collections || []).some((c) => c.handle === h));
     });
+    if (extraProducts.length) map[kit.EXTRA_HANDLE] = extraProducts;
     return map;
-  }, [handles, allStepProducts, products]);
-  const hasProducts = handles.some((h) => productsByHandle[h]?.length);
+  }, [handles, allStepProducts, products, extraProducts]);
+  const hasProducts = handles.some((h) => productsByHandle[h]?.length) || extraProducts.length > 0;
   const fallbackProducts = hasProducts ? null : SAMPLE_PRODUCTS;
   const collectionNames = useMemo(() => Object.fromEntries((collections || []).map((c) => [c.handle, c.title])), [collections]);
   const collectionImages = useMemo(() => Object.fromEntries((collections || []).filter((c) => c.image).map((c) => [c.handle, c.image])), [collections]);
@@ -83,7 +97,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
   // answers, the options show and don't filter.
   const [collectionMembers, setCollectionMembers] = useState({});
   const membersKey = useMemo(() => {
-    const filterHandles = kit.filterGroupHandles(config);
+    const filterHandles = kit.memberHandles(config);
     const ids = [...new Set(Object.values(productsByHandle).flat().map((p) => String(p.id)))].filter((id) => id.startsWith('gid://shopify/Product/'));
     return filterHandles.length && ids.length ? JSON.stringify({ handles: filterHandles, productIds: ids }) : '';
   }, [config, productsByHandle]);
@@ -104,8 +118,10 @@ export default function QuickShopPreview({ config, device, products = [], collec
     // "Only products I choose" by collection can't be checked here (products
     // carry collection handles, not ids), so the preview counts those; the
     // live page and checkout use real membership.
-    const qualifies = (productId) => value.qualify.mode !== 'selected'
-      || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
+    const extra = value.qualify.extra_product_ids || [];
+    const noOffer = value.qualify.exclude_product_ids || [];
+    const qualifies = (productId) => !noOffer.includes(productId) && (value.qualify.mode !== 'selected'
+      || value.qualify.product_ids.includes(productId) || extra.includes(productId) || value.qualify.collection_ids.length > 0);
     return {
       view: { measure: value.measure || 'weight', unit: value.unit, tiers: value.tiers, maxGrams: value.max_grams, messages: value.messages, enabled: true },
       qualifies,
@@ -213,10 +229,27 @@ export default function QuickShopPreview({ config, device, products = [], collec
     if (el) setPending((prev) => ({ ...prev, [el.getAttribute('data-product-id')]: el.value }));
   };
 
+  const pageRef = useRef(null);
+  // An open filter dropdown stays under its chip (see kit.placeMenus), also
+  // while the builder's preview pane scrolls.
+  useEffect(() => {
+    const node = pageRef.current;
+    kit.placeMenus(node);
+    if (!ui.menu || !node) return undefined;
+    let queued = false;
+    const onMove = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; kit.placeMenus(node); });
+    };
+    window.addEventListener('scroll', onMove, { passive: true, capture: true });
+    window.addEventListener('resize', onMove);
+    return () => { window.removeEventListener('scroll', onMove, { capture: true }); window.removeEventListener('resize', onMove); };
+  });
+
   // Weight / price sliders, with native listeners (React's onChange fires on
   // every step of a range input): while moving only the text and fill change,
   // letting go filters, like the storefront.
-  const pageRef = useRef(null);
   useEffect(() => {
     const node = pageRef.current;
     if (!node) return undefined;
@@ -226,7 +259,7 @@ export default function QuickShopPreview({ config, device, products = [], collec
       if (!isRange(e)) return;
       const picked = { dd: {} };
       if (!kit.applyRange(picked, e.target)) return;
-      setUi((prev) => ({ ...prev, menu: null, dd: { ...(prev.dd || {}), ...picked.dd } }));
+      setUi((prev) => ({ ...prev, dd: { ...(prev.dd || {}), ...picked.dd } }));
     };
     node.addEventListener('input', onInput);
     node.addEventListener('change', onRangeChange);

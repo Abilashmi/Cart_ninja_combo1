@@ -20,7 +20,7 @@ import { AdvancedSection } from './AdvancedSection';
 import { usesQuickShop } from '../../utils/combo-weight.shared.js';
 import { ThemePresets } from './ThemePresets';
 import {
-  QuickShopBarSection, QuickShopCardsSection, QuickShopColorsSection, QuickShopFiltersSection, QuickShopProgressSection,
+  QuickShopBarSection, QuickShopCardsSection, QuickShopColorsSection, QuickShopFiltersSection, QuickShopProductsSection, QuickShopProgressSection,
 } from './QuickShopSections';
 
 const SETTINGS_INDEX = [
@@ -274,6 +274,7 @@ function BuilderSidebarComponent({
                   PxField={PxField}
                   ColorPickerField={ColorPickerField}
                 />
+                <QuickShopProductsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsProducts} onToggle={() => toggleSection('qsProducts')} />
                 <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} collections={collections} PxField={PxField} />
                 <QuickShopCardsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsCards} onToggle={() => toggleSection('qsCards')} PxField={PxField} />
               </>

@@ -27,6 +27,26 @@ export async function loader({ request }) {
   const url = new URL(request.url);
   const singleHandle = url.searchParams.get('handle');
   const handlesParam = url.searchParams.get('handles');
+  const idsParam = url.searchParams.get('ids');
+
+  // Products by id (the box templates' extra products in the builder preview): flat array.
+  if (idsParam) {
+    const ids = idsParam.split(',').map((s) => s.trim()).filter((s) => /^gid:\/\/shopify\/Product\/\d+$/.test(s)).slice(0, 50);
+    if (!ids.length) return Response.json([]);
+    try {
+      const res = await admin.graphql(`
+        query BrixProductsByIds($ids: [ID!]!) {
+          nodes(ids: $ids) { ... on Product { ...ProductInfo } }
+        }
+        ${PRODUCT_FRAGMENT}
+      `, { variables: { ids } });
+      const json = await res.json();
+      return Response.json((json.data?.nodes || []).filter((n) => n?.id).map(formatProduct));
+    } catch (err) {
+      console.error('[api.products] ids error:', err);
+      return Response.json([]);
+    }
+  }
 
   // Single handle: return flat array (used by preview fetcher)
   if (singleHandle) {

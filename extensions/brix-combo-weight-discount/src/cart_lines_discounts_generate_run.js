@@ -39,6 +39,8 @@ function numericId(gid) {
 function qualifies(template, product) {
   const productId = numericId(product?.id);
   if (!productId) return false;
+  // "Not part of the box offer" products never count.
+  if (Array.isArray(template.exclude_ids) && template.exclude_ids.includes(productId)) return false;
   if (Array.isArray(template.product_ids) && template.product_ids.includes(productId)) return true;
   const allowed = Array.isArray(template.collection_ids) ? template.collection_ids : [];
   if (!allowed.length) return false;
