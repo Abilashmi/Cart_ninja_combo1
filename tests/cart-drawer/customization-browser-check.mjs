@@ -17,7 +17,9 @@ import os from 'node:os';
 const JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.js'), 'utf8');
 const CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.css'), 'utf8');
 const UI_CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cart_ui.css'), 'utf8');
-const snippet = (f) => fs.readFileSync(path.resolve('extensions/cart-drawer/snippets', f), 'utf8');
+// Scripts a snippet loads from the extension's assets are inlined (no Shopify CDN here).
+const snippet = (f) => fs.readFileSync(path.resolve('extensions/cart-drawer/snippets', f), 'utf8')
+  .replace(/<script src="\{\{ '([\w.-]+\.js)' \| asset_url \}\}" defer><\/script>/g, (_, a) => `<script>${fs.readFileSync(path.resolve('extensions/cart-drawer/assets', a), 'utf8')}</script>`);
 const shotDir = path.join(os.tmpdir(), 'brix-customization');
 fs.mkdirSync(shotDir, { recursive: true });
 

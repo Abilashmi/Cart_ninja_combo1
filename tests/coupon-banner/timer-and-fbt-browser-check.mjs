@@ -15,7 +15,9 @@ import process from 'node:process';
 
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
-const read = (f) => fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'snippets', f), 'utf8');
+// Scripts a snippet loads from the extension's assets are inlined (no Shopify CDN here).
+const read = (f) => fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'snippets', f), 'utf8')
+  .replace(/<script src="\{\{ '([\w.-]+\.js)' \| asset_url \}\}" defer><\/script>/g, (_, a) => `<script>${fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'assets', a), 'utf8')}</script>`);
 
 const browser = await chromium.launch();
 

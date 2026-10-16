@@ -18,6 +18,8 @@ const shotDir = path.join(os.tmpdir(), 'brix-fbt-widget');
 fs.mkdirSync(shotDir, { recursive: true });
 
 const fbt = fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'snippets', 'fbt-widget-render.liquid'), 'utf8')
+  // The widget script is an asset (the Liquid size limit): inline it here.
+  .replace(`<script src="{{ 'fbt_widget_render.js' | asset_url }}" defer></script>`, () => `<script>${fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'assets', 'fbt_widget_render.js'), 'utf8')}</script>`)
   .replace('{{ product.id }}', '100')
   .replace('{{ shop.permanent_domain }}', 'demo.myshopify.com')
   .replace('{{ shop.currency }}', 'INR')
