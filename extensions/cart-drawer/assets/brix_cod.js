@@ -2046,9 +2046,10 @@
       if (!paymentValue || !paymentValue.prepaid) return { code: null };
       return fetchCart().then(function (cart) {
         if (!(prepaidInCart(cart) > 0)) return { code: null };
+        // Like the Function: free gifts and combo box lines (already at the box price) never get it.
         var items = (cart.items || []).filter(function (it) {
           var p = it.properties || {};
-          return p._brixReward !== 'true' && p._brixReward !== true;
+          return p._brixReward !== 'true' && p._brixReward !== true && !p._brix_combo_id;
         }).map(function (it) { return { variantId: it.variant_id, quantity: it.quantity }; });
         if (!items.length) return { code: null };
         return api('prepaid-code', { items: items }).then(function (json) {

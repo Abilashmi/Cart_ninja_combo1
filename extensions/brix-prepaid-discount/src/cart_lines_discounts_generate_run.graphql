@@ -1,10 +1,14 @@
 query Input($collectionIds: [ID!]) {
+  enteredDiscountCodes {
+    code
+  }
   cart {
     cod: attribute(key: "_brixCod") { value }
     lines {
       id
       cod: attribute(key: "_brixCod") { value }
       reward: attribute(key: "_brixReward") { value }
+      combo: attribute(key: "_brix_combo_id") { value }
       merchandise {
         __typename
         ... on ProductVariant {

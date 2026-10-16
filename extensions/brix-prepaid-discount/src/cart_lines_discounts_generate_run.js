@@ -25,6 +25,12 @@
 
 const NONE = { operations: [] };
 
+// BRIX's one-time combo box code (app/services/combo-box-code.server.js
+// newBoxCode: "BX" + 10 of its letters). It already gives the box price, on a
+// checkout that holds only that box (Shiprocket, or its Shopify fallback),
+// where the lines carry no box marker: the prepaid discount stays out.
+const BOX_CODE = /^BX[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$/;
+
 const marked = (attr) => attr != null && attr.value != null && String(attr.value).trim() !== '';
 
 /**
@@ -45,11 +51,14 @@ export function cartLinesDiscountsGenerateRun(input) {
 
   // Cash on Delivery: never discounted.
   if (marked(cart.cod) || lines.some((line) => marked(line.cod))) return NONE;
+  // A BRIX box code: that box is already at its box price.
+  if ((input?.enteredDiscountCodes || []).some((entry) => BOX_CODE.test(String(entry?.code || '').trim().toUpperCase()))) return NONE;
 
-  // Free reward gifts (BRIX Progress Bar) are already free, and products in
-  // a collection the merchant left out never get it: both are left out of
-  // the discount and of the minimum.
-  const gifts = lines.filter((line) => String(line.reward?.value ?? '') === 'true').map((line) => line.id);
+  // Free reward gifts (BRIX Progress Bar) are already free, combo box lines
+  // (_brix_combo_id) already carry the box price, and products in a
+  // collection the merchant left out never get it: all are left out of the
+  // discount and of the minimum.
+  const gifts = lines.filter((line) => String(line.reward?.value ?? '') === 'true' || marked(line.combo)).map((line) => line.id);
   const excluded = lines
     .filter((line) => (line.merchandise?.product?.inCollections || []).some((membership) => membership.isMember))
     .map((line) => line.id);

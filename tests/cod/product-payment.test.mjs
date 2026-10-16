@@ -202,13 +202,14 @@ test('merchant text: {percent} {amount} {min} {price} filled in', () => {
 /* ── the Discount Function (logic only) ───────────────────────────────────── */
 
 const cfg = (patch = {}) => ({ version: 1, enabled: true, percent: 10, minSubtotal: 0, currency: 'INR', title: 'Prepaid discount', ...patch });
-const line = (id, amount, { cod = null, reward = null, currency = 'INR', excluded = null } = {}) => ({
-  id, cod: cod == null ? null : { value: cod }, reward: reward == null ? null : { value: reward },
+const line = (id, amount, { cod = null, reward = null, currency = 'INR', excluded = null, combo = null } = {}) => ({
+  id, cod: cod == null ? null : { value: cod }, reward: reward == null ? null : { value: reward }, combo: combo == null ? null : { value: combo },
   cost: { subtotalAmount: { amount: String(amount), currencyCode: currency } },
   // Shopify answers inCollections for the excluded collections ($collectionIds).
   merchandise: { __typename: 'ProductVariant', product: { inCollections: excluded == null ? [] : [{ isMember: excluded }] } },
 });
-const fnInput = (lines, config, { cartCod = null, classes = ['ORDER'] } = {}) => ({
+const fnInput = (lines, config, { cartCod = null, classes = ['ORDER'], codes = [] } = {}) => ({
+  enteredDiscountCodes: codes.map((code) => ({ code, rejectable: true })),
   cart: { cod: cartCod == null ? null : { value: cartCod }, lines },
   discount: { discountClasses: classes },
   shop: { metafield: config ? { jsonValue: config } : null },
@@ -389,4 +390,21 @@ test('sync: the cap reaches the Function config only when set', () => {
   const plain = sanitizeCodSettings({ productPayment: { enabled: true, prepaid: { enabled: true, percent: 10 } } });
   assert.equal('maxDiscount' in buildPrepaidConfig(plain, { currencyCode: 'INR', planLive: true }), false);
   assert.equal(prepaidRuntime({ verified: true, state: 'active' }, { percent: 10, minSubtotal: 0, maxDiscount: 250, currency: 'INR' }).maxDiscount, 250);
+});
+
+test('Function: combo box lines (already at the box price) never get the prepaid discount', () => {
+  assert.deepEqual(run(fnInput([line('B1', 500, { combo: '9' }), line('B2', 469, { combo: '9' })], cfg())), { operations: [] }, 'a box-only cart gets nothing');
+  const mixed = order(run(fnInput([line('B1', 500, { combo: '9' }), line('P1', 1100)], cfg())));
+  assert.deepEqual(mixed.candidates[0].targets, [{ orderSubtotal: { excludedCartLineIds: ['B1'] } }], 'the box line is left out, the other line gets 10%');
+  assert.deepEqual(run(fnInput([line('B1', 900, { combo: '9' }), line('P1', 300)], cfg({ minSubtotal: 999 }))), { operations: [] }, 'and box lines don\'t count toward the minimum');
+  assert.equal(order(run(fnInput([line('B1', 500, { combo: '' }), line('P1', 300)], cfg()))).candidates[0].targets[0].orderSubtotal.excludedCartLineIds.length, 0, 'an empty attribute is no box');
+});
+
+test('Function: a BRIX box code (Shiprocket box checkout) keeps the prepaid discount out', () => {
+  // As on extrokids: 10 items at ₹204 with box code BXPM43NHRL9P (box at ₹1999) got another 10% on top.
+  assert.deepEqual(run(fnInput([line('L1', 2040)], cfg(), { codes: ['BXPM43NHRL9P'] })), { operations: [] });
+  assert.deepEqual(run(fnInput([line('L1', 2040)], cfg(), { codes: ['bxpm43nhrl9p'] })), { operations: [] }, 'any letter case');
+  assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['WELCOME10'] }))).candidates.length, 1, 'other codes: prepaid as usual');
+  assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['BXSALE'] }))).candidates.length, 1, 'a merchant code that only starts with BX is not a box code');
+  assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['BXPM43NHRL0P'] }))).candidates.length, 1, '0 is not in the box code letters');
 });
