@@ -91,6 +91,10 @@
       offerStrikeTotal:config.offerStrikeTotal===true,
       offerProductPrices:config.offerProductPrices===true,
       showVariantPicker:config.showVariantPicker===true,
+      /* "Match the shopper's size": saved live only in AI-Powered mode (sizeMatchLive). */
+      sizeMatch:config.sizeMatchLive===true,
+      sizeMatchMissing:config.sizeMatchMissing==='note'?'note':'hide',
+      sizeMatchOption:typeof config.sizeMatchOption==='string'?config.sizeMatchOption.trim().slice(0,40):'',
       offerAlign:['left','center','right'].indexOf(config.offerAlign)!==-1?config.offerAlign:'center',
       offerFontFamily:typeof config.offerFontFamily==='string'&&config.offerFontFamily!=='inherit'&&/^[A-Za-z0-9 -]{1,40}$/.test(config.offerFontFamily.trim())?config.offerFontFamily.trim():''};
   }
@@ -183,7 +187,7 @@
   // Live price + compare-at price of the variant the widget will add (the
   // rule's own variant, else the first available one, as buildVariantLookup
   // picks). /products.json gives "19.99" strings, /products/<handle>.js cents.
-  function withLivePrice(product,variants,inCents){
+  function withLivePrice(product,variants,inCents,options){
     var wanted=normalizeVariantId(product&&(product.variantId||product.variant_id||(product.variant&&product.variant.id)));
     var v=(wanted&&variants.find(function(x){return normalizeVariantId(x&&x.id)===wanted;}))||variants.find(function(x){return x&&x.available;})||variants[0];
     if(!v)return product;
@@ -191,12 +195,15 @@
     var price=toPriceNumber(v.price)/div;
     var compareAt=toPriceNumber(v.compare_at_price)/div;
     /* Every variant, for the widget's variant picker (sold-out ones shown but not pickable). */
-    var list=variants.filter(function(x){return x&&x.id;}).slice(0,100).map(function(x){var p=toPriceNumber(x.price)/div,c=toPriceNumber(x.compare_at_price)/div;return{id:normalizeVariantId(x.id),title:String(x.title||''),price:p,compareAt:c>p?c:0,available:x.available!==false};});
-    return Object.assign({},product,{price:price,compareAt:compareAt>price?compareAt:0,variants:list,liveVariantId:normalizeVariantId(v.id)});
+    var list=variants.filter(function(x){return x&&x.id;}).slice(0,100).map(function(x){var p=toPriceNumber(x.price)/div,c=toPriceNumber(x.compare_at_price)/div;return{id:normalizeVariantId(x.id),title:String(x.title||''),price:p,compareAt:c>p?c:0,available:x.available!==false,opts:[x.option1==null?null:String(x.option1),x.option2==null?null:String(x.option2),x.option3==null?null:String(x.option3)]};});
+    /* Option names (Size, Color...): /products.json gives objects, older .js plain strings. */
+    var optionNames=(options||[]).map(function(o){return String(o&&typeof o==='object'?o.name||'':o||'');});
+    return Object.assign({},product,{price:price,compareAt:compareAt>price?compareAt:0,variants:list,liveVariantId:normalizeVariantId(v.id),optionNames:optionNames});
   }
 
   async function filterAvailableFbtProducts(products){
     var variantsById=new Map();
+    var optionsById=new Map();
     try{
       var res=await fetch('/products.json?limit=250');
       if(res.ok){
@@ -204,7 +211,7 @@
         var ajaxProducts=Array.isArray(json&&json.products)?json.products:[];
         ajaxProducts.forEach(function(ap){
           var pid=String(ap&&ap.id||'');
-          if(pid)variantsById.set(pid,Array.isArray(ap&&ap.variants)?ap.variants:[]);
+          if(pid){variantsById.set(pid,Array.isArray(ap&&ap.variants)?ap.variants:[]);optionsById.set(pid,ap&&ap.options);}
         });
       }
     }catch(e){}
@@ -217,7 +224,7 @@
       var numId=extractNumericId(product&&product.id);
       if(variantsById.has(numId)){
         var listed=variantsById.get(numId);
-        if(isAvailable(listed))out.push(withLivePrice(product,listed,false));
+        if(isAvailable(listed))out.push(withLivePrice(product,listed,false,optionsById.get(numId)));
         continue;
       }
       var handle=String(product&&product.handle||'').trim();
@@ -227,9 +234,87 @@
         if(!hr.ok){out.push(product);continue;}
         var hj=await hr.json();
         var hvariants=Array.isArray(hj&&hj.variants)?hj.variants:[];
-        if(isAvailable(hvariants))out.push(withLivePrice(product,hvariants,true));
+        if(isAvailable(hvariants))out.push(withLivePrice(product,hvariants,true,hj&&hj.options));
       }catch(e){out.push(product);}
     }
+    return out;
+  }
+
+  /* ── "Match the shopper's size" (AI-Powered mode). Same rules as
+     app/utils/fbt-size.shared.js (unit-tested there); keep them in step. ── */
+  var SIZE_NAME_RE=/size|age|year|yrs/i;
+  function sizeOptionIndex(names,preferred){
+    var list=(names||[]).map(function(n){return String(n&&typeof n==='object'?n.name||'':n||'').trim();});
+    var want=String(preferred||'').trim().toLowerCase();
+    for(var i=0;i<list.length;i++){if(want?list[i].toLowerCase()===want:SIZE_NAME_RE.test(list[i]))return i;}
+    return -1;
+  }
+  function parseSize(value){
+    var s=String(value==null?'':value).toLowerCase().replace(/\s+/g,' ').trim();
+    if(!s)return null;
+    var nums=(s.match(/\d+(?:\.\d+)?/g)||[]).map(Number);
+    if(!nums.length)return{text:s.replace(/[^a-z0-9]/g,'')};
+    var unit=/\d\s*(m|mo|mos|mon|mth|mths|month|months)\b/.test(s)||/\bmonths?\b/.test(s)?'m':/\d\s*(y|yr|yrs|year|years)\b/.test(s)||/\b(years?|yrs?)\b/.test(s)?'y':'';
+    return{lo:Math.min.apply(null,nums),hi:Math.max.apply(null,nums),unit:unit};
+  }
+  function sizeScore(a,b){
+    if(!a||!b)return 0;
+    if(a.text!=null||b.text!=null)return a.text!=null&&a.text===b.text?2:0;
+    if(a.unit&&b.unit&&a.unit!==b.unit)return 0;
+    if(a.lo===b.lo&&a.hi===b.hi)return 2;
+    return a.lo<=b.hi&&b.lo<=a.hi?1:0;
+  }
+  function pickSizeVariant(product,pageSize,preferred){
+    var idx=sizeOptionIndex(product&&product.optionNames,preferred);
+    var want=parseSize(pageSize);
+    if(idx<0||!want)return{status:'none'};
+    var variants=product.variants||[];
+    var base=null;for(var b=0;b<variants.length;b++)if(variants[b].id===product.liveVariantId)base=variants[b];
+    var best=null,bestScore=0;
+    for(var i=0;i<variants.length;i++){
+      var v=variants[i];if(!v.available)continue;
+      var score=sizeScore(parseSize(v.opts&&v.opts[idx]),want)*10;if(!score)continue;
+      if(base)for(var k=0;k<3;k++)if(k!==idx&&((v.opts&&v.opts[k])==null?null:v.opts[k])===((base.opts&&base.opts[k])==null?null:base.opts[k]))score+=1;
+      if(score>bestScore){best=v;bestScore=score;}
+    }
+    return best?{status:'match',variant:best}:{status:'missing'};
+  }
+  /* The size picked on the product page: the page product's own data (.js,
+     fetched once) and the variant chosen in its form (or ?variant=). */
+  function pageVariantId(){
+    var input=document.querySelector('form[action*="/cart/add"] [name="id"]');
+    var id=input&&normalizeVariantId(input.value);
+    if(id)return id;
+    try{return normalizeVariantId(new URLSearchParams(location.search).get('variant'));}catch(e){return '';}
+  }
+  async function currentPageSize(el,config){
+    var handle=el.dataset.productHandle;
+    if(!handle)return null;
+    if(!el.__psPageProduct){
+      try{var r=await fetch('/products/'+encodeURIComponent(handle)+'.js');el.__psPageProduct=r.ok?await r.json():{};}catch(e){el.__psPageProduct={};}
+    }
+    var p=el.__psPageProduct||{};
+    var variants=Array.isArray(p.variants)?p.variants:[];
+    var idx=sizeOptionIndex(p.options,config.sizeMatchOption);
+    if(idx<0||!variants.length)return null;
+    var vid=pageVariantId();
+    var v=variants.find(function(x){return normalizeVariantId(x.id)===vid;})||variants.find(function(x){return x.available;})||variants[0];
+    var value=v&&v['option'+(idx+1)];
+    if(!value)return null;
+    /* The viewed product is in the offer's set: price the picked variant. */
+    if(v.price!=null)config.viewedPrice=toPriceNumber(v.price)/100;
+    return{value:String(value),variantId:normalizeVariantId(v.id)};
+  }
+  /* Each product in the shopper's size: that size picked (in stock); without
+     it hidden, or marked "Not in <size>"; products with no size option as they are. */
+  function applySizeMatch(products,size,config){
+    var out=[];
+    products.forEach(function(p){
+      var r=pickSizeVariant(p,size,config.sizeMatchOption);
+      if(r.status==='match')out.push(Object.assign({},p,{variantId:r.variant.id,liveVariantId:r.variant.id,price:r.variant.price,compareAt:r.variant.compareAt}));
+      else if(r.status==='missing'){if(config.sizeMatchMissing==='note')out.push(Object.assign({},p,{sizeMissing:size}));}
+      else out.push(p);
+    });
     return out;
   }
 
@@ -350,23 +435,49 @@
           });
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
-          matchedProducts=await filterAvailableFbtProducts(matchedProducts);
-          if(!matchedProducts.length)return;
-          /* The offer needs every one of its products: one sold out = no offer. */
-          config.offer=null;
-          if(offerRule){
-            var shownIds=matchedProducts.map(function(p){return extractNumericId(p.id);});
-            var setIds=offerRule.fbtProducts.map(function(p){return extractNumericId(p.id);}).filter(function(id){return id&&id!==currentNumId;});
-            if(setIds.length&&setIds.every(function(id){return shownIds.indexOf(id)!==-1;}))config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text,count:setIds.length+1,productIds:setIds};
-          }
+          var liveProducts=await filterAvailableFbtProducts(matchedProducts);
+          if(!liveProducts.length)return;
           config.currentProductId=currentNumId;
           /* The viewed product's price (cents, from Liquid): it's part of the offer's set. */
           var viewedCents=Number(el.dataset.productPrice);
           config.viewedPrice=isFinite(viewedCents)&&viewedCents>0?viewedCents/100:0;
-          renderFBT(el,config,matchedProducts,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
-          el.__psMargin=config.marginTop+'px 0 '+config.marginBottom+'px';
-          placeWidget(apiPlacement);
-          el.style.margin=el.__psMargin;
+          var placed=false,drawToken=0;
+          async function draw(){
+            var token=++drawToken;
+            var products=liveProducts;
+            if(config.sizeMatch){
+              var pageSize=await currentPageSize(el,config);
+              if(token!==drawToken)return;
+              if(pageSize)products=applySizeMatch(liveProducts,pageSize.value,config);
+            }
+            /* The offer needs every one of its products shown (sold out, or not
+               in the shopper's size = no offer). */
+            config.offer=null;
+            if(offerRule){
+              var shownIds=products.filter(function(p){return!p.sizeMissing;}).map(function(p){return extractNumericId(p.id);});
+              var setIds=offerRule.fbtProducts.map(function(p){return extractNumericId(p.id);}).filter(function(id){return id&&id!==currentNumId;});
+              if(setIds.length&&setIds.every(function(id){return shownIds.indexOf(id)!==-1;}))config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text,count:setIds.length+1,productIds:setIds};
+            }
+            if(!products.length){el.style.display='none';el.innerHTML='';return;}
+            renderFBT(el,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
+            if(!placed){
+              placed=true;
+              el.__psMargin=config.marginTop+'px 0 '+config.marginBottom+'px';
+              placeWidget(apiPlacement);
+              el.style.margin=el.__psMargin;
+            }else el.style.display='block';
+          }
+          await draw();
+          /* A new size picked on the page: draw again for it (themes change the
+             form's variant without events, so it's checked twice a second). */
+          if(config.sizeMatch){
+            var lastVariant=pageVariantId();
+            var watch=setInterval(function(){
+              if(!el.isConnected){clearInterval(watch);return;}
+              var now=pageVariantId();
+              if(now!==lastVariant){lastVariant=now;draw();}
+            },500);
+          }
         })
         .catch(function(){});
     }
@@ -476,15 +587,17 @@
     }
 
     var usesQuantityMap=config.interactionType==='quickAdd'||config.interactionType==='checkboxQty';
+    /* Not in the shopper's size (sizeMatchMissing 'note'): shown greyed, never picked. */
+    var missingIds=new Set(products.filter(function(p){return p.sizeMissing;}).map(function(p){return String(p.id);}));
     /* Start with every product selected (a bundle) or let shoppers pick:
        Bundle always; else the merchant's startSelected; else the style's
        default (Classic yes, Quick Add / Checkbox + Quantity no).
        app/utils/fbt-style.shared.js fbtStartsSelected. */
     var startPicked=config.interactionType==='bundle'?true:(config.startSelected===true||config.startSelected===false?config.startSelected:!usesQuantityMap);
-    if(usesQuantityMap){products.forEach(function(p){productQuantities.set(String(p.id),startPicked?1:0);});}
-    else if(startPicked){products.forEach(function(p){selectedProductIds.add(String(p.id));});}
+    if(usesQuantityMap){products.forEach(function(p){productQuantities.set(String(p.id),startPicked&&!missingIds.has(String(p.id))?1:0);});}
+    else if(startPicked){products.forEach(function(p){if(!missingIds.has(String(p.id)))selectedProductIds.add(String(p.id));});}
 
-    function getProductQuantity(pid){var id=String(pid);if(usesQuantityMap)return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
+    function getProductQuantity(pid){var id=String(pid);if(missingIds.has(id))return 0;if(usesQuantityMap)return productQuantities.get(id)||0;return selectedProductIds.has(id)?1:0;}
     function getSelectedCount(){if(usesQuantityMap)return products.reduce(function(c,p){return c+(getProductQuantity(p.id)>0?1:0);},0);return selectedProductIds.size;}
 
     function updateCardStyle(entry){
@@ -516,6 +629,11 @@
       var qty=getProductQuantity(pid);var isSelected=qty>0;
       actionSlot.innerHTML='';
       if(entry.requiredBadge){entry.requiredBadge.remove();entry.requiredBadge=null;}
+      if(missingIds.has(pid)){
+        actionSlot.innerHTML='<span class="ps-fbt-nosize" style="font-size:11px;font-weight:600;opacity:.75;color:'+config.textColor+';">Not in '+escapeHtml(product.sizeMissing)+'</span>';
+        entry.card.style.opacity='0.55';
+        return;
+      }
 
       if(config.interactionType==='classic'){
         var btn=document.createElement('button');btn.className='ps-classic-btn'+(isSelected?' is-selected':'');
@@ -604,7 +722,7 @@
        only for products with real options; starts on the variant the widget adds. */
     function variantPicker(product){
       var list=(product&&product.variants)||[];
-      if(!config.showVariantPicker||list.length<2)return '';
+      if(!config.showVariantPicker||list.length<2||product.sizeMissing)return '';
       var current=product.liveVariantId||'';
       var opts=list.map(function(v){return '<option value="'+escapeHtml(v.id)+'"'+(v.id===current?' selected':'')+(v.available?'':' disabled')+'>'+escapeHtml(v.title+(v.available?'':' - Sold out'))+'</option>';}).join('');
       return '<select class="ps-fbt-variant" aria-label="Choose an option" style="display:block;width:100%;max-width:100%;margin-top:4px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';

@@ -25,6 +25,7 @@ const fbt = fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer'
   .replace('{{ shop.currency }}', 'INR')
   // The viewed product's price in cents (₹800), part of the offer's set.
   .replace('{{ product.selected_or_first_available_variant.price }}', '80000')
+  .replace('{{ product.handle }}', 'joggers')
   .replace("{{ block.settings.placement | default: 'below_atc' }}", 'below_cart')
   .replace('{{ request.design_mode }}', 'false');
 
@@ -37,7 +38,9 @@ const catalog = (capAvailable = true, socksVariants = null) => ({ products: [
 
 const browser = await chromium.launch();
 
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null }) {
+// products: a whole /products.json catalog instead of catalog(); pageProduct:
+// the viewed product's /products/joggers.js (its options and variants).
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
@@ -47,7 +50,8 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
   await page.route('https://int.thebrix.io/**', (r) => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
   await page.route('http://shop.test/**', (r) => {
     const url = new URL(r.request().url());
-    if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(catalog(capAvailable, socksVariants)) });
+    if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(products ? { products } : catalog(capAvailable, socksVariants)) });
+    if (url.pathname === '/products/joggers.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(pageProduct || { options: [], variants: [] }) });
     if (url.pathname === '/cart.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cart }) });
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
     if (url.hostname === 'img.test' || url.pathname.endsWith('.svg')) return r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#16a34a"/></svg>' });
@@ -60,6 +64,49 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
 }
 
 const OFFER = { type: 'percentage', value: 10, text: 'Buy all {count} together and save {discount}' };
+
+/* S. Match the shopper's size (AI-Powered mode) */
+{
+  const v = (id, size, available = true, price = '500.00') => ({ id, title: size, option1: size, available, price, compare_at_price: null });
+  const products = [
+    { id: 203, options: [{ name: 'Size', position: 1 }], variants: [v(9301, '10 Y'), v(9302, '12 Y', true, '550.00'), v(9303, '13-14 Y')] },
+    { id: 204, options: [{ name: 'Size', position: 1 }], variants: [v(9401, '8 Y'), v(9402, '10 Y')] },
+    { id: 201, options: [{ name: 'Title', position: 1 }], variants: [v(9201, 'Default Title', true, '199.00')] },
+  ];
+  // The viewed joggers: 12 Years picked (the page form's variant 1005), 10 Years is 1006.
+  const pageProduct = { options: [{ name: 'Size', position: 1 }], variants: [{ id: 1006, option1: '10 Years', available: true, price: 79900 }, { id: 1005, option1: '12 Years', available: true, price: 80000 }] };
+  const TOP = { id: 'gid://shopify/Product/203', title: 'Top', handle: 'top', price: '500' };
+  const JEANS = { id: 'gid://shopify/Product/204', title: 'Jeans', handle: 'jeans', price: '500' };
+  const SOCK = { id: 'gid://shopify/Product/201', title: 'Socks', handle: 'socks', price: '199' };
+  const sizeRule = (extra = {}) => ({ id: 'rs', displayScope: 'per_product', triggerProducts: [{ id: 'gid://shopify/Product/100' }], fbtProducts: [TOP, JEANS, SOCK], ...extra });
+  const titles = (page) => page.$$eval('ps-fbt-widget .ps-product-title', (els) => els.map((e) => e.textContent));
+
+  let { page, log } = await open({ condition: [sizeRule()], temp1: { sizeMatchLive: true, showVariantPicker: true }, products, pageProduct });
+  check('size 12: jeans (no 12 in stock) hidden, sizeless socks kept', (await titles(page)).join('|') === 'Top|Socks', (await titles(page)).join('|'));
+  check('size 12: the top shows its 12 Y, priced', (await page.$eval('ps-fbt-widget .ps-fbt-variant', (e) => e.value)) === '9302' && (await page.textContent('ps-fbt-widget .ps-product-card .ps-product-price')) === '₹550');
+  await page.locator('ps-fbt-widget .ps-fbt-addall').click();
+  await page.waitForFunction(() => /Added/.test(document.querySelector('ps-fbt-widget .ps-fbt-addall').textContent));
+  check('Add all adds the 12 Y top', (log.added[0]?.items || []).map((i) => String(i.id)).join(',') === '9302,9201', JSON.stringify(log.added[0]));
+  // The shopper picks 10 Years on the page (themes set the form value without events).
+  await page.evaluate(() => { document.querySelector('form[action*="/cart/add"] [name="id"]').value = '1006'; });
+  await page.waitForFunction(() => document.querySelectorAll('ps-fbt-widget .ps-product-title').length === 3, null, { timeout: 4000 }).catch(() => {});
+  check('size changed to 10: jeans back in 10 Y, top switches to 10 Y', (await titles(page)).join('|') === 'Top|Jeans|Socks'
+    && (await page.$$eval('ps-fbt-widget .ps-fbt-variant', (els) => els.map((e) => e.value))).join(',') === '9301,9402', (await titles(page)).join('|'));
+  await page.close();
+
+  ({ page, log } = await open({ condition: [sizeRule({ offer: OFFER })], temp1: { sizeMatchLive: true, sizeMatchMissing: 'note' }, products, pageProduct }));
+  check('note mode: jeans shown greyed "Not in 12 Years"', (await page.textContent('ps-fbt-widget')).includes('Not in 12 Years'));
+  check('note mode: no bundle offer (the set isn\'t complete in this size)', (await page.$('ps-fbt-widget .ps-fbt-offer')) === null);
+  await page.screenshot({ path: path.join(shotDir, 'size-note.png') });
+  await page.locator('ps-fbt-widget .ps-fbt-addall').click();
+  await page.waitForFunction(() => /Added/.test(document.querySelector('ps-fbt-widget .ps-fbt-addall').textContent));
+  check('note mode: Add all skips the greyed jeans', (log.added[0]?.items || []).map((i) => String(i.id)).join(',') === '9302,9201', JSON.stringify(log.added[0]));
+  await page.close();
+
+  ({ page } = await open({ condition: [sizeRule()], temp1: { sizeMatch: true, sizeMatchLive: false }, products, pageProduct }));
+  check('manual mode (not live): no size matching, every product shown', (await titles(page)).join('|') === 'Top|Jeans|Socks');
+  await page.close();
+}
 const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerProducts: [{ id: 'gid://shopify/Product/100' }], fbtProducts: [SOCKS, CAP], ...extra });
 
 /* 0. Variant picker + "show the discount" (savings line, struck bundle total, per-product prices) */

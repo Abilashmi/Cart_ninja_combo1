@@ -1208,6 +1208,8 @@ export default function FBTPage() {
       bgColor, textColor, priceColor, buttonColor, buttonTextColor, borderColor, borderRadius,
       ...Object.fromEntries(FBT_EXTRA_COLOR_KEYS.map((k) => [k, extraColors[k] || ''])),
       ...fbtLayout,
+      // Size matching is an AI-Powered mode setting: live only while that mode is on.
+      sizeMatchLive: configMode === 'ai' && fbtLayout.sizeMatch === true,
     };
     /* build template objects so PHP saves them into temp1/temp2/temp3 columns */
     const templates = {};
@@ -1697,6 +1699,33 @@ export default function FBTPage() {
                             <Button key={ex} size="micro" variant="tertiary" onClick={() => { setAiInstructions((p) => (p.trim() ? `${p.trim()}\n${ex}` : ex)); mark(); }}>{ex}</Button>
                           ))}
                         </InlineStack>
+                      </BlockStack>
+                      <BlockStack gap="150">
+                        <Checkbox
+                          label="Match the shopper's size"
+                          helpText="When a size is picked on the product page (e.g. 12 Years), each suggestion shows in that size, already selected. Sizes are matched by their numbers, so 12 Years, 12Y and 11-12 Y all count; Years never match Months."
+                          checked={fbtLayout.sizeMatch}
+                          onChange={setLayoutKey('sizeMatch')}
+                        />
+                        {fbtLayout.sizeMatch && (
+                          <InlineGrid columns={2} gap="300">
+                            <Select
+                              label="Suggestion without that size in stock"
+                              options={[{ label: 'Hide it', value: 'hide' }, { label: 'Show it greyed: "Not in 12 Years"', value: 'note' }]}
+                              value={fbtLayout.sizeMatchMissing}
+                              onChange={setLayoutKey('sizeMatchMissing')}
+                            />
+                            <TextField
+                              label="Size option name"
+                              value={fbtLayout.sizeMatchOption}
+                              onChange={setLayoutKey('sizeMatchOption')}
+                              autoComplete="off"
+                              maxLength={40}
+                              placeholder="Automatic"
+                              helpText="Empty = the option called Size, Age or Years. Products with no size (toys, books) always show."
+                            />
+                          </InlineGrid>
+                        )}
                       </BlockStack>
                       <InlineStack gap="200">
                         <Button variant="primary" disabled={!aiCountValid} loading={isSaving} onClick={() => handleSave({ regenerateAi: true })}>

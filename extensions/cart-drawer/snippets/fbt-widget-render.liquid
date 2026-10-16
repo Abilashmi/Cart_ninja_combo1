@@ -3,6 +3,7 @@
   data-shop="{{ shop.permanent_domain }}"
   data-currency="{{ shop.currency }}"
   data-product-price="{{ product.selected_or_first_available_variant.price }}"
+  data-product-handle="{{ product.handle }}"
   data-placement="{{ block.settings.placement | default: 'below_atc' }}"
   data-design-mode="{{ request.design_mode }}"
   style="display:none">

@@ -158,6 +158,11 @@ export function pickFbtLayout(tpl) {
   out.startSelected = tpl?.startSelected === true ? true : tpl?.startSelected === false ? false : null;
   // A variant dropdown on each product (off = the widget adds the rule's / first in-stock variant).
   out.showVariantPicker = tpl?.showVariantPicker === true;
+  // AI-Powered mode → "Match the shopper's size" (app/utils/fbt-size.shared.js):
+  // the merchant's choice; the widget follows sizeMatchLive, saved true only in AI mode.
+  out.sizeMatch = tpl?.sizeMatch === true;
+  out.sizeMatchMissing = tpl?.sizeMatchMissing === 'note' ? 'note' : 'hide';
+  out.sizeMatchOption = typeof tpl?.sizeMatchOption === 'string' ? tpl.sizeMatchOption.trim().slice(0, 40) : '';
   // The offer text's look rides along (loaded and saved with the layout).
   return { ...out, ...pickFbtOfferStyle(tpl) };
 }
