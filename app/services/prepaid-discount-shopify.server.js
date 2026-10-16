@@ -61,6 +61,8 @@ export function buildPrepaidConfig(settings, { currencyCode = null, planLive = f
     minSubtotal: live ? Number(pp.prepaid.minSubtotal) || 0 : 0,
     currency: currencyCode,
     title: live ? pp.prepaid.title : '',
+    // Only when set, so a config without a cap is exactly what it was.
+    ...(live && Number(pp.prepaid.maxDiscount) > 0 ? { maxDiscount: Number(pp.prepaid.maxDiscount) } : {}),
   };
 }
 
@@ -126,7 +128,7 @@ async function ensurePrepaidDiscount(admin, variables) {
 /** What the storefront may show: only a verified discount, with the numbers Shopify really has. */
 export function prepaidRuntime(result, config) {
   return result.verified
-    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() }
+    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() }
     : { verified: false, state: result.state, at: new Date().toISOString() };
 }
 

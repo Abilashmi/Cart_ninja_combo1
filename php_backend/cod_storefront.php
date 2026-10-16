@@ -259,6 +259,8 @@ function cods_product_payment($s, $codLive) {
             // save): product pages in them show no prepaid offer.
             'excludedCollections' => cods_collection_ids($rt['excludedCollections'] ?? []),
             'minSubtotal' => cods_num($rt['minSubtotal'] ?? 0),
+            // The most it takes off (0 = no cap), as Shopify verified on save.
+            'maxDiscount' => cods_num($rt['maxDiscount'] ?? 0),
             'currency' => is_string($rt['currency'] ?? null) && preg_match('/^[A-Z]{3}$/', $rt['currency']) ? $rt['currency'] : '',
             'showBadge' => cods_bool($pre['showBadge'] ?? null, true),
             'showSavingsAmount' => cods_bool($pre['showSavingsAmount'] ?? null, true),

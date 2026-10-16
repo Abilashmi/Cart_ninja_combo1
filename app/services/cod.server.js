@@ -423,6 +423,8 @@ async function loadComboVariants(admin, variantIds, collectionIds = []) {
 
 function comboQualifies(template, variant) {
   if (!variant?.productId) return false;
+  // Same rule as the checkout Function: "not part of the box offer" never counts.
+  if ((template.exclude_ids || []).map(String).includes(variant.productId)) return false;
   if ((template.product_ids || []).map(String).includes(variant.productId)) return true;
   const allowed = (template.collection_ids || []).map(String);
   return variant.collectionIds.some((id) => allowed.includes(id));
@@ -646,6 +648,73 @@ function cleanAttributes(attributes) {
     .map(([key, value]) => ({ key, value: String(value) }));
 }
 
+// What a code takes off on this draft: Shopify's own figure when it names
+// the discounts, else the difference against the same draft without it.
+async function codeAmount(admin, { code, base, calc }) {
+  if (Array.isArray(calc.platformDiscounts)) {
+    return calc.platformDiscounts
+      .filter((d) => d.code && d.code.toLowerCase() === code.toLowerCase())
+      .reduce((sum, d) => sum + amountOf(d.totalAmountPriceSet), 0);
+  }
+  const without = { ...base, discountCodes: (base.discountCodes || []).filter((c) => c.toLowerCase() !== code.toLowerCase()) };
+  if (!without.discountCodes.length) delete without.discountCodes;
+  const plain = await calculate(admin, without);
+  return Math.max(0, amountOf(calc.totalDiscountsSet) - amountOf(plain.totalDiscountsSet));
+}
+
+// Does the code have a usage limit or once-per-customer rule? A capped code
+// goes on the order as a fixed discount, which Shopify doesn't count as a use,
+// so such codes are refused over the cap instead (never reusable through COD).
+// Unknown (lookup failed) counts as limited.
+async function codeIsLimited(admin, code) {
+  try {
+    const data = await gql(admin, `#graphql
+      query CodCouponLimits($code: String!) {
+        codeDiscountNodeByCode(code: $code) {
+          codeDiscount {
+            ... on DiscountCodeBasic { usageLimit appliesOncePerCustomer }
+            ... on DiscountCodeBxgy { usageLimit appliesOncePerCustomer }
+            ... on DiscountCodeFreeShipping { usageLimit appliesOncePerCustomer }
+            ... on DiscountCodeApp { usageLimit appliesOncePerCustomer }
+          }
+        }
+      }`, { code });
+    const d = data?.codeDiscountNodeByCode?.codeDiscount;
+    if (!d) return true;
+    return d.usageLimit != null || d.appliesOncePerCustomer === true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * settings.couponMaxDiscount: a typed code that would take off more than the
+ * cap. Without usage limits it becomes the order's fixed discount of exactly
+ * the cap (titled with the code); with limits it's left off with a message.
+ * Returns null (no cap, not applied, or within it), { applied, amount, base,
+ * calc } or { refused, message, base, calc }.
+ */
+async function capCoupon(admin, { settings, code, base, calc, format }) {
+  const cap = Number(settings.couponMaxDiscount) || 0;
+  if (cap <= 0 || !(base.discountCodes || []).some((c) => c.toLowerCase() === code.toLowerCase())) return null;
+  const amount = await codeAmount(admin, { code, base, calc });
+  if (!(amount > cap + 0.004)) return null;
+  const rest = (base.discountCodes || []).filter((c) => c.toLowerCase() !== code.toLowerCase());
+  const next = { ...base };
+  if (rest.length) next.discountCodes = rest; else delete next.discountCodes;
+  if (await codeIsLimited(admin, code)) {
+    return {
+      refused: true,
+      message: `${code} takes off more than ${format(cap)}, the most a Cash on Delivery order can save with a code. Pay online to use it, or try another code.`,
+      base: next,
+      calc: await calculate(admin, next),
+    };
+  }
+  next.appliedDiscount = { title: code.slice(0, 40), description: `${code}, up to ${format(cap)} on COD`, value: Math.round(cap * 100) / 100, valueType: 'FIXED_AMOUNT' };
+  next.customAttributes = [...(next.customAttributes || []), { key: 'brix_coupon_capped', value: code }];
+  return { applied: true, amount: Math.round(cap * 100) / 100, base: next, calc: await calculate(admin, next) };
+}
+
 /**
  * Price the lines through Shopify and apply the merchant's COD rules.
  * Returns { quote, input } — `input` is the DraftOrderInput core reused by placeCodOrder.
@@ -687,6 +756,9 @@ export async function quoteCod(admin, {
     base = { ...base, acceptAutomaticDiscounts: false };
     calc = await calculate(admin, base);
   }
+  // The most a typed code may take off (settings.couponMaxDiscount).
+  const capped = code ? await capCoupon(admin, { settings, code, base, calc, format }) : null;
+  if (capped) ({ base, calc } = capped);
   const subtotal = amountOf(calc.subtotalPriceSet);
   const ruleError = checkCodRules({ settings, subtotal, pincode, productTags: tags, surface, format });
   if (ruleError) throw new CodError(ruleError.code, ruleError.message, { status: 422 });
@@ -716,7 +788,7 @@ export async function quoteCod(admin, {
   const usedCode = (c) => (platform
     ? platform.some((d) => d.code && d.code.toLowerCase() === c.toLowerCase() && amountOf(d.totalAmountPriceSet) > 0)
     : (calc.discountCodes || []).some((x) => x.toLowerCase() === c.toLowerCase()) && otherDiscounts > 0);
-  const couponApplied = Boolean(code) && usedCode(code);
+  const couponApplied = capped?.applied ? true : capped?.refused ? false : Boolean(code) && usedCode(code);
   const cartCodesApplied = carried.map((c) => ({ code: c, applied: usedCode(c) }));
 
   const quote = {
@@ -744,7 +816,12 @@ export async function quoteCod(admin, {
     tax: amountOf(calc.totalTaxSet),
     taxesIncluded: Boolean(calc.taxesIncluded),
     total: amountOf(calc.totalPriceSet),
-    coupon: code ? { code, applied: couponApplied } : null,
+    coupon: code ? {
+      code,
+      applied: couponApplied,
+      ...(capped?.applied ? { capped: true, amount: capped.amount } : {}),
+      ...(capped?.refused ? { message: capped.message } : {}),
+    } : null,
     // The cart's codes carried over (only when the merchant has cart discounts on).
     cartCodes: cartCodesApplied,
     // Each discount Shopify gave, by name (null when the API can't say).
@@ -753,8 +830,9 @@ export async function quoteCod(admin, {
         .filter((d) => d.amount > 0)
       : null,
   };
-  // Only codes Shopify used go on the order.
-  const kept = [...(couponApplied ? [code] : []), ...cartCodesApplied.filter((c) => c.applied).map((c) => c.code)];
+  // Only codes Shopify used go on the order (a capped code is the order's
+  // fixed discount instead, see capCoupon).
+  const kept = [...(couponApplied && !capped?.applied ? [code] : []), ...cartCodesApplied.filter((c) => c.applied).map((c) => c.code)];
   if (kept.length) input.discountCodes = kept;
   else delete input.discountCodes;
   return { quote, input };

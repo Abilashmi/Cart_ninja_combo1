@@ -233,7 +233,7 @@ const GROUPS = [
     title: 'Product page payments',
     items: [
       { id: 'payoptions', label: 'Payment options', icon: PaymentIcon, preview: 'product', fields: ['ppOnlineLabel', 'ppCodLabel', 'ppOnlineButton'], toggle: (f) => f.pp.enabled },
-      { id: 'prepaid', label: 'Prepaid discount', icon: CreditCardPercentIcon, preview: 'product', fields: ['ppPercent', 'ppMinSubtotal', 'ppTitle'], toggle: (f) => f.pp.enabled && f.pp.online.enabled && f.pp.prepaid.enabled },
+      { id: 'prepaid', label: 'Prepaid discount', icon: CreditCardPercentIcon, preview: 'product', fields: ['ppPercent', 'ppMinSubtotal', 'ppMaxDiscount', 'ppTitle'], toggle: (f) => f.pp.enabled && f.pp.online.enabled && f.pp.prepaid.enabled },
       {
         id: 'paydesign', label: 'Payment options design', icon: ColorIcon, preview: 'product',
         fields: ['pp_onlineColor', 'pp_codColor', 'pp_cardBackground', 'pp_borderColor', 'pp_selectedBackground', 'pp_badgeBackground', 'pp_badgeText'],
@@ -254,7 +254,7 @@ const GROUPS = [
     items: [
       { id: 'popup', label: 'Popup design', icon: PaintBrushFlatIcon, preview: 'sheet', fields: ['sheetLogo', 'sheetAccent'] },
       { id: 'discounts', label: 'Cart discounts', icon: DiscountIcon, preview: 'sheet', fields: [], toggle: 'cartDiscounts' },
-      { id: 'coupons', label: 'Coupons', icon: DiscountIcon, preview: 'sheet', fields: [], toggle: 'allowCoupons' },
+      { id: 'coupons', label: 'Coupons', icon: DiscountIcon, preview: 'sheet', fields: ['couponMaxDiscount'], toggle: 'allowCoupons' },
     ],
   },
   {
@@ -867,6 +867,13 @@ export default function CodCustomizePage() {
           <Card>
             <FormLayout>
               <Checkbox label="Allow discount codes on COD orders" checked={form.allowCoupons} onChange={set('allowCoupons')} />
+              {form.allowCoupons && (
+                <TextField
+                  label="Most a code can take off" type="number" min={0} value={form.couponMaxDiscount} onChange={set('couponMaxDiscount')}
+                  placeholder="No limit" prefix={data.currencyCode} error={errors.couponMaxDiscount} autoComplete="off"
+                  helpText="A code worth more takes off exactly this much (shown as a fixed discount named after the code). Codes with a usage limit or once-per-customer rule are refused instead, so they can't be reused through COD."
+                />
+              )}
               {form.allowCoupons && <Checkbox label="Show a coupon field in the popup" checked={form.sheetCoupon} onChange={set('sheetCoupon')} />}
               {form.allowCoupons && form.sheetCoupon && (
                 <>

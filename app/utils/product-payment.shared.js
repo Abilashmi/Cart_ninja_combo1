@@ -96,6 +96,7 @@ export const DEFAULT_PRODUCT_PAYMENT = Object.freeze({
     percent: 10,
     title: 'Prepaid discount', // the discount's name in Shopify checkout
     minSubtotal: 0, // 0 = no minimum
+    maxDiscount: 0, // the most it takes off an order (shop currency); 0 = no cap
     showBadge: true, // "Save 10%" badge on the card and the Buy button
     showSavingsAmount: true, // "(save ₹110)" next to the online price
     // {percent} {amount} {min} {price} are filled in for the shopper.
@@ -194,11 +195,13 @@ export function sanitizeProductPayment(patch, base = DEFAULT_PRODUCT_PAYMENT) {
   const pp = subPatch('prepaid');
   const basePercent = parsePrepaidPercent(prepaid.percent) ?? d.prepaid.percent;
   const baseMin = parseMinSubtotal(prepaid.minSubtotal) ?? 0;
+  const baseMax = parseMinSubtotal(prepaid.maxDiscount) ?? 0;
   const outPrepaid = {
     enabled: bool(pp.enabled, bool(prepaid.enabled, false)),
     percent: 'percent' in pp ? (parsePrepaidPercent(pp.percent) ?? basePercent) : basePercent,
     title: cleanText(pp.title ?? prepaid.title, d.prepaid.title, L.title),
     minSubtotal: 'minSubtotal' in pp ? (parseMinSubtotal(pp.minSubtotal) ?? baseMin) : baseMin,
+    maxDiscount: 'maxDiscount' in pp ? (parseMinSubtotal(pp.maxDiscount) ?? baseMax) : baseMax,
     showBadge: bool(pp.showBadge, bool(prepaid.showBadge, true)),
     showSavingsAmount: bool(pp.showSavingsAmount, bool(prepaid.showSavingsAmount, true)),
     offerTitle: cleanText(pp.offerTitle ?? prepaid.offerTitle, d.prepaid.offerTitle, L.offerTitle),
@@ -261,7 +264,8 @@ export function prepaidDiscountLive(productPayment, planLive) {
 /**
  * What the shopper sees for one product line (unit price × quantity), as the
  * storefront computes it (brix_cod.js Pay.pricing mirrors this exactly).
- *   prepaid: { percent, minSubtotal } | null   (null = no verified prepaid offer)
+ *   prepaid: { percent, minSubtotal, maxDiscount } | null   (null = no verified prepaid offer)
+ *     maxDiscount > 0 caps the saving (same currency rule as the minimum).
  *   currencyMatches: the shopper's currency is the one the minimum is set in.
  *     With a minimum and another currency, no saving is promised (the Function
  *     can't compare them either).
@@ -271,15 +275,18 @@ export function productPaymentPricing({ unitPrice, quantity = 1, prepaid = null,
   const subtotal = round2((Number(unitPrice) || 0) * qty);
   const percent = prepaid ? parsePrepaidPercent(prepaid.percent) : null;
   const min = prepaid ? Number(prepaid.minSubtotal) || 0 : 0;
-  const minMet = min > 0 ? currencyMatches && subtotal >= min : true;
+  const cap = prepaid ? Number(prepaid.maxDiscount) || 0 : 0;
+  // A cap is in the shop currency: like the minimum, never promised in another one.
+  const minMet = (min > 0 || cap > 0) && !currencyMatches ? false : min > 0 ? subtotal >= min : true;
   const qualifies = Boolean(percent) && subtotal > 0 && minMet;
-  const savings = qualifies ? round2((subtotal * percent) / 100) : 0;
+  const full = qualifies ? round2((subtotal * percent) / 100) : 0;
+  const savings = cap > 0 ? Math.min(full, round2(cap)) : full;
   const fee = round2(codFee);
   return {
     subtotal,
     percent,
     qualifies,
-    minMissing: Boolean(percent) && !minMet,
+    minMissing: Boolean(percent) && min > 0 && !minMet,
     savings,
     online: round2(subtotal - savings),
     cod: subtotal,

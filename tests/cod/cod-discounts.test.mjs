@@ -105,3 +105,75 @@ test('an API version without platformDiscounts falls back and still prices the o
   assert.equal(quote.discounts, 150);
   assert.deepEqual(input.discountCodes, ['KO10']);
 });
+
+/* ── settings.couponMaxDiscount: the most a typed code may take off ── */
+
+// Like shopify() above, with an order-level fixed discount (appliedDiscount) honoured.
+function shopifyWithManual(input, withPlatform) {
+  const base = shopify(input, withPlatform);
+  const manual = input.appliedDiscount ? Number(input.appliedDiscount.value) : 0;
+  if (!manual) return base;
+  const off = Number(base.totalDiscountsSet.shopMoney.amount) + manual;
+  return { ...base, subtotalPriceSet: money(1000 - off), totalDiscountsSet: money(off), totalPriceSet: money(1000 - off) };
+}
+function capAdmin({ limited = false, lookupFails = false } = {}) {
+  const { admin, inputs } = fakeAdmin(shopifyWithManual);
+  const inner = admin.graphql;
+  admin.graphql = async (query, opts) => {
+    if (query.includes('CodCouponLimits')) {
+      if (lookupFails) throw new Error('boom');
+      return { json: async () => ({ data: { codeDiscountNodeByCode: { codeDiscount: limited ? { usageLimit: 100, appliesOncePerCustomer: false } : { usageLimit: null, appliesOncePerCustomer: false } } } }) };
+    }
+    return inner(query, opts);
+  };
+  return { admin, inputs };
+}
+
+test('coupon cap: a code worth more becomes a fixed discount of exactly the cap', async () => {
+  const { admin, inputs } = capAdmin();
+  const { quote, input } = await quoteCod(admin, { settings: settings({ allowCoupons: true, couponMaxDiscount: 60 }), lines: LINES, surface: 'drawer', coupon: 'WELCOME', cartCodes: [] });
+  assert.deepEqual(quote.coupon, { code: 'WELCOME', applied: true, capped: true, amount: 60 });
+  assert.equal(input.discountCodes, undefined, 'the code itself is not on the order');
+  assert.deepEqual(input.appliedDiscount, { title: 'WELCOME', description: 'WELCOME, up to ₹60.00 on COD', value: 60, valueType: 'FIXED_AMOUNT' });
+  assert.ok(input.customAttributes.some((a) => a.key === 'brix_coupon_capped' && a.value === 'WELCOME'));
+  assert.equal(quote.total, 890, '₹1000 − ₹50 automatic − ₹60 (the cap, not the code\'s ₹100)');
+  assert.equal(inputs.at(-1).appliedDiscount.value, 60);
+});
+
+test('coupon cap: within the cap the code applies as usual; no cap = as before', async () => {
+  let { admin } = capAdmin();
+  let { quote, input } = await quoteCod(admin, { settings: settings({ allowCoupons: true, couponMaxDiscount: 150 }), lines: LINES, surface: 'drawer', coupon: 'WELCOME' });
+  assert.deepEqual(quote.coupon, { code: 'WELCOME', applied: true });
+  assert.deepEqual(input.discountCodes, ['WELCOME']);
+  ({ admin } = capAdmin());
+  ({ quote } = await quoteCod(admin, { settings: settings({ allowCoupons: true }), lines: LINES, surface: 'drawer', coupon: 'WELCOME' }));
+  assert.deepEqual(quote.coupon, { code: 'WELCOME', applied: true });
+});
+
+test('coupon cap: a code with a usage limit (or an unknown one) is refused over the cap', async () => {
+  for (const opts of [{ limited: true }, { lookupFails: true }]) {
+    const { admin } = capAdmin(opts);
+    const { quote, input } = await quoteCod(admin, { settings: settings({ allowCoupons: true, couponMaxDiscount: 60 }), lines: LINES, surface: 'drawer', coupon: 'WELCOME' });
+    assert.equal(quote.coupon.applied, false);
+    assert.match(quote.coupon.message, /WELCOME takes off more than ₹60/);
+    assert.equal(input.discountCodes, undefined);
+    assert.equal(input.appliedDiscount, undefined);
+    assert.equal(quote.total, 950, 'priced without it (the ₹50 automatic discount stays)');
+  }
+});
+
+test('coupon cap: works without platformDiscounts (difference against the draft without the code)', async () => {
+  const { admin } = fakeAdmin(shopifyWithManual, { platformFails: true });
+  const inner = admin.graphql;
+  admin.graphql = async (query, opts) => (query.includes('CodCouponLimits')
+    ? { json: async () => ({ data: { codeDiscountNodeByCode: { codeDiscount: { usageLimit: null, appliesOncePerCustomer: false } } } }) }
+    : inner(query, opts));
+  const { quote } = await quoteCod(admin, { settings: settings({ allowCoupons: true, couponMaxDiscount: 60, cartDiscounts: false }), lines: LINES, surface: 'drawer', coupon: 'WELCOME' });
+  assert.equal(quote.coupon.capped, true);
+  assert.equal(quote.total, 940);
+});
+
+test('coupon cap: settings keep it; empty = no limit', () => {
+  assert.equal(settings().couponMaxDiscount, 0);
+  assert.equal(settings({ couponMaxDiscount: '250' }).couponMaxDiscount, 250);
+});

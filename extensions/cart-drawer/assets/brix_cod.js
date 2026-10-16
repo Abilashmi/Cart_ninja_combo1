@@ -1154,7 +1154,7 @@
       self.track('add_payment_info');
       if (json.quote.coupon && !json.quote.coupon.applied) {
         self.couponDraft = json.quote.coupon.code;
-        self.couponError = json.quote.coupon.code + ' can\'t be used on this order, so it was left off.';
+        self.couponError = json.quote.coupon.message || (json.quote.coupon.code + ' can\'t be used on this order, so it was left off.');
         self.coupon = null;
       }
       self.renderReview();
@@ -1240,7 +1240,7 @@
         self.couponJustApplied = true;
       } else {
         // Keep the current prices (and any code already applied).
-        self.couponError = code + ' isn\'t valid for this order. Check the code, or the order may not meet its conditions.';
+        self.couponError = (json.quote.coupon && json.quote.coupon.message) || (code + ' isn\'t valid for this order. Check the code, or the order may not meet its conditions.');
       }
       self.renderReview(Boolean(self.couponError));
       self.couponJustApplied = false;
@@ -1285,7 +1285,7 @@
       var rest = Math.round((q.discounts - listed) * 100) / 100;
       if (rest > 0.009) html += '<div style="color:#067647"><span>Other discounts</span><span class="num">\u2212' + fmt(rest) + '</span></div>';
     } else if (q.discounts > 0) {
-      html += '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>';
+      html += '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + (q.coupon.capped ? ', max ' + fmt(q.coupon.amount) : '') + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>';
     }
     (q.cartCodes || []).forEach(function (c) {
       if (!c.applied) html += '<div class="mu"><span>' + esc(c.code) + ' doesn\'t apply to this order</span></div>';
@@ -2546,11 +2546,13 @@
       var subtotal = round2((Number(unitPrice) || 0) * qty);
       var percent = prepaid && Number(prepaid.percent) >= 1 && Number(prepaid.percent) <= 50 ? round2(prepaid.percent) : null;
       var min = prepaid ? Number(prepaid.minSubtotal) || 0 : 0;
-      var minMet = min > 0 ? Boolean(currencyMatches) && subtotal >= min : true;
+      var cap = prepaid ? Number(prepaid.maxDiscount) || 0 : 0;
+      var minMet = (min > 0 || cap > 0) && !currencyMatches ? false : min > 0 ? subtotal >= min : true;
       var qualifies = Boolean(percent) && subtotal > 0 && minMet;
-      var savings = qualifies ? round2(subtotal * percent / 100) : 0;
+      var full = qualifies ? round2(subtotal * percent / 100) : 0;
+      var savings = cap > 0 ? Math.min(full, round2(cap)) : full;
       return {
-        subtotal: subtotal, percent: percent, qualifies: qualifies, minMissing: Boolean(percent) && !minMet,
+        subtotal: subtotal, percent: percent, qualifies: qualifies, minMissing: Boolean(percent) && min > 0 && !minMet,
         savings: savings, online: round2(subtotal - savings), cod: subtotal, codFee: round2(codFee), codTotal: round2(subtotal + (Number(codFee) || 0)),
       };
     }

@@ -54,7 +54,7 @@ export function paymentForm(pp) {
     ...p,
     online: { ...p.online },
     cod: { ...p.cod },
-    prepaid: { ...p.prepaid, percent: String(p.prepaid.percent), minSubtotal: numText(p.prepaid.minSubtotal) },
+    prepaid: { ...p.prepaid, percent: String(p.prepaid.percent), minSubtotal: numText(p.prepaid.minSubtotal), maxDiscount: numText(p.prepaid.maxDiscount) },
     layout: { ...p.layout },
     appearance: { ...p.appearance },
   };
@@ -67,6 +67,7 @@ export function paymentSettings(pf) {
       ...pf.prepaid,
       percent: parsePrepaidPercent(pf.prepaid.percent) ?? pf.prepaid.percent,
       minSubtotal: parseMinSubtotal(pf.prepaid.minSubtotal) ?? pf.prepaid.minSubtotal,
+      maxDiscount: parseMinSubtotal(pf.prepaid.maxDiscount) ?? pf.prepaid.maxDiscount,
     },
   };
 }
@@ -89,6 +90,7 @@ export function paymentErrors(pf) {
     e.ppPercent = `Enter a percentage from ${PREPAID_PERCENT_MIN} to ${PREPAID_PERCENT_MAX}.`;
   }
   if (parseMinSubtotal(pf.prepaid.minSubtotal) === null) e.ppMinSubtotal = 'Enter an amount of 0 or more, or leave it empty.';
+  if (parseMinSubtotal(pf.prepaid.maxDiscount) === null) e.ppMaxDiscount = 'Enter an amount of 0 or more, or leave it empty.';
   if (pf.prepaid.enabled && !String(pf.prepaid.title || '').trim()) e.ppTitle = 'Enter the name shoppers see at checkout.';
   if (!String(pf.online.label || '').trim()) e.ppOnlineLabel = 'Enter a label.';
   if (!String(pf.cod.label || '').trim()) e.ppCodLabel = 'Enter a label.';
@@ -123,6 +125,7 @@ export function toForm(s) {
     excludedProductTags: s.excludedProductTags.join(', '),
     excludedBehavior: s.excludedBehavior,
     allowCoupons: s.allowCoupons,
+    couponMaxDiscount: numText(s.couponMaxDiscount),
     cartDiscounts: s.cartDiscounts !== false,
     prepaidNudgeText: s.prepaidNudgeText,
     orderTags: s.orderTags.join(', '),
@@ -192,6 +195,7 @@ export function toSettings(f) {
     excludedProductTags: f.excludedProductTags,
     excludedBehavior: f.excludedBehavior,
     allowCoupons: f.allowCoupons,
+    couponMaxDiscount: Number(f.couponMaxDiscount) || 0,
     cartDiscounts: f.cartDiscounts,
     prepaidNudgeText: f.prepaidNudgeText,
     orderTags: f.orderTags,
@@ -250,7 +254,7 @@ export function toSettings(f) {
 export function formErrors(f) {
   const e = {};
   const money = (key) => { if (f[key] !== '' && !(Number(f[key]) >= 0)) e[key] = 'Enter an amount of 0 or more.'; };
-  ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder'].forEach(money);
+  ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder', 'couponMaxDiscount'].forEach(money);
   if (f.codFeePercent !== '' && !(Number(f.codFeePercent) >= 0 && Number(f.codFeePercent) <= COD_FEE_PERCENT_MAX)) e.codFeePercent = `Enter 0 to ${COD_FEE_PERCENT_MAX}%, or leave it empty.`;
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0) && !(Number(f.codFeePercent) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';

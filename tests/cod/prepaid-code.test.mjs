@@ -40,7 +40,7 @@ const SETTINGS = { productPayment: { enabled: true, online: { enabled: true }, p
 const VERIFIED = { prepaid: { verified: true, percent: 10, minSubtotal: 0, currency: 'INR' } };
 
 test('the offer comes only from saved + verified settings on a live plan', () => {
-  assert.deepEqual(prepaidOffer(SETTINGS, VERIFIED, true), { percent: 10, minSubtotal: 0, excludedCollections: [] });
+  assert.deepEqual(prepaidOffer(SETTINGS, VERIFIED, true), { percent: 10, minSubtotal: 0, maxDiscount: 0, excludedCollections: [] });
   assert.equal(prepaidOffer(SETTINGS, VERIFIED, false), null, 'plan off');
   assert.equal(prepaidOffer(SETTINGS, { prepaid: { verified: false, percent: 10 } }, true), null, 'not verified in Shopify');
   assert.equal(prepaidOffer(SETTINGS, {}, true), null, 'never synced');
@@ -49,7 +49,7 @@ test('the offer comes only from saved + verified settings on a live plan', () =>
   const onlineOff = { productPayment: { ...SETTINGS.productPayment, online: { enabled: false } } };
   assert.equal(prepaidOffer(onlineOff, VERIFIED, true), null, 'Pay Online off');
   // Shopify's verified numbers win over the saved ones.
-  assert.deepEqual(prepaidOffer(SETTINGS, { prepaid: { verified: true, percent: 12.5, minSubtotal: 999 } }, true), { percent: 12.5, minSubtotal: 999, excludedCollections: [] });
+  assert.deepEqual(prepaidOffer(SETTINGS, { prepaid: { verified: true, percent: 12.5, minSubtotal: 999 } }, true), { percent: 12.5, minSubtotal: 999, maxDiscount: 0, excludedCollections: [] });
 });
 
 test('a one-time code: X% of the Shopify prices + one paisa, a fixed amount on the items, never with order discounts', async () => {
@@ -110,4 +110,13 @@ test('Shopify refusing the code is an error (the storefront then uses Shopify ch
     createPrepaidCode(fakeAdmin({ reject: true }), { offer: { percent: 10, minSubtotal: 0 }, items: [{ variantId: '41', quantity: 1 }], now: NOW, random: fixedRandom }),
     /discountCodeBasicCreate failed/,
   );
+});
+
+test('a cap: the code takes off at most the cap (+ one paisa, like X% normally)', async () => {
+  const admin = fakeAdmin({ prices: { 41: '3000.00' } });
+  const result = await createPrepaidCode(admin, { offer: { percent: 10, minSubtotal: 0, maxDiscount: 200 }, items: [{ variantId: '41', quantity: 1 }], now: NOW, random: fixedRandom });
+  assert.equal(result.amount, '200.01', '10% of 3000 = 300, capped at 200');
+  const small = await createPrepaidCode(fakeAdmin({ prices: { 41: '1000.00' } }), { offer: { percent: 10, minSubtotal: 0, maxDiscount: 200 }, items: [{ variantId: '41', quantity: 1 }], now: NOW, random: fixedRandom });
+  assert.equal(small.amount, '100.01', 'under the cap: plain 10%');
+  assert.equal(prepaidOffer(SETTINGS, { prepaid: { ...VERIFIED.prepaid, maxDiscount: 200 } }, true).maxDiscount, 200);
 });

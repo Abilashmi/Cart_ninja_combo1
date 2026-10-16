@@ -355,3 +355,38 @@ test('sync: honest states — not deployed, inactive, plan locked, off; never th
   const rt = prepaidRuntime(failed, failed.config);
   assert.deepEqual(rt, { verified: false, state: 'failed', at: rt.at }, 'nothing the storefront could show');
 });
+
+/* ── maximum discount (cap) ───────────────────────────────────────────────── */
+
+test('cap: settings keep it, empty = no cap; pricing never promises more than the cap', () => {
+  const s = sanitizeProductPayment({ prepaid: { maxDiscount: '200' } });
+  assert.equal(s.prepaid.maxDiscount, 200);
+  assert.equal(sanitizeProductPayment({}).prepaid.maxDiscount, 0);
+  assert.equal(sanitizeProductPayment({ prepaid: { maxDiscount: -5 } }).prepaid.maxDiscount, 0, 'bad value keeps the base');
+  const big = productPaymentPricing({ unitPrice: 3000, prepaid: { percent: 10, maxDiscount: 200 } });
+  assert.equal(big.savings, 200);
+  assert.equal(big.online, 2800);
+  assert.equal(productPaymentPricing({ unitPrice: 1000, prepaid: { percent: 10, maxDiscount: 200 } }).savings, 100);
+  const other = productPaymentPricing({ unitPrice: 3000, prepaid: { percent: 10, maxDiscount: 200 }, currencyMatches: false });
+  assert.equal(other.savings, 0, 'another currency: no saving promised');
+  assert.equal(other.minMissing, false, 'and no "orders above" text without a minimum');
+});
+
+test('Function: over the cap takes exactly the cap off; under it, the percentage', () => {
+  const over = order(run(fnInput([line('L1', 3000)], cfg({ maxDiscount: 200 }))));
+  assert.deepEqual(over.candidates[0].value, { fixedAmount: { amount: '200.00' } });
+  assert.deepEqual(over.candidates[0].targets, [{ orderSubtotal: { excludedCartLineIds: [] } }]);
+  const under = order(run(fnInput([line('L1', 1000)], cfg({ maxDiscount: 200 }))));
+  assert.deepEqual(under.candidates[0].value, { percentage: { value: '10' } });
+  assert.deepEqual(run(fnInput([line('L1', 3000, { currency: 'USD' })], cfg({ maxDiscount: 200 }))), { operations: [] }, 'cap in another currency: no guessing');
+  const gifts = order(run(fnInput([line('L1', 1500), line('G', 900, { reward: 'true' })], cfg({ maxDiscount: 200 }))));
+  assert.deepEqual(gifts.candidates[0].value, { percentage: { value: '10' } }, 'gifts are not part of the subtotal the cap compares');
+});
+
+test('sync: the cap reaches the Function config only when set', () => {
+  const settings = sanitizeCodSettings({ productPayment: { enabled: true, prepaid: { enabled: true, percent: 10, maxDiscount: 250 } } });
+  assert.equal(buildPrepaidConfig(settings, { currencyCode: 'INR', planLive: true }).maxDiscount, 250);
+  const plain = sanitizeCodSettings({ productPayment: { enabled: true, prepaid: { enabled: true, percent: 10 } } });
+  assert.equal('maxDiscount' in buildPrepaidConfig(plain, { currencyCode: 'INR', planLive: true }), false);
+  assert.equal(prepaidRuntime({ verified: true, state: 'active' }, { percent: 10, minSubtotal: 0, maxDiscount: 250, currency: 'INR' }).maxDiscount, 250);
+});

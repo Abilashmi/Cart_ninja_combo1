@@ -18,6 +18,8 @@
 //
 // Config shape:
 //   { version: 1, enabled: true, percent: 10, minSubtotal: 0, currency: "INR", title: "Prepaid discount" }
+//   maxDiscount (optional, > 0): the most it takes off, in the shop currency;
+//   when X% would be more, it takes off exactly that amount instead.
 // Excluded collections come as the input variable $collectionIds (a metafield
 // on the discount, see shopify.extension.toml).
 
@@ -56,8 +58,9 @@ export function cartLinesDiscountsGenerateRun(input) {
   if (paid.length === 0) return NONE;
 
   const min = Number(config.minSubtotal) || 0;
-  if (min > 0) {
-    let subtotal = 0;
+  const cap = Number(config.maxDiscount) || 0;
+  let subtotal = 0;
+  if (min > 0 || cap > 0) {
     let currency = null;
     for (const line of paid) {
       const amount = Number(line.cost?.subtotalAmount?.amount);
@@ -65,20 +68,22 @@ export function cartLinesDiscountsGenerateRun(input) {
       subtotal += amount;
       currency = currency || line.cost.subtotalAmount.currencyCode;
     }
-    // The minimum is in the shop currency; without a conversion rate here,
-    // only compare when the cart is in that same currency (never guess).
+    // The minimum and the cap are in the shop currency; without a conversion
+    // rate here, only compare when the cart is in that same currency (never guess).
     if (!config.currency || currency !== config.currency) return NONE;
-    if (subtotal < min) return NONE;
+    if (min > 0 && subtotal < min) return NONE;
   }
 
   const title = typeof config.title === 'string' && config.title.trim() ? config.title.trim().slice(0, 40) : 'Prepaid discount';
+  // Over the cap: exactly the cap off (a fixed amount on the same lines).
+  const capped = cap > 0 && (subtotal * percent) / 100 > cap;
   return {
     operations: [{
       orderDiscountsAdd: {
         candidates: [{
           message: title,
           targets: [{ orderSubtotal: { excludedCartLineIds: left } }],
-          value: { percentage: { value: String(percent) } },
+          value: capped ? { fixedAmount: { amount: (Math.round(cap * 100) / 100).toFixed(2) } } : { percentage: { value: String(percent) } },
         }],
         selectionStrategy: 'FIRST',
       },

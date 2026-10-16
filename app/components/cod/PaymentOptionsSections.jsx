@@ -187,7 +187,7 @@ function PrepaidStatus({ status, dirty, enabled }) {
   if (status.verified) {
     return (
       <Banner tone="success" title="Active in Shopify checkout">
-        {`${status.percent}% off online payments${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}${status.excludedCollections?.length ? `, not on ${status.excludedCollections.length} excluded collection${status.excludedCollections.length === 1 ? '' : 's'}` : ''}. Shoppers see the offer on product pages.`}
+        {`${status.percent}% off online payments${status.maxDiscount > 0 ? ` (up to ${status.maxDiscount} ${status.currency || ''})`.replace(' )', ')') : ''}${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}${status.excludedCollections?.length ? `, not on ${status.excludedCollections.length} excluded collection${status.excludedCollections.length === 1 ? '' : 's'}` : ''}. Shoppers see the offer on product pages.`}
       </Banner>
     );
   }
@@ -245,6 +245,18 @@ export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirt
                   error={errors.ppMinSubtotal}
                   placeholder="No minimum"
                   helpText="The order subtotal at checkout."
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Maximum discount"
+                  type="number"
+                  min={0}
+                  prefix={currencyCode}
+                  value={p.maxDiscount}
+                  onChange={setPP(['prepaid', 'maxDiscount'])}
+                  error={errors.ppMaxDiscount}
+                  placeholder="No limit"
+                  helpText={`The most it takes off one order, e.g. ${p.percent || 10}% off up to 200.`}
                   autoComplete="off"
                 />
               </FormLayout.Group>

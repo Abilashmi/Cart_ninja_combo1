@@ -55,6 +55,8 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   excludedProductTags: [],
   excludedBehavior: 'unavailable',
   allowCoupons: true,
+  // The most a code typed in the popup may take off one order (0 = no limit).
+  couponMaxDiscount: 0,
   // Apply the cart's own discounts (automatic ones, app / Function ones, and
   // codes already on the cart) to COD orders, as Shopify checkout does.
   cartDiscounts: true,
@@ -375,6 +377,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     excludedProductTags: parseTags(has('excludedProductTags') ? p.excludedProductTags : b.excludedProductTags),
     excludedBehavior: pick('excludedBehavior', COD_EXCLUDED_BEHAVIORS),
     allowCoupons: has('allowCoupons') ? Boolean(p.allowCoupons) : b.allowCoupons !== false,
+    couponMaxDiscount: has('couponMaxDiscount') ? money(p.couponMaxDiscount, b.couponMaxDiscount) : money(b.couponMaxDiscount),
     cartDiscounts: has('cartDiscounts') ? Boolean(p.cartDiscounts) : b.cartDiscounts !== false,
     prepaidNudgeText: has('prepaidNudgeText') ? (typeof p.prepaidNudgeText === 'string' ? p.prepaidNudgeText.trim().slice(0, 140) : '') : String(b.prepaidNudgeText || ''),
     orderTags: parseTags(has('orderTags') ? p.orderTags : b.orderTags),

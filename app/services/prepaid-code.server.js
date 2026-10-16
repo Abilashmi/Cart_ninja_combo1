@@ -41,7 +41,7 @@ async function gql(admin, query, variables) {
 }
 
 /**
- * The offer a code may carry: { percent, minSubtotal, excludedCollections }
+ * The offer a code may carry: { percent, minSubtotal, maxDiscount, excludedCollections }
  * only when saved, on the plan and verified in Shopify; else null.
  * excludedCollections: numeric ids of the collections left out (verified).
  */
@@ -52,7 +52,7 @@ export function prepaidOffer(settings, runtime, planLive) {
   if (!Number.isFinite(percent) || percent < 1 || percent > 50) return null;
   const excludedCollections = (Array.isArray(verified.excludedCollections) ? verified.excludedCollections : [])
     .map(String).filter((id) => /^\d+$/.test(id));
-  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0), excludedCollections };
+  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0), maxDiscount: Math.max(0, Number(verified.maxDiscount) || 0), excludedCollections };
 }
 
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
@@ -90,7 +90,9 @@ export async function createPrepaidCode(admin, { offer, items, now = Date.now(),
   }
   if (subtotalMinor <= 0) return { code: null };
   if (offer.minSubtotal > 0 && subtotalMinor < Math.round(offer.minSubtotal * 100)) return { code: null };
-  const savingMinor = Math.round((subtotalMinor * offer.percent) / 100);
+  // Same as the Function: X%, but never more than the cap.
+  const capMinor = offer.maxDiscount > 0 ? Math.round(offer.maxDiscount * 100) : Infinity;
+  const savingMinor = Math.min(Math.round((subtotalMinor * offer.percent) / 100), capMinor);
   if (savingMinor <= 0) return { code: null };
   const amountMinor = savingMinor + 1; // one paisa more than the Function (see above)
   const amount = (amountMinor / 100).toFixed(2);
