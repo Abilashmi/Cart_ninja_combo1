@@ -388,3 +388,49 @@ test('text sizes: only set ones become CSS variables; 6px allowed', () => {
   assert.match(mile, /--bxq-lbl-fs:6px;--bxq-lbl-sub:6px;/);
   assert.match(mile, /--bxq-lbl-fs-m:6px;/);
 });
+
+/* ── slots bottom bar (quantity boxes) ──────────────────────────────── */
+
+const QTY_TIERS = [{ id: 'q1', min_grams: 3, type: 'fixed_price', value: 469, label: '' }, { id: 'q2', min_grams: 5, type: 'percentage', value: 10, label: '' }];
+function slotsModel(selection = {}, { isMobile = false, config = {}, measure = 'quantity', tiers = QTY_TIERS } = {}) {
+  return kit.buildModel({
+    config: { qs_bar_style: 'slots', ...config },
+    productsByHandle: { k: [P[0], P[1]] }, handles: ['k'], ui: {}, selection, isMobile,
+    pricing: { measure, tiers, enabled: true, maxGrams: 20 }, symbol: '₹',
+  });
+}
+const slotHtml = (m) => kit.render(m).match(/<div class="bxq-bar[\s\S]*$/)?.[0] || '';
+
+test('slots: shown before anything is added, one empty box per item of the first offer', () => {
+  const html = slotHtml(slotsModel());
+  assert.match(html, /bxq-bar bxq-bar--slots/);
+  assert.match(html, /<div class="bxq-slots-msg is-muted"/);
+  assert.equal((html.match(/class="bxq-slot"/g) || []).length, 3);
+  assert.ok(!html.includes('bxq-go'), 'no Go to Cart before an item');
+});
+
+test('slots: items fill boxes with their pictures (tap = take one out); target moves to the next offer', () => {
+  const sel = { [P[0].variants[0].id]: { productId: P[0].id, qty: 2 } };
+  let html = slotHtml(slotsModel(sel));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length, 2);
+  assert.equal((html.match(/class="bxq-slot"/g) || []).length, 1);
+  assert.match(html, /data-combo-action="box-dec" data-variant-id="gid:\/\/shopify\/ProductVariant\/1" aria-label="Remove Product 1"/);
+  assert.match(html, /bxq-go/);
+  html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 3 } }));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length + (html.match(/class="bxq-slot"/g) || []).length, 5, 'first offer reached: boxes for the next (5)');
+  html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 7 } }));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length, 7, 'all offers reached, more items: a box each');
+});
+
+test('slots: at most 8 boxes (5 on phones), the last one counts', () => {
+  const big = [{ id: 'q', min_grams: 12, type: 'percentage', value: 10, label: '' }];
+  assert.match(slotHtml(slotsModel({}, { tiers: big })), /<span class="bxq-slot is-more" role="listitem">0\/12<\/span>/);
+  assert.equal((slotHtml(slotsModel({}, { tiers: big, isMobile: true })).match(/class="bxq-slot[ "]/g) || []).length, 5);
+});
+
+test('slots: weight / value boxes get the full bar instead', () => {
+  const html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 1 } }, { measure: 'weight', tiers: [{ id: 'w', min_grams: 1000, type: 'percentage', value: 10, label: '' }] }));
+  assert.match(html, /bxq-bar--full/);
+  assert.ok(!html.includes('bxq-slots'));
+  assert.equal(slotHtml(slotsModel({}, { measure: 'weight', tiers: [{ id: 'w', min_grams: 1000, type: 'percentage', value: 10, label: '' }] })), '', 'and no empty bar');
+});

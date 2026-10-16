@@ -801,6 +801,30 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+/* Slots bottom bar on a quantity box (as on veeba.in): empty boxes from the
+   start, pictures as items go in, tap one to take it out. */
+{
+  const BUNDLE = { measure: 'quantity', max_grams: 10, tiers: [t(3, 'fixed_price', 469, 'the bundle at ₹469'), t(5, 'percentage', 10)], messages: { locked: 'Select {{remaining}} more to get {{tier}}', unlocked: 'You unlocked {{tier}}' } };
+  const { page, log } = await openCombo({ ...baseConfig, qs_bar_style: 'slots' }, wp(BUNDLE), { viewport: { width: 390, height: 844 } });
+  await page.waitForSelector('.bxq-bar--slots');
+  const empty = await page.evaluate(() => ({ msg: document.querySelector('.bxq-slots-msg')?.textContent, slots: document.querySelectorAll('.bxq-slot').length, filled: document.querySelectorAll('.bxq-slot.is-filled').length, go: !!document.querySelector('.bxq-bar .bxq-go') }));
+  check('slots: on arrival, "Select 3 more…" over 3 empty boxes, no button yet', empty.msg === 'Select 3 items more to get the bundle at ₹469' && empty.slots === 3 && empty.filled === 0 && !empty.go, JSON.stringify(empty));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-slots-empty-phone.png') });
+  await plus(page, 2);
+  await page.click(`${card(4)} [data-combo-action="qty-inc"]`);
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-slot.is-filled').length === 2);
+  const two = await page.evaluate(() => ({ msg: document.querySelector('.bxq-slots-msg')?.textContent, imgs: [...document.querySelectorAll('.bxq-slot.is-filled img')].length, go: !!document.querySelector('.bxq-bar .bxq-go') }));
+  check('slots: two items = two pictures, one + left, Go to Cart shown', two.msg === 'Select 1 item more to get the bundle at ₹469' && two.imgs === 2 && two.go, JSON.stringify(two));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-slots-phone.png') });
+  await page.click('.bxq-slot.is-filled');
+  await page.waitForFunction(() => document.querySelectorAll('.bxq-slot.is-filled').length === 1);
+  check('slots: tapping a picture takes that item out', (await page.$$('.bxq-slot.is-filled')).length === 1);
+  const fits = await page.evaluate(() => { const r = document.querySelector('.bxq-bar').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; });
+  check('slots: the bar fits the phone screen', fits);
+  void log;
+  await page.close();
+}
+
 /* Icons on a theme that sizes every svg and every "*icon*" class (seen on a
    live mobile theme: milestone icons drawn a few px wide inside their circles). */
 {

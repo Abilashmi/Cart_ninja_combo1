@@ -118,6 +118,8 @@ const BAR_STYLES = [
   { value: 'slim', label: 'Slim line', preview: <div style={{ width: '100%' }}><div style={track}><div style={fill('60%')} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}><span style={{ fontSize: 9 }}>5 Items</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div></div> },
   { value: 'ring', label: 'Ring', preview: <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'space-between' }}><span style={{ width: 20, height: 20, borderRadius: '50%', border: '3px solid #2563eb', borderRightColor: '#e5e7eb', fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>5</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div> },
   { value: 'compact', label: 'Compact', preview: <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}><span style={{ fontSize: 9 }}>5 · ₹999</span><span style={{ background: '#2563eb', borderRadius: 4, width: 26, height: 10 }} /></div> },
+  // Quantity boxes only: one box per item of the next offer.
+  { value: 'slots', label: 'Slots', quantityOnly: true, preview: <div style={{ width: '100%' }}><div style={{ fontSize: 8, fontWeight: 700, textAlign: 'center', marginBottom: 3 }}>Add 2 more</div><div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>{[1, 0, 0].map((f, i) => <span key={i} style={{ width: 12, height: 12, borderRadius: 3, border: `1.5px solid ${f ? '#2563eb' : '#cbd5e1'}`, background: f ? '#dbeafe' : '#fff', fontSize: 9, lineHeight: '10px', color: '#94a3b8', textAlign: 'center' }}>{f ? '' : '+'}</span>)}</div></div> },
 ];
 
 function Colors({ config, updateConfig, ColorPickerField, fields }) {
@@ -693,19 +695,25 @@ function ProgressSectionComponent({ config, updateConfig, expanded, onToggle, Co
 }
 
 function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPickerField, PxField, shiprocketEnabled = false }) {
-  const style = val(config, 'qs_bar_style');
+  const measure = fixedMeasureFor(config.layout) || config.weight_pricing?.measure || 'weight';
+  const styles = BAR_STYLES.filter((s) => !s.quantityOnly || measure === 'quantity');
+  // A saved Slots bar on a weight / value box is drawn as the full bar.
+  const style = val(config, 'qs_bar_style') === 'slots' && measure !== 'quantity' ? 'full' : val(config, 'qs_bar_style');
   return (
     <SectionCard title="Bottom bar" expanded={expanded} onToggle={onToggle} badge={BAR_STYLES.find((s) => s.value === style)?.label}>
       <FormLayout>
-        <StylePicker label="Style" value={style} options={BAR_STYLES} onChange={(v) => updateConfig('qs_bar_style', v)} />
+        <StylePicker label="Style" value={style} options={styles} onChange={(v) => updateConfig('qs_bar_style', v)} />
+        {style === 'slots' && (
+          <Text as="p" variant="bodySm" tone="subdued">One box per item the next offer needs: added items show their picture (tap to take one out), the rest a +. Shown before anything is added. The message on top is the one under Advanced → Offer (e.g. &quot;Select {'{{remaining}}'} more to get {'{{tier}}'}&quot;).</Text>
+        )}
         {style !== 'compact' && (
           <>
             <Checkbox label="Unlock message" checked={isOn(config, 'qs_bar_show_message')} onChange={(v) => updateConfig('qs_bar_show_message', v)} />
-            {style !== 'ring' && <Checkbox label="Item pictures" checked={isOn(config, 'qs_bar_show_thumbs')} onChange={(v) => updateConfig('qs_bar_show_thumbs', v)} />}
-            <Checkbox label="Savings line" checked={isOn(config, 'qs_bar_show_saved')} onChange={(v) => updateConfig('qs_bar_show_saved', v)} helpText="Compare-at savings plus the box discount (only while the box discount is live)." />
+            {style !== 'ring' && style !== 'slots' && <Checkbox label="Item pictures" checked={isOn(config, 'qs_bar_show_thumbs')} onChange={(v) => updateConfig('qs_bar_show_thumbs', v)} />}
+            {style !== 'slots' && <Checkbox label="Savings line" checked={isOn(config, 'qs_bar_show_saved')} onChange={(v) => updateConfig('qs_bar_show_saved', v)} helpText="Compare-at savings plus the box discount (only while the box discount is live)." />}
           </>
         )}
-        {isOn(config, 'qs_bar_show_saved') && style !== 'compact' && (
+        {isOn(config, 'qs_bar_show_saved') && style !== 'compact' && style !== 'slots' && (
           <div className="cst-grid-2">
             <TextField label="Savings, more tiers to go" value={val(config, 'qs_saved_text')} onChange={(v) => updateConfig('qs_saved_text', v)} autoComplete="off" helpText="{{saved}} = amount saved" />
             <TextField label="Savings, all unlocked" value={val(config, 'qs_saved_done_text')} onChange={(v) => updateConfig('qs_saved_done_text', v)} autoComplete="off" />

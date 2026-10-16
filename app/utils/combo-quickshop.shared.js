@@ -137,7 +137,7 @@ export function createQuickShopKit(core) {
     qs_top_done: '#16a34a',
     qs_tier_icons: 'gift, truck, percent, star, trophy', // built-in SVG icon names (ICONS) or https:// image links
     // Bottom bar
-    qs_bar_style: 'full', // full | slim | ring | compact
+    qs_bar_style: 'full', // full | slim | ring | compact | slots (quantity boxes: one box per item of the next offer)
     qs_bar_bg: '#ffffff',
     qs_bar_text: '#111827',
     qs_bar_save: '#16a34a',
@@ -939,6 +939,7 @@ export function createQuickShopKit(core) {
     var total = 0;
     var compareSavings = 0;
     var thumbs = [];
+    var units = [];
     var sheet = [];
     var qtyByVariant = {};
     for (var vid in selection) {
@@ -957,6 +958,8 @@ export function createQuickShopKit(core) {
       if (cmp) compareSavings += (cmp - price) * qty;
       var image = (variant && variant.image && (variant.image.url || variant.image.src)) || (product && product.image && (product.image.url || product.image.src)) || '';
       if (image && thumbs.length < 3) thumbs.push(image);
+      // One entry per item in the box (the slots bar draws a picture per item).
+      for (var un = 0; un < qty && units.length < 40; un++) units.push({ variantId: vid, image: image, title: product ? product.title : '' });
       sheet.push({
         variantId: vid, productId: sel.productId, qty: qty, image: image,
         title: product ? product.title : '', variantTitle: variant && variant.title !== 'Default Title' ? variant.title : '',
@@ -1064,6 +1067,7 @@ export function createQuickShopKit(core) {
       bar: {
         items: items,
         thumbs: thumbs,
+        units: units,
         sheet: sheet,
         message: bar,
         saved: saved > 0.004 ? core.fillMessage(savedTemplate, { saved: money(saved, symbol) }) : '',
@@ -1593,14 +1597,40 @@ export function createQuickShopKit(core) {
     return html;
   }
 
+  /**
+   * The slots bar (quantity boxes): one box per item the next offer needs
+   * (the last offer once all are unlocked, or more when the box holds more);
+   * a filled box shows the item's picture (tap = take one out), an empty one
+   * a +. Shown from the first visit, before anything is added. At most 8
+   * boxes (5 on phones); past that the last one counts ("6/12").
+   */
+  function renderSlots(model) {
+    var bar = model.bar;
+    var tiers = model.view.tiers;
+    var next = model.box.nextTier;
+    var target = Math.max(next ? next.min_grams : tiers[tiers.length - 1].min_grams, bar.items);
+    var cap = model.isMobile ? 5 : 8;
+    var count = Math.min(target, cap);
+    var html = '<div class="bxq-slots" role="list" aria-label="' + bar.items + ' of ' + target + ' items">';
+    for (var i = 0; i < count; i++) {
+      if (target > cap && i === count - 1) { html += '<span class="bxq-slot is-more" role="listitem">' + bar.items + '/' + target + '</span>'; continue; }
+      var unit = bar.units[i];
+      html += unit
+        ? '<button type="button" role="listitem" class="bxq-slot is-filled" data-combo-action="box-dec" data-variant-id="' + esc(unit.variantId) + '" aria-label="Remove ' + esc(unit.title) + '">'
+          + (unit.image ? '<img src="' + esc(unit.image) + '" alt="" loading="lazy" />' : '<span class="bxq-noimg"></span>') + '<span class="bxq-slot-x" aria-hidden="true">&times;</span></button>'
+        : '<span class="bxq-slot" role="listitem" aria-label="Empty">' + ICON_PLUS + '</span>';
+    }
+    return html + '</div>';
+  }
+
   function renderBar(model) {
     var config = model.config;
     var bar = model.bar;
-    if (!bar.items) return '';
     var style = opt(config, 'qs_bar_style');
-    var cod = model.cod || {};
-    var codPlacement = cod.placement === 'replace' || cod.placement === 'above' ? cod.placement : 'below';
-    var disabled = !bar.canCheckout;
+    // Slots only count items: weight / value boxes (or no live offer) get the full bar.
+    var slots = style === 'slots' && model.view.enabled && model.view.measure === 'quantity' && model.view.tiers.length > 0;
+    if (style === 'slots' && !slots) style = 'full';
+    if (!bar.items && !slots) return '';
     var html = '<div class="bxq-bar bxq-bar--' + esc(style) + (bar.celebrate ? ' is-celebrate' : '') + '" role="region" aria-label="Your box">';
 
     if (bar.sheetOpen) {
@@ -1619,6 +1649,12 @@ export function createQuickShopKit(core) {
     var msg = bar.message;
     var showMessage = on(config, 'qs_bar_show_message') && msg.text;
     var progress = model.progress;
+    if (slots) {
+      if (showMessage) html += '<div class="bxq-slots-msg is-' + esc(msg.tone) + '" aria-live="polite">' + boldTier(msg.text, msg.tier) + '</div>';
+      html += '<div class="bxq-row">' + renderSlots(model);
+      if (bar.items) html += barActions(model);
+      return html + '</div></div>';
+    }
     if (style === 'slim' && model.view.enabled && model.view.tiers.length) {
       html += '<div class="bxq-slim"><div class="bxq-slim-fill' + (model.box.tier ? ' is-done' : '') + '" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
     }
@@ -1646,6 +1682,18 @@ export function createQuickShopKit(core) {
     else if (style !== 'compact') html += '<span class="bxq-total">' + esc(bar.total) + '</span>';
     html += '</button>';
 
+    html += barActions(model);
+    html += '</div></div>';
+    return html;
+  }
+
+  // Go to Cart (and COD) of the bottom bar.
+  function barActions(model) {
+    var config = model.config;
+    var bar = model.bar;
+    var cod = model.cod || {};
+    var codPlacement = cod.placement === 'replace' || cod.placement === 'above' ? cod.placement : 'below';
+    var disabled = !bar.canCheckout;
     var label = bar.checkingOut ? 'Adding…' : opt(config, 'qs_btn_label');
     // Locked (not busy): looks dimmed but still answers a tap with the reason.
     var lockAttrs = bar.lockedWhy
@@ -1655,9 +1703,7 @@ export function createQuickShopKit(core) {
     var codAction = bar.lockedWhy ? 'checkout-locked' : 'cod';
     var checkoutBtn = cod.shown && codPlacement === 'replace' ? '' : '<button type="button" class="bxq-go' + (bar.lockedWhy ? ' is-locked' : '') + '" data-combo-action="' + goAction + '"' + lockAttrs + '>' + esc(label) + '</button>';
     var codBtn = cod.shown ? '<button type="button" class="bxq-cod' + (bar.lockedWhy ? ' is-locked' : '') + '" data-combo-action="' + codAction + '"' + lockAttrs + (cod.css ? ' style="' + esc(cod.css) + '"' : '') + '>' + (cod.icon || '') + esc(cod.text || 'Cash on Delivery') + '</button>' : '';
-    html += '<span class="bxq-actions' + (cod.shown ? ' has-cod' : '') + '">' + (codPlacement === 'below' ? checkoutBtn + codBtn : codBtn + checkoutBtn) + '</span>';
-    html += '</div></div>';
-    return html;
+    return '<span class="bxq-actions' + (cod.shown ? ' has-cod' : '') + '">' + (codPlacement === 'below' ? checkoutBtn + codBtn : codBtn + checkoutBtn) + '</span>';
   }
 
   /* ── title, description, banner: the builder's shared Content / Banner settings ── */
@@ -2162,6 +2208,22 @@ export const QUICK_SHOP_CSS = `
 .bxq-add > svg{width:22px !important;height:22px !important;max-width:none !important;flex:0 0 auto;}
 .bxq-chip > svg{width:16px !important;height:16px !important;max-width:none !important;flex:0 0 auto;}
 .bxq-chip--icon > svg{width:20px !important;height:20px !important;}
+/* Slots bar (quantity boxes). */
+.bxq-bar--slots{padding-top:0;}
+.bxq-slots-msg{margin:0 -16px 12px;padding:11px 14px;text-align:center;font-weight:700;font-size:15px;line-height:1.35;background:color-mix(in srgb,var(--bxq-bar-text) 4%,var(--bxq-bar-bg));border-bottom:1px solid rgba(0,0,0,.08);}
+.bxq--m .bxq-slots-msg{margin:0 -12px 10px;padding:10px 12px;font-size:14px;}
+.bxq-slots-msg.is-success{color:var(--bxq-save);}
+.bxq-slots{display:flex;gap:10px;flex:1 1 auto;justify-content:center;min-width:0;}
+.bxq--m .bxq-slots{gap:8px;flex:1 1 100%;}
+.bxq-slot{position:relative;flex:0 0 auto;width:64px;height:64px;box-sizing:border-box;border-radius:12px;border:1.5px solid rgba(0,0,0,.14);background:#fff;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.35);padding:0;overflow:hidden;}
+.bxq--m .bxq-slot{width:56px;height:56px;}
+.bxq-slot > svg{width:22px !important;height:22px !important;max-width:none !important;}
+.bxq-slot.is-filled{border-color:var(--bxq-accent);cursor:pointer;}
+.bxq-slot img{width:100%;height:100%;object-fit:contain;display:block;}
+.bxq-slot-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(17,24,39,.65);color:#fff;font-size:14px;line-height:18px;text-align:center;}
+.bxq-slot.is-more{font-weight:800;font-size:13px;color:var(--bxq-bar-text);}
+.bxq--m .bxq-bar--slots .bxq-actions{flex:1 1 100%;}
+.bxq--m .bxq-bar--slots .bxq-actions > *{flex:1 1 0;}
 /* Card and filter text sizes (merchant settings; unset = the sizes above). */
 .bxq-card .bxq-name{font-size:var(--bxq-title-fs,17px);}
 .bxq--m .bxq-card .bxq-name{font-size:var(--bxq-title-fs-m,14px);}
