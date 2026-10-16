@@ -21,19 +21,21 @@ const fbt = fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer'
   .replace('{{ product.id }}', '100')
   .replace('{{ shop.permanent_domain }}', 'demo.myshopify.com')
   .replace('{{ shop.currency }}', 'INR')
+  // The viewed product's price in cents (₹800), part of the offer's set.
+  .replace('{{ product.selected_or_first_available_variant.price }}', '80000')
   .replace("{{ block.settings.placement | default: 'below_atc' }}", 'below_cart')
   .replace('{{ request.design_mode }}', 'false');
 
 const SOCKS = { id: 'gid://shopify/Product/201', title: 'Socks', handle: 'socks', price: '199' };
 const CAP = { id: 'gid://shopify/Product/202', title: 'Cap', handle: 'cap', price: '500' };
-const catalog = (capAvailable = true) => ({ products: [
-  { id: 201, variants: [{ id: 9201, available: true, price: '199.00', compare_at_price: null }] },
+const catalog = (capAvailable = true, socksVariants = null) => ({ products: [
+  { id: 201, variants: socksVariants || [{ id: 9201, available: true, price: '199.00', compare_at_price: null }] },
   { id: 202, variants: [{ id: 9202, available: capAvailable, price: '500.00', compare_at_price: null }] },
 ] });
 
 const browser = await chromium.launch();
 
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
@@ -43,7 +45,7 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
   await page.route('https://int.thebrix.io/**', (r) => r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
   await page.route('http://shop.test/**', (r) => {
     const url = new URL(r.request().url());
-    if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(catalog(capAvailable)) });
+    if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(catalog(capAvailable, socksVariants)) });
     if (url.pathname === '/cart.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cart }) });
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
     if (url.hostname === 'img.test' || url.pathname.endsWith('.svg')) return r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#16a34a"/></svg>' });
@@ -57,6 +59,41 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
 
 const OFFER = { type: 'percentage', value: 10, text: 'Buy all {count} together and save {discount}' };
 const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerProducts: [{ id: 'gid://shopify/Product/100' }], fbtProducts: [SOCKS, CAP], ...extra });
+
+/* 0. Variant picker + "show the discount" (savings line, struck bundle total, per-product prices) */
+{
+  const socksVariants = [
+    { id: 9201, title: 'Small', available: true, price: '199.00', compare_at_price: null },
+    { id: 9203, title: 'Large', available: true, price: '249.00', compare_at_price: null },
+    { id: 9204, title: 'XL', available: false, price: '249.00', compare_at_price: null },
+  ];
+  const temp1 = { showVariantPicker: true, offerShowSavings: true, offerStrikeTotal: true, offerProductPrices: true };
+  const { page, log } = await open({ condition: [rule({ offer: OFFER })], temp1, socksVariants });
+  const opts = await page.$$eval('ps-fbt-widget .ps-fbt-variant option', (els) => els.map((o) => `${o.textContent}${o.disabled ? '!' : ''}`));
+  check('variant picker: only on the product with options; sold-out listed but not pickable', opts.join('|') === 'Small|Large|XL - Sold out!', opts.join('|'));
+  const savings = () => page.textContent('ps-fbt-widget .ps-fbt-savings');
+  const total = () => page.textContent('ps-fbt-widget .ps-total-price');
+  check('savings line: 10% of ₹800 + ₹199 + ₹500', (await savings()) === 'You save ₹149.9', await savings());
+  check('bundle total struck through with the new one', (await total()) === '₹1,499₹1,349.1', await total());
+  check('total label names the whole set', (await page.textContent('ps-fbt-widget .ps-total-label')) === 'Bundle total (3 items)');
+  check('each product: old price struck, price after its share', (await page.textContent('ps-fbt-widget .ps-product-card .ps-product-price')) === '₹199₹179.1');
+  await page.selectOption('ps-fbt-widget .ps-fbt-variant', '9203');
+  check('picking Large updates the savings and prices', (await savings()) === 'You save ₹154.9' && (await page.textContent('ps-fbt-widget .ps-product-card .ps-product-price')) === '₹249₹224.1', await savings());
+  await page.screenshot({ path: path.join(shotDir, 'variants-savings.png') });
+  await page.click('ps-fbt-widget .ps-product-card:nth-of-type(1) .ps-classic-btn');
+  check('not the whole set: no savings shown, plain total', !(await page.isVisible('ps-fbt-widget .ps-fbt-savings')) && (await total()) === '₹500');
+  await page.click('ps-fbt-widget .ps-product-card:nth-of-type(1) .ps-classic-btn');
+  await page.locator('ps-fbt-widget .ps-fbt-addall').click();
+  await page.waitForFunction(() => /Added/.test(document.querySelector('ps-fbt-widget .ps-fbt-addall').textContent));
+  const ids = (log.added[0]?.items || []).map((i) => String(i.id));
+  check('Add all adds the picked variant (Large)', ids.join(',') === '1005,9203,9202', ids.join(','));
+  await page.close();
+}
+{
+  const { page } = await open({ condition: [rule({ offer: OFFER })], socksVariants: [{ id: 9201, title: 'Small', available: true, price: '199.00' }, { id: 9203, title: 'Large', available: true, price: '249.00' }] });
+  check('switches off by default: no picker, no savings line, plain total', (await page.$('ps-fbt-widget .ps-fbt-variant')) === null && (await page.$('ps-fbt-widget .ps-fbt-savings')) === null && (await page.textContent('ps-fbt-widget .ps-total-price')) === '₹699');
+  await page.close();
+}
 
 /* 1. Live offer: text, Add all adds the viewed product too */
 {

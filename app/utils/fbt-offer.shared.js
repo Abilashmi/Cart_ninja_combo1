@@ -126,3 +126,24 @@ export function withConditionOffers(condition, rulesById, widgetOffer, liveIds) 
     return offer ? { ...rest, offer: { ...offer, text: widgetOffer?.text || FBT_OFFER_TEXT_DEFAULT } } : rest;
   });
 }
+
+/**
+ * What a live offer takes off once the whole set is picked: one unit of the
+ * viewed product and of each recommended product, as the checkout Function
+ * does (a fixed amount is one amount for the set, shared by price, never more
+ * than the set costs). Mirrored by fbt-widget-render.liquid offerSavings.
+ *   offer: { type, value }, viewedPrice, prices: [unit price per recommended product]
+ * Returns { total, per: [amount per recommended product], viewed, base } or null.
+ */
+export function fbtOfferSavings(offer, viewedPrice, prices) {
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const value = Number(offer?.value) || 0;
+  if (!offer || !(value > 0) || !Array.isArray(prices) || !prices.length) return null;
+  const viewed = Number(viewedPrice) > 0 ? Number(viewedPrice) : 0;
+  const base = viewed + prices.reduce((sum, p) => sum + (Number(p) || 0), 0);
+  if (!(base > 0)) return null;
+  const pct = offer.type === 'percentage';
+  const total = round2(pct ? (base * value) / 100 : Math.min(value, base));
+  const share = (price) => round2(pct ? (price * value) / 100 : (total * price) / base);
+  return { total, per: prices.map((p) => share(Number(p) || 0)), viewed: share(viewed), base: round2(base) };
+}

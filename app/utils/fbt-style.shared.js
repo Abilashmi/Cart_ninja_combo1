@@ -98,6 +98,12 @@ export const FBT_OFFER_STYLE_DEFAULTS = Object.freeze({
   offerItalic: false,
   offerAlign: 'center',
   offerFontFamily: 'inherit', // the theme's font, or a Google font name
+  // Once the whole set is picked and the offer is live: a "You save ₹X"
+  // line, the bundle total struck through with the new one, and each
+  // product's price after its share of the offer.
+  offerShowSavings: false,
+  offerStrikeTotal: false,
+  offerProductPrices: false,
 });
 export const FBT_OFFER_WEIGHTS = [400, 500, 600, 700, 800];
 export const FBT_OFFER_ALIGNS = ['left', 'center', 'right'];
@@ -117,6 +123,9 @@ export function pickFbtOfferStyle(tpl) {
     offerItalic: tpl?.offerItalic === true,
     offerAlign: FBT_OFFER_ALIGNS.includes(tpl?.offerAlign) ? tpl.offerAlign : d.offerAlign,
     offerFontFamily: family && family !== 'inherit' && FONT_NAME_RE.test(family) ? family : 'inherit',
+    offerShowSavings: tpl?.offerShowSavings === true,
+    offerStrikeTotal: tpl?.offerStrikeTotal === true,
+    offerProductPrices: tpl?.offerProductPrices === true,
   };
 }
 
@@ -147,6 +156,8 @@ export function pickFbtLayout(tpl) {
   // Start with every product selected (a bundle) or let shoppers add each:
   // true / false, null = the interaction style's own default (fbtStartsSelected).
   out.startSelected = tpl?.startSelected === true ? true : tpl?.startSelected === false ? false : null;
+  // A variant dropdown on each product (off = the widget adds the rule's / first in-stock variant).
+  out.showVariantPicker = tpl?.showVariantPicker === true;
   // The offer text's look rides along (loaded and saved with the layout).
   return { ...out, ...pickFbtOfferStyle(tpl) };
 }

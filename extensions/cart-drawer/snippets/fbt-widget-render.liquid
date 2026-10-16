@@ -2,6 +2,7 @@
   data-product-id="{{ product.id }}"
   data-shop="{{ shop.permanent_domain }}"
   data-currency="{{ shop.currency }}"
+  data-product-price="{{ product.selected_or_first_available_variant.price }}"
   data-placement="{{ block.settings.placement | default: 'below_atc' }}"
   data-design-mode="{{ request.design_mode }}"
   style="display:none">
@@ -273,6 +274,11 @@
       offerFontSize:fbtNum(config.offerFontSize,13,10,24),
       offerFontWeight:[400,500,600,700,800].indexOf(Number(config.offerFontWeight))!==-1?Number(config.offerFontWeight):700,
       offerItalic:config.offerItalic===true,
+      /* With the offer live and the whole set picked (app/utils/fbt-style.shared.js pickFbtOfferStyle). */
+      offerShowSavings:config.offerShowSavings===true,
+      offerStrikeTotal:config.offerStrikeTotal===true,
+      offerProductPrices:config.offerProductPrices===true,
+      showVariantPicker:config.showVariantPicker===true,
       offerAlign:['left','center','right'].indexOf(config.offerAlign)!==-1?config.offerAlign:'center',
       offerFontFamily:typeof config.offerFontFamily==='string'&&config.offerFontFamily!=='inherit'&&/^[A-Za-z0-9 -]{1,40}$/.test(config.offerFontFamily.trim())?config.offerFontFamily.trim():''};
   }
@@ -372,7 +378,9 @@
     var div=inCents?100:1;
     var price=toPriceNumber(v.price)/div;
     var compareAt=toPriceNumber(v.compare_at_price)/div;
-    return Object.assign({},product,{price:price,compareAt:compareAt>price?compareAt:0});
+    /* Every variant, for the widget's variant picker (sold-out ones shown but not pickable). */
+    var list=variants.filter(function(x){return x&&x.id;}).slice(0,100).map(function(x){var p=toPriceNumber(x.price)/div,c=toPriceNumber(x.compare_at_price)/div;return{id:normalizeVariantId(x.id),title:String(x.title||''),price:p,compareAt:c>p?c:0,available:x.available!==false};});
+    return Object.assign({},product,{price:price,compareAt:compareAt>price?compareAt:0,variants:list,liveVariantId:normalizeVariantId(v.id)});
   }
 
   async function filterAvailableFbtProducts(products){
@@ -540,6 +548,9 @@
             if(setIds.length&&setIds.every(function(id){return shownIds.indexOf(id)!==-1;}))config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text,count:setIds.length+1,productIds:setIds};
           }
           config.currentProductId=currentNumId;
+          /* The viewed product's price (cents, from Liquid): it's part of the offer's set. */
+          var viewedCents=Number(el.dataset.productPrice);
+          config.viewedPrice=isFinite(viewedCents)&&viewedCents>0?viewedCents/100:0;
           renderFBT(el,config,matchedProducts,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
           el.__psMargin=config.marginTop+'px 0 '+config.marginBottom+'px';
           placeWidget(apiPlacement);
@@ -584,7 +595,7 @@
           ):'')
         +'</div>'
         +'<div class="ps-fbt-products"></div>'
-        +(config.offer?'<div class="ps-fbt-offer" style="margin-top:14px;padding:9px 12px;border-radius:'+Math.min(config.borderRadius,12)+'px;'+fbtOfferCss(config)+'">'+escapeHtml(fbtOfferText(config.offer,currencySymbol))+'</div>':'')
+        +(config.offer?'<div class="ps-fbt-offer" style="margin-top:14px;padding:9px 12px;border-radius:'+Math.min(config.borderRadius,12)+'px;'+fbtOfferCss(config)+'">'+escapeHtml(fbtOfferText(config.offer,currencySymbol))+(config.offerShowSavings?'<div class="ps-fbt-savings" style="display:none;margin-top:3px;font-size:'+Math.max(10,config.offerFontSize-1)+'px;font-weight:800;"></div>':'')+'</div>':'')
         +'<div class="ps-fbt-footer" style="border-color:'+config.borderColor+';justify-content:'+(config.showPrices?'space-between':'flex-end')+';">'
           +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">Select items</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
           +(config.showAddAllButton?'<button class="ps-fbt-addall" style="background:'+config.buttonColor+';color:'+config.buttonTextColor+';display:none;">Add to Cart</button>':'')
@@ -592,6 +603,7 @@
       +'</div>';
 
     var wrapper=container.querySelector('.ps-fbt-products');
+    var savingsEl=container.querySelector('.ps-fbt-savings');
     var totalLabelEl=container.querySelector('.ps-total-label');
     var totalEl=container.querySelector('.ps-total-price');
     var addBtn=container.querySelector('.ps-fbt-addall');
@@ -627,6 +639,29 @@
     var selectedProductIds=new Set();
     var productQuantities=new Map();
     var cardEntries=new Map();
+    /* The variant picked on each card (variant picker); none = the one the widget always adds. */
+    var chosenVariants=new Map();
+    function variantOf(p){var id=chosenVariants.get(String(p.id));if(!id)return null;return(p.variants||[]).find(function(v){return v.id===id;})||null;}
+    function unitPrice(p){var v=variantOf(p);return v?v.price:toPriceNumber(p.price);}
+    function unitCompare(p){var v=variantOf(p);return v?v.compareAt:toPriceNumber(p.compareAt);}
+    function round2(n){return Math.round(n*100)/100;}
+    /* What the offer takes off once the whole set is picked (one unit each, as
+       the checkout Function): { total, per: {productId: amount}, base } or null.
+       The viewed product is in the set; a fixed amount is split by price. */
+    function offerSavings(){
+      if(!config.offer)return null;
+      var set=products.filter(function(p){return config.offer.productIds.indexOf(extractNumericId(p.id))!==-1;});
+      if(!set.length||!set.every(function(p){return getProductQuantity(p.id)>0;}))return null;
+      var viewed=config.viewedPrice||0;
+      var base=viewed+set.reduce(function(sum,p){return sum+unitPrice(p);},0);
+      if(!(base>0))return null;
+      var value=Number(config.offer.value)||0;
+      var pct=config.offer.type==='percentage';
+      var total=round2(pct?base*value/100:Math.min(value,base));
+      var per={};
+      set.forEach(function(p){per[String(p.id)]=round2(pct?unitPrice(p)*value/100:total*unitPrice(p)/base);});
+      return{total:total,per:per,base:base};
+    }
 
     var usesQuantityMap=config.interactionType==='quickAdd'||config.interactionType==='checkboxQty';
     /* Start with every product selected (a bundle) or let shoppers pick:
@@ -730,17 +765,38 @@
     function updateFooter(){
       var total=0,compareTotal=0;
       products.forEach(function(p){
-        var q=getProductQuantity(p.id),price=toPriceNumber(p.price);
+        var q=getProductQuantity(p.id),price=unitPrice(p),cmp=unitCompare(p);
         total+=q*price;
-        compareTotal+=q*(p.compareAt>price?p.compareAt:price);
+        compareTotal+=q*(cmp>price?cmp:price);
       });
-      if(totalEl)totalEl.innerHTML=priceHtml(total,compareTotal,15);
+      var saving=offerSavings();
+      /* Bundle total with the offer: the set (the viewed product too) before and after it. */
+      if(totalEl){
+        if(saving&&config.offerStrikeTotal){var before=total+(config.viewedPrice||0);totalEl.innerHTML=priceHtml(round2(before-saving.total),before,15);}
+        else totalEl.innerHTML=priceHtml(total,compareTotal,15);
+      }
+      if(savingsEl){savingsEl.style.display=saving?'block':'none';savingsEl.textContent=saving?'You save '+money(saving.total):'';}
+      cardEntries.forEach(function(entry){
+        if(!entry.priceEl)return;
+        var p=entry.product,price=unitPrice(p),off=saving&&config.offerProductPrices?saving.per[String(p.id)]||0:0;
+        entry.priceEl.innerHTML=off>0?priceHtml(round2(price-off),price):priceHtml(price,unitCompare(p));
+      });
       var selectedCount=getSelectedCount();
-      if(totalLabelEl)totalLabelEl.textContent=selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
+      if(totalLabelEl)totalLabelEl.textContent=saving&&config.offerStrikeTotal?'Bundle total ('+config.offer.count+' items)':selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
       if(addBtn){addBtn.classList.remove('is-done');addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';var fullSet=config.offer&&config.offer.productIds.every(function(id){return products.some(function(p){return extractNumericId(p.id)===id&&getProductQuantity(p.id)>0;});});addBtn.textContent=fullSet?'Add all '+config.offer.count+' to Cart':'Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
     }
 
     function updateUI(){cardEntries.forEach(function(entry){updateCardStyle(entry);renderControl(entry);});updateFooter();}
+
+    /* A product's variant dropdown (Styling → "Variant picker on each product"),
+       only for products with real options; starts on the variant the widget adds. */
+    function variantPicker(product){
+      var list=(product&&product.variants)||[];
+      if(!config.showVariantPicker||list.length<2)return '';
+      var current=product.liveVariantId||'';
+      var opts=list.map(function(v){return '<option value="'+escapeHtml(v.id)+'"'+(v.id===current?' selected':'')+(v.available?'':' disabled')+'>'+escapeHtml(v.title+(v.available?'':' - Sold out'))+'</option>';}).join('');
+      return '<select class="ps-fbt-variant" aria-label="Choose an option" style="display:block;width:100%;max-width:100%;margin-top:4px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';
+    }
 
     products.forEach(function(product,idx){
       var handleFallback=String((product&&product.handle)||'').replace(/[-_]+/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
@@ -765,6 +821,7 @@
              overflowing — its actual width comes from the grid track. */
           +'<div style="min-width:0;">'
             +'<div class="ps-product-row-title" style="display:block;color:'+config.titleColor+';font-size:13px;font-weight:600;line-height:1.35;white-space:normal;word-break:break-word;">'+safeTitle+'</div>'
+            +variantPicker(product)
             +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:flex-end;"></div>';
@@ -774,6 +831,7 @@
           '<div class="ps-product-image" style="width:100%;height:'+config.imageSize+'px;background:'+(config.imageBg||config.borderColor+'22')+';border-radius:'+config.imageRadius+'px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
           +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
             +'<div class="ps-product-title" style="color:'+config.titleColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
+            +variantPicker(product)
             +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
@@ -786,7 +844,15 @@
         plus.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:16px;font-size:18px;font-weight:700;color:'+config.textColor+';opacity:0.4;align-self:center;';
         wrapper.appendChild(plus);
       }
-      cardEntries.set(String(product.id),{product:product,card:card,actionSlot:card.querySelector('.ps-product-action'),checkboxSlot:card.querySelector('.ps-product-checkbox-slot'),requiredBadge:null});
+      var entry={product:product,card:card,actionSlot:card.querySelector('.ps-product-action'),checkboxSlot:card.querySelector('.ps-product-checkbox-slot'),priceEl:card.querySelector('.ps-product-row-price,.ps-product-price'),requiredBadge:null};
+      cardEntries.set(String(product.id),entry);
+      var picker=card.querySelector('.ps-fbt-variant');
+      if(picker){
+        picker.addEventListener('change',function(){
+          chosenVariants.set(String(product.id),picker.value);
+          updateFooter();
+        });
+      }
     });
 
     updateUI();
@@ -809,7 +875,7 @@
           products.forEach(function(product){
             var id=String(product.id);var qty=getProductQuantity(id);
             if(qty<=0){skipped.push({id:id,title:product.title,reason:'not-selected'});return;}
-            var variantId=variantLookup.get(id);
+            var variantId=chosenVariants.get(id)||variantLookup.get(id);
             if(!variantId){skipped.push({id:id,title:product.title,reason:'variant-lookup-failed'});return;}
             var fullProduct=productById.get(id);
             items.push({id:String(variantId),quantity:qty,productId:id,productTitle:(fullProduct&&fullProduct.title)||'Product'});

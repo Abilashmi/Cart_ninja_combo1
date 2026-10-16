@@ -160,3 +160,15 @@ test('offer text style: defaults look as before, merchant values validated', asy
   assert.equal(pickFbtOfferStyle({ offerFontFamily: "x';}body{" }).offerFontFamily, 'inherit', 'no CSS through the font name');
   assert.equal(pickFbtLayout({ offerFontSize: 15 }).offerFontSize, 15, 'saved and loaded with the template layout');
 });
+
+test('fbtOfferSavings: one unit of each, viewed product included, a fixed amount shared by price', async () => {
+  const { fbtOfferSavings } = await import('../../app/utils/fbt-offer.shared.js');
+  const pct = fbtOfferSavings({ type: 'percentage', value: 10 }, 800, [199, 500]);
+  assert.deepEqual(pct, { total: 149.9, per: [19.9, 50], viewed: 80, base: 1499 });
+  const fixed = fbtOfferSavings({ type: 'fixed_amount', value: 150 }, 500, [250, 250]);
+  assert.deepEqual(fixed, { total: 150, per: [37.5, 37.5], viewed: 75, base: 1000 });
+  assert.equal(fbtOfferSavings({ type: 'fixed_amount', value: 5000 }, 100, [100]).total, 200, 'never more than the set costs');
+  assert.equal(fbtOfferSavings({ type: 'percentage', value: 10 }, 0, [100]).total, 10, 'viewed price unknown: the recommended products only');
+  assert.equal(fbtOfferSavings(null, 100, [100]), null);
+  assert.equal(fbtOfferSavings({ type: 'percentage', value: 0 }, 100, [100]), null);
+});

@@ -26,7 +26,7 @@ import {
   ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules, ensureFbtAiInstructionColumns, ensureFbtOfferColumns,
 } from '../services/cart-config-writes.server';
 import { syncFbtOfferDiscount } from '../services/fbt-offer-shopify.server';
-import { sanitizeFbtOffer, sanitizeRuleOffer, fbtOfferText, FBT_OFFER_TEXT_DEFAULT } from '../utils/fbt-offer.shared';
+import { sanitizeFbtOffer, sanitizeRuleOffer, fbtOfferText, fbtOfferSavings, FBT_OFFER_TEXT_DEFAULT } from '../utils/fbt-offer.shared';
 import { resolveFbtInstructions } from '../services/pairing-assistant.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
@@ -1177,6 +1177,20 @@ export default function FBTPage() {
   // What the same items cost at their compare-at prices, struck through next to the total.
   const compareTotal = fbtPreviewProducts.reduce((sum, p, i) => isActive(i) ? sum + (p.compareAt || p.price) * productStates[i].qty : sum, 0);
   const activeCount = fbtPreviewProducts.filter((_, i) => isActive(i)).length;
+  // The offer once every product is picked; the first sample product's price
+  // stands in for the product being viewed (the storefront uses the real one).
+  const previewViewedPrice = fbtPreviewProducts[0]?.price || 0;
+  const previewSaving = offer.enabled && Number(offer.value) > 0 && fbtPreviewProducts.length && activeCount === fbtPreviewProducts.length
+    ? fbtOfferSavings({ type: offer.type, value: Number(offer.value) }, previewViewedPrice, fbtPreviewProducts.map((p) => p.price))
+    : null;
+  const offerPriceOf = (i) => (previewSaving && fbtLayout.offerProductPrices ? previewSaving.per[i] || 0 : 0);
+  const previewVariantPicker = fbtLayout.showVariantPicker ? (
+    <select aria-label="Choose an option" defaultValue="m" style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px', border: `1px solid ${borderColor}`, borderRadius: '6px', background: bgColor, color: textColor }}>
+      <option value="s">Small</option>
+      <option value="m">Medium</option>
+      <option value="l" disabled>Large - Sold out</option>
+    </select>
+  ) : null;
 
   // Shared by the Save button and the instant enable/disable toggle below —
   // the toggle used to only flip local state and wait for a manual Save
@@ -1355,10 +1369,12 @@ export default function FBTPage() {
         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
         overflow: 'hidden', wordBreak: 'break-word',
       }}>{p.name}</div>
+      {previewVariantPicker}
       {showPrices && (
         <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
-          {p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}
-          {currencySymbol}{p.price}
+          {offerPriceOf(i) > 0
+            ? <><s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.price}</s>{currencySymbol}{Math.round((p.price - offerPriceOf(i)) * 100) / 100}</>
+            : <>{p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}{currencySymbol}{p.price}</>}
         </div>
       )}
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
@@ -1403,10 +1419,12 @@ export default function FBTPage() {
               color: fx.title, fontSize: '12px', fontWeight: 600,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{p.name}</div>
+            {previewVariantPicker}
             {showPrices && (
               <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>
-                {p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}
-                {currencySymbol}{p.price}
+                {offerPriceOf(i) > 0
+                  ? <><s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.price}</s>{currencySymbol}{Math.round((p.price - offerPriceOf(i)) * 100) / 100}</>
+                  : <>{p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}{currencySymbol}{p.price}</>}
               </div>
             )}
           </div>
@@ -1997,6 +2015,12 @@ export default function FBTPage() {
                             ? 'Every product shows as added; one tap on the cart button takes the whole set. Shoppers remove what they don\'t want.'
                             : 'Products start unselected; shoppers add each one they want.'}
                       />
+                      <Checkbox
+                        label="Variant picker on each product"
+                        helpText="A dropdown of sizes / options under each product's name; the picked one is added (sold-out options shown but can't be picked). Off = the first in-stock option is added."
+                        checked={fbtLayout.showVariantPicker}
+                        onChange={setLayoutKey('showVariantPicker')}
+                      />
                       <Select
                         label="Layout Alignment"
                         options={LAYOUT_OPTIONS}
@@ -2095,6 +2119,11 @@ export default function FBTPage() {
                             <Select label="Alignment" options={[{ label: 'Left', value: 'left' }, { label: 'Center', value: 'center' }, { label: 'Right', value: 'right' }]} value={fbtLayout.offerAlign} onChange={setLayoutKey('offerAlign')} />
                             <div style={{ paddingTop: 24 }}><Checkbox label="Italic" checked={fbtLayout.offerItalic} onChange={setLayoutKey('offerItalic')} /></div>
                           </InlineGrid>
+                          <Text as="h4" variant="headingSm">Show the discount</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Once the shopper picks every product of the offer (the product being viewed counts too).</Text>
+                          <Checkbox label={'"You save ₹X" line'} helpText="Under the offer text." checked={fbtLayout.offerShowSavings} onChange={setLayoutKey('offerShowSavings')} />
+                          <Checkbox label="Bundle total, struck through with the new total" helpText="The total includes the product being viewed." checked={fbtLayout.offerStrikeTotal} onChange={setLayoutKey('offerStrikeTotal')} />
+                          <Checkbox label="Each product's price after the discount" helpText="The old price struck through next to it (a fixed amount is shared by price)." checked={fbtLayout.offerProductPrices} onChange={setLayoutKey('offerProductPrices')} />
                           <Text as="p" variant="bodySm" tone="subdued">Manual rules can use their own offer, or none, under Configure → Saved rules. Save to apply.</Text>
                         </>
                       )}
@@ -2187,12 +2216,23 @@ export default function FBTPage() {
                   {/* Price summary + CTA */}
                   <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: `1px solid ${borderColor}` }}>
                     <div style={{ color: textColor, fontSize: '12px', marginBottom: '12px' }}>
-                      {activeCount > 0 ? `Total (${activeCount} item${activeCount === 1 ? '' : 's'})` : 'Select items'}
+                      {previewSaving && fbtLayout.offerStrikeTotal
+                        ? `Bundle total (${fbtPreviewProducts.length + 1} items)`
+                        : activeCount > 0 ? `Total (${activeCount} item${activeCount === 1 ? '' : 's'})` : 'Select items'}
                       <br />
-                      {Math.round(compareTotal) > Math.round(total) && (
-                        <s style={{ color: textColor, opacity: 0.5, fontSize: '14px', fontWeight: 500, marginRight: '6px' }}>{currencySymbol}{Math.round(compareTotal)}</s>
+                      {previewSaving && fbtLayout.offerStrikeTotal ? (
+                        <>
+                          <s style={{ color: textColor, opacity: 0.5, fontSize: '14px', fontWeight: 500, marginRight: '6px' }}>{currencySymbol}{Math.round(total + previewViewedPrice)}</s>
+                          <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total + previewViewedPrice - previewSaving.total)}</span>
+                        </>
+                      ) : (
+                        <>
+                          {Math.round(compareTotal) > Math.round(total) && (
+                            <s style={{ color: textColor, opacity: 0.5, fontSize: '14px', fontWeight: 500, marginRight: '6px' }}>{currencySymbol}{Math.round(compareTotal)}</s>
+                          )}
+                          <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
+                        </>
                       )}
-                      <span style={{ color: priceColor, fontSize: '20px', fontWeight: 700, lineHeight: 1.3 }}>{currencySymbol}{Math.round(total)}</span>
                     </div>
                     {offer.enabled && Number(offer.value) > 0 && (
                       <div className="fbtpv-offer" style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: '8px', ...fbtOfferCss(fbtLayout, priceColor) }}>
@@ -2200,6 +2240,9 @@ export default function FBTPage() {
                           <link rel="stylesheet" href={`https://fonts.googleapis.com/css2?family=${encodeURIComponent(fbtLayout.offerFontFamily)}:wght@400;500;600;700;800&display=swap`} />
                         )}
                         {fbtOfferText(offer.text, { count: fbtPreviewProducts.length + 1, offer: { type: offer.type, value: Number(offer.value) }, symbol: currencySymbol })}
+                        {fbtLayout.offerShowSavings && previewSaving && (
+                          <div style={{ marginTop: '3px', fontWeight: 800, fontSize: `${Math.max(10, fbtLayout.offerFontSize - 1)}px` }}>You save {currencySymbol}{previewSaving.total}</div>
+                        )}
                       </div>
                     )}
                     {showAddAll && (activeCount > 0 || addAllPreview !== 'idle') && (
