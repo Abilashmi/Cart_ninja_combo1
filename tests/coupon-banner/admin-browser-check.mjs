@@ -341,6 +341,42 @@ await check('section title: defaults to "Apply Coupon", editable (text, size, co
   await context.close();
 });
 
+await check('banner width: full / same as Add to cart / custom; preview follows; saved; loads back', async () => {
+  const data = pageData({ selected: ['gid://shopify/DiscountCodeNode/1'] });
+  let { page, context, posts, errors } = await open({ data });
+  await page.getByRole('button', { name: 'Layout' }).click();
+  assert.equal(await page.getByLabel('Banner width', { exact: true }).inputValue(), 'full', 'not saved = full width');
+  const outer = () => page.evaluate(() => { const b = document.querySelector('.pw-banner').getBoundingClientRect(), p = document.querySelector('.pw-banner').parentElement.getBoundingClientRect(); return { banner: Math.round(b.width), room: Math.round(p.width - 36), standin: !!document.querySelector('.pw-atc-standin') }; });
+  let g = await outer();
+  assert.ok(Math.abs(g.banner - g.room) <= 3 && !g.standin, 'full (frame padding + border aside) ' + JSON.stringify(g));
+  await page.getByLabel('Banner width', { exact: true }).selectOption('atc');
+  await page.getByText('the title, offer ladders and coupons take its width').waitFor();
+  g = await outer();
+  assert.ok(g.standin && g.banner < g.room, 'atc: narrower, with a stand-in Add to cart ' + JSON.stringify(g));
+  const sameW = await page.evaluate(() => Math.round(document.querySelector('.pw-layout').getBoundingClientRect().width) === Math.round(document.querySelector('.pw-atc-standin').getBoundingClientRect().width));
+  assert.ok(sameW, 'coupon as wide as the stand-in button');
+  await page.locator('.pw-banner').locator('..').screenshot({ path: path.join(process.cwd(), 'tests', 'coupon-banner', 'screenshots', 'banner-width-atc.png') });
+  await page.getByLabel('Banner width', { exact: true }).selectOption('custom');
+  await page.getByLabel('Banner width (px)').waitFor();
+  g = await outer();
+  assert.ok(!g.standin && g.banner <= 400, 'custom 400px ' + JSON.stringify(g));
+  await page.getByLabel('Banner width', { exact: true }).selectOption('atc');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const tpl = posts.at(-1).template;
+  assert.deepEqual([tpl.bannerWidth, tpl.bannerWidthPx], ['atc', 400]);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // Saved settings come back (the loader merges tempNDefaultStyle into the template).
+  const saved = pageData({ selected: ['gid://shopify/DiscountCodeNode/1'] });
+  saved.couponConfig.templates = { ...saved.couponConfig.templates, template1: { ...saved.couponConfig.templates.template1, bannerWidth: 'custom', bannerWidthPx: 520 } };
+  ({ page, context } = await open({ data: saved }));
+  await page.getByRole('button', { name: 'Layout' }).click();
+  assert.equal(await page.getByLabel('Banner width', { exact: true }).inputValue(), 'custom');
+  assert.equal(await page.locator('.pw-banner').evaluate((e) => e.style.maxWidth), '520px');
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

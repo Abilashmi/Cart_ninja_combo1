@@ -31,13 +31,15 @@ const config = {
   },
 };
 
+// The theme's Add to cart button on the test page (the banner width check sizes it).
+let pageAtc = '<form action="/cart/add"><button name="add">Add</button></form>';
 const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.route('https://int.thebrix.io/**', (route) => route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
 await page.route('http://shop.test/**', (route) => {
   const url = new URL(route.request().url());
   if (url.pathname === '/cart.js') return route.fulfill({ contentType: 'application/json', body: '{"items":[]}' });
-  return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><form action="/cart/add"><button name="add">Add</button></form>${element}\n${rest.join('\n')}</body></html>` });
+  return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body>${pageAtc}${element}\n${rest.join('\n')}</body></html>` });
 });
 await page.goto('http://shop.test/products/tee');
 // Each card's Copy button carries the code shoppers copy (data-code).
@@ -152,4 +154,45 @@ for (const [layout, width] of [['list', 1000], ['grid', 1000], ['grid', 390], ['
   }
 }
 console.log('  ✓ layout: list stacked, grid 2 columns (1 on phones), carousel / not saved = sliding row');
+// Banner width (Coupon Banner → Layout → Banner size): full (default), same as
+// the theme's Add to cart button (width + left edge; a small icon button or none
+// = full width), custom px (never wider than the screen).
+const bannerBox = () => page.evaluate(() => {
+  const b = document.querySelector('ps-coupon-slider .ps-slider').getBoundingClientRect(), w = document.querySelector('ps-coupon-slider').getBoundingClientRect();
+  const a = document.querySelector('[name=add]'); const r = a && a.getBoundingClientRect();
+  return { width: Math.round(b.width), full: Math.round(w.width), left: r ? Math.round(b.left - r.left) : null, card: Math.round(document.querySelector('.ps-card').getBoundingClientRect().width) };
+});
+config.data.layout = 'list';
+await page.setViewportSize({ width: 1000, height: 800 });
+pageAtc = '<form action="/cart/add" style="padding-left:40px"><button name="add" style="width:300px;height:48px">Add to cart</button></form>';
+config.data.temp1DefaultStyle = { headingText: 'Deal', bannerWidth: 'atc' };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => Math.round(document.querySelector('ps-coupon-slider .ps-slider')?.getBoundingClientRect().width || 0) === 300, null, { timeout: 10000 });
+let bb = await bannerBox();
+assert.deepEqual([bb.width, bb.left], [300, 0], 'same width and left edge as Add to cart ' + JSON.stringify(bb));
+assert.ok(bb.card >= 290 && bb.card <= 300, 'cards fill it (less the 2px side padding of the row) ' + JSON.stringify(bb));
+await page.evaluate(() => { document.querySelector('[name=add]').style.width = '420px'; });
+await page.waitForFunction(() => Math.round(document.querySelector('ps-coupon-slider .ps-slider').getBoundingClientRect().width) === 420, null, { timeout: 3000 });
+pageAtc = '<form action="/cart/add"><button name="add" style="width:44px">+</button></form>';
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+await page.waitForTimeout(500);
+bb = await bannerBox();
+assert.equal(bb.width, bb.full, 'icon-size Add to cart: full width');
+config.data.temp1DefaultStyle = { headingText: 'Deal', bannerWidth: 'custom', bannerWidthPx: 360 };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+assert.equal((await bannerBox()).width, 360, 'custom width');
+config.data.temp1DefaultStyle = { headingText: 'Deal', bannerWidth: 'custom', bannerWidthPx: 700 };
+await page.setViewportSize({ width: 360, height: 800 });
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'custom width never wider than a phone');
+config.data.temp1DefaultStyle = { headingText: 'Deal' };
+await page.setViewportSize({ width: 1000, height: 800 });
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
+bb = await bannerBox();
+assert.equal(bb.width, bb.full, 'not saved: full width, as before');
+console.log('  ✓ banner width: same as Add to cart (follows it; icon button = full), custom px (phone-safe), not saved = full');
 await browser.close();

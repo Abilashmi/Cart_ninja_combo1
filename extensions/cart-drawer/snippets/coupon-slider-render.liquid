@@ -222,6 +222,325 @@ function csCopiedAttrs(s){
   return' data-copied-bg="'+escapeHtmlJs(csHex(s.copiedBgColor)||'#10b981')+'" data-copied-text="'+escapeHtmlJs(csHex(s.copiedTextColor)||'#ffffff')+'"';
 }
 
+/* Offer ladder rules, HTML and CSS: copied verbatim from app/utils/offer-ladder.shared.js (tests/coupon-banner/offer-ladder.test.mjs checks). */
+/* offer-ladder:begin */
+function createOfferLadder(){
+  var LOOKS=['strip','ticker','rotate'];
+  var SEPARATORS=['|','•','/','✦'];
+  var ACTIONS=['copy','apply'];
+  var DIRECTIONS=['row','column'];
+  /* right = button at the right edge, center = text + button side by side in the middle, below = button under the text */
+  var BUTTON_PLACES=['right','center','below'];
+  /* full = the widget's width, atc = the theme's Add to cart button (width, and at least its height), custom = boxWidth px */
+  var BOX_SIZES=['full','atc','custom'];
+  var MAX_TIERS=5;
+  var DEFAULTS={look:'strip',separator:'|',interval:4,textSize:14,boxWidth:400,padY:10,padX:14,buttonText:{copy:'Copy code',apply:'Apply coupon'},buttonDoneText:{copy:'Copied!',apply:'Applied!'}};
+  function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function hex(v,d){return typeof v==='string'&&/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v.trim())?v.trim():d;}
+  function num(v,min,max,d){var n=parseInt(v,10);return isFinite(n)?Math.max(min,Math.min(max,n)):d;}
+  function text(v,max,d){var s=String(v==null?'':v).trim();return s?s.slice(0,max):d;}
+  /* A code goes into /cart/update.js as a comma list: no commas, no line breaks. */
+  function code(v){var c=String(v==null?'':v).trim();return c&&c.length<=255&&!/[,\r\n]/.test(c)?c:'';}
+  function upper(v){return String(v||'').toUpperCase();}
+
+  /* Saved per-coupon style → clean ladder. Offers keep the merchant's order. */
+  function normalize(s){
+    s=s||{};
+    var tiers=[];
+    (Array.isArray(s.tiers)?s.tiers:[]).forEach(function(t){
+      if(!t||typeof t!=='object'||tiers.length>=MAX_TIERS)return;
+      var label=text(t.text,80,''),q=parseInt(t.qty,10);
+      if(!label)return;
+      tiers.push({text:label,qty:q>=1?Math.min(99,q):0,code:code(t.code)});
+    });
+    var action=ACTIONS.indexOf(s.buttonAction)!==-1?s.buttonAction:'copy';
+    var btnCode=code(s.buttonCode);
+    return {
+      tiers:tiers,
+      look:LOOKS.indexOf(s.look)!==-1?s.look:DEFAULTS.look,
+      separator:SEPARATORS.indexOf(s.separator)!==-1?s.separator:DEFAULTS.separator,
+      interval:num(s.interval,2,15,DEFAULTS.interval),
+      textSize:num(s.textSize,11,24,DEFAULTS.textSize),
+      radius:num(s.borderRadius,0,24,8),
+      subtext:text(s.subtextText,120,''),
+      direction:DIRECTIONS.indexOf(s.direction)!==-1?s.direction:'row',
+      buttonPlace:BUTTON_PLACES.indexOf(s.buttonPlace)!==-1?s.buttonPlace:'right',
+      boxSize:BOX_SIZES.indexOf(s.boxSize)!==-1?s.boxSize:'full',
+      boxWidth:num(s.boxWidth,200,800,DEFAULTS.boxWidth),
+      padY:num(s.padY,4,32,DEFAULTS.padY),
+      padX:num(s.padX,6,40,DEFAULTS.padX),
+      minHeight:num(s.minHeight,0,200,0),
+      autoApply:s.autoApply===true,
+      /* A button needs a code to copy or apply. */
+      button:s.buttonShow===true&&btnCode?{action:action,code:btnCode,text:text(s.buttonText,30,DEFAULTS.buttonText[action]),doneText:text(s.buttonDoneText,30,DEFAULTS.buttonDoneText[action])}:null,
+      bg:hex(s.bgColor,'#111827'),
+      fg:hex(s.textColor,'#ffffff'),
+      accent:hex(s.accentColor,'#facc15')
+    };
+  }
+
+  /* Items that count: every cart line except BRIX's free reward gifts. */
+  function cartCount(cart){
+    var n=0;
+    (cart&&Array.isArray(cart.items)?cart.items:[]).forEach(function(it){
+      if(!it||(it.properties&&it.properties._brixReward))return;
+      n+=Math.max(0,parseInt(it.quantity,10)||0);
+    });
+    return n;
+  }
+
+  /* Auto-apply: the best offer (with an item count) the cart has reached. */
+  function reached(L,count){
+    var best=null;
+    L.tiers.forEach(function(t){if(t.qty&&count>=t.qty&&(!best||t.qty>best.qty))best=t;});
+    return best;
+  }
+
+  /* Codes the cart should carry for this count: the reached offer's code (if
+     it has one) instead of any other code of this ladder; codes the shopper
+     entered (or the ladder's button applied) stay. null = nothing to change. */
+  function codesFor(L,count,cartCodes){
+    if(!L.autoApply)return null;
+    var own={};
+    L.tiers.forEach(function(t){if(t.code&&t.qty)own[upper(t.code)]=true;});
+    var current=(cartCodes||[]).filter(Boolean).map(String);
+    var keep=current.filter(function(c){return !own[upper(c)];});
+    var best=reached(L,count);
+    var want=best&&best.code?keep.concat([best.code]):keep;
+    var a=current.map(upper).sort().join(','),b=want.map(upper).sort().join(',');
+    return a===b?null:want;
+  }
+
+  function tierHtml(t,cls){return '<span class="psl-tier'+(cls?' '+cls:'')+'">'+esc(t.text)+'</span>';}
+  function rowHtml(L){
+    return L.tiers.map(function(t,i){return (i?'<span class="psl-sep" aria-hidden="true">'+esc(L.separator)+'</span>':'')+tierHtml(t);}).join('');
+  }
+
+  /* opts: show = index of the offer a rotating ladder is on, done = the button was tapped. */
+  function html(L,opts){
+    opts=opts||{};
+    if(!L.tiers.length)return '';
+    var body='';
+    if(L.look==='ticker'){
+      var chars=0;L.tiers.forEach(function(t){chars+=t.text.length+4;});
+      var row=rowHtml(L)+'<span class="psl-sep" aria-hidden="true">'+esc(L.separator)+'</span>';
+      body='<div class="psl-ticker"><div class="psl-move" style="animation-duration:'+Math.max(10,Math.round(chars*0.32))+'s"><span class="psl-run">'+row+'</span><span class="psl-run" aria-hidden="true">'+row+'</span></div></div>';
+    }else if(L.look==='rotate'){
+      var show=((parseInt(opts.show,10)||0)%L.tiers.length+L.tiers.length)%L.tiers.length;
+      body='<div class="psl-rotate">'+L.tiers.map(function(t,i){return tierHtml(t,'psl-slide'+(i===show?' is-show':''));}).join('')+'</div>';
+    }else{
+      body='<div class="psl-row">'+rowHtml(L)+'</div>';
+    }
+    var b=L.button,btn='';
+    if(b)btn='<button type="button" class="psl-btn'+(opts.done?' is-done':'')+'" data-psl-action="'+b.action+'" data-psl-code="'+esc(b.code)+'">'+esc(opts.done?b.doneText:b.text)+'</button>';
+    var sub=L.subtext?'<div class="psl-sub">'+esc(L.subtext)+'</div>':'';
+    var cls='psl psl--'+L.look+' psl--size-'+L.boxSize+(L.look==='strip'&&L.direction==='column'?' psl--col':'')+(b?' psl--btn psl--btn-'+L.buttonPlace:'');
+    var box='--psl-py:'+L.padY+'px;--psl-px:'+L.padX+'px;'+(L.minHeight?'--psl-mh:'+L.minHeight+'px;':'')+(L.boxSize==='custom'?'max-width:'+L.boxWidth+'px;':'');
+    return '<div class="'+cls+'" style="--psl-bg:'+L.bg+';--psl-fg:'+L.fg+';--psl-accent:'+L.accent+';--psl-fs:'+L.textSize+'px;--psl-r:'+L.radius+'px;'+box+'">'
+      +'<div class="psl-main"><div class="psl-offers">'+body+sub+'</div>'+btn+'</div></div>';
+  }
+
+  var css=''
+    +'.psl{background:var(--psl-bg);color:var(--psl-fg);border-radius:var(--psl-r);padding:var(--psl-py,10px) var(--psl-px,14px);min-height:var(--psl-mh,0px);display:flex;flex-direction:column;justify-content:center;font-size:var(--psl-fs);line-height:1.35;box-sizing:border-box;width:100%;overflow:hidden;text-align:center}'
+    +'.psl--size-atc{min-height:max(var(--psl-mh,0px),var(--psl-atc-h,0px))}'
+    +'.psl *{box-sizing:border-box}'
+    +'.psl-main{display:flex;align-items:center;justify-content:center;gap:8px 12px;flex-wrap:wrap}'
+    +'.psl-offers{flex:1 1 220px;min-width:0}'
+    +'.psl--btn-center .psl-offers{flex:0 1 auto}'
+    +'.psl--btn-below .psl-main{flex-direction:column}'
+    +'.psl--btn-below .psl-offers{flex:none;width:100%}'
+    +'.psl--col .psl-row{flex-direction:column;gap:4px}'
+    +'.psl--col .psl-row>.psl-sep{display:none}'
+    +'.psl-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 10px;font-weight:700}'
+    +'.psl-sep{opacity:.45;font-weight:400}'
+    +'.psl-tier{display:inline-flex;align-items:center;white-space:normal;overflow-wrap:anywhere}'
+    +'.psl-ticker{overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)}'
+    +'.psl-move{display:inline-flex;font-weight:700;animation:psl-scroll linear infinite;will-change:transform}'
+    +'.psl-run{display:inline-flex;align-items:center;gap:10px;padding-right:10px;flex-shrink:0}'
+    +'.psl-run .psl-tier{white-space:nowrap}'
+    +'.psl:hover .psl-move{animation-play-state:paused}'
+    +'@keyframes psl-scroll{to{transform:translateX(-50%)}}'
+    +'.psl-rotate{font-weight:700;min-height:1.4em}'
+    +'.psl-slide{display:none}'
+    +'.psl-slide.is-show{display:inline-flex;animation:psl-in .35s ease}'
+    +'@keyframes psl-in{from{opacity:0;transform:translateY(6px)}}'
+    +'.psl-sub{opacity:.75;font-size:.85em;margin-top:4px}'
+    +'.psl-btn{flex:0 0 auto;background:var(--psl-accent);color:var(--psl-bg);border:none;border-radius:999px;padding:7px 16px;font:inherit;font-size:.86em;font-weight:700;line-height:1.2;cursor:pointer;max-width:100%;white-space:normal;overflow-wrap:anywhere}'
+    +'.psl-btn:hover{filter:brightness(1.06)}'
+    +'.psl-btn:disabled{opacity:.7;cursor:default}'
+    +'@media (prefers-reduced-motion:reduce){.psl-move{animation:none;white-space:normal;flex-wrap:wrap;justify-content:center;width:100%}.psl-run[aria-hidden]{display:none}.psl-run{flex-wrap:wrap;justify-content:center;flex-shrink:1}.psl-run>.psl-sep:last-child{display:none}.psl-ticker{-webkit-mask-image:none;mask-image:none;white-space:normal}.psl-slide.is-show{animation:none}}';
+
+  return {LOOKS:LOOKS,SEPARATORS:SEPARATORS,ACTIONS:ACTIONS,DIRECTIONS:DIRECTIONS,BUTTON_PLACES:BUTTON_PLACES,BOX_SIZES:BOX_SIZES,MAX_TIERS:MAX_TIERS,DEFAULTS:DEFAULTS,normalize:normalize,cartCount:cartCount,reached:reached,codesFor:codesFor,html:html,css:css};
+}
+/* offer-ladder:end */
+
+/* Offer ladders ("ladder:<id>", app/utils/offer-ladder.shared.js): text bars
+   above the coupon cards. Optional button: copies its code, or puts it on the
+   Shopify cart (/cart/update.js discount, so every checkout path gets it).
+   Optional auto-apply: when the cart has enough items the reached offer's code
+   goes on the cart and the ladder's other codes come off; the shopper's own
+   codes stay. Cart changes are seen through PerformanceObserver (any theme or
+   app calling /cart/add, change, update); only when a ladder uses auto-apply. */
+var LADDER=createOfferLadder();
+var _ladders=[],_ladderBusy=false,_ladderAgain=false,_ladderWatching=false,_ladderLastPut='';
+/* The theme's Add to cart button (placement, and ladders sized like it). */
+var ATC_SELECTORS=[
+  '.product-form__submit',
+  '.product__submit button[type="submit"]',
+  'form[action*="/cart/add"] button[type="submit"]',
+  '[name="add"]',
+  '.btn--add-to-cart',
+  '.product-form button[type="submit"]',
+  '.shopify-payment-button__button',
+];
+function findAtcButton(){
+  for(var i=0;i<ATC_SELECTORS.length;i++){
+    var b=document.querySelector(ATC_SELECTORS[i]);
+    if(b)return b;
+  }
+  return null;
+}
+/* Width 'same as Add to cart' (the whole banner, or one offer ladder): the
+   node takes the Add to cart button's width and left edge (a ladder also at
+   least its height, --psl-atc-h). No button found, or it is hidden = full width. */
+function fitToAtc(slot){
+  var atc=findAtcButton(),r=atc&&atc.getBoundingClientRect();
+  /* A small (icon-only) button is no guide: under 160px wide = full width. */
+  if(!r||r.width<160||!slot.isConnected){slot.style.width='';slot.style.marginLeft='';slot.style.removeProperty('--psl-atc-h');return;}
+  var parent=slot.parentNode.getBoundingClientRect();
+  if(!parent.width)return; /* not shown yet: fit() runs again after placement */
+  var left=Math.max(0,Math.min(Math.round(r.left-parent.left),Math.round(parent.width-r.width)));
+  slot.style.width=Math.min(Math.round(r.width),Math.round(parent.width))+'px';
+  slot.style.maxWidth='100%';
+  slot.style.marginLeft=left+'px';
+  slot.style.setProperty('--psl-atc-h',Math.round(r.height)+'px');
+}
+/* Fit now, again once the widget has moved next to the button, and whenever the page or the button resizes. */
+function watchAtcFit(node){
+  var fit=function(){if(node.isConnected)fitToAtc(node);};
+  fit();
+  setTimeout(fit,0);setTimeout(fit,400);
+  window.addEventListener('resize',fit);
+  var atc=findAtcButton();
+  if(atc&&window.ResizeObserver){try{new ResizeObserver(fit).observe(atc);}catch(_e){}}
+}
+function ladderDraw(x){
+  var h=LADDER.html(x.L,{show:x.show,done:x.done});
+  if(h!==x.html){x.html=h;x.el.innerHTML=h;}
+}
+function ladderCss(){
+  if(document.getElementById('ps-ladder-css'))return;
+  var st=document.createElement('style');st.id='ps-ladder-css';st.textContent=LADDER.css;document.head.appendChild(st);
+}
+function ladderMount(el,L){
+  ladderCss();
+  var x={el:el,L:L,show:0,done:false,html:''};
+  _ladders.push(x);
+  ladderDraw(x);
+  if(L.boxSize==='atc')watchAtcFit(el);
+  if(L.look==='rotate'&&L.tiers.length>1){
+    x.timer=setInterval(function(){
+      if(!el.isConnected){clearInterval(x.timer);return;}
+      if(document.hidden)return;
+      x.show=(x.show+1)%L.tiers.length;ladderDraw(x);
+    },L.interval*1000);
+  }
+  if(L.button)el.addEventListener('click',function(e){
+    var btn=e.target.closest('.psl-btn');
+    if(!btn||btn.disabled)return;
+    var b=L.button;
+    if(b.action==='copy'){
+      ladderCopy(b.code);
+      x.done=true;ladderDraw(x);
+      setTimeout(function(){x.done=false;ladderDraw(x);},2500);
+      return;
+    }
+    btn.disabled=true;
+    ladderApplyCode(b.code).then(function(ok){
+      x.done=!!ok;x.html='';ladderDraw(x);
+    });
+  });
+  if(L.autoApply&&L.tiers.some(function(t){return t.qty&&t.code;})){
+    ladderWatch();
+    ladderSync();
+  }
+}
+function ladderCopy(code){
+  try{
+    var ta=document.createElement('textarea');
+    ta.value=code;
+    ta.style.cssText='position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;';
+    document.body.appendChild(ta);ta.focus();ta.setSelectionRange(0,ta.value.length);
+    document.execCommand('copy');document.body.removeChild(ta);
+  }catch(_e){}
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(code).catch(function(){});
+}
+function ladderReadCart(){
+  return fetch('/cart.js',{credentials:'same-origin',cache:'no-store'})
+    .then(function(r){return r.ok?r.json():null;})
+    .catch(function(){return null;});
+}
+function ladderCartCodes(cart){
+  return (cart&&Array.isArray(cart.discount_codes)?cart.discount_codes:[]).map(function(d){return d&&d.code;}).filter(Boolean).map(String);
+}
+function ladderPutCodes(list){
+  return fetch('/cart/update.js',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({discount:list.join(',')})})
+    .then(function(r){return r.ok?r.json():null;})
+    .catch(function(){return null;});
+}
+/* The button's Apply: adds the code to the cart's codes. Resolves true once
+   the cart holds it (Shopify checks at checkout whether the order qualifies). */
+function ladderApplyCode(code){
+  var up=code.toUpperCase();
+  function has(cart){return ladderCartCodes(cart).some(function(c){return c.toUpperCase()===up;});}
+  return ladderReadCart().then(function(cart){
+    if(has(cart))return true;
+    return ladderPutCodes(ladderCartCodes(cart).concat([code])).then(function(after){
+      if(after&&Array.isArray(after.discount_codes))return has(after);
+      /* A cart answer without discount_codes: Shopify's discount link sets the code for checkout. */
+      return fetch('/discount/'+encodeURIComponent(code)+'?redirect=%2Fcart.js',{credentials:'same-origin'})
+        .then(function(r){return r.ok;}).catch(function(){return false;});
+    });
+  }).catch(function(){return false;});
+}
+function ladderSync(){
+  if(_ladderBusy){_ladderAgain=true;return;}
+  _ladderBusy=true;
+  ladderReadCart().then(function(cart){
+    _ladders=_ladders.filter(function(x){return x.el.isConnected;});
+    if(!cart||!_ladders.length)return;
+    var count=LADDER.cartCount(cart);
+    var list=ladderCartCodes(cart),changed=false;
+    _ladders.forEach(function(x){var next=LADDER.codesFor(x.L,count,list);if(next){list=next;changed=true;}});
+    /* Never the same change twice in a row: a code Shopify drops (or the shopper took off) can't loop. */
+    var key=count+'|'+list.join(',');
+    if(!changed||_ladderLastPut===key)return;
+    _ladderLastPut=key;
+    return ladderPutCodes(list);
+  }).catch(function(){}).then(function(){
+    _ladderBusy=false;
+    if(_ladderAgain){_ladderAgain=false;ladderSync();}
+  });
+}
+function ladderWatch(){
+  if(_ladderWatching)return;
+  _ladderWatching=true;
+  var t=null;
+  function soon(){clearTimeout(t);t=setTimeout(ladderSync,350);}
+  if(window.PerformanceObserver){
+    try{
+      new PerformanceObserver(function(list){
+        list.getEntries().forEach(function(e){
+          var p=String(e.name||'').replace(/^https?:\/\/[^\/]+/,'').split('?')[0];
+          if(/\/cart\/(add|change|update|clear)(\.js)?$/.test(p))soon();
+        });
+      }).observe({type:'resource'});
+    }catch(_e){}
+  }
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)soon();});
+  window.addEventListener('pageshow',function(e){if(e.persisted)soon();});
+}
+
 /* textOnly: a text offer (id "text:...", no code): heading + subtext only, no code panel, no Copy button. */
 function buildCard(tpl,s,code,h,sub,timerData,textOnly){
   var fs=parseInt(s.fontSize)||13;
@@ -386,6 +705,13 @@ function renderSlider(el,data,ctx){
     if(!cond.displayCondition&&ov.displayCondition)cond=ov;
     if(!matchesCondition(cond,ctx))return;
 
+    /* ladder:<id> = an offer ladder: its own colours (never the template's), the template's corners. */
+    if(nid.indexOf('ladder:')===0||ov.ladder===true){
+      var L=LADDER.normalize(Object.assign({},ov,{borderRadius:s.borderRadius}));
+      if(L.tiers.length)itemsToRender.push({ladder:L});
+      return;
+    }
+
     var rawStoredCode=isObj?item.code:null;
     /* Ignore codes that are purely numeric - they are GID tails saved by mistake */
     var storedCode=(rawStoredCode&&!/^\d+$/.test(rawStoredCode))?rawStoredCode:null;
@@ -415,22 +741,34 @@ function renderSlider(el,data,ctx){
     return;
   }
 
+  /* Offer ladders go above the cards, full width, in their saved order. */
+  var ladders=itemsToRender.filter(function(item){return item.ladder;});
+  var cards=itemsToRender.filter(function(item){return !item.ladder;});
   /* One coupon: nothing to slide, so no side arrows and the card fills the row */
-  var single=itemsToRender.length===1;
+  var single=cards.length===1;
   /* Banner layout (Coupon Banner → Layout): carousel = the sliding row,
      list = stacked full width, grid = 2 columns (1 on phones). Not saved =
      carousel, how it always looked here. */
   var layout=['list','carousel','grid'].indexOf(data.layout)!==-1?data.layout:'carousel';
-  var slides=layout==='carousel'&&!single;
+  var slides=layout==='carousel'&&cards.length>1;
   el.innerHTML=
     '<div class="ps-slider'+(single?' ps-slider--single':'')+' ps-slider--'+layout+'">'
       +(String(titleText).trim()===''?'':'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+escapeHtmlJs(titleText)+'</div>')
-      +'<div class="ps-slider-row">'
+      +(ladders.length?'<div class="ps-ladders">'+ladders.map(function(){return '<div class="ps-ladder"></div>';}).join('')+'</div>':'')
+      +(cards.length?'<div class="ps-slider-row">'
         +(slides?'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>':'')
         +'<div class="ps-coupon-wrapper"></div>'
         +(slides?'<button class="ps-nav ps-next" aria-label="Next coupon">&#8594;</button>':'')
-      +'</div>'
+      +'</div>':'')
     +'</div>';
+
+  /* Banner width (Coupon Banner → Layout): full (default) | atc = same as the
+     Add to cart button | custom = bannerWidthPx (200-800, never wider than the screen). */
+  var bannerBox=el.querySelector('.ps-slider');
+  if(def.bannerWidth==='custom'){var bw=csPx(def.bannerWidthPx,200,800);if(bw)bannerBox.style.maxWidth=bw+'px';}
+  else if(def.bannerWidth==='atc')watchAtcFit(bannerBox);
+  Array.prototype.forEach.call(el.querySelectorAll('.ps-ladder'),function(slot,i){ladderMount(slot,ladders[i].ladder);});
+  if(!cards.length)return;
 
   var w=el.querySelector('.ps-coupon-wrapper');
   var prv=el.querySelector('.ps-prev');
@@ -441,7 +779,7 @@ function renderSlider(el,data,ctx){
   // Preview panel shows it, instead of a single bar floating above the
   // widget title outside any card. startCouponTimer runs after the cards
   // exist in the DOM since it queries for their .ps-timer-text elements.
-  itemsToRender.forEach(function(item){
+  cards.forEach(function(item){
     w.appendChild(buildCard(tpl,item.style,item.code,item.heading,item.subtext,data,item.textOnly));
   });
 
@@ -456,7 +794,7 @@ function renderSlider(el,data,ctx){
   }
 
   /* Scroll by roughly one card width */
-  var cardW=(itemsToRender.length>0&&w.firstChild)?w.firstChild.offsetWidth+12:280;
+  var cardW=(cards.length>0&&w.firstChild)?w.firstChild.offsetWidth+12:280;
   if(nxt)nxt.addEventListener('click',function(){w.scrollBy({left:cardW,behavior:'smooth'});});
   if(prv)prv.addEventListener('click',function(){w.scrollBy({left:-cardW,behavior:'smooth'});});
 
@@ -497,20 +835,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
       // normalize all value variants → above_atc / below_atc
       var placement=(raw==='above_cart'||raw==='top')?'above_atc':(raw==='below_cart'||raw==='bottom')?'below_atc':raw;
       if(placement==='custom'){el.style.display='block';return;}
-      var atcSelectors=[
-        '.product-form__submit',
-        '.product__submit button[type="submit"]',
-        'form[action*="/cart/add"] button[type="submit"]',
-        '[name="add"]',
-        '.btn--add-to-cart',
-        '.product-form button[type="submit"]',
-        '.shopify-payment-button__button',
-      ];
-      var atcBtn=null;
-      for(var i=0;i < atcSelectors.length;i++){
-        atcBtn=document.querySelector(atcSelectors[i]);
-        if(atcBtn)break;
-      }
+      var atcBtn=findAtcButton();
       el.style.display='block';
       if(atcBtn){
         var anchor=atcBtn.closest('form')||atcBtn.parentNode;
@@ -585,6 +910,9 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 <style>
 .ps-slider{width:100%;padding:4px 0}
 .ps-section-title{margin:0 0 10px}
+/* Offer ladders: full-width bars above the coupon cards */
+.ps-ladders{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.ps-ladders:last-child{margin-bottom:0}
 /* Row: [←] [scrollable cards] [→] */
 .ps-slider-row{display:flex;align-items:center;gap:8px}
 .ps-coupon-wrapper{
