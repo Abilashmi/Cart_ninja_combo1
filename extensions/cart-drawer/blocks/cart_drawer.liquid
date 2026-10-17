@@ -1,5 +1,5 @@
 ﻿{% if shop.permanent_domain != blank %}
-  <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"></div>
+  <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}" data-fast-add="{{ block.settings.fast_add }}"></div>
 
   {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
   {{ 'brix_cart_ui.css' | asset_url | stylesheet_tag }}
@@ -27,6 +27,15 @@
   "target": "body",
   "enabled_on": {
     "templates": ["*"]
-  }
+  },
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "fast_add",
+      "label": "Fast Add to cart",
+      "default": false,
+      "info": "BRIX handles your theme's Add to cart button itself, so the cart opens as soon as the product is added. Turn on if Add to cart feels slow with this theme."
+    }
+  ]
 }
 {% endschema %}

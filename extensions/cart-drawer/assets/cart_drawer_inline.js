@@ -222,6 +222,35 @@
   // timestamp it's already been set, letting us skip our own duplicate
   // POST instead of adding the item a second time.
   let _ccExternalAddInFlightAt = 0;
+  // The cart's item count as last seen (the poll and every drawer render), so
+  // the poll never re-opens the drawer for an add the drawer already showed.
+  let _ccSeenCount = -1;
+  // The cart as Shopify last returned it (renders, poll), for Fast Add's
+  // drawer drawn straight from the add's answer.
+  let _ccLastCart = null;
+  // Each drawer render gets a number. The first to finish draws and later
+  // ones update it, but never one older than what is already drawn. (Only
+  // the newest used to draw: on extrokids the add opened three renders at
+  // once, the theme's slow /cart?view=ajax_side_cart held the newest one's
+  // cart read for 1.5 s, and the drawer waited for it although an older
+  // render already had the item.)
+  let _ccRenderSeq = 0;
+  let _ccDrawnSeq = 0;
+  // Adds to cart still waiting for Shopify's answer: while one is, the drawer
+  // isn't drawn from a cart that doesn't have the item yet (the add's own
+  // answer opens it).
+  let _ccAddsPending = 0;
+  let _ccAddsPendingSince = 0;
+  function ccAddStarted() { _ccAddsPending++; _ccAddsPendingSince = Date.now(); }
+  // Adds whose answer the browser already reported (see ccWatchAddAnswers).
+  let _ccAddsAnsweredEarly = 0;
+  // false = this answer was already reported and opened the drawer: opening
+  // again would bring it back after the shopper closed it.
+  function ccAddEnded() {
+    if (_ccAddsAnsweredEarly > 0) { _ccAddsAnsweredEarly--; return false; }
+    _ccAddsPending = Math.max(0, _ccAddsPending - 1);
+    return true;
+  }
   // Add-to-cart transaction guard — a rapid double-click can fire two
   // separate, individually-legitimate 'submit' events before the theme has
   // a chance to disable the button, each of which would otherwise pass our
@@ -474,6 +503,7 @@
         _ccActive = true;
 
         await enrichUpsellProducts(CONFIG.upsell);
+        ccWarmCatalog();
       } else {
         // API returned error / no record for this shop — fall back to defaults
         // so the drawer still works even if the merchant hasn't saved settings yet.
@@ -934,6 +964,8 @@
   /* =================== OPEN DRAWER =================== */
 
   async function openDrawer() {
+    // An add is still on its way (never longer than 8 s): its answer opens the drawer.
+    if (_ccAddsPending > 0 && Date.now() - _ccAddsPendingSince < 8000) return;
     if (!CONFIG) {
       // Avoid concurrent loads
       if (_ccConfigLoading) {
@@ -968,12 +1000,18 @@
   /* =================== DEBOUNCED OPEN =================== */
   // Single debounce prevents duplicate opens when multiple triggers fire at once.
   let _ccOpenTimer = null;
+  // A pending open is never pushed later by a slower request (an add that
+  // already finished opens at once even if the theme fires its own events).
+  let _ccOpenAt = 0;
   function scheduleOpenDrawer(delay) {
+    const at = Date.now() + (delay === undefined ? 350 : delay);
+    if (_ccOpenTimer && _ccOpenAt <= at) return;
     if (_ccOpenTimer) clearTimeout(_ccOpenTimer);
+    _ccOpenAt = at;
     _ccOpenTimer = setTimeout(function () {
       _ccOpenTimer = null;
       openDrawer();
-    }, delay || 350);
+    }, Math.max(0, at - Date.now()));
   }
 
   /* =================== CART ACTION INTERCEPTS =================== */
@@ -1139,18 +1177,48 @@
       if (dispatchUrl.includes('/cart/add')) {
         _ccExternalAddInFlightAt = Date.now();
         ccCountAddRequest('window.fetch (external)');
+        ccAddStarted();
       }
     } catch (e) { /* noop — args[0] shape unexpected, safe to ignore */ }
 
-    const response = await originalFetch.apply(this, args);
+    const isAdd = (function () { try { return String(typeof args[0] === 'string' ? args[0] : args[0] && args[0].url || '').includes('/cart/add'); } catch (e) { return false; } })();
+    let response;
     try {
-      const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : '';
-      if (url.includes('/cart/add') && response.ok) {
-        scheduleOpenDrawer(350);
-      }
-    } catch (e) { }
+      response = await originalFetch.apply(this, args);
+    } catch (err) {
+      if (isAdd) ccAddEnded();
+      throw err;
+    }
+    // Added: open as soon as Shopify answers (it used to wait another 350 ms).
+    if (isAdd) {
+      if (ccAddEnded() && response.ok) scheduleOpenDrawer(30);
+    }
     return response;
   };
+
+  // Another app's fetch wrapper can hold an add's answer back: Snap Cart
+  // Drawer's w4theme.js (knitnknot.in) queues every /cart/add and passes the
+  // answer on 500 ms late, and BRIX's own adds go through it too. The
+  // browser's own record of the request says when Shopify really answered,
+  // so an add BRIX is waiting on opens the drawer then. Only a known 2xx
+  // counts (responseStatus; Safari has none, it waits for the answer).
+  // Wrappers are never bypassed: Shopify's analytics (Add to cart events)
+  // and other apps watch fetch too.
+  (function ccWatchAddAnswers() {
+    try {
+      if (!window.PerformanceObserver) return;
+      new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (entry) {
+          if (_ccAddsPending <= 0 || !/\/cart\/add/.test(entry.name || '')) return;
+          const status = entry.responseStatus;
+          if (!(status >= 200 && status < 300)) return;
+          _ccAddsPending--;
+          _ccAddsAnsweredEarly++;
+          scheduleOpenDrawer(0);
+        });
+      }).observe({ type: 'resource' });
+    } catch (e) { /* no resource timing: the answer opens it */ }
+  })();
 
   // 2. XHR intercept — catches themes that use XMLHttpRequest (only on success)
   const originalXHROpen = XMLHttpRequest.prototype.open;
@@ -1161,11 +1229,12 @@
       // interceptor's duplicate-check as early as possible.
       _ccExternalAddInFlightAt = Date.now();
       ccCountAddRequest('XMLHttpRequest (external)');
+      ccAddStarted();
       this.addEventListener('load', function () {
-        if (this.status >= 200 && this.status < 300) {
-          scheduleOpenDrawer(350);
-        }
+        if (ccAddEnded() && this.status >= 200 && this.status < 300) scheduleOpenDrawer(30);
       });
+      this.addEventListener('error', ccAddEnded);
+      this.addEventListener('abort', ccAddEnded);
     }
     return originalXHROpen.apply(this, arguments);
   };
@@ -1250,7 +1319,7 @@
       }
       if (_ccExternalAddInFlightAt >= submitStartedAt) {
         ccDebug('submit intercept: theme already added this item itself, skipping our own duplicate POST');
-        scheduleOpenDrawer(250);
+        // Our fetch/XHR patch saw that add: it opens the drawer when the add answers.
         return;
       }
 
@@ -1260,13 +1329,15 @@
       ccBeginAddToCartTransaction();
       ccMilestone('Cart request started');
       ccCountAddRequest('submit interceptor (ours)');
+      ccAddStarted();
       originalFetch('/cart/add.js', { method: 'POST', body: formData })
       .then(function (res) {
+        const fresh = ccAddEnded();
         ccEndAddToCartTransaction();
         if (res.ok) {
           ccMilestone('Cart request completed');
           ccDebug('submit intercept: /cart/add.js succeeded, opening drawer');
-          scheduleOpenDrawer(300);
+          if (fresh) scheduleOpenDrawer(30);
         } else {
           // A real Shopify error (e.g. 422 sold out / invalid variant) —
           // this is a legitimate answer, not an interception failure, so we
@@ -1276,6 +1347,7 @@
         }
       })
       .catch(function (err) {
+        ccAddEnded();
         ccEndAddToCartTransaction();
         // Our AJAX path itself failed (network error, blocked request,
         // etc.) — gracefully fall back to the native form submission
@@ -1292,25 +1364,30 @@
   // 3b. Universal cart polling — checks /cart.js every 1.5s and opens drawer
   // if item_count increases. This catches every add-to-cart regardless of method.
   (function () {
-    let _ccPollCount = -1;
     let _ccPollActive = false;
     function ccPoll() {
       if (_ccPollActive) return;
+      // Never while an add is going on (cart requests queue on Shopify's side
+      // and slowed the add down), in a background tab, or with our drawer open.
+      if (document.hidden || Date.now() - _ccExternalAddInFlightAt < 5000 || document.getElementById('cc-overlay')) return;
       _ccPollActive = true;
       originalFetch('/cart.js')
         .then(function (r) { return r.json(); })
         .then(function (data) {
           const count = data.item_count || 0;
-          if (_ccPollCount !== -1 && count > _ccPollCount) {
+          if (_ccSeenCount !== -1 && count > _ccSeenCount) {
             scheduleOpenDrawer(150);
           }
-          _ccPollCount = count;
+          _ccSeenCount = count;
+          _ccLastCart = data;
         })
         .catch(function () { })
         .finally(function () { _ccPollActive = false; });
     }
     ccPoll(); // set baseline immediately
-    setInterval(ccPoll, 1500);
+    // A fallback for themes whose adds we don't see any other way; every 4 s
+    // (it was 1.5 s, a cart request for the whole visit).
+    setInterval(ccPoll, 4000);
   })();
 
   // 4. Common Shopify theme custom events
@@ -1403,11 +1480,233 @@
           '[data-testid="cart-drawer-trigger"]'
         )
       ) {
-        scheduleOpenDrawer(600);
+        ccOpenIfClickAdded();
       }
     },
     true
   );
+
+  /* ── Fast Add to cart (app embed setting, off by default, per theme) ──
+     Some themes do slow work of their own before and after adding (extrokids'
+     Halo theme reads the cart first, then loads its own sidebar), so our
+     drawer could only open well after the tap. With the setting on, BRIX
+     answers the theme's Add to cart button itself: the product form goes
+     straight to /cart/add.js, the drawer opens with it as soon as Shopify
+     answers, the theme's cart counters follow, and Shopify's own message
+     shows when it refuses (e.g. no more stock). */
+  function ccFastAddOn() {
+    return _ccActive && container.dataset.fastAdd === 'true';
+  }
+
+  function ccToast(text) {
+    let t = document.getElementById('cc-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'cc-toast';
+      t.setAttribute('role', 'alert');
+      t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(92vw,420px);background:#111827;color:#fff;padding:12px 16px;border-radius:10px;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:2147483647;text-align:center;';
+      document.body.appendChild(t);
+    }
+    t.textContent = text;
+    t.style.display = 'block';
+    clearTimeout(t._ccHide);
+    t._ccHide = setTimeout(function () { t.style.display = 'none'; }, 4000);
+  }
+
+  // The theme's own cart counters (its handler didn't run, so they'd stay old).
+  const CC_THEME_COUNT_SELECTORS = '[data-cart-count],.cartCount,.cart-count,.cart-count-bubble span,#CartCount,.header__cart-count,.site-header__cart-count span,.ekh-count';
+  function ccSyncThemeCartCount(count) {
+    document.querySelectorAll(CC_THEME_COUNT_SELECTORS).forEach(function (el) {
+      if (el.closest('#cc-root') || el.children.length) return;
+      if (/^\s*\d*\s*$/.test(el.textContent)) el.textContent = String(count);
+    });
+  }
+
+  // The cart after an add, from the last cart Shopify gave and /cart/add.js's
+  // answer (the added line(s), with their real prices); null when unknown.
+  function ccCartWithAdded(cart, added) {
+    if (!cart || !Array.isArray(cart.items) || !added) return null;
+    const lines = Array.isArray(added.items) ? added.items : (added.key ? [added] : []);
+    if (!lines.length) return null;
+    const items = cart.items.slice();
+    lines.forEach(function (line) {
+      const at = items.findIndex(function (it) { return it.key === line.key; });
+      if (at === -1) items.unshift(line); else items[at] = line;
+    });
+    const sum = function (f) { return items.reduce(function (n, it) { return n + (Number(it[f]) || 0); }, 0); };
+    const total = sum('final_line_price');
+    return Object.assign({}, cart, {
+      items: items, item_count: sum('quantity'), total_price: total, items_subtotal_price: total,
+      original_total_price: sum('original_line_price'), cart_level_discount_applications: [],
+    });
+  }
+
+  // Fast Add opens the drawer at the tap, not after Shopify's answer (about
+  // 1 s, more on phones): the line being added is drawn from the page's
+  // product (/products/<handle>.js, read ahead) and the last cart, without
+  // stepper / remove until Shopify answers; then the real cart replaces it,
+  // and a refusal takes it back out with Shopify's message. Only for the
+  // product page's own product, no line properties; else the drawer opens
+  // on the answer as before.
+  let _ccPageProduct = null;
+  function ccLoadPageProduct() {
+    const m = location.pathname.match(/\/products\/([^/?#.]+)/);
+    if (!m || _ccPageProduct) return;
+    const root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    originalFetch(root + 'products/' + m[1] + '.js')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (p) { if (p && Array.isArray(p.variants)) _ccPageProduct = p; })
+      .catch(function () { /* no instant drawer, the answer opens it */ });
+  }
+
+  function ccPendingLine(form) {
+    const p = _ccPageProduct;
+    if (!p || !_ccLastCart || !Array.isArray(_ccLastCart.items)) return null;
+    const hasProps = Array.prototype.some.call(form.querySelectorAll('[name^="properties["]'), function (el) {
+      return !el.disabled && el.value && !((el.type === 'checkbox' || el.type === 'radio') && !el.checked);
+    });
+    if (hasProps || form.querySelector('[name="selling_plan"][value]:not([value=""])')) return null;
+    const vid = String((form.querySelector('[name="id"]') || {}).value || '');
+    const v = p.variants.find(function (x) { return String(x.id) === vid; });
+    if (!v || typeof v.price !== 'number') return null;
+    const qty = Math.max(1, parseInt((form.querySelector('[name="quantity"]') || {}).value, 10) || 1);
+    const same = _ccLastCart.items.find(function (it) {
+      return String(it.variant_id) === vid && !(it.properties && Object.keys(it.properties).length);
+    });
+    if (same) {
+      const n = same.quantity + qty;
+      return Object.assign({}, same, { quantity: n, final_line_price: same.final_price * n, original_line_price: same.original_price * n, _ccPending: true });
+    }
+    let img = (v.featured_image && v.featured_image.src) || p.featured_image || '';
+    if (img && img.indexOf('//') === 0) img = 'https:' + img;
+    return {
+      key: 'cc-pending:' + vid, id: v.id, variant_id: v.id, product_id: p.id, handle: p.handle,
+      product_title: p.title, title: p.title, variant_title: v.title,
+      product_has_only_default_variant: p.variants.length === 1,
+      image: img, quantity: qty, price: v.price, original_price: v.price, final_price: v.price,
+      line_price: v.price * qty, original_line_price: v.price * qty, final_line_price: v.price * qty,
+      properties: {}, _ccPending: true,
+    };
+  }
+
+  // The theme's own stock cap, which its handler would have applied (Halo:
+  // the button's data-inventory-quantity; else the quantity field's max).
+  // Shopify may accept more (stores that sell past zero), so Fast Add keeps
+  // the theme's limit instead of letting shoppers past it.
+  function ccThemeStockCap(form, btn) {
+    const raw = btn.getAttribute('data-inventory-quantity') || (form.querySelector('[name="quantity"]') || {}).max || '';
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function ccFastAdd(form, btn) {
+    if (btn._ccAdding) return;
+    const cap = ccThemeStockCap(form, btn);
+    if (cap && _ccLastCart && Array.isArray(_ccLastCart.items)) {
+      const variantId = String((form.querySelector('[name="id"]') || {}).value || '');
+      const inCart = _ccLastCart.items.filter(function (it) { return String(it.variant_id || it.id) === variantId; })
+        .reduce(function (n, it) { return n + (it.quantity || 0); }, 0);
+      const wanted = Math.max(1, parseInt((form.querySelector('[name="quantity"]') || {}).value, 10) || 1);
+      if (inCart + wanted > cap) {
+        ccToast(inCart >= cap
+          ? 'You can\'t add more of this item. You already have ' + inCart + ' in your cart.'
+          : 'Only ' + (cap - inCart) + ' more of this item can be added.');
+        return;
+      }
+    }
+    btn._ccAdding = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.style.opacity = '0.7';
+    const data = new FormData(form);
+    const pendingCart = ccCartWithAdded(_ccLastCart, ccPendingLine(form));
+    if (pendingCart) {
+      if (_ccOpenTimer) { clearTimeout(_ccOpenTimer); _ccOpenTimer = null; }
+      renderDrawer({ cart: pendingCart }).catch(function () { /* the answer draws it */ });
+    }
+    const drawerOpen = function () { const o = document.getElementById('cc-overlay'); return !!(o && o.classList.contains('active')); };
+    _ccExternalAddInFlightAt = Date.now();
+    ccCountAddRequest('fast add (ours)');
+    ccAddStarted();
+    originalFetch('/cart/add.js', { method: 'POST', body: data, headers: { Accept: 'application/json' } })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (json) {
+          const fresh = ccAddEnded();
+          if (res.ok && (!fresh || pendingCart) && !drawerOpen()) {
+            // Already shown at the tap or reported and opening, and the
+            // shopper closed it since: leave it closed.
+            document.dispatchEvent(new CustomEvent('brix:cart:added', { detail: json }));
+          } else if (res.ok) {
+            // Drawn at once from what we know (last cart + the added line),
+            // then the exact cart (discounts, gifts, counters) in place.
+            const known = ccCartWithAdded(_ccLastCart, json);
+            if (known) {
+              if (_ccOpenTimer) { clearTimeout(_ccOpenTimer); _ccOpenTimer = null; }
+              renderDrawer({ cart: known }).then(function () { return renderDrawer(); }).catch(function () { scheduleOpenDrawer(0); });
+            } else {
+              scheduleOpenDrawer(0);
+            }
+            document.dispatchEvent(new CustomEvent('brix:cart:added', { detail: json }));
+          } else {
+            // Drawn at the tap but refused: back to the real cart.
+            if (pendingCart && drawerOpen()) renderDrawer({ cart: _ccLastCart }).then(function () { return renderDrawer(); }).catch(function () {});
+            ccToast(json.description || json.message || 'This item could not be added to your cart.');
+          }
+        });
+      })
+      .catch(function () {
+        ccAddEnded();
+        if (pendingCart && drawerOpen()) closeDrawer();
+        // The add didn't go through at all: let the form do it the normal way.
+        try { form.submit(); } catch (e) { /* noop */ }
+      })
+      .finally(function () {
+        btn._ccAdding = false;
+        btn.removeAttribute('aria-busy');
+        btn.style.opacity = '';
+      });
+  }
+
+  if (container.dataset.fastAdd === 'true') ccLoadPageProduct();
+
+  // Before the theme's own handlers (capture), only the product form's real
+  // Add to cart button (never quantity +/-, never Buy it now / wallets).
+  document.addEventListener('click', function (e) {
+    if (!ccFastAddOn()) return;
+    const btn = e.target.closest && e.target.closest('button, input[type="submit"]');
+    if (!btn || btn.closest('#cc-root') || btn.closest('.shopify-payment-button')) return;
+    const form = btn.form || btn.closest('form');
+    if (!form || !/\/cart\/add/.test(form.getAttribute('action') || '') || !form.querySelector('[name="id"]')) return;
+    const type = (btn.getAttribute('type') || 'submit').toLowerCase();
+    if (type !== 'submit' && btn.name !== 'add') return;
+    if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    ccFastAdd(form, btn);
+  }, true);
+
+  // An Add to cart click opens our drawer only when something was really
+  // added. It used to open 600 ms after every such click: when the theme
+  // refused the add (e.g. all the stock already in the cart, extrokids'
+  // "You cannot add more of the items into the cart"), our drawer opened
+  // anyway, unchanged, and covered the theme's message: "it doesn't add".
+  // An add we see (fetch / XHR / our form intercept) opens the drawer when
+  // it answers; for adds we can't see, the cart's item count decides.
+  function ccOpenIfClickAdded() {
+    const clickedAt = Date.now();
+    setTimeout(function () {
+      if (!_ccActive || _ccExternalAddInFlightAt >= clickedAt || document.getElementById('cc-overlay')) return;
+      originalFetch('/cart.js')
+        .then(function (r) { return r.json(); })
+        .then(function (cart) {
+          const count = cart.item_count || 0;
+          const grew = _ccSeenCount !== -1 && count > _ccSeenCount;
+          _ccSeenCount = count;
+          _ccLastCart = cart;
+          if (grew) scheduleOpenDrawer(0);
+        })
+        .catch(function () { /* no answer: the poll still catches a real add */ });
+    }, 1500);
+  }
 
   // Shared "is this a known native cart drawer?" identification — used both
   // by the generic click fallback right below and by the body
@@ -1634,25 +1933,22 @@
         if ((el === document.body || el === document.documentElement) && m.type === 'attributes' && m.attributeName === 'class') {
           if (!Array.prototype.some.call(el.classList, ccIsCartStateClass)) continue;
           ccMilestone('Native drawer open attempt detected (page state class)', el.className);
-          scheduleOpenDrawer(200);
+          if (!document.getElementById('cc-overlay')) scheduleOpenDrawer(200); // ours already open: nothing to redraw
           if (!_ccActive) continue;
-          // The theme shows its drawer by CSS once the class lands, often with
-          // an animation: look for it a few times, hide what shows; then, if
-          // the class is still there, take it off (the theme's own CSS then
-          // closes its drawer and overlay), so closing ours never reveals it.
+          // Take the class off right away: this runs before the browser draws
+          // the next frame, so the theme's sidebar (and its dark overlay),
+          // shown by CSS keyed to that class, never appears. Before, it slid
+          // in for a moment and was then hidden as ours opened: "opening,
+          // closing and opening again" on extrokids.
           const page = el;
-          [0, 200, 500, 900].forEach(function (ms, i, all) {
-            setTimeout(function () {
-              if (!_ccActive) return;
-              ccVisibleNativeDrawers().forEach(ccNeutralizeNativeDrawer);
-              if (i === all.length - 1) {
-                const left = Array.prototype.filter.call(page.classList, ccIsCartStateClass);
-                if (left.length) {
-                  page.classList.remove.apply(page.classList, left);
-                  ccMilestone('Native drawer state class cleared', left.join(' '));
-                }
-              }
-            }, ms);
+          const left = Array.prototype.filter.call(page.classList, ccIsCartStateClass);
+          if (left.length) {
+            page.classList.remove.apply(page.classList, left);
+            ccMilestone('Native drawer state class cleared', left.join(' '));
+          }
+          // A theme that also shows its drawer another way: hide what shows.
+          [0, 150, 400].forEach(function (ms) {
+            setTimeout(function () { if (_ccActive) ccVisibleNativeDrawers().forEach(ccNeutralizeNativeDrawer); }, ms);
           });
           continue;
         }
@@ -2400,6 +2696,12 @@
   // prepaidCartCode, Shiprocket can't run the Function); if that code can't
   // be made, Shopify checkout, where the saving still applies.
   function ccGoToCheckout(href) {
+    // The drawer can show an item Shopify hasn't confirmed yet (Fast Add
+    // opens at the tap): checkout waits for it (at most 8 s).
+    if (_ccAddsPending > 0 && Date.now() - _ccAddsPendingSince < 8000) {
+      setTimeout(function () { ccGoToCheckout(href); }, 100);
+      return;
+    }
     if (CONFIG && CONFIG.shiprocketEnabled && window.BrixCheckout) {
       const own = appliedCouponCodes[0] || null;
       const prepaid = !own && window.BrixCod && window.BrixCod.prepaidCartCode
@@ -2660,7 +2962,9 @@
   function renderCartItemHtml(item, opts) {
     var isGift = opts.isGift;
     var isFreeGift = isGift && item.final_line_price === 0;
-    var noStepper = opts.isRewardItem || opts.packLine;
+    // A Fast Add line drawn at the tap, before Shopify answered (no key yet).
+    var pending = !!item._ccPending;
+    var noStepper = opts.isRewardItem || opts.packLine || pending;
     var title = escapeHtml(item.product_title);
     var variant = item.variant_title && item.variant_title !== 'Default Title' && !item.product_has_only_default_variant ? escapeHtml(item.variant_title) : '';
     var unit = (typeof item.final_price === 'number' ? item.final_price : item.original_price) / 100;
@@ -2696,7 +3000,7 @@
         ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
         : '<span style="font-size:28px;" aria-hidden="true">📦</span>') + '</div>' +
       '<p class="bxcd-item__title">' + title + '</p>' +
-      '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\')">' + CC_ICON_X + '</button>' +
+      (pending ? '' : '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\')">' + CC_ICON_X + '</button>') +
       (variant ? '<p class="bxcd-item__variant">' + variant + '</p>' : '') +
       '<div class="bxcd-item__price">' + price + '</div>' +
       (qty ? '<div class="bxcd-item__qty">' + qty + '</div>' : '') +
@@ -2721,7 +3025,12 @@
       '</div>';
   }
 
-  async function renderDrawer() {
+  // opts.cart: a cart BRIX already has (Fast Add: the last cart + the add's
+  // answer), drawn without reading /cart.js; it never syncs reward gifts (the
+  // exact render right after does).
+  async function renderDrawer(opts) {
+    opts = opts || {};
+    const seq = ++_ccRenderSeq;
     if (!document.getElementById('cc-drawer-styles')) {
       const style = document.createElement('style');
       style.id = 'cc-drawer-styles';
@@ -2752,7 +3061,12 @@
       document.head.appendChild(style);
     }
 
-    const cart = await originalFetch('/cart.js').then((r) => r.json());
+    const cart = opts.cart || await originalFetch('/cart.js').then((r) => r.json());
+    if (!opts.cart) {
+      _ccSeenCount = cart.item_count || 0;
+      _ccLastCart = cart;
+      if (ccFastAddOn()) ccSyncThemeCartCount(cart.item_count || 0);
+    }
     // Milestones are measured on what the shopper pays for: the reward
     // product BRIX auto-added (marker below) never counts toward its own unlock.
     const isGiftLine = (it) => !!(it.properties && it.properties._brixReward === 'true');
@@ -2845,7 +3159,10 @@
     const progress = CONFIG.progress;
     if (progress.enabled && (progress.showOnEmpty || !isEmpty)) {
       const pInfo = getProgressInfo(cartTotal, cartQty, progress);
-      await syncRewardProducts(cart, pInfo);
+      // Never waited for: adding a gift loads the catalogue and posts to the
+      // cart, which held the drawer back for seconds on the add that crossed
+      // a milestone. It redraws the drawer itself once the gift is in.
+      if (!opts.cart) syncRewardProducts(cart, pInfo);
 
       const fgColor = progress.barForegroundColor || '#2563eb';
       ccLoadCelebrationState(cart.token);
@@ -3100,10 +3417,10 @@
       rule => (rule.upsellProductIds || []).length > 0
     );
     if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty) && (upsell.useAI || hasUpsellProductsConfigured)) {
-      if (upsell.position === 'top') {
-        topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
-      } else if (upsell.position === 'bottom') {
-        bottomUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
+      if (upsell.position === 'top' || upsell.position === 'bottom') {
+        const upsellHtml = await ccUpsellHtmlFor(cart, upsell, seq);
+        if (upsell.position === 'top') topUpsellHtml = upsellHtml;
+        else bottomUpsellHtml = upsellHtml;
       }
     }
 
@@ -3217,6 +3534,10 @@
 </div>
 `;
     }
+
+    // A newer render already drew while this one waited (upsells, the cart).
+    if (seq < _ccDrawnSeq) return;
+    _ccDrawnSeq = seq;
 
     // ---- SMOOTH DOM UPDATE ----
     if (isFirstOpen) {
@@ -3771,6 +4092,51 @@
         + ` data-price="${escapeHtml(price)}" data-compare="${escapeHtml(compare)}" data-image="${escapeHtml(v.image || '')}">${escapeHtml(label)}</option>`;
     }).join('');
     return `<select class="cc-upsell-variant" aria-label="${escapeHtml('Choose an option for ' + (detail.title || 'this product'))}">${options}</select>`;
+  }
+
+  // Upsells never hold the drawer back. A new product in the cart can need
+  // further catalogue pages and Shopify recommendations (seconds on a big
+  // store), which made every add after the first one slow. The section is
+  // kept per set of cart products; when it isn't ready within a moment the
+  // drawer opens with the last one drawn and redraws once it is.
+  const _ccUpsellSections = {};
+  let _ccLastUpsellHtml = '';
+  function ccUpsellHtmlFor(cart, upsellConfig, seq) {
+    const key = upsellConfig.position + '|' + Array.from(new Set((cart.items || []).map((it) => String(it.product_id)))).sort().join(',');
+    let entry = _ccUpsellSections[key];
+    if (!entry || Date.now() - entry.ts > CC_STORE_CATALOG_CACHE_TTL_MS) {
+      entry = { ts: Date.now(), html: null };
+      entry.job = renderUpsellSectionAsync(cart, upsellConfig)
+        .catch(() => '')
+        .then((html) => { entry.html = html || ''; return entry.html; });
+      _ccUpsellSections[key] = entry;
+    }
+    if (entry.html !== null) return Promise.resolve(_ccLastUpsellHtml = entry.html);
+    return Promise.race([entry.job, new Promise((r) => setTimeout(() => r(null), 150))]).then((html) => {
+      if (html !== null) return (_ccLastUpsellHtml = html);
+      entry.job.then(() => {
+        const overlay = document.getElementById('cc-overlay');
+        if (seq === _ccRenderSeq && overlay && overlay.classList.contains('active')) renderDrawer({ cart: cart });
+      });
+      return _ccLastUpsellHtml;
+    });
+  }
+
+  // Loads the catalogue pages the upsell picks and reward products need
+  // while the shopper is still browsing, so the drawer has them on the add.
+  function ccWarmCatalog() {
+    const ids = [];
+    ((CONFIG && CONFIG.upsell && CONFIG.upsell.manualRules) || []).forEach((rule) => {
+      if (rule.enabled !== false) (rule.upsellProductIds || []).forEach((id) => ids.push(String(id).replace('gid://shopify/Product/', '')));
+    });
+    ((CONFIG && CONFIG.progress && CONFIG.progress.enabled && CONFIG.progress.tiers) || []).forEach((tier) => {
+      (tier.products || []).forEach((pid) => { const n = ccExtractNumericId(pid); if (n) ids.push(n); });
+    });
+    const upsellOn = CONFIG && CONFIG.upsell && CONFIG.upsell.enabled;
+    if (!ids.length && !(upsellOn && CONFIG.upsell.useAI)) return;
+    const run = () => { ccEnsureCatalogProducts(ids).catch(() => {}); };
+    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
+    else setTimeout(run, 1200);
   }
 
   async function renderUpsellSectionAsync(cart, upsellConfig) {

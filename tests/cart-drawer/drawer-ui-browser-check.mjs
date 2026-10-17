@@ -54,23 +54,32 @@ function config({ banner = {}, progress = null } = {}) {
   };
 }
 
-const page0 = () => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
+const page0 = (before = '') => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
   <style>body{margin:0;font-family:Arial,sans-serif} button{text-transform:uppercase;letter-spacing:2px;min-height:44px;padding:0 20px;border-radius:0} img{max-width:100%}</style>
   <link rel="stylesheet" href="https://cdn.test/cart_drawer_inline.css"><link rel="stylesheet" href="https://cdn.test/brix_cart_ui.css"></head>
   <body><header><a href="/cart" id="cart-icon-bubble">Cart</a></header><main><h1>Store</h1></main>
-  <div id="cc-root" data-shop="demo.myshopify.com" data-currency="INR"></div>
+  <div id="cc-root" data-shop="demo.myshopify.com" data-currency="INR"${before.includes('data-fast-add') ? ' data-fast-add="true"' : ''}></div>
   <script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'},currency:{active:'INR'}};</script>
-  <script src="https://cdn.test/cart_drawer_inline.js"></script></body></html>`;
+  ${before}<script src="https://cdn.test/cart_drawer_inline.js"></script></body></html>`;
+
+// Another app's fetch wrapper loaded before BRIX, like Snap Cart Drawer's
+// w4theme.js on knitnknot.in: every /cart/add is queued and its answer passed
+// on 500 ms late.
+const SNAP_WRAPPER = `<script>(function(){var f=window.fetch,q=Promise.resolve();window.fetch=function(u,o){var s=typeof u==='string'?u:(u&&u.url)||'';var a=arguments,self=this;
+  if(s.indexOf('/cart/add')<0)return f.apply(self,a);
+  q=q.catch(function(){}).then(function(){return new Promise(function(ok,no){f.apply(self,a).then(function(r){setTimeout(function(){ok(r)},500)},no)})});return q;};})();</script>`;
 
 const browser = await chromium.launch();
 
-async function open({ width, cart = CART, cfg = config() }) {
+async function open({ width, cart = CART, cfg = config(), before = '', heldReads = false, path = '/' }) {
   const context = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
-  const net = { images: [], changes: [], nav: [] };
+  const net = { images: [], changes: [], nav: [], cartReads: [], adds: [] };
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   let currentCart = [...cart];
+  let lastAddAt = 0;
+  let readsSinceAdd = 0;
   await page.route('**/*', async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -86,8 +95,31 @@ async function open({ width, cart = CART, cfg = config() }) {
       return json({ status: 'success' });
     }
     if (url.origin === 'https://shop.test') {
-      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page0() });
+      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page0(before) });
+      // A product page (Fast Add's instant drawer reads the page's product).
+      if (url.pathname === '/products/tee') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page0('<!-- data-fast-add --><form action="/cart/add" id="pdp"><input type="hidden" name="id" value="77"><input type="number" name="quantity" value="1"><button type="submit" name="add" id="pdp-add">Add to cart</button></form>') });
+      if (url.pathname === '/products/tee.js') return json({ id: 7, title: 'Pending Tee', handle: 'tee', featured_image: '//img.test/p.svg', variants: [{ id: 77, title: 'M', price: 49900, featured_image: null }, { id: 78, title: 'L', price: 49900 }] });
+      if (url.pathname === '/cart/add.js') {
+        // A slow add, like a busy store's (~1 s); id 'sold' = Shopify refuses (422).
+        const body = req.postData() || '';
+        net.adds.push(body);
+        await new Promise((r) => setTimeout(r, 1000));
+        if (body.includes('sold')) return route.fulfill({ status: 422, contentType: 'application/json', body: '{"status":422,"description":"All 2 Sold Tee are in your cart."}' });
+        const first = cart[0];
+        const line = { ...first, key: 'added:' + net.adds.length, id: 999, variant_id: 999, product_title: 'Added Tee', title: 'Added Tee', quantity: 1, final_line_price: first.final_price, original_line_price: first.original_price };
+        currentCart = [...currentCart, line];
+        lastAddAt = Date.now();
+        readsSinceAdd = 0;
+        return json(line);
+      }
       if (url.pathname === '/cart.js') {
+        net.cartReads.push(Date.now());
+        // Like extrokids: the theme's own slow cart request right after an
+        // add holds every later cart read (Shopify answers them in turn).
+        if (heldReads && Date.now() - lastAddAt < 2500) {
+          readsSinceAdd += 1;
+          await new Promise((r) => setTimeout(r, readsSinceAdd === 1 ? 400 : 1500));
+        }
         const total = currentCart.reduce((n, l) => n + l.final_line_price, 0);
         return json({ items: currentCart, item_count: currentCart.reduce((n, l) => n + l.quantity, 0), total_price: total, currency: 'INR' });
       }
@@ -102,7 +134,7 @@ async function open({ width, cart = CART, cfg = config() }) {
     }
     return route.fulfill({ status: 404, body: '' });
   });
-  await page.goto('https://shop.test/');
+  await page.goto('https://shop.test' + path);
   await page.waitForFunction(() => typeof window.testCart === 'function');
   await page.waitForTimeout(300);
   await page.evaluate(() => window.testCart());
@@ -378,7 +410,7 @@ for (const width of [1280, 390]) {
   check('halo theme: our drawer closed to start', !(await brixOpen()));
   await page.evaluate(() => {
     const st = document.createElement('style');
-    st.textContent = '.halo-cart-sidebar{position:fixed;top:0;right:0;bottom:0;width:350px;background:#fff;visibility:hidden;z-index:101} body.cart-sidebar-show .halo-cart-sidebar{visibility:visible} body.menu-sidebar-show .halo-menu{visibility:visible}';
+    st.textContent = '.halo-cart-sidebar{position:fixed;top:0;right:0;bottom:0;width:350px;background:#fff;visibility:hidden;z-index:101;transition:visibility 0s linear 0s} body.cart-sidebar-show .halo-cart-sidebar{visibility:visible;transition:visibility 0s linear .12s} body.menu-sidebar-show .halo-menu{visibility:visible}';
     document.head.appendChild(st);
     document.body.insertAdjacentHTML('beforeend', '<div id="halo-cart-sidebar" class="halo-sidebar halo-sidebar-right halo-cart-sidebar"><p>Theme cart</p><form action="/cart/add"><button>Add</button></form></div>');
   });
@@ -387,9 +419,21 @@ for (const width of [1280, 390]) {
   await page.waitForTimeout(800);
   check('halo theme: a menu sidebar class never opens our cart', !(await brixOpen()));
   await page.evaluate(() => document.body.classList.remove('menu-sidebar-show'));
-  // The theme's Add to cart: its sidebar opens by the body class.
-  await page.evaluate(() => document.body.classList.add('cart-sidebar-show'));
-  await page.waitForTimeout(1500);
+  // The theme's Add to cart: its sidebar opens by the body class. It must not
+  // show for even one frame (it used to flash, then ours opened: "opening,
+  // closing and opening again").
+  const flashes = await page.evaluate(() => new Promise((resolve) => {
+    const side = document.getElementById('halo-cart-sidebar');
+    let shown = 0;
+    const t0 = performance.now();
+    const tick = () => {
+      if (getComputedStyle(side).visibility === 'visible' && getComputedStyle(side).display !== 'none') shown += 1;
+      if (performance.now() - t0 < 1500) requestAnimationFrame(tick); else resolve(shown);
+    };
+    document.body.classList.add('cart-sidebar-show');
+    requestAnimationFrame(tick);
+  }));
+  check('halo theme: the theme sidebar never shows, not even for a frame', flashes === 0, `${flashes} frames`);
   const st = await page.evaluate(() => ({
     body: getComputedStyle(document.body).display,
     themeCart: getComputedStyle(document.getElementById('halo-cart-sidebar')).display + '/' + getComputedStyle(document.getElementById('halo-cart-sidebar')).visibility,
@@ -399,6 +443,166 @@ for (const width of [1280, 390]) {
   check('halo theme: the theme cart is hidden and its body class cleared', /none|hidden/.test(st.themeCart) && !st.bodyClassLeft, JSON.stringify(st));
   check('halo theme: our drawer opens instead', await brixOpen());
   await page.screenshot({ path: path.join(shotDir, 'halo-theme-body-class.png') });
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
+/* Fast Add on a product page: the drawer opens at the tap with the product
+   (from the page's product), Shopify's answer then gives the real line; a
+   refusal takes it back out; closed before the answer, it stays closed. */
+{
+  const page = await open({ width: 1280, path: '/products/tee' });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  const text = () => page.evaluate(() => document.getElementById('cc-drawer')?.textContent || '');
+  const isOpen = () => page.evaluate(() => !!document.querySelector('#cc-overlay.active'));
+  let t0 = Date.now();
+  await page.click('#pdp-add');
+  await page.waitForFunction(() => /Pending Tee/.test(document.getElementById('cc-drawer')?.textContent || '') && document.querySelector('#cc-overlay.active'), null, { timeout: 3000 });
+  const shownMs = Date.now() - t0;
+  check('instant: the drawer opens at the tap with the product, before Shopify answers', shownMs < 450 && page.net.adds.length === 1, `${shownMs} ms`);
+  const row = await page.evaluate(() => { const r = document.querySelector('[data-item-key^="cc-pending"]'); return r && { remove: !!r.querySelector('.bxcd-item__remove'), stepper: !!r.querySelector('.bxcd-qty'), variant: (r.querySelector('.bxcd-item__variant') || {}).textContent, img: (r.querySelector('img') || {}).src }; });
+  check('instant: the waiting line shows size and picture, no remove / stepper yet', row && !row.remove && !row.stepper && row.variant === 'M' && /img\.test\/p\.svg/.test(row.img), JSON.stringify(row));
+  await page.waitForFunction(() => /Added Tee/.test(document.getElementById('cc-drawer')?.textContent || ''), null, { timeout: 4000 });
+  await page.waitForTimeout(300);
+  check('instant: Shopify\'s answer replaces it with the real line', !/Pending Tee/.test(await text()) && !(await page.$('[data-item-key^="cc-pending"]')));
+  // Closed before Shopify answers: not brought back.
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  await page.click('#pdp-add');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(1600);
+  check('instant: closed before the answer, it stays closed', !(await isOpen()) && page.net.adds.length === 2);
+  // Refused by Shopify: the line goes, Shopify's message shows.
+  await page.evaluate(() => document.getElementById('pdp').insertAdjacentHTML('beforeend', '<input type="hidden" name="sold" value="1">'));
+  t0 = Date.now();
+  await page.click('#pdp-add');
+  await page.waitForTimeout(250);
+  const during = await isOpen();
+  await page.waitForTimeout(1600);
+  const toast = await page.evaluate(() => (document.getElementById('cc-toast') || {}).textContent || '');
+  check('instant: a refused add takes the line back out and says why', during && !(await page.$('[data-item-key^="cc-pending"]')) && /Sold Tee/.test(toast), JSON.stringify({ during, toast }));
+  check('instant: no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+}
+
+/* Several renders after one add, the later cart reads held up behind the
+   theme's slow cart request (extrokids): the first render with the item
+   draws, it doesn't wait for the newest. */
+{
+  const page = await open({ width: 1280, heldReads: true });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  const t0 = Date.now();
+  await page.evaluate(() => {
+    fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 1, quantity: 1 }) })
+      .then(() => setTimeout(() => document.dispatchEvent(new CustomEvent('cart:updated')), 30));
+  });
+  await page.waitForFunction(() => /Added Tee/.test(document.getElementById('cc-drawer')?.textContent || ''), null, { timeout: 5000 });
+  const ms = Date.now() - t0;
+  check('held cart reads: the drawer shows the item from the first answer, not the newest render\'s', ms < 1900, `${ms} ms`);
+  await page.waitForTimeout(2500);
+  check('held cart reads: still open with the item after the late renders', /Added Tee/.test(await page.evaluate(() => document.getElementById('cc-drawer')?.textContent || '')) && await page.evaluate(() => !!document.querySelector('#cc-overlay.active')));
+  check('held cart reads: no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+}
+
+/* Another app holds every add's answer back 500 ms (Snap Cart Drawer on
+   knitnknot.in): the drawer still opens when Shopify answered, for the
+   theme's own add and for BRIX's form add; a refused add opens nothing. */
+{
+  const page = await open({ width: 1280, before: SNAP_WRAPPER });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  const isOpen = () => page.evaluate(() => !!document.getElementById('cc-overlay'));
+  let t0 = Date.now();
+  await page.evaluate(() => { fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 1, quantity: 1 }) }); });
+  await page.waitForFunction(() => /Added Tee/.test(document.getElementById('cc-drawer')?.textContent || ''), null, { timeout: 4000 });
+  check('held answer: the theme\'s add opens the drawer when Shopify answered, not 500 ms later', Date.now() - t0 < 1400, `${Date.now() - t0} ms`);
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(1200);
+  check('held answer: closed by the shopper, the late answer doesn\'t bring it back', !(await isOpen()));
+  await page.evaluate(() => document.querySelector('main').insertAdjacentHTML('beforeend', '<form action="/cart/add" method="post" id="pf2"><input type="hidden" name="id" value="77"><button type="submit" id="plain-add">Add to cart</button></form>'));
+  const before = await page.evaluate(() => (document.getElementById('cc-root').textContent.match(/(\d+) ITEMS?/) || [])[1] || '0');
+  t0 = Date.now();
+  await page.click('#plain-add');
+  await page.waitForFunction((n) => { const m = (document.getElementById('cc-drawer')?.textContent || '').match(/(\d+) ITEMS?/); return m && Number(m[1]) > Number(n); }, before, { timeout: 4000 }).catch(() => {});
+  check('held answer: BRIX\'s own form add opens the drawer when Shopify answered', Date.now() - t0 < 1400 && await isOpen(), `${Date.now() - t0} ms`);
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => { fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'sold', quantity: 1 }) }); });
+  await page.waitForTimeout(2200);
+  check('held answer: a refused add opens nothing', !(await isOpen()));
+  check('held answer: no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+}
+
+/* Adding on a slow store, every theme (Fast Add off): the drawer opens as
+   soon as Shopify answers (no extra wait, no cart read while the add is on
+   its way), a click the theme refuses opens nothing (its own message shows),
+   and a failed add opens nothing. */
+{
+  const page = await open({ width: 1280 });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  const isOpen = () => page.evaluate(() => !!document.getElementById('cc-overlay'));
+  page.net.cartReads.length = 0;
+  const t0 = Date.now();
+  await page.evaluate(() => { fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 1, quantity: 1 }) }); });
+  await page.waitForTimeout(800);
+  check('slow add: nothing drawn from the cart before Shopify answers', !(await isOpen()) && page.net.cartReads.length === 0, JSON.stringify(page.net.cartReads.map((t) => t - t0)));
+  await page.waitForFunction(() => /Added Tee/.test(document.getElementById('cc-drawer')?.textContent || ''), null, { timeout: 3000 });
+  check('slow add: the drawer opens with the item right after the answer (no extra wait)', Date.now() - t0 < 1700, `${Date.now() - t0} ms`);
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  // A theme that refuses (stock already in the cart): no add request at all.
+  await page.evaluate(() => {
+    document.querySelector('main').insertAdjacentHTML('beforeend', '<form action="/cart/add" id="pf"><input type="hidden" name="id" value="77"><button type="submit" name="add" id="theme-add" data-inventory-quantity="2">Add to cart</button></form>');
+    window.__themeHandled = 0;
+    document.getElementById('theme-add').addEventListener('click', (e) => { e.preventDefault(); window.__themeHandled += 1; document.body.insertAdjacentHTML('beforeend', '<p id="theme-error">You cannot add more of the items into the cart</p>'); });
+  });
+  await page.click('#theme-add');
+  await page.waitForTimeout(2200);
+  check('refused add: our drawer stays closed, the theme\'s message shows', !(await isOpen()) && (await page.$('#theme-error')) !== null);
+  await page.evaluate(() => { fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'sold', quantity: 1 }) }); });
+  await page.waitForTimeout(1800);
+  check('failed add: nothing opens', !(await isOpen()));
+
+  /* Fast Add (app embed setting, this theme only): BRIX answers the theme's
+     Add to cart button itself, so the theme's slow handler never runs. */
+  await page.evaluate(() => {
+    document.getElementById('cc-root').dataset.fastAdd = 'true';
+    document.getElementById('theme-error')?.remove();
+    document.body.insertAdjacentHTML('beforeend', '<span class="cartCount" data-cart-count>0</span>');
+  });
+  const addsBefore = page.net.adds.length;
+  const t1 = Date.now();
+  await page.click('#theme-add');
+  await page.waitForFunction(() => /Added Tee/.test(document.getElementById('cc-drawer')?.textContent || ''), null, { timeout: 3000 });
+  const fast = await page.evaluate(() => ({ themeHandled: window.__themeHandled, counter: document.querySelector('.cartCount').textContent }));
+  check('fast add: one add straight from the form, the theme\'s handler never runs', page.net.adds.length === addsBefore + 1 && /id=77|"id"/.test(page.net.adds.at(-1)) && fast.themeHandled === 1, JSON.stringify({ adds: page.net.adds.length - addsBefore, ...fast }));
+  check('fast add: the drawer shows the item as soon as Shopify answers', Date.now() - t1 < 1400, `${Date.now() - t1} ms`);
+  await page.waitForFunction(() => document.querySelector('.cartCount').textContent !== '0', null, { timeout: 3000 });
+  check('fast add: the theme\'s cart counter follows', Number(await page.textContent('.cartCount')) > 0, await page.textContent('.cartCount'));
+  // The theme's stock cap (data-inventory-quantity=2): the 2nd unit of 77 is fine, a 3rd is refused here.
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  await page.evaluate(() => { document.querySelector('#pf [name=id]').value = '999'; });
+  await page.click('#theme-add');
+  await page.waitForTimeout(1600);
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(700);
+  const addsAtCap = page.net.adds.length;
+  await page.click('#theme-add');
+  await page.waitForTimeout(600);
+  const capToast = await page.evaluate(() => document.getElementById('cc-toast')?.style.display === 'block' ? document.getElementById('cc-toast').textContent : '');
+  check('fast add: the theme\'s stock cap is kept (no add, a clear message)', page.net.adds.length === addsAtCap && /can't add more/.test(capToast), JSON.stringify({ capToast }));
+  // Shopify refuses: its own message shows.
+  await page.evaluate(() => { document.querySelector('#pf [name=id]').value = 'sold'; document.getElementById('theme-add').removeAttribute('data-inventory-quantity'); });
+  await page.click('#theme-add');
+  await page.waitForFunction(() => document.getElementById('cc-toast')?.textContent.includes('Sold Tee'), null, { timeout: 3000 });
+  check('fast add: Shopify\'s refusal message shows', true);
   allErrors.push(...page.errors);
   await page.context().close();
 }

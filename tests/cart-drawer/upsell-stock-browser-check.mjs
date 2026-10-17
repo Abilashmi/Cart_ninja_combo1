@@ -66,7 +66,7 @@ const page0 = () => `<!doctype html><html><head><meta name="viewport" content="w
 
 const browser = await chromium.launch();
 
-async function open({ cfg = config(), refuse = [], width = 1280 } = {}) {
+async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0 } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   const net = { adds: [], related: [] };
   page.errors = [];
@@ -87,7 +87,10 @@ async function open({ cfg = config(), refuse = [], width = 1280 } = {}) {
     if (url.origin === 'https://shop.test') {
       if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page0() });
       if (url.pathname === '/cart.js') return json({ items: CART, item_count: 1, total_price: 27500, currency: 'INR' });
-      if (url.pathname === '/products.json') return json({ products: url.searchParams.get('page') ? [] : PRODUCTS });
+      if (url.pathname === '/products.json') {
+        if (slowCatalog) await new Promise((r) => setTimeout(r, slowCatalog));
+        return json({ products: url.searchParams.get('page') ? [] : PRODUCTS });
+      }
       if (url.pathname === '/recommendations/products.json') {
         net.related.push(url.searchParams.get('product_id'));
         return json({ products: RELATED[url.searchParams.get('product_id')] || [] });
@@ -106,9 +109,11 @@ async function open({ cfg = config(), refuse = [], width = 1280 } = {}) {
   await page.goto('https://shop.test/');
   await page.waitForFunction(() => typeof window.testCart === 'function');
   await page.waitForTimeout(300);
+  const t0 = Date.now();
   await page.evaluate(() => window.testCart());
-  await page.waitForSelector('#cc-drawer', { timeout: 5000 });
-  await page.waitForSelector('.cc-upsell-card', { timeout: 5000 }).catch(() => {});
+  await page.waitForSelector('#cc-overlay.active .bxcd-item', { timeout: 8000 });
+  page.openMs = Date.now() - t0;
+  await page.waitForSelector('.cc-upsell-card', { timeout: slowCatalog + 5000 }).catch(() => {});
   await page.waitForTimeout(400);
   page.net = net;
   return page;
@@ -159,6 +164,17 @@ const card = (page, title) => page.locator('.cc-upsell-card', { hasText: title }
   const t = await titles(page);
   check('hide: sold-out pick left out, nothing added in its place', t.length === 2 && !t.includes('Blue Co-ord Set'), JSON.stringify(t));
   check('hide: no related products fetched', page.net.related.length === 0);
+  await page.close();
+}
+
+// ── a slow catalogue never holds the drawer back (it made every add after the
+// first slow: a new product in the cart needs more catalogue pages) ──
+{
+  const page = await open({ slowCatalog: 3000 });
+  check('slow catalogue: the drawer opens with the cart at once', page.openMs < 1200, `${page.openMs} ms`);
+  const t = await titles(page);
+  check('slow catalogue: the upsells fill in once it answers, drawer still open', t.length === 3 && await page.locator('#cc-overlay.active').count() === 1, JSON.stringify(t));
+  check('slow catalogue: no page errors', page.errors.length === 0, page.errors.join(' | '));
   await page.close();
 }
 
