@@ -1,5 +1,5 @@
 // Run with: node --import ./tests/packs/register.mjs --test tests/billing/annual-plans.test.mjs
-// Yearly billing (app/config/plans.js): 60-day trial, no usage charges (Shopify
+// Yearly billing (app/config/plans.js): same 14-day trial, no usage charges (Shopify
 // allows none on a yearly subscription), so past the monthly order cap the
 // storefront pauses and AI BRIX stops at its credits. The PHP mirror of the
 // order cap is plan_order_cap_exceeded in php_backend/plan_helpers.php.
@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   PLANS, normalizeBillingInterval, billsUsage, orderCapBehavior, aiCreditAllowed, trialDaysFor,
-  ANNUAL_TRIAL_DAYS, MONTHLY_TRIAL_DAYS,
+  TRIAL_DAYS,
 } from '../../app/config/plans.js';
 
 test('intervals: Shopify ANNUAL / annual / yearly = annual, anything else = monthly', () => {
@@ -41,15 +41,12 @@ test('AI BRIX: monthly keeps going past the credits (charged), yearly stops at t
   assert.equal(aiCreditAllowed('pro', 'annual', PLANS.pro.aiBrixCredits), false);
 });
 
-test('trial: 14 days monthly (a promo code replaces it, as before), 60 days yearly (a promo only when longer)', () => {
-  assert.equal(MONTHLY_TRIAL_DAYS, 14);
-  assert.equal(ANNUAL_TRIAL_DAYS, 60);
-  assert.equal(trialDaysFor('monthly'), 14);
-  assert.equal(trialDaysFor('monthly', 30), 30);
-  assert.equal(trialDaysFor('monthly', 7), 7, 'unchanged monthly rule');
-  assert.equal(trialDaysFor('annual'), 60);
-  assert.equal(trialDaysFor('annual', 30), 60);
-  assert.equal(trialDaysFor('annual', 90), 90);
+test('trial: 14 days, monthly or yearly; a promo code replaces it', () => {
+  assert.equal(TRIAL_DAYS, 14);
+  assert.equal(trialDaysFor(), 14);
+  assert.equal(trialDaysFor(0), 14);
+  assert.equal(trialDaysFor(30), 30);
+  assert.equal(trialDaysFor(7), 7);
 });
 
 test('PHP mirror: a yearly Starter / Growth pauses at the cap (overage only when billed monthly)', () => {

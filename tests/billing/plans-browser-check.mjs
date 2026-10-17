@@ -1,6 +1,6 @@
 /* eslint-env node */
 // Real-browser check of the plan page (app.subscribe.jsx): Monthly / Yearly
-// switch, yearly prices, the 60-day yearly trial, yearly limits (no per-order
+// switch, yearly prices, the 14-day trial on both, yearly limits (no per-order
 // or AI overage), and what each button posts. Bundled by tests/billing/harness
 // (Vite) with server modules stubbed; the action is mocked. Run from the repo root:
 //   node tests/billing/plans-browser-check.mjs
@@ -51,17 +51,17 @@ const card = (page, label) => page.locator('div', { has: page.getByRole('heading
   check('monthly: 14-day trial', /14-day free trial/.test(await page.innerText('body')) && /Upgrade to Starter — 14-day trial/.test(await starter.innerText()));
   await page.getByRole('radio', { name: /Yearly/ }).click();
   const st = await starter.innerText();
-  check('yearly: Starter $290 / year, 60-day trial, $24.17 a month', /\$290\s*\/ year/.test(st) && /60-day free trial, then \$24\.17\/month/.test(st), st.split('\n').slice(0, 8).join(' | '));
+  check('yearly: Starter $290 / year, $24.17 a month, 2 months free', /\$290\s*\/ year/.test(st) && /Billed yearly — \$24\.17\/month, 2 months free/.test(st), st.split('\n').slice(0, 8).join(' | '));
   check('yearly: no per-order charge, the storefront pauses at 500', /500 orders \/ month — storefront pauses after that/.test(st) && !/then \$0\.03\/order/.test(st));
   check('yearly: AI BRIX credits without a per-credit charge', /AI BRIX — 30 credits \/ month$/m.test(st));
   const growth = await card(page, 'Growth').innerText();
   check('yearly: Growth $590 / year, 1000 orders then pause', /\$590\s*\/ year/.test(growth) && /1000 orders \/ month — storefront pauses after that/.test(growth));
   check('yearly: Pro $790 / year, unlimited orders', /\$790\s*\/ year/.test(await card(page, 'Pro').innerText()) && /Unlimited orders/.test(await card(page, 'Pro').innerText()));
   check('yearly: Free stays free', /\$0\s*\/ month/.test(await card(page, 'Free').innerText()) && /Always free/.test(await card(page, 'Free').innerText()));
-  check('yearly: the footer explains the yearly limits', /Yearly plans include a 60-day free trial/.test(await page.innerText('body')));
-  await starter.getByRole('button', { name: /Upgrade to Starter — 60-day trial/ }).click();
+  check('yearly: the footer explains the yearly limits', /Yearly plans include a 14-day free trial/.test(await page.innerText('body')));
+  await starter.getByRole('button', { name: /Upgrade to Starter — 14-day trial/ }).click();
   const dialog = page.getByRole('dialog');
-  check('yearly: the plan dialog says billed yearly, 60-day trial', /Starter \(billed yearly\), which includes a 60-day free trial/.test(await dialog.innerText()));
+  check('yearly: the plan dialog says billed yearly, 14-day trial', /Starter \(billed yearly\), which includes a 14-day free trial/.test(await dialog.innerText()));
   await dialog.getByRole('button', { name: 'Continue' }).click();
   await page.waitForTimeout(400);
   check('yearly: Starter posts interval ANNUAL', posts.length === 1 && posts[0].planKey === 'starter' && posts[0].interval === 'ANNUAL', JSON.stringify(posts));

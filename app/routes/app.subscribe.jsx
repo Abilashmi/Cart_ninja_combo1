@@ -7,7 +7,7 @@ import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@sho
 import { authenticate } from "../shopify.server";
 import { getShopPlan, getShopBillingInterval, setPendingPlanKey } from "../services/plan-permissions.server";
 import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
-import { PLANS, PLAN_KEYS, FEATURES, ANNUAL_TRIAL_DAYS, trialDaysFor } from "../config/plans";
+import { PLANS, PLAN_KEYS, FEATURES, trialDaysFor } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
@@ -15,7 +15,7 @@ import { PLANS, PLAN_KEYS, FEATURES, ANNUAL_TRIAL_DAYS, trialDaysFor } from "../
 // combo_tier_pricing only keeps tiers working on older Classic combos; not a selling point.
 const FEATURE_ROWS = Object.keys(FEATURES).filter((key) => key !== 'combo_tier_pricing');
 
-// Trial length: 14 days monthly, 60 days yearly; a redeemed promo code
+// Trial length: 14 days, monthly or yearly; a redeemed promo code
 // overrides it with whatever that code was configured with (trialDaysFor in
 // app/config/plans.js).
 
@@ -288,7 +288,7 @@ export async function action({ request }) {
     // app/services/promo.server.js. No new trial while replacing a yearly
     // plan the merchant is already paying for.
     const promoTrialDays = await getPromoTrialDays(shop);
-    const trialDays = replacingAnnual ? 0 : trialDaysFor(isAnnual ? 'annual' : 'monthly', promoTrialDays);
+    const trialDays = replacingAnnual ? 0 : trialDaysFor(promoTrialDays);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -377,8 +377,8 @@ function featureRowLabel(featureKey, planKey, state) {
 
 export default function SubscribePage() {
     const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays } = useLoaderData();
-    // Monthly or yearly prices on the cards (yearly = 10 × monthly, 60-day
-    // trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
+    // Monthly or yearly prices on the cards (yearly = 10 × monthly, same
+    // 14-day trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
     const [billing, setBilling] = useState(currentInterval === 'annual' ? 'annual' : 'monthly');
     const isYearly = billing === 'annual';
     const intervalParam = isYearly ? 'ANNUAL' : 'EVERY_30_DAYS';
@@ -402,8 +402,8 @@ export default function SubscribePage() {
     const isPromoEligible = promoTrialDays > 0;
     // Every merchant gets a trial by default — a redeemed code only matters
     // when it changes the length from the standard one.
-    const effectiveTrialDays = trialDaysFor(billing, promoTrialDays);
-    const standardTrialDays = trialDaysFor(billing, 0);
+    const effectiveTrialDays = trialDaysFor(promoTrialDays);
+    const standardTrialDays = trialDaysFor(0);
 
     // Fires once the promo redemption fetcher settles. On success the modal
     // stays open showing the acknowledgment (how many days were just
@@ -512,7 +512,7 @@ export default function SubscribePage() {
 
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <div role="radiogroup" aria-label="Billing" style={{ display: 'inline-flex', gap: 4, padding: 4, background: '#f3f4f6', borderRadius: 999, border: '1px solid #e5e7eb' }}>
-                        {[['monthly', 'Monthly'], ['annual', `Yearly · ${ANNUAL_TRIAL_DAYS}-day free trial`]].map(([key, label]) => (
+                        {[['monthly', 'Monthly'], ['annual', 'Yearly · 2 months free']].map(([key, label]) => (
                             <button
                                 key={key}
                                 type="button"
@@ -560,7 +560,7 @@ export default function SubscribePage() {
                                         {p.price.monthly === 0
                                             ? 'Always free'
                                             : yearlyCard
-                                                ? `Billed yearly — ${ANNUAL_TRIAL_DAYS}-day free trial, then $${(p.price.annual / 12).toFixed(2)}/month`
+                                                ? `Billed yearly — $${(p.price.annual / 12).toFixed(2)}/month, 2 months free`
                                                 : 'Billed monthly — cancel anytime'}
                                     </Text>
 

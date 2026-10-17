@@ -161,14 +161,13 @@ export function getOverageRate(planKey) {
 
 // ── Billing interval (monthly | annual) ──
 // Paid plans can be billed every 30 days or yearly (price.annual = 10 ×
-// monthly). Shopify doesn't allow usage charges on a yearly subscription, so
+// monthly, two months free), both with the same 14-day trial. Shopify doesn't allow usage charges on a yearly subscription, so
 // a yearly plan can't bill per-order or AI BRIX overage: past the monthly
 // order cap its storefront widgets pause until next month (like Free; Pro has
 // no cap), and AI BRIX stops at the monthly credits. Mirrored by
 // plan_order_cap_exceeded in php_backend/plan_helpers.php.
 export const BILLING_INTERVALS = ['monthly', 'annual'];
-export const MONTHLY_TRIAL_DAYS = 14;
-export const ANNUAL_TRIAL_DAYS = 60;
+export const TRIAL_DAYS = 14;
 
 export function normalizeBillingInterval(value) {
   return /annual|year/i.test(String(value || '')) ? 'annual' : 'monthly';
@@ -193,11 +192,9 @@ export function aiCreditAllowed(planKey, interval, creditsUsed) {
   return billsUsage(interval) || creditsUsed < resolvePlan(planKey).aiBrixCredits;
 }
 
-// Trial length for a new subscription. Monthly: a redeemed promo code's
-// length, else the standard 14 days (as before). Yearly: 60 days, or a promo
-// code's when it is longer.
-export function trialDaysFor(interval, promoTrialDays = 0) {
+// Trial length for a new subscription, monthly or yearly: a redeemed promo
+// code's length, else the standard 14 days.
+export function trialDaysFor(promoTrialDays = 0) {
   const promo = Number(promoTrialDays) || 0;
-  if (normalizeBillingInterval(interval) === 'annual') return Math.max(ANNUAL_TRIAL_DAYS, promo);
-  return promo > 0 ? promo : MONTHLY_TRIAL_DAYS;
+  return promo > 0 ? promo : TRIAL_DAYS;
 }
