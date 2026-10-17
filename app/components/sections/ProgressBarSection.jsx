@@ -314,16 +314,16 @@ export function ProgressBarSection() {
       <Divider />
 
       {progressBar.tiers.length === 0 && (
-        <Button onClick={addTier}>Add tier</Button>
+        <Button onClick={addTier}>Add milestone</Button>
       )}
 
       {progressBar.tiers.length > 0 && (
         <>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h3" variant="headingSm">Tier {activeTierIndex + 1} of {progressBar.tiers.length}</Text>
+              <Text as="h3" variant="headingSm">Milestone {activeTierIndex + 1} of {progressBar.tiers.length}</Text>
               <InlineStack gap="200">
-                <Button size="slim" onClick={addTier}>Add tier</Button>
+                <Button size="slim" onClick={addTier}>Add milestone</Button>
                 {activeTierIndex > 0 && (
                   <Button size="slim" onClick={() => setActiveTierIndex(activeTierIndex - 1)}>← Prev</Button>
                 )}
@@ -336,7 +336,7 @@ export function ProgressBarSection() {
             <Card>
               <FormLayout>
                 <InlineStack align="space-between">
-                  <Text as="h3" variant="headingSm">Tier {activeTierIndex + 1}</Text>
+                  <Text as="h3" variant="headingSm">Milestone {activeTierIndex + 1}</Text>
                   {progressBar.tiers.length > 1 && (
                     <Button variant="plain" tone="critical" size="slim" onClick={() => removeTier(activeTierIndex)}>Remove</Button>
                   )}
@@ -349,7 +349,7 @@ export function ProgressBarSection() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Tier title (optional)"
+                  label="Milestone title (optional)"
                   value={activeTier.title}
                   onChange={(v) => updateTier(activeTierIndex, { title: v })}
                   autoComplete="off"
