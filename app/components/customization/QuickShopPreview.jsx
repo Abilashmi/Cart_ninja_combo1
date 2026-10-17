@@ -175,6 +175,9 @@ export default function QuickShopPreview({ config, device, products = [], collec
     const next = { ...selection };
     if (qty <= 0) delete next[variantId];
     else next[variantId] = { productId, qty };
+    // The most of one product per box (qs_max_per_product).
+    const limitMsg = qty > (selection[variantId]?.qty || 0) ? kit.productLimitMessage(config, selection, next) : '';
+    if (limitMsg) { shopify.toast.show(limitMsg, { isError: true }); return; }
     if (qty > (selection[variantId]?.qty || 0) && buildFor(next).box.overMax) {
       const view = pricing.view;
       shopify.toast.show(core.fillMessage(view.messages.over_max, {

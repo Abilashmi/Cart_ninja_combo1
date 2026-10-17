@@ -337,6 +337,31 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+// ── Max of each product (qs_max_per_product): all sizes of a product together ──
+{
+  const config = { ...baseConfig, layout: 'layout7', qs_max_per_product: 2, qs_max_per_product_text: 'Max {{max}} of each item' };
+  const { page } = await openCombo(config, wp(QUANTITY));
+  await page.waitForSelector(card(1));
+  const qtyOf = (n) => text(page, `${card(n)} .bxq-stepper span`);
+  const items = () => page.$$eval('.bxq-stepper span', (els) => els.reduce((sum, e) => sum + Number(e.textContent || 0), 0));
+  await plus(page, 1); await plus(page, 1);
+  check('max per product: 2 of the 500 g, then + is off', (await qtyOf(1)) === '2' && await page.$eval(`${card(1)} .bxq-stepper [data-combo-action="qty-inc"]`, (b) => b.disabled));
+  await page.selectOption(`${card(1)} select`, V(11));
+  check('max per product: the 1 kg of the same product can\'t be added either', await page.$eval(`${card(1)} .bxq-add`, (b) => b.disabled));
+  // A tap that still gets through (e.g. an old button): refused with the message.
+  await page.$eval(`${card(1)} .bxq-add`, (b) => { b.disabled = false; b.click(); });
+  await page.waitForTimeout(200);
+  const toast = await page.evaluate(() => (document.querySelector('[data-brix-combo-toast]') || {}).textContent || '');
+  check('max per product: the page refuses it and says why', toast.includes('Max 2 of each item') && (await page.$(`${card(1)} .bxq-stepper`)) === null, toast);
+  await plus(page, 2); await plus(page, 2);
+  check('max per product: another product still goes in up to its own 2', (await qtyOf(2)) === '2');
+  await page.selectOption(`${card(1)} select`, V(10));
+  await page.click(`${card(1)} [data-combo-action="qty-dec"]`);
+  check('max per product: one out, + is back', !(await page.$eval(`${card(1)} .bxq-stepper [data-combo-action="qty-inc"]`, (b) => b.disabled)));
+  check('max per product: the box holds 3 items', (await items()) === 3, String(await items()));
+  await page.close();
+}
+
 // ── page loader: default round spinner → the merchant's loader → products ──
 {
   const mine = { loader_style: 'dots', loader_color: '#be185d', loader_bg: '#fff7ed', loader_logo: 'https://cdn.example.com/logo.png', loader_logo_place: 'above', loader_text: 'Packing your box…' };

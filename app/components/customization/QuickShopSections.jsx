@@ -604,6 +604,25 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
           <TextField label="Badge for products tagged" value={val(config, 'qs_badge_tag')} onChange={(v) => updateConfig('qs_badge_tag', v)} autoComplete="off" helpText="A Shopify tag. Empty = no badge." />
           <TextField label="Badge text" value={val(config, 'qs_badge_text')} onChange={(v) => updateConfig('qs_badge_text', v)} autoComplete="off" />
         </div>
+        <div className="cst-grid-2">
+          <TextField
+            label="Max of each product" type="number" min={1} max={99} placeholder="No limit" autoComplete="off"
+            value={config.qs_max_per_product ? String(config.qs_max_per_product) : ''}
+            onChange={(v) => {
+              const n = Math.floor(Number(v));
+              updateConfig('qs_max_per_product', v === '' || !Number.isFinite(n) || n < 1 ? null : Math.min(n, 99));
+            }}
+            helpText="All its sizes / variants together. Empty = no limit."
+          />
+        </div>
+        {Number(config.qs_max_per_product) > 0 && (
+          <TextField
+            label="Message when a shopper reaches it" autoComplete="off" maxLength={120}
+            value={config.qs_max_per_product_text ?? val(config, 'qs_max_per_product_text')}
+            onChange={(v) => updateConfig('qs_max_per_product_text', v)}
+            helpText="{{max}} = your number."
+          />
+        )}
         <Px PxField={PxField} config={config} updateConfig={updateConfig} keyName="qs_card_radius" label="Card corners" />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Text sizes</Text></div>
         <div className="cst-grid-2">

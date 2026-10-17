@@ -97,6 +97,10 @@ export function createQuickShopKit(core) {
     qs_show_subtitle: true,
     qs_show_compare: true,
     qs_show_price: true, // the card's selling price (the popup always shows it)
+    // Most of one product a shopper can put in the box, all its variants
+    // together (null / 0 = no limit); + stops there and the text says why.
+    qs_max_per_product: null,
+    qs_max_per_product_text: 'You can add up to {{max}} of each product.',
     qs_show_off: true,
     qs_show_weight: true,
     qs_badge_tag: 'bestseller',
@@ -203,6 +207,47 @@ export function createQuickShopKit(core) {
     var n = Number(value);
     if (!isFinite(n)) n = fallback;
     return Math.max(min, Math.min(max, n));
+  }
+
+  /* ── most of one product per box (qs_max_per_product) ──────────────── */
+
+  /** The limit (1-99), or 0 = none. */
+  function maxPerProduct(config) {
+    var n = Math.floor(Number(opt(config, 'qs_max_per_product')));
+    return isFinite(n) && n > 0 ? Math.min(n, 99) : 0;
+  }
+
+  /** How many of a product the box holds, all its variants together. selection = { variantId: { productId, qty } }. */
+  function productQty(selection, productId) {
+    var total = 0;
+    for (var vid in selection) {
+      if (!Object.prototype.hasOwnProperty.call(selection, vid)) continue;
+      var sel = selection[vid];
+      if (sel && String(sel.productId) === String(productId)) total += Number(sel.qty) || 0;
+    }
+    return total;
+  }
+
+  /**
+   * '' when the box may hold `next` (the selection after the change) as far
+   * as the per-product limit goes, else the message to show. Only a product
+   * that grew is checked, so taking one out is always allowed.
+   */
+  function productLimitMessage(config, selection, next) {
+    var max = maxPerProduct(config);
+    if (!max) return '';
+    var seen = {};
+    for (var vid in next) {
+      if (!Object.prototype.hasOwnProperty.call(next, vid)) continue;
+      var pid = String(next[vid] && next[vid].productId);
+      if (seen[pid]) continue;
+      seen[pid] = true;
+      var after = productQty(next, pid);
+      if (after > max && after > productQty(selection || {}, pid)) {
+        return String(opt(config, 'qs_max_per_product_text') || DEFAULTS.qs_max_per_product_text).replace(/\{\{\s*max\s*\}\}/g, String(max));
+      }
+    }
+    return '';
   }
 
   // qs_hide_decimals of the template being built/rendered (set by
@@ -964,6 +1009,7 @@ export function createQuickShopKit(core) {
         variantId: vid, productId: sel.productId, qty: qty, image: image,
         title: product ? product.title : '', variantTitle: variant && variant.title !== 'Default Title' ? variant.title : '',
         price: money(price * qty, symbol),
+        stock: variant && typeof variant.stock === 'number' ? variant.stock : null,
       });
       lines.push({
         key: vid,
@@ -1008,6 +1054,7 @@ export function createQuickShopKit(core) {
     var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {}, groupInfo);
     var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending, groupInfo);
     var cards = [];
+    var perProduct = maxPerProduct(config);
     var badgeTag = String(opt(config, 'qs_badge_tag') || '').trim();
     for (var c = 0; c < shown.length; c++) {
       var p = shown[c];
@@ -1033,6 +1080,8 @@ export function createQuickShopKit(core) {
         stock: v && typeof v.stock === 'number' ? v.stock : null,
         variantId: v ? v.id : '',
         qty: v ? (qtyByVariant[v.id] || 0) : 0,
+        // The box already holds the most of this product allowed (any variant).
+        full: perProduct > 0 && productQty(selection, p.id) >= perProduct,
         counts: input.qualifies ? !!input.qualifies(p.id) : true,
       });
     }
@@ -1053,6 +1102,7 @@ export function createQuickShopKit(core) {
     var savedTemplate = box.nextTier && view.enabled ? opt(config, 'qs_saved_text') : opt(config, 'qs_saved_done_text');
     return {
       config: config,
+      selection: selection,
       isMobile: !!input.isMobile,
       symbol: symbol,
       title: config.collection_title || input.templateName || '',
@@ -1546,12 +1596,20 @@ export function createQuickShopKit(core) {
         + '<span aria-live="polite">' + card.qty + '</span>'
         + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     }
-    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
+    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '"' + (card.full ? ' disabled' : '') + '>' + esc(opt(config, 'qs_add_label') || 'Add') + '</button>';
   }
 
-  // ' disabled' once the box holds all Shopify will sell of this variant.
+  // ' disabled' once the box holds all Shopify will sell of this variant, or
+  // the most of this product allowed (qs_max_per_product).
   function atStock(card) {
-    return card.stock !== null && card.stock !== undefined && card.qty >= card.stock ? ' disabled' : '';
+    return card.full || (card.stock !== null && card.stock !== undefined && card.qty >= card.stock) ? ' disabled' : '';
+  }
+
+  // A box line's + is off at the per-product limit or the variant's stock.
+  function lineFull(model, line) {
+    var max = maxPerProduct(model.config);
+    if (max && productQty(model.selection || {}, line.productId) >= max) return true;
+    return line.stock !== null && line.stock !== undefined && line.qty >= line.stock;
   }
 
   function renderCard(model, card) {
@@ -1571,7 +1629,7 @@ export function createQuickShopKit(core) {
         + '<span aria-live="polite">' + card.qty + '</span>'
         + '<button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + '>+</button></div>';
     } else {
-      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + '</button>';
+      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '"' + (card.full ? ' disabled' : '') + '>' + ICON_PLUS + '</button>';
     }
     html += '</div><div class="bxq-info">';
     var eyebrow = opt(config, 'qs_card_eyebrow');
@@ -1640,7 +1698,7 @@ export function createQuickShopKit(core) {
         html += '<div class="bxq-line">' + (line.image ? '<img src="' + esc(line.image) + '" alt="" />' : '<span class="bxq-noimg"></span>')
           + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + '</div>' + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + '</div>' : '') + '</div>'
           + '<div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span>'
-          + '<button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one">+</button></div>'
+          + '<button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one"' + (lineFull(model, line) ? ' disabled' : '') + '>+</button></div>'
           + '<div class="bxq-line-price">' + esc(line.price) + '</div></div>';
       }
       html += '<button type="button" class="bxq-clear" data-combo-action="reset">Remove all</button></div>';
@@ -1944,6 +2002,9 @@ export function createQuickShopKit(core) {
     barMessage: barMessage,
     buildModel: buildModel,
     render: render,
+    maxPerProduct: maxPerProduct,
+    productQty: productQty,
+    productLimitMessage: productLimitMessage,
     applyUiAction: applyUiAction,
     ICON_NAMES: ICON_NAMES,
     TIER_ICON_ORDER: TIER_ICON_ORDER,

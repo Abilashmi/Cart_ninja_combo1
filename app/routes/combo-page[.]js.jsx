@@ -530,6 +530,14 @@ const SCRIPT_BODY = String.raw`
     return true;
   }
 
+  // The most of one product per box (qs_max_per_product, all its variants
+  // together): next = the box after the change.
+  function overProductLimit(root, state, next) {
+    var msg = QuickShop.productLimitMessage(state.config, state.selectedMap, next);
+    if (msg) showToast(root, state, msg);
+    return !!msg;
+  }
+
   function soldOutText(state) {
     return state.config.sold_out_text || 'Sold out';
   }
@@ -544,6 +552,7 @@ const SCRIPT_BODY = String.raw`
       return;
     }
     if (overStock(root, state, variantId, qty, product)) return;
+    if (overProductLimit(root, state, withQty(state.selectedMap, variantId, product.id, qty))) return;
     if (state.weightMode) {
       if (blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, product.id, qty))) return;
       state.selectedMap[variantId] = { productId: product.id, qty: qty };
@@ -565,6 +574,7 @@ const SCRIPT_BODY = String.raw`
     if (!state.selectedMap[variantId]) return;
     if (qty <= 0) { delete state.selectedMap[variantId]; render(root); return; }
     if (qty > (state.selectedMap[variantId].qty || 0) && overStock(root, state, variantId, qty)) return;
+    if (qty > (state.selectedMap[variantId].qty || 0) && overProductLimit(root, state, withQty(state.selectedMap, variantId, state.selectedMap[variantId].productId, qty))) return;
     if (state.weightMode) {
       var current = state.selectedMap[variantId];
       if (qty > (current.qty || 0) && blockedByMaxWeight(root, state, withQty(state.selectedMap, variantId, current.productId, qty))) return;

@@ -118,6 +118,17 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   check('normal cards: a card already in the box shows a stepper', (await page.$$('.bxq-cta--stepper')).length >= 1);
   await page.getByLabel('Add button text').fill('Add to box');
   check('Add button text follows the setting', (await text(page, '.bxq-card:not(.is-in) .bxq-cta')).startsWith('Add to box'));
+  // Max of each product: the preview's + stops there and says why.
+  await page.getByLabel('Max of each product').fill('1');
+  check('max per product: the message field appears', (await sidebar(page)).includes('Message when a shopper reaches it'));
+  check('max per product: + on a product already in the box is off', await page.$eval('.bxq-cta--stepper [data-combo-action="qty-inc"]', (b) => b.disabled));
+  await page.getByLabel('Message when a shopper reaches it').fill('Only {{max}} of each');
+  await page.$eval('.bxq-cta--stepper [data-combo-action="qty-inc"]', (b) => { b.disabled = false; b.click(); });
+  await page.waitForTimeout(150);
+  const limitToast = (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).at(-1);
+  check('max per product: the preview refuses with the merchant\'s text', limitToast === 'Only 1 of each', limitToast);
+  await page.getByLabel('Max of each product').fill('');
+  check('max per product: emptied = no limit, + is back', !(await page.$eval('.bxq-cta--stepper [data-combo-action="qty-inc"]', (b) => b.disabled)));
 
   // Advanced: the Quantity Box is always priced by items
   await tab(page, 'Advanced');
