@@ -1,5 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
+import { PLANS } from '../config/plans';
 import { agentTurn } from '../services/ai-llm.server';
 import { guardChatReply, stripEmojis } from '../services/ai-safety.server';
 import { TOOL_REGISTRY, isDestructiveToolCall } from '../config/ai-tool-schemas';
@@ -199,6 +200,15 @@ export async function action({ request }) {
 
     const credit = await checkAndConsumeCredit(shop, admin);
     const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
+    // Yearly plans can't be billed per extra credit: they stop at the monthly credits.
+    if (!credit.allowed) {
+      return Response.json({
+        success: true,
+        message: `You've used all ${credit.limit} AI BRIX credits for this month. Yearly plans include ${credit.limit} credits a month; they renew on the 1st. Switch to monthly billing to keep going at $${PLANS[credit.planKey]?.aiBrixOverageRate.toFixed(2)} per extra credit.`,
+        credits,
+        creditsExhausted: true,
+      });
+    }
     const planKey = await getShopPlan(shop, admin);
     // Fetched once per request and threaded through ctx so every tool
     // executor (and the system prompt below) shares the same real store

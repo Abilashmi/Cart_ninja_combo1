@@ -1,7 +1,7 @@
 import { getDb } from './db.server';
 import { ensurePlanTables } from './plan-schema.server';
-import { getShopPlan } from './plan-permissions.server';
-import { getAiBrixCreditLimit, getAiBrixOverageRate } from '../config/plans';
+import { getShopPlan, getShopBillingInterval } from './plan-permissions.server';
+import { getAiBrixCreditLimit, getAiBrixOverageRate, aiCreditAllowed, billsUsage } from '../config/plans';
 import { chargeAiCreditOverage } from './billing.server';
 
 function currentPeriodKey() {
@@ -12,16 +12,30 @@ function currentPeriodKey() {
 
 // Increments the shop's message count for this period and — once that count
 // passes the plan's monthly cap — bills the overage credit via Shopify usage
-// billing (see chargeAiCreditOverage). Chat is never blocked: past the cap,
-// the shop simply pays per extra credit at its plan's overage rate.
+// billing (see chargeAiCreditOverage). Monthly plans are never blocked: past
+// the cap, the shop pays per extra credit at its plan's overage rate. Yearly
+// plans can't be billed usage, so they stop at the cap (allowed: false, no
+// credit used) until next month.
 export async function checkAndConsumeCredit(shop, admin) {
   const db = getDb();
   await ensurePlanTables(db);
 
   const planKey = await getShopPlan(shop);
+  const interval = await getShopBillingInterval(shop);
   const limit = getAiBrixCreditLimit(planKey);
   const overageRate = getAiBrixOverageRate(planKey);
   const periodKey = currentPeriodKey();
+
+  if (!billsUsage(interval)) {
+    const [usedRows] = await db.execute(
+      'SELECT credits_used FROM ai_brix_credit_usage WHERE shop_domain = ? AND period_key = ? LIMIT 1',
+      [shop, periodKey]
+    );
+    const used = usedRows[0]?.credits_used || 0;
+    if (!aiCreditAllowed(planKey, interval, used)) {
+      return { allowed: false, remaining: 0, limit, planKey, isOverage: false, overageRate: 0, overageCharge: null };
+    }
+  }
 
   await db.execute(
     `INSERT INTO ai_brix_credit_usage (shop_domain, period_key, credits_used)
@@ -35,7 +49,7 @@ export async function checkAndConsumeCredit(shop, admin) {
     [shop, periodKey]
   );
   const creditsUsedAfter = rows[0]?.credits_used || 1;
-  const isOverage = creditsUsedAfter > limit;
+  const isOverage = billsUsage(interval) && creditsUsedAfter > limit;
 
   let overageCharge = null;
   if (isOverage) {
@@ -60,8 +74,9 @@ export async function getCreditStatus(shop) {
   await ensurePlanTables(db);
 
   const planKey = await getShopPlan(shop);
+  const interval = await getShopBillingInterval(shop);
   const limit = getAiBrixCreditLimit(planKey);
-  const overageRate = getAiBrixOverageRate(planKey);
+  const overageRate = billsUsage(interval) ? getAiBrixOverageRate(planKey) : 0;
   const periodKey = currentPeriodKey();
 
   const [rows] = await db.execute(
@@ -72,10 +87,13 @@ export async function getCreditStatus(shop) {
 
   return {
     planKey,
+    interval,
     limit,
     used,
     remaining: Math.max(0, limit - used),
-    isOverage: used > limit,
+    isOverage: billsUsage(interval) && used > limit,
+    // Yearly plans stop at the monthly credits (no usage billing).
+    exhausted: !aiCreditAllowed(planKey, interval, used),
     overageRate,
   };
 }

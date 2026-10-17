@@ -41,7 +41,7 @@ export const PLANS = {
     tagline: 'Weight & value boxes',
     price: { monthly: 59, annual: 590 },
     rank: 2,
-    orderCap: 2000,
+    orderCap: 1000,
     overageRate: 0.02,
     aiBrixCredits: 60,
     aiBrixOverageRate: 0.02,
@@ -157,4 +157,47 @@ export function getOrderCap(planKey) {
 
 export function getOverageRate(planKey) {
   return resolvePlan(planKey).overageRate;
+}
+
+// ── Billing interval (monthly | annual) ──
+// Paid plans can be billed every 30 days or yearly (price.annual = 10 ×
+// monthly). Shopify doesn't allow usage charges on a yearly subscription, so
+// a yearly plan can't bill per-order or AI BRIX overage: past the monthly
+// order cap its storefront widgets pause until next month (like Free; Pro has
+// no cap), and AI BRIX stops at the monthly credits. Mirrored by
+// plan_order_cap_exceeded in php_backend/plan_helpers.php.
+export const BILLING_INTERVALS = ['monthly', 'annual'];
+export const MONTHLY_TRIAL_DAYS = 14;
+export const ANNUAL_TRIAL_DAYS = 60;
+
+export function normalizeBillingInterval(value) {
+  return /annual|year/i.test(String(value || '')) ? 'annual' : 'monthly';
+}
+
+// Whether this plan bills per-order / AI credit overage (Shopify usage charges).
+export function billsUsage(interval) {
+  return normalizeBillingInterval(interval) !== 'annual';
+}
+
+// Past the monthly order cap: 'charge' (overage billed), 'pause' (storefront
+// widgets pause until next month) or 'none' (no cap).
+export function orderCapBehavior(planKey, interval) {
+  const plan = resolvePlan(planKey);
+  if (plan.orderCap === null) return 'none';
+  return plan.overageRate > 0 && billsUsage(interval) ? 'charge' : 'pause';
+}
+
+// Whether one more AI BRIX credit may be used: past the monthly credits only
+// plans that bill usage keep going (charged per credit).
+export function aiCreditAllowed(planKey, interval, creditsUsed) {
+  return billsUsage(interval) || creditsUsed < resolvePlan(planKey).aiBrixCredits;
+}
+
+// Trial length for a new subscription. Monthly: a redeemed promo code's
+// length, else the standard 14 days (as before). Yearly: 60 days, or a promo
+// code's when it is longer.
+export function trialDaysFor(interval, promoTrialDays = 0) {
+  const promo = Number(promoTrialDays) || 0;
+  if (normalizeBillingInterval(interval) === 'annual') return Math.max(ANNUAL_TRIAL_DAYS, promo);
+  return promo > 0 ? promo : MONTHLY_TRIAL_DAYS;
 }

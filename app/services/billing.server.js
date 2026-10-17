@@ -1,7 +1,7 @@
 import { getDb } from './db.server';
 import { ensurePlanTables } from './plan-schema.server';
-import { getShopPlan } from './plan-permissions.server';
-import { PLANS } from '../config/plans';
+import { getShopPlan, getShopBillingInterval } from './plan-permissions.server';
+import { PLANS, orderCapBehavior } from '../config/plans';
 import { unauthenticated } from '../shopify.server';
 
 function yesterdayDateStr() {
@@ -90,8 +90,11 @@ async function createUsageCharge(admin, { amount, description }) {
 async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
   const planKey = await getShopPlan(shop);
   const plan = PLANS[planKey];
+  const interval = await getShopBillingInterval(shop);
 
-  if (plan.orderCap === null || plan.overageRate === 0 || orderCount <= plan.orderCap) {
+  // A yearly plan has no usage line item (Shopify allows none on yearly
+  // subscriptions): its storefront pauses at the cap instead.
+  if (orderCapBehavior(planKey, interval) !== 'charge' || orderCount <= plan.orderCap) {
     // overageRate === 0 (e.g. Free) means exceeding the cap pauses
     // storefront widgets instead of billing — see plan_order_cap_exceeded
     // in php_backend/plan_helpers.php, the actual enforcement point.
@@ -266,6 +269,7 @@ export async function getTodayUsage(shop) {
   await ensurePlanTables(db);
   const planKey = await getShopPlan(shop);
   const plan = PLANS[planKey];
+  const charges = orderCapBehavior(planKey, await getShopBillingInterval(shop)) === 'charge';
   const today = new Date().toISOString().slice(0, 10);
 
   const [rows] = await db.execute(
@@ -275,7 +279,7 @@ export async function getTodayUsage(shop) {
   const totalOrders = rows[0]?.billable_order_count || 0;
   const freeOrders = plan.orderCap;
   const overageOrders = freeOrders === null ? 0 : Math.max(0, totalOrders - freeOrders);
-  const pendingCharge = overageOrders * plan.overageRate;
+  const pendingCharge = charges ? overageOrders * plan.overageRate : 0;
 
   // Reporting-only breakdown — an order can be tagged under more than one
   // source, so these can sum to more than total_orders. They don't feed
@@ -311,7 +315,8 @@ export async function getMonthlyOrderCapStatus(shop) {
   const planKey = await getShopPlan(shop);
   const plan = PLANS[planKey];
 
-  if (plan.orderCap === null || plan.overageRate > 0) {
+  // Capped plans that don't bill overage: Free, and Starter / Growth billed yearly.
+  if (orderCapBehavior(planKey, await getShopBillingInterval(shop)) !== 'pause') {
     return { applies: false };
   }
 

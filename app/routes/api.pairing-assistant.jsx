@@ -31,7 +31,8 @@ export async function action({ request }) {
       const maxOffers = Math.min(Math.max(parseInt(body.maxOffers, 10) || 3, 1), 10);
       const result = await suggestRulesFromPrompt(admin, shop, body.prompt, {
         maxOffers,
-        consumeCredit: () => checkAndConsumeCredit(shop, admin),
+        // false = no credit left this month (yearly plans stop at the cap).
+        consumeCredit: async () => (await checkAndConsumeCredit(shop, admin)).allowed !== false,
       });
       return Response.json({ success: true, intent: 'prompt', ...result });
     }

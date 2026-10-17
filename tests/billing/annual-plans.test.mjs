@@ -1,0 +1,61 @@
+// Run with: node --import ./tests/packs/register.mjs --test tests/billing/annual-plans.test.mjs
+// Yearly billing (app/config/plans.js): 60-day trial, no usage charges (Shopify
+// allows none on a yearly subscription), so past the monthly order cap the
+// storefront pauses and AI BRIX stops at its credits. The PHP mirror of the
+// order cap is plan_order_cap_exceeded in php_backend/plan_helpers.php.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {
+  PLANS, normalizeBillingInterval, billsUsage, orderCapBehavior, aiCreditAllowed, trialDaysFor,
+  ANNUAL_TRIAL_DAYS, MONTHLY_TRIAL_DAYS,
+} from '../../app/config/plans.js';
+
+test('intervals: Shopify ANNUAL / annual / yearly = annual, anything else = monthly', () => {
+  for (const v of ['ANNUAL', 'annual', 'Yearly']) assert.equal(normalizeBillingInterval(v), 'annual', v);
+  for (const v of ['EVERY_30_DAYS', 'monthly', '', null, undefined]) assert.equal(normalizeBillingInterval(v), 'monthly', String(v));
+  assert.equal(billsUsage('annual'), false);
+  assert.equal(billsUsage('EVERY_30_DAYS'), true);
+});
+
+test('yearly price is 10 × monthly (two months free) on every paid plan', () => {
+  for (const key of ['starter', 'growth', 'pro']) assert.equal(PLANS[key].price.annual, PLANS[key].price.monthly * 10, key);
+  assert.equal(PLANS.growth.orderCap, 1000, 'Growth: 1000 orders a month');
+});
+
+test('order cap: monthly Starter / Growth bill overage, yearly ones pause, Free and Pro have none', () => {
+  assert.equal(orderCapBehavior('starter', 'monthly'), 'charge');
+  assert.equal(orderCapBehavior('growth', 'monthly'), 'charge');
+  assert.equal(orderCapBehavior('starter', 'annual'), 'pause');
+  assert.equal(orderCapBehavior('growth', 'annual'), 'pause');
+  assert.equal(orderCapBehavior('free', 'monthly'), 'none', 'Free has no order cap');
+  assert.equal(orderCapBehavior('pro', 'annual'), 'none');
+  assert.equal(orderCapBehavior('pro', 'monthly'), 'none');
+});
+
+test('AI BRIX: monthly keeps going past the credits (charged), yearly stops at them', () => {
+  const cap = PLANS.starter.aiBrixCredits;
+  assert.equal(aiCreditAllowed('starter', 'monthly', cap + 5), true);
+  assert.equal(aiCreditAllowed('starter', 'annual', cap - 1), true, 'the last credit');
+  assert.equal(aiCreditAllowed('starter', 'annual', cap), false, 'all used');
+  assert.equal(aiCreditAllowed('pro', 'annual', PLANS.pro.aiBrixCredits), false);
+});
+
+test('trial: 14 days monthly (a promo code replaces it, as before), 60 days yearly (a promo only when longer)', () => {
+  assert.equal(MONTHLY_TRIAL_DAYS, 14);
+  assert.equal(ANNUAL_TRIAL_DAYS, 60);
+  assert.equal(trialDaysFor('monthly'), 14);
+  assert.equal(trialDaysFor('monthly', 30), 30);
+  assert.equal(trialDaysFor('monthly', 7), 7, 'unchanged monthly rule');
+  assert.equal(trialDaysFor('annual'), 60);
+  assert.equal(trialDaysFor('annual', 30), 60);
+  assert.equal(trialDaysFor('annual', 90), 90);
+});
+
+test('PHP mirror: a yearly Starter / Growth pauses at the cap (overage only when billed monthly)', () => {
+  const php = fs.readFileSync(new URL('../../php_backend/plan_helpers.php', import.meta.url), 'utf8');
+  assert.match(php, /if \(\$plan\['overageRate'\] > 0 && plan_billing_interval\(\$pdo, \$shopDomain\) !== 'annual'\) return false;/);
+  assert.match(php, /ADD COLUMN `billing_interval` VARCHAR\(10\) NOT NULL DEFAULT 'monthly'/);
+  const cfg = fs.readFileSync(new URL('../../php_backend/plan_config.php', import.meta.url), 'utf8');
+  assert.match(cfg, /'orderCap' => 1000,/, 'Growth cap in PHP too');
+});

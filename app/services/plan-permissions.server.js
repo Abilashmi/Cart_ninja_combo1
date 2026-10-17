@@ -9,6 +9,7 @@ import {
   canPublishFeature as configCanPublishFeature,
   canPreviewFeature as configCanPreviewFeature,
   getMinPlanForFeature,
+  normalizeBillingInterval,
 } from '../config/plans';
 
 // Short-lived in-process cache so multiple loaders/actions on the same
@@ -90,6 +91,28 @@ export async function getShopPlan(shop, admin = null) {
 
 function invalidateShopPlanCache(shop) {
   planCache.delete(shop);
+  intervalCache.delete(shop);
+}
+
+// 'monthly' | 'annual': how the shop's plan is billed (shops.billing_interval,
+// set by confirmPlanFromWebhook). A yearly plan bills no usage (see
+// billsUsage in app/config/plans.js).
+const intervalCache = new Map(); // shop -> { interval, expiresAt }
+export async function getShopBillingInterval(shop) {
+  if (!shop) return 'monthly';
+  const cached = intervalCache.get(shop);
+  if (cached && cached.expiresAt > Date.now()) return cached.interval;
+  let interval = 'monthly';
+  try {
+    const db = getDb();
+    await ensurePlanTables(db);
+    const [rows] = await db.execute('SELECT billing_interval FROM shops WHERE shop_domain = ? LIMIT 1', [shop]);
+    interval = normalizeBillingInterval(rows[0]?.billing_interval);
+  } catch (error) {
+    console.error('[Plan] ❌ Failed to resolve billing interval:', error.message);
+  }
+  intervalCache.set(shop, { interval, expiresAt: Date.now() + CACHE_TTL_MS });
+  return interval;
 }
 
 // Gates app access on having approved a real Shopify subscription at least
@@ -170,7 +193,7 @@ async function reconcilePlanFromShopify(shop, admin) {
               plan {
                 pricingDetails {
                   __typename
-                  ... on AppRecurringPricing { price { amount } }
+                  ... on AppRecurringPricing { price { amount } interval }
                 }
               }
             }
@@ -200,14 +223,15 @@ async function reconcilePlanFromShopify(shop, admin) {
       // aliasLegacyPlanName below), so price is the more reliable signal.
       // Falls back to name matching only for $0 usage-only subscriptions
       // where price can't disambiguate.
-      const byPrice = PLAN_KEYS.find((key) => amount > 0 && PLANS[key].price.monthly === amount);
+      const interval = activeSub ? normalizeBillingInterval(recurringLine?.plan?.pricingDetails?.interval) : 'monthly';
+      const byPrice = PLAN_KEYS.find((key) => amount > 0 && PLANS[key].price[interval] === amount);
       resolvedPlanKey = activeSub ? (byPrice || aliasLegacyPlanName(sub.name)) : 'free';
 
       await db.execute(
-        `INSERT INTO shops (shop_domain, plan_key, plan_name, subscription_id, subscription_status, pending_plan_key, plan_synced_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, NULL, NOW(), NOW())
-         ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), plan_name = VALUES(plan_name), subscription_id = VALUES(subscription_id), subscription_status = VALUES(subscription_status), pending_plan_key = NULL, plan_synced_at = NOW(), updated_at = NOW()`,
-        [shop, resolvedPlanKey, sub.name, sub.id, String(sub.status || '').toLowerCase()]
+        `INSERT INTO shops (shop_domain, plan_key, plan_name, subscription_id, subscription_status, pending_plan_key, billing_interval, plan_synced_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), plan_name = VALUES(plan_name), subscription_id = VALUES(subscription_id), subscription_status = VALUES(subscription_status), pending_plan_key = NULL, billing_interval = VALUES(billing_interval), plan_synced_at = NOW(), updated_at = NOW()`,
+        [shop, resolvedPlanKey, sub.name, sub.id, String(sub.status || '').toLowerCase(), interval]
       );
     } else {
       // No live subscription found on Shopify's side either — mark checked
@@ -228,15 +252,15 @@ async function reconcilePlanFromShopify(shop, admin) {
 // it once the merchant actually confirms — this is how plan_key is set
 // explicitly, rather than ever being inferred by parsing the Shopify
 // subscription name string.
-export async function setPendingPlanKey(shop, planKey) {
+export async function setPendingPlanKey(shop, planKey, interval = 'monthly') {
   if (!shop || !isValidPlanKey(planKey)) return;
   const db = getDb();
   await ensurePlanTables(db);
   await db.execute(
-    `INSERT INTO shops (shop_domain, pending_plan_key, updated_at)
-     VALUES (?, ?, NOW())
-     ON DUPLICATE KEY UPDATE pending_plan_key = VALUES(pending_plan_key), updated_at = NOW()`,
-    [shop, planKey]
+    `INSERT INTO shops (shop_domain, pending_plan_key, pending_billing_interval, updated_at)
+     VALUES (?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE pending_plan_key = VALUES(pending_plan_key), pending_billing_interval = VALUES(pending_billing_interval), updated_at = NOW()`,
+    [shop, planKey, normalizeBillingInterval(interval)]
   );
   invalidateShopPlanCache(shop);
 }
@@ -251,7 +275,12 @@ export async function setPendingPlanKey(shop, planKey) {
 // expire, only falls back to free if there's no pending_plan_key waiting on
 // a still-in-flight ACTIVE webhook for a replacement subscription —
 // otherwise leaves plan_key untouched. Returns the resolved plan_key.
-export async function confirmPlanFromWebhook(shop, subscriptionStatus, planHandle) {
+// `interval` ('monthly' | 'annual', read from the subscription by the webhook)
+// is stored with the plan; `otherActive` = the shop still has another ACTIVE
+// subscription (a yearly plan replaced at the end of its year cancels the old
+// one at the same moment the new one starts, in either order), so a
+// cancellation never drops it to free.
+export async function confirmPlanFromWebhook(shop, subscriptionStatus, planHandle, { interval = null, otherActive = false } = {}) {
   if (!shop) return 'free';
   const db = getDb();
   await ensurePlanTables(db);
@@ -261,10 +290,19 @@ export async function confirmPlanFromWebhook(shop, subscriptionStatus, planHandl
   const handleKey = String(planHandle || '').toLowerCase();
 
   const [rows] = await db.execute(
-    'SELECT plan_key, pending_plan_key FROM shops WHERE shop_domain = ? LIMIT 1',
+    'SELECT plan_key, pending_plan_key, billing_interval, pending_billing_interval FROM shops WHERE shop_domain = ? LIMIT 1',
     [shop]
   );
   const row = rows[0];
+
+  // Not yet approved / waiting for the current paid year to end while the
+  // shop still has an ACTIVE subscription: keep that plan until this one is
+  // ACTIVE (a yearly plan moving to a cheaper one or to monthly is deferred
+  // by Shopify to the end of its year).
+  if (status !== 'active' && otherActive) {
+    invalidateShopPlanCache(shop);
+    return row?.plan_key && isValidPlanKey(row.plan_key) ? row.plan_key : 'free';
+  }
 
   if (isActive) {
     // Rapid plan switching (e.g. Free -> Starter -> Pro within seconds)
@@ -281,15 +319,20 @@ export async function confirmPlanFromWebhook(shop, subscriptionStatus, planHandl
         ? row.pending_plan_key
         : (row?.plan_key && isValidPlanKey(row.plan_key) ? row.plan_key : 'free');
 
+    const resolvedInterval = resolvedPlanKey === 'free'
+      ? 'monthly'
+      : normalizeBillingInterval(interval || row?.pending_billing_interval || row?.billing_interval);
+
     await db.execute(
-      `INSERT INTO shops (shop_domain, plan_key, pending_plan_key, updated_at)
-       VALUES (?, ?, NULL, NOW())
-       ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), pending_plan_key = NULL, updated_at = NOW()`,
-      [shop, resolvedPlanKey]
+      `INSERT INTO shops (shop_domain, plan_key, pending_plan_key, billing_interval, pending_billing_interval, updated_at)
+       VALUES (?, ?, NULL, ?, NULL, NOW())
+       ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), pending_plan_key = NULL, billing_interval = VALUES(billing_interval), pending_billing_interval = NULL, updated_at = NOW()`,
+      [shop, resolvedPlanKey, resolvedInterval]
     );
     invalidateShopPlanCache(shop);
     return resolvedPlanKey;
   }
+
 
   // Terminal/negative statuses (CANCELLED, DECLINED, EXPIRED, FROZEN) fire
   // for the *old* subscription during a plan switch — cancelActiveSubscription
@@ -307,12 +350,13 @@ export async function confirmPlanFromWebhook(shop, subscriptionStatus, planHandl
   const resolvedPlanKey = hasPendingSwitch
     ? (row?.plan_key && isValidPlanKey(row.plan_key) ? row.plan_key : 'free')
     : 'free';
+  const keptInterval = resolvedPlanKey === 'free' ? 'monthly' : normalizeBillingInterval(row?.billing_interval);
 
   await db.execute(
-    `INSERT INTO shops (shop_domain, plan_key, updated_at)
-     VALUES (?, ?, NOW())
-     ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), updated_at = NOW()`,
-    [shop, resolvedPlanKey]
+    `INSERT INTO shops (shop_domain, plan_key, billing_interval, updated_at)
+     VALUES (?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE plan_key = VALUES(plan_key), billing_interval = VALUES(billing_interval), updated_at = NOW()`,
+    [shop, resolvedPlanKey, keptInterval]
   );
   invalidateShopPlanCache(shop);
   return resolvedPlanKey;

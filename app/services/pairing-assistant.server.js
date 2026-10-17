@@ -342,7 +342,8 @@ function planWantsHistory(plan) {
 // Wording that means "do this for every product", not one pairing.
 const GENERAL_IDEA = /\b(complementary|complement|ideally|in general|generally|always|every (?:product|item|category|page)|all (?:products|items|categories|product pages)|any product|should (?:show|recommend|suggest|display)|at least \d)/i;
 
-// consumeCredit: async () => void, called only when the model is actually used.
+// consumeCredit: async () => boolean, called only when the model would be used;
+// false = no AI credit left (yearly plans stop at the monthly credits), words only.
 // Returns { rules, warnings, question, usedAi, catalogTruncated }.
 export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 3, consumeCredit } = {}) {
   const text = String(prompt || '').trim().slice(0, 2000);
@@ -353,8 +354,9 @@ export async function suggestRulesFromPrompt(admin, shop, prompt, { maxOffers = 
 
   let plan = null;
   let usedAi = false;
-  if (process.env.OPENAI_API_KEY) {
-    if (consumeCredit) await consumeCredit();
+  // consumeCredit() === false: no AI credit left this month, words only.
+  const creditOk = process.env.OPENAI_API_KEY && (!consumeCredit || (await consumeCredit()) !== false);
+  if (creditOk) {
     const messages = buildPlanMessages(text, { catalog, collections });
     const reply = await callLlmWithMeta(messages, { maxTokens: 2500, temperature: 0, json: true, timeoutMs: 45_000 });
     if (reply.content) {

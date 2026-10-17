@@ -5,9 +5,9 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { getShopPlan, setPendingPlanKey } from "../services/plan-permissions.server";
+import { getShopPlan, getShopBillingInterval, setPendingPlanKey } from "../services/plan-permissions.server";
 import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
-import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
+import { PLANS, PLAN_KEYS, FEATURES, ANNUAL_TRIAL_DAYS, trialDaysFor } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
@@ -15,9 +15,9 @@ import { PLANS, PLAN_KEYS, FEATURES } from "../config/plans";
 // combo_tier_pricing only keeps tiers working on older Classic combos; not a selling point.
 const FEATURE_ROWS = Object.keys(FEATURES).filter((key) => key !== 'combo_tier_pricing');
 
-// Every merchant gets this trial length by default; a redeemed promo code
-// overrides it with whatever that code was configured with instead.
-const DEFAULT_TRIAL_DAYS = 14;
+// Trial length: 14 days monthly, 60 days yearly; a redeemed promo code
+// overrides it with whatever that code was configured with (trialDaysFor in
+// app/config/plans.js).
 
 // Shopify's own app handle in the admin (visible in URLs like
 // admin.shopify.com/store/{shop}/charges/{appHandle}/... or
@@ -57,15 +57,16 @@ async function isPartnerDevelopmentStore(admin) {
 
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
-    const [planKey, promoTrialDays] = await Promise.all([
+    const [planKey, promoTrialDays, interval] = await Promise.all([
         getShopPlan(session.shop, admin),
         getPromoTrialDays(session.shop),
+        getShopBillingInterval(session.shop),
     ]);
     // getShopPlan already defaults an unapproved shop to 'free', which is
     // exactly its real feature access now that /app.jsx no longer forces
     // approval before using the app — so that's shown as the current plan
     // here too, not treated as "no plan selected yet."
-    return { currentPlanKey: planKey, promoTrialDays };
+    return { currentPlanKey: planKey, currentInterval: planKey === 'free' ? 'monthly' : interval, promoTrialDays };
 }
 
 export async function action({ request }) {
@@ -83,7 +84,9 @@ export async function action({ request }) {
     }
 
     const planKey = formData.get("planKey");
-    const interval = formData.get("interval") === "ANNUAL" ? "ANNUAL" : "EVERY_30_DAYS";
+    // Free is always a monthly usage-only subscription.
+    const interval = formData.get("interval") === "ANNUAL" && planKey !== "free" ? "ANNUAL" : "EVERY_30_DAYS";
+    const isAnnual = interval === "ANNUAL";
 
     if (!PLANS[planKey]) {
         return { error: "Invalid plan selected." };
@@ -119,15 +122,23 @@ export async function action({ request }) {
         },
     };
 
-    async function fetchActiveSubscriptionIds() {
+    async function fetchActiveSubscriptions() {
         const subRes = await admin.graphql(`
             query {
                 currentAppInstallation {
-                    activeSubscriptions { id status }
+                    activeSubscriptions {
+                        id
+                        status
+                        lineItems { plan { pricingDetails { __typename ... on AppRecurringPricing { interval } } } }
+                    }
                 }
             }
         `);
         const subData = await subRes.json();
+        return subData.data?.currentAppInstallation?.activeSubscriptions || [];
+    }
+
+    async function fetchActiveSubscriptionIds() {
         // activeSubscriptions returns both ACTIVE and PENDING subscriptions
         // (that's what "active" means in Shopify's Billing API — cancelled/
         // declined/expired ones are already excluded) — a leftover PENDING
@@ -135,11 +146,13 @@ export async function action({ request }) {
         // Shopify's confirmation page still counts toward the "same pricing
         // details" conflict, so every entry here needs cancelling, not just
         // ones with status === "ACTIVE".
-        return (subData.data?.currentAppInstallation?.activeSubscriptions || []).map(s => s.id);
+        return (await fetchActiveSubscriptions()).map(s => s.id);
     }
 
-    async function cancelActiveSubscription() {
-        const subIds = await fetchActiveSubscriptionIds();
+    async function cancelActiveSubscription({ pendingOnly = false } = {}) {
+        const subIds = pendingOnly
+            ? (await fetchActiveSubscriptions()).filter((s) => String(s.status || '').toUpperCase() !== 'ACTIVE').map((s) => s.id)
+            : await fetchActiveSubscriptionIds();
 
         for (const id of subIds) {
             const cancelRes = await admin.graphql(`
@@ -165,7 +178,9 @@ export async function action({ request }) {
         // no longer lists it. Poll until Shopify's own read confirms the
         // cancellation before proceeding, instead of racing it.
         for (let attempt = 0; attempt < 5; attempt++) {
-            const remaining = await fetchActiveSubscriptionIds();
+            const remaining = pendingOnly
+                ? (await fetchActiveSubscriptions()).filter((s) => String(s.status || '').toUpperCase() !== 'ACTIVE')
+                : await fetchActiveSubscriptionIds();
             if (remaining.length === 0) return null;
             await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
         }
@@ -178,14 +193,25 @@ export async function action({ request }) {
     // with the same pricing details" if an old subscription with identical
     // line items is still active/pending, which silently blocked every
     // plan switch here until this ran unconditionally.
+    // A yearly plan is never cancelled here: that would throw away the rest
+    // of the year the merchant paid for. Shopify replaces it instead
+    // (replacementBehavior STANDARD): a dearer yearly plan at once, prorated;
+    // a cheaper yearly plan, monthly or Free when the paid year ends. A yearly
+    // subscription has no usage line item, so there is no "same pricing
+    // details" clash; only leftover unapproved (PENDING) ones are cancelled.
+    let replacingAnnual = false;
     try {
-        const cancelErr = await cancelActiveSubscription();
+        replacingAnnual = (await fetchActiveSubscriptions()).some((s) =>
+            String(s.status || '').toUpperCase() === 'ACTIVE'
+            && (s.lineItems || []).some((li) => li.plan?.pricingDetails?.interval === 'ANNUAL'));
+        const cancelErr = await cancelActiveSubscription({ pendingOnly: replacingAnnual });
         if (cancelErr?.error) {
             return { error: cancelErr.error };
         }
     } catch (err) {
         return { error: err.message || "Failed to cancel existing subscription." };
     }
+    const replacementArgs = replacingAnnual ? { replacementBehavior: "STANDARD" } : {};
 
     // Downgrading/selecting Free: create a usage-only subscription (no
     // recurring line item) so order-overage and AI BRIX credit-overage
@@ -198,12 +224,14 @@ export async function action({ request }) {
                     $lineItems: [AppSubscriptionLineItemInput!]!
                     $returnUrl: URL!
                     $test: Boolean
+                    $replacementBehavior: AppSubscriptionReplacementBehavior
                 ) {
                     appSubscriptionCreate(
                         name: $name
                         lineItems: $lineItems
                         returnUrl: $returnUrl
                         test: $test
+                        replacementBehavior: $replacementBehavior
                     ) {
                         userErrors { field message }
                         confirmationUrl
@@ -217,6 +245,7 @@ export async function action({ request }) {
                     lineItems: [usageLineItem],
                     returnUrl: adminAppUrl(shop, "/app/billing"),
                     test: isTestCharge,
+                    ...replacementArgs,
                 },
             });
             const data = await res.json();
@@ -235,7 +264,7 @@ export async function action({ request }) {
         }
     }
 
-    const price = interval === "ANNUAL" ? plan.price.annual : plan.price.monthly;
+    const price = isAnnual ? plan.price.annual : plan.price.monthly;
 
     const lineItems = [
         {
@@ -248,13 +277,18 @@ export async function action({ request }) {
         },
     ];
 
-    lineItems.push(usageLineItem);
+    // Shopify allows no usage charges on a yearly subscription: yearly plans
+    // have no per-order / AI credit overage (storefront pauses at the order
+    // cap, AI BRIX stops at its credits; orderCapBehavior in config/plans.js).
+    if (!isAnnual) lineItems.push(usageLineItem);
 
-    // Every merchant gets the standard 14-day trial by default. A redeemed
-    // promo code overrides this with whatever that code was configured with
-    // (e.g. 30 days) — see app/services/promo.server.js.
+    // Every merchant gets the standard trial by default: 14 days monthly, 60
+    // days yearly. A redeemed promo code overrides it with whatever that code
+    // was configured with (e.g. 30 days; on yearly only when longer) — see
+    // app/services/promo.server.js. No new trial while replacing a yearly
+    // plan the merchant is already paying for.
     const promoTrialDays = await getPromoTrialDays(shop);
-    const trialDays = promoTrialDays > 0 ? promoTrialDays : DEFAULT_TRIAL_DAYS;
+    const trialDays = replacingAnnual ? 0 : trialDaysFor(isAnnual ? 'annual' : 'monthly', promoTrialDays);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -263,6 +297,7 @@ export async function action({ request }) {
             $returnUrl: URL!
             $trialDays: Int
             $test: Boolean
+            $replacementBehavior: AppSubscriptionReplacementBehavior
         ) {
             appSubscriptionCreate(
                 name: $name
@@ -270,6 +305,7 @@ export async function action({ request }) {
                 returnUrl: $returnUrl
                 trialDays: $trialDays
                 test: $test
+                replacementBehavior: $replacementBehavior
             ) {
                 userErrors { field message }
                 confirmationUrl
@@ -279,11 +315,12 @@ export async function action({ request }) {
     `;
 
     const variables = {
-        name: `Cart Ninja ${plan.label}`,
+        name: `Cart Ninja ${plan.label}${isAnnual ? " (Yearly)" : ""}`,
         lineItems,
         returnUrl: adminAppUrl(shop, "/app/billing"),
         trialDays,
         test: isTestCharge,
+        ...replacementArgs,
     };
 
     const res = await admin.graphql(mutation, { variables });
@@ -304,7 +341,7 @@ export async function action({ request }) {
     // Record the intended plan now, before the merchant confirms on
     // Shopify's page — the app_subscriptions/update webhook promotes this
     // to shops.plan_key once the subscription actually becomes active.
-    await setPendingPlanKey(shop, planKey);
+    await setPendingPlanKey(shop, planKey, isAnnual ? "annual" : "monthly");
 
     return { confirmationUrl };
 }
@@ -339,7 +376,12 @@ function featureRowLabel(featureKey, planKey, state) {
 }
 
 export default function SubscribePage() {
-    const { currentPlanKey, promoTrialDays: initialPromoTrialDays } = useLoaderData();
+    const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays } = useLoaderData();
+    // Monthly or yearly prices on the cards (yearly = 10 × monthly, 60-day
+    // trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
+    const [billing, setBilling] = useState(currentInterval === 'annual' ? 'annual' : 'monthly');
+    const isYearly = billing === 'annual';
+    const intervalParam = isYearly ? 'ANNUAL' : 'EVERY_30_DAYS';
     const actionData = useActionData();
     const navigation = useNavigation();
     const submit = useSubmit();
@@ -360,7 +402,8 @@ export default function SubscribePage() {
     const isPromoEligible = promoTrialDays > 0;
     // Every merchant gets a trial by default — a redeemed code only matters
     // when it changes the length from the standard one.
-    const effectiveTrialDays = isPromoEligible ? promoTrialDays : DEFAULT_TRIAL_DAYS;
+    const effectiveTrialDays = trialDaysFor(billing, promoTrialDays);
+    const standardTrialDays = trialDaysFor(billing, 0);
 
     // Fires once the promo redemption fetcher settles. On success the modal
     // stays open showing the acknowledgment (how many days were just
@@ -384,8 +427,10 @@ export default function SubscribePage() {
         }
     }, [actionData]);
 
+    const isCurrentChoice = (planKey) => planKey === currentPlanKey && (planKey === 'free' || billing === currentInterval);
+
     const handleSelect = (planKey) => {
-        if (planKey === currentPlanKey) return;
+        if (isCurrentChoice(planKey)) return;
         // Only a real downgrade (an existing approved plan being replaced)
         // needs the "this cancels your subscription" warning — a shop with
         // no currentPlanKey yet is approving for the first time, not
@@ -398,7 +443,7 @@ export default function SubscribePage() {
             // Free never carries a trial, and a shop that's already promo-
             // eligible has nothing to gain from the code prompt — skip
             // straight to plan submission in both cases.
-            submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+            submit({ planKey, interval: intervalParam }, { method: "POST" });
             return;
         }
         setPromoCode('');
@@ -422,16 +467,17 @@ export default function SubscribePage() {
             promoFetcher.submit({ intent: "redeem_promo", code: promoCode }, { method: "POST" });
         } else {
             setPlanModalPlanKey(null);
-            submit({ planKey, interval: "EVERY_30_DAYS" }, { method: "POST" });
+            submit({ planKey, interval: intervalParam }, { method: "POST" });
         }
     };
 
     const getBtn = (planKey) => {
         const trialSuffix = ` — ${effectiveTrialDays}-day trial`;
-        if (planKey === currentPlanKey) return { label: 'Current Plan', variant: 'current' };
+        if (isCurrentChoice(planKey)) return { label: 'Current Plan', variant: 'current' };
         const rank = PLAN_KEYS.indexOf(planKey);
         const currentRank = PLAN_KEYS.indexOf(currentPlanKey);
         if (planKey === 'free') return { label: 'Downgrade to Free', variant: 'downgrade' };
+        if (planKey === currentPlanKey) return { label: isYearly ? 'Switch to yearly billing' : 'Switch to monthly billing', variant: 'upgrade' };
         return { label: rank > currentRank ? `Upgrade to ${PLANS[planKey].label}${trialSuffix}` : `Switch to ${PLANS[planKey].label}`, variant: 'upgrade' };
     };
 
@@ -458,17 +504,35 @@ export default function SubscribePage() {
                     {isPromoEligible && (
                         <div style={{ marginTop: 16 }}>
                             <Text as="p" variant="bodySm" tone="success" fontWeight="semibold">
-                                Promo applied — you get {promoTrialDays} days free on any paid plan (instead of the standard {DEFAULT_TRIAL_DAYS}).
+                                Promo applied — you get {effectiveTrialDays} days free on any paid plan (instead of the standard {standardTrialDays}).
                             </Text>
                         </div>
                     )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div role="radiogroup" aria-label="Billing" style={{ display: 'inline-flex', gap: 4, padding: 4, background: '#f3f4f6', borderRadius: 999, border: '1px solid #e5e7eb' }}>
+                        {[['monthly', 'Monthly'], ['annual', `Yearly · ${ANNUAL_TRIAL_DAYS}-day free trial`]].map(([key, label]) => (
+                            <button
+                                key={key}
+                                type="button"
+                                role="radio"
+                                aria-checked={billing === key}
+                                onClick={() => setBilling(key)}
+                                style={{ border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 18px', fontSize: 13, fontWeight: 700, background: billing === key ? '#1a1a1a' : 'transparent', color: billing === key ? '#fff' : '#374151' }}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, alignItems: 'stretch' }}>
                     {PLAN_KEYS.map((planKey) => {
                         const p = PLANS[planKey];
                         const prevPlanKey = PLAN_KEYS[PLAN_KEYS.indexOf(planKey) - 1];
-                        const isCurrent = planKey === currentPlanKey;
+                        const isCurrent = isCurrentChoice(planKey);
+                        const yearlyCard = isYearly && p.price.monthly > 0;
                         const isHighlightPlan = planKey === 'starter';
                         const btn = getBtn(planKey);
                         return (
@@ -489,11 +553,15 @@ export default function SubscribePage() {
                                     <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">{p.tagline}</Text></div>
 
                                     <div style={{ margin: '16px 0 4px', display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-                                        <span style={{ fontSize: 40, fontWeight: 800, color: '#1a1a1a', lineHeight: 1 }}>${p.price.monthly}</span>
-                                        <span style={{ fontSize: 14, color: '#6b7280', marginBottom: 5 }}>/ month</span>
+                                        <span style={{ fontSize: 40, fontWeight: 800, color: '#1a1a1a', lineHeight: 1 }}>${yearlyCard ? p.price.annual : p.price.monthly}</span>
+                                        <span style={{ fontSize: 14, color: '#6b7280', marginBottom: 5 }}>{yearlyCard ? '/ year' : '/ month'}</span>
                                     </div>
-                                    <Text as="p" variant="bodyXs" tone={isHighlightPlan ? 'success' : 'subdued'}>
-                                        {p.price.monthly === 0 ? 'Always free' : 'Billed monthly — cancel anytime'}
+                                    <Text as="p" variant="bodyXs" tone={isHighlightPlan || yearlyCard ? 'success' : 'subdued'}>
+                                        {p.price.monthly === 0
+                                            ? 'Always free'
+                                            : yearlyCard
+                                                ? `Billed yearly — ${ANNUAL_TRIAL_DAYS}-day free trial, then $${(p.price.annual / 12).toFixed(2)}/month`
+                                                : 'Billed monthly — cancel anytime'}
                                     </Text>
 
                                     <Divider />
@@ -503,7 +571,7 @@ export default function SubscribePage() {
                                         <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
                                             {p.orderCap === null
                                                 ? 'Unlimited orders'
-                                                : p.overageRate > 0
+                                                : p.overageRate > 0 && !yearlyCard
                                                     ? `${p.orderCap} orders / month — then $${p.overageRate.toFixed(2)}/order`
                                                     : `${p.orderCap} orders / month — storefront pauses after that`}
                                         </span>
@@ -547,7 +615,9 @@ export default function SubscribePage() {
                                                 <Icon source={CheckCircleIcon} tone="success" />
                                             </span>
                                             <Text as="p" variant="bodyXs">
-                                                AI BRIX — {p.aiBrixCredits} credits / month, then ${p.aiBrixOverageRate.toFixed(2)}/credit
+                                                {yearlyCard
+                                                    ? `AI BRIX — ${p.aiBrixCredits} credits / month`
+                                                    : `AI BRIX — ${p.aiBrixCredits} credits / month, then $${p.aiBrixOverageRate.toFixed(2)}/credit`}
                                             </Text>
                                         </div>
                                         {(!prevPlanKey || PLANS[prevPlanKey].watermarkRemovable !== p.watermarkRemovable) && (
@@ -581,7 +651,9 @@ export default function SubscribePage() {
 
                 <div style={{ textAlign: 'center', paddingBottom: 8 }}>
                     <Text as="p" variant="bodyXs" tone="subdued">
-                        {`All paid plans include a ${effectiveTrialDays}-day free trial. Cancel anytime. No charge until trial ends.`}
+                        {isYearly
+                            ? `Yearly plans include a ${effectiveTrialDays}-day free trial, then one payment a year. Shopify can't add per-order or AI charges to a yearly plan, so past the monthly order limit your storefront widgets pause until next month, and AI BRIX stops at the monthly credits. Leaving a yearly plan takes effect when the paid year ends.`
+                            : `All paid plans include a ${effectiveTrialDays}-day free trial. Cancel anytime. No charge until trial ends.`}
                     </Text>
                 </div>
 
@@ -604,12 +676,12 @@ export default function SubscribePage() {
                         <BlockStack gap="300">
                             {isPromoEligible ? (
                                 <Text as="p" fontWeight="semibold" tone="success">
-                                    You get {promoTrialDays} days free on {PLANS[planModalPlanKey].label} (instead of the standard {DEFAULT_TRIAL_DAYS}).
+                                    You get {effectiveTrialDays} days free on {PLANS[planModalPlanKey].label} (instead of the standard {standardTrialDays}).
                                 </Text>
                             ) : (
                                 <>
                                     <Text as="p">
-                                        You are getting {PLANS[planModalPlanKey].label}, which includes a {DEFAULT_TRIAL_DAYS}-day free trial. Have a promo code for an extended trial?
+                                        You are getting {PLANS[planModalPlanKey].label}{isYearly ? ' (billed yearly)' : ''}, which includes a {standardTrialDays}-day free trial. Have a promo code for an extended trial?
                                     </Text>
                                     <TextField
                                         label="Promo code"
@@ -645,6 +717,11 @@ export default function SubscribePage() {
                 >
                     <Modal.Section>
                         <BlockStack gap="300">
+                            {currentInterval === 'annual' && (
+                                <Text as="p" fontWeight="semibold">
+                                    You keep your yearly plan until the year you paid for ends; Free starts then.
+                                </Text>
+                            )}
                             <Text as="p">
                                 Downgrading cancels your current subscription. Features like Progress Bar, AI Cart
                                 Upsell, Full Analytics, Custom CSS, and Build a Combo will be locked. FBT and Coupon

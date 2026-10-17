@@ -379,7 +379,7 @@ export const action = async ({ request }) => {
           instructions = await resolveFbtInstructions(admin, shop, aiInstructions, {
             maxOffers: aiProductCount,
             cached: parseJson(cachedRows[0]?.ai_instruction_rules, null),
-            consumeCredit: () => checkAndConsumeCredit(shop, admin),
+            consumeCredit: async () => (await checkAndConsumeCredit(shop, admin)).allowed !== false,
           });
           if (instructions.cacheable) {
             await db.execute('UPDATE fbt_widget_settings SET ai_instruction_rules = ? WHERE shop_domain = ?', [

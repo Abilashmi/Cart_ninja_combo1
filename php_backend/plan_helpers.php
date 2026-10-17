@@ -24,6 +24,9 @@ function plan_ensure_columns($pdo) {
     if (!in_array('pending_plan_key', $existingCols)) {
         $alterations[] = "ADD COLUMN `pending_plan_key` VARCHAR(20) NULL DEFAULT NULL";
     }
+    if (!in_array('billing_interval', $existingCols)) {
+        $alterations[] = "ADD COLUMN `billing_interval` VARCHAR(10) NOT NULL DEFAULT 'monthly'";
+    }
     if (!empty($alterations)) {
         $pdo->exec("ALTER TABLE shops " . implode(', ', $alterations));
     }
@@ -63,6 +66,16 @@ function resolve_plan_key($pdo, $shopDomain) {
     return plan_alias_legacy_plan_name($row['plan_name'] ?? null);
 }
 
+/** 'monthly' | 'annual': how the shop's plan is billed (shops.billing_interval). */
+function plan_billing_interval($pdo, $shopDomain) {
+    if (!$shopDomain) return 'monthly';
+    plan_ensure_columns($pdo);
+    $stmt = $pdo->prepare("SELECT billing_interval FROM shops WHERE shop_domain = :shop LIMIT 1");
+    $stmt->execute([':shop' => $shopDomain]);
+    $row = $stmt->fetch();
+    return ($row && $row['billing_interval'] === 'annual') ? 'annual' : 'monthly';
+}
+
 /**
  * Whether this shop's plan enforces a hard storefront cutoff (a capped,
  * zero-overage-rate plan like Free) and the shop has hit that cap for the
@@ -80,7 +93,12 @@ function plan_order_cap_exceeded($pdo, $shopDomain, $planKey) {
     if (!$shopDomain) return false;
 
     $plan = plan_get_config($planKey);
-    if ($plan['orderCap'] === null || $plan['overageRate'] > 0) return false;
+    if ($plan['orderCap'] === null) return false;
+    // A plan that bills per-order overage only does so when billed monthly:
+    // Shopify allows no usage charges on a yearly subscription, so a yearly
+    // Starter / Growth pauses at the cap like Free (orderCapBehavior in
+    // app/config/plans.js).
+    if ($plan['overageRate'] > 0 && plan_billing_interval($pdo, $shopDomain) !== 'annual') return false;
 
     $stmt = $pdo->prepare(
         "SELECT COALESCE(SUM(billable_order_count), 0) AS total

@@ -26,6 +26,15 @@ export async function ensurePlanTables(db) {
   if (!existing.includes('plan_synced_at')) {
     alterations.push('ADD COLUMN `plan_synced_at` DATETIME NULL DEFAULT NULL');
   }
+  // Monthly or yearly billing of the shop's plan (see BILLING_INTERVALS in
+  // app/config/plans.js); pending_ = what the merchant picked, confirmed by
+  // the app_subscriptions/update webhook like pending_plan_key.
+  if (!existing.includes('billing_interval')) {
+    alterations.push("ADD COLUMN `billing_interval` VARCHAR(10) NOT NULL DEFAULT 'monthly'");
+  }
+  if (!existing.includes('pending_billing_interval')) {
+    alterations.push('ADD COLUMN `pending_billing_interval` VARCHAR(10) NULL DEFAULT NULL');
+  }
   if (alterations.length > 0) {
     await db.execute(`ALTER TABLE shops ${alterations.join(', ')}`);
   }
