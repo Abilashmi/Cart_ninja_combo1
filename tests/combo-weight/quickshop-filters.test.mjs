@@ -434,3 +434,14 @@ test('slots: weight / value boxes get the full bar instead', () => {
   assert.ok(!html.includes('bxq-slots'));
   assert.equal(slotHtml(slotsModel({}, { measure: 'weight', tiers: [{ id: 'w', min_grams: 1000, type: 'percentage', value: 10, label: '' }] })), '', 'and no empty bar');
 });
+
+test('box list: line prices shown by default, hidden with qs_sheet_show_price off', () => {
+  const selection = { [P[0].variants[0].id]: { productId: P[0].id, qty: 2 } };
+  const list = (config) => kit.render(model(config, { sheetOpen: true }, { selection }));
+  const shown = list({});
+  assert.match(shown, /class="bxq-sheet"/);
+  assert.match(shown, /<div class="bxq-line-price">₹200<\/div>/);
+  const hidden = list({ qs_sheet_show_price: false });
+  assert.match(hidden, /class="bxq-line-name">Product 1</, 'the line is still there');
+  assert.doesNotMatch(hidden, /bxq-line-price/);
+});

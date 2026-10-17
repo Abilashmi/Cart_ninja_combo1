@@ -94,6 +94,13 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.getByLabel('Button text', { exact: true }).fill('View box');
   check('button text follows the setting', (await text(page, '.bxq-go')) === 'View box');
   check('no Shiprocket choice on a shop without Shiprocket', !(await sidebar(page)).includes('Checkout with'));
+  // The box list the bar opens: its line prices can be hidden.
+  await page.click('.bxq-bar [data-combo-action="box-open"]');
+  check('box list shows each line\'s price by default', (await page.$$('.bxq-sheet .bxq-line-price')).length > 0);
+  await page.getByLabel('Prices in the box list').uncheck();
+  check('"Prices in the box list" off hides them, lines stay', (await page.$$('.bxq-sheet .bxq-line-price')).length === 0 && (await page.$$('.bxq-sheet .bxq-line')).length > 0);
+  await page.getByLabel('Prices in the box list').check();
+  await page.click('.bxq-bar [data-combo-action="box-close"]');
 
   // Clicking the bar opens its settings; clicking a card opens the card settings
   await page.click('.bxq-card .bxq-name');

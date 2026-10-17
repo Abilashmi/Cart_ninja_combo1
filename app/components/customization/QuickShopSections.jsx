@@ -732,6 +732,7 @@ function BarSectionComponent({ config, updateConfig, expanded, onToggle, ColorPi
             {style !== 'slots' && <Checkbox label="Savings line" checked={isOn(config, 'qs_bar_show_saved')} onChange={(v) => updateConfig('qs_bar_show_saved', v)} helpText="Compare-at savings plus the box discount (only while the box discount is live)." />}
           </>
         )}
+        <Checkbox label="Prices in the box list" helpText="The list that opens from the bottom bar, one line per product in the box. Untick to show only names, sizes and quantities." checked={isOn(config, 'qs_sheet_show_price')} onChange={(v) => updateConfig('qs_sheet_show_price', v)} />
         {isOn(config, 'qs_bar_show_saved') && style !== 'compact' && style !== 'slots' && (
           <div className="cst-grid-2">
             <TextField label="Savings, more tiers to go" value={val(config, 'qs_saved_text')} onChange={(v) => updateConfig('qs_saved_text', v)} autoComplete="off" helpText="{{saved}} = amount saved" />

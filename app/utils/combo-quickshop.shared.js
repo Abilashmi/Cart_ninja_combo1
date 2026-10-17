@@ -149,6 +149,7 @@ export function createQuickShopKit(core) {
     qs_bar_show_message: true,
     qs_bar_show_thumbs: true,
     qs_bar_show_saved: true,
+    qs_sheet_show_price: true, // each line's price in the box list the bottom bar opens
     qs_bar_celebrate: true,
     qs_bar_icon_done: 'party',
     qs_bar_icon_locked: 'gift',
@@ -1699,7 +1700,7 @@ export function createQuickShopKit(core) {
           + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + '</div>' + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + '</div>' : '') + '</div>'
           + '<div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span>'
           + '<button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one"' + (lineFull(model, line) ? ' disabled' : '') + '>+</button></div>'
-          + '<div class="bxq-line-price">' + esc(line.price) + '</div></div>';
+          + (on(config, 'qs_sheet_show_price') ? '<div class="bxq-line-price">' + esc(line.price) + '</div>' : '') + '</div>';
       }
       html += '<button type="button" class="bxq-clear" data-combo-action="reset">Remove all</button></div>';
     }
