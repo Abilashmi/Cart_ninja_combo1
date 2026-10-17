@@ -1438,8 +1438,30 @@
   // ccNeutralizeNativeDrawer) so the diagnostic instrumentation below can
   // recognize and log the same set.
   const CC_DRAWER_STATE_CLASSES = ['cart-drawer-open', 'drawer-open', 'js-drawer-open', 'cart-open', 'is-open', 'open-drawer'];
+  // The page itself is never a "native drawer": themes such as Halo (used on
+  // extrokids.com) open their cart by adding a class like cart-sidebar-show
+  // to <body>, which matched the class test below and hid the whole page
+  // (white screen after Add to cart).
+  function ccIsPageShell(el) {
+    if (!el || el === document.documentElement || el === document.body) return true;
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'main' || el.id === 'MainContent') return true;
+    return typeof el.querySelector === 'function' && !!el.querySelector('main, #MainContent');
+  }
+
+  // A <body>/<html> class saying the theme's CART is open (cart-sidebar-show,
+  // cart-drawer-open...): only cart words, so a menu sidebar never opens ours.
+  function ccIsCartStateClass(c) {
+    return /cart.*(show|open|active|visible)|(show|open|active).*cart/i.test(c);
+  }
+  // Classes cleared while ours takes over: the known drawer-state ones too.
+  function ccIsDrawerStateClass(c) {
+    return CC_DRAWER_STATE_CLASSES.indexOf(c) !== -1 || ccIsCartStateClass(c);
+  }
+
   function ccLooksLikeNativeDrawer(el) {
     if (!el || !el.tagName) return false;
+    if (ccIsPageShell(el)) return false;
     // Explicit exclusion, checked first: never treat anything inside Cart
     // Ninja's own drawer as a native one, regardless of any class/id/tag
     // naming coincidence the heuristics below might otherwise match.
@@ -1591,10 +1613,49 @@
     const cs = window.getComputedStyle(el);
     return cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity || '1') !== 0;
   }
+  // Themes that open their drawer through a <body>/<html> class: the drawer
+  // element itself doesn't change, so find whichever one is now showing.
+  function ccVisibleNativeDrawers() {
+    const found = [];
+    const candidates = document.querySelectorAll('[class*="cart"], [id*="cart"], [class*="drawer"], ' + CC_DRAWER_TAGS.join(','));
+    for (let i = 0; i < candidates.length && found.length < 4; i++) {
+      const c = candidates[i];
+      if (!ccLooksLikeNativeDrawer(c) || !ccIsVisible(c)) continue;
+      if (found.some(function (f) { return f.contains(c); })) continue;
+      found.push(c);
+    }
+    return found;
+  }
+
   (function () {
     new MutationObserver(function (mutations) {
       for (const m of mutations) {
         const el = m.target;
+        if ((el === document.body || el === document.documentElement) && m.type === 'attributes' && m.attributeName === 'class') {
+          if (!Array.prototype.some.call(el.classList, ccIsCartStateClass)) continue;
+          ccMilestone('Native drawer open attempt detected (page state class)', el.className);
+          scheduleOpenDrawer(200);
+          if (!_ccActive) continue;
+          // The theme shows its drawer by CSS once the class lands, often with
+          // an animation: look for it a few times, hide what shows; then, if
+          // the class is still there, take it off (the theme's own CSS then
+          // closes its drawer and overlay), so closing ours never reveals it.
+          const page = el;
+          [0, 200, 500, 900].forEach(function (ms, i, all) {
+            setTimeout(function () {
+              if (!_ccActive) return;
+              ccVisibleNativeDrawers().forEach(ccNeutralizeNativeDrawer);
+              if (i === all.length - 1) {
+                const left = Array.prototype.filter.call(page.classList, ccIsCartStateClass);
+                if (left.length) {
+                  page.classList.remove.apply(page.classList, left);
+                  ccMilestone('Native drawer state class cleared', left.join(' '));
+                }
+              }
+            }, ms);
+          });
+          continue;
+        }
         if (!ccLooksLikeNativeDrawer(el)) continue;
         ccMilestone('Native cart detected', el.tagName + (el.id ? '#' + el.id : '') + (el.className ? '.' + String(el.className).trim().split(/\s+/).join('.') : ''));
         if (m.type !== 'attributes') continue;
@@ -1636,6 +1697,8 @@
   // hide/restore logic can be applied to a whole chain of elements, not
   // just the single one the MutationObserver happened to match.
   function ccHideSingleElement(target) {
+    // Last line of defence: never the page itself.
+    if (ccIsPageShell(target)) return function () {};
     const prevDisplay = ccSnapshotStyle(target, 'display');
     const prevPointerEvents = ccSnapshotStyle(target, 'pointerEvents');
     target.style.setProperty('display', 'none', 'important');
@@ -1716,8 +1779,8 @@
       // is the correct fix here (not guessing at the theme's specific
       // width/transform/margin CSS) — it undoes whatever the theme's own
       // stylesheet is keyed to, without us needing to know those rules.
-      const prevHtmlClasses = CC_DRAWER_STATE_CLASSES.filter(function (c) { return document.documentElement.classList.contains(c); });
-      const prevBodyClasses = CC_DRAWER_STATE_CLASSES.filter(function (c) { return document.body.classList.contains(c); });
+      const prevHtmlClasses = Array.prototype.filter.call(document.documentElement.classList, ccIsDrawerStateClass);
+      const prevBodyClasses = Array.prototype.filter.call(document.body.classList, ccIsDrawerStateClass);
 
       const prevBodyOverflow = ccSnapshotStyle(document.body, 'overflow');
       const prevBodyPaddingRight = ccSnapshotStyle(document.body, 'paddingRight');

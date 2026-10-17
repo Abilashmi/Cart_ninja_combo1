@@ -366,6 +366,43 @@ for (const width of [1280, 390]) {
   await page.context().close();
 }
 
+/* A theme that opens its cart by a <body> class (Halo, as on extrokids.com:
+   body.cart-sidebar-show shows #halo-cart-sidebar by CSS). The native-drawer
+   watcher used to take <body> itself for the drawer and hide it: white page
+   after Add to cart. */
+{
+  const page = await open({ width: 1280 });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(600);
+  const brixOpen = () => page.evaluate(() => { const d = document.getElementById('cc-drawer'); if (!d) return false; const r = d.getBoundingClientRect(); return r.left < innerWidth - 10 && getComputedStyle(d).visibility !== 'hidden'; });
+  check('halo theme: our drawer closed to start', !(await brixOpen()));
+  await page.evaluate(() => {
+    const st = document.createElement('style');
+    st.textContent = '.halo-cart-sidebar{position:fixed;top:0;right:0;bottom:0;width:350px;background:#fff;visibility:hidden;z-index:101} body.cart-sidebar-show .halo-cart-sidebar{visibility:visible} body.menu-sidebar-show .halo-menu{visibility:visible}';
+    document.head.appendChild(st);
+    document.body.insertAdjacentHTML('beforeend', '<div id="halo-cart-sidebar" class="halo-sidebar halo-sidebar-right halo-cart-sidebar"><p>Theme cart</p><form action="/cart/add"><button>Add</button></form></div>');
+  });
+  // A menu sidebar opening must never open the cart.
+  await page.evaluate(() => document.body.classList.add('menu-sidebar-show'));
+  await page.waitForTimeout(800);
+  check('halo theme: a menu sidebar class never opens our cart', !(await brixOpen()));
+  await page.evaluate(() => document.body.classList.remove('menu-sidebar-show'));
+  // The theme's Add to cart: its sidebar opens by the body class.
+  await page.evaluate(() => document.body.classList.add('cart-sidebar-show'));
+  await page.waitForTimeout(1500);
+  const st = await page.evaluate(() => ({
+    body: getComputedStyle(document.body).display,
+    themeCart: getComputedStyle(document.getElementById('halo-cart-sidebar')).display + '/' + getComputedStyle(document.getElementById('halo-cart-sidebar')).visibility,
+    bodyClassLeft: document.body.classList.contains('cart-sidebar-show'),
+  }));
+  check('halo theme: the page never goes white (body stays shown)', st.body !== 'none', JSON.stringify(st));
+  check('halo theme: the theme cart is hidden and its body class cleared', /none|hidden/.test(st.themeCart) && !st.bodyClassLeft, JSON.stringify(st));
+  check('halo theme: our drawer opens instead', await brixOpen());
+  await page.screenshot({ path: path.join(shotDir, 'halo-theme-body-class.png') });
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);
