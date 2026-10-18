@@ -269,6 +269,9 @@ export function ProgressBarSection() {
     for (const id of selectedIds) if (prev[id]) rewardVariants[id] = prev[id];
     updateTier(pickerTierIndex, {
       rewardProducts: selectedIds,
+      // The older copy goes into the storefront blob too: left as loaded
+      // (often []), it hid the picked reward from the drawer.
+      products: selectedIds,
       rewardProductCount: selectedIds.length,
       rewardVariants,
     });

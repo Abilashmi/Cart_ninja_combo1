@@ -12,6 +12,7 @@ import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
 import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
+import { milestonePositions, progressFill, fillMoneyTag } from '../utils/progress-layout.shared.js';
 // The storefront drawer's own stylesheet for item rows, pricing summary and the
 // image banner, so the preview draws them exactly like the live drawer. Linked
 // from the app's /brix_cart_ui.css route, never imported from extensions/
@@ -236,14 +237,11 @@ const TIER_CELEBRATION_DURATION_MS = 2500;
 
 // Fills a merchant-authored Progress Message template with the current
 // remaining amount/item count/target. Unrecognized placeholders (or none at
-// all) are left exactly as typed — never throws. Mirrors the identical
-// function in cart_drawer_inline.js (same reasoning as the constant above:
-// genuinely separate JS runtimes, so mirrored by hand rather than shared).
+// all) are left exactly as typed — never throws. Same as the storefront's
+// fillProgressMessageTemplate: a sign typed before {amount} isn't doubled.
 function fillProgressMessageTemplate(template, { amountStr, itemsStr, targetStr }) {
-  return String(template)
-    .replace(/\{amount\}/g, amountStr)
-    .replace(/\{items\}/g, itemsStr)
-    .replace(/\{target\}/g, targetStr);
+  return fillMoneyTag(fillMoneyTag(template, '{amount}', amountStr), '{target}', targetStr)
+    .replace(/\{items\}/g, itemsStr);
 }
 
 function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
@@ -335,8 +333,11 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   const fillColor = colors.fill || '#10b981';
   const iconColor = colors.icon || '#2563eb';
   const msgColor = colors.message || '#10b981';
-  const maxThreshold = tiers[tiers.length - 1].minimumSpend;
-  const fillPct = Math.min(100, (currentValue / maxThreshold) * 100);
+  // Milestones at least 20% apart, the fill drawn against the same positions
+  // (like the storefront drawer): close targets used to pile up.
+  const msTargets = tiers.map((t) => t.minimumSpend);
+  const msPos = milestonePositions(msTargets, 0, 100, 20);
+  const fillPct = progressFill(currentValue, msTargets, msPos);
   const nextTier = tiers.find((t) => currentValue < t.minimumSpend);
   // Math.ceil (not round) plus a floor of 1: a fractional remainder like
   // 0.4 must never display as "0 left" while the tier genuinely isn't
@@ -398,8 +399,11 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${fillPct}%`, backgroundColor: fillColor, borderRadius: `${radius}px`, transition: 'width 0.3s ease' }} />
         </div>
 
-        {tiers.map((tier) => {
-          const pct = Math.min(100, (tier.minimumSpend / maxThreshold) * 100);
+        {tiers.map((tier, idx) => {
+          const pct = msPos[idx];
+          // Label as wide as the space to the nearest milestone allows.
+          const gapPct = Math.min(idx > 0 ? pct - msPos[idx - 1] : 100, idx < tiers.length - 1 ? msPos[idx + 1] - pct : 100);
+          const labelWidth = Math.max(56, Math.min(90, Math.floor(gapPct * 2.6) - 4));
           const unlocked = currentValue >= tier.minimumSpend;
           const IconComp = TIER_ICON_MAP[tier.icon] ?? GiftCardFilledIcon;
           return (
@@ -430,7 +434,7 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
                     their content instead of stretching them, so without a width
                     here the text has no real box to wrap against. */}
                 {(tier.title || tier.description) && (
-                  <div style={{ width: '90px', fontSize: '8px', color: iconColor, fontWeight: 600, whiteSpace: 'normal', overflowWrap: 'break-word', lineHeight: 1.3, textAlign: 'center' }}>
+                  <div style={{ width: `${labelWidth}px`, fontSize: '8px', color: iconColor, fontWeight: 600, whiteSpace: 'normal', overflowWrap: 'break-word', lineHeight: 1.3, textAlign: 'center' }}>
                     {tier.title || tier.description}
                   </div>
                 )}

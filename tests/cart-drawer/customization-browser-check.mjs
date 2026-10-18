@@ -256,6 +256,16 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   check('free gift past the first 250 products: one Storefront API lookup by product id', far.net.storefrontApi.length === 1 && JSON.stringify(far.net.storefrontApi[0].variables.ids) === '["gid://shopify/Product/9001"]', JSON.stringify(far.net.storefrontApi));
   await close(far);
 
+  // extrokids' ₹1300 milestone: the editor left the older `products` copy
+  // as loaded ([]) next to the picked `rewardProducts`; the gift must still go in.
+  const stale = await openDrawer({
+    data: { progress_status: 1, progress_data: JSON.stringify({ ...progress, tiers: [{ ...tiers[0], rewardType: 'free_shipping', products: [], rewardVariants: {} }] }) },
+  });
+  await stale.waitForTimeout(800);
+  const staleAdd = stale.net.adds.find((b) => Array.isArray(b.items) && b.items.some((i) => i.properties && i.properties._brixReward === 'true'));
+  check('free gift saved with an empty older `products` list next to rewardProducts: still added', Boolean(staleAdd), JSON.stringify(stale.net.adds).slice(0, 200));
+  await close(stale);
+
   const gone = await openDrawer({
     data: { progress_status: 1, progress_data: JSON.stringify({ ...progress, tiers: farTiers }) },
     storefrontApi: () => ({ data: { nodes: [null] } }),

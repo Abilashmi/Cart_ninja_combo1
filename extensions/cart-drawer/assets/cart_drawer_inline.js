@@ -350,11 +350,67 @@
   // function in CartPreview.jsx (kept in each file by hand rather than
   // shared: this is a standalone script tag on the storefront; that's a
   // bundled React admin page — genuinely separate JS runtimes).
+  // Milestone positions, fill and money tags: a verbatim copy of
+  // app/utils/progress-layout.shared.js (begin..end), checked by
+  // tests/cart-drawer/progress-layout.test.mjs.
+  /* progress-layout:begin */
+  // Where each milestone sits (percent of the track), targets ascending.
+  // lo..hi = the track's usable span; gap = the least space between two.
+  function ccMilestonePositions(targets, lo, hi, gap) {
+    var n = targets.length;
+    if (!n) return [];
+    var max = targets[n - 1] > 0 ? targets[n - 1] : 1;
+    var room = n > 1 ? (hi - lo) / (n - 1) : 0;
+    var g = Math.min(gap, room);
+    var out = [];
+    var i;
+    for (i = 0; i < n; i++) {
+      var p = Math.min(hi, Math.max(lo, (targets[i] / max) * 100));
+      if (i > 0 && p < out[i - 1] + g) p = out[i - 1] + g;
+      out.push(p);
+    }
+    if (out[n - 1] > hi) {
+      out[n - 1] = hi;
+      for (i = n - 2; i >= 0; i--) if (out[i] > out[i + 1] - g) out[i] = out[i + 1] - g;
+    }
+    return out;
+  }
+
+  // How full the bar is for `value`: 0 at 0, each milestone's position at its
+  // target, 100 at (or past) the last target.
+  function ccProgressFill(value, targets, positions) {
+    var n = targets.length;
+    if (!n || !(value > 0)) return 0;
+    if (value >= targets[n - 1]) return 100;
+    var prevT = 0;
+    var prevP = 0;
+    for (var i = 0; i < n; i++) {
+      if (value < targets[i]) {
+        var span = targets[i] - prevT;
+        return span > 0 ? prevP + ((value - prevT) / span) * (positions[i] - prevP) : positions[i];
+      }
+      prevT = targets[i];
+      prevP = positions[i];
+    }
+    return 100;
+  }
+
+  // Puts a formatted amount ("₹2,524.00") in place of `tag` ("{amount}"). A
+  // currency sign the merchant typed right before the tag ("Add ₹{amount}")
+  // is dropped when the amount already starts with it (it showed "₹₹2,524.00").
+  function ccFillMoneyTag(text, tag, value) {
+    var str = String(value);
+    var sign = (str.match(/^[^\d\s.,-]+/) || [''])[0];
+    var out = String(text);
+    if (sign) out = out.split(sign + ' ' + tag).join(tag).split(sign + tag).join(tag);
+    return out.split(tag).join(str);
+  }
+  /* progress-layout:end */
+
   function fillProgressMessageTemplate(template, vars) {
-    return String(template)
-      .replace(/\{amount\}/g, vars.amountStr)
-      .replace(/\{items\}/g, vars.itemsStr)
-      .replace(/\{target\}/g, vars.targetStr);
+    // ccFillMoneyTag: "Add ₹{amount}" showed "₹₹2,524.00".
+    return ccFillMoneyTag(ccFillMoneyTag(template, '{amount}', vars.amountStr), '{target}', vars.targetStr)
+      .replace(/\{items\}/g, vars.itemsStr);
   }
 
   /* =================== CONFETTI POPUP =================== */
@@ -696,9 +752,11 @@
           confetti: t.confetti !== false,
           // The admin's ProductPickerModal saves this as `rewardProducts`;
           // some write paths (the AI-tool legacy sync) also mirror it as
-          // `products` — accept either so a reward product picked in the
-          // manual editor is never silently dropped here.
-          products: t.products || t.rewardProducts || [],
+          // `products`. `rewardProducts` wins: the editor used to leave
+          // `products` as loaded ([] on a milestone that had no reward yet),
+          // and `[] || rewardProducts` is [] — extrokids' ₹1300 gift was
+          // never added. `products` only for blobs without `rewardProducts`.
+          products: Array.isArray(t.rewardProducts) ? t.rewardProducts : (Array.isArray(t.products) ? t.products : []),
           // 'free' = the reward must really cost nothing at checkout, or it is not
           // given at all (see syncRewardProducts). Anything else = regular price.
           pricing: (t.rewardPricing || t.reward_pricing) === 'free' ? 'free' : 'regular',
@@ -3336,15 +3394,22 @@
       // applied here, so the storefront always rendered a fixed pill shape
       // regardless of what was saved.)
       const trackRadius = progress.borderRadius ?? 8;
-      pbHtml += `<div style="position:relative;width:calc(100% - 20px);height:8px;margin:8px 10px 48px 10px;background:${progress.barBackgroundColor || '#e2e8f0'
+      pbHtml += `<div class="cc-ms-track" style="position:relative;width:calc(100% - 20px);height:8px;margin:8px 10px 48px 10px;background:${progress.barBackgroundColor || '#e2e8f0'
         };border-radius:${trackRadius}px;">`;
 
+      // Milestones at least 20% apart (in order), the fill drawn against the
+      // same positions (ccMilestonePositions / ccProgressFill): close targets
+      // far below the last one used to pile up at the start of the bar.
+      const msTargets = pInfo.tiers.map((t) => t.target);
+      const msPos = ccMilestonePositions(msTargets, 3, 97, 20);
+      const fillPercent = ccProgressFill(pInfo.currentVal, msTargets, msPos);
+
       // 1. The progress bar filler
-      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:${fgColor};border-radius:${trackRadius}px;transition:width 0.3s ease;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
+      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${fillPercent}%;background:${fgColor};border-radius:${trackRadius}px;transition:width 0.3s ease;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
 
       // 2. Tier segment markers — thin lines on the track showing where each level is
-      pInfo.tiers.forEach((ms) => {
-        const segPercent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
+      pInfo.tiers.forEach((ms, idx) => {
+        const segPercent = msPos[idx];
         const reached = pInfo.currentVal >= ms.target;
         pbHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${reached ? fgColor : '#cbd5e180'
           };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
@@ -3361,7 +3426,7 @@
         const isCompleted = pInfo.currentVal >= ms.target;
         const prevTarget = idx > 0 ? pInfo.tiers[idx - 1].target : 0;
         const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
-        const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
+        const percent = msPos[idx];
         const iconFill = progress.iconColor || progress.icon_color || fgColor;
         const iconHtml = getMilestoneIconHtml(ms, isCompleted ? '#ffffff' : iconFill);
         const nodeSize = 24;
@@ -3371,8 +3436,8 @@
         // adjacent labels never overlap when tiers are close together in
         // value (a fixed width previously caused dense tier ladders —
         // e.g. $2000/$2500/$3500 — to collide).
-        const prevPercent = idx > 0 ? Math.min(97, Math.max(3, (pInfo.tiers[idx - 1].target / pInfo.maxTarget) * 100)) : 0;
-        const nextPercent = idx < pInfo.tiers.length - 1 ? Math.min(97, Math.max(3, (pInfo.tiers[idx + 1].target / pInfo.maxTarget) * 100)) : 100;
+        const prevPercent = idx > 0 ? msPos[idx - 1] : 0;
+        const nextPercent = idx < pInfo.tiers.length - 1 ? msPos[idx + 1] : 100;
         const nearestGapPercent = Math.min(percent - prevPercent, nextPercent - percent);
         const APPROX_TRACK_WIDTH_PX = 340; // rough estimate of the track's rendered width, good enough for sizing text
         const labelWidthPx = Math.max(60, Math.min(110, Math.floor((nearestGapPercent / 100) * APPROX_TRACK_WIDTH_PX) - 6));
@@ -3394,7 +3459,7 @@
         // label joined the flex column it would count toward the wrapper's
         // height, which pulls that centering point up and drags the label
         // back over the track/badge instead of sitting cleanly below the node.
-        pbHtml += `<div style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;width:${labelWidthPx}px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">`;
+        pbHtml += `<div class="cc-ms-label" style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;width:${labelWidthPx}px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">`;
         if (isCompleted) {
           pbHtml += `<div style="font-size:7px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0.3px;">REACHED</div>`;
         } else if (!progress.hideMilestoneAmount) {
@@ -3652,7 +3717,35 @@
     startCountdownTicker();
     startCouponTimers();
     startAnnouncementRotator();
+    ccFitProgressLabels();
+    requestAnimationFrame(ccFitProgressLabels);
   }
+
+  /* =================== PROGRESS BAR LABELS =================== */
+  // The milestone labels hang below the bar (absolute), so the bar's bottom
+  // margin has to hold the tallest one: a fixed 48px let a badge + two-line
+  // label run into "Items included" below (extrokids). Labels that stick out
+  // past the section's sides are moved back inside. Measured after each draw
+  // (relative rects, so the drawer's slide-in doesn't matter).
+  function ccFitProgressLabels() {
+    const track = document.querySelector('#cc-drawer .cc-ms-track');
+    if (!track) return;
+    const tr = track.getBoundingClientRect();
+    if (!tr.width) return;
+    const box = (track.closest('.cc-progress-section') || track).getBoundingClientRect();
+    let bottom = tr.bottom;
+    track.querySelectorAll('.cc-ms-label').forEach((el) => {
+      el.style.marginLeft = '0px';
+      const r = el.getBoundingClientRect();
+      let shift = 0;
+      if (r.right > box.right - 2) shift = box.right - 2 - r.right;
+      if (r.left + shift < box.left + 2) shift = box.left + 2 - r.left;
+      if (shift) el.style.marginLeft = Math.round(shift) + 'px';
+      bottom = Math.max(bottom, r.bottom);
+    });
+    track.style.marginBottom = Math.max(48, Math.ceil(bottom - tr.bottom) + 10) + 'px';
+  }
+  window.addEventListener('resize', () => { ccFitProgressLabels(); });
 
   /* =================== ROTATING ANNOUNCEMENT BAR =================== */
   // 2+ messages: one at a time, next every `interval` s (paused while hovered
@@ -4192,12 +4285,18 @@
     ((CONFIG && CONFIG.upsell && CONFIG.upsell.manualRules) || []).forEach((rule) => {
       if (rule.enabled !== false) (rule.upsellProductIds || []).forEach((id) => ids.push(String(id).replace('gid://shopify/Product/', '')));
     });
+    // Rewards are looked up by id (one Storefront API call), never by paging
+    // the catalogue: on extrokids that loaded 8 pages (2000 products) per visit.
+    const rewardIds = [];
     ((CONFIG && CONFIG.progress && CONFIG.progress.enabled && CONFIG.progress.tiers) || []).forEach((tier) => {
-      (tier.products || []).forEach((pid) => { const n = ccExtractNumericId(pid); if (n) ids.push(n); });
+      (tier.products || []).forEach((pid) => { const n = ccExtractNumericId(pid); if (n) rewardIds.push(n); });
     });
     const upsellOn = CONFIG && CONFIG.upsell && CONFIG.upsell.enabled;
-    if (!ids.length && !(upsellOn && CONFIG.upsell.useAI)) return;
-    const run = () => { ccEnsureCatalogProducts(ids).catch(() => {}); };
+    if (!ids.length && !rewardIds.length && !(upsellOn && CONFIG.upsell.useAI)) return;
+    const run = () => {
+      if (rewardIds.length) ccRewardProductDetails(rewardIds).catch(() => {});
+      if (ids.length || (upsellOn && CONFIG.upsell.useAI)) ccEnsureCatalogProducts(ids).catch(() => {});
+    };
     if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
     else setTimeout(run, 1200);
   }
