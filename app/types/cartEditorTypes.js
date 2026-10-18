@@ -16,6 +16,7 @@ export const defaultTier = {
   rewardVariants: {},
   // The gift row's badge text in the drawer ('' = FREE / REWARD).
   rewardBadgeLabel: '',
+  rewardNote: '',
   // Merchant-authored template shown while this tier is NOT YET reached —
   // supports {amount}/{items}/{target} placeholders, filled in dynamically
   // from the current progress mode/cart value at render time (see

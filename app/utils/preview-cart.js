@@ -39,6 +39,7 @@ export function getUnlockedRewards({ tiers, mode, total, count, allProducts = []
         pricing: isFree ? 'free' : 'regular',
         variant: rewardVariant(product, tier.rewardVariants?.[id]),
         badge: rewardBadgeText(tier.rewardBadgeLabel, isFree),
+        note: String(tier.rewardNote || '').replace(/\s+/g, ' ').trim(),
       });
     }
   }

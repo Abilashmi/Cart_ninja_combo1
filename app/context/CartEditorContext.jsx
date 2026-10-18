@@ -172,6 +172,7 @@ function hydrateFromProgressBar(pb, base) {
     rewardPricing: (t.reward_pricing ?? t.rewardPricing) === 'free' ? 'free' : 'regular',
     rewardVariants: (t.reward_variants && typeof t.reward_variants === 'object' && !Array.isArray(t.reward_variants)) ? t.reward_variants : {},
     rewardBadgeLabel: t.reward_badge_label ?? t.rewardBadgeLabel ?? '',
+    rewardNote: t.reward_note ?? t.rewardNote ?? '',
   })) : base.body.progressBar.tiers;
 
   return {

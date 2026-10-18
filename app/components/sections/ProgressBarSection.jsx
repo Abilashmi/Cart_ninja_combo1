@@ -247,6 +247,7 @@ export function ProgressBarSection() {
       rewardPricing: 'free',
       rewardVariants: {},
       rewardBadgeLabel: '',
+      rewardNote: '',
       progressMessage: '',
       completionMessage: '',
       confetti: true,
@@ -417,6 +418,19 @@ export function ProgressBarSection() {
                       autoComplete="off"
                       error={/[<>]/.test(activeTier.rewardBadgeLabel || '') ? 'Remove < and > from the badge text' : undefined}
                       helpText={'The tag shown on the reward product in the cart, e.g. "BIRTHDAY GIFT". Leave empty for FREE GIFT / REWARD. Text with the word "free" only shows when the product really costs nothing.'}
+                    />
+                  )}
+                  {activeTier.rewardProductCount > 0 && (
+                    <TextField
+                      label="Gift note"
+                      value={activeTier.rewardNote || ''}
+                      onChange={(v) => updateTier(activeTierIndex, { rewardNote: v.replace(/\s+/g, ' ').slice(0, 80) })}
+                      placeholder="Added for reaching your milestone"
+                      maxLength={80}
+                      showCharacterCount
+                      autoComplete="off"
+                      error={/[<>]/.test(activeTier.rewardNote || '') ? 'Remove < and > from the note' : undefined}
+                      helpText="The line under a free gift's name in the cart. Leave empty for “Added for reaching your milestone”."
                     />
                   )}
                   {activeTier.rewardProductCount > 0 && (

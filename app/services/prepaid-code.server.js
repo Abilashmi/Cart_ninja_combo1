@@ -58,44 +58,97 @@ export function prepaidOffer(settings, runtime, planLive) {
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
 
 /**
- * Creates the code, or returns { code: null } when there is no live offer
- * (or nothing to discount, or below the offer's minimum).
- * items: [{ variantId, quantity }] (numeric variant ids).
- * Returns { code, percent, amount, endsAt } (amount in the shop currency).
+ * Which gift lines a code may also make free: a gift product of a milestone
+ * the merchant gives away free (rewardTiers = reward-gift-shopify.server.js
+ * buildRewardConfig().tiers, from the saved Progress Bar, never the browser)
+ * that the paid items reach, measured like the reward Function: the cart
+ * without gifts, by amount (shop currency) or item count. One unit per gift.
  */
-export async function createPrepaidCode(admin, { offer, items, now = Date.now(), random = crypto.randomBytes }) {
-  if (!offer) return { code: null };
+export function coveredGifts(gifts, rewardTiers, { paidMinor, paidCount }) {
+  const out = [];
+  for (const gift of gifts) {
+    const reached = (rewardTiers || []).some((tier) => {
+      const min = Number(tier?.min);
+      if (!(min > 0) || !(tier.productIds || []).map(String).includes(String(gift.productId))) return false;
+      return tier.mode === 'count' ? paidCount >= min : paidMinor >= Math.round(min * 100);
+    });
+    if (reached) out.push(gift);
+  }
+  return out;
+}
+
+/**
+ * Creates the code, or returns { code: null } when there is nothing to give
+ * (no live prepaid offer or below its minimum, and no free gift covered).
+ * items: [{ variantId, quantity }] the cart's paid lines (numeric variant ids).
+ * gifts: [{ variantId, quantity }] its free reward lines (_brixReward, at ₹0
+ *   in the cart), rewardTiers: who may have them free (see coveredGifts).
+ *   Shiprocket can't run the reward Function either, so the same code also
+ *   takes each covered gift's price off.
+ * prepaid: false = Shopify showed no prepaid saving in the cart (then only gifts).
+ * Returns { code, percent, amount, endsAt, gifts } (amount in the shop currency,
+ * gifts = how many gift lines the code covers).
+ */
+export async function createPrepaidCode(admin, { offer, items, gifts = [], rewardTiers = null, prepaid = true, now = Date.now(), random = crypto.randomBytes }) {
+  const wantGifts = gifts.length > 0 && Array.isArray(rewardTiers) && rewardTiers.length > 0;
+  if (!offer && !wantGifts) return { code: null };
   const quantities = new Map();
   for (const item of items) {
     const id = String(item.variantId);
     quantities.set(id, (quantities.get(id) || 0) + (Number(item.quantity) || 0));
   }
+  const giftIds = wantGifts ? [...new Set(gifts.map((g) => String(g.variantId)))] : [];
   // Prices from Shopify, never the browser (2 decimals: COD is INR-only).
   const priced = await gql(admin, `#graphql
     query BrixPrepaidPrices($ids: [ID!]!) {
-      nodes(ids: $ids) { ... on ProductVariant { id price product { collections(first: 250) { nodes { id } } } } }
-    }`, { ids: [...quantities.keys()].map(toVariantGid) });
+      nodes(ids: $ids) { ... on ProductVariant { id price product { id collections(first: 250) { nodes { id } } } } }
+    }`, { ids: [...new Set([...quantities.keys(), ...giftIds])].map(toVariantGid) });
   // Like the Function: products in an excluded collection get nothing.
-  const excluded = new Set((offer.excludedCollections || []).map(String));
+  const excluded = new Set(((offer && offer.excludedCollections) || []).map(String));
   const isExcluded = (node) => (node?.product?.collections?.nodes || [])
     .some((c) => excluded.has(String(c?.id || '').split('/').pop()));
-  let subtotalMinor = 0;
+  let subtotalMinor = 0; // the prepaid saving's base (excluded collections left out)
+  let paidMinor = 0; // every paid line, for gift milestones and the code's minimum
+  let paidCount = 0;
   const variantIds = [];
+  const paidVariantIds = [];
+  const byId = new Map();
   for (const node of priced?.nodes || []) {
     const id = String(node?.id || '').split('/').pop();
+    if (id) byId.set(id, node);
     const price = Number(node?.price);
-    if (!quantities.has(id) || !Number.isFinite(price) || price <= 0 || isExcluded(node)) continue;
+    if (!quantities.has(id) || !Number.isFinite(price) || price <= 0) continue;
+    paidMinor += Math.round(price * 100) * quantities.get(id);
+    paidCount += quantities.get(id);
+    paidVariantIds.push(id);
+    if (isExcluded(node)) continue;
     subtotalMinor += Math.round(price * 100) * quantities.get(id);
     variantIds.push(id);
   }
-  if (subtotalMinor <= 0) return { code: null };
-  if (offer.minSubtotal > 0 && subtotalMinor < Math.round(offer.minSubtotal * 100)) return { code: null };
+
   // Same as the Function: X%, but never more than the cap.
-  const capMinor = offer.maxDiscount > 0 ? Math.round(offer.maxDiscount * 100) : Infinity;
-  const savingMinor = Math.min(Math.round((subtotalMinor * offer.percent) / 100), capMinor);
-  if (savingMinor <= 0) return { code: null };
-  const amountMinor = savingMinor + 1; // one paisa more than the Function (see above)
+  let savingMinor = 0;
+  if (offer && prepaid !== false && subtotalMinor > 0 && !(offer.minSubtotal > 0 && subtotalMinor < Math.round(offer.minSubtotal * 100))) {
+    const capMinor = offer.maxDiscount > 0 ? Math.round(offer.maxDiscount * 100) : Infinity;
+    savingMinor = Math.min(Math.round((subtotalMinor * offer.percent) / 100), capMinor);
+  }
+
+  const giftLines = wantGifts ? gifts.map((g) => {
+    const node = byId.get(String(g.variantId));
+    return { variantId: String(g.variantId), productId: String(node?.product?.id || '').split('/').pop(), price: Number(node?.price) };
+  }).filter((g) => g.productId && Number.isFinite(g.price) && g.price > 0) : [];
+  const covered = paidMinor > 0 ? coveredGifts(giftLines, rewardTiers, { paidMinor, paidCount }) : [];
+  const giftMinor = covered.reduce((sum, g) => sum + Math.round(g.price * 100), 0);
+
+  if (savingMinor + giftMinor <= 0) return { code: null };
+  // One paisa more than BRIX's own discounts give together (see above).
+  const amountMinor = savingMinor + giftMinor + 1;
   const amount = (amountMinor / 100).toFixed(2);
+  // Without gifts: exactly the prepaid code as before. With gifts: on every
+  // paid line + the gifts, and the cart's paid lines as the minimum, so the
+  // code can't be used for the gift alone.
+  const entitled = covered.length ? [...new Set([...paidVariantIds, ...covered.map((g) => g.variantId)])] : variantIds;
+  const minimumMinor = covered.length ? paidMinor : subtotalMinor;
 
   const code = newBoxCode(random, 'PP');
   const endsAt = new Date(now + PREPAID_CODE_TTL_MS).toISOString();
@@ -116,10 +169,11 @@ export async function createPrepaidCode(admin, { offer, items, now = Date.now(),
       context: { all: 'ALL' },
       customerGets: {
         value: { discountAmount: { amount, appliesOnEachItem: false } },
-        items: { products: { productVariantsToAdd: variantIds.map(toVariantGid) } },
+        items: { products: { productVariantsToAdd: entitled.map(toVariantGid) } },
       },
-      minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: (subtotalMinor / 100).toFixed(2) } },
-      // Never with the prepaid Function (an order discount), see above.
+      minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: (minimumMinor / 100).toFixed(2) } },
+      // Never with the prepaid Function (an order discount) or the free gift
+      // Function (a product discount), see above.
       combinesWith: { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true },
     },
   });
@@ -127,5 +181,5 @@ export async function createPrepaidCode(admin, { offer, items, now = Date.now(),
   if (errors.length || !data?.discountCodeBasicCreate?.codeDiscountNode?.id) {
     throw new Error(`discountCodeBasicCreate failed: ${JSON.stringify(errors).slice(0, 300)}`);
   }
-  return { code, percent: offer.percent, amount, endsAt };
+  return { code, percent: savingMinor > 0 ? offer.percent : null, amount, endsAt, gifts: covered.length };
 }

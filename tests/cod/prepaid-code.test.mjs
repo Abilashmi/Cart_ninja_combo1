@@ -22,7 +22,8 @@ function fakeAdmin(opts = {}) {
         return new Response(JSON.stringify({ data: { nodes: variables.ids.map((id) => {
           const v = id.split('/').pop();
           if (!prices[v]) return null;
-          return { id, price: prices[v], product: { collections: { nodes: (collections[v] || []).map((c) => ({ id: `gid://shopify/Collection/${c}` })) } } };
+          const productId = (opts.products || {})[v] || `9${v}`;
+          return { id, price: prices[v], product: { id: `gid://shopify/Product/${productId}`, collections: { nodes: (collections[v] || []).map((c) => ({ id: `gid://shopify/Collection/${c}` })) } } };
         }) } }));
       }
       if (op !== 'BrixPrepaidCode') throw new Error(`fake admin: unhandled op ${op}`);
@@ -119,4 +120,67 @@ test('a cap: the code takes off at most the cap (+ one paisa, like X% normally)'
   const small = await createPrepaidCode(fakeAdmin({ prices: { 41: '1000.00' } }), { offer: { percent: 10, minSubtotal: 0, maxDiscount: 200 }, items: [{ variantId: '41', quantity: 1 }], now: NOW, random: fixedRandom });
   assert.equal(small.amount, '100.01', 'under the cap: plain 10%');
   assert.equal(prepaidOffer(SETTINGS, { prepaid: { ...VERIFIED.prepaid, maxDiscount: 200 } }, true).maxDiscount, 200);
+});
+
+/* ── free reward gifts: one code for Shiprocket (it can't run either Function) ── */
+
+// extrokids: the ₹1300 milestone gives the key chain (product 8050779160749) free.
+const GIFT_TIERS = [{ id: '3', mode: 'amount', min: 1300, productIds: ['8050779160749'] }];
+const giftShop = (extra = {}) => fakeAdmin({ prices: { 41: '1856.00', 42: '146.00', 77: '135.00' }, products: { 77: '8050779160749' }, ...extra });
+const createInput = (admin) => admin.calls.find((c) => c.op === 'BrixPrepaidCode').variables.input;
+
+test('gift + prepaid: one code = 10% of the paid lines + the gift + one paisa, on the paid lines and the gift', async () => {
+  const admin = giftShop();
+  const result = await createPrepaidCode(admin, {
+    offer: { percent: 10, minSubtotal: 750 }, items: [{ variantId: '41', quantity: 1 }, { variantId: '42', quantity: 1 }],
+    gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.equal(result.gifts, 1);
+  assert.equal(result.amount, '335.21'); // 10% of 2002 = 200.20 + 135 gift + 0.01
+  const input = createInput(admin);
+  assert.deepEqual(input.customerGets.items.products.productVariantsToAdd, ['gid://shopify/ProductVariant/41', 'gid://shopify/ProductVariant/42', 'gid://shopify/ProductVariant/77']);
+  assert.deepEqual(input.minimumRequirement, { subtotal: { greaterThanOrEqualToSubtotal: '2002.00' } }, 'the paid lines must be there: never the gift alone');
+  assert.deepEqual(input.combinesWith, { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true });
+});
+
+test('gift only (no prepaid saving in the cart): the gift + one paisa', async () => {
+  const admin = giftShop();
+  const result = await createPrepaidCode(admin, {
+    offer: null, items: [{ variantId: '41', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.equal(result.amount, '135.01');
+  assert.equal(result.percent, null);
+  const prepaidShown = await createPrepaidCode(giftShop(), {
+    offer: { percent: 10, minSubtotal: 0 }, prepaid: false, items: [{ variantId: '41', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.equal(prepaidShown.amount, '135.01', 'Shopify showed no prepaid saving: the code adds none');
+});
+
+test('a gift the cart has not earned, or the merchant does not give free, is never covered', async () => {
+  const below = await createPrepaidCode(giftShop(), {
+    offer: null, items: [{ variantId: '42', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.deepEqual(below, { code: null }, '₹146 is below the ₹1300 milestone');
+  const other = await createPrepaidCode(giftShop({ products: { 77: '555' } }), {
+    offer: null, items: [{ variantId: '41', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.deepEqual(other, { code: null }, 'not a free gift product');
+  const noTiers = await createPrepaidCode(giftShop(), {
+    offer: null, items: [{ variantId: '41', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: [], now: NOW, random: fixedRandom,
+  });
+  assert.deepEqual(noTiers, { code: null }, 'no free milestones saved');
+  const withPrepaid = await createPrepaidCode(giftShop(), {
+    offer: { percent: 10, minSubtotal: 0 }, items: [{ variantId: '42', quantity: 1 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: GIFT_TIERS, now: NOW, random: fixedRandom,
+  });
+  assert.equal(withPrepaid.gifts, 0);
+  assert.equal(withPrepaid.amount, '14.61', 'just the prepaid code as before (10% of 146 + one paisa)');
+  assert.deepEqual(withPrepaid.code && 'ok', 'ok');
+});
+
+test('count milestones are measured in paid items, gifts left out', async () => {
+  const tiers = [{ id: '1', mode: 'count', min: 3, productIds: ['8050779160749'] }];
+  const two = await createPrepaidCode(giftShop(), { offer: null, items: [{ variantId: '42', quantity: 2 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: tiers, now: NOW, random: fixedRandom });
+  assert.deepEqual(two, { code: null });
+  const three = await createPrepaidCode(giftShop(), { offer: null, items: [{ variantId: '42', quantity: 3 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: tiers, now: NOW, random: fixedRandom });
+  assert.equal(three.amount, '135.01');
 });

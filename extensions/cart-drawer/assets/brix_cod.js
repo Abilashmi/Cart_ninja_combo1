@@ -2025,7 +2025,7 @@
       if (shiprocketOn()) {
         prepaidCartCode().then(function (r) {
           if (r.failed) { window.location.href = ROOT + 'checkout'; return; }
-          window.BrixCheckout.checkoutCart({ coupon: r.code, fallbackUrl: ROOT + 'checkout' });
+          window.BrixCheckout.checkoutCart({ coupon: r.code, giftsCovered: r.giftsCovered, fallbackUrl: ROOT + 'checkout' });
         });
         return;
       }
@@ -2035,28 +2035,80 @@
   }
 
   // The whole cart to Shiprocket (cart drawers): Shopify already took the
-  // prepaid saving off in the cart (prepaidInCart), but Shiprocket can't run
-  // the Function, so it gets a one-time Shopify code for the same percent
-  // (api.cod.prepaid-code.jsx), on the paid lines like the Function (free
-  // reward gifts left out). Resolves { code } (null = no prepaid saving in
-  // this cart) or { failed: true }: then Shopify checkout, where the saving
-  // the drawer showed still applies.
+  // prepaid saving off in the cart (prepaidInCart) and made the reward gifts
+  // free, but Shiprocket can't run either Function, so it gets ONE one-time
+  // Shopify code (Shiprocket takes one) worth the same percent on the paid
+  // lines plus the free gifts' price (api.cod.prepaid-code.jsx checks each
+  // gift against the merchant's free milestones). Resolves { code,
+  // giftsCovered } (code null = nothing to carry) or { failed: true }: then
+  // Shopify checkout, where both still apply.
+  // What the code request for this cart would be, or null (nothing to carry).
+  function cartCodeRequest(cart) {
+    var isGift = function (it) { var p = it.properties || {}; return p._brixReward === 'true' || p._brixReward === true; };
+    // Free in the cart now (the reward Function made it ₹0).
+    var gifts = (cart.items || []).filter(function (it) { return isGift(it) && Number(it.final_line_price) === 0; })
+      .map(function (it) { return { variantId: it.variant_id, quantity: it.quantity }; });
+    var prepaid = Boolean(paymentValue && paymentValue.prepaid) && prepaidInCart(cart) > 0;
+    if (!prepaid && !gifts.length) return null;
+    // Like the Function: free gifts and combo box lines (already at the box price) never get it.
+    var items = (cart.items || []).filter(function (it) {
+      var p = it.properties || {};
+      return !isGift(it) && !p._brix_combo_id;
+    }).map(function (it) { return { variantId: it.variant_id, quantity: it.quantity }; });
+    if (!items.length) return null;
+    var key = function (list) { return list.map(function (l) { return l.variantId + 'x' + l.quantity; }).sort().join(','); };
+    return {
+      body: { items: items, gifts: gifts, prepaid: prepaid },
+      gifts: gifts.length,
+      // The cart token too: a code is single use, and an order starts a new cart.
+      signature: [cart.token || '', key(items), key(gifts), prepaid ? 1 : 0].join('|'),
+    };
+  }
+
+  // Codes made ahead for a cart (prepareCartCode), reused by its checkout:
+  // making one takes Shopify ~3 s, which the shopper used to wait on after
+  // tapping Checkout. A failed one is dropped so the tap tries again.
+  var CART_CODE_TTL_MS = 90 * 60 * 1000;
+  var cartCodes = {};
+  function cartCodeFor(req) {
+    var hit = cartCodes[req.signature];
+    if (hit && Date.now() - hit.at < CART_CODE_TTL_MS) return hit.promise;
+    var promise = api('prepaid-code', req.body).then(function (json) {
+      return json && json.success ? { code: json.code || null, giftsCovered: req.gifts > 0 && Number(json.gifts) >= req.gifts } : { failed: true };
+    }, function () { return { failed: true }; }).then(function (r) {
+      if (r.failed && cartCodes[req.signature] && cartCodes[req.signature].promise === promise) delete cartCodes[req.signature];
+      return r;
+    });
+    cartCodes[req.signature] = { at: Date.now(), promise: promise };
+    return promise;
+  }
+
+  // The whole cart to Shiprocket (cart drawers): Shopify already took the
+  // prepaid saving off in the cart (prepaidInCart) and made the reward gifts
+  // free, but Shiprocket can't run either Function, so it gets ONE one-time
+  // Shopify code (Shiprocket takes one) worth the same percent on the paid
+  // lines plus the free gifts' price (api.cod.prepaid-code.jsx checks each
+  // gift against the merchant's free milestones). Resolves { code,
+  // giftsCovered } (code null = nothing to carry) or { failed: true }: then
+  // Shopify checkout, where both still apply.
   function prepaidCartCode() {
     return loadConfig().then(function () {
-      if (!paymentValue || !paymentValue.prepaid) return { code: null };
       return fetchCart().then(function (cart) {
-        if (!(prepaidInCart(cart) > 0)) return { code: null };
-        // Like the Function: free gifts and combo box lines (already at the box price) never get it.
-        var items = (cart.items || []).filter(function (it) {
-          var p = it.properties || {};
-          return p._brixReward !== 'true' && p._brixReward !== true && !p._brix_combo_id;
-        }).map(function (it) { return { variantId: it.variant_id, quantity: it.quantity }; });
-        if (!items.length) return { code: null };
-        return api('prepaid-code', { items: items }).then(function (json) {
-          return json && json.success ? { code: json.code || null } : { failed: true };
-        });
+        var req = cartCodeRequest(cart);
+        return req ? cartCodeFor(req) : { code: null };
       });
     }).catch(function () { return { failed: true }; });
+  }
+
+  // Makes the code for this cart now (the drawer calls it while open), so
+  // Checkout finds it ready. Never throws.
+  function prepareCartCode(cart) {
+    return loadConfig().then(function () {
+      return cart ? cart : fetchCart();
+    }).then(function (c) {
+      var req = cartCodeRequest(c);
+      if (req) cartCodeFor(req);
+    }).catch(function () { /* the tap makes it instead */ });
   }
 
   // The cart's price for price tags: after its discounts when known.
@@ -3151,6 +3203,7 @@
     mountDrawerButton: mountDrawerButton,
     paymentSnapshot: Pay.snapshot,
     prepaidCartCode: prepaidCartCode,
+    prepareCartCode: prepareCartCode,
   };
 
   function init() {

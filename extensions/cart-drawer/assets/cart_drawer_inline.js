@@ -682,6 +682,35 @@
     return tier.badgeLabel;
   }
 
+  // The line under a free gift's title: the merchant's own text for the
+  // tier that product belongs to (Cart Editor → Progress Bar → Gift note).
+  function ccRewardNoteText(item) {
+    const tiers = (CONFIG && CONFIG.progress && CONFIG.progress.tiers) || [];
+    const pid = String(item.product_id);
+    const tier = tiers.find((t) => t.noteLabel && (t.products || []).some((p) => ccExtractNumericId(p) === pid));
+    return tier ? tier.noteLabel : 'Added for reaching your milestone';
+  }
+
+  // Gifts the shopper took out with ✕: never put back in this cart (the
+  // drawer used to add a missing gift again on the next redraw). Per cart
+  // token, so a new cart offers it again.
+  const CC_DECLINED_KEY = 'brixGiftDeclined';
+  function ccDeclinedGifts() {
+    const token = _ccLastCart && _ccLastCart.token;
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(CC_DECLINED_KEY) || 'null');
+      if (saved && token && saved.token === token && Array.isArray(saved.ids)) return new Set(saved.ids.map(String));
+    } catch (e) { /* storage blocked: only costs the gift coming back */ }
+    return new Set();
+  }
+  function ccDeclineGift(productId) {
+    const token = _ccLastCart && _ccLastCart.token;
+    if (!token || !productId) return;
+    const ids = ccDeclinedGifts();
+    ids.add(String(productId));
+    try { window.sessionStorage.setItem(CC_DECLINED_KEY, JSON.stringify({ token, ids: [...ids] })); } catch (e) { /* see above */ }
+  }
+
   function ccClampInt(v, min, max, def) {
     const n = parseInt(v, 10);
     return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def;
@@ -766,6 +795,8 @@
           variants: ccRewardVariantMap(t.rewardVariants || t.reward_variants),
           // The gift row's badge text ('' = FREE GIFT / REWARD).
           badgeLabel: String(t.rewardBadgeLabel || t.reward_badge_label || '').trim().slice(0, 30),
+          // The line under a free gift's title ('' = "Added for reaching your milestone").
+          noteLabel: String(t.rewardNote || t.reward_note || '').replace(/\s+/g, ' ').trim().slice(0, 80),
           rewardType: t.rewardType || 'product',
           iconType: t.iconType || 'preset',
           // The admin's ProgressBarSection tier editor saves the icon key
@@ -2656,7 +2687,8 @@
     const chargedFreeLines = rewardLines.filter((it) => freePricedIds.has(String(it.product_id)) && it.final_line_price > 0);
     if (chargedFreeLines.length > 0) _ccFreeGiftUnavailable = true;
 
-    const toAdd = [...wantedProductIds].filter((pid) => !presentProductIds.has(pid) && !(_ccFreeGiftUnavailable && freePricedIds.has(pid)));
+    const declined = ccDeclinedGifts();
+    const toAdd = [...wantedProductIds].filter((pid) => !presentProductIds.has(pid) && !declined.has(pid) && !(_ccFreeGiftUnavailable && freePricedIds.has(pid)));
     const toRemove = rewardLines.filter((it) => !wantedProductIds.has(String(it.product_id)) || chargedFreeLines.includes(it));
 
     if (toAdd.length === 0 && toRemove.length === 0) return;
@@ -2816,7 +2848,30 @@
   // saving Shopify showed in the cart as a one-time code (brix_cod.js
   // prepaidCartCode, Shiprocket can't run the Function); if that code can't
   // be made, Shopify checkout, where the saving still applies.
+  // A tap on Checkout shows at once that it's on its way (the hand-off to
+  // Shiprocket can take a moment); the next drawer render draws it afresh.
+  function ccCheckoutBusy() {
+    document.querySelectorAll('#cc-drawer [data-cc-checkout-label]').forEach((el) => { el.textContent = 'Opening checkout…'; });
+    document.querySelectorAll('#cc-standard-checkout-btn, #cc-animated-checkout-btn').forEach((b) => { b.style.opacity = '0.75'; b.style.cursor = 'progress'; });
+  }
+
+  // Shiprocket shops: while the drawer sits open on a cart, BRIX makes the
+  // checkout's one-time code (brix_cod.js prepareCartCode), so Checkout
+  // doesn't wait ~3 s for Shopify to create it after the tap.
+  let _ccPrepareTimer = null;
+  function ccPrepareCheckoutCode(cart) {
+    if (_ccPrepareTimer) clearTimeout(_ccPrepareTimer);
+    if (!CONFIG || !CONFIG.shiprocketEnabled || !window.BrixCod || !window.BrixCod.prepareCartCode) return;
+    if (appliedCouponCodes.length > 0 || !cart || !(cart.items || []).length) return;
+    _ccPrepareTimer = setTimeout(() => {
+      _ccPrepareTimer = null;
+      const overlay = document.getElementById('cc-overlay');
+      if (overlay && overlay.classList.contains('active') && _ccAddsPending === 0) window.BrixCod.prepareCartCode(_ccLastCart || cart);
+    }, 800);
+  }
+
   function ccGoToCheckout(href) {
+    ccCheckoutBusy();
     // The drawer can show an item Shopify hasn't confirmed yet (Fast Add
     // opens at the tap): checkout waits for it (at most 8 s).
     if (_ccAddsPending > 0 && Date.now() - _ccAddsPendingSince < 8000) {
@@ -2832,6 +2887,8 @@
         if (r && r.failed) { window.location.href = href; return; }
         window.BrixCheckout.checkoutCart({
           coupon: own || (r && r.code) || null,
+          // The code also makes the free gifts free (else they stay on Shopify checkout).
+          giftsCovered: Boolean(!own && r && r.giftsCovered),
           fallbackUrl: href,
           onOpen: closeDrawer,
         });
@@ -3094,7 +3151,7 @@
     var key = String(item.key).replace(/'/g, '');
 
     var price = isFreeGift
-      ? '<span class="bxcd-item__note">Added for reaching your milestone</span>'
+      ? '<span class="bxcd-item__note">' + escapeHtml(ccRewardNoteText(item)) + '</span>'
       : '<span class="bxcd-item__unit">' + formatMoney(unit) + '</span>' +
         (original > unit ? '<span class="bxcd-item__compare">' + formatMoney(original) + '</span>' : '');
 
@@ -3121,7 +3178,7 @@
         ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
         : '<span style="font-size:28px;" aria-hidden="true">📦</span>') + '</div>' +
       '<p class="bxcd-item__title">' + title + '</p>' +
-      (pending ? '' : '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\')">' + CC_ICON_X + '</button>') +
+      (pending ? '' : '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\'' + (isGift ? ', \'' + String(item.product_id).replace(/\D/g, '') + '\'' : '') + ')">' + CC_ICON_X + '</button>') +
       (variant ? '<p class="bxcd-item__variant">' + variant + '</p>' : '') +
       '<div class="bxcd-item__price">' + price + '</div>' +
       (qty ? '<div class="bxcd-item__qty">' + qty + '</div>' : '') +
@@ -3193,7 +3250,11 @@
     const isGiftLine = (it) => !!(it.properties && it.properties._brixReward === 'true');
     const giftValue = cart.items.filter(isGiftLine).reduce((sum, it) => sum + it.final_line_price, 0);
     const giftQty = cart.items.filter(isGiftLine).reduce((sum, it) => sum + it.quantity, 0);
-    const cartTotal = (cart.total_price - giftValue) / 100;
+    // On the lines' subtotal, before cart-level discounts, like the free gift
+    // Function: with the prepaid 10% taken off first, a ₹1350 cart measured
+    // ₹1215 and showed "₹85 away" from a ₹1300 gift Shopify would give free.
+    const linesSubtotal = Number.isFinite(Number(cart.items_subtotal_price)) ? Number(cart.items_subtotal_price) : cart.total_price;
+    const cartTotal = (linesSubtotal - giftValue) / 100;
     const cartQty = cart.item_count - giftQty;
     // The cart's own lines (fresh from /cart.js on every render) decide whether
     // there is anything to check out: the items list, the pricing summary and
@@ -3717,6 +3778,7 @@
     startCountdownTicker();
     startCouponTimers();
     startAnnouncementRotator();
+    if (!opts.cart) ccPrepareCheckoutCode(cart);
     ccFitProgressLabels();
     requestAnimationFrame(ccFitProgressLabels);
   }
@@ -4676,7 +4738,9 @@
     updateQuantity(key, Math.max(0, qty));
   };
 
-  window.ccRemoveItem = function (key) {
+  // giftProductId: a reward line the shopper takes out stays out (ccDeclineGift).
+  window.ccRemoveItem = function (key, giftProductId) {
+    if (giftProductId) ccDeclineGift(giftProductId);
     removeItem(key);
   };
 

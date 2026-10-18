@@ -163,6 +163,18 @@ function cleanRewardVariants(v, products) {
   return Object.keys(out).length ? JSON.stringify(out) : null;
 }
 
+// The line under a free gift's title in the drawer ('' = the default text).
+export const REWARD_NOTE_MAX = 80;
+export async function ensureRewardNoteColumn(db) {
+  await ensureColumns(db, 'progress_bar_tiers.reward_note', 'progress_bar_tiers', [
+    { name: 'reward_note', ddl: '`reward_note` VARCHAR(80) NULL' },
+  ]);
+}
+function cleanRewardNote(v) {
+  const s = String(v ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, REWARD_NOTE_MAX);
+  return s || null;
+}
+
 function cleanRewardBadge(v) {
   const s = String(v ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, REWARD_BADGE_MAX);
   return s || null;
@@ -395,6 +407,7 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
   const db = getDb();
   await ensureRewardPricingColumn(db);
   await ensureRewardVariantColumns(db);
+  await ensureRewardNoteColumn(db);
   const ex = (await fetchProgressBar(db, shop)) || {};
 
   const progressBarAllowed = canPublishFeature(planKey, 'progress_bar');
@@ -451,8 +464,8 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
           INSERT INTO progress_bar_tiers
             (shop_domain, settings_id, min_value, min_quantity, description,
              reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing,
-             reward_variants, reward_badge_label, is_active, sort_order)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
+             reward_variants, reward_badge_label, reward_note, is_active, sort_order)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
         `, [
           shop, settingsId,
           t.min_value ?? t.minValue ?? 0,
@@ -470,6 +483,9 @@ export async function saveProgressBarSettings(shop, planKey, patch) {
           cleanRewardBadge(t.reward_badge_label !== undefined || t.rewardBadgeLabel !== undefined
             ? (t.reward_badge_label ?? t.rewardBadgeLabel)
             : ex.tiers?.[i]?.reward_badge_label),
+          cleanRewardNote(t.reward_note !== undefined || t.rewardNote !== undefined
+            ? (t.reward_note ?? t.rewardNote)
+            : ex.tiers?.[i]?.reward_note),
           i,
         ]);
       }

@@ -37,7 +37,7 @@ globalThis.fetch = async (url, init) => {
   // there" is both the real production state and an assertion that the
   // ALTER handler below stays unreached on the normal path.
   if (q.startsWith('SELECT COLUMN_NAME FROM information_schema.COLUMNS')) {
-    const COLUMNS_BY_TABLE = { progress_bar_tiers: ['reward_pricing', 'reward_variants', 'reward_badge_label'] };
+    const COLUMNS_BY_TABLE = { progress_bar_tiers: ['reward_pricing', 'reward_variants', 'reward_badge_label', 'reward_note'] };
     return ok((COLUMNS_BY_TABLE[params[0]] || []).map((c) => ({ COLUMN_NAME: c })));
   }
   if (q.startsWith('ALTER TABLE progress_bar_tiers')) return done();
@@ -52,8 +52,8 @@ globalThis.fetch = async (url, init) => {
   }
   if (q.startsWith('INSERT INTO progress_bar_tiers')) {
     if (q.includes('min_quantity')) {
-      const [shop, settings_id, min_value, min_quantity, description, reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, reward_variants, reward_badge_label, sort_order] = params;
-      tiers.push({ id: nextTierId++, shop_domain: shop, settings_id, min_value, min_quantity, description, reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, reward_variants, reward_badge_label, is_active: 1, sort_order });
+      const [shop, settings_id, min_value, min_quantity, description, reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, reward_variants, reward_badge_label, reward_note, sort_order] = params;
+      tiers.push({ id: nextTierId++, shop_domain: shop, settings_id, min_value, min_quantity, description, reward_type, icon_type, icon_preset, icon_custom_svg, reward_products, reward_pricing, reward_variants, reward_badge_label, reward_note, is_active: 1, sort_order });
     } else {
       const [shop, settings_id, min_value, reward_type, icon_preset, reward_products, reward_pricing] = params;
       tiers.push({ id: nextTierId++, shop_domain: shop, settings_id, min_value, reward_type, icon_preset, reward_products, reward_pricing, is_active: 1, sort_order: 0 });

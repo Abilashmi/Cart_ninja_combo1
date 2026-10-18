@@ -76,19 +76,16 @@
   }
 
   // Shiprocket's cart checkout takes its coupon from the `discount_code`
-  // cookie. Shopify sets that cookie itself for /discount/<code>; the direct
-  // write is only a backstop if that request fails.
+  // cookie: written here at once. Shopify's own /discount/<code> (which also
+  // puts the code on its cart, for the Shopify checkout fallback) runs
+  // alongside; waiting for it held Shiprocket back ~1.4 s.
   function syncCoupon(code) {
     if (code) {
       var url = rootUrl() + 'discount/' + encodeURIComponent(code) + '?redirect=' + encodeURIComponent(rootUrl() + 'cart.js');
-      return window.fetch(url, { credentials: 'same-origin' })
-        .catch(function () { return null; })
-        .then(function () {
-          if (readCookie('discount_code') !== code) {
-            document.cookie = 'discount_code=' + encodeURIComponent(code) + '; path=/';
-          }
-          remember(code);
-        });
+      document.cookie = 'discount_code=' + encodeURIComponent(code) + '; path=/';
+      remember(code);
+      window.fetch(url, { credentials: 'same-origin' }).catch(function () { return null; });
+      return Promise.resolve();
     }
     // No coupon applied now: drop only a code this helper set earlier (the
     // shopper applied then removed it). A cookie from the merchant's own
@@ -104,15 +101,17 @@
   // Pack prices, weight combo box prices and free reward gifts are applied by
   // our Shopify Functions, which only run in Shopify's own checkout —
   // Shiprocket would charge those lines at full price. A cart holding any of
-  // them stays on Shopify checkout. If the cart can't be read, stay on Shopify too.
-  function cartNeedsShopifyCheckout() {
+  // them stays on Shopify checkout, except free gifts the one-time code
+  // already covers (giftsCovered, brix_cod.js prepaidCartCode). If the cart
+  // can't be read, stay on Shopify too.
+  function cartNeedsShopifyCheckout(giftsCovered) {
     return window.fetch(rootUrl() + 'cart.js', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
       .then(function (response) { return response.json(); })
       .then(function (cart) {
         return (cart.items || []).some(function (item) {
           var properties = item.properties || {};
           if (properties._brix_pack_id || properties._brix_combo_id) return true;
-          return properties._brixReward === 'true' && Number(item.final_line_price) === 0;
+          return !giftsCovered && properties._brixReward === 'true' && Number(item.final_line_price) === 0;
         });
       })
       .catch(function () { return true; });
@@ -139,7 +138,7 @@
   }
 
   // Checks out the whole current cart (the cart drawer's checkout button).
-  // options: { coupon, fallbackUrl, onOpen }
+  // options: { coupon, giftsCovered, fallbackUrl, onOpen }
   function checkoutCart(options) {
     var fallbackUrl = (options && options.fallbackUrl) || rootUrl() + 'checkout';
     if (busy) return;
@@ -147,7 +146,9 @@
     waitForShiprocket()
       .then(function (events) {
         if (!events) { go(fallbackUrl); return null; }
-        return Promise.all([cartNeedsShopifyCheckout(), syncCoupon(options && options.coupon)]).then(function (results) {
+        // giftsCovered only counts with the code that covers them.
+        var giftsCovered = Boolean(options && options.giftsCovered && options.coupon);
+        return Promise.all([cartNeedsShopifyCheckout(giftsCovered), syncCoupon(options && options.coupon)]).then(function (results) {
           if (results[0]) { go(fallbackUrl); return; }
           launch(function () { events.buyCart(null); }, fallbackUrl, options && options.onOpen);
         });

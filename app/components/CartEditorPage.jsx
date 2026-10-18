@@ -149,6 +149,7 @@ function CartEditorContent() {
             reward_pricing: t.rewardPricing === 'free' ? 'free' : 'regular',
             reward_variants: t.rewardVariants || {},
             reward_badge_label: t.rewardBadgeLabel || '',
+            reward_note:    t.rewardNote || '',
             sort_order:     i,
           })),
         }),

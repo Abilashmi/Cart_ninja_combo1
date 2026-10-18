@@ -63,7 +63,7 @@ function GiftRow({ reward }) {
       <button type="button" className="bxcd-item__remove" aria-label="Remove product" title="Remove" onClick={stop()}>{X_ICON}</button>
       {variantTitle && <p className="bxcd-item__variant">{variantTitle}</p>}
       <div className="bxcd-item__price">
-        {isFree ? <span className="bxcd-item__note">Added for reaching your milestone</span> : <span className="bxcd-item__unit">{price > 0 ? formatMoney(price) : ''}</span>}
+        {isFree ? <span className="bxcd-item__note">{reward.note || 'Added for reaching your milestone'}</span> : <span className="bxcd-item__unit">{price > 0 ? formatMoney(price) : ''}</span>}
       </div>
       <div className="bxcd-item__total">
         {isFree ? (
