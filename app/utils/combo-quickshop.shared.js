@@ -36,6 +36,19 @@ export function createQuickShopKit(core) {
     qs_chip_image_size: 64, // px on desktop; phones get 80% of it
     qs_chip_image_shape: 'circle', // circle | rounded | square
     qs_chip_images: null, // { [collection handle]: 'https://…' }
+    // The merchant's own name for a collection on the page (chips, picture
+    // bar, section headings); missing / empty = the Shopify collection name.
+    qs_col_titles: null, // { [collection handle]: 'Tees' }
+    qs_chips_align: 'left', // left | center | right: the chip row and the picture bar
+    // Products in one section per collection (in the Box Collections order)
+    // under its name, instead of one mixed grid. A product in two collections
+    // shows in the first. Products added under "Products on the page" come
+    // last, under qs_extra_title (empty = no heading).
+    qs_group_by_collection: false,
+    qs_group_title_align: 'left', // left | center | right
+    qs_group_title_size: null, // px; null = 20 (phones 17)
+    qs_group_title_size_m: null,
+    qs_extra_title: '',
     qs_filter_type: true,
     qs_filter_type_label: 'Type',
     qs_filter_brand: true,
@@ -101,6 +114,10 @@ export function createQuickShopKit(core) {
     // together (null / 0 = no limit); + stops there and the text says why.
     qs_max_per_product: null,
     qs_max_per_product_text: 'You can add up to {{max}} of each product.',
+    // Cards drawn at once; "Show more" adds the next lot. Filters always
+    // search every product of the page, not just the cards drawn.
+    qs_page_size: 40,
+    qs_more_text: 'Show more',
     qs_show_off: true,
     qs_show_weight: true,
     qs_badge_tag: 'bestseller',
@@ -210,12 +227,40 @@ export function createQuickShopKit(core) {
     return Math.max(min, Math.min(max, n));
   }
 
+  /** A collection's name on the page: the merchant's own, else Shopify's. */
+  function collectionTitle(config, handle, collectionNames) {
+    var own = opt(config, 'qs_col_titles');
+    var mine = own && typeof own === 'object' ? String(own[handle] || '').trim().slice(0, 60) : '';
+    return mine || (collectionNames && collectionNames[handle]) || handle;
+  }
+
+  function sideOf(config, key) {
+    var a = opt(config, key);
+    return a === 'center' || a === 'right' ? a : 'left';
+  }
+
   /* ── most of one product per box (qs_max_per_product) ──────────────── */
 
   /** The limit (1-99), or 0 = none. */
   function maxPerProduct(config) {
     var n = Math.floor(Number(opt(config, 'qs_max_per_product')));
     return isFinite(n) && n > 0 ? Math.min(n, 99) : 0;
+  }
+
+  /** Cards per "Show more" step (12-200, default 40). */
+  function pageSize(config) {
+    var n = Math.floor(Number(opt(config, 'qs_page_size')));
+    return isFinite(n) && n > 0 ? Math.max(12, Math.min(n, 200)) : DEFAULTS.qs_page_size;
+  }
+
+  // What the shopper has filtered by: "Show more" counts only while it stays
+  // the same, so a new filter starts again from the first cards.
+  function filterKey(ui) {
+    var dd = ui && ui.dd ? ui.dd : {};
+    var keys = [];
+    for (var k in dd) if (Object.prototype.hasOwnProperty.call(dd, k) && dd[k]) keys.push(k + '=' + dd[k]);
+    keys.sort();
+    return String((ui && ui.chip) || 'all') + '|' + (ui && ui.instock ? 1 : 0) + '|' + keys.join('&');
   }
 
   /** How many of a product the box holds, all its variants together. selection = { variantId: { productId, qty } }. */
@@ -758,7 +803,7 @@ export function createQuickShopKit(core) {
     var pictures = opt(config, 'qs_chip_style') === 'images';
     if (source === 'collections' && handles.length > 1) {
       for (var h = 0; h < handles.length; h++) {
-        var chip = { value: 'c:' + handles[h], label: collectionNames[handles[h]] || handles[h] };
+        var chip = { value: 'c:' + handles[h], label: collectionTitle(config, handles[h], collectionNames) };
         if (pictures) { chip.picture = true; chip.image = collectionImage(config, handles[h], collectionImages, productsByHandle); }
         chipValues.push(chip);
       }
@@ -1054,6 +1099,12 @@ export function createQuickShopKit(core) {
     } : null;
     var row = filterRow(config, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {}, groupInfo);
     var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending, groupInfo);
+    // A page of cards at a time: big collections (1000+ products) would make
+    // every redraw slow. "Show more" (ui.pages) adds the next lot.
+    var step = pageSize(config);
+    var pages = ui.pagesFor === filterKey(ui) ? Math.max(1, Math.floor(Number(ui.pages)) || 1) : 1;
+    var more = Math.max(0, shown.length - step * pages);
+    if (more) shown = shown.slice(0, step * pages);
     var cards = [];
     var perProduct = maxPerProduct(config);
     var badgeTag = String(opt(config, 'qs_badge_tag') || '').trim();
@@ -1087,6 +1138,31 @@ export function createQuickShopKit(core) {
       });
     }
 
+    // One section per collection, in the merchant's order (qs_group_by_collection).
+    var sections = null;
+    if (on(config, 'qs_group_by_collection') && cards.length) {
+      var home = {};
+      // A collection chip picked: everything shown is that collection's.
+      var picked = ui.chip && ui.chip.indexOf('c:') === 0 ? ui.chip.slice(2) : '';
+      if (picked) for (var pk = 0; pk < cards.length; pk++) home[cards[pk].id] = picked;
+      for (var ph = 0; ph < pageHandles.length; ph++) {
+        var inCol = (input.productsByHandle || {})[pageHandles[ph]] || [];
+        for (var pi = 0; pi < inCol.length; pi++) if (!home[inCol[pi].id]) home[inCol[pi].id] = pageHandles[ph];
+      }
+      sections = [];
+      for (var sh = 0; sh < pageHandles.length; sh++) {
+        var handle = pageHandles[sh];
+        var inSection = [];
+        for (var sc = 0; sc < cards.length; sc++) if (home[cards[sc].id] === handle) inSection.push(cards[sc]);
+        if (!inSection.length) continue;
+        sections.push({
+          handle: handle,
+          title: handle === EXTRA_HANDLE ? String(opt(config, 'qs_extra_title') || '').trim() : collectionTitle(config, handle, input.collectionNames || {}),
+          cards: inSection,
+        });
+      }
+    }
+
     // The product popup (ui.popup = product id), while that card is shown.
     var popup = null;
     if (ui.popup && on(config, 'qs_product_popup')) {
@@ -1110,6 +1186,9 @@ export function createQuickShopKit(core) {
       description: config.collection_description || '',
       row: row,
       cards: cards,
+      sections: sections,
+      // Products left after the cards drawn ("Show more").
+      more: more,
       empty: !all.length ? 'No products yet. Choose collections for this combo.' : (!cards.length ? 'Nothing matches these filters.' : ''),
       view: view,
       box: box,
@@ -1228,6 +1307,7 @@ export function createQuickShopKit(core) {
       ['qs_card_text_size', '--bxq-ctext-fs'], ['qs_card_text_size_m', '--bxq-ctext-fs-m'],
       ['qs_card_price_size', '--bxq-price-fs'], ['qs_card_price_size_m', '--bxq-price-fs-m'],
       ['qs_filter_font_size', '--bxq-chip-fs'], ['qs_filter_font_size_m', '--bxq-chip-fs-m'],
+      ['qs_group_title_size', '--bxq-sec-fs'], ['qs_group_title_size_m', '--bxq-sec-fs-m'],
     ];
     for (var sz = 0; sz < sizes.length; sz++) {
       var px = sizePx(config, sizes[sz][0]);
@@ -1252,8 +1332,15 @@ export function createQuickShopKit(core) {
   }
 
   // Collection chips as pictures: a row of tiles above the filter chips.
-  function renderCollectionBar(chips) {
-    var html = '<div class="bxq-colbar" role="tablist" aria-label="Collections">';
+  // qs_chips_align: margins push a scrolling row to the centre / right while
+  // it fits, and it still scrolls from its start when it doesn't.
+  function alignClass(config) {
+    var a = sideOf(config, 'qs_chips_align');
+    return a === 'left' ? '' : ' bxq-al-' + a;
+  }
+
+  function renderCollectionBar(chips, config) {
+    var html = '<div class="bxq-colbar' + alignClass(config) + '" role="tablist" aria-label="Collections">';
     for (var i = 0; i < chips.length; i++) {
       var chip = chips[i];
       html += '<button type="button" role="tab" class="bxq-col' + (chip.on ? ' is-on' : '') + '" aria-selected="' + (chip.on ? 'true' : 'false') + '" data-combo-action="qs-chip" data-value="' + esc(chip.value) + '">'
@@ -1429,10 +1516,10 @@ export function createQuickShopKit(core) {
     var pictureChips = [];
     var chips = [];
     for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
-    var bar = pictureChips.length ? renderCollectionBar(pictureChips) : '';
+    var bar = pictureChips.length ? renderCollectionBar(pictureChips, model.config) : '';
     var groupRows = renderChipGroups(row.groups || []) + renderSliders(row.sliders || []);
     if (!chips.length && !row.menus.length) return bar + groupRows;
-    var html = bar + '<div class="bxq-filters">';
+    var html = bar + '<div class="bxq-filters' + alignClass(model.config) + '">';
     html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? ' is-active' : '') + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + '</button>';
     for (var i = 0; i < chips.length; i++) {
       var chip = chips[i];
@@ -1932,7 +2019,7 @@ export function createQuickShopKit(core) {
       // Picture collection bar stays above; the rest in the left column.
       var pictures = [];
       for (var pc = 0; pc < model.row.chips.length; pc++) if (model.row.chips[pc].picture) pictures.push(model.row.chips[pc]);
-      if (pictures.length) html += renderCollectionBar(pictures);
+      if (pictures.length) html += renderCollectionBar(pictures, config);
       html += '<div class="bxq-layout"><aside class="bxq-side" aria-label="Filters">' + renderSideFilters(model) + '</aside><div class="bxq-main">';
     } else {
       html += renderFilters(model);
@@ -1941,10 +2028,24 @@ export function createQuickShopKit(core) {
       }
     }
     if (model.empty) html += '<div class="bxq-empty">' + esc(model.empty) + '</div>';
-    else {
+    else if (model.sections) {
+      var titleAlign = sideOf(config, 'qs_group_title_align');
+      for (var sx = 0; sx < model.sections.length; sx++) {
+        var section = model.sections[sx];
+        html += '<section class="bxq-section" data-collection="' + esc(section.handle) + '">';
+        if (section.title) html += '<h2 class="bxq-section-title" style="text-align:' + titleAlign + '">' + esc(section.title) + '</h2>';
+        html += '<div class="bxq-grid">';
+        for (var sk = 0; sk < section.cards.length; sk++) html += renderCard(model, section.cards[sk]);
+        html += '</div></section>';
+      }
+    } else {
       html += '<div class="bxq-grid">';
       for (var c = 0; c < model.cards.length; c++) html += renderCard(model, model.cards[c]);
       html += '</div>';
+    }
+    if (!model.empty && model.more > 0) {
+      html += '<div class="bxq-more-wrap"><button type="button" class="bxq-more" data-combo-action="qs-more">'
+        + esc(cleanText(opt(config, 'qs_more_text'), 40) || DEFAULTS.qs_more_text) + ' <span class="bxq-more-n">(' + model.more + ')</span></button></div>';
     }
     if (left) html += '</div></div>';
     html += renderBar(model);
@@ -1969,6 +2070,13 @@ export function createQuickShopKit(core) {
     if (action === 'qs-pick') { ui.dd[menu] = value || ''; ui.menu = null; return true; }
     if (action === 'qs-group') { ui.dd[menu] = value && ui.dd[menu] !== value ? value : ''; ui.menu = null; return true; }
     if (action === 'qs-clear') { ui.chip = 'all'; ui.instock = false; ui.dd = {}; ui.menu = null; return true; }
+    if (action === 'qs-more') {
+      var key = filterKey(ui);
+      ui.pages = (ui.pagesFor === key ? Math.max(1, Math.floor(Number(ui.pages)) || 1) : 1) + 1;
+      ui.pagesFor = key;
+      ui.menu = null;
+      return true;
+    }
     if (action === 'qs-view') { ui.popup = el && el.getAttribute ? el.getAttribute('data-product-id') : null; ui.popupImage = 0; ui.menu = null; return true; }
     if (action === 'qs-view-close') { ui.popup = null; ui.popupImage = 0; return true; }
     if (action === 'qs-view-img') { ui.popupImage = Math.max(0, Math.round(Number(value)) || 0); return true; }
@@ -2004,6 +2112,7 @@ export function createQuickShopKit(core) {
     buildModel: buildModel,
     render: render,
     maxPerProduct: maxPerProduct,
+    pageSize: pageSize,
     productQty: productQty,
     productLimitMessage: productLimitMessage,
     applyUiAction: applyUiAction,
@@ -2107,6 +2216,12 @@ export const QUICK_SHOP_CSS = `
 .bxq-chip--icon{padding:9px 14px;position:relative;}
 .bxq-colbar{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 12px;margin-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 .bxq-colbar::-webkit-scrollbar{display:none;}
+.bxq-al-center>:first-child,.bxq-al-right>:first-child{margin-left:auto;}
+.bxq-al-center>:last-child{margin-right:auto;}
+.bxq-section{margin:0 0 26px;}
+.bxq-section-title{margin:6px 0 14px;font-size:var(--bxq-sec-fs,20px);line-height:1.25;font-weight:800;color:var(--bxq-text);}
+.bxq--m .bxq-section{margin-bottom:20px;}
+.bxq--m .bxq-section-title{font-size:var(--bxq-sec-fs-m,17px);margin:4px 0 10px;}
 .bxq-col{flex:0 0 auto;width:calc(var(--bxq-col-size) + 16px);display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;margin:0;border:0;background:none;cursor:pointer;font:inherit;color:var(--bxq-text) !important;}
 .bxq-col-img{width:var(--bxq-col-size);height:var(--bxq-col-size);border-radius:var(--bxq-col-r);overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;color:var(--bxq-accent);transition:box-shadow .15s;}
 .bxq-col-img img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -2170,6 +2285,10 @@ export const QUICK_SHOP_CSS = `
 .bxq-cta--stepper span{font-weight:800;}
 .bxq--m .bxq-cta{min-height:36px;font-size:14px;}
 .bxq--m .bxq-cta--stepper button{height:36px;width:34px;}
+.bxq-more-wrap{display:flex;justify-content:center;margin:22px 0 8px;}
+.bxq-more{border:1.5px solid var(--bxq-btn);background:var(--bxq-card);color:var(--bxq-btn);border-radius:999px;padding:11px 26px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+.bxq-more:hover{background:var(--bxq-btn);color:var(--bxq-btn-text);}
+.bxq-more-n{font-weight:500;opacity:.75;}
 .bxq-empty{padding:40px 16px;text-align:center;opacity:.65;font-size:15px;background:var(--bxq-card);border-radius:var(--bxq-radius);}
 .bxq-bar{position:sticky;bottom:12px;z-index:999;margin:18px auto 0;max-width:980px;background:var(--bxq-bar-bg);color:var(--bxq-bar-text);border-radius:var(--bxq-bar-r);box-shadow:0 -2px 24px rgba(0,0,0,.14);padding:12px 16px;overflow:hidden;}
 .bxq--m .bxq-bar{bottom:8px;padding:10px 12px;}

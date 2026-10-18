@@ -362,6 +362,43 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+// ── collections in their own order, own names, one section each ──
+{
+  const config = { ...baseConfig, layout: 'layout7', col_1: 'mutton', col_2: 'chicken', qs_col_titles: { chicken: 'Chicken cuts' }, qs_group_by_collection: true, qs_group_title_align: 'center', qs_chips_align: 'center' };
+  const { page } = await openCombo(config, wp(QUANTITY));
+  await page.waitForSelector('.bxq-section');
+  const chips = await page.$$eval('.bxq-filters [data-combo-action="qs-chip"]', (els) => els.map((e) => e.textContent.trim()));
+  check('sections: chips follow the merchant\'s order and names', JSON.stringify(chips) === JSON.stringify(['All', 'Mutton', 'Chicken cuts']), JSON.stringify(chips));
+  const titles = await page.$$eval('.bxq-section-title', (els) => els.map((e) => [e.textContent, getComputedStyle(e).textAlign]));
+  check('sections: one per collection, mutton first, centred', titles.length === 2 && titles[1][0] === 'Chicken cuts' && titles.every((t) => t[1] === 'center'), JSON.stringify(titles));
+  check('sections: chips row centred', await page.$eval('.bxq-filters', (e) => e.classList.contains('bxq-al-center')));
+  await plus(page, 2);
+  check('sections: adding from a section still works', (await text(page, `${card(2)} .bxq-stepper span`)) === '1');
+  await page.click('[data-combo-action="qs-chip"][data-value="c:chicken"]');
+  check('sections: a chip leaves its own section', JSON.stringify(await page.$$eval('.bxq-section-title', (els) => els.map((e) => e.textContent))) === JSON.stringify(['Chicken cuts']));
+  await page.close();
+}
+
+// ── big collection (1349 books on the client's store): a page of cards, "Show more" ──
+{
+  const books = Array.from({ length: 130 }, (_, i) => product(100 + i, `Book ${i + 1}`, { price: '99.00', grams: 300, type: 'Book', available: i % 10 !== 9 }));
+  const config = { ...baseConfig, layout: 'layout7', tab_count: 1, col_1: 'books', qs_filter_instock: true };
+  const { page, log } = await openCombo(config, wp(QUANTITY, { qualifyingProductIds: books.map((b) => b.id) }), {
+    data: { productsByHandle: { books }, collectionNameMap: { books: 'Books' } },
+  });
+  const count = () => page.$$eval('.bxq-card', (els) => els.length);
+  check('big collection: 40 cards at first', (await count()) === 40, String(await count()));
+  check('big collection: "Show more" says how many are left', (await text(page, '.bxq-more')) === 'Show more (90)', await text(page, '.bxq-more'));
+  await page.click('.bxq-more');
+  check('big collection: Show more draws the next 40', (await count()) === 80 && (await text(page, '.bxq-more')) === 'Show more (50)');
+  await plus(page, 170); // Book 71, from the second lot
+  check('big collection: a card from the second lot goes in the box', (await text(page, `${card(170)} .bxq-stepper span`)) === '1' && log.add.length === 0);
+  check('big collection: adding keeps the cards shown', (await count()) === 80);
+  await page.click('[data-combo-action="qs-instock"]');
+  check('big collection: a new filter starts from the first 40 of its 117', (await count()) === 40 && (await text(page, '.bxq-more')) === 'Show more (77)', await text(page, '.bxq-more'));
+  await page.close();
+}
+
 // ── page loader: default round spinner → the merchant's loader → products ──
 {
   const mine = { loader_style: 'dots', loader_color: '#be185d', loader_bg: '#fff7ed', loader_logo: 'https://cdn.example.com/logo.png', loader_logo_place: 'above', loader_text: 'Packing your box…' };

@@ -359,6 +359,38 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.close();
 }
 
+// ── Box Collections: order, own names, sections; chips alignment ──
+{
+  const page = await open();
+  const chipOrder = () => page.$$eval('.bxq-filters [data-combo-action="qs-chip"]', (els) => els.map((e) => e.textContent.trim()));
+  check('collections: chips as before (Shopify names, saved order)', JSON.stringify(await chipOrder()) === JSON.stringify(['All', 'Face Wash', 'Serums']), JSON.stringify(await chipOrder()));
+  await tab(page, 'Layout');
+  if (!(await sidebar(page)).includes('Add Collection')) await section(page, 'Box Collections');
+  await page.getByLabel('Name on the page for collection 1').fill('Cleansers');
+  check('collections: own name shows on the chip', (await chipOrder()).includes('Cleansers') && !(await chipOrder()).includes('Face Wash'), JSON.stringify(await chipOrder()));
+  await page.getByLabel('Move collection 2 up').click();
+  check('collections: ↑ moves Serums first', JSON.stringify(await chipOrder()) === JSON.stringify(['All', 'Serums', 'Cleansers']), JSON.stringify(await chipOrder()));
+  check('collections: the own name follows its collection', (await page.getByLabel('Name on the page for collection 2').inputValue()) === 'Cleansers');
+  check('collections: one grid until sections are switched on', (await page.$$('.bxq-section')).length === 0);
+  await page.getByLabel('Show products by collection').check();
+  const sections = await page.$$eval('.bxq-section-title', (els) => els.map((e) => [e.textContent, e.style.textAlign]));
+  check('sections: one per collection, in the new order, own names', JSON.stringify(sections) === JSON.stringify([['Serums', 'left'], ['Cleansers', 'left']]), JSON.stringify(sections));
+  await page.getByLabel('Section title alignment').selectOption('center');
+  check('sections: title alignment', (await page.$$eval('.bxq-section-title', (els) => els.map((e) => e.style.textAlign))).every((a) => a === 'center'));
+  await page.getByLabel('Title size (px)').fill('26');
+  check('sections: title size', await page.$eval('.bxq-section-title', (e) => getComputedStyle(e).fontSize) === '26px');
+  await page.screenshot({ path: path.join(SHOTS, 'builder-collection-sections.png') });
+  await tab(page, 'Layout');
+  if (!(await sidebar(page)).includes('Chips alignment')) await section(page, 'Filters');
+  await page.getByLabel('Chips alignment').selectOption('center');
+  check('chips alignment: centre', await page.$eval('.bxq-filters', (e) => e.classList.contains('bxq-al-center')));
+  // Removing the first collection keeps the second (it used to be lost).
+  if (!(await sidebar(page)).includes('Add Collection')) await section(page, 'Box Collections');
+  await page.getByLabel('Remove collection 1').click();
+  check('remove: the other collection stays', (await page.getByLabel('Collection 1', { exact: true }).inputValue()) === 'face-wash' && (await page.$$('.bxq-card')).length === 2, await page.getByLabel('Collection 1', { exact: true }).inputValue());
+  await page.close();
+}
+
 await browser.close();
 server.close();
 const failed = results.filter((r) => !r.ok);

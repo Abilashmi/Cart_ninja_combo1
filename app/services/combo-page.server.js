@@ -6,11 +6,13 @@
 // resolve.
 import { unauthenticated } from '../shopify.server';
 import prisma from '../db.server';
-import { comboCollectionHandles, createComboWeightCore, isWeightCombo, normalizeWeightPricing, toGrams, usesQuickShop } from '../utils/combo-weight.shared.js';
+import { comboCollectionHandles, createComboWeightCore, isWeightCombo, normalizeWeightPricing, usesQuickShop } from '../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../utils/combo-quickshop.shared.js';
 import { storefrontWeightPricing } from './combo-weight-shopify.server';
-import { attachVariantStock } from './combo-stock.server';
+import { loadVariantStock, pageVariantIds } from './combo-stock.server';
 import { loadCollectionMembers } from './collection-members.server';
+import { loadActiveDiscounts, loadBoxCollection, loadClassicCollection, loadCollections, loadExtraProducts } from './combo-page-products.server';
+import { createSwrCache } from './swr-cache.server';
 
 const quickShopKit = createQuickShopKit(createComboWeightCore());
 
@@ -112,54 +114,24 @@ export async function ensureComboForgeTemplate(admin) {
   }
 }
 
-const PRODUCT_FRAGMENT = `
-  fragment ProductInfo on Product {
-    id
-    title
-    handle
-    descriptionHtml
-    description(truncateAt: 160)
-    vendor
-    productType
-    tags
-    featuredImage { url altText width height }
-    images(first: 10) { nodes { url altText width height } }
-    variants(first: 25) { nodes { id title price compareAtPrice availableForSale image { url altText } inventoryItem { measurement { weight { value unit } } } } }
-    priceRangeV2 { minVariantPrice { amount currencyCode } }
-  }
-`;
+const MIN = 60_000;
+// Shopify data behind combo pages, kept in memory so a shopper doesn't wait
+// on a 1000+ product load: fresh for the first span, then answered at once
+// while one background load refreshes it (template saves don't empty it:
+// products are kept per collection, not per template).
+const productCache = createSwrCache({ freshMs: 10 * MIN, staleMs: 6 * 60 * MIN, max: 300, label: 'combo-products' });
+const stockCache = createSwrCache({ freshMs: 90_000, staleMs: 30 * MIN, max: 300, label: 'combo-stock' });
+const membersCache = createSwrCache({ freshMs: 10 * MIN, staleMs: 6 * 60 * MIN, max: 300, label: 'combo-members' });
+const shopCache = createSwrCache({ freshMs: 10 * MIN, staleMs: 6 * 60 * MIN, max: 500, label: 'combo-shop' });
 
-// One page product from Shopify's ProductInfo (collection products and the
-// box templates' extra products look the same).
-function pageProduct(node) {
-  return {
-    id: node.id, title: node.title, handle: node.handle,
-    descriptionHtml: node.descriptionHtml || '',
-    // Quick Shop cards and filters: one-line subtitle, Brand / Type
-    // dropdowns, tag chips and badges.
-    summary: node.description || '',
-    vendor: node.vendor || '',
-    productType: node.productType || '',
-    tags: (node.tags || []).slice(0, 40),
-    secondImageSrc: node.images?.nodes?.length > 1 ? node.images.nodes[1].url : null,
-    image: node.featuredImage ? { url: node.featuredImage.url, altText: node.featuredImage.altText } : null,
-    images: (node.images?.nodes || []).map((img) => ({
-      url: img.url, altText: img.altText,
-    })),
-    variants: (node.variants?.nodes || []).map((v) => ({
-      id: v.id,
-      title: v.title,
-      price: v.price,
-      compareAtPrice: v.compareAtPrice || null,
-      available: v.availableForSale !== false,
-      image: v.image ? { url: v.image.url, altText: v.image.altText } : null,
-      // Weight-priced combos: grams per unit, null when the variant has no weight.
-      grams: toGrams(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
-    })),
-    variantId: node.variants?.nodes?.[0]?.id || null,
-    price: node.priceRangeV2?.minVariantPrice?.amount || '0.00',
-    currency: node.priceRangeV2?.minVariantPrice?.currencyCode || 'USD',
-  };
+// A cached load, or `fallback` when it fails with nothing cached.
+async function cached(cache, key, loader, fallback, what) {
+  try {
+    return await cache.get(key, loader);
+  } catch (e) {
+    console.error(`[ComboPage] ${what}:`, String(e?.message || e).slice(0, 300));
+    return fallback;
+  }
 }
 
 async function ensureComboTemplatesTable() {
@@ -228,79 +200,65 @@ export async function loadComboPageDataForRow(shop, row) {
   const templateName = row.name || 'Untitled';
 
   const { admin } = await unauthenticated.admin(shop);
-
-  let collections = [];
-  try {
-    const colRes = await admin.graphql(`#graphql
-      query { collections(first: 250) {
-        nodes { id title handle productsCount { count } image { url } }
-      } }
-    `);
-    const colJson = await colRes.json();
-    collections = (colJson.data?.collections?.nodes || []).map((n) => ({
-      id: n.id, title: n.title, handle: n.handle, image: n.image?.url || '',
-    }));
-  } catch (e) {
-    console.error('[ComboPage] Collection fetch error:', e);
-  }
+  const startedAt = Date.now();
 
   // Includes layout3's col_1..col_4 nav pills — without them every pill, and
   // the "all" view built from them, renders "No products in this category".
   // Shared with weight pricing, whose "layout collections" are these same ones.
   const allHandles = comboCollectionHandles(config);
-
-  const productsByHandle = {};
-  for (const handle of allHandles) {
-    try {
-      const res = await admin.graphql(`
-        query GetCollectionByHandle($handle: String!) {
-          collectionByHandle(handle: $handle) {
-            products(first: 50) {
-              edges { node { ...ProductInfo } }
-            }
-          }
-        }
-        ${PRODUCT_FRAGMENT}
-      `, { variables: { handle } });
-      const json = await res.json();
-      const edges = json.data?.collectionByHandle?.products?.edges || [];
-      productsByHandle[handle] = edges.map((e) => pageProduct(e.node));
-    } catch (e) {
-      console.error(`[ComboPage] Products fetch error for "${handle}":`, e);
-      productsByHandle[handle] = [];
-    }
-  }
-
+  const box = usesQuickShop(config.layout);
   // Box templates: products added beyond the page's collections (they also
   // count toward the box, weight_pricing.qualify.extra_product_ids).
-  const extraIds = usesQuickShop(config.layout) ? (normalizeWeightPricing(config.weight_pricing).value.qualify.extra_product_ids || []) : [];
-  if (extraIds.length) {
-    try {
-      const res = await admin.graphql(`
-        query BrixBoxExtraProducts($ids: [ID!]!) {
-          nodes(ids: $ids) { ... on Product { status ...ProductInfo } }
-        }
-        ${PRODUCT_FRAGMENT}
-      `, { variables: { ids: extraIds } });
-      const json = await res.json();
-      productsByHandle[quickShopKit.EXTRA_HANDLE] = (json.data?.nodes || [])
-        .filter((n) => n?.id && (!n.status || n.status === 'ACTIVE'))
-        .map(pageProduct);
-    } catch (e) {
-      console.error('[ComboPage] Extra products fetch error:', e);
+  const extraIds = box ? (normalizeWeightPricing(config.weight_pricing).value.qualify.extra_product_ids || []) : [];
+
+  const [collections, lists, extras, activeDiscounts] = await Promise.all([
+    cached(shopCache, `collections:${shop}`, () => loadCollections(admin), [], 'Collection fetch error'),
+    Promise.all(allHandles.map((handle) => cached(
+      productCache, `${box ? 'box' : 'classic'}:${shop}:${handle}`,
+      () => (box ? loadBoxCollection(admin, handle) : loadClassicCollection(admin, handle)),
+      [], `Products fetch error for "${handle}"`,
+    ))),
+    extraIds.length
+      ? cached(productCache, `extra:${shop}:${extraIds.join(',')}`, () => loadExtraProducts(admin, extraIds), null, 'Extra products fetch error')
+      : null,
+    cached(shopCache, `discounts:${shop}`, () => loadActiveDiscounts(admin), [], 'Discount fetch error'),
+  ]);
+
+  const productsByHandle = {};
+  allHandles.forEach((handle, i) => { productsByHandle[handle] = lists[i]; });
+  if (extras) productsByHandle[quickShopKit.EXTRA_HANDLE] = extras;
+
+  // Stock limits and the box templates' collection filter groups (which page
+  // products are in each filter collection; kept apart from allHandles, which
+  // also decides what the box price counts). Keyed by the page's collections,
+  // not its product ids, so a collection refresh never makes a shopper wait.
+  const pageKey = `${shop}:${allHandles.join(',')}:${extraIds.join(',')}`;
+  const filterHandles = box ? quickShopKit.memberHandles(config) : [];
+  const [stock, collectionMembers, weightPricing] = await Promise.all([
+    cached(stockCache, pageKey, () => loadVariantStock(admin, pageVariantIds(productsByHandle)), null, 'stock limits skipped'),
+    filterHandles.length
+      ? cached(membersCache, `${pageKey}:${filterHandles.join(',')}`, async () => {
+        const productIds = [...new Set(Object.values(productsByHandle).flat().map((p) => p.id))];
+        const members = await loadCollectionMembers(admin, { handles: filterHandles, productIds });
+        // It never throws: a handle left out = its lookup failed; don't keep that.
+        if (!Object.keys(members).length) throw new Error('collection membership unknown');
+        return members;
+      }, {}, 'collection membership skipped')
+      : {},
+    // Weight-priced combos: tiers, max weight and which shown products count.
+    // `enabled` only when checkout will really give the box price.
+    isWeightCombo(config)
+      ? storefrontWeightPricing({ shop, admin, templateId: row.id, active: Number(row.is_active) === 1 || row.is_active === true, config, productsByHandle })
+      : null,
+  ]);
+  // On copies: the cached products are shared by every request.
+  if (stock) {
+    for (const handle of Object.keys(productsByHandle)) {
+      productsByHandle[handle] = productsByHandle[handle].map((p) => ({
+        ...p,
+        variants: (p.variants || []).map((v) => ({ ...v, stock: typeof stock[v.id] === 'number' ? stock[v.id] : null })),
+      }));
     }
-  }
-
-  await attachVariantStock(admin, productsByHandle);
-
-  // Box templates' collection filter groups: which page products are in each
-  // filter collection (kept apart from allHandles, which also decides what the
-  // box price counts).
-  let collectionMembers = {};
-  const filterHandles = usesQuickShop(config.layout) ? quickShopKit.memberHandles(config) : [];
-  if (filterHandles.length) {
-    const productIds = Object.values(productsByHandle).flat().map((p) => p.id);
-    collectionMembers = await loadCollectionMembers(admin, { handles: filterHandles, productIds });
   }
 
   const collectionNameMap = {};
@@ -309,67 +267,11 @@ export async function loadComboPageDataForRow(shop, row) {
   const collectionImageMap = {};
   collections.forEach((c) => { if (c.image && allHandles.includes(c.handle)) collectionImageMap[c.handle] = c.image; });
 
-  let activeDiscounts = [];
-  try {
-    const discRes = await admin.graphql(`#graphql
-      query PreviewDiscounts {
-        discountNodes(first: 50, reverse: true) {
-          edges {
-            node {
-              id
-              discount {
-                ... on DiscountCodeBasic {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount { amount currencyCode } } } }
-                }
-                ... on DiscountCodeBxgy {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                  customerGets { value { ... on DiscountPercentage { percentage } ... on DiscountAmount { amount { amount currencyCode } } } }
-                }
-                ... on DiscountCodeFreeShipping {
-                  title
-                  codes(first: 1) { edges { node { code } } }
-                  status
-                }
-              }
-            }
-          }
-        }
-      }
-    `);
-    const discJson = await discRes.json();
-    if (discJson.errors) console.error('[ComboPage] Discount query errors:', discJson.errors);
-    if (!discJson.errors) {
-      activeDiscounts = (discJson.data?.discountNodes?.edges || [])
-        .map(({ node }) => {
-          const d = node.discount;
-          if (!d) return null;
-          const code = d.codes?.edges?.[0]?.node?.code || '';
-          const gets = d.customerGets?.value;
-          let valueType = '';
-          let value = 0;
-          if (gets) {
-            if ('percentage' in gets) { valueType = 'percentage'; value = parseFloat(gets.percentage || 0) * 100; }
-            else if ('amount' in gets) { valueType = 'fixed_amount'; value = parseFloat(gets.amount?.amount || 0); }
-          }
-          return { id: node.id, title: d.title || code, code, type: d.__typename || '', status: d.status || 'ACTIVE', valueType, value };
-        })
-        .filter(Boolean)
-        .filter((d) => d.status === 'ACTIVE');
-    }
-  } catch (e) {
-    console.error('[ComboPage] Discount fetch error:', e);
+  const ms = Date.now() - startedAt;
+  if (ms > 3000) {
+    const count = Object.values(productsByHandle).reduce((n, list) => n + list.length, 0);
+    console.warn(`[ComboPage] ${shop} template ${row.id}: ${ms} ms for ${count} products`);
   }
-
-  // Weight-priced combos: tiers, max weight and which shown products count.
-  // `enabled` only when checkout will really give the box price.
-  const weightPricing = isWeightCombo(config)
-    ? await storefrontWeightPricing({ shop, admin, templateId: row.id, active: Number(row.is_active) === 1 || row.is_active === true, config, productsByHandle })
-    : null;
 
   return { templateId: row.id, templateName, config, collections, productsByHandle, collectionNameMap, collectionImageMap, collectionMembers, shop, activeDiscounts, weightPricing };
 }

@@ -6,9 +6,11 @@
 // page already shows: one query for the collections' ids, then one per 100
 // products. Never throws: a failure leaves the handle out, and the page then
 // shows that option without filtering by it.
+import { adminGraphql, mapLimit } from './admin-graphql.server';
 
 const MAX_HANDLES = 75; // 5 groups × 15 collections
-const MAX_PRODUCTS = 500;
+// Box pages load every product of their collections (1000+ books on one page).
+const MAX_PRODUCTS = 5000;
 const HANDLES_PER_QUERY = 25;
 // Keep each query small: products × collections fields per request.
 const FIELDS_PER_QUERY = 2500;
@@ -24,12 +26,7 @@ function unique(list, test, max) {
   return out;
 }
 
-async function run(admin, query, variables) {
-  const res = await admin.graphql(query, { variables });
-  const json = await res.json();
-  if (json.errors?.length) throw new Error(json.errors.map((e) => e.message).join('; '));
-  return json.data || {};
-}
+const run = (admin, query, variables) => adminGraphql(admin, query, variables);
 
 /** { [handle]: collection gid } for the handles that exist. */
 async function collectionIds(admin, handles) {
@@ -77,11 +74,16 @@ export async function loadCollectionMembers(admin, { handles, productIds }) {
   const fields = found.map((_, i) => `m${i}: inCollection(id: $c${i})`).join('\n');
   const query = `query BrixFilterMembers(${vars}) {\n  nodes(ids: $ids) {\n    ... on Product {\n      id\n${fields}\n    }\n  }\n}`;
   const collected = Object.fromEntries(found.map((h) => [h, []]));
+  const batches = [];
+  for (let start = 0; start < ids.length; start += perQuery) batches.push(ids.slice(start, start + perQuery));
   try {
-    for (let start = 0; start < ids.length; start += perQuery) {
-      const variables = { ids: ids.slice(start, start + perQuery) };
+    // A few at a time; results kept in page order.
+    const pages = await mapLimit(batches, 3, (batch) => {
+      const variables = { ids: batch };
       found.forEach((h, i) => { variables[`c${i}`] = byHandle[h]; });
-      const data = await run(admin, query, variables);
+      return run(admin, query, variables);
+    });
+    for (const data of pages) {
       for (const node of data.nodes || []) {
         if (!node?.id) continue;
         found.forEach((h, i) => { if (node[`m${i}`] === true) collected[h].push(node.id); });

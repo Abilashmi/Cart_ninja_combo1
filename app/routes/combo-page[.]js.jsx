@@ -2359,7 +2359,7 @@ const SCRIPT_BODY = String.raw`
       collectionMembers: state.collectionMembers,
       selection: state.selectedMap,
       pending: state.pendingVariant,
-      ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, popup: state.qsUi.popup, popupImage: state.qsUi.popupImage, checkingOut: state.checkingOut },
+      ui: { chip: state.qsUi.chip, dd: state.qsUi.dd, instock: state.qsUi.instock, menu: state.qsUi.menu, sheetOpen: state.qsUi.sheetOpen, popup: state.qsUi.popup, popupImage: state.qsUi.popupImage, pages: state.qsUi.pages, pagesFor: state.qsUi.pagesFor, checkingOut: state.checkingOut },
       // Not live (plan, inactive, checkout discount not active): no offer is shown.
       pricing: w ? { measure: w.measure, unit: w.unit, tiers: w.tiers, maxGrams: w.maxGrams, messages: w.messages, enabled: !!w.enabled } : { tiers: [], enabled: false },
       qualifies: function (productId) { return !w || !!state.qualifying[productId]; },

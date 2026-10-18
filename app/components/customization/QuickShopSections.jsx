@@ -496,6 +496,15 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         {source === 'collections' && val(config, 'qs_chip_style') === 'images' && (
           <CollectionPictures config={config} updateConfig={updateConfig} collections={collections} PxField={PxField} />
         )}
+        {source !== 'none' && (
+          <Select
+            label="Chips alignment"
+            options={[{ label: 'Left', value: 'left' }, { label: 'Centre', value: 'center' }, { label: 'Right', value: 'right' }]}
+            value={val(config, 'qs_chips_align')}
+            onChange={(v) => updateConfig('qs_chips_align', v)}
+            helpText="The chip row (and the picture bar). When there are more chips than fit, the row scrolls from the start."
+          />
+        )}
         {source === 'tags' && (
           <TextField
             label="Tags to show as chips" value={config.qs_chip_tags || ''} onChange={(v) => updateConfig('qs_chip_tags', v)}
@@ -614,7 +623,22 @@ function CardsSectionComponent({ config, updateConfig, expanded, onToggle, PxFie
             }}
             helpText="All its sizes / variants together. Empty = no limit."
           />
+          <TextField
+            label="Products shown at first" type="number" min={12} max={200} placeholder="40" autoComplete="off"
+            // Kept as typed (the kit holds it to 12-200), so typing "40" never jumps to the minimum at "4".
+            value={config.qs_page_size ? String(config.qs_page_size) : ''}
+            onChange={(v) => {
+              const n = Math.floor(Number(v));
+              updateConfig('qs_page_size', v === '' || !Number.isFinite(n) || n < 1 ? null : Math.min(n, 200));
+            }}
+            helpText="A “Show more” button adds the next lot. Filters always search every product."
+          />
         </div>
+        <TextField
+          label="“Show more” button text" autoComplete="off" maxLength={40}
+          value={config.qs_more_text ?? val(config, 'qs_more_text')}
+          onChange={(v) => updateConfig('qs_more_text', v)}
+        />
         {Number(config.qs_max_per_product) > 0 && (
           <TextField
             label="Message when a shopper reaches it" autoComplete="off" maxLength={120}

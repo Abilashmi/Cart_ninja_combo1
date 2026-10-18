@@ -166,11 +166,25 @@ function GeneralSectionComponent({
   if (layout === 'layout2' || layout === 'layout5' || layout === 'layout6' || layout === 'layout7') {
     const isQuickShop = layout === 'layout5' || layout === 'layout6' || layout === 'layout7';
     const tabCount = Number(config.tab_count || 1);
-    const addTab = () => updateConfig('tab_count', tabCount + 1);
-    const removeTab = (i) => {
-      updateConfig('tab_count', Math.max(1, tabCount - 1));
-      updateConfig(`col_${i}`, '');
+    const cols = [...Array(tabCount)].map((_, k) => config[`col_${k + 1}`] || '');
+    // Writes the list back as col_1..col_N (order = chips and sections order).
+    const setCols = (list) => {
+      const count = Math.max(1, list.length);
+      for (let k = 1; k <= Math.max(count, tabCount); k++) updateConfig(`col_${k}`, k <= list.length ? list[k - 1] : '');
+      updateConfig('tab_count', count);
     };
+    const addTab = () => updateConfig('tab_count', tabCount + 1);
+    // Removing one from the middle used to clear it and drop the last one.
+    const removeTab = (index) => setCols(cols.filter((_, k) => k !== index));
+    const moveTab = (index, by) => {
+      const list = [...cols];
+      [list[index], list[index + by]] = [list[index + by], list[index]];
+      setCols(list);
+    };
+    const titles = config.qs_col_titles && typeof config.qs_col_titles === 'object' ? config.qs_col_titles : {};
+    const titleOf = (handle) => (collections || []).find((c) => c.handle === handle)?.title || handle;
+    const grouped = !!config.qs_group_by_collection;
+    const arrowStyle = (off) => ({ background: 'none', border: '1px solid #c9cccf', borderRadius: 6, width: 28, height: 28, cursor: off ? 'default' : 'pointer', opacity: off ? 0.35 : 1, fontSize: 14, lineHeight: 1, marginBottom: 4 });
     return (
       <SectionCard
         title={isQuickShop ? 'Box Collections' : 'Collections (Switching Tabs)'}
@@ -214,8 +228,10 @@ function GeneralSectionComponent({
           <div className="cst-row cst-row--vertical" style={{ marginTop: 12, gap: 10 }}>
             {[...Array(tabCount)].map((_, index) => {
               const i = index + 1;
+              const handle = config[`col_${i}`] || '';
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <div key={i}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
                   <div style={{ flex: 1 }}>
                     <Select
                       label={`Collection ${i}`}
@@ -231,14 +247,35 @@ function GeneralSectionComponent({
                     />
                   </div>
                   {tabCount > 1 && (
+                    <>
+                      <button type="button" aria-label={`Move collection ${i} up`} disabled={index === 0} onClick={() => moveTab(index, -1)} style={arrowStyle(index === 0)}>↑</button>
+                      <button type="button" aria-label={`Move collection ${i} down`} disabled={index === tabCount - 1} onClick={() => moveTab(index, 1)} style={arrowStyle(index === tabCount - 1)}>↓</button>
+                    </>
+                  )}
+                  {tabCount > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeTab(i)}
+                      aria-label={`Remove collection ${i}`}
+                      onClick={() => removeTab(index)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d72c0d', fontSize: 13, fontWeight: 600, padding: '8px 4px', marginBottom: 4 }}
                     >
                       <CloseGlyph />
                     </button>
                   )}
+                </div>
+                {isQuickShop && handle && (
+                  <div style={{ marginTop: 6 }}>
+                    <TextField
+                      label={`Name on the page for collection ${i}`}
+                      labelHidden
+                      value={titles[handle] || ''}
+                      placeholder={`Name on the page (optional): ${titleOf(handle)}`}
+                      onChange={(v) => updateConfig('qs_col_titles', { ...titles, [handle]: v })}
+                      autoComplete="off"
+                      maxLength={60}
+                    />
+                  </div>
+                )}
                 </div>
               );
             })}
@@ -255,6 +292,47 @@ function GeneralSectionComponent({
           >
             <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add Collection
           </button>
+          {isQuickShop && (
+            <>
+              <Text as="p" variant="bodySm" tone="subdued">
+                The order here is the order of the filter chips (and of the sections below). A name on the page replaces the collection&apos;s Shopify name on the page only; empty = the Shopify name.
+              </Text>
+              <Checkbox
+                label="Show products by collection"
+                helpText="One section per collection, in this order, under its name. A product in two collections shows in the first. Off = one grid, as now."
+                checked={grouped}
+                onChange={(v) => updateConfig('qs_group_by_collection', v)}
+              />
+              {grouped && (
+                <>
+                  <Select
+                    label="Section title alignment"
+                    options={[{ label: 'Left', value: 'left' }, { label: 'Centre', value: 'center' }, { label: 'Right', value: 'right' }]}
+                    value={config.qs_group_title_align || 'left'}
+                    onChange={(v) => updateConfig('qs_group_title_align', v)}
+                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <TextField
+                      label="Title size (px)" type="number" min={10} max={40} placeholder="20" autoComplete="off"
+                      value={config.qs_group_title_size ? String(config.qs_group_title_size) : ''}
+                      onChange={(v) => updateConfig('qs_group_title_size', v === '' ? null : Number(v))}
+                    />
+                    <TextField
+                      label="On phones (px)" type="number" min={10} max={40} placeholder="17" autoComplete="off"
+                      value={config.qs_group_title_size_m ? String(config.qs_group_title_size_m) : ''}
+                      onChange={(v) => updateConfig('qs_group_title_size_m', v === '' ? null : Number(v))}
+                    />
+                  </div>
+                  <TextField
+                    label="Title for products you added yourself" autoComplete="off" maxLength={60}
+                    value={config.qs_extra_title || ''}
+                    onChange={(v) => updateConfig('qs_extra_title', v)}
+                    helpText="Products added under Products on the page come last. Empty = no title."
+                  />
+                </>
+              )}
+            </>
+          )}
         </FormLayout>
       </SectionCard>
     );
