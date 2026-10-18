@@ -8,6 +8,13 @@ import { useState, useEffect } from 'react';
 //
 // `resetKey` (e.g. the modal's `open` flag) clears the search box each time the
 // modal is reopened.
+//
+// `products` is only the first products of the store (50), so a search also
+// asks Shopify (/api/product-search) and shows its results: on a big
+// catalogue most products are only found that way. `onFound(products)` gets
+// every product a search brought back, so the parent can show the ones picked.
+
+const SEARCH_DELAY_MS = 300;
 
 const CSS = `
 .rpm{display:flex;flex-direction:column;gap:14px}
@@ -35,15 +42,44 @@ const CSS = `
 .rpm-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;font-weight:650;color:#202223;line-height:1.3;margin-top:4px}
 .rpm-price{font-size:12px;color:#6d7175}
 .rpm-none{margin:12px 0;text-align:center;color:#6d7175;font-size:13px}
+.rpm-note{margin:-6px 0 0;color:#6d7175;font-size:12px}
 `;
 
 // eslint-disable-next-line react/prop-types
-export default function ProductPickerBody({ products, selectedIds, setSelectedIds, currencySymbol = '', resetKey }) {
+export default function ProductPickerBody({ products, selectedIds, setSelectedIds, currencySymbol = '', resetKey, onFound }) {
   const [query, setQuery] = useState('');
+  // Shopify's answer for `for` (null = none yet / failed: the local list is shown).
+  const [remote, setRemote] = useState({ for: '', products: null, searching: false });
   useEffect(() => { setQuery(''); }, [resetKey]);
 
   const needle = query.trim().toLowerCase();
-  const visible = needle ? products.filter((p) => String(p.title || '').toLowerCase().includes(needle)) : products;
+  useEffect(() => {
+    if (!needle) { setRemote({ for: '', products: null, searching: false }); return undefined; }
+    let live = true;
+    setRemote((r) => ({ ...r, searching: true }));
+    const timer = setTimeout(() => {
+      fetch(`/api/product-search?q=${encodeURIComponent(needle)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!live) return;
+          const found = data?.success && Array.isArray(data.products) ? data.products : null;
+          setRemote({ for: needle, products: found, searching: false });
+          if (found && found.length && onFound) onFound(found);
+        })
+        .catch(() => { if (live) setRemote({ for: needle, products: null, searching: false }); });
+    }, SEARCH_DELAY_MS);
+    return () => { live = false; clearTimeout(timer); };
+    // onFound is a callback from the parent; a new one doesn't need a new search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needle]);
+
+  const local = needle ? products.filter((p) => String(p.title || '').toLowerCase().includes(needle)) : products;
+  // Shopify's results once they're in (local matches first, no repeats).
+  const fromShopify = needle && remote.for === needle && remote.products ? remote.products : null;
+  const visible = fromShopify
+    ? [...local, ...fromShopify.filter((p) => !local.some((l) => l.id === p.id))]
+    : local;
+  const searching = Boolean(needle) && (remote.searching || remote.for !== needle);
   const toggle = (id) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   // "Select all" acts on what is shown, so a search narrows what it picks.
@@ -71,8 +107,9 @@ export default function ProductPickerBody({ products, selectedIds, setSelectedId
           <button type="button" className="rpm-btn rpm-btn--quiet" onClick={() => setSelectedIds([])}>Clear</button>
         )}
       </div>
+      {searching && <p className="rpm-note">Searching all products…</p>}
       {visible.length === 0 ? (
-        <p className="rpm-none">No products match "{query}".</p>
+        <p className="rpm-none">{searching ? 'Searching…' : `No products match "${query}".`}</p>
       ) : (
         <div className="rpm-grid">
           {visible.map((product) => {

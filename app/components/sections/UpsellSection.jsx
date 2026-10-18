@@ -19,7 +19,11 @@ const CONFIG_OPTIONS = [
 const PRODUCT_CACHE_KEY = 'cached_products';
 
 function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
-  const { allProducts: contextProducts } = useCartEditor();
+  const { allProducts: contextProducts, addCatalogProducts } = useCartEditor();
+  // Products a search found (outside the store's first 50): the picked ones
+  // join the editor's catalogue on save, so the rules and preview show them.
+  const found = useRef(new Map());
+  const remember = useCallback((list) => { list.forEach((p) => found.current.set(p.id, p)); }, []);
   const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -77,7 +81,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
 
   return (
     <Modal open={open} onClose={onClose} title={title || 'Select Products'} size="large"
-      primaryAction={{ content: 'Save Selection', onAction: () => { onSave(selectedIds); onClose(); } }}
+      primaryAction={{ content: 'Save Selection', onAction: () => { addCatalogProducts(selectedIds.map((id) => found.current.get(id)).filter(Boolean)); onSave(selectedIds); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
       <Modal.Section>
@@ -93,7 +97,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
           ) : allProducts.length === 0 ? (
             <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
           ) : (
-            <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} />
+            <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} onFound={remember} />
           )}
         </BlockStack>
       </Modal.Section>

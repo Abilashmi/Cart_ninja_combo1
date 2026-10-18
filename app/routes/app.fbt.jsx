@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLoaderData, useRouteError, useFetcher } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
@@ -571,9 +571,13 @@ function templateIdToApiKey(id) {
 }
 
 /* ─── PRODUCT PICKER MODAL ────────────────────────────────────────────────── */
-function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, title }) {
+function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, onFoundPicked, title }) {
   const { symbol: currencySymbol } = useCurrency();
   const [localSelected, setLocalSelected] = useState([]);
+  // Products a search found (outside the store's first 50): the picked ones
+  // join the page's catalogue on save, so the rule shows them.
+  const found = useRef(new Map());
+  const remember = useCallback((list) => { list.forEach((p) => found.current.set(p.id, p)); }, []);
 
   /* reset selection when modal opens or external selectedIds change */
   const prevOpen = usePrevious(open);
@@ -585,7 +589,7 @@ function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, t
 
   return (
     <Modal open={open} onClose={onClose} title={title || 'Browse Products'} size="large"
-      primaryAction={{ content: `Save Selection (${localSelected.length})`, onAction: () => { onSave(localSelected); onClose(); } }}
+      primaryAction={{ content: `Save Selection (${localSelected.length})`, onAction: () => { if (onFoundPicked) onFoundPicked(localSelected.map((id) => found.current.get(id)).filter(Boolean)); onSave(localSelected); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
       <Modal.Section>
@@ -594,7 +598,7 @@ function ProductPickerModal({ open, onClose, allProducts, selectedIds, onSave, t
           {allProducts.length === 0 ? (
             <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
           ) : (
-            <ProductPickerBody products={allProducts} selectedIds={localSelected} setSelectedIds={setLocalSelected} currencySymbol={currencySymbol} resetKey={open} />
+            <ProductPickerBody products={allProducts} selectedIds={localSelected} setSelectedIds={setLocalSelected} currencySymbol={currencySymbol} resetKey={open} onFound={remember} />
           )}
         </BlockStack>
       </Modal.Section>
@@ -808,7 +812,16 @@ function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, next
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 export default function FBTPage() {
-  const { shop, fbtConfig, allProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
+  const { shop, fbtConfig, allProducts: loadedProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
+  // The store's first 50 products + products picked through the modal's search.
+  const [foundProducts, setFoundProducts] = useState([]);
+  const allProducts = useMemo(() => {
+    const extra = foundProducts.filter((p) => !(loadedProducts || []).some((l) => l.id === p.id));
+    return extra.length ? [...(loadedProducts || []), ...extra] : (loadedProducts || []);
+  }, [loadedProducts, foundProducts]);
+  const addFoundProducts = useCallback((list) => {
+    if (list.length) setFoundProducts((prev) => [...prev, ...list.filter((p) => !prev.some((x) => x.id === p.id))]);
+  }, []);
   const { symbol: currencySymbol } = useCurrency();
   const fetcher = useFetcher();
   const { canPublishFeature } = usePlan();
@@ -1962,6 +1975,7 @@ export default function FBTPage() {
             onClose={() => { setShowProductPicker(false); setPickerTarget(null); }}
             allProducts={allProducts}
             selectedIds={[]}
+            onFoundPicked={addFoundProducts}
             onSave={(ids) => {
               if (pickerTarget === 'trigger') {
                 setDraftRule(prev => ({ triggerIds: ids, fbtIds: prev?.fbtIds || [] }));

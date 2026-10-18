@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal } from '@shopify/polaris';
 import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, DiscountFilledIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
@@ -20,7 +20,11 @@ const PRODUCT_PICKER_STORAGE_KEY = 'cached_products';
 
 
 function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }) {
-  const { allProducts: contextProducts } = useCartEditor();
+  const { allProducts: contextProducts, addCatalogProducts } = useCartEditor();
+  // Products a search found (outside the store's first 50): the picked ones
+  // join the editor's catalogue on save, so the card and preview show them.
+  const found = useRef(new Map());
+  const remember = useCallback((list) => { list.forEach((p) => found.current.set(p.id, p)); }, []);
   const { symbol: currencySymbol } = useCurrency();
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -78,7 +82,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
 
   return (
     <Modal open={open} onClose={onClose} title={title || 'Select Products'} size="large"
-      primaryAction={{ content: 'Save Selection', onAction: () => { onSave(selectedIds); onClose(); } }}
+      primaryAction={{ content: 'Save Selection', onAction: () => { addCatalogProducts(selectedIds.map((id) => found.current.get(id)).filter(Boolean)); onSave(selectedIds); onClose(); } }}
       secondaryActions={[{ content: 'Cancel', onAction: onClose }]}
     >
       <Modal.Section>
@@ -92,7 +96,7 @@ function ProductPickerModal({ open, onClose, onSave, initialSelectedIds, title }
         ) : allProducts.length === 0 ? (
           <Text as="p" variant="bodyMd" tone="subdued">No products found. Make sure your store has products.</Text>
         ) : (
-          <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} />
+          <ProductPickerBody products={allProducts} selectedIds={selectedIds} setSelectedIds={setSelectedIds} currencySymbol={currencySymbol} resetKey={open} onFound={remember} />
         )}
       </Modal.Section>
     </Modal>
@@ -207,7 +211,20 @@ function RewardVariantPickers({ ids, catalog, value, onChange }) {
 }
 
 export function ProgressBarSection() {
-  const { body, updateProgressBar, allProducts: catalog } = useCartEditor();
+  const { body, updateProgressBar, allProducts: catalog, addCatalogProducts } = useCartEditor();
+  // Reward products picked earlier that aren't among the store's first 50
+  // products: load them once, so their pictures, names and variants show.
+  const rewardIds = [...new Set((body?.progressBar?.tiers || []).flatMap((t) => t.rewardProducts || []))];
+  const missingKey = rewardIds.filter((id) => !(catalog || []).some((p) => p.id === id)).sort().join(',');
+  const asked = useRef(new Set());
+  useEffect(() => {
+    if (!missingKey || asked.current.has(missingKey)) return;
+    asked.current.add(missingKey);
+    fetch(`/api/product-search?ids=${encodeURIComponent(missingKey)}`)
+      .then((r) => r.json())
+      .then((data) => { if (data?.success && Array.isArray(data.products)) addCatalogProducts(data.products); })
+      .catch(() => {});
+  }, [missingKey, addCatalogProducts]);
   const { symbol: currencySymbol } = useCurrency();
   const { progressBar } = body;
   const [activeTierIndex, setActiveTierIndex] = useState(0);

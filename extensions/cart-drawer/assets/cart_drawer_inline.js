@@ -1092,6 +1092,67 @@
     return catalog;
   }
 
+  // Reward products by id, whatever the size of the catalogue. The first page
+  // of /products.json (250) rarely holds them on a big store (extrokids: 4000+
+  // products, so rewards were never added), so the rest are asked of
+  // Shopify's Storefront API on the store's own domain (tokenless: product
+  // reads need no token), then, if that fails, the catalogue pages. Never
+  // throws; a product not published to the Online Store comes back missing.
+  const CC_STOREFRONT_API = '/api/2026-07/graphql.json';
+  const _ccRewardDetails = {};
+  // Not found at all this page visit: not looked up again on every render.
+  const _ccRewardMissing = {};
+  async function ccRewardProductDetails(ids) {
+    const out = {};
+    const catalog = await ccGetStoreCatalog();
+    const known = (id) => (catalog && catalog.detailsById && catalog.detailsById[id]) || _ccRewardDetails[id];
+    (ids || []).forEach((id) => { if (known(id)) out[id] = known(id); });
+    const missing = (ids || []).filter((id) => !out[id] && !_ccRewardMissing[id]);
+    if (missing.length) {
+      try {
+        const res = await originalFetch(CC_STOREFRONT_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            query: 'query BrixRewards($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { id title handle featuredImage { url } '
+              + 'variants(first: 100) { nodes { id title availableForSale price { amount } compareAtPrice { amount } image { url } } } } } }',
+            variables: { ids: missing.map((id) => 'gid://shopify/Product/' + id) },
+          }),
+        });
+        const data = res.ok ? await res.json().catch(() => null) : null;
+        ((data && data.data && data.data.nodes) || []).forEach((n) => {
+          if (!n || !n.id) return;
+          const detail = ccProductDetail({
+            id: ccExtractNumericId(n.id),
+            title: n.title,
+            handle: n.handle,
+            images: n.featuredImage ? [n.featuredImage.url] : [],
+            variants: ((n.variants && n.variants.nodes) || []).map((v) => ({
+              id: ccExtractNumericId(v.id),
+              title: v.title,
+              price: v.price ? v.price.amount : null,
+              compare_at_price: v.compareAtPrice ? v.compareAtPrice.amount : null,
+              available: v.availableForSale !== false,
+              featured_image: v.image ? v.image.url : null,
+            })),
+          });
+          if (detail) { _ccRewardDetails[detail.id] = detail; out[detail.id] = detail; }
+        });
+      } catch (e) {
+        console.warn('[CartDrawer] reward product lookup failed:', e && e.message);
+      }
+    }
+    const still = missing.filter((id) => !out[id]);
+    if (still.length) {
+      const paged = await ccEnsureCatalogProducts(still).catch(() => null);
+      still.forEach((id) => {
+        if (paged && paged.detailsById && paged.detailsById[id]) out[id] = paged.detailsById[id];
+        else _ccRewardMissing[id] = true;
+      });
+    }
+    return out;
+  }
+
   // Shopify's own "related products" for a product, in stock only (used to
   // fill the spot of a sold-out upsell). Never throws.
   const _ccRelatedCache = {};
@@ -2553,10 +2614,10 @@
       }
 
       if (toAdd.length > 0) {
-        const storeCatalog = await ccGetStoreCatalog();
+        const details = await ccRewardProductDetails(toAdd);
         const items = [];
         toAdd.forEach((pid) => {
-          const detail = storeCatalog && storeCatalog.detailsById && storeCatalog.detailsById[pid];
+          const detail = details[pid];
           // The merchant's chosen variant while it's in stock, else the
           // first in-stock one.
           const chosen = detail && wantedVariant[pid]
@@ -2565,6 +2626,8 @@
           const variantId = chosen ? chosen.id : (detail && detail.variantId);
           if (variantId) {
             items.push({ id: Number(variantId), quantity: 1, properties: { _brixReward: 'true' } });
+          } else {
+            console.warn('[CartDrawer] reward product ' + pid + ' not added: ' + (detail ? 'sold out' : 'not found on the Online Store'));
           }
         });
         if (items.length > 0) {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
@@ -668,12 +668,26 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     ? { ...state.footer, checkoutButton: { ...state.footer.checkoutButton, ...previewOverride.checkoutButton } }
     : state.footer;
 
+  // The loader sends the store's first 50 products; products found by a
+  // modal's search (or picked earlier outside those 50) join them here, so
+  // the reward card, variant pickers and preview can show them.
+  const [extraProducts, setExtraProducts] = useState([]);
+  const addCatalogProducts = useCallback((list) => {
+    setExtraProducts((prev) => {
+      const known = new Set([...allProducts, ...prev].map((p) => p.id));
+      const fresh = (list || []).filter((p) => p && p.id && !known.has(p.id));
+      return fresh.length ? [...prev, ...fresh] : prev;
+    });
+  }, [allProducts]);
+  const catalog = useMemo(() => (extraProducts.length ? [...allProducts, ...extraProducts] : allProducts), [allProducts, extraProducts]);
+
   const value = {
     ...state,
     header: effectiveHeader,
     footer: effectiveFooter,
     availableCoupons,
-    allProducts,
+    allProducts: catalog,
+    addCatalogProducts,
     openSection,
     navigateToSection,
     setActiveSection,

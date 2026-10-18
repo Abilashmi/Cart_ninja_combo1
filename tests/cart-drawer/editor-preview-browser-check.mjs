@@ -71,6 +71,15 @@ const saves = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await ctx.route('https://admin.test/**', async (route) => {
   const url = new URL(route.request().url());
+  // Product search for the "select products" modals (any product of a big store).
+  if (url.pathname === '/api/product-search') {
+    const book = (n, title) => ({ id: `gid://shopify/Product/${n}`, title, handle: `book-${n}`, image: '', price: '99.00', variants: [{ id: `gid://shopify/ProductVariant/${n}1`, title: 'Default Title', price: '99.00', available: true }], available: true });
+    const all = [book(9001, 'Story Book Gift'), book(9002, 'Saved Gift Book')];
+    const ids = (url.searchParams.get('ids') || '').split(',').filter(Boolean);
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const products = ids.length ? all.filter((p) => ids.includes(p.id)) : all.filter((p) => q && p.title.toLowerCase().includes(q));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, products }) });
+  }
   if (url.pathname.startsWith('/api/')) {
     saves.push({ path: url.pathname, body: JSON.parse(route.request().postData() || '{}') });
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: {} }) });
@@ -372,6 +381,30 @@ for (const behavior of ['replace', 'hide']) {
     String(legacy?.coupon_data || '').slice(0, 80));
   await ed.screenshot({ path: path.join(shotDir, 'customization.png') });
   await ed.close();
+}
+
+// ── Reward products past the store's first 50 (extrokids: 4000+ products) ──
+{
+  data.cartRecord = null; data.csRecord = null; data.upsellRecord = null;
+  // Picked earlier, not among the 50 products the editor loads.
+  data.pbRecord = { is_enabled: 1, mode: 'amount', placement: 'top', show_on_empty: 1, tiers: [{ id: 9, min_value: 1, description: 'Gift', reward_type: 'product', icon_preset: 'gift', reward_products: ['gid://shopify/Product/9002'], reward_pricing: 'regular', reward_variants: {}, reward_badge_label: null }] };
+  const rp = await ctx.newPage();
+  rp.on('pageerror', (e) => errors.push(e.message));
+  await rp.goto('https://admin.test/app/cartdrawer');
+  await rp.waitForSelector('text=Announcements');
+  await rp.locator('button', { hasText: 'Progress Bar' }).first().click();
+  await rp.waitForTimeout(600);
+  check('reward picked earlier outside the first 50: loaded by id, its name shows', (await rp.locator('.rpc-names').textContent().catch(() => '')).includes('Saved Gift Book'));
+  await rp.getByRole('button', { name: 'Edit products' }).click();
+  await rp.getByRole('searchbox', { name: 'Search products' }).fill('story');
+  await rp.waitForSelector('.rpm-card:has-text("Story Book Gift")', { timeout: 4000 }).catch(() => {});
+  check('reward search finds a product outside the first 50 (asks Shopify)', (await rp.locator('.rpm-card', { hasText: 'Story Book Gift' }).count()) === 1);
+  await rp.locator('.rpm-card', { hasText: 'Story Book Gift' }).click();
+  await rp.getByRole('button', { name: 'Save Selection' }).click();
+  await rp.waitForTimeout(300);
+  const names = await rp.locator('.rpc-names').textContent().catch(() => '');
+  check('reward found by search shows on the milestone card after saving the selection', names.includes('Story Book Gift') && names.includes('Saved Gift Book'), names);
+  await rp.close();
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

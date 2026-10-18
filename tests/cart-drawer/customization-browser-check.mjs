@@ -48,10 +48,10 @@ const drawerPage = () => `<!doctype html><html><head><meta name="viewport" conte
 
 const browser = await chromium.launch();
 
-async function openDrawer({ data, cart = CART, width = 1280 }) {
+async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null }) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await context.newPage();
-  const net = { adds: [] };
+  const net = { adds: [], storefrontApi: [] };
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   let current = [...cart];
@@ -79,6 +79,12 @@ async function openDrawer({ data, cart = CART, width = 1280 }) {
         return json({ items: body.items || [] });
       }
       if (url.pathname === '/recommendations/products.json') return json({ products: [] });
+      // Shopify's tokenless Storefront API (reward products past the first catalogue page).
+      if (/^\/api\/[\d-]+\/graphql\.json$/.test(url.pathname)) {
+        const body = JSON.parse(req.postData() || '{}');
+        net.storefrontApi.push(body);
+        return storefrontApi ? json(storefrontApi(body)) : route.fulfill({ status: 404, body: '' });
+      }
       return route.fulfill({ status: 404, body: '' });
     }
     return route.fulfill({ status: 404, body: '' });
@@ -230,6 +236,34 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   const badge = await withGift.locator('.bxcd-item--gift .bxcd-item__badge').textContent();
   check('free gift: the badge shows the merchant\'s text', badge.trim() === 'VIP BONUS', badge);
   await close(withGift);
+
+  // A big store (extrokids: 4000+ products): the reward isn't in the first
+  // /products.json page, so the drawer asks the Storefront API by product id.
+  const farTiers = [{ id: 't1', minimumSpend: 500, title: 'Gift', rewardType: 'product', rewardProducts: ['gid://shopify/Product/9001'], rewardPricing: 'regular' }];
+  const far = await openDrawer({
+    data: { progress_status: 1, progress_data: JSON.stringify({ ...progress, tiers: farTiers }) },
+    storefrontApi: (body) => ({ data: { nodes: (body.variables.ids || []).map((id) => (id === 'gid://shopify/Product/9001' ? {
+      id, title: 'Story Book Gift', handle: 'story-book-gift', featuredImage: null,
+      variants: { nodes: [
+        { id: 'gid://shopify/ProductVariant/90011', title: 'Hardcover', availableForSale: false, price: { amount: '199.0' }, compareAtPrice: null, image: null },
+        { id: 'gid://shopify/ProductVariant/90012', title: 'Paperback', availableForSale: true, price: { amount: '99.0' }, compareAtPrice: null, image: null },
+      ] },
+    } : null)) } }),
+  });
+  await far.waitForTimeout(800);
+  const farAdd = far.net.adds.find((b) => Array.isArray(b.items) && b.items.some((i) => i.properties && i.properties._brixReward === 'true'));
+  check('free gift past the first 250 products: found by id and added (in-stock variant)', farAdd && farAdd.items[0].id === 90012, JSON.stringify(far.net.adds));
+  check('free gift past the first 250 products: one Storefront API lookup by product id', far.net.storefrontApi.length === 1 && JSON.stringify(far.net.storefrontApi[0].variables.ids) === '["gid://shopify/Product/9001"]', JSON.stringify(far.net.storefrontApi));
+  await close(far);
+
+  const gone = await openDrawer({
+    data: { progress_status: 1, progress_data: JSON.stringify({ ...progress, tiers: farTiers }) },
+    storefrontApi: () => ({ data: { nodes: [null] } }),
+  });
+  await gone.evaluate(() => window.testCart());
+  await gone.waitForTimeout(800);
+  check('free gift not on the Online Store: nothing added, looked up once per visit', !gone.net.adds.some((b) => Array.isArray(b.items) && b.items.some((i) => i.properties && i.properties._brixReward === 'true')) && gone.net.storefrontApi.length === 1, JSON.stringify(gone.net.storefrontApi.length));
+  await close(gone);
 
   const freeWord = JSON.stringify({ ...progress, tiers: [{ ...tiers[0], rewardBadgeLabel: 'Free mug' }] });
   const charged = await openDrawer({ data: { progress_status: 1, progress_data: freeWord }, cart: [...CART, gift] });
