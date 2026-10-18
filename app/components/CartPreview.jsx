@@ -640,7 +640,11 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   const pickVariant = (product) => (id) => setPicked((prev) => ({ ...prev, [product.id]: id }));
   // Manual rules show every selected product; only AI mode is capped by limit.
   // Mirror the storefront so the preview count matches what customers see.
-  const manualIds = (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
+  // Shopify recommendations mode has no picks: sample store products stand in
+  // for what Shopify would recommend (the preview can't ask Shopify).
+  const manualIds = upsell.useAI && upsell.upsellMode === 'shopify'
+    ? []
+    : (upsell.manualRules || []).flatMap((r) => r.upsellProductIds || r.upsellProducts || []);
   const count = upsell.useAI ? (upsell.limit || 3) : (manualIds.length || upsell.limit || 3);
   const resolved = findProductsByIds(allProducts, manualIds);
   // No specific selection yet (e.g. AI mode, or rule not configured) — show

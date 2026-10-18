@@ -56,6 +56,8 @@ export async function action({ request }) {
       totalProducts: result.totalProducts,
       productsSkipped: result.productsSkipped,
       truncated: result.truncated,
+      // AI mode was saved with the rules (else the editor's Save stores it).
+      modeSaved: Boolean(result.modeSaved),
     });
   } catch (e) {
     console.error('[upsell-ai-suggestions] generateAiUpsellRules failed:', e);

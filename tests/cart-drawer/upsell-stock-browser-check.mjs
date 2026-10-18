@@ -39,7 +39,11 @@ const rec = (id, title, price, available) => ({ id, title, handle: `r${id}`, fea
   variants: [{ id: id * 10, title: 'Default Title', price: price * 100, compare_at_price: null, available }] });
 const RELATED = {
   102: [rec(1, 'Boys Joggers', 275, true), rec(202, 'Sold Out Cap', 299, false), rec(201, 'Blue Co-ord Set', 999, true)],
+  // For the cart's Boys Joggers (product 1): Shopify's own related products.
+  1: [rec(301, 'Kids Cap', 299, true), rec(302, 'Sold Out Belt', 199, false), rec(1, 'Boys Joggers', 275, true), rec(303, 'Sun Hat', 349, true), rec(305, 'Rain Boots', 799, true)],
 };
+// intent=complementary (the merchant's Search & Discovery picks).
+const COMPLEMENTARY = { 1: [rec(304, 'Matching Tee', 399, true)] };
 
 function config(upsell = {}) {
   return {
@@ -68,7 +72,7 @@ const browser = await chromium.launch();
 
 async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0 } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
-  const net = { adds: [], related: [] };
+  const net = { adds: [], related: [], intents: [] };
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   await page.route('**/*', async (route) => {
@@ -92,6 +96,9 @@ async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0
         return json({ products: url.searchParams.get('page') ? [] : PRODUCTS });
       }
       if (url.pathname === '/recommendations/products.json') {
+        const intent = url.searchParams.get('intent');
+        net.intents.push(`${intent}:${url.searchParams.get('product_id')}`);
+        if (intent === 'complementary') return json({ products: COMPLEMENTARY[url.searchParams.get('product_id')] || [] });
         net.related.push(url.searchParams.get('product_id'));
         return json({ products: RELATED[url.searchParams.get('product_id')] || [] });
       }
@@ -155,6 +162,35 @@ const card = (page, title) => page.locator('.cc-upsell-card', { hasText: title }
   const after = await jeans2.locator('select.cc-upsell-variant').evaluate((s) => ({ value: s.value, refusedDisabled: [...s.options].find((o) => o.value === '1013').disabled }));
   check('refused size is marked sold out and the dropdown moves to an in-stock size', after.refusedDisabled && after.value === '1012', JSON.stringify(after));
   check('no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+}
+
+// ── Shopify recommendations mode (big catalogues: no rules, any product) ──
+{
+  const page = await open({ cfg: config({ useAI: true, upsellMode: 'shopify', limit: 3 }) });
+  const t = await titles(page);
+  check('shopify mode: complementary first, then related, sold-out and in-cart left out, up to the limit',
+    JSON.stringify(t) === JSON.stringify(['Matching Tee', 'Kids Cap', 'Sun Hat']), JSON.stringify(t));
+  check('shopify mode: the merchant\'s rules are not used', !t.includes('Cotton Socks') && !t.includes('Girls Grey Denim Jeans'));
+  check('shopify mode: asked Shopify about the cart\'s product', page.net.intents.includes('complementary:1') && page.net.intents.includes('related:1'), JSON.stringify(page.net.intents));
+  check('shopify mode: no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+}
+
+// ── AI mode: a cart no generated rule covers is filled from Shopify ──
+{
+  const rules = [{ id: 'ai1', aiGenerated: true, enabled: true, triggerType: 'specific', triggerProductIds: ['gid://shopify/Product/999'], upsellProductIds: ['gid://shopify/Product/103'] }];
+  const page = await open({ cfg: config({ useAI: true, upsellMode: 'ai', limit: 2, manualRules: rules }) });
+  const t = await titles(page);
+  check('ai mode: no rule for the cart → Shopify\'s recommendations instead of nothing', JSON.stringify(t) === JSON.stringify(['Matching Tee', 'Kids Cap']), JSON.stringify(t));
+  await page.close();
+}
+
+// ── Manual mode is unchanged: only the merchant's picks, no recommendations ──
+{
+  const rules = [{ id: 'm1', enabled: true, triggerType: 'specific', triggerProductIds: ['gid://shopify/Product/999'], upsellProductIds: ['gid://shopify/Product/103'] }];
+  const page = await open({ cfg: config({ useAI: false, manualRules: rules }) });
+  check('manual mode: no rule matches → no upsells, nothing asked of Shopify', (await titles(page)).length === 0 && page.net.intents.length === 0, JSON.stringify(page.net.intents));
   await page.close();
 }
 

@@ -1242,17 +1242,22 @@
     return out;
   }
 
-  // Shopify's own "related products" for a product, in stock only (used to
-  // fill the spot of a sold-out upsell). Never throws.
+  // Shopify's own recommendations for a product, in stock only: `related`
+  // (Shopify's automatic picks) or `complementary` (the merchant's own, from
+  // the Search & Discovery app; empty when none are set). Used to fill the
+  // spot of a sold-out upsell, and by the Shopify recommendations mode.
+  // Never throws.
   const _ccRelatedCache = {};
-  async function ccRelatedProducts(productId) {
-    const key = String(productId || '');
-    if (!key) return [];
+  async function ccRelatedProducts(productId, intent) {
+    const id = String(productId || '');
+    if (!id) return [];
+    const kind = intent === 'complementary' ? 'complementary' : 'related';
+    const key = kind + ':' + id;
     if (_ccRelatedCache[key]) return _ccRelatedCache[key];
     _ccRelatedCache[key] = (async () => {
       try {
         const root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-        const res = await originalFetch(root + 'recommendations/products.json?product_id=' + encodeURIComponent(key) + '&limit=10&intent=related');
+        const res = await originalFetch(root + 'recommendations/products.json?product_id=' + encodeURIComponent(id) + '&limit=10&intent=' + kind);
         if (!res.ok) return [];
         const data = await res.json().catch(() => null);
         return (Array.isArray(data?.products) ? data.products : [])
@@ -1263,6 +1268,29 @@
       }
     })();
     return _ccRelatedCache[key];
+  }
+
+  // Up to `wanted` of Shopify's recommendations for the cart's products
+  // (seeds, newest first, at most 4): complementary before related, taken in
+  // turns so every cart product gets a say; `exclude` = product ids to skip.
+  // Works on any catalogue size: nothing to page through, no rules.
+  async function ccShopifyRecommendations(seeds, exclude, wanted) {
+    const lists = await Promise.all(seeds.slice(0, 4).map(async (seed) => {
+      const [complementary, related] = await Promise.all([ccRelatedProducts(seed, 'complementary'), ccRelatedProducts(seed, 'related')]);
+      return complementary.concat(related);
+    }));
+    const seen = new Set((exclude || []).map(String));
+    const out = [];
+    for (let round = 0; out.length < wanted && lists.some((list) => list.length > round); round++) {
+      for (const list of lists) {
+        const detail = list[round];
+        if (!detail || seen.has(String(detail.id))) continue;
+        seen.add(String(detail.id));
+        out.push(detail);
+        if (out.length >= wanted) break;
+      }
+    }
+    return out;
   }
 
   async function ccGetStoreCatalog() {
@@ -4353,7 +4381,7 @@
     ((CONFIG && CONFIG.progress && CONFIG.progress.enabled && CONFIG.progress.tiers) || []).forEach((tier) => {
       (tier.products || []).forEach((pid) => { const n = ccExtractNumericId(pid); if (n) rewardIds.push(n); });
     });
-    const upsellOn = CONFIG && CONFIG.upsell && CONFIG.upsell.enabled;
+    const upsellOn = CONFIG && CONFIG.upsell && CONFIG.upsell.enabled && CONFIG.upsell.upsellMode !== 'shopify';
     if (!ids.length && !rewardIds.length && !(upsellOn && CONFIG.upsell.useAI)) return;
     const run = () => {
       if (rewardIds.length) ccRewardProductDetails(rewardIds).catch(() => {});
@@ -4368,9 +4396,20 @@
     let upsellProducts = [];
     let matchedUpsellDetails = [];
     let storeDetailsById = null;
+    // manual = the merchant's rules, every pick; ai = the generated rules up to
+    // the limit, filled with Shopify's recommendations (AI pairings cover 300
+    // products; extrokids has 4000+); shopify = only Shopify's recommendations.
+    const mode = upsellConfig.useAI ? (upsellConfig.upsellMode === 'shopify' ? 'shopify' : 'ai') : 'manual';
+    // What Shopify recommends for: the shopper's own items, newest first (never
+    // a free gift), else on an empty cart the product page's own product.
+    const giftIds = cart.items.filter((it) => it.properties && it.properties._brixReward === 'true').map((it) => String(it.product_id));
+    let seedIds = [...new Set(cart.items.filter((it) => !(it.properties && it.properties._brixReward === 'true')).map((it) => String(it.product_id)))];
+    if (!seedIds.length) {
+      const pageProduct = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+      if (pageProduct && pageProduct.id) seedIds = [String(pageProduct.id)];
+    }
 
-
-    if (upsellProducts.length === 0 && upsellConfig.manualRules) {
+    if (mode !== 'shopify' && upsellProducts.length === 0 && upsellConfig.manualRules) {
       for (const rule of upsellConfig.manualRules) {
         if (rule.enabled === false) continue;
         const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
@@ -4399,7 +4438,8 @@
 
     // Every picked product's live detail (title, price, variants, stock),
     // loading further catalogue pages for products past the first 250.
-    const storeCatalog = await ccEnsureCatalogProducts(upsellProducts);
+    // (Not in Shopify mode: no rule picks, and its cards come with their details.)
+    const storeCatalog = mode === 'shopify' ? null : await ccEnsureCatalogProducts(upsellProducts);
     if (storeCatalog && storeCatalog.detailsById) {
       storeDetailsById = storeCatalog.detailsById;
     }
@@ -4408,12 +4448,13 @@
     if (!upsellConfig.showIfInCart) {
       upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
     }
-    // Manual rules show every product the merchant selected; AI mode is
-    // capped by the global limit. That's how many cards the shopper should see.
+    // Manual rules show every product the merchant selected; AI and Shopify
+    // modes show the global limit (Shopify's recommendations fill what rules
+    // don't). That's how many cards the shopper should see.
     let wanted = upsellProducts.length;
-    if (upsellConfig.limit && upsellConfig.useAI) {
+    if (mode !== 'manual') {
       const parsedLimit = Number.parseInt(String(upsellConfig.limit), 10);
-      if (Number.isFinite(parsedLimit) && parsedLimit > 0) wanted = Math.min(wanted, parsedLimit);
+      wanted = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 3;
     }
     if (wanted === 0) return '';
 
@@ -4451,6 +4492,16 @@
           replacementDetails[detail.id] = detail;
         }
       }
+    }
+
+    // AI / Shopify modes: Shopify's recommendations for the cart fill the rest.
+    if (mode !== 'manual' && upsellProducts.length < wanted && seedIds.length) {
+      const exclude = upsellProducts.concat(soldOut, giftIds, upsellConfig.showIfInCart ? [] : cartProductIds);
+      const recommended = await ccShopifyRecommendations(seedIds, exclude, wanted - upsellProducts.length);
+      recommended.forEach((detail) => {
+        upsellProducts.push(detail.id);
+        replacementDetails[detail.id] = detail;
+      });
     }
 
     if (upsellProducts.length === 0) return '';

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useFetcher } from 'react-router';
 import { FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Icon, Divider, Modal, Banner, Checkbox } from '@shopify/polaris';
-import { MagicIcon, SettingsIcon } from '@shopify/polaris-icons';
+import { MagicIcon, SettingsIcon, StoreIcon } from '@shopify/polaris-icons';
 import { useCartEditor } from '../../context/CartEditorContext';
 import ProductPickerBody from '../shared/ProductPickerBody';
 import { FeatureToggle } from '../shared/FeatureToggle';
@@ -11,10 +11,14 @@ import { useCurrency } from '../CurrencyContext';
 import PairingAssistant from '../shared/PairingAssistant';
 import { toUpsellRule, upsellRuleKey } from '../../utils/pairing.shared';
 
+// Saved as useAI (true for ai / shopify, what older drawers read) + upsellMode.
 const CONFIG_OPTIONS = [
   { value: 'ai', label: 'AI Recommendations', desc: 'Let AI automatically suggest relevant products based on cart contents', icon: MagicIcon },
+  { value: 'shopify', label: 'Smart Recommendations', desc: 'Related products for what\u2019s in the cart, picked by Shopify. Covers every product, best for big stores, nothing to set up', icon: StoreIcon },
   { value: 'manual', label: 'Manual Selection', desc: 'Hand-pick exactly which products to show as upsells', icon: SettingsIcon },
 ];
+
+const modeOf = (up) => (up.useAI ? (up.upsellMode === 'shopify' ? 'shopify' : 'ai') : 'manual');
 
 const PRODUCT_CACHE_KEY = 'cached_products';
 
@@ -139,14 +143,18 @@ function LimitPicker({ value, onChange }) {
 }
 
 export function UpsellSection() {
-  const { body, allProducts, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, resetDirty } = useCartEditor();
+  const { body, allProducts, updateUpsellProducts, addUpsellRule, removeUpsellRule, updateUpsellRule, resetDirty, isDirty } = useCartEditor();
   const { upsellProducts } = body;
   const [assistantTab, setAssistantTab] = useState(null); // null | 'describe' | 'orders'
-  const [configMode, setConfigMode] = useState(upsellProducts.useAI ? 'ai' : 'manual');
+  const [configMode, setConfigMode] = useState(modeOf(upsellProducts));
   const [pickerConfig, setPickerConfig] = useState(null);
   const aiFetcher = useFetcher();
   const [aiStatus, setAiStatus] = useState(null); // { type: 'success' | 'error', message }
   const appliedAiDataRef = useRef(null);
+  // Nothing else unsaved when Generate was tapped (switching to AI from a
+  // saved page counts as clean: the server saves the mode with the rules).
+  const cleanAtGenerateRef = useRef(false);
+  const cleanBeforeModeRef = useRef(false);
 
   const aiLoading = aiFetcher.state !== 'idle';
 
@@ -164,8 +172,12 @@ export function UpsellSection() {
       // know this particular change is already saved), which lit up the
       // main Save button and made a regenerate that had genuinely already
       // saved look unsaved — resetDirty right after corrects that.
-      updateUpsellProducts({ manualRules: aiFetcher.data.rules || [] });
-      resetDirty();
+      // The server also saved AI mode with the rules (saveUpsellAiMode).
+      updateUpsellProducts({ manualRules: aiFetcher.data.rules || [], useAI: true, upsellMode: 'ai' });
+      setConfigMode('ai');
+      // Only when nothing else was waiting: else the merchant's other edits
+      // would look saved and be lost on refresh.
+      if (cleanAtGenerateRef.current && aiFetcher.data.modeSaved) resetDirty();
       const { productsCovered, totalProducts, productsSkipped } = aiFetcher.data;
       setAiStatus({
         type: 'success',
@@ -180,8 +192,9 @@ export function UpsellSection() {
   }, [aiFetcher.data]);
 
   const handleModeChange = (mode) => {
+    if (!isDirty) cleanBeforeModeRef.current = true;
     setConfigMode(mode);
-    updateUpsellProducts({ useAI: mode === 'ai' });
+    updateUpsellProducts({ useAI: mode !== 'manual', upsellMode: mode });
   };
 
   const addRule = () => {
@@ -204,6 +217,7 @@ export function UpsellSection() {
 
   const handleGenerateAiSuggestions = () => {
     setAiStatus(null);
+    cleanAtGenerateRef.current = !isDirty || cleanBeforeModeRef.current;
     // The catalog is fetched server-side against the real store now (same
     // as FBT's AI Coverage Run), so it no longer needs the client's product
     // list — `count` is products-per-trigger (reuses the same "Max upsells
@@ -264,6 +278,9 @@ export function UpsellSection() {
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Ranks each product&rsquo;s upsell by real order history first, then by shared collections — never an invented pairing. Generates one rule per product, matched to whatever&rsquo;s actually in the cart.
                 </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Pairings cover up to 300 products. A cart whose products have none (or too few) is filled with Shopify&rsquo;s own recommendations, so shoppers always see suggestions.
+                </Text>
               </BlockStack>
               <LimitPicker value={upsellProducts.limit} onChange={(v) => updateUpsellProducts({ limit: v })} />
               <InlineStack gap="200">
@@ -274,6 +291,19 @@ export function UpsellSection() {
               {aiStatus && (
                 <Banner tone={aiStatus.type === 'success' ? 'success' : 'critical'}>{aiStatus.message}</Banner>
               )}
+            </BlockStack>
+          )}
+
+          {configMode === 'shopify' && (
+            <BlockStack gap="300">
+              <BlockStack gap="100">
+                <Text as="h3" variant="headingSm">Smart Recommendations</Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  For each product in the cart, the drawer shows what Shopify recommends with it: your complementary products from the Shopify Search &amp; Discovery app first, then Shopify&rsquo;s related products. Works for any number of products, with no rules to keep up to date. Products already in the cart and sold-out products are left out.
+                </Text>
+              </BlockStack>
+              <LimitPicker value={upsellProducts.limit} onChange={(v) => updateUpsellProducts({ limit: v })} />
+              <Banner tone="info">The preview shows sample products from your store. The live drawer shows Shopify&rsquo;s picks for the shopper&rsquo;s cart.</Banner>
             </BlockStack>
           )}
 

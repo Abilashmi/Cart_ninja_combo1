@@ -17,6 +17,7 @@ import { canPublishFeature } from '../config/plans';
 import { buildAiFbtRules, shapeAiUpsellRules } from '../utils/fbt-ai.shared';
 import { mergeInstructionRules } from '../utils/pairing.shared';
 import { withTimeout } from '../utils/with-timeout';
+import { fetchCartDrawerRecord, persistCartDrawerRecord } from './cart-drawer-record.server';
 import { cleanBannerImage, cleanBannerPlacement, cleanBannerSpacing, DEFAULT_BANNER_PLACEMENT, BANNER_SPACING_DEFAULT } from '../utils/cart-banner.shared';
 
 // Ceiling for a single Shopify Admin API call made from a save path.
@@ -1438,8 +1439,39 @@ export async function generateAiUpsellRules(admin, shop, planKey, countPerProduc
   const nextManualRules = [...keptManualRules, ...aiRules];
 
   const settings = await saveUpsellWidgetSettings(shop, planKey, { manualRules: nextManualRules });
+  const modeSaved = await saveUpsellAiMode(shop, planKey, nextManualRules);
 
-  return { totalProducts, productsCovered: covered, productsSkipped, truncated, rules: aiRules, settings };
+  return { totalProducts, productsCovered: covered, productsSkipped, truncated, rules: aiRules, settings, modeSaved };
+}
+
+// What the storefront GET of the drawer record (save_cart_drawer.php
+// applyPlanGatingToCartDrawerResult) may switch off for the plan. The record
+// can only be written back whole, so it is written only when none of these
+// can have been changed in the copy read.
+const DRAWER_GATED_FEATURES = ['ai_cart_upsell', 'progress_bar', 'confetti', 'custom_css', 'mobile_swipe_checkout', 'open_countdown'];
+
+// Generating AI recommendations means the upsell runs in AI mode. The mode
+// lives only in the drawer's own blob (cart_drawer.upsell_data `useAI`: what
+// the storefront and the Cart Editor's reload read), which only the editor's
+// Save used to write, and the editor marks the page saved after a generate,
+// so the mode fell back to Manual on refresh and on the storefront. Returns
+// whether it was saved (else the editor keeps Save lit, and its Save stores
+// the mode). Never throws: the rules are already saved.
+export async function saveUpsellAiMode(shop, planKey, manualRules) {
+  try {
+    if (!DRAWER_GATED_FEATURES.every((f) => canPublishFeature(planKey, f))) return false;
+    const existing = await fetchCartDrawerRecord(shop);
+    // Off can also be a paused order cap in the copy read: never written back.
+    if (!existing || !Number(existing.cartStatus ?? existing.cart_status)) return false;
+    let up = existing.upsell_data;
+    if (typeof up === 'string') { try { up = JSON.parse(up || '{}'); } catch { up = {}; } }
+    if (!up || typeof up !== 'object' || Array.isArray(up)) up = {};
+    const result = await persistCartDrawerRecord(shop, { ...existing, upsell_data: JSON.stringify({ ...up, useAI: true, upsellMode: 'ai', manualRules }) });
+    return Boolean(result?.ok);
+  } catch (e) {
+    console.warn('[upsell-ai] could not save AI mode:', String(e?.message || e).slice(0, 200));
+    return false;
+  }
 }
 
 // ── Countdown Timer (cart drawer's own — distinct from the Product Widget's
