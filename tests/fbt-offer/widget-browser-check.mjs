@@ -4,6 +4,7 @@
 //    and only while every product of the set is shown
 //  - Add all also adds the product being viewed when an offer applies
 //  - image and spacing settings (sizes, corners, fit, gaps, padding, margins)
+//  - the image popup (every picture of the product) and the spacing inside cards
 // Liquid attributes are filled with fixed values and every request is mocked.
 //   node tests/fbt-offer/widget-browser-check.mjs
 import { chromium } from '@playwright/test';
@@ -40,7 +41,7 @@ const browser = await chromium.launch();
 
 // products: a whole /products.json catalog instead of catalog(); pageProduct:
 // the viewed product's /products/joggers.js (its options and variants).
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '' }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '', productJs = {} }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
@@ -52,6 +53,7 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
     const url = new URL(r.request().url());
     if (url.pathname === '/products.json') { log.hits.catalog += 1; if (catalogDelay) await new Promise((res) => setTimeout(res, catalogDelay)); }
     if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(products ? { products } : catalog(capAvailable, socksVariants)) });
+    if (productJs[url.pathname]) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(productJs[url.pathname]) });
     if (url.pathname === '/products/joggers.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(pageProduct || { options: [], variants: [] }) });
     if (url.pathname === '/cart.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cart }) });
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
@@ -239,6 +241,20 @@ const rule = (extra = {}) => ({ id: 'r1', displayScope: 'per_product', triggerPr
   await page.close();
 }
 
+/* 4b. Show only, "offer from N items" (the store's own "any N" discount) */
+{
+  const temp1 = { offerShowSavings: true, offerStrikeTotal: true };
+  const { page } = await open({ condition: [rule({ offer: { type: 'percentage', value: 10, text: 'Buy any {count} together and save {discount}', min: 2 } })], temp1 });
+  const savings = () => page.textContent('ps-fbt-widget .ps-fbt-savings');
+  check('any N: "Buy any 2 together and save 10%"', (await page.locator('ps-fbt-widget .ps-fbt-offer').textContent()).startsWith('Buy any 2 together and save 10%'));
+  check('any N: everything picked = 10% of ₹800 + ₹199 + ₹500', (await savings()) === 'You save ₹149.9', await savings());
+  await page.click('ps-fbt-widget .ps-product-card:nth-of-type(2) .ps-classic-btn');
+  check('any N: 2 items (viewed + socks) still get it: ₹99.9', (await savings()) === 'You save ₹99.9' && (await page.textContent('ps-fbt-widget .ps-total-label')) === 'Bundle total (2 items)', await savings());
+  await page.click('ps-fbt-widget .ps-product-card:nth-of-type(1) .ps-classic-btn');
+  check('any N: below 2 items, no saving shown', !(await page.isVisible('ps-fbt-widget .ps-fbt-savings')));
+  await page.close();
+}
+
 /* 5. Amount offer text */
 {
   const { page } = await open({ condition: [rule({ offer: { type: 'fixed_amount', value: 150, text: 'Save {discount} when you take all {count}' } })] });
@@ -372,6 +388,87 @@ const measure = (page) => page.evaluate(() => {
   const b = await measure(bad.page);
   check('bad values are clamped / ignored', b.imgH === 200 && b.gap === '0px' && b.fit === 'contain', JSON.stringify(b));
   await bad.page.close();
+}
+
+/* 9. Spacing inside each product (image to text, title to price, list rows) */
+const inner = (page) => page.evaluate(() => {
+  const w = document.querySelector('ps-fbt-widget');
+  const card = w.querySelector('.ps-product-card, .ps-product-row');
+  const price = w.querySelector('.ps-product-price, .ps-product-row-price');
+  const wrap = w.querySelector('.ps-fbt-products');
+  return { gap: getComputedStyle(card).columnGap, priceTop: getComputedStyle(price).marginTop, listGap: getComputedStyle(wrap).rowGap };
+});
+{
+  const withImg = [rule({ fbtProducts: [{ ...SOCKS, image: 'http://shop.test/socks.svg' }, { ...CAP, image: 'http://shop.test/cap.svg' }] })];
+  const d = await open({ condition: withImg });
+  const dc = await inner(d.page);
+  check('spacing defaults unchanged: cards 8px image to text, 4px title to price', dc.gap === '8px' && dc.priceTop === '4px', JSON.stringify(dc));
+  await d.page.close();
+  const dl = await open({ condition: withImg, temp1: { layout: 'vertical' } });
+  const dlc = await inner(dl.page);
+  check('spacing defaults unchanged: rows 12px / 2px, no space between rows', dlc.gap === '12px' && dlc.priceTop === '2px' && (dlc.listGap === '0px' || dlc.listGap === 'normal'), JSON.stringify(dlc));
+  await dl.page.close();
+  const c = await open({ condition: withImg, temp1: { imageTextGap: 20, textGap: 10, rowGap: 14 } });
+  const cc = await inner(c.page);
+  check('spacing custom (cards): image to text 20px, title to price 10px', cc.gap === '20px' && cc.priceTop === '10px', JSON.stringify(cc));
+  await c.page.close();
+  const cl = await open({ condition: withImg, temp1: { layout: 'vertical', imageTextGap: 20, textGap: 10, rowGap: 14 } });
+  const clc = await inner(cl.page);
+  check('spacing custom (list): 20px / 10px, 14px between rows', clc.gap === '20px' && clc.priceTop === '10px' && clc.listGap === '14px', JSON.stringify(clc));
+  await cl.page.screenshot({ path: path.join(shotDir, 'list-spacing.png') });
+  await cl.page.close();
+}
+
+/* 10. Image popup: a tap on a product's image shows all its pictures */
+{
+  const withImg = [rule({ fbtProducts: [{ ...SOCKS, image: 'http://shop.test/socks.svg' }, { ...CAP, image: 'http://shop.test/cap.svg' }] })];
+  const productJs = { '/products/socks.js': { title: 'Socks', images: ['http://shop.test/socks-front.svg', 'http://shop.test/socks.svg?v=2', 'http://shop.test/socks-back.svg'] } };
+  const { page } = await open({ condition: withImg, productJs, themeCss: 'div:empty{display:none}' });
+  check('popup: images are tappable', (await page.$$('ps-fbt-widget [data-fbt-zoom]')).length === 2);
+  await page.click('ps-fbt-widget .ps-product-image >> nth=0');
+  await page.waitForSelector('#ps-fbt-pop .ps-fbt-pop-thumb', { timeout: 5000 });
+  const st = () => page.evaluate(() => {
+    const p = document.getElementById('ps-fbt-pop');
+    if (!p) return null;
+    return { title: p.querySelector('.ps-fbt-pop-title').textContent, count: (p.querySelector('.ps-fbt-pop-count') || {}).textContent || '', thumbs: p.querySelectorAll('.ps-fbt-pop-thumb').length, src: p.querySelector('.ps-fbt-pop-main img').getAttribute('src'), price: (p.querySelector('.ps-fbt-pop-price') || {}).textContent || '', link: (p.querySelector('.ps-fbt-pop-link') || {}).getAttribute?.('href') || '', label: p.getAttribute('aria-label'), overflow: document.documentElement.style.overflow, visible: getComputedStyle(p).display !== 'none' };
+  });
+  const a = await st();
+  check('popup: opens on the card picture, in the product\'s order, no duplicate', a && a.visible && a.thumbs === 3 && a.count === '2 / 3' && a.src.includes('socks.svg'), JSON.stringify(a));
+  check('popup: title, price, product link, dialog label', a.title === 'Socks' && a.price.includes('199') && a.link === '/products/socks' && a.label === 'Socks', JSON.stringify(a));
+  check('popup: page scroll locked while open', a.overflow === 'hidden');
+  await page.click('#ps-fbt-pop .ps-fbt-pop-next');
+  check('popup: next arrow', (await st()).count === '3 / 3');
+  await page.keyboard.press('ArrowRight');
+  check('popup: → wraps to the first', (await st()).count === '1 / 3');
+  await page.click('#ps-fbt-pop .ps-fbt-pop-thumb >> nth=2');
+  const t = await st();
+  check('popup: thumbnail picks the picture', t.count === '3 / 3' && t.src.includes('socks-back'), JSON.stringify(t));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotDir, 'image-popup.png') });
+  await page.keyboard.press('Escape');
+  check('popup: Esc closes and gives scroll back', (await st()) === null && (await page.evaluate(() => document.documentElement.style.overflow)) === '');
+  await page.click('ps-fbt-widget .ps-product-image >> nth=1');
+  await page.waitForSelector('#ps-fbt-pop', { timeout: 5000 });
+  const one = await st();
+  check('popup: a product without more pictures shows its one image, no arrows', one.thumbs === 0 && one.count === '' && one.src.includes('cap.svg'), JSON.stringify(one));
+  await page.mouse.click(5, 5);
+  check('popup: tap outside closes', (await st()) === null);
+  await page.close();
+
+  const phone = await open({ condition: withImg, productJs, width: 390 });
+  await phone.page.click('ps-fbt-widget .ps-product-image >> nth=0');
+  await phone.page.waitForSelector('#ps-fbt-pop .ps-fbt-pop-thumb', { timeout: 5000 });
+  const sheet = await phone.page.evaluate(() => { const r = document.querySelector('#ps-fbt-pop .ps-fbt-pop-panel').getBoundingClientRect(); return { bottom: Math.round(r.bottom), width: Math.round(r.width), vh: innerHeight }; });
+  check('popup (phone): a bottom sheet the full width', sheet.bottom === sheet.vh && sheet.width === 390, JSON.stringify(sheet));
+  await phone.page.waitForTimeout(300);
+  await phone.page.screenshot({ path: path.join(shotDir, 'image-popup-phone.png') });
+  await phone.page.close();
+
+  const off = await open({ condition: withImg, productJs, temp1: { imagePopup: false } });
+  await off.page.click('ps-fbt-widget .ps-product-image >> nth=0');
+  await off.page.waitForTimeout(300);
+  check('popup off: images are not tappable', (await off.page.$$('ps-fbt-widget [data-fbt-zoom]')).length === 0 && !(await off.page.$('#ps-fbt-pop')));
+  await off.page.close();
 }
 
 await browser.close();

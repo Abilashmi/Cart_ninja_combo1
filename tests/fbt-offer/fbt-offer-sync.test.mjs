@@ -161,3 +161,14 @@ test('show only has no metafield size limit: every rule with an offer shows it (
   assert.equal(shown.state, 'show_only');
   assert.equal(withOffer(), 150, 'show only: all 150');
 });
+
+test('show only with "offer from 4 items": the widget gets the minimum and "any" wording', async () => {
+  db.settings.offer_create_discount = 0;
+  db.settings.offer_min_items = 4;
+  db.settings.offer_text = null; // default text
+  await syncFbtOfferDiscount(fakeAdmin(), 'shop-m.myshopify.com');
+  assert.deepEqual(db.condition[0].offer, { type: 'percentage', value: 10, text: 'Buy any {count} together and save {discount}', min: 4 });
+  db.settings.offer_create_discount = 1; // BRIX's own discount: the whole set, no minimum
+  await syncFbtOfferDiscount(fakeAdmin(), 'shop-m.myshopify.com');
+  assert.equal(db.condition[0].offer.min, undefined);
+});

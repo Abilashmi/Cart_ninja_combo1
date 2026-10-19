@@ -38,11 +38,11 @@ export async function loadFbtOfferInputs(db, shop) {
   await ensureFbtRulesSourceColumn(db);
   await ensureFbtOfferColumns(db);
   const [settingsRows] = await db.execute(
-    'SELECT mode, offer_enabled, offer_type, offer_value, offer_text, offer_create_discount FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
+    'SELECT mode, offer_enabled, offer_type, offer_value, offer_text, offer_create_discount, offer_min_items FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
   );
   const s = settingsRows[0] || {};
   const mode = s.mode === 'ai' ? 'ai' : 'manual';
-  const offer = sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount });
+  const offer = sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount, minItems: s.offer_min_items });
   const [ruleRows] = await db.execute(
     'SELECT * FROM fbt_rules WHERE shop_domain = ? AND source = ? AND is_active = 1 ORDER BY sort_order ASC', [shop, mode]
   );

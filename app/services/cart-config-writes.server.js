@@ -883,6 +883,7 @@ async function syncFbtWidgetToLegacyRecord(shop, settings) {
 // Array.isArray(body.rules)), kept as-is here.
 export async function saveFbtWidgetSettings(shop, planKey, patch) {
   const db = getDb();
+  await ensureFbtInteractionColumn(db);
   const [exRows] = await db.execute(
     'SELECT * FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
   );
@@ -932,7 +933,7 @@ export async function saveFbtWidgetSettings(shop, planKey, patch) {
     pick(patch.border_color ?? patch.borderColor, ex.border_color, '#e5e7eb'),
     pick(patch.border_radius ?? patch.borderRadius, ex.border_radius, 8),
     pick(patch.layout, ex.layout, 'carousel'),
-    pick(patch.interaction_type ?? patch.interactionType, ex.interaction_type, 'classic'),
+    cleanFbtInteraction(patch.interaction_type ?? patch.interactionType) || cleanFbtInteraction(ex.interaction_type) || 'classic',
     pickFlag(patch.show_prices, ex.show_prices, 1),
     pickFlag(patch.show_add_all_button, ex.show_add_all_button, 1),
   ]);
@@ -1150,6 +1151,8 @@ export async function ensureFbtOfferColumns(db) {
     { name: 'offer_message', ddl: '`offer_message` VARCHAR(255) NULL' },
     // 1 = BRIX creates the "BRIX Bundle Offer" discount; 0 = show the offer only.
     { name: 'offer_create_discount', ddl: '`offer_create_discount` TINYINT(1) NOT NULL DEFAULT 1' },
+    // Show only: offer from this many items (0 = the whole set).
+    { name: 'offer_min_items', ddl: '`offer_min_items` TINYINT NOT NULL DEFAULT 0' },
   ]);
   await ensureColumns(db, 'fbt_rules.offer', 'fbt_rules', [
     { name: 'offer_mode', ddl: "`offer_mode` VARCHAR(16) NOT NULL DEFAULT 'widget'" },
@@ -1163,6 +1166,31 @@ export async function ensureFbtBackupColumn(db) {
   await ensureColumns(db, 'fbt_rules.backup_products', 'fbt_rules', [
     { name: 'backup_products', ddl: '`backup_products` TEXT NULL' },
   ]);
+}
+
+// The FBT add style. The column was created as ENUM('classic','quick-add',
+// 'bundle') while the app saves 'quickAdd' / 'checkboxQty': MariaDB stored ''
+// for those, the FBT page read it back as Classic, and the next Save wrote
+// Classic over the template the storefront reads. Widened once to text.
+export const FBT_INTERACTION_TYPES = ['classic', 'bundle', 'quickAdd', 'checkboxQty'];
+let fbtInteractionWidened = false;
+export async function ensureFbtInteractionColumn(db) {
+  if (fbtInteractionWidened) return;
+  const [rows] = await db.execute(
+    'SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    ['fbt_widget_settings', 'interaction_type']
+  );
+  if (rows?.[0] && /^enum/i.test(String(rows[0].COLUMN_TYPE ?? rows[0].column_type ?? ''))) {
+    await db.execute("ALTER TABLE `fbt_widget_settings` MODIFY `interaction_type` VARCHAR(20) NOT NULL DEFAULT 'classic'");
+  }
+  fbtInteractionWidened = true;
+}
+
+/** A saved add style, else '' (old 'quick-add' = quickAdd). */
+export function cleanFbtInteraction(value) {
+  const v = String(value ?? '').trim();
+  if (v === 'quick-add') return 'quickAdd';
+  return FBT_INTERACTION_TYPES.includes(v) ? v : '';
 }
 
 export async function ensureFbtRulesSourceColumn(db) {

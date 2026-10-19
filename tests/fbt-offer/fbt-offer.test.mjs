@@ -16,7 +16,10 @@ const rule = (id, t, o, extra = {}) => ({ id, displayScope: t.length ? 'per_prod
 const ON = sanitizeFbtOffer({ enabled: true, type: 'percentage', value: 10 });
 
 test('widget offer: defaults off, values cleaned, percent capped at 90', () => {
-  assert.deepEqual(sanitizeFbtOffer({}), { enabled: false, type: 'percentage', value: 10, text: 'Buy all {count} together and save {discount}', createDiscount: true });
+  assert.deepEqual(sanitizeFbtOffer({}), { enabled: false, type: 'percentage', value: 10, text: 'Buy all {count} together and save {discount}', createDiscount: true, minItems: 0 });
+  assert.equal(sanitizeFbtOffer({ minItems: 4 }).minItems, 4);
+  assert.equal(sanitizeFbtOffer({ min_items: '1' }).minItems, 0, '1 item is no bundle: the whole set');
+  assert.equal(sanitizeFbtOffer({ minItems: 99 }).minItems, 20);
   // "Create the discount": ticked unless saved off (the DB column is 0 / 1).
   assert.equal(sanitizeFbtOffer({ createDiscount: false }).createDiscount, false);
   assert.equal(sanitizeFbtOffer({ create_discount: 0 }).createDiscount, false);

@@ -27,6 +27,9 @@ export const DEFAULT_FBT_OFFER = Object.freeze({
   // true = BRIX creates the "BRIX Bundle Offer" discount; false = the widget
   // only shows the offer (the store's own automatic discount gives it).
   createDiscount: true,
+  // Show only: the offer applies from this many items (the viewed product
+  // counts; 0 = the whole set). For stores whose own discount is "any N".
+  minItems: 0,
 });
 
 function numericId(value) {
@@ -47,10 +50,12 @@ export function sanitizeFbtOffer(raw = {}, base = DEFAULT_FBT_OFFER) {
   const value = cleanValue(type, raw.value ?? base.value) ?? cleanValue(type, base.value) ?? 10;
   const text = String(raw.text ?? base.text ?? '').replace(/[<>]/g, '').trim().slice(0, 120) || FBT_OFFER_TEXT_DEFAULT;
   const cd = raw.createDiscount ?? raw.create_discount;
+  const mi = Math.floor(Number(raw.minItems ?? raw.min_items ?? base.minItems ?? 0));
   return {
     enabled: raw.enabled === undefined ? Boolean(base.enabled) : Boolean(Number(raw.enabled) || raw.enabled === true),
     type, value, text,
     createDiscount: cd === undefined || cd === null || cd === '' ? base.createDiscount !== false : Boolean(Number(cd) || cd === true),
+    minItems: Number.isFinite(mi) && mi >= 2 ? Math.min(mi, 20) : 0,
   };
 }
 
@@ -125,6 +130,8 @@ export function fbtOfferText(text, { count, offer, symbol = '' }) {
  * offer: { type, value, text } on rules in `liveIds` (sets the Function
  * really has, discount verified ACTIVE), removed from every other rule.
  */
+export const FBT_OFFER_ANY_TEXT_DEFAULT = 'Buy any {count} together and save {discount}';
+
 export function withConditionOffers(condition, rulesById, widgetOffer, liveIds) {
   const live = new Set((liveIds || []).map(String));
   return (Array.isArray(condition) ? condition : []).map((entry) => {
@@ -133,7 +140,11 @@ export function withConditionOffers(condition, rulesById, widgetOffer, liveIds) 
     const id = String(entry?.id ?? '');
     const rule = rulesById.get(id);
     const offer = live.has(id) && rule ? effectiveOffer(rule, widgetOffer) : null;
-    return offer ? { ...rest, offer: { ...offer, text: widgetOffer?.text || FBT_OFFER_TEXT_DEFAULT } } : rest;
+    // Show only with a minimum: the widget offers it from that many picked items.
+    const min = widgetOffer?.createDiscount === false && widgetOffer?.minItems >= 2 ? { min: widgetOffer.minItems } : {};
+    const text = widgetOffer?.text || FBT_OFFER_TEXT_DEFAULT;
+    // "Buy all 4" would be wrong for "any 4": the default text reads "any" then.
+    return offer ? { ...rest, offer: { ...offer, text: min.min && text === FBT_OFFER_TEXT_DEFAULT ? FBT_OFFER_ANY_TEXT_DEFAULT : text, ...min } } : rest;
   });
 }
 

@@ -38,11 +38,11 @@
     var cards='';
     for(var i=0;i<n;i++){
       cards+=isList
-        ?'<span style="display:flex!important;align-items:center;gap:12px;padding:'+(config.cardPadding+2)+'px 4px;'+(i<n-1?'border-bottom:1px solid '+config.borderColor+';':'')+'">'
+        ?'<span style="display:flex!important;align-items:center;gap:'+fbtGap(config.imageTextGap,12)+'px;padding:'+(config.cardPadding+2)+'px 4px;'+(i<n-1?'border-bottom:1px solid '+config.borderColor+';':'')+'">'
           +bar('width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;flex-shrink:0;border-radius:'+config.imageRadius+'px;')
           +'<span style="display:block!important;flex:1;min-width:0;">'+bar('height:12px;width:75%;')+bar('height:12px;width:45%;margin-top:8px;')+'</span>'
           +bar('width:58px;height:28px;flex-shrink:0;')+'</span>'
-        :'<span style="display:flex!important;flex-direction:column;align-items:center;gap:8px;flex:0 0 '+config.cardWidth+'px;width:'+config.cardWidth+'px;padding:'+config.cardPadding+'px;border:1px solid '+config.borderColor+';border-radius:'+config.borderRadius+'px;box-sizing:border-box;background:'+config.bgColor+';">'
+        :'<span style="display:flex!important;flex-direction:column;align-items:center;gap:'+fbtGap(config.imageTextGap,8)+'px;flex:0 0 '+config.cardWidth+'px;width:'+config.cardWidth+'px;padding:'+config.cardPadding+'px;border:1px solid '+config.borderColor+';border-radius:'+config.borderRadius+'px;box-sizing:border-box;background:'+config.bgColor+';">'
           +bar('width:100%;height:'+config.imageSize+'px;border-radius:'+config.imageRadius+'px;')
           +bar('height:11px;width:85%;')+bar('height:11px;width:55%;')
           +bar('height:13px;width:40%;margin-top:2px;')
@@ -50,7 +50,7 @@
     }
     el.innerHTML='<div class="ps-fbt-wrapper" aria-busy="true" aria-label="Loading suggestions" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';padding:var(--ps-fbt-pad,'+config.widgetPadding+'px);">'
       +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:16px;">Frequently Bought Together</div>'
-      +'<span style="display:flex!important;'+(isList?'flex-direction:column;':'gap:'+config.gap+'px;overflow:hidden;')+'">'+cards+'</span>'
+      +'<span style="display:flex!important;'+(isList?'flex-direction:column;gap:'+config.rowGap+'px;':'gap:'+config.gap+'px;overflow:hidden;')+'">'+cards+'</span>'
       +'<span style="display:flex!important;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid '+config.borderColor+';">'
         +'<span style="display:block!important;">'+bar('height:10px;width:70px;')+bar('height:18px;width:90px;margin-top:6px;')+'</span>'
         +bar('height:40px;width:150px;border-radius:999px;')+'</span>'
@@ -73,7 +73,7 @@
     if(!Array.isArray(parsed))return[];
     return parsed.filter(function(r){return r&&typeof r==='object';}).map(function(rule,i){
       /* offer: only on rules the BRIX server confirmed live at checkout (fbt-offer-shopify.server.js). */
-      var offer=rule.offer&&typeof rule.offer==='object'&&(rule.offer.type==='percentage'||rule.offer.type==='fixed_amount')&&Number(rule.offer.value)>0?{type:rule.offer.type,value:Number(rule.offer.value),text:String(rule.offer.text||'')}:null;
+      var offer=rule.offer&&typeof rule.offer==='object'&&(rule.offer.type==='percentage'||rule.offer.type==='fixed_amount')&&Number(rule.offer.value)>0?{type:rule.offer.type,value:Number(rule.offer.value),text:String(rule.offer.text||''),min:Math.floor(Number(rule.offer.min))>=2?Math.min(20,Math.floor(Number(rule.offer.min))):0}:null;
       return{id:rule.id||rule.ruleId||('rule-'+i),displayScope:rule.displayScope||'all',triggerProducts:Array.isArray(rule.triggerProducts)?rule.triggerProducts:[],triggerProductId:rule.triggerProductId||null,fbtProducts:Array.isArray(rule.fbtProducts)?rule.fbtProducts:[],backupProducts:Array.isArray(rule.backupProducts)?rule.backupProducts:[],offer:offer};
     }).filter(function(r){return r.fbtProducts.length>0;});
   }
@@ -102,6 +102,7 @@
   }
 
   /* Image and spacing settings (app/utils/fbt-style.shared.js pickFbtLayout): bad or missing = what the widget always drew. */
+  function fbtGap(v,def){return v===null||v===undefined?def:v;}
   function fbtNum(v,def,min,max){if(v===''||v===null||v===undefined)return def;var n=Math.round(Number(v));return isFinite(n)?Math.max(min,Math.min(max,n)):def;}
   function normalizeConfig(config,currencySymbol){
     if(!config||typeof config!=='object')return null;
@@ -132,6 +133,12 @@
       startSelected:config.startSelected===true?true:config.startSelected===false?false:null,
       marginTop:fbtNum(config.marginTop,16,0,80),
       marginBottom:fbtNum(config.marginBottom,16,0,80),
+      /* Inside each product (null = the old 8 / 12 px image to text, 4 / 2 px title to price) and between list rows. */
+      imageTextGap:fbtNum(config.imageTextGap,null,0,40),
+      textGap:fbtNum(config.textGap,null,0,24),
+      rowGap:fbtNum(config.rowGap,0,0,40),
+      /* A tap on a product's image opens all its pictures (openFbtGallery); off only when saved false. */
+      imagePopup:config.imagePopup!==false,
       /* "Buy all together" text look (app/utils/fbt-style.shared.js pickFbtOfferStyle); '' = price colour / its tint. */
       offerTextColor:fbtHex(config.offerTextColor)||'',
       offerBgColor:fbtHex(config.offerBgColor)||'',
@@ -165,6 +172,116 @@
   function toPriceNumber(v){var p=parseFloat(v);return isNaN(p)?0:p;}
 
   function escapeHtml(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+  /* Styling → "Open pictures on image tap" (imagePopup): a popup with every
+     picture of the product (/products/<handle>.js, shared cache), a big one
+     with arrows / swipe / ← →, thumbnails, title, price and a link to the
+     product. Shows the card's picture at once; phones get a bottom sheet. */
+  function fbtImgUrl(u,w){
+    u=String(u||'');if(!u)return '';
+    if(u.indexOf('//')===0)u='https:'+u;
+    if(!/cdn\.shopify\.com|\/cdn\/shop\//.test(u))return u;
+    u=u.replace(/([?&])width=\d+&?/,'$1').replace(/[?&]$/,'');
+    return u+(u.indexOf('?')===-1?'?':'&')+'width='+w;
+  }
+  /* Same picture whatever the domain (cdn.shopify.com or the shop's /cdn/shop) or size suffix. */
+  function fbtImgKey(u){return String(u||'').split('?')[0].split('/').pop().replace(/_\d*x\d*(?=\.)/,'').toLowerCase();}
+  function openFbtGallery(o){
+    var config=o.config;
+    var old=document.getElementById('ps-fbt-pop');if(old&&old.parentNode)old.parentNode.removeChild(old);
+    if(!document.getElementById('ps-fbt-pop-css')){
+      var st=document.createElement('style');st.id='ps-fbt-pop-css';
+      st.textContent='#ps-fbt-pop{position:fixed;inset:0;z-index:2147483000;display:flex!important;align-items:center;justify-content:center;background:rgba(17,24,39,.55);padding:16px;box-sizing:border-box;animation:ps-fbt-pop-in .15s ease-out}'
+        +'@keyframes ps-fbt-pop-in{from{opacity:0}to{opacity:1}}'
+        +'#ps-fbt-pop .ps-fbt-pop-panel{position:relative;display:flex;flex-direction:column;width:100%;max-width:560px;max-height:calc(100vh - 32px);overflow:auto;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.3);box-sizing:border-box;padding:16px}'
+        +'#ps-fbt-pop .ps-fbt-pop-main{position:relative;display:flex!important;align-items:center;justify-content:center;width:100%;aspect-ratio:1/1;max-height:62vh;border-radius:10px;overflow:hidden;touch-action:pan-y}'
+        +'#ps-fbt-pop .ps-fbt-pop-main img{width:100%;height:100%;object-fit:contain;display:block}'
+        +'#ps-fbt-pop button{font:inherit;margin:0;min-width:0;min-height:0;box-shadow:none;text-transform:none;letter-spacing:normal}'
+        +'#ps-fbt-pop .ps-fbt-pop-arrow{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.92);color:#111827;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}'
+        +'#ps-fbt-pop .ps-fbt-pop-prev{left:8px}#ps-fbt-pop .ps-fbt-pop-next{right:8px}'
+        +'#ps-fbt-pop .ps-fbt-pop-count{position:absolute;bottom:8px;right:8px;padding:2px 8px;border-radius:10px;background:rgba(17,24,39,.6);color:#fff;font-size:11px;font-weight:600}'
+        +'#ps-fbt-pop .ps-fbt-pop-close{position:absolute;top:8px;right:8px;z-index:2;width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,.95);color:#111827;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}'
+        +'#ps-fbt-pop .ps-fbt-pop-thumbs{display:flex!important;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:2px;scrollbar-width:thin}'
+        +'#ps-fbt-pop .ps-fbt-pop-thumb{flex:0 0 56px;width:56px;height:56px;padding:0;border-radius:8px;overflow:hidden;cursor:pointer;background:transparent;border:2px solid transparent}'
+        +'#ps-fbt-pop .ps-fbt-pop-thumb img{width:100%;height:100%;object-fit:cover;display:block}'
+        +'#ps-fbt-pop .ps-fbt-pop-title{margin:12px 0 0;font-size:16px;font-weight:700;line-height:1.35}'
+        +'#ps-fbt-pop .ps-fbt-pop-price{margin-top:4px;font-size:15px;font-weight:700}'
+        +'#ps-fbt-pop .ps-fbt-pop-link{display:inline-block;margin-top:10px;font-size:13px;font-weight:600;text-decoration:underline}'
+        +'@media (max-width:640px){#ps-fbt-pop{align-items:flex-end;padding:0}#ps-fbt-pop .ps-fbt-pop-panel{max-width:none;border-radius:16px 16px 0 0;max-height:92vh;padding:14px 14px calc(14px + env(safe-area-inset-bottom))}#ps-fbt-pop .ps-fbt-pop-main{max-height:52vh}}'
+        +'@media (prefers-reduced-motion:reduce){#ps-fbt-pop{animation:none}}';
+      document.head.appendChild(st);
+    }
+    var images=[],idx=0;
+    function addImage(u){if(!u)return;var k=fbtImgKey(u);for(var i=0;i<images.length;i++)if(fbtImgKey(images[i])===k)return;images.push(u);}
+    addImage(o.image);
+    var arrow=function(d){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(d<0?'M15 18l-6-6 6-6':'M9 18l6-6-6-6')+'"/></svg>';};
+    var root=(window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/';
+    var pop=document.createElement('div');pop.id='ps-fbt-pop';
+    pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');
+    pop.innerHTML='<div class="ps-fbt-pop-panel" style="background:'+config.bgColor+';color:'+config.textColor+';">'
+      +'<button type="button" class="ps-fbt-pop-close" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
+      +'<div class="ps-fbt-pop-main" style="background:'+(config.imageBg||config.borderColor+'22')+';"></div>'
+      +'<div class="ps-fbt-pop-thumbs"></div>'
+      +'<div class="ps-fbt-pop-title" style="color:'+config.titleColor+';">'+(o.title||'')+'</div>'
+      +(o.priceHtml?'<div class="ps-fbt-pop-price" style="color:'+config.priceColor+';">'+o.priceHtml+'</div>':'')
+      +(o.handle?'<a class="ps-fbt-pop-link" style="color:'+config.textColor+';" href="'+root.replace(/\/?$/,'/')+'products/'+encodeURIComponent(o.handle)+'">View full details</a>':'')
+      +'</div>';
+    var main=pop.querySelector('.ps-fbt-pop-main'),thumbs=pop.querySelector('.ps-fbt-pop-thumbs');
+    pop.setAttribute('aria-label',pop.querySelector('.ps-fbt-pop-title').textContent||'Product pictures');
+    function draw(){
+      if(!images.length){main.innerHTML='<span style="font-size:12px;color:#9ca3af;">No image</span>';thumbs.style.display='none';return;}
+      idx=(idx+images.length)%images.length;
+      var many=images.length>1;
+      main.innerHTML='<img src="'+escapeHtml(fbtImgUrl(images[idx],1000))+'" alt="'+(idx+1)+' of '+images.length+'">'
+        +(many?'<button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-prev" aria-label="Previous picture">'+arrow(-1)+'</button><button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-next" aria-label="Next picture">'+arrow(1)+'</button><span class="ps-fbt-pop-count">'+(idx+1)+' / '+images.length+'</span>':'');
+      thumbs.style.setProperty('display',many?'flex':'none','important');
+      thumbs.innerHTML=many?images.map(function(u,i){return '<button type="button" class="ps-fbt-pop-thumb" data-i="'+i+'" aria-label="Picture '+(i+1)+'" style="border-color:'+(i===idx?config.checkboxColor:config.borderColor)+';"><img src="'+escapeHtml(fbtImgUrl(u,160))+'" alt="" loading="lazy"></button>';}).join(''):'';
+      var cur=thumbs.querySelector('[data-i="'+idx+'"]');if(cur&&thumbs.scrollWidth>thumbs.clientWidth)thumbs.scrollLeft=Math.max(0,cur.offsetLeft-thumbs.clientWidth/2+28);
+    }
+    function go(d){if(images.length>1){idx+=d;draw();}}
+    var prevOverflow=document.documentElement.style.overflow;
+    function close(){
+      document.removeEventListener('keydown',onKey,true);
+      document.documentElement.style.overflow=prevOverflow;
+      if(pop.parentNode)pop.parentNode.removeChild(pop);
+      if(o.opener&&o.opener.focus)try{o.opener.focus({preventScroll:true});}catch(e){}
+    }
+    function onKey(e){
+      if(!pop.parentNode)return;
+      if(e.key==='Escape'){e.preventDefault();close();}
+      else if(e.key==='ArrowLeft'){e.preventDefault();go(-1);}
+      else if(e.key==='ArrowRight'){e.preventDefault();go(1);}
+    }
+    pop.addEventListener('click',function(e){
+      var t=e.target;
+      if(t===pop||t.closest('.ps-fbt-pop-close')){close();return;}
+      if(t.closest('.ps-fbt-pop-prev')){go(-1);return;}
+      if(t.closest('.ps-fbt-pop-next')){go(1);return;}
+      var th=t.closest('.ps-fbt-pop-thumb');if(th){idx=Number(th.getAttribute('data-i'))||0;draw();}
+    });
+    var startX=null;
+    main.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;},{passive:true});
+    main.addEventListener('touchend',function(e){if(startX===null)return;var dx=e.changedTouches[0].clientX-startX;startX=null;if(Math.abs(dx)>40)go(dx<0?1:-1);},{passive:true});
+    document.addEventListener('keydown',onKey,true);
+    document.documentElement.style.overflow='hidden';
+    document.body.appendChild(pop);
+    draw();
+    var closeBtn=pop.querySelector('.ps-fbt-pop-close');if(closeBtn)try{closeBtn.focus({preventScroll:true});}catch(e){}
+    if(o.handle){
+      cachedJson('/products/'+encodeURIComponent(o.handle)+'.js').then(function(p){
+        if(!pop.parentNode)return;
+        /* The product's own order; the picture on the card stays in view (first if the product doesn't list it). */
+        var shown=images[idx],list=(p&&p.images)||[];
+        if(!list.length&&p&&p.media)list=p.media.filter(function(m){return m.media_type==='image';}).map(function(m){return m.src;});
+        if(!list.length)return;
+        images=[];list.forEach(addImage);
+        var at=-1;for(var i=0;i<images.length;i++)if(shown&&fbtImgKey(images[i])===fbtImgKey(shown))at=i;
+        if(shown&&at===-1){images.unshift(shown);at=0;}
+        idx=Math.max(0,at);
+        draw();
+      }).catch(function(){});
+    }
+  }
 
   function extractNumericId(v){var s=String(v||'');var m=s.match(/(\d+)(?!.*\d)/);return m?m[1]:'';}
 
@@ -537,8 +654,16 @@
             config.offer=null;
             if(offerRule){
               var shownIds=products.filter(function(p){return!p.sizeMissing;}).map(function(p){return extractNumericId(p.id);});
+              /* Show only with a minimum (the store's own "any N" discount): any
+                 shown products count, spares too, from `min` items picked. */
+              var minItems=offerRule.offer.min||0;
+              if(minItems){
+                var anyIds=shownIds.filter(function(id){return id&&id!==currentNumId;});
+                if(anyIds.length+1>=minItems)config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text||'Buy any {count} together and save {discount}',count:minItems,productIds:anyIds,min:minItems};
+              }else{
               var setIds=offerRule.fbtProducts.map(function(p){return extractNumericId(p.id);}).filter(function(id){return id&&id!==currentNumId;});
               if(setIds.length&&setIds.every(function(id){return shownIds.indexOf(id)!==-1;}))config.offer={type:offerRule.offer.type,value:offerRule.offer.value,text:offerRule.offer.text,count:setIds.length+1,productIds:setIds};
+              }
             }
             if(!products.length){el.style.display='none';el.innerHTML='';return;}
             /* Keep the height while it redraws (a new size), so the page doesn't jump. */
@@ -616,7 +741,7 @@
     var navNext=container.querySelector('.ps-fbt-nav-next');
 
     if(isListStyle){
-      wrapper.style.cssText='display:flex;flex-direction:column;gap:0;';
+      wrapper.style.cssText='display:flex;flex-direction:column;gap:'+config.rowGap+'px;';
     }else if(isGridLayout){
       wrapper.style.cssText='display:grid;grid-template-columns:repeat(2,1fr);gap:'+config.gap+'px;';
     }else{
@@ -656,7 +781,9 @@
     function offerSavings(){
       if(!config.offer)return null;
       var set=products.filter(function(p){return config.offer.productIds.indexOf(extractNumericId(p.id))!==-1;});
-      if(!set.length||!set.every(function(p){return getProductQuantity(p.id)>0;}))return null;
+      /* "Any N": the picked ones, once there are N with the viewed product. */
+      if(config.offer.min){set=set.filter(function(p){return getProductQuantity(p.id)>0;});if(set.length+1<config.offer.min)return null;}
+      else if(!set.length||!set.every(function(p){return getProductQuantity(p.id)>0;}))return null;
       var viewed=config.viewedPrice||0;
       var base=viewed+set.reduce(function(sum,p){return sum+unitPrice(p);},0);
       if(!(base>0))return null;
@@ -665,7 +792,7 @@
       var total=round2(pct?base*value/100:Math.min(value,base));
       var per={};
       set.forEach(function(p){per[String(p.id)]=round2(pct?unitPrice(p)*value/100:total*unitPrice(p)/base);});
-      return{total:total,per:per,base:base};
+      return{total:total,per:per,base:base,count:set.length+1};
     }
 
     var usesQuantityMap=config.interactionType==='quickAdd'||config.interactionType==='checkboxQty';
@@ -695,7 +822,7 @@
         var rowImg=Math.round(config.imageSize*0.75);
         var rowColumns=useCheckboxLeft?'20px '+rowImg+'px 1fr auto':rowImg+'px 1fr auto';
         var rowPad=config.cardPadding+2;
-        entry.card.style.cssText='display:grid;grid-template-columns:'+rowColumns+';align-items:center;gap:12px;width:100%;padding:'+rowPad+'px 16px '+rowPad+'px 4px;'+(isLastRow?'':'border-bottom:1px solid '+config.borderColor+';')+'background:'+config.bgColor+';color:'+config.textColor+';box-sizing:border-box;';
+        entry.card.style.cssText='display:grid;grid-template-columns:'+rowColumns+';align-items:center;gap:'+fbtGap(config.imageTextGap,12)+'px;width:100%;padding:'+rowPad+'px 16px '+rowPad+'px 4px;'+(isLastRow?'':'border-bottom:1px solid '+config.borderColor+';')+'background:'+config.bgColor+';color:'+config.textColor+';box-sizing:border-box;';
         return;
       }
       var cardWidth=isCarouselLayout?config.cardWidth+'px':'1 1 120px';
@@ -703,7 +830,7 @@
       var borderStyle=isModernStyle
         ?'border:none;box-shadow:0 6px 18px rgba(0,0,0,0.14);'
         :'border:1px solid '+(isActive?config.checkboxColor:config.borderColor)+';box-shadow:0 1px 4px rgba(0,0,0,0.06);';
-      entry.card.style.cssText=(isCarouselLayout?'width:':'flex:')+cardWidth+';min-width:'+Math.min(120,config.cardWidth)+'px;max-width:'+Math.max(220,config.cardWidth)+'px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:'+config.cardPadding+'px '+Math.max(0,config.cardPadding-2)+'px;border-radius:'+config.borderRadius+'px;background:'+config.bgColor+';'+borderStyle+'transition:border-color 0.2s ease;position:relative;overflow:visible;box-sizing:border-box;color:'+config.textColor+';'+snapAlign;
+      entry.card.style.cssText=(isCarouselLayout?'width:':'flex:')+cardWidth+';min-width:'+Math.min(120,config.cardWidth)+'px;max-width:'+Math.max(220,config.cardWidth)+'px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:'+fbtGap(config.imageTextGap,8)+'px;padding:'+config.cardPadding+'px '+Math.max(0,config.cardPadding-2)+'px;border-radius:'+config.borderRadius+'px;background:'+config.bgColor+';'+borderStyle+'transition:border-color 0.2s ease;position:relative;overflow:visible;box-sizing:border-box;color:'+config.textColor+';'+snapAlign;
     }
 
     function renderControl(entry){
@@ -794,8 +921,8 @@
         entry.priceEl.innerHTML=off>0?priceHtml(round2(price-off),price):priceHtml(price,unitCompare(p));
       });
       var selectedCount=getSelectedCount();
-      if(totalLabelEl)totalLabelEl.textContent=saving&&config.offerStrikeTotal?'Bundle total ('+config.offer.count+' items)':selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
-      if(addBtn){addBtn.classList.remove('is-done');addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';var fullSet=config.offer&&config.offer.productIds.every(function(id){return products.some(function(p){return extractNumericId(p.id)===id&&getProductQuantity(p.id)>0;});});addBtn.textContent=fullSet?'Add all '+config.offer.count+' to Cart':'Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
+      if(totalLabelEl)totalLabelEl.textContent=saving&&config.offerStrikeTotal?'Bundle total ('+(saving.count||config.offer.count)+' items)':selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
+      if(addBtn){addBtn.classList.remove('is-done');addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';var fullSet=config.offer&&!config.offer.min&&config.offer.productIds.every(function(id){return products.some(function(p){return extractNumericId(p.id)===id&&getProductQuantity(p.id)>0;});});addBtn.textContent=fullSet?'Add all '+config.offer.count+' to Cart':'Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
     }
 
     function updateUI(){cardEntries.forEach(function(entry){updateCardStyle(entry);renderControl(entry);});updateFooter();}
@@ -807,7 +934,7 @@
       if(!config.showVariantPicker||list.length<2||product.sizeMissing)return '';
       var current=product.liveVariantId||'';
       var opts=list.map(function(v){return '<option value="'+escapeHtml(v.id)+'"'+(v.id===current?' selected':'')+(v.available?'':' disabled')+'>'+escapeHtml(v.title+(v.available?'':' - Sold out'))+'</option>';}).join('');
-      return '<select class="ps-fbt-variant" aria-label="Choose an option" style="display:block;width:100%;max-width:100%;margin-top:4px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';
+      return '<select class="ps-fbt-variant" aria-label="Choose an option" style="display:block;width:100%;max-width:100%;margin-top:'+fbtGap(config.textGap,4)+'px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';
     }
 
     products.forEach(function(product,idx){
@@ -821,7 +948,7 @@
         card.className='ps-product-row';
         card.innerHTML=
           (useCheckboxLeft?'<div class="ps-product-checkbox-slot" style="display:flex;align-items:center;justify-content:center;"></div>':'')
-          +'<div class="ps-product-row-image" style="width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;border-radius:'+config.imageRadius+'px;background:'+(config.imageBg||config.borderColor+'22')+';overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
+          +'<div class="ps-product-row-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="View pictures of '+safeTitle+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;border-radius:'+config.imageRadius+'px;background:'+(config.imageBg||config.borderColor+'22')+';overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
           /* NOTE: intentionally NOT reusing the .ps-product-title/.ps-product-price
              classes here — those carry -webkit-line-clamp:2 + display:-webkit-box
              from the grid-card style below, which conflicts with this row's
@@ -834,17 +961,17 @@
           +'<div style="min-width:0;">'
             +'<div class="ps-product-row-title" style="display:block;color:'+config.titleColor+';font-size:13px;font-weight:600;line-height:1.35;white-space:normal;word-break:break-word;">'+safeTitle+'</div>'
             +variantPicker(product)
-            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:2px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
+            +(config.showPrices?'<div class="ps-product-row-price" style="display:block;margin-top:'+fbtGap(config.textGap,2)+'px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:flex-end;"></div>';
       }else{
         card.className='ps-product-card';
         card.innerHTML=
-          '<div class="ps-product-image" style="width:100%;height:'+config.imageSize+'px;background:'+(config.imageBg||config.borderColor+'22')+';border-radius:'+config.imageRadius+'px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
+          '<div class="ps-product-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="View pictures of '+safeTitle+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:100%;height:'+config.imageSize+'px;background:'+(config.imageBg||config.borderColor+'22')+';border-radius:'+config.imageRadius+'px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
           +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
             +'<div class="ps-product-title" style="color:'+config.titleColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
             +variantPicker(product)
-            +(config.showPrices?'<div class="ps-product-price" style="margin-top:4px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
+            +(config.showPrices?'<div class="ps-product-price" style="margin-top:'+fbtGap(config.textGap,4)+'px;color:'+config.priceColor+';font-size:12px;font-weight:700;">'+priceHtml(price,compareAt)+'</div>':'')
           +'</div>'
           +'<div class="ps-product-action" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;width:100%;margin-top:auto;"></div>';
       }
@@ -858,6 +985,12 @@
       }
       var entry={product:product,card:card,actionSlot:card.querySelector('.ps-product-action'),checkboxSlot:card.querySelector('.ps-product-checkbox-slot'),priceEl:card.querySelector('.ps-product-row-price,.ps-product-price'),requiredBadge:null};
       cardEntries.set(String(product.id),entry);
+      var zoomEl=config.imagePopup&&card.querySelector('[data-fbt-zoom]');
+      if(zoomEl){
+        var openZoom=function(){openFbtGallery({title:safeTitle,handle:product.handle,image:(zoomEl.querySelector('img')&&zoomEl.querySelector('img').getAttribute('src'))||product.image,priceHtml:config.showPrices?priceHtml(unitPrice(product),unitCompare(product)):'',config:config,opener:zoomEl});};
+        zoomEl.addEventListener('click',openZoom);
+        zoomEl.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();openZoom();}});
+      }
       var picker=card.querySelector('.ps-fbt-variant');
       if(picker){
         picker.addEventListener('change',function(){

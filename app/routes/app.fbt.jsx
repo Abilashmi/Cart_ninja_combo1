@@ -24,6 +24,7 @@ import { getShopPlan } from '../services/plan-permissions.server';
 import { canPublishFeature } from '../config/plans';
 import {
   ensureFbtRulesSourceColumn, rebuildFbtLegacyConditionForMode, generateAiFbtRules, ensureFbtAiInstructionColumns, ensureFbtOfferColumns,
+  ensureFbtInteractionColumn, cleanFbtInteraction,
 } from '../services/cart-config-writes.server';
 import { syncFbtOfferDiscount } from '../services/fbt-offer-shopify.server';
 import { sanitizeFbtOffer, sanitizeRuleOffer, fbtOfferText, fbtOfferSavings, FBT_OFFER_TEXT_DEFAULT } from '../utils/fbt-offer.shared';
@@ -145,10 +146,13 @@ export const loader = async ({ request }) => {
           // Heading / title / button-state colours live only in the active
           // template's JSON (fbt_widget.tempN), which the storefront reads.
           let extras = { ...pickFbtExtras({}), ...pickFbtLayout({}) };
+          // The add style the storefront really uses (the template), for rows
+          // whose interaction_type was lost to the old ENUM column ('').
+          let tplInteraction = '';
           try {
             const [legacyRows] = await db.execute('SELECT temp1, temp2, temp3 FROM fbt_widget WHERE shopDomain = ? LIMIT 1', [shop]);
             const slot = { fbt1: 'temp1', fbt2: 'temp2', fbt3: 'temp3' }[s.selected_template || 'fbt1'] || 'temp1';
-            if (legacyRows[0]) { const tplJson = parseJson(legacyRows[0][slot], {}); extras = { ...pickFbtExtras(tplJson), ...pickFbtLayout(tplJson) }; }
+            if (legacyRows[0]) { const tplJson = parseJson(legacyRows[0][slot], {}); extras = { ...pickFbtExtras(tplJson), ...pickFbtLayout(tplJson) }; tplInteraction = cleanFbtInteraction(tplJson.interactionType); }
           } catch (e) { console.error('[FBT loader] template colours:', e.message); }
           fbtConfig = {
             ...extras,
@@ -156,7 +160,7 @@ export const loader = async ({ request }) => {
             activeTemplate: s.selected_template || 'fbt1',
             mode: s.mode || 'manual',
             layout: s.layout || 'horizontal',
-            interactionType: s.interaction_type || 'classic',
+            interactionType: cleanFbtInteraction(s.interaction_type) || tplInteraction || 'classic',
             showPrices: s.show_prices !== 0,
             showAddAllButton: s.show_add_all_button !== 0,
             bgColor: s.bg_color || '#ffffff',
@@ -170,7 +174,7 @@ export const loader = async ({ request }) => {
             aiProductCount: s.ai_product_count || 3,
             aiInstructions: s.ai_instructions || '',
             widgetPlacement: s.widget_placement || 'above_cart',
-            offer: sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount }),
+            offer: sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount, minItems: s.offer_min_items }),
             offerStatus: s.offer_state ? { state: s.offer_state, message: s.offer_message || '' } : null,
           };
           manualRules = rules.map(r => ({
@@ -304,6 +308,7 @@ export const action = async ({ request }) => {
     const isEnabled = fbtPublishable && body.isEnabled !== false ? 1 : 0;
 
     const db = getDb();
+    await ensureFbtInteractionColumn(db);
 
     // Save to normalized fbt_widget_settings table
     await db.execute(`
@@ -446,8 +451,8 @@ export const action = async ({ request }) => {
     if (body.offer && typeof body.offer === 'object') {
       const offer = sanitizeFbtOffer(body.offer);
       await ensureFbtOfferColumns(db);
-      await db.execute('UPDATE fbt_widget_settings SET offer_enabled = ?, offer_type = ?, offer_value = ?, offer_text = ?, offer_create_discount = ? WHERE shop_domain = ?',
-        [offer.enabled ? 1 : 0, offer.type, offer.value, offer.text, offer.createDiscount === false ? 0 : 1, shop]);
+      await db.execute('UPDATE fbt_widget_settings SET offer_enabled = ?, offer_type = ?, offer_value = ?, offer_text = ?, offer_create_discount = ?, offer_min_items = ? WHERE shop_domain = ?',
+        [offer.enabled ? 1 : 0, offer.type, offer.value, offer.text, offer.createDiscount === false ? 0 : 1, offer.minItems || 0, shop]);
     }
     const offerSync = await syncFbtOfferDiscount(admin, shop);
 
@@ -615,11 +620,14 @@ function usePrevious(value) {
 
 /* The storefront's product image box (fbt-widget-render.liquid): fixed
    height, the merchant's corners / fit / background. */
-function PreviewImage({ width, height, image, layout, borderColor }) {
+function PreviewImage({ width, height, image, layout, borderColor, onZoom }) {
+  const zoom = layout.imagePopup && onZoom;
   return (
-    <div className="fbtpv-img" style={{
+    <div className="fbtpv-img" onClick={zoom ? onZoom : undefined} role={zoom ? 'button' : undefined} tabIndex={zoom ? 0 : undefined}
+      onKeyDown={zoom ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onZoom(); } } : undefined} style={{
       width, height, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       borderRadius: `${layout.imageRadius}px`, background: layout.imageBg || `${borderColor}22`,
+      cursor: zoom ? 'zoom-in' : undefined,
     }}>
       {image
         ? <img src={image} alt="" style={{ width: '100%', height: '100%', objectFit: layout.imageFit, display: 'block' }} />
@@ -861,6 +869,8 @@ export default function FBTPage() {
   const [fbtLayout,         setFbtLayout]         = useState(() => pickFbtLayout(fbtConfig));
   const setLayoutKey = (key) => (v) => { setFbtLayout((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
   const sizes = fbtLayoutSizes(fbtLayout);
+  // Preview of the storefront's image popup (Styling → "Open pictures on image tap").
+  const [previewZoom, setPreviewZoom] = useState(null);
   const setExtra = (key) => (v) => { setExtraColors((prev) => ({ ...prev, [key]: v })); setHasChanges(true); };
   const fx = fbtEffectiveColors({ textColor, priceColor, buttonColor, buttonTextColor, ...extraColors });
   // Preview of the Add-all button's states (idle → loading → success).
@@ -1198,7 +1208,7 @@ export default function FBTPage() {
     : null;
   const offerPriceOf = (i) => (previewSaving && fbtLayout.offerProductPrices ? previewSaving.per[i] || 0 : 0);
   const previewVariantPicker = fbtLayout.showVariantPicker ? (
-    <select aria-label="Choose an option" defaultValue="m" style={{ width: '100%', marginTop: '4px', padding: '3px 6px', fontSize: '11px', border: `1px solid ${borderColor}`, borderRadius: '6px', background: bgColor, color: textColor }}>
+    <select aria-label="Choose an option" defaultValue="m" style={{ width: '100%', marginTop: `${sizes.cardTextGap}px`, padding: '3px 6px', fontSize: '11px', border: `1px solid ${borderColor}`, borderRadius: '6px', background: bgColor, color: textColor }}>
       <option value="s">Small</option>
       <option value="m">Medium</option>
       <option value="l" disabled>Large - Sold out</option>
@@ -1374,10 +1384,11 @@ export default function FBTPage() {
   const PreviewCard = ({ p, i }) => (
     <div style={{
       ...cardStyle,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: `${sizes.cardGap}px`,
       boxSizing: 'border-box',
     }}>
-      <PreviewImage width="100%" height={fbtLayout.imageSize} image={p.image} layout={fbtLayout} borderColor={borderColor} />
+      <PreviewImage width="100%" height={fbtLayout.imageSize} image={p.image} layout={fbtLayout} borderColor={borderColor} onZoom={() => setPreviewZoom(i)} />
+      <div style={{ width: '100%', minWidth: 0 }}>
       <div style={{
         color: fx.title, fontSize: '11px', fontWeight: 500, lineHeight: 1.35,
         textAlign: 'center', width: '100%',
@@ -1386,12 +1397,13 @@ export default function FBTPage() {
       }}>{p.name}</div>
       {previewVariantPicker}
       {showPrices && (
-        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center' }}>
+        <div style={{ color: priceColor, fontSize: '13px', fontWeight: 700, textAlign: 'center', marginTop: `${sizes.cardTextGap}px` }}>
           {offerPriceOf(i) > 0
             ? <><s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.price}</s>{currencySymbol}{Math.round((p.price - offerPriceOf(i)) * 100) / 100}</>
             : <>{p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}{currencySymbol}{p.price}</>}
         </div>
       )}
+      </div>
       <div style={{ marginTop: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
         {renderAction(i)}
       </div>
@@ -1410,10 +1422,10 @@ export default function FBTPage() {
   const useRowLayout = interactionStyle === 'checkbox-qty' || layout === 'vertical';
   const showPlusSeparators = selectedTemplate === 'classic-grid' && !useRowLayout && layout !== 'grid';
   const previewProducts = useRowLayout ? (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: `${sizes.listGap}px` }}>
       {fbtPreviewProducts.map((p, i) => (
         <div key={p.id} style={{
-          display: 'flex', alignItems: 'center', gap: '12px', padding: `${sizes.rowPadding}px 2px`,
+          display: 'flex', alignItems: 'center', gap: `${sizes.rowGap}px`, padding: `${sizes.rowPadding}px 2px`,
           borderBottom: i < fbtPreviewProducts.length - 1 ? `1px solid ${borderColor}` : 'none',
         }}>
           {interactionStyle === 'checkbox-qty' && (
@@ -1428,7 +1440,7 @@ export default function FBTPage() {
               style={{ width: '18px', height: '18px', accentColor: fx.checkbox, flexShrink: 0, cursor: 'pointer' }}
             />
           )}
-          <PreviewImage width={sizes.rowImage} height={sizes.rowImage} image={p.image} layout={fbtLayout} borderColor={borderColor} />
+          <PreviewImage width={sizes.rowImage} height={sizes.rowImage} image={p.image} layout={fbtLayout} borderColor={borderColor} onZoom={() => setPreviewZoom(i)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               color: fx.title, fontSize: '12px', fontWeight: 600,
@@ -1436,7 +1448,7 @@ export default function FBTPage() {
             }}>{p.name}</div>
             {previewVariantPicker}
             {showPrices && (
-              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: '2px' }}>
+              <div style={{ color: priceColor, fontSize: '12px', fontWeight: 700, marginTop: `${sizes.rowTextGap}px` }}>
                 {offerPriceOf(i) > 0
                   ? <><s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.price}</s>{currencySymbol}{Math.round((p.price - offerPriceOf(i)) * 100) / 100}</>
                   : <>{p.compareAt > 0 && <s style={{ color: textColor, opacity: 0.5, fontWeight: 500, marginRight: '4px' }}>{currencySymbol}{p.compareAt}</s>}{currencySymbol}{p.price}</>}
@@ -2130,6 +2142,19 @@ export default function FBTPage() {
                             checked={offer.createDiscount !== false}
                             onChange={setOfferKey('createDiscount')}
                           />
+                          {offer.createDiscount === false && (
+                            <TextField
+                              label="Offer from this many items"
+                              type="number"
+                              min={0}
+                              max={20}
+                              autoComplete="off"
+                              value={offer.minItems ? String(offer.minItems) : ''}
+                              placeholder="All of them"
+                              onChange={(v) => { const n = Math.floor(Number(v)); setOffer((prev) => ({ ...prev, minItems: v === '' || !(n >= 2) ? 0 : Math.min(n, 20) })); setHasChanges(true); }}
+                              helpText='Match your own discount, e.g. 4 for "20% off any 4 items" (the product being viewed counts). The saving shows once that many are picked; use {count} in the text, e.g. "Buy any {count} together and save {discount}". Empty = the whole set.'
+                            />
+                          )}
                           <InlineGrid columns={2} gap="300">
                             <Select
                               label="Offer"
@@ -2206,9 +2231,18 @@ export default function FBTPage() {
                       />
                       <ColorField label="Image background" value={fbtLayout.imageBg} fallback="#f3f4f6" allowEmpty onChange={setLayoutKey('imageBg')} helpText="Shows around images that don't fill the box. Empty = a light tint of the border colour" />
                       <SliderField label="Card width (carousel)" value={fbtLayout.cardWidth} min={100} max={280} suffix="px" onChange={setLayoutKey('cardWidth')} />
+                      <Checkbox
+                        label="Open pictures on image tap"
+                        helpText="A tap on a product's image opens a popup with all its pictures, its price and a link to the product."
+                        checked={fbtLayout.imagePopup}
+                        onChange={setLayoutKey('imagePopup')}
+                      />
                       <Divider />
                       <Text as="h4" variant="headingSm">Spacing</Text>
-                      <SliderField label="Space between products" value={fbtLayout.gap} min={0} max={40} suffix="px" onChange={setLayoutKey('gap')} />
+                      <SliderField label="Space between products" value={fbtLayout.gap} min={0} max={40} suffix="px" onChange={setLayoutKey('gap')} helpText="Cards in the carousel and grid." />
+                      <SliderField label="Space between rows (list)" value={fbtLayout.rowGap} min={0} max={40} suffix="px" onChange={setLayoutKey('rowGap')} helpText="Vertical list and Checkbox + Quantity." />
+                      <SliderField label="Space between image and text" value={useRowLayout ? sizes.rowGap : sizes.cardGap} min={0} max={40} suffix="px" onChange={setLayoutKey('imageTextGap')} helpText="Also between the text and the button." />
+                      <SliderField label="Space between title and price" value={useRowLayout ? sizes.rowTextGap : sizes.cardTextGap} min={0} max={24} suffix="px" onChange={setLayoutKey('textGap')} />
                       <SliderField label="Padding inside each product" value={fbtLayout.cardPadding} min={0} max={30} suffix="px" onChange={setLayoutKey('cardPadding')} />
                       <SliderField label="Padding inside the widget" value={fbtLayout.widgetPadding} min={0} max={48} suffix="px" onChange={setLayoutKey('widgetPadding')} helpText="Phones use 70% of it." />
                       <SliderField label="Space above the widget" value={fbtLayout.marginTop} min={0} max={80} suffix="px" onChange={setLayoutKey('marginTop')} />
@@ -2246,6 +2280,7 @@ export default function FBTPage() {
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Preview</Text>
                 <div className="fbtpv-widget" style={{
+                  position: 'relative',
                   background: bgColor, borderRadius: '12px', padding: `${fbtLayout.widgetPadding}px`,
                   border: `1px solid ${borderColor}`,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
@@ -2268,6 +2303,34 @@ export default function FBTPage() {
 
                   {/* Product cards */}
                   {previewProducts}
+
+                  {/* The storefront's image popup (one picture here; the store shows all of the product's). */}
+                  {fbtLayout.imagePopup && previewZoom != null && fbtPreviewProducts[previewZoom] && (() => {
+                    const zp = fbtPreviewProducts[previewZoom];
+                    return (
+                      <div className="fbtpv-zoom" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setPreviewZoom(null); }}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setPreviewZoom(null); }} style={{
+                        position: 'absolute', inset: 0, zIndex: 5, borderRadius: '12px', background: 'rgba(17,24,39,0.55)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px',
+                      }}>
+                        <div style={{ position: 'relative', width: '100%', maxWidth: '360px', background: bgColor, color: textColor, borderRadius: '14px', padding: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
+                          <button type="button" aria-label="Close" onClick={() => setPreviewZoom(null)} style={{
+                            position: 'absolute', top: 8, right: 8, zIndex: 2, width: 30, height: 30, borderRadius: '50%', border: 'none',
+                            background: 'rgba(255,255,255,0.95)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                          }}>×</button>
+                          <div style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: '10px', overflow: 'hidden', background: fbtLayout.imageBg || `${borderColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {zp.image
+                              ? <img src={zp.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                              : <span style={{ fontSize: 11, color: '#9ca3af' }}>No image</span>}
+                          </div>
+                          <div style={{ marginTop: 10, color: fx.title, fontSize: '15px', fontWeight: 700 }}>{zp.name}</div>
+                          {showPrices && <div style={{ marginTop: 4, color: priceColor, fontSize: '14px', fontWeight: 700 }}>{currencySymbol}{zp.price}</div>}
+                          <div style={{ marginTop: 8, fontSize: '12px', fontWeight: 600, textDecoration: 'underline' }}>View full details</div>
+                          <div style={{ marginTop: 6, fontSize: '11px', opacity: 0.6 }}>On your store: every picture of the product, with arrows and thumbnails.</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Price summary + CTA */}
                   <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: `1px solid ${borderColor}` }}>

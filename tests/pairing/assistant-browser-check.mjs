@@ -247,7 +247,7 @@ await check('Bundle offer: switch on, % and text; preview shows the offer; Save 
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await new Promise((r) => setTimeout(r, 500));
   const saved = posts.fbt.at(-1);
-  assert.deepEqual(saved.offer, { enabled: true, type: 'percentage', value: 15, text: 'Take all {count}, save {discount}', createDiscount: true });
+  assert.deepEqual(saved.offer, { enabled: true, type: 'percentage', value: 15, text: 'Take all {count}, save {discount}', createDiscount: true, minItems: 0 });
   await page.getByText('The bundle offer discount is not installed on this store yet.').waitFor();
   await page.screenshot({ path: path.join(shotDir, 'fbt-offer.png') });
   assert.deepEqual(errors, []);
@@ -288,6 +288,37 @@ await check('Images and spacing: preview follows; Save sends them in the templat
   await new Promise((r) => setTimeout(r, 500));
   const tpl = posts.fbt.at(-1).templates.fbt1;
   assert.deepEqual([tpl.imageSize, tpl.imageRadius, tpl.imageFit, tpl.widgetPadding, tpl.gap, tpl.marginTop], [100, 50, 'cover', 30, 22, 16]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+await check('Spacing inside products + image popup: preview follows; Save sends them', async () => {
+  const { page, context, posts, errors } = await open('/app/fbt');
+  await page.getByRole('button', { name: /Styling & Display/ }).first().click();
+  // Defaults: the old spacing, popup on.
+  assert.equal(await page.getByLabel('Space between image and text').inputValue(), '8');
+  assert.ok(await page.getByLabel('Open pictures on image tap').isChecked());
+  await page.getByLabel('Space between image and text').fill('18');
+  await page.getByLabel('Space between title and price').fill('9');
+  await page.waitForTimeout(200);
+  const pv = await page.evaluate(() => {
+    const card = document.querySelector('.fbtpv-img').parentElement;
+    const price = [...card.querySelectorAll('div')].find((d) => /\d/.test(d.textContent) && d.style.marginTop);
+    return { gap: getComputedStyle(card).rowGap, priceTop: price && price.style.marginTop };
+  });
+  assert.deepEqual(pv, { gap: '18px', priceTop: '9px' });
+  // A tap on a preview image opens the popup; the close button shuts it.
+  await page.locator('.fbtpv-img').first().click();
+  assert.ok(await page.locator('.fbtpv-zoom').isVisible());
+  await page.locator('.fbtpv-zoom button[aria-label="Close"]').click();
+  assert.equal(await page.locator('.fbtpv-zoom').count(), 0);
+  await page.getByLabel('Open pictures on image tap').uncheck();
+  await page.locator('.fbtpv-img').first().click();
+  assert.equal(await page.locator('.fbtpv-zoom').count(), 0);
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await new Promise((r) => setTimeout(r, 500));
+  const tpl = posts.fbt.at(-1).templates.fbt1;
+  assert.deepEqual([tpl.imageTextGap, tpl.textGap, tpl.rowGap, tpl.imagePopup], [18, 9, 0, false]);
   assert.deepEqual(errors, []);
   await context.close();
 });

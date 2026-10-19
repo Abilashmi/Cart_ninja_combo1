@@ -71,6 +71,11 @@ export const FBT_LAYOUT_DEFAULTS = Object.freeze({
   widgetPadding: 20, // inside the widget; phones get 70%
   marginTop: 16,
   marginBottom: 16,
+  // Inside each product: null = what the widget always drew
+  // (image to text: cards 8, list rows 12; title to price: cards 4, rows 2).
+  imageTextGap: null,
+  textGap: null,
+  rowGap: 0, // extra space between list rows (the vertical list had none)
 });
 
 export const FBT_LAYOUT_LIMITS = Object.freeze({
@@ -82,6 +87,9 @@ export const FBT_LAYOUT_LIMITS = Object.freeze({
   widgetPadding: [0, 48],
   marginTop: [0, 80],
   marginBottom: [0, 80],
+  imageTextGap: [0, 40],
+  textGap: [0, 24],
+  rowGap: [0, 40],
 });
 
 export const FBT_IMAGE_FITS = ['contain', 'cover'];
@@ -153,6 +161,8 @@ export function pickFbtLayout(tpl) {
   }
   if (FBT_IMAGE_FITS.includes(tpl?.imageFit)) out.imageFit = tpl.imageFit;
   out.imageBg = normalizeHex(tpl?.imageBg) || '';
+  // A tap on a product's image opens a popup with all its pictures (false = off).
+  out.imagePopup = tpl?.imagePopup !== false;
   // Start with every product selected (a bundle) or let shoppers add each:
   // true / false, null = the interaction style's own default (fbtStartsSelected).
   out.startSelected = tpl?.startSelected === true ? true : tpl?.startSelected === false ? false : null;
@@ -187,5 +197,10 @@ export function fbtLayoutSizes(l) {
     phonePadding: Math.round(l.widgetPadding * 0.7),
     cardPadding: `${l.cardPadding}px ${Math.max(0, l.cardPadding - 2)}px`,
     rowPadding: l.cardPadding + 2,
+    cardGap: l.imageTextGap ?? 8,
+    rowGap: l.imageTextGap ?? 12,
+    cardTextGap: l.textGap ?? 4,
+    rowTextGap: l.textGap ?? 2,
+    listGap: l.rowGap || 0,
   };
 }
