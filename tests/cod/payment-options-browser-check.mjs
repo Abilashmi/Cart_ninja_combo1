@@ -541,6 +541,16 @@ await settle(page, 1000);
 check('product COD button: follows the quantity (2 × ₹1,500 + ₹50 = ₹3,050)', await plainBtn() === 'Buy it for ₹3,050 COD', await plainBtn());
 await page.close();
 
+// Payment options off but the prepaid discount on: only its details come
+// (cards: false) for the cart drawers; the product page keeps the plain COD
+// button, no option cards.
+config = { ...COD, productPayment: { cards: false, prepaid: PREPAID } };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 800);
+check('options off + prepaid on: plain COD button, no payment option cards', (await page.locator('.bxpay').count()) === 0 && (await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').count()) === 1);
+await page.close();
+
 // Payment options off, COD not replacing Buy it now: the merchant's text on Shopify's Buy it now.
 config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Buy it now {price}' }, productPayment: null };
 page = await openPage();
@@ -591,6 +601,26 @@ const srOrder = await page.evaluate(() => {
   return { inDrawer: Boolean(slot.closest('cart-drawer')), afterBuyNow: sr && sr.nextElementSibling === slot, visible: slot.getBoundingClientRect().height > 0 };
 });
 check('Shiprocket Buy Now as the selector: COD goes below the product\'s Buy Now, not into the cart drawer', !srOrder.inDrawer && srOrder.afterBuyNow && srOrder.visible, JSON.stringify(srOrder));
+await page.close();
+
+// The same with the payment options: choosing Cash on Delivery hides the
+// merchant's Buy it now too (only Shopify's own was hidden: Shiprocket's
+// "BUY IT NOW · SAVE 5%" stayed next to "Buy with COD").
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowSelector: '.shiprocket-headless' }, productPayment: PAYMENT };
+page = await openPage('?sr=1');
+await page.locator('.bxpay-card[data-method="cod"]').waitFor({ timeout: 5000 });
+const srButton = () => page.evaluate(() => {
+  const sr = document.querySelector('.shiprocket-headless[data-type="product"]');
+  return { shown: Boolean(sr) && sr.getBoundingClientRect().height > 0, text: sr ? sr.textContent.trim() : '' };
+});
+await page.locator('.bxpay-card[data-method="cod"]').click();
+await settle(page, 400);
+const srCod = await srButton();
+check('payment options + Shiprocket selector: COD chosen hides Shiprocket\'s Buy Now', srCod.shown === false, JSON.stringify(srCod));
+await page.locator('.bxpay-card[data-method="online"]').click();
+await settle(page, 400);
+const srOnline = await srButton();
+check('payment options + Shiprocket selector: Pay Online shows it again, with the saving', srOnline.shown === true && /Save \d+%/.test(srOnline.text), JSON.stringify(srOnline));
 await page.close();
 
 // Above / Below Shopify's Buy it now.

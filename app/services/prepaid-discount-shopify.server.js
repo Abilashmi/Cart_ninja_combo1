@@ -17,7 +17,7 @@
  * php_backend/cod_storefront.php), so shoppers are never promised a discount
  * Shopify won't give.
  */
-import { excludedCollectionIds, prepaidDiscountLive } from '../utils/product-payment.shared.js';
+import { excludedCollectionIds, prepaidDiscountLive, prepaidShowOnly, prepaidUsable } from '../utils/product-payment.shared.js';
 
 export const PREPAID_FUNCTION_HANDLE = 'brix-prepaid-discount';
 export const PREPAID_DISCOUNT_TITLE = 'BRIX Prepaid Discount';
@@ -127,6 +127,8 @@ async function ensurePrepaidDiscount(admin, variables) {
 
 /** What the storefront may show: only a verified discount, with the numbers Shopify really has. */
 export function prepaidRuntime(result, config) {
+  // Show only: the numbers the storefront shows; no discount of BRIX's.
+  if (result.showOnly) return { verified: false, showOnly: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() };
   return result.verified
     ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() }
     : { verified: false, state: result.state, at: new Date().toISOString() };
@@ -139,14 +141,25 @@ export function prepaidRuntime(result, config) {
  * what is (and isn't) live. `verified` is true only when the discount exists,
  * is ACTIVE, and the config was written.
  *
- * states: not_needed | plan_locked | active | not_deployed | inactive | failed
+ * states: not_needed | show_only | plan_locked | active | not_deployed | inactive | failed
  */
 export async function syncPrepaidDiscount(admin, settings, { currencyCode = null, planLive = false } = {}) {
   const config = buildPrepaidConfig(settings, { currencyCode, planLive });
-  const wanted = Boolean(settings?.productPayment?.enabled && settings.productPayment.prepaid?.enabled);
+  const wanted = Boolean(settings?.productPayment?.prepaid?.enabled && prepaidUsable(settings.productPayment));
   try {
     await writePrepaidConfig(admin, config);
     if (!config.enabled) {
+      // "Create the discount" off: BRIX's discount gives nothing (config
+      // enabled: false); the storefront only shows the prepaid price.
+      if (prepaidShowOnly(settings.productPayment, planLive)) {
+        const p = settings.productPayment.prepaid;
+        const shown = { percent: Number(p.percent), minSubtotal: Number(p.minSubtotal) || 0, maxDiscount: Number(p.maxDiscount) || 0, currency: currencyCode, title: p.title };
+        return {
+          ok: true, verified: false, showOnly: true, state: 'show_only',
+          message: `Shoppers see the ${shown.percent}% prepaid price, but BRIX creates no discount: your checkout (e.g. Shiprocket) has to give it.`,
+          config: shown, excludedCollections: excludedCollectionIds(p),
+        };
+      }
       if (wanted && !planLive) {
         return { ok: true, verified: false, state: 'plan_locked', message: 'The prepaid discount goes live for shoppers on the Starter or Pro plan.', config };
       }

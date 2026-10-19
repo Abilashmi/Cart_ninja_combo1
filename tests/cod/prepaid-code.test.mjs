@@ -184,3 +184,8 @@ test('count milestones are measured in paid items, gifts left out', async () => 
   const three = await createPrepaidCode(giftShop(), { offer: null, items: [{ variantId: '42', quantity: 3 }], gifts: [{ variantId: '77', quantity: 1 }], rewardTiers: tiers, now: NOW, random: fixedRandom });
   assert.equal(three.amount, '135.01');
 });
+
+test('show only ("Create the discount" off): no Shiprocket code for the prepaid saving', () => {
+  const showOnly = { productPayment: { ...SETTINGS.productPayment, prepaid: { enabled: true, createDiscount: false, percent: 10 } } };
+  assert.equal(prepaidOffer(showOnly, { prepaid: { verified: false, showOnly: true, percent: 10 } }, true), null);
+});

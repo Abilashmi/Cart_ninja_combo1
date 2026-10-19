@@ -1782,7 +1782,27 @@
     // codTotal: the same without the prepaid discount, which COD never gets.
     var total = isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : subtotal;
     var codTotal = Math.round((total + prepaidInCart(cart)) * 100) / 100;
+    // "Create the discount" off: the cart has no prepaid discount of BRIX's,
+    // so the online price ("Pay now {price}") shows it taken off here.
+    total = Math.round((total - prepaidShownSaving(cart)) * 100) / 100;
     return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal), subtotal: subtotal, total: total, codTotal: codTotal };
+  }
+
+  // Show-only prepaid (paymentValue.prepaid.showOnly): the saving the online
+  // price shows, worked out like the Function (paid lines only, never gifts
+  // or combo boxes, the minimum and the cap). Collections left out of it can't
+  // be told from the cart, so they aren't. 0 when BRIX creates the discount.
+  function prepaidShownSaving(cart) {
+    var pre = paymentValue && paymentValue.prepaid;
+    if (!pre || !pre.showOnly || !cart) return 0;
+    var base = (cart.items || []).reduce(function (sum, it) {
+      var p = it.properties || {};
+      return p._brixReward === 'true' || p._brixReward === true || p._brix_combo_id ? sum : sum + (Number(it.final_line_price) || 0);
+    }, 0) / 100;
+    if (!(base > 0) || (pre.minSubtotal > 0 && base < pre.minSubtotal)) return 0;
+    var saving = Math.round(base * Number(pre.percent)) / 100;
+    if (pre.maxDiscount > 0 && saving > pre.maxDiscount) saving = pre.maxDiscount;
+    return saving;
   }
 
   // The BRIX prepaid discount (product page payment options) is a Shopify
@@ -2644,6 +2664,8 @@
       style.id = 'brix-pay-style';
       style.textContent = [
         '[data-brix-pay-cod] .shopify-payment-button,[data-brix-pay-cod] [data-shopify="payment-button"],[data-brix-pay-cod] shopify-buy-it-now-button,[data-brix-pay-cod] shopify-accelerated-checkout{display:none !important}',
+        // The merchant's own Buy it now (its selector, e.g. Shiprocket's) while COD is chosen.
+        '[data-brix-pay-hidden]{display:none !important}',
         '.bxpay{display:block;width:100%;max-width:100%;margin:14px 0;padding:0;font-family:inherit;line-height:1.4;text-align:left;box-sizing:border-box}',
         '.bxpay *,.bxpay *:before,.bxpay *:after{box-sizing:border-box}',
         '.bxpay-h{display:block;margin:0 0 8px;font-size:14px;font-weight:600;letter-spacing:normal;text-transform:none}',
@@ -2975,7 +2997,15 @@
         if (hide) scope.setAttribute('data-brix-pay-cod', ''); else scope.removeAttribute('data-brix-pay-cod');
       }
       st.scope = scope;
-      var btn = customBuyNow(st.cfg) ? textTarget(st.buyNow) : nativeButton(st.buyNow);
+      // A Buy it now found by the merchant's selector (COD → Customize →
+      // Product page, e.g. Shiprocket's .shiprocket-headless) isn't one of
+      // Shopify's that the rule above hides: it stayed next to "Buy with COD"
+      // with COD chosen. Hidden on itself (a redrawn one is marked again here).
+      var custom = customBuyNow(st.cfg);
+      if (custom && hide !== custom.hasAttribute('data-brix-pay-hidden')) {
+        if (hide) custom.setAttribute('data-brix-pay-hidden', ''); else custom.removeAttribute('data-brix-pay-hidden');
+      }
+      var btn = custom ? textTarget(st.buyNow) : nativeButton(st.buyNow);
       if (!btn) return;
       if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
       var original = btn.getAttribute('data-brix-pay-orig');
@@ -3166,8 +3196,10 @@
   function initProductButton() {
     if (!isProductPage()) return;
     loadConfig().then(function (cfg) {
-      // Payment options on: they own the product page's COD button.
-      if (paymentValue) { Pay.start(cfg, paymentValue); return; }
+      // Payment options on: they own the product page's COD button. Off with
+      // a prepaid discount still on (cards: false): only its details come, for
+      // the drawers; the product page keeps its plain COD button.
+      if (paymentValue && paymentValue.cards !== false) { Pay.start(cfg, paymentValue); return; }
       if (!cfg || cfg.surfaces.product === false) return;
       productInfo().then(function (info) {
         var excluded = hasExcludedTag(info.tags, excludedTags(cfg));

@@ -306,7 +306,12 @@ test('sync: config comes from saved settings only, and is off unless the plan pu
     { version: 1, enabled: true, percent: 10, minSubtotal: 999, currency: 'INR', title: 'Prepaid discount' });
   assert.equal(buildPrepaidConfig(settingsWith({}), { currencyCode: 'INR', planLive: false }).enabled, false);
   assert.equal(buildPrepaidConfig(settingsWith({ online: { enabled: false } }), { planLive: true }).enabled, false, 'no Pay Online → no discount');
-  assert.equal(buildPrepaidConfig(settingsWith({ enabled: false }), { planLive: true }).enabled, false, 'selector off → no discount');
+  // Its own switch: the product page options off still leave it on for every
+  // online checkout (cart, Pay now, Shiprocket); options on with only COD = off.
+  assert.equal(buildPrepaidConfig(settingsWith({ enabled: false }), { planLive: true }).enabled, true, 'options off → the discount still applies');
+  assert.equal(buildPrepaidConfig(settingsWith({ enabled: false, online: { enabled: false } }), { planLive: true }).enabled, true, 'options off: their Pay Online switch doesn\'t matter');
+  assert.equal(buildPrepaidConfig(settingsWith({ enabled: false, prepaid: { enabled: false, percent: 10 } }), { planLive: true }).enabled, false, 'its own switch off → off');
+  assert.equal(buildPrepaidConfig(settingsWith({ enabled: false }), { planLive: false }).enabled, false, 'still needs the plan');
   assert.equal(buildPrepaidConfig(sanitizeCodSettings({}), { planLive: true }).enabled, false);
   assert.equal(prepaidDiscountLive(DEFAULT_COD_SETTINGS.productPayment, true), false);
 });
@@ -407,4 +412,23 @@ test('Function: a BRIX box code (Shiprocket box checkout) keeps the prepaid disc
   assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['WELCOME10'] }))).candidates.length, 1, 'other codes: prepaid as usual');
   assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['BXSALE'] }))).candidates.length, 1, 'a merchant code that only starts with BX is not a box code');
   assert.equal(order(run(fnInput([line('L1', 2040)], cfg(), { codes: ['BXPM43NHRL0P'] }))).candidates.length, 1, '0 is not in the box code letters');
+});
+
+// "Create the discount" off: BRIX only shows the prepaid price (the store's
+// checkout, e.g. Shiprocket, gives the discount itself).
+test('show only: no discount of BRIX\'s (config off), the price details kept for the storefront', async () => {
+  const showOnly = settingsWith({ enabled: false, prepaid: { enabled: true, createDiscount: false, percent: 5, minSubtotal: 0, maxDiscount: 100 } });
+  assert.equal(showOnly.productPayment.prepaid.createDiscount, false);
+  assert.equal(settingsWith({}).productPayment.prepaid.createDiscount, true, 'ticked by default: existing stores unchanged');
+  assert.equal(buildPrepaidConfig(showOnly, { planLive: true }).enabled, false, 'the Function gives nothing');
+  const admin = fakeShopify();
+  const result = await syncPrepaidDiscount(admin, showOnly, { currencyCode: 'INR', planLive: true });
+  assert.equal(result.state, 'show_only');
+  assert.equal(result.verified, false, 'never "verified": no Shopify discount of BRIX\'s');
+  assert.equal(JSON.parse(admin.calls.find((c) => c.op === 'PrepaidConfig').variables.metafields[0].value).enabled, false);
+  assert.equal(admin.calls.some((c) => c.op === 'PrepaidDiscountCreate'), false, 'no discount created');
+  const rt = prepaidRuntime(result, result.config);
+  assert.deepEqual([rt.showOnly, rt.verified, rt.percent, rt.maxDiscount, rt.currency], [true, false, 5, 100, 'INR']);
+  const planOff = await syncPrepaidDiscount(fakeShopify(), showOnly, { currencyCode: 'INR', planLive: false });
+  assert.notEqual(planOff.state, 'show_only', 'still needs the plan');
 });

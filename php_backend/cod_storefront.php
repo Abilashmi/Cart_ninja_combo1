@@ -233,7 +233,12 @@ function cods_bool($value, $default) {
  */
 function cods_product_payment($s, $codLive) {
     $p = is_array($s['productPayment'] ?? null) ? $s['productPayment'] : null;
-    if (!$p || ($p['enabled'] ?? false) !== true) return null;
+    if (!$p) return null;
+    // The payment option cards. Off: product pages stay as they are, but the
+    // prepaid discount (its own switch) still applies to online checkouts, so
+    // its details are still sent (cards => false) for the cart drawers and the
+    // Shiprocket code (prepaidUsable in product-payment.shared.js).
+    $cardsOn = ($p['enabled'] ?? false) === true;
     $on = is_array($p['online'] ?? null) ? $p['online'] : [];
     $cd = is_array($p['cod'] ?? null) ? $p['cod'] : [];
     $pre = is_array($p['prepaid'] ?? null) ? $p['prepaid'] : [];
@@ -249,9 +254,13 @@ function cods_product_payment($s, $codLive) {
     $prepaid = null;
     $rt = is_array($s['_runtime']['prepaid'] ?? null) ? $s['_runtime']['prepaid'] : [];
     $percent = is_numeric($rt['percent'] ?? null) ? round((float)$rt['percent'], 2) : 0;
-    if ($onlineOn && cods_bool($pre['enabled'] ?? null, false) && ($rt['verified'] ?? false) === true && $percent >= 1 && $percent <= 50) {
+    // verified = BRIX's discount is active in Shopify; showOnly = "Create the
+    // discount" is off: only the price is shown, the store's checkout gives it.
+    $showOnly = ($rt['showOnly'] ?? false) === true;
+    if ((!$cardsOn || $onlineOn) && cods_bool($pre['enabled'] ?? null, false) && (($rt['verified'] ?? false) === true || $showOnly) && $percent >= 1 && $percent <= 50) {
         $prepaid = [
             'percent' => $percent,
+            'showOnly' => $showOnly,
             // The discount's name in the cart (the Function's message), so the
             // drawer can tell it apart and leave it out of the COD price.
             'title' => cods_text($pre['title'] ?? null, 'Prepaid discount', 40),
@@ -269,6 +278,8 @@ function cods_product_payment($s, $codLive) {
             'minNotMetText' => cods_text($pre['minNotMetText'] ?? null, '', 100),
         ];
     }
+
+    if (!$cardsOn) return $prepaid ? ['cards' => false, 'prepaid' => $prepaid] : null;
 
     $placements = ['below_price', 'below_variants', 'below_quantity', 'before_purchase_buttons', 'above_buy_now', 'below_add_to_cart', 'app_block'];
     $radius = is_numeric($ly['radius'] ?? null) ? max(0, min(24, (int)round((float)$ly['radius']))) : 8;

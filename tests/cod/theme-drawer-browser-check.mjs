@@ -570,6 +570,16 @@ const done = async (page, name) => {
   allErrors.push(...old.errors);
   await old.context().close();
 
+  // "Create the discount" off (show only): Shopify's cart has no prepaid
+  // discount, the online price still shows it; COD stays at the full price.
+  const shown = await open('dawn', { brixOn: true, cfg: { ...cfg, productPayment: { cards: false, prepaid: { percent: 10, title: 'Prepaid discount', showOnly: true } } } });
+  await openDrawer(shown);
+  s = await seen(shown);
+  check('show only: Pay Now shows the prepaid price ₹1,169.10 (no discount in the cart)', /^Pay Now ₹1,169\.1/.test(s.checkout || ''), s.checkout);
+  check('show only: COD button = ₹1,299 + ₹40 fee', s.cod === 'Cash on Delivery ₹1,339', JSON.stringify(s));
+  allErrors.push(...shown.errors);
+  await shown.context().close();
+
   // Shiprocket shop: Checkout hands the cart to Shiprocket with a one-time
   // code for the prepaid saving (Shiprocket can't run the Function).
   const clickCheckout = (pg) => pg.evaluate(() => {

@@ -184,6 +184,13 @@ function PrepaidStatus({ status, dirty, enabled }) {
   if (!enabled) return null;
   if (dirty) return <Banner tone="info">Save to set up these changes in Shopify checkout.</Banner>;
   if (!status) return <Banner tone="info">Save to set up the discount in Shopify checkout.</Banner>;
+  if (status.showOnly) {
+    return (
+      <Banner tone="info" title="Showing the prepaid price only">
+        {`Shoppers see ${status.percent}% off online payments, but BRIX creates no discount: your checkout (e.g. Shiprocket's own prepaid offer) has to give it.`}
+      </Banner>
+    );
+  }
   if (status.verified) {
     return (
       <Banner tone="success" title="Active in Shopify checkout">
@@ -206,7 +213,8 @@ function PrepaidStatus({ status, dirty, enabled }) {
 export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirty }) {
   const pp = form.pp;
   const p = pp.prepaid;
-  const canUse = pp.enabled && pp.online.enabled;
+  // Its own switch: with the options off it still applies to online checkouts.
+  const canUse = !pp.enabled || pp.online.enabled;
   return (
     <BlockStack gap="400">
       <Text as="p" tone="subdued">A discount for paying online, given by Shopify at checkout. Cash on Delivery orders never get it.</Text>
@@ -218,8 +226,22 @@ export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirt
             checked={p.enabled}
             onChange={setPP(['prepaid', 'enabled'])}
             disabled={!canUse}
-            helpText={canUse ? 'Turning the payment options or Pay Online off also stops it.' : 'Turn on payment options with Pay Online first (Payment options).'}
+            helpText={canUse
+              ? (pp.enabled
+                ? 'Applies to every online checkout. Turning Pay Online off in the payment options stops it.'
+                : 'Applies to every online checkout (cart, Pay now, Shiprocket), even with the product page payment options off.')
+              : 'The payment options show only Cash on Delivery: turn Pay Online on, or the payment options off.'}
           />
+          {p.enabled && (
+            <Checkbox
+              label="Create the discount"
+              checked={p.createDiscount !== false}
+              onChange={setPP(['prepaid', 'createDiscount'])}
+              helpText={p.createDiscount !== false
+                ? 'BRIX creates the discount in Shopify, so it applies at checkout (and goes to Shiprocket as a one-time code).'
+                : 'Off: BRIX only shows the prepaid price (product page, the cart\'s Pay now). Use this when your checkout gives the discount itself, e.g. Shiprocket\'s own prepaid offer.'}
+            />
+          )}
           {p.enabled && (
             <>
               <FormLayout.Group>

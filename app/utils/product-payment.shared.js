@@ -93,6 +93,10 @@ export const DEFAULT_PRODUCT_PAYMENT = Object.freeze({
   }),
   prepaid: Object.freeze({
     enabled: false,
+    // true = BRIX creates the discount in Shopify (the Function); false = only
+    // shows the online price, the store's checkout gives the discount itself
+    // (e.g. Shiprocket's own prepaid offer).
+    createDiscount: true,
     percent: 10,
     title: 'Prepaid discount', // the discount's name in Shopify checkout
     minSubtotal: 0, // 0 = no minimum
@@ -198,6 +202,7 @@ export function sanitizeProductPayment(patch, base = DEFAULT_PRODUCT_PAYMENT) {
   const baseMax = parseMinSubtotal(prepaid.maxDiscount) ?? 0;
   const outPrepaid = {
     enabled: bool(pp.enabled, bool(prepaid.enabled, false)),
+    createDiscount: bool(pp.createDiscount, bool(prepaid.createDiscount, true)),
     percent: 'percent' in pp ? (parsePrepaidPercent(pp.percent) ?? basePercent) : basePercent,
     title: cleanText(pp.title ?? prepaid.title, d.prepaid.title, L.title),
     minSubtotal: 'minSubtotal' in pp ? (parseMinSubtotal(pp.minSubtotal) ?? baseMin) : baseMin,
@@ -256,9 +261,30 @@ export function sanitizeProductPayment(patch, base = DEFAULT_PRODUCT_PAYMENT) {
  * selector is on, Pay Online is offered, the discount is on, and the plan
  * publishes BRIX COD (`cod_checkout`) to shoppers.
  */
-export function prepaidDiscountLive(productPayment, planLive) {
+/**
+ * Can the prepaid discount be on with these payment options? It has its own
+ * switch: with the product page options off it still applies to every online
+ * checkout (the cart, "Pay now", Shiprocket); with them on, Pay Online has to
+ * be one of them (COD only = nothing paid online to discount).
+ */
+export function prepaidUsable(productPayment) {
   const pp = productPayment || {};
-  return Boolean(planLive && pp.enabled && pp.online?.enabled && pp.prepaid?.enabled && parsePrepaidPercent(pp.prepaid.percent));
+  return !pp.enabled || Boolean(pp.online?.enabled);
+}
+
+function prepaidOn(productPayment, planLive) {
+  const pp = productPayment || {};
+  return Boolean(planLive && prepaidUsable(pp) && pp.prepaid?.enabled && parsePrepaidPercent(pp.prepaid.percent));
+}
+
+/** BRIX's own Shopify discount is on (the Function gives it). */
+export function prepaidDiscountLive(productPayment, planLive) {
+  return prepaidOn(productPayment, planLive) && productPayment.prepaid.createDiscount !== false;
+}
+
+/** The prepaid price is only shown: "Create the discount" is off, the store's checkout gives it. */
+export function prepaidShowOnly(productPayment, planLive) {
+  return prepaidOn(productPayment, planLive) && productPayment.prepaid.createDiscount === false;
 }
 
 /**

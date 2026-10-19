@@ -233,7 +233,7 @@ const GROUPS = [
     title: 'Product page payments',
     items: [
       { id: 'payoptions', label: 'Payment options', icon: PaymentIcon, preview: 'product', fields: ['ppOnlineLabel', 'ppCodLabel', 'ppOnlineButton'], toggle: (f) => f.pp.enabled },
-      { id: 'prepaid', label: 'Prepaid discount', icon: CreditCardPercentIcon, preview: 'product', fields: ['ppPercent', 'ppMinSubtotal', 'ppMaxDiscount', 'ppTitle'], toggle: (f) => f.pp.enabled && f.pp.online.enabled && f.pp.prepaid.enabled },
+      { id: 'prepaid', label: 'Prepaid discount', icon: CreditCardPercentIcon, preview: 'product', fields: ['ppPercent', 'ppMinSubtotal', 'ppMaxDiscount', 'ppTitle'], toggle: (f) => f.pp.prepaid.enabled && (!f.pp.enabled || f.pp.online.enabled) },
       {
         id: 'paydesign', label: 'Payment options design', icon: ColorIcon, preview: 'product',
         fields: ['pp_onlineColor', 'pp_codColor', 'pp_cardBackground', 'pp_borderColor', 'pp_selectedBackground', 'pp_badgeBackground', 'pp_badgeText'],
