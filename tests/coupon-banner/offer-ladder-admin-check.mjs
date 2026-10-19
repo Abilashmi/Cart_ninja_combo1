@@ -194,6 +194,10 @@ await check('coupon ticket: cut-out shape, a line under each offer, left text, b
   assert.equal(await page.getByLabel('Button position').count(), 0, 'a ticket\'s button always sits in the stub');
   assert.equal(await page.locator('.pw-ladder .psl-stub .psl-btn').count(), 1);
   await page.locator('.pw-ladders').screenshot({ path: path.join(shotDir, 'offer-ladder-ticket.png') });
+  // Width "Same as Add to cart" with only ladders: the title sits over them (as on the store).
+  await page.getByLabel('Width', { exact: true }).selectOption('atc');
+  const fit = await page.evaluate(() => { const t = document.querySelector('.pw-section-title'), l = document.querySelector('.pw-ladder-atc'); if (!t || !l) return null; const a = t.getBoundingClientRect(), b = l.getBoundingClientRect(); return [Math.round(a.left - b.left), Math.round(a.width - b.width)]; });
+  assert.deepEqual(fit, [0, 0], 'preview title has the ladder\'s width and left edge: ' + JSON.stringify(fit));
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForTimeout(400);
   const save = posts.find((p) => p.couponStyles);

@@ -207,6 +207,21 @@ await check('offers vertical: one under another, no dividers', async () => {
   await context.close();
 });
 
+await check('ticket on a theme that hides empty divs (Dawn): the strip and stub show; an Add to cart wide ladder gets its title over it', async () => {
+  const atc = '<style>div:empty{display:none}</style><form action="/cart/add" style="padding-left:40px"><button name="add" class="product-form__submit" style="width:300px;height:50px">Add to cart</button></form>';
+  const cfg = config({ ...LADDER, shape: 'ticket', direction: 'column', boxSize: 'atc' }, []);
+  cfg.data.temp1DefaultStyle = { ...cfg.data.temp1DefaultStyle, title: { text: 'Coupons Automatically Applied', alignment: 'center' } };
+  const o = await open({ cfg, atc });
+  await o.page.waitForTimeout(600);
+  const g = await o.page.evaluate(() => {
+    const stub = document.querySelector('.psl-stub'), l = document.querySelector('.psl').getBoundingClientRect(), t = document.querySelector('.ps-section-title').getBoundingClientRect();
+    return { stubShown: getComputedStyle(stub).display !== 'none' && stub.getBoundingClientRect().width > 0, strip: getComputedStyle(stub).borderLeftWidth, ladder: [Math.round(l.left), Math.round(l.width)], title: [Math.round(t.left), Math.round(t.width)] };
+  });
+  assert.ok(g.stubShown && parseFloat(g.strip) >= 10, 'stub and its strip shown: ' + JSON.stringify(g));
+  assert.deepEqual(g.title, g.ladder, 'the title takes the ladder\'s width and place, so it is centred over it');
+  await o.context.close();
+});
+
 await check('box size: same as Add to cart (width, left edge, at least its height), custom width, spacing', async () => {
   const atc = '<form action="/cart/add" style="padding-left:40px"><button name="add" class="product-form__submit" style="width:300px;height:50px">Add to cart</button></form>';
   let o = await open({ cfg: config({ ...LADDER, boxSize: 'atc', tiers: [{ text: 'Buy 2 Get 10%' }] }, []), atc });

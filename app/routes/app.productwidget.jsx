@@ -1326,7 +1326,11 @@ export default function ProductWidgetPage() {
                                     </div>
                                     <div className="pw-banner" data-width={bannerWidth} style={bannerWidth === "atc" ? { width: "78%" } : bannerWidth === "custom" ? { maxWidth: `${bannerWidthPx}px` } : undefined}>
                                     {sectionTitle.text.trim() !== "" && (
-                                        <div className="pw-section-title" style={{ textAlign: sectionTitle.alignment, color: sectionTitle.textColor, fontSize: `${sectionTitle.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2 }}>
+                                        // Only ladders as wide as Add to cart: the title takes their width
+                                        // (the storefront fits it to the button the same way).
+                                        <div className="pw-section-title" style={{ textAlign: sectionTitle.alignment, color: sectionTitle.textColor, fontSize: `${sectionTitle.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2,
+                                            ...(cardIds.length === 0 && selectedLadderIds.length > 0 && bannerWidth !== "atc" && bannerWidth !== "custom"
+                                                && selectedLadderIds.every((id) => offerLadder.normalize(couponOverrides[id] || {}).boxSize === "atc") ? { width: "78%" } : {}) }}>
                                             {sectionTitle.text}
                                         </div>
                                     )}

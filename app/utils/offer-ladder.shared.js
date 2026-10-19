@@ -165,9 +165,10 @@ function createOfferLadder(){
     /* Two full-size layers kept where both are (intersect): half-width layers left a nick where they met. */
     +'.psl--ticket{--psl-notch:11px;flex-direction:row;align-items:stretch;padding:0;-webkit-mask:radial-gradient(circle at 0 50%,transparent var(--psl-notch),#000 calc(var(--psl-notch) + .5px)),radial-gradient(circle at 100% 50%,transparent var(--psl-notch),#000 calc(var(--psl-notch) + .5px));-webkit-mask-composite:source-in;mask:radial-gradient(circle at 0 50%,transparent var(--psl-notch),#000 calc(var(--psl-notch) + .5px)),radial-gradient(circle at 100% 50%,transparent var(--psl-notch),#000 calc(var(--psl-notch) + .5px));mask-composite:intersect}'
     +'.psl--ticket>.psl-main{flex:1 1 auto;min-width:0;padding:var(--psl-py,10px) 10px var(--psl-py,10px) calc(var(--psl-px,14px) + var(--psl-notch))}'
-    /* Empty stub: about a quarter of the ticket (less on phones); with a button, as wide as the button needs. */
-    +'.psl-stub{flex:0 0 auto;width:clamp(48px,26%,240px);display:flex;align-items:center;justify-content:center;padding:var(--psl-py,10px) calc(var(--psl-px,14px) + var(--psl-notch)) var(--psl-py,10px) 10px;border-left:clamp(10px,3.5vw,22px) solid rgba(255,255,255,.32)}'
-    +'.psl-stub--btn{width:auto;min-width:clamp(48px,26%,240px)}'
+    /* Empty stub: about a quarter of the ticket (less on phones); with a button, as wide as the button needs.
+       .psl> outranks themes' div:empty{display:none} (Dawn and copies), which hid the empty stub and its strip. */
+    +'.psl>.psl-stub{flex:0 0 auto;width:clamp(48px,26%,240px);display:flex;align-items:center;justify-content:center;padding:var(--psl-py,10px) calc(var(--psl-px,14px) + var(--psl-notch)) var(--psl-py,10px) 10px;border-left:clamp(10px,3.5vw,22px) solid rgba(255,255,255,.32)}'
+    +'.psl>.psl-stub--btn{width:auto;min-width:clamp(48px,26%,240px)}'
     +'.psl-stub .psl-btn{white-space:nowrap}'
     +'.psl-ticker{overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)}'
     +'.psl-move{display:inline-flex;font-weight:700;animation:psl-scroll linear infinite;will-change:transform}'
