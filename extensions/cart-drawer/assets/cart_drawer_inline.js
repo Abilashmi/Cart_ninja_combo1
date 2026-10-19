@@ -2812,6 +2812,42 @@
 
   /* =================== CHECKOUT BUTTON (standard / swipe / animated) =================== */
 
+  // Price tags in the Checkout text (Cart Editor → Checkout Button), e.g.
+  // "Pay {prepaid_price}": {price} = the total the summary shows,
+  // {prepaid_price} / {saving} = after / the prepaid discount, {cod_fee} /
+  // {cod_price} with COD on (brix_cod.js priceTagValues; without it every
+  // price is the total). Same tags as COD's button texts (price-tags.shared.js).
+  const CC_PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+  let _ccCheckoutPrice = null; // { cart, total } of the last drawn footer
+  function ccHasPriceTags(text) { return new RegExp(CC_PRICE_TAG.source).test(String(text || '')); }
+  function ccCheckoutText(text, info) {
+    if (!ccHasPriceTags(text)) return text;
+    const total = info && Number.isFinite(Number(info.total)) ? Number(info.total) : null;
+    const values = window.BrixCod && window.BrixCod.priceTagValues && info
+      ? window.BrixCod.priceTagValues(info.cart, total)
+      : (total == null ? {} : { price: total, prepaid_price: total });
+    return String(text).replace(CC_PRICE_TAG, function (all, key) {
+      const n = values[key];
+      return n == null || !Number.isFinite(Number(n)) ? '' : formatMoney(Number(n));
+    }).replace(/\s+/g, ' ').trim();
+  }
+  // Once COD's settings have loaded (the prepaid offer comes with them), the
+  // label is filled again; COD → Customize's own checkout text wins when set.
+  function ccRefreshCheckoutTags() {
+    const text = CONFIG && CONFIG.checkoutName;
+    if (!ccHasPriceTags(text) || !window.BrixCod || !window.BrixCod.config || !_ccCheckoutPrice) return;
+    const info = _ccCheckoutPrice;
+    window.BrixCod.config().then(function () {
+      if (info !== _ccCheckoutPrice) return;
+      const values = window.BrixCod.priceTagValues(info.cart, info.total);
+      if (values.codText) return;
+      const next = ccCheckoutText(text, info);
+      document.querySelectorAll('#cc-checkout-wrap [data-cc-checkout-label]').forEach(function (el) {
+        if (el.textContent !== next) el.textContent = next;
+      });
+    }).catch(function () {});
+  }
+
   function renderCheckoutButton(appliedCouponCodes) {
     const cbStyle = CONFIG.checkoutButtonStyle || {};
     const bg = cbStyle.backgroundColor || '#111827';
@@ -2838,7 +2874,7 @@
       const thumbH = trackH - 6;
       return `
   <div id="cc-swipe-track" data-href="${href}" style="position:relative;width:100%;height:${trackH}px;background:${bg};border-radius:${radius}px;overflow:hidden;touch-action:pan-y;user-select:none;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
-    <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:${Math.max(12, fontSize - 2)}px;font-weight:700;letter-spacing:0.3px;pointer-events:none;"><span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Swipe to checkout')}</span> →</span>
+    <span id="cc-swipe-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:${fg};font-size:${Math.max(12, fontSize - 2)}px;font-weight:700;letter-spacing:0.3px;pointer-events:none;"><span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Swipe to checkout', _ccCheckoutPrice))}</span> →</span>
     <div id="cc-swipe-thumb" style="position:absolute;top:3px;left:3px;width:${thumbH}px;height:${thumbH}px;border-radius:${thumbRadius}px;background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:grab;touch-action:none;">
       <span style="color:${bg};font-size:20px;line-height:1;">›</span>
     </div>
@@ -2849,7 +2885,7 @@
       return `
   <button type="button" id="cc-animated-checkout-btn" class="cc-anim-btn" data-href="${href}" style="position:relative;overflow:hidden;width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
     <span id="cc-animated-checkout-spinner" style="display:none;width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);border-top-color:${fg};animation:cc-anim-spin 0.6s linear infinite;flex-shrink:0;"></span>
-    <span id="cc-animated-checkout-label" data-cc-checkout-label aria-live="polite">${escapeHtml(CONFIG.checkoutName || 'Checkout')}</span>
+    <span id="cc-animated-checkout-label" data-cc-checkout-label aria-live="polite">${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout', _ccCheckoutPrice))}</span>
   </button>`;
     }
 
@@ -2860,14 +2896,14 @@
     if (CONFIG.shiprocketEnabled) {
       return `
   <button type="button" id="cc-standard-checkout-btn" data-href="${href}" style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-    <span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Checkout Now')}</span> <span style="font-size:18px;">→</span>
+    <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout Now', _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
   </button>`;
     }
 
     return `
   <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
     <button style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      <span data-cc-checkout-label>${escapeHtml(CONFIG.checkoutName || 'Checkout Now')}</span> <span style="font-size:18px;">→</span>
+      <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout Now', _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
     </button>
   </a>`;
   }
@@ -3773,7 +3809,7 @@
 <div id="cc-drawer-footer" style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
   ${renderSummaryHtml(shownSubtotal, totalDiscount, finalTotal, cartLevelOff > 0 ? cartDiscounts : [])}
   <div id="cc-cod-slot"></div>
-  <div id="cc-checkout-wrap">${renderCheckoutButton(appliedCouponCodes)}</div>
+  <div id="cc-checkout-wrap">${(_ccCheckoutPrice = { cart: cart, total: finalTotal }, renderCheckoutButton(appliedCouponCodes))}</div>
   <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
@@ -3822,6 +3858,7 @@
       initSwipeCheckout();
       initAnimatedCheckout();
       initCodButton(cart);
+      ccRefreshCheckoutTags();
     } else {
       // Subsequent updates: only replace drawer inner content (no flash)
       const drawer = document.getElementById('cc-drawer');
@@ -3844,6 +3881,7 @@
       initSwipeCheckout();
       initAnimatedCheckout();
       initCodButton(cart);
+      ccRefreshCheckoutTags();
     }
 
     startCountdownTicker();

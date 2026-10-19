@@ -1784,8 +1784,10 @@
     var codTotal = Math.round((total + prepaidInCart(cart)) * 100) / 100;
     // "Create the discount" off: the cart has no prepaid discount of BRIX's,
     // so the online price ("Pay now {price}") shows it taken off here.
-    total = Math.round((total - prepaidShownSaving(cart)) * 100) / 100;
-    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal), subtotal: subtotal, total: total, codTotal: codTotal };
+    var shownSaving = prepaidShownSaving(cart);
+    total = Math.round((total - shownSaving) * 100) / 100;
+    var saving = Math.round((codTotal - total) * 100) / 100;
+    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal, saving: saving } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal), subtotal: subtotal, total: total, codTotal: codTotal, saving: saving };
   }
 
   // Show-only prepaid (paymentValue.prepaid.showOnly): the saving the online
@@ -1803,6 +1805,34 @@
     var saving = Math.round(base * Number(pre.percent)) / 100;
     if (pre.maxDiscount > 0 && saving > pre.maxDiscount) saving = pre.maxDiscount;
     return saving;
+  }
+
+  // Price tags in the BRIX Cart Drawer's own Checkout text (Cart Editor →
+  // Checkout Button, e.g. "Pay {prepaid_price}"), for a cart whose total the
+  // drawer shows as `total`: {price} = that total, {prepaid_price} = it after
+  // the prepaid discount (already off when Shopify applies BRIX's; taken off
+  // here when it's show only), {saving} = the prepaid saving, {cod_fee} /
+  // {cod_price} = the COD fee and the COD total (only with COD on). ready =
+  // the settings have loaded; codText = COD → Customize's checkout text is
+  // set and draws the label instead (relabelBrixCheckout).
+  function priceTagValues(cart, total) {
+    var t = Number(total);
+    if (!isFinite(t)) t = cart && isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : 0;
+    var inCart = prepaidInCart(cart);
+    var shown = prepaidShownSaving(cart);
+    var saving = Math.round((inCart + shown) * 100) / 100;
+    var cfg = configValue || null;
+    var codBase = Math.round((t + inCart) * 100) / 100;
+    var fee = cfg ? codFeeFor(cfg, codBase) : null;
+    return {
+      price: t,
+      prepaid_price: Math.round((t - shown) * 100) / 100,
+      saving: saving > 0 ? saving : null,
+      cod_fee: cfg ? fee : null,
+      cod_price: cfg ? Math.round((codBase + fee) * 100) / 100 : null,
+      ready: configValue !== undefined,
+      codText: Boolean(cfg && cfg.drawerCheckoutText && cfg.surfaces && cfg.surfaces.drawer !== false),
+    };
   }
 
   // The BRIX prepaid discount (product page payment options) is a Shopify
@@ -2150,7 +2180,7 @@
     var price = state ? cartPrice(state) : null;
     var cod = state ? codPrice(state) : null;
     var fee = codFeeFor(cfg, cod);
-    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
+    var values = price == null ? {} : { price: price, prepaid_price: price, saving: state.saving > 0 ? state.saving : null, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
     return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
   }
 
@@ -2484,8 +2514,11 @@
 
   // The merchant's text on Shopify's Buy it now (COD → Customize →
   // Product page), with price tags for the chosen variant and quantity.
-  // Only while Buy it now shows (COD doesn't replace it). No prepaid offer
-  // here (that's payment options), so {prepaid_price} is the price.
+  // Only while Buy it now shows (COD doesn't replace it). The prepaid
+  // discount has its own switch: with the payment options off its offer still
+  // comes (paymentValue.prepaid), so {prepaid_price} / {saving} use it, worked
+  // out like the payment options (minimum, cap, excluded collections,
+  // currency); it used to be the plain price here.
   function relabelBuyNow(cfg, form, info) {
     var text = cfg && cfg.productButton && cfg.productButton.buyNowText;
     if (!text || !form) return;
@@ -2493,7 +2526,14 @@
     if (!btn) return;
     var price = productPrice(form, info);
     var fee = codFeeFor(cfg, price);
-    var values = price == null ? {} : { price: price, prepaid_price: price, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var online = price;
+    var pre = paymentValue && paymentValue.prepaid;
+    if (pre && price != null && !Pay.prepaidExcludedHere(pre)) {
+      var active = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY;
+      var pr = Pay.pricing(price, 1, pre, 0, Boolean(pre.currency && pre.currency === active));
+      if (pr.qualifies) online = pr.online;
+    }
+    var values = price == null ? {} : { price: price, prepaid_price: online, saving: price - online > 0 ? Math.round((price - online) * 100) / 100 : null, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
     setButtonText(btn, next);
   }
@@ -3190,7 +3230,7 @@
       return { method: v.method, shown: v.shown, pricing: v.pr, variantId: v.sel.variantId, quantity: v.sel.quantity };
     }
 
-    return { start: start, snapshot: snapshot, pricing: pricing, fill: fill, onlineLabel: onlineLabel };
+    return { start: start, snapshot: snapshot, pricing: pricing, fill: fill, onlineLabel: onlineLabel, prepaidExcludedHere: prepaidExcludedHere };
   })();
 
   function initProductButton() {
@@ -3236,6 +3276,7 @@
     paymentSnapshot: Pay.snapshot,
     prepaidCartCode: prepaidCartCode,
     prepareCartCode: prepareCartCode,
+    priceTagValues: priceTagValues,
   };
 
   function init() {

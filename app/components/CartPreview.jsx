@@ -10,6 +10,7 @@ import PreviewCartItems from './PreviewCartItems';
 import { AnnouncementRotator } from './AnnouncementRotator';
 import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
+import { fillPriceTags } from '../utils/price-tags.shared';
 import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 import { milestonePositions, progressFill, fillMoneyTag } from '../utils/progress-layout.shared.js';
@@ -826,6 +827,9 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
     ? getUnlockedRewards({ tiers: pb.tiers, mode: pb.mode === 'count' ? 'count' : 'amount', total: paidTotalNow.paidTotal, count: paidTotalNow.paidCount, allProducts })
     : [];
   const { paidTotal, paidCount, subtotal } = getPreviewTotals({ baseTotal: CART_TOTAL, added, rewards });
+  // Price tags in the Checkout text, like the storefront (cart_drawer_inline.js
+  // ccCheckoutText); the preview has no prepaid offer, so {prepaid_price} = {price} = the total.
+  const checkoutLabel = fillPriceTags(footer.checkoutButton.text || 'Checkout Now', { price: subtotal, prepaid_price: subtotal }, formatMoney);
   const itemCount = 1 + added.length + rewards.length;
 
   useEffect(() => {
@@ -1097,11 +1101,11 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                           <div style={{ width: checkoutPreview.swipeH - 6, height: checkoutPreview.swipeH - 6, margin: 3, borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
                             <span style={{ color: footer.checkoutButton.bgColor, fontSize: 16, lineHeight: 1 }}>›</span>
                           </div>
-                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: checkoutPreview.swipeFont, fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>Swipe to checkout</span>
+                          <span style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', color: footer.checkoutButton.textColor, fontSize: checkoutPreview.swipeFont, fontWeight: 600, letterSpacing: '0.3px', pointerEvents: 'none' }}>{checkoutLabel} →</span>
                         </div>
                       ) : (
                         <button style={{ width: '100%', padding: `${checkoutPreview.padY}px 11px`, border: 'none', borderRadius: `${footer.checkoutButton.borderRadius}px`, fontSize: checkoutPreview.font, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: footer.checkoutButton.bgColor, color: footer.checkoutButton.textColor }}>
-                          {footer.checkoutButton.text} →
+                          {checkoutLabel} →
                         </button>
                       )}
                       {/* Footer note */}

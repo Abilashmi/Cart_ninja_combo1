@@ -15,6 +15,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 const JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.js'), 'utf8');
+const COD_JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cod.js'), 'utf8');
 const CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.css'), 'utf8');
 const UI_CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cart_ui.css'), 'utf8');
 // Scripts a snippet loads from the extension's assets are inlined (no Shopify CDN here).
@@ -39,16 +40,19 @@ const PRODUCTS = [
   { id: 102, title: 'Socks', handle: 'socks', variants: [v(1021, 'Default Title', '199.00', true)] },
 ];
 
-const drawerPage = () => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
+// cod: also load brix_cod.js (its settings mocked), as the app embed does.
+const drawerPage = (cod = false) => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
   <style>body{margin:0;font-family:Arial,sans-serif}</style>
   <link rel="stylesheet" href="https://cdn.test/cart_drawer_inline.css"><link rel="stylesheet" href="https://cdn.test/brix_cart_ui.css"></head>
   <body><main><h1>Store</h1></main><div id="cc-root" data-shop="demo.myshopify.com" data-currency="INR"></div>
   <script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'},currency:{active:'INR'}};</script>
+  ${cod ? '<script src="https://cdn.test/brix_cod.js" data-php="https://int.thebrix.io" data-shop="demo.myshopify.com" data-currency="INR"></script>' : ''}
   <script src="https://cdn.test/cart_drawer_inline.js"></script></body></html>`;
 
 const browser = await chromium.launch();
 
-async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null, opens = 1, slowProducts = 0 }) {
+// cod: brix_cod.js's settings (cod_storefront.php?action=config); cartExtra: more cart.js fields.
+async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null, opens = 1, slowProducts = 0, cod = null, cartExtra = null }) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await context.newPage();
   const net = { adds: [], storefrontApi: [] };
@@ -60,17 +64,18 @@ async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = nul
     const url = new URL(req.url());
     const json = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d), headers: { 'Access-Control-Allow-Origin': '*' } });
     if (url.origin === 'https://cdn.test') {
-      const body = { '/cart_drawer_inline.js': JS, '/cart_drawer_inline.css': CSS, '/brix_cart_ui.css': UI_CSS }[url.pathname];
+      const body = { '/cart_drawer_inline.js': JS, '/brix_cod.js': COD_JS, '/cart_drawer_inline.css': CSS, '/brix_cart_ui.css': UI_CSS }[url.pathname];
       return route.fulfill({ contentType: url.pathname.endsWith('.js') ? 'application/javascript; charset=utf-8' : 'text/css; charset=utf-8', body });
     }
     if (url.origin === 'https://int.thebrix.io') {
+      if (url.pathname === '/cod_storefront.php') return json(cod || { success: true, enabled: false });
       if (url.pathname === '/save_cart_drawer.php') return json({ status: 'success', data: { cartStatus: '1', checkoutName: 'Checkout', header_title: 'Your Cart', ...data } });
       return json({ status: 'success', data: [] });
     }
     if (url.origin === 'https://shop.test') {
-      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: drawerPage() });
+      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: drawerPage(Boolean(cod)) });
       if (url.pathname === '/cart.js') {
-        return json({ items: current, item_count: current.length, total_price: current.reduce((n, l) => n + l.final_line_price, 0), currency: 'INR' });
+        return json({ items: current, item_count: current.length, total_price: current.reduce((n, l) => n + l.final_line_price, 0), currency: 'INR', ...(cartExtra || {}) });
       }
       if (url.pathname === '/products.json') {
         if (slowProducts) await new Promise((r) => setTimeout(r, slowProducts));
@@ -443,6 +448,36 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   });
   check('swipe button: height follows the padding (64px), thumb fits, label size', sw && sw.h === 64 && sw.thumb === 58 && sw.fs === '16px', JSON.stringify(sw));
   await close(swipe);
+}
+
+/* Price tags in the Checkout text (Cart Editor → Checkout Button) */
+{
+  const label = (page) => page.evaluate(() => [...document.querySelectorAll('#cc-checkout-wrap [data-cc-checkout-label]')].map((e) => e.textContent).join('|'));
+  const plain = await openDrawer({ data: { checkoutName: 'Pay {price} now' } });
+  check('checkout text: {price} = the cart total', /^Pay ₹900(\.00)? now$/.test(await label(plain)), await label(plain));
+  await close(plain);
+
+  // Prepaid offer, "Create the discount" off (show only): the drawer takes it off itself.
+  const showOnly = await openDrawer({
+    data: { checkoutName: 'Pay {prepaid_price} · save {saving}' },
+    cod: { success: true, enabled: false, productPayment: { cards: false, prepaid: { showOnly: true, percent: 10, minSubtotal: 0, maxDiscount: 0 } } },
+  });
+  check('checkout text (show-only prepaid): {prepaid_price} and {saving}', /^Pay ₹810(\.00)? · save ₹90(\.00)?$/.test(await label(showOnly)), await label(showOnly));
+  await close(showOnly);
+
+  // BRIX's prepaid discount is live: Shopify already took it off the cart.
+  const live = await openDrawer({
+    data: { checkoutName: 'Pay {prepaid_price} · save {saving}' },
+    cod: { success: true, enabled: false, productPayment: { cards: false, prepaid: { verified: true, percent: 10, title: 'Prepaid 10% off' } } },
+    cartExtra: { total_price: 81000, items_subtotal_price: 90000, cart_level_discount_applications: [{ title: 'Prepaid 10% off', total_allocated_amount: 9000, value_type: 'percentage', value: '10.0' }] },
+  });
+  check('checkout text (prepaid in the cart): the total already has it, {saving} from the cart', /^Pay ₹810(\.00)? · save ₹90(\.00)?$/.test(await label(live)), await label(live));
+  await close(live);
+
+  // No prepaid offer: {saving} is left out, {prepaid_price} = the total.
+  const none = await openDrawer({ data: { checkoutName: 'Pay {prepaid_price} {saving}' }, cod: { success: true, enabled: false } });
+  check('checkout text (no prepaid offer): {prepaid_price} = total, no {saving}', /^Pay ₹900(\.00)?$/.test(await label(none)), await label(none));
+  await close(none);
 }
 
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));

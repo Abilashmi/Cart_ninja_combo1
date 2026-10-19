@@ -20,6 +20,7 @@ export function CheckoutSection() {
             label="Checkout Button Text"
             value={checkoutButton.text}
             onChange={(v) => updateCheckoutButton({ text: v })}
+            helpText="Price tags: {price} = cart total, {prepaid_price} = after the prepaid discount, {saving} = the prepaid saving, {cod_price} / {cod_fee} with COD on. Example: Pay {prepaid_price}"
             autoComplete="off"
           />
           <TextField

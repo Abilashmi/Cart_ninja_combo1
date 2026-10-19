@@ -564,6 +564,27 @@ s = await state(page);
 check('Buy it now text: follows the variant (₹1,500)', s.nativeText === 'Buy it now ₹1,500', s.nativeText);
 await page.close();
 
+// Payment options off, prepaid discount on (its own switch): {prepaid_price}
+// and {saving} use the prepaid offer (it was the plain price here).
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Pay Now {prepaid_price} (save {saving})' }, productPayment: { cards: false, prepaid: PREPAID } };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text with the prepaid discount: "Pay Now ₹990 (save ₹110)" (10% off ₹1,100)', s.nativeText === 'Pay Now ₹990 (save ₹110)', s.nativeText);
+await page.selectOption('#opt', '22');
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text with the prepaid discount: follows the variant (₹1,350)', s.nativeText === 'Pay Now ₹1,350 (save ₹150)', s.nativeText);
+await page.close();
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Pay Now {prepaid_price}' }, productPayment: { cards: false, prepaid: { ...PREPAID, minSubtotal: 5000 } } };
+page = await openPage();
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+s = await state(page);
+check('Buy it now text: below the prepaid minimum, {prepaid_price} is the plain price', s.nativeText === 'Pay Now ₹1,100', s.nativeText);
+await page.close();
+
 // A theme with its own Buy it now button outside the form: found by the merchant's selector.
 const customBtn = (pg) => pg.evaluate(() => { const b = document.querySelector('.hk-buy-now'); return { text: b.textContent.trim(), icon: Boolean(b.querySelector('svg')), shown: getComputedStyle(b).display !== 'none' }; });
 config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowText: 'Buy it now {price}' }, productPayment: null };
