@@ -373,7 +373,7 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   const celebratingTier = celebratingTierId ? tiers.find((t) => t.id === celebratingTierId) : null;
 
   return (
-    <div className="cart-preview-progress">
+    <div className="cart-preview-progress" style={pb.sticky ? { position: 'sticky', [pb.position === 'bottom' ? 'bottom' : 'top']: 0, zIndex: 5, background: '#fff' } : undefined}>
       {/* Badge sits in its own flex row above the message (a sibling in
           normal flow, not an overlay) so it can never render on top of the
           centered message text below it. */}

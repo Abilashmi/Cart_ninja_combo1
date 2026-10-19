@@ -560,6 +560,7 @@
 
         await enrichUpsellProducts(CONFIG.upsell);
         ccWarmCatalog();
+        ccLearnBannerRatio(CONFIG.banner);
       } else {
         // API returned error / no record for this shop — fall back to defaults
         // so the drawer still works even if the merchant hasn't saved settings yet.
@@ -839,6 +840,9 @@
       // each not-yet-reached milestone icon — never the progress message or
       // the REACHED/title label.
       hideMilestoneAmount: data.hideMilestoneAmount === true,
+      // Cart Editor → Progress Bar → "Keep visible while scrolling": pinned to
+      // the top (or bottom, with placement bottom) of the drawer's item list.
+      sticky: data.sticky === true,
       // The admin's ProgressBarSection saves this field as `position`
       // (defaultCartEditorState.body.progressBar.position) — `placement` is
       // never actually written, so without the `data.position` fallback the
@@ -3154,8 +3158,29 @@
       : '';
     // The spacing replaces the body's section gap (--cc-gap) instead of adding to it.
     var margin = 'margin:calc(' + banner.marginTop + 'px - var(--cc-gap, 12px)) 0 calc(' + banner.marginBottom + 'px - var(--cc-gap, 12px));';
+    // Eager, and its space kept from the picture's known shape: lazy loading
+    // in a drawer that slides in from off-screen loaded it late, and the
+    // picture then pushed the cart lines down (the drawer "jumped" on adds).
+    var ratio = _ccBannerRatio[ccBannerSrcInUse(banner)];
     return '<div class="bxcd-banner" id="cc-image-banner" style="order:' + order + ';' + margin + '"><picture>' + source +
-      '<img src="' + escapeHtml(banner.desktop) + '" alt="' + alt + '" loading="lazy" decoding="async"' + (alt ? '' : ' role="presentation"') + '></picture></div>';
+      '<img src="' + escapeHtml(banner.desktop) + '" alt="' + alt + '" loading="eager" decoding="async"' + (ratio ? ' style="aspect-ratio:' + ratio + '"' : '') + (alt ? '' : ' role="presentation"') + '></picture></div>';
+  }
+
+  // The banner picture's shape (width / height) per image, learned once
+  // (preloaded when the drawer's settings arrive), so its space is held
+  // before it loads.
+  var _ccBannerRatio = {};
+  function ccBannerSrcInUse(banner) {
+    var phone = window.matchMedia && window.matchMedia('(max-width: 480px)').matches;
+    return phone && banner.mobile ? banner.mobile : banner.desktop;
+  }
+  function ccLearnBannerRatio(banner) {
+    if (!banner || !banner.enabled || !banner.desktop) return;
+    var src = ccBannerSrcInUse(banner);
+    if (!src || _ccBannerRatio[src]) return;
+    var img = new Image();
+    img.onload = function () { if (img.naturalWidth && img.naturalHeight) _ccBannerRatio[src] = img.naturalWidth + ' / ' + img.naturalHeight; };
+    img.src = src;
   }
 
   var CC_ICON_X = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>';
@@ -3292,7 +3317,7 @@
 
     const root = document.getElementById('cc-root');
     let overlay = document.getElementById('cc-overlay');
-    const isFirstOpen = !overlay;
+    let isFirstOpen = !overlay;
 
     // Save scroll position before re-render
     let savedScroll = 0;
@@ -3416,7 +3441,12 @@
       }
       const celebratingTier = _ccCelebratingTierId ? pInfo.tiers.find((t) => t.id === _ccCelebratingTierId) : null;
 
-      let pbHtml = `<div data-cc-section="progress" class="cc-progress-section" style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -20 : 980};">`;
+      // Sticky: pinned while the items scroll under it (its top / bottom and
+      // background are set after drawing, ccFitProgressLabels).
+      const stickyCss = progress.sticky
+        ? `position:sticky;${progress.placement === 'top' ? 'top' : 'bottom'}:0;z-index:6;background:#fff;box-shadow:0 ${progress.placement === 'top' ? '6px' : '-6px'} 8px -8px rgba(15,23,42,.25);`
+        : 'position:relative;';
+      let pbHtml = `<div data-cc-section="progress" class="cc-progress-section${progress.sticky ? ' cc-progress-section--sticky' : ''}" style="padding:8px 16px;margin-bottom:0;${stickyCss}order:${progress.placement === 'top' ? -20 : 980};">`;
       // Header info
       pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
       if (celebratingTier) {
@@ -3494,7 +3524,10 @@
       const fillPercent = ccProgressFill(pInfo.currentVal, msTargets, msPos);
 
       // 1. The progress bar filler
-      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${fillPercent}%;background:${fgColor};border-radius:${trackRadius}px;transition:width 0.3s ease;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
+      // Drawn at the last fill and slid to the new one after drawing
+      // (ccFitProgressLabels): every redraw rebuilds the bar, so it snapped.
+      const fromPercent = _ccLastFillPercent === null ? fillPercent : _ccLastFillPercent;
+      pbHtml += `<div class="cc-pb-fill" data-cc-fill="${fillPercent}" style="position:absolute;left:0;top:0;height:100%;width:${fromPercent}%;background:${fgColor};border-radius:${trackRadius}px;transition:width 0.3s ease;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
 
       // 2. Tier segment markers — thin lines on the track showing where each level is
       pInfo.tiers.forEach((ms, idx) => {
@@ -3756,6 +3789,16 @@
     if (seq < _ccDrawnSeq) return;
     _ccDrawnSeq = seq;
 
+    // Another render may have built the drawer while this one waited (two
+    // opens close together, e.g. an add and a cart icon tap): update that one.
+    // Deciding before the wait built a second drawer on top that never
+    // updated again (a stale copy over the live one).
+    const liveOverlay = document.getElementById('cc-overlay');
+    if (isFirstOpen && liveOverlay) {
+      overlay = liveOverlay;
+      isFirstOpen = false;
+    }
+
     // ---- SMOOTH DOM UPDATE ----
     if (isFirstOpen) {
       // First open: build full overlay with backdrop + drawer
@@ -3817,7 +3860,38 @@
   // label run into "Items included" below (extrokids). Labels that stick out
   // past the section's sides are moved back inside. Measured after each draw
   // (relative rects, so the drawer's slide-in doesn't matter).
+  var _ccLastFillPercent = null; // var: read by renderDrawer above, before this line may have run
   function ccFitProgressLabels() {
+    const fill = document.querySelector('#cc-drawer .cc-pb-fill');
+    if (fill) {
+      const target = Number(fill.getAttribute('data-cc-fill'));
+      if (Number.isFinite(target)) {
+        if (_ccLastFillPercent !== target) {
+          void fill.offsetWidth; // start from the drawn width, so it slides
+          fill.style.width = target + '%';
+        }
+        _ccLastFillPercent = target;
+      }
+    }
+    // A pinned bar covers the list's own padding too (else items show in the
+    // gap above it) and takes the drawer's real background (custom CSS too).
+    const sticky = document.querySelector('#cc-drawer .cc-progress-section--sticky');
+    const listBody = document.getElementById('cc-drawer-body');
+    if (sticky && listBody) {
+      const cs = getComputedStyle(listBody);
+      if (sticky.style.top) sticky.style.top = -parseFloat(cs.paddingTop || 0) + 'px';
+      if (sticky.style.bottom) sticky.style.bottom = -parseFloat(cs.paddingBottom || 0) + 'px';
+      const drawer = document.getElementById('cc-drawer');
+      const bg = drawer && getComputedStyle(drawer).backgroundColor;
+      if (bg && !/rgba\(0, 0, 0, 0\)|transparent/.test(bg)) sticky.style.background = bg;
+    }
+    // The banner picture's shape, for the next draw (ccLearnBannerRatio).
+    const bannerImg = document.querySelector('#cc-drawer #cc-image-banner img');
+    if (bannerImg && !bannerImg.dataset.ccRatio) {
+      bannerImg.dataset.ccRatio = '1';
+      const learn = () => { if (bannerImg.naturalWidth && bannerImg.naturalHeight) _ccBannerRatio[bannerImg.currentSrc || bannerImg.src] = bannerImg.naturalWidth + ' / ' + bannerImg.naturalHeight; };
+      if (bannerImg.complete) learn(); else bannerImg.addEventListener('load', learn, { once: true });
+    }
     const track = document.querySelector('#cc-drawer .cc-ms-track');
     if (!track) return;
     const tr = track.getBoundingClientRect();
@@ -3836,6 +3910,12 @@
     track.style.marginBottom = Math.max(48, Math.ceil(bottom - tr.bottom) + 10) + 'px';
   }
   window.addEventListener('resize', () => { ccFitProgressLabels(); });
+  // The theme's font can arrive after the drawer drew: labels then grow
+  // (a three-line label ran into "Items included"), so measure again.
+  if (document.fonts) {
+    if (document.fonts.ready) document.fonts.ready.then(() => { ccFitProgressLabels(); }).catch(() => {});
+    if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => { ccFitProgressLabels(); });
+  }
 
   /* =================== ROTATING ANNOUNCEMENT BAR =================== */
   // 2+ messages: one at a time, next every `interval` s (paused while hovered

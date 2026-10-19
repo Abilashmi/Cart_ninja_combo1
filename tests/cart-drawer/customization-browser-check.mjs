@@ -48,7 +48,7 @@ const drawerPage = () => `<!doctype html><html><head><meta name="viewport" conte
 
 const browser = await chromium.launch();
 
-async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null }) {
+async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null, opens = 1, slowProducts = 0 }) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await context.newPage();
   const net = { adds: [], storefrontApi: [] };
@@ -72,7 +72,10 @@ async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = nul
       if (url.pathname === '/cart.js') {
         return json({ items: current, item_count: current.length, total_price: current.reduce((n, l) => n + l.final_line_price, 0), currency: 'INR' });
       }
-      if (url.pathname === '/products.json') return json({ products: url.searchParams.get('page') && url.searchParams.get('page') !== '1' ? [] : PRODUCTS });
+      if (url.pathname === '/products.json') {
+        if (slowProducts) await new Promise((r) => setTimeout(r, slowProducts));
+        return json({ products: url.searchParams.get('page') && url.searchParams.get('page') !== '1' ? [] : PRODUCTS });
+      }
       if (url.pathname === '/cart/add.js') {
         const body = JSON.parse(req.postData() || '{}');
         net.adds.push(body);
@@ -92,13 +95,25 @@ async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = nul
   await page.goto('https://shop.test/');
   await page.waitForFunction(() => typeof window.testCart === 'function');
   await page.waitForTimeout(300);
-  await page.evaluate(() => window.testCart());
+  // opens: several opens at once (an add and a cart icon tap close together).
+  await page.evaluate((n) => { for (let i = 0; i < n; i++) window.testCart(); }, opens);
   await page.waitForSelector('#cc-drawer', { timeout: 5000 });
   await page.waitForTimeout(800);
   page.net = net;
   return page;
 }
 const close = async (page) => { allErrors.push(...page.errors); await page.context().close(); };
+
+/* 0. Two opens at once build ONE drawer (the second used to sit on top, stale) */
+{
+  // Upsells to load (a slow catalogue): each open waits on them, so both are
+  // in flight together; the older one finishing first used to build a 2nd drawer.
+  const upsell = { upsell_status: 1, upsell_data: JSON.stringify({ enabled: true, useAI: false, manualRules: [{ id: 'r1', enabled: true, triggerType: 'all', triggerProductIds: [], upsellProductIds: [`gid://shopify/Product/${PRODUCTS[0].id}`] }] }) };
+  const page = await openDrawer({ data: upsell, opens: 2, slowProducts: 500 });
+  await page.waitForTimeout(600);
+  check('two opens at once: one drawer', (await page.locator('#cc-drawer').count()) === 1 && (await page.locator('#cc-overlay').count()) === 1, String(await page.locator('#cc-drawer').count()));
+  await close(page);
+}
 
 /* 1. Rotating announcement bar */
 {

@@ -324,6 +324,16 @@ export function ProgressBarSection() {
             enabled={progressBar.hideMilestoneAmount}
             onToggle={(v) => updateProgressBar({ hideMilestoneAmount: v })}
           />
+          <BlockStack gap="100">
+            <FeatureToggle
+              label="Keep visible while scrolling"
+              enabled={progressBar.sticky === true}
+              onToggle={(v) => updateProgressBar({ sticky: v })}
+            />
+            <Text as="p" variant="bodySm" tone="subdued">
+              The progress bar stays pinned at the top of the cart (at the bottom when placed below the products) while shoppers scroll their items.
+            </Text>
+          </BlockStack>
         </FormLayout>
       </Card>
 

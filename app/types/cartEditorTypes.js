@@ -88,6 +88,8 @@ export const defaultCartEditorState = {
       // each not-yet-reached milestone icon. Never affects the "You're X
       // left to reach..." progress message or the REACHED/title labels.
       hideMilestoneAmount: false,
+      // Pinned while the cart's items scroll (top, or bottom with placement bottom).
+      sticky: false,
       colors: {
         background: '#e5e7eb',
         fill: '#10b981',
