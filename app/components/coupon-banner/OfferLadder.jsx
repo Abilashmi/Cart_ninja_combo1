@@ -17,6 +17,14 @@ const DIRECTION_OPTIONS = [
     { label: "Horizontal: side by side", value: "row" },
     { label: "Vertical: one under another", value: "column" },
 ];
+const SHAPE_OPTIONS = [
+    { label: "Plain box", value: "plain" },
+    { label: "Coupon ticket (cut-outs on both sides)", value: "ticket" },
+];
+const ALIGN_OPTIONS = [
+    { label: "Centre", value: "center" },
+    { label: "Left", value: "left" },
+];
 const PLACE_OPTIONS = [
     { label: "Right side", value: "right" },
     { label: "Centre, next to the text", value: "center" },
@@ -43,6 +51,9 @@ export function OfferLadderFields({ value, onChange, codeOptions }) {
     const auto = ov.autoApply === true;
     const action = ov.buttonAction === "apply" ? "apply" : "copy";
     const size = offerLadder.BOX_SIZES.includes(ov.boxSize) ? ov.boxSize : "full";
+    const shape = ov.shape === "ticket" ? "ticket" : "plain";
+    // Same default as normalize(): a ticket reads left-aligned.
+    const align = offerLadder.ALIGNS.includes(ov.align) ? ov.align : shape === "ticket" ? "left" : "center";
     const setTier = (i, patch) => onChange({ tiers: tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)) });
     const removeTier = (i) => onChange({ tiers: tiers.filter((_, j) => j !== i) });
     const addTier = () => {
@@ -74,6 +85,7 @@ export function OfferLadderFields({ value, onChange, codeOptions }) {
                                 <Button size="slim" variant="plain" tone="critical" icon={DeleteIcon} accessibilityLabel={`Remove offer ${i + 1}`} onClick={() => removeTier(i)} />
                             </InlineStack>
                             <TextField label="Offer text" value={t.text ?? ""} onChange={(v) => setTier(i, { text: v })} placeholder="Buy any 2 Get 10% Off" autoComplete="off" maxLength={80} showCharacterCount error={!String(t.text || "").trim() ? "Add the words shoppers see" : undefined} />
+                            <TextField label="Line under it (optional)" value={t.sub ?? ""} onChange={(v) => setTier(i, { sub: v })} placeholder="(On all Orders)" autoComplete="off" maxLength={60} />
                             {auto && (
                                 <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "10px" }}>
                                     <TextField label="Items in cart" type="number" min={1} max={99} value={t.qty === "" || t.qty == null ? "" : String(t.qty)} onChange={(v) => setTier(i, { qty: v === "" ? "" : Math.max(0, Math.min(99, parseInt(v, 10) || 0)) })} autoComplete="off" error={qtyError} />
@@ -93,7 +105,10 @@ export function OfferLadderFields({ value, onChange, codeOptions }) {
 
             <Divider />
             <Text as="h3" variant="headingSm">Look</Text>
+            <Select label="Shape" value={shape} options={SHAPE_OPTIONS} onChange={(v) => onChange({ shape: v })}
+                helpText={shape === "ticket" ? "A coupon: half-circle cut-outs in the middle of both sides and a stub on the right, behind a light strip. The button (if you show one) goes in the stub." : undefined} />
             <Select label="Style" value={look} options={LOOK_OPTIONS} onChange={(v) => onChange({ look: v })} />
+            <Select label="Text alignment" value={align} options={ALIGN_OPTIONS} onChange={(v) => onChange({ align: v })} />
             {(look === "ticker" || (look === "strip" && ov.direction !== "column")) && (
                 <Select label="Divider between offers" value={offerLadder.SEPARATORS.includes(ov.separator) ? ov.separator : "|"} onChange={(v) => onChange({ separator: v })}
                     options={offerLadder.SEPARATORS.map((s) => ({ label: s, value: s }))} />
@@ -128,7 +143,9 @@ export function OfferLadderFields({ value, onChange, codeOptions }) {
             {ov.buttonShow === true && (
                 <BlockStack gap="200">
                     <Select label="When tapped" value={action} options={ACTION_OPTIONS} onChange={(v) => onChange({ buttonAction: v })} />
-                    <Select label="Button position" value={offerLadder.BUTTON_PLACES.includes(ov.buttonPlace) ? ov.buttonPlace : "right"} options={PLACE_OPTIONS} onChange={(v) => onChange({ buttonPlace: v })} />
+                    {shape !== "ticket" && (
+                        <Select label="Button position" value={offerLadder.BUTTON_PLACES.includes(ov.buttonPlace) ? ov.buttonPlace : "right"} options={PLACE_OPTIONS} onChange={(v) => onChange({ buttonPlace: v })} />
+                    )}
                     <Select label="Coupon code" value={ov.buttonCode || ""} options={optionsFor(ov.buttonCode, "Pick a code")} onChange={(v) => onChange({ buttonCode: v })}
                         error={!ov.buttonCode ? "Pick the code the button uses. Without one the button doesn't show." : undefined} />
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>

@@ -924,7 +924,8 @@ export default function ProductWidgetPage() {
                 style.ladder = true;
                 LADDER_STYLE_KEYS.forEach((k) => { if (ov[k] !== undefined && ov[k] !== "") style[k] = ov[k]; });
                 // Only offers with words and a number of items, lowest first.
-                style.tiers = offerLadder.normalize(ov).tiers;
+                // (The line under an offer only when it has one.)
+                style.tiers = offerLadder.normalize(ov).tiers.map(({ sub, ...t }) => (sub ? { ...t, sub } : t));
             }
             ["headingText", "subtextText", "buttonText", "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor",
                 // Subtitle font, "Copied" colours and icon (CouponStyleFields).

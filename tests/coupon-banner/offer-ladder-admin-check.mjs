@@ -176,6 +176,35 @@ await check('offers direction, button position and box size: preview follows, Sa
   await context.close();
 });
 
+await check('coupon ticket: cut-out shape, a line under each offer, left text, button in the stub; Save posts them', async () => {
+  const { page, context, posts, errors } = await open();
+  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
+  await page.getByLabel('Shape').selectOption('ticket');
+  await page.getByLabel('Offer direction').selectOption('column');
+  const tier = (i) => page.locator('.pw-ladder-tier').nth(i);
+  await tier(0).getByLabel('Line under it (optional)').fill('(On all Orders)');
+  assert.equal(await page.getByLabel('Text alignment').inputValue(), 'left', 'a ticket starts left-aligned');
+  const cls = await page.locator('.pw-ladder .psl').getAttribute('class');
+  assert.match(cls, /psl--ticket/);
+  assert.match(cls, /psl--left/);
+  assert.equal(await page.locator('.pw-ladder .psl-tier-sub').first().textContent(), '(On all Orders)');
+  assert.equal(await page.locator('.pw-ladder .psl-stub').count(), 1, 'the stub on the right');
+  await page.getByLabel('Show a button').check();
+  await page.getByLabel('Coupon code').selectOption('SAVE10');
+  assert.equal(await page.getByLabel('Button position').count(), 0, 'a ticket\'s button always sits in the stub');
+  assert.equal(await page.locator('.pw-ladder .psl-stub .psl-btn').count(), 1);
+  await page.locator('.pw-ladders').screenshot({ path: path.join(shotDir, 'offer-ladder-ticket.png') });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const save = posts.find((p) => p.couponStyles);
+  const st = save.couponStyles[save.selectedActiveCoupons[0]];
+  assert.equal(st.shape, 'ticket');
+  assert.equal(st.tiers[0].sub, '(On all Orders)');
+  assert.equal('sub' in st.tiers[1], false, 'no empty line saved for an offer without one');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

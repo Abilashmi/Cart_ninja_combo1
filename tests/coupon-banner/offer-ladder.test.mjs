@@ -28,11 +28,11 @@ test('the storefront snippet carries the shared block verbatim', () => {
 test('normalize: merchant order kept, item count optional, codes trimmed, max 5', () => {
   const L = O.normalize({ ...LADDER, tiers: [...LADDER.tiers, { text: '', qty: 4 }, { text: 'No count', qty: 0 }, { text: 'Comma', qty: 7, code: 'A,B' }, null] });
   assert.deepEqual(L.tiers, [
-    { text: 'Buy any 3 Get 15% Off', qty: 3, code: 'BUY3' },
-    { text: 'Buy any 2 Get 10% Off', qty: 2, code: 'BUY2' },
-    { text: 'Buy any 5 Get 25% Off', qty: 5, code: '' },
-    { text: 'No count', qty: 0, code: '' },
-    { text: 'Comma', qty: 7, code: '' },
+    { text: 'Buy any 3 Get 15% Off', sub: '', qty: 3, code: 'BUY3' },
+    { text: 'Buy any 2 Get 10% Off', sub: '', qty: 2, code: 'BUY2' },
+    { text: 'Buy any 5 Get 25% Off', sub: '', qty: 5, code: '' },
+    { text: 'No count', sub: '', qty: 0, code: '' },
+    { text: 'Comma', sub: '', qty: 7, code: '' },
   ]);
   assert.equal(O.normalize({ tiers: Array.from({ length: 8 }, (_, i) => ({ text: `T${i}` })) }).tiers.length, 5);
   const d = O.normalize({});
@@ -104,4 +104,44 @@ test('layout + box size: direction, button position, width modes, spacing', () =
   assert.doesNotMatch(O.html({ ...L, look: 'ticker' }, {}), /psl--col/, 'vertical is for the one-line look only');
   assert.doesNotMatch(O.html({ ...L, boxSize: 'atc' }, {}), /max-width/, 'Add to cart width is set by the storefront from the real button');
   assert.doesNotMatch(O.html({ ...L, buttonShow: false, button: null }, {}), /psl--btn/, 'no button, no button position');
+});
+
+// The coupon look from the merchant's design: a ticket with cut-outs, a line
+// under each offer, left-aligned.
+const TICKET = {
+  shape: 'ticket', direction: 'column', bgColor: '#94c459',
+  tiers: [
+    { text: 'Buy any 2 Get 10% Off', sub: '(On all Orders)' },
+    { text: 'Buy any 3 Get 15% Off', sub: '(On all Orders)' },
+  ],
+};
+
+test('ticket: cut-out shape, a line under each offer, left-aligned by default', () => {
+  const L = O.normalize(TICKET);
+  assert.equal(L.shape, 'ticket');
+  assert.equal(L.align, 'left', 'a ticket reads left-aligned unless centre is picked');
+  assert.equal(O.normalize({ ...TICKET, align: 'center' }).align, 'center');
+  assert.deepEqual(L.tiers.map((t) => t.sub), ['(On all Orders)', '(On all Orders)']);
+  const h = O.html(L);
+  assert.match(h, /class="psl [^"]*psl--ticket[^"]*psl--left/);
+  assert.match(h, /<span class="psl-tier">Buy any 2 Get 10% Off<span class="psl-tier-sub">\(On all Orders\)<\/span><\/span>/);
+  assert.match(h, /<div class="psl-stub"><\/div>/, 'no button: the stub stays empty, as in the design');
+  assert.match(O.css, /\.psl--ticket\{[^}]*mask:radial-gradient\(circle at 0 50%/, 'cut-outs in the middle of both sides');
+});
+
+test('ticket with a button: the button sits in the stub, not next to the offers', () => {
+  const h = O.html(O.normalize({ ...TICKET, buttonShow: true, buttonCode: 'SAVE10' }));
+  assert.match(h, /<div class="psl-stub psl-stub--btn"><button type="button" class="psl-btn"/);
+  assert.equal((h.match(/class="psl-btn/g) || []).length, 1);
+});
+
+test('existing ladders are drawn as before: plain, centred, no stub, sub line only when set', () => {
+  const L = O.normalize({ tiers: [{ text: 'Buy 2' }] });
+  assert.equal(L.shape, 'plain');
+  assert.equal(L.align, 'center');
+  const h = O.html(L);
+  assert.doesNotMatch(h, /psl--ticket|psl--left|psl-stub|psl-tier-sub/);
+  assert.match(h, /<span class="psl-tier">Buy 2<\/span>/);
+  assert.equal(O.normalize({ shape: 'oval' }).shape, 'plain', 'unknown shape = plain');
+  assert.equal(O.normalize({ tiers: [{ text: 'x', sub: 'y'.repeat(90) }] }).tiers[0].sub.length, 60);
 });
