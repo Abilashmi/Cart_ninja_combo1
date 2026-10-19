@@ -128,3 +128,36 @@ test('plan without FBT: nothing goes live', async () => {
   assert.deepEqual(JSON.parse(admin.log.metafield.value).sets, []);
   assert.match(r.message, /plan/);
 });
+
+// "Create the discount" off: the store's own automatic discount gives the
+// offer; BRIX's gives nothing and the widget only shows it.
+test('show only: no BRIX discount (empty config, none created), the offer still shown on the widget', async () => {
+  db.settings.offer_create_discount = 0;
+  const admin = fakeAdmin();
+  const r = await syncFbtOfferDiscount(admin, 'shop-s.myshopify.com');
+  assert.equal(r.state, 'show_only');
+  assert.equal(r.verified, false);
+  assert.deepEqual(JSON.parse(admin.log.metafield.value).sets, [], 'the Function gives nothing');
+  assert.equal(admin.log.created, null, 'no discount created');
+  assert.deepEqual(db.condition[0].offer, { type: 'percentage', value: 10, text: 'Save {discount} on all {count}' });
+  assert.equal(db.condition[1].offer, undefined, 'a rule without an offer still shows none');
+  assert.equal(db.state.state, 'show_only');
+});
+
+test('show only has no metafield size limit: every rule with an offer shows it (knitnknot: 143 AI rules)', async () => {
+  const many = Array.from({ length: 150 }, (_, i) => ({
+    id: 100 + i, source: 'manual', is_active: 1, sort_order: i, trigger_scope: 'specific_products',
+    trigger_products: JSON.stringify([G(1000000000000 + i)]),
+    fbt_products: JSON.stringify([1, 2, 3, 4, 5].map((k) => G(2000000000000 + i * 10 + k))),
+    offer_mode: 'widget', offer_value: '0.00',
+  }));
+  db.rules = many;
+  db.condition = many.map((r) => ({ id: String(r.id), fbtProducts: [] }));
+  const created = await syncFbtOfferDiscount(fakeAdmin(), 'shop-t.myshopify.com');
+  const withOffer = () => db.condition.filter((e) => e.offer).length;
+  assert.ok(created.state === 'active' && withOffer() < 150, `creating the discount: only what fits the metafield (${withOffer()})`);
+  db.settings.offer_create_discount = 0;
+  const shown = await syncFbtOfferDiscount(fakeAdmin(), 'shop-t.myshopify.com');
+  assert.equal(shown.state, 'show_only');
+  assert.equal(withOffer(), 150, 'show only: all 150');
+});

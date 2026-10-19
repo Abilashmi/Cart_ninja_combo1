@@ -38,11 +38,11 @@ export async function loadFbtOfferInputs(db, shop) {
   await ensureFbtRulesSourceColumn(db);
   await ensureFbtOfferColumns(db);
   const [settingsRows] = await db.execute(
-    'SELECT mode, offer_enabled, offer_type, offer_value, offer_text FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
+    'SELECT mode, offer_enabled, offer_type, offer_value, offer_text, offer_create_discount FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]
   );
   const s = settingsRows[0] || {};
   const mode = s.mode === 'ai' ? 'ai' : 'manual';
-  const offer = sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text });
+  const offer = sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount });
   const [ruleRows] = await db.execute(
     'SELECT * FROM fbt_rules WHERE shop_domain = ? AND source = ? AND is_active = 1 ORDER BY sort_order ASC', [shop, mode]
   );
@@ -136,7 +136,7 @@ async function recordState(db, shop, result) {
  * `verified` is true only when the discount exists and is ACTIVE and the
  * config was written; only then does the widget show any offer.
  *
- * states: not_needed | active | not_deployed | inactive | failed
+ * states: not_needed | show_only | active | not_deployed | inactive | failed
  */
 export async function syncFbtOfferDiscount(admin, shop) {
   const db = getDb();
@@ -153,6 +153,21 @@ export async function syncFbtOfferDiscount(admin, shop) {
     const planKey = await getShopPlan(shop);
     const publishable = canPublishFeature(planKey, 'fbt');
     const shopData = await shopInfo(admin);
+    // "Create the discount" off: the store's own automatic discount gives the
+    // offer, BRIX's gives nothing (no sets) and the widget only shows it, on
+    // every rule with an offer (no metafield size limit to fit then).
+    if (inputs.offer.createDiscount === false) {
+      const shown = buildFbtOfferConfig(inputs.offer, publishable ? inputs.rules : [], shopData.currencyCode, { maxBytes: Infinity });
+      await writeConfig(admin, shopData.id, { version: 1, currency: shopData.currencyCode || null, sets: [] });
+      if (!shown.included.length) {
+        return finish({ ok: true, verified: false, state: 'not_needed', message: publishable ? 'No bundle offer is set up.' : 'Bundle offers go live once FBT is on your plan.', rules: 0, skipped: shown.skipped }, []);
+      }
+      return finish({
+        ok: true, verified: false, showOnly: true, state: 'show_only',
+        message: `The offer shows on ${shown.included.length} rule${shown.included.length === 1 ? '' : 's'}, but BRIX creates no discount: your store's own automatic discount has to give it.`,
+        rules: shown.included.length, skipped: shown.skipped,
+      }, shown.included);
+    }
     const { config, included, skipped } = buildFbtOfferConfig(inputs.offer, publishable ? inputs.rules : [], shopData.currencyCode);
     await writeConfig(admin, shopData.id, config);
     if (!config.sets.length) {

@@ -1148,6 +1148,8 @@ export async function ensureFbtOfferColumns(db) {
     { name: 'offer_text', ddl: '`offer_text` VARCHAR(160) NULL' },
     { name: 'offer_state', ddl: '`offer_state` VARCHAR(16) NULL' },
     { name: 'offer_message', ddl: '`offer_message` VARCHAR(255) NULL' },
+    // 1 = BRIX creates the "BRIX Bundle Offer" discount; 0 = show the offer only.
+    { name: 'offer_create_discount', ddl: '`offer_create_discount` TINYINT(1) NOT NULL DEFAULT 1' },
   ]);
   await ensureColumns(db, 'fbt_rules.offer', 'fbt_rules', [
     { name: 'offer_mode', ddl: "`offer_mode` VARCHAR(16) NOT NULL DEFAULT 'widget'" },

@@ -247,7 +247,7 @@ await check('Bundle offer: switch on, % and text; preview shows the offer; Save 
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await new Promise((r) => setTimeout(r, 500));
   const saved = posts.fbt.at(-1);
-  assert.deepEqual(saved.offer, { enabled: true, type: 'percentage', value: 15, text: 'Take all {count}, save {discount}' });
+  assert.deepEqual(saved.offer, { enabled: true, type: 'percentage', value: 15, text: 'Take all {count}, save {discount}', createDiscount: true });
   await page.getByText('The bundle offer discount is not installed on this store yet.').waitFor();
   await page.screenshot({ path: path.join(shotDir, 'fbt-offer.png') });
   assert.deepEqual(errors, []);

@@ -170,7 +170,7 @@ export const loader = async ({ request }) => {
             aiProductCount: s.ai_product_count || 3,
             aiInstructions: s.ai_instructions || '',
             widgetPlacement: s.widget_placement || 'above_cart',
-            offer: sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text }),
+            offer: sanitizeFbtOffer({ enabled: s.offer_enabled, type: s.offer_type, value: s.offer_value, text: s.offer_text, createDiscount: s.offer_create_discount }),
             offerStatus: s.offer_state ? { state: s.offer_state, message: s.offer_message || '' } : null,
           };
           manualRules = rules.map(r => ({
@@ -446,8 +446,8 @@ export const action = async ({ request }) => {
     if (body.offer && typeof body.offer === 'object') {
       const offer = sanitizeFbtOffer(body.offer);
       await ensureFbtOfferColumns(db);
-      await db.execute('UPDATE fbt_widget_settings SET offer_enabled = ?, offer_type = ?, offer_value = ?, offer_text = ? WHERE shop_domain = ?',
-        [offer.enabled ? 1 : 0, offer.type, offer.value, offer.text, shop]);
+      await db.execute('UPDATE fbt_widget_settings SET offer_enabled = ?, offer_type = ?, offer_value = ?, offer_text = ?, offer_create_discount = ? WHERE shop_domain = ?',
+        [offer.enabled ? 1 : 0, offer.type, offer.value, offer.text, offer.createDiscount === false ? 0 : 1, shop]);
     }
     const offerSync = await syncFbtOfferDiscount(admin, shop);
 
@@ -493,7 +493,7 @@ const SECTION_TIPS = {
   offer:       'A small saving for taking the whole set gives shoppers a reason to add every recommended product, not just one.',
 };
 
-const OFFER_STATUS_TONE = { active: 'success', not_needed: 'info', not_deployed: 'warning', inactive: 'warning', failed: 'critical' };
+const OFFER_STATUS_TONE = { active: 'success', show_only: 'info', not_needed: 'info', not_deployed: 'warning', inactive: 'warning', failed: 'critical' };
 
 /* A rule's own offer (Manual rules): the widget's offer, none, or its own. */
 function RuleOfferPicker({ rule, onChange, currencySymbol }) {
@@ -2122,6 +2122,14 @@ export default function FBTPage() {
                       />
                       {offer.enabled && (
                         <>
+                          <Checkbox
+                            label="Create the discount"
+                            helpText={offer.createDiscount !== false
+                              ? 'BRIX creates the "BRIX Bundle Offer" discount in Shopify, so the offer applies at checkout.'
+                              : 'Off: the widget only shows the offer and the discounted price. Use this when your store has its own automatic discount for the set.'}
+                            checked={offer.createDiscount !== false}
+                            onChange={setOfferKey('createDiscount')}
+                          />
                           <InlineGrid columns={2} gap="300">
                             <Select
                               label="Offer"

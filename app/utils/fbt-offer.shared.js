@@ -24,6 +24,9 @@ export const DEFAULT_FBT_OFFER = Object.freeze({
   type: 'percentage',
   value: 10,
   text: FBT_OFFER_TEXT_DEFAULT,
+  // true = BRIX creates the "BRIX Bundle Offer" discount; false = the widget
+  // only shows the offer (the store's own automatic discount gives it).
+  createDiscount: true,
 });
 
 function numericId(value) {
@@ -43,7 +46,12 @@ export function sanitizeFbtOffer(raw = {}, base = DEFAULT_FBT_OFFER) {
   const type = FBT_OFFER_TYPES.includes(raw.type) ? raw.type : base.type;
   const value = cleanValue(type, raw.value ?? base.value) ?? cleanValue(type, base.value) ?? 10;
   const text = String(raw.text ?? base.text ?? '').replace(/[<>]/g, '').trim().slice(0, 120) || FBT_OFFER_TEXT_DEFAULT;
-  return { enabled: raw.enabled === undefined ? Boolean(base.enabled) : Boolean(Number(raw.enabled) || raw.enabled === true), type, value, text };
+  const cd = raw.createDiscount ?? raw.create_discount;
+  return {
+    enabled: raw.enabled === undefined ? Boolean(base.enabled) : Boolean(Number(raw.enabled) || raw.enabled === true),
+    type, value, text,
+    createDiscount: cd === undefined || cd === null || cd === '' ? base.createDiscount !== false : Boolean(Number(cd) || cd === true),
+  };
 }
 
 /** A rule's own offer setting, always valid. */
@@ -70,7 +78,9 @@ export function effectiveOffer(rule, widgetOffer) {
  * Returns { config, included: [ruleId], skipped: [{ id, reason }] }.
  * config = { version: 1, currency, sets: [{ id, t: [productId], o: [productId], k: 'p'|'f', v }] }
  */
-export function buildFbtOfferConfig(widgetOffer, rules, currency = null) {
+// maxBytes: the Function's metafield limit; Infinity = just which rules have an
+// offer (show only: nothing goes to the Function).
+export function buildFbtOfferConfig(widgetOffer, rules, currency = null, { maxBytes = FBT_OFFER_CONFIG_MAX_BYTES } = {}) {
   const config = { version: 1, currency: currency || null, sets: [] };
   const included = [];
   const skipped = [];
@@ -87,7 +97,7 @@ export function buildFbtOfferConfig(widgetOffer, rules, currency = null) {
     if (o.length > FBT_OFFER_MAX_PRODUCTS) { skipped.push({ id, reason: 'too_many_products' }); continue; }
     const set = { id, t, o, k: offer.type === 'percentage' ? 'p' : 'f', v: offer.value };
     const add = JSON.stringify(set).length + 1;
-    if (size + add > FBT_OFFER_CONFIG_MAX_BYTES) { skipped.push({ id, reason: 'too_big' }); continue; }
+    if (size + add > maxBytes) { skipped.push({ id, reason: 'too_big' }); continue; }
     config.sets.push(set);
     size += add;
     included.push(id);
