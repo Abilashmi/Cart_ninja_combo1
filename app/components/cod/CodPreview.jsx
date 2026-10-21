@@ -5,6 +5,7 @@ import { checkCodRules, codButtonLook, codCharges, codFeeOf, codPriceValues, DEF
 import { tagMoney } from '../../utils/price-tags.shared.js';
 import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
 import { PaymentOptionsScreen } from './PaymentOptionsPreview';
+import { prepaidUsable, productPaymentPricing } from '../../utils/product-payment.shared';
 
 const SURFACES = [
   { id: 'drawer', label: 'Cart drawer' },
@@ -15,6 +16,23 @@ const SURFACES = [
 // A COD button's text with its price tags filled in for `price`, as the storefront does.
 function codText(settings, text, price, money) {
   return fillPriceTags(text, codPriceValues(price, codFeeOf(settings, price)), tagMoney(money));
+}
+
+// The drawer's Checkout text, as the storefront fills it (brix_cod.js
+// checkoutLabel): the online price = the cart after the prepaid discount
+// (Prepaid discount switch on), so {price} and {prepaid_price} both show it,
+// {saving} what it takes off; COD never gets it ({cod_price} = cart + fee).
+function checkoutText(settings, text, cart, money) {
+  const pp = settings.productPayment || {};
+  const prepaid = prepaidUsable(pp) && pp.prepaid?.enabled ? pp.prepaid : null;
+  const pr = productPaymentPricing({ unitPrice: cart, prepaid });
+  const fee = codFeeOf(settings, cart);
+  return fillPriceTags(text, {
+    ...codPriceValues(cart, fee),
+    price: pr.online,
+    prepaid_price: pr.online,
+    saving: pr.savings > 0 ? pr.savings : null,
+  }, tagMoney(money));
 }
 
 const COMBO_PLACEMENT_NOTE = {
@@ -120,8 +138,8 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
       scale={1}
     />
   ) : null;
-  const checkoutText = settings.drawerCheckoutText ? codText(settings, settings.drawerCheckoutText, cart, money) : 'Check out';
-  const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">{checkoutText}</div> : null;
+  const checkoutLabel = settings.drawerCheckoutText ? checkoutText(settings, settings.drawerCheckoutText, cart, money) : 'Check out';
+  const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">{checkoutLabel}</div> : null;
   const items = sampleItems(cart);
   return (
     <div className="bcod-dr-stage" data-placement={placement}>

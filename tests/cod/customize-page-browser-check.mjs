@@ -406,6 +406,16 @@ if (scenario === 'live') {
   await shot('payment-options-mobile');
   await page.getByRole('button', { name: 'Desktop' }).click();
 
+  // The drawer's Checkout text with the prepaid discount on (10%, sample cart ₹1,299), as the store fills it.
+  await openSec('Cart drawer');
+  await page.getByLabel('Checkout button text').fill('Pay Now {prepaid_price} save {saving}');
+  await page.waitForTimeout(200);
+  {
+    const co = (await page.locator('.bcz-screen .bcod-dr-checkout').textContent()).trim();
+    check('Checkout text: {prepaid_price} = ₹1,299 less 10% (₹1,169.10), {saving} = ₹129.90', /^Pay Now ₹1,169\.10? save ₹129\.90?$/.test(co), co);
+  }
+  await page.getByLabel('Checkout button text').fill('Pay online {price}');
+
   // COD fee
   await openSec('COD fee');
   check('COD fee: preview switches to the COD checkout', await page.locator('.bcz-screen .cod-scr-sheet').count() === 1);

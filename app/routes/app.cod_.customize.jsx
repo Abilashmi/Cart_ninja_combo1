@@ -496,7 +496,7 @@ export default function CodCustomizePage() {
                       maxLength={60}
                       placeholder="Check out"
                       autoComplete="off"
-                      helpText={'The Checkout button next to COD, in the BRIX Cart Drawer or your theme\'s drawer (it still opens your normal checkout). Empty = that drawer\'s own text (BRIX: Cart Editor → Checkout Button). Prices: {price} = cart total.'}
+                      helpText={'The Checkout button next to COD, in the BRIX Cart Drawer or your theme\'s drawer (it still opens your normal checkout). Empty = that drawer\'s own text (BRIX: Cart Editor → Checkout Button). Prices: {prepaid_price} = cart total after the prepaid discount, {saving} = what it saves, {price} = cart total (also after it).'}
                     />
                   )}
                   <TextField
