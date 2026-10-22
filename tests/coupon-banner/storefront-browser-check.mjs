@@ -195,4 +195,20 @@ await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps
 bb = await bannerBox();
 assert.equal(bb.width, bb.full, 'not saved: full width, as before');
 console.log('  ✓ banner width: same as Add to cart (follows it; icon button = full), custom px (phone-safe), not saved = full');
+
+// Copy never moves the page (an off-page textarea at top:-9999px used to scroll
+// it to the top on every tap, "like a reload"). http here = the textarea way.
+pageAtc = '<div style="height:1600px">Product photos</div><form action="/cart/add"><button name="add">Add</button></form>';
+await page.setViewportSize({ width: 390, height: 700 });
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-btn[data-code]').length >= 1, null, { timeout: 10000 });
+await page.locator('ps-coupon-slider .ps-btn[data-code]').first().scrollIntoViewIfNeeded();
+const before = await page.evaluate(() => window.scrollY);
+await page.locator('ps-coupon-slider .ps-btn[data-code]').first().click();
+await page.waitForTimeout(300);
+const after = await page.evaluate(() => ({ y: window.scrollY, text: document.querySelector('ps-coupon-slider .ps-btn[data-code]').innerText }));
+assert.ok(before > 1000, `banner is far down the page (${before})`);
+assert.equal(after.y, before, 'Copy keeps the page where it was');
+assert.equal(after.text, 'Copied!');
+console.log('  ✓ Copy keeps the page where it was (no jump to the top)');
 await browser.close();

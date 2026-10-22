@@ -490,16 +490,30 @@ function ladderMount(el,L){
     ladderSync();
   }
 }
-function ladderCopy(code){
+/* Copy a code without moving the page: the clipboard API first; the old
+   textarea way only when that's missing or refused, fixed on screen and
+   focused with preventScroll (an off-page textarea at top:-9999px made the
+   browser scroll to the top on every Copy, like a reload). */
+function csCopyFallback(code){
+  var x=window.scrollX,y=window.scrollY,active=document.activeElement;
   try{
     var ta=document.createElement('textarea');
-    ta.value=code;
-    ta.style.cssText='position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;';
-    document.body.appendChild(ta);ta.focus();ta.setSelectionRange(0,ta.value.length);
+    ta.value=code;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta);
+    try{ta.focus({preventScroll:true});}catch(_f){ta.focus();}
+    ta.setSelectionRange(0,ta.value.length);
     document.execCommand('copy');document.body.removeChild(ta);
   }catch(_e){}
-  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(code).catch(function(){});
+  try{if(active&&active.focus)active.focus({preventScroll:true});}catch(_a){}
+  if(window.scrollX!==x||window.scrollY!==y)window.scrollTo(x,y);
 }
+function csCopy(code){
+  if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext!==false){
+    navigator.clipboard.writeText(code).catch(function(){csCopyFallback(code);});
+  }else csCopyFallback(code);
+}
+function ladderCopy(code){csCopy(code);}
 function ladderReadCart(){
   return fetch('/cart.js',{credentials:'same-origin',cache:'no-store'})
     .then(function(r){return r.ok?r.json():null;})
@@ -838,16 +852,8 @@ function renderSlider(el,data,ctx){
     if(!btn)return;
     var c=btn.dataset.code,t=btn.innerText;
     if(!c)return;
-    try{
-      var ta=document.createElement('textarea');
-      ta.value=c;
-      ta.style.cssText='position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;';
-      document.body.appendChild(ta);ta.focus();ta.setSelectionRange(0,ta.value.length);
-      document.execCommand('copy');document.body.removeChild(ta);
-    }catch(_e){}
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(c).catch(function(){});
-    }
+    e.preventDefault();
+    csCopy(c);
     var prevBg=btn.style.background,prevCol=btn.style.color;
     btn.innerText='Copied!';btn.style.background=btn.getAttribute('data-copied-bg')||'#10b981';btn.style.color=btn.getAttribute('data-copied-text')||'#fff';
     setTimeout(function(){btn.innerText=t;btn.style.background=prevBg;btn.style.color=prevCol;},2000);
