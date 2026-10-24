@@ -16,6 +16,7 @@ import os from 'node:os';
 
 const JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.js'), 'utf8');
 const COD_JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cod.js'), 'utf8');
+const CHECKOUT_JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_checkout.js'), 'utf8');
 const CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.css'), 'utf8');
 const UI_CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/brix_cart_ui.css'), 'utf8');
 // Scripts a snippet loads from the extension's assets are inlined (no Shopify CDN here).
@@ -40,19 +41,22 @@ const PRODUCTS = [
   { id: 102, title: 'Socks', handle: 'socks', variants: [v(1021, 'Default Title', '199.00', true)] },
 ];
 
-// cod: also load brix_cod.js (its settings mocked), as the app embed does.
-const drawerPage = (cod = false) => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
+// cod: also load brix_cod.js (its settings mocked), as the app embed does;
+// headJs: a script that runs first (another app's embed, e.g. GoKwik).
+const drawerPage = (cod = false, headJs = '') => `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
   <style>body{margin:0;font-family:Arial,sans-serif}</style>
   <link rel="stylesheet" href="https://cdn.test/cart_drawer_inline.css"><link rel="stylesheet" href="https://cdn.test/brix_cart_ui.css"></head>
   <body><main><h1>Store</h1></main><div id="cc-root" data-shop="demo.myshopify.com" data-currency="INR"></div>
   <script>window.Shopify={shop:'demo.myshopify.com',routes:{root:'/'},currency:{active:'INR'}};</script>
+  ${headJs ? `<script>${headJs}</script>` : ''}
+  <script src="https://cdn.test/brix_checkout.js"></script>
   ${cod ? '<script src="https://cdn.test/brix_cod.js" data-php="https://int.thebrix.io" data-shop="demo.myshopify.com" data-currency="INR"></script>' : ''}
   <script src="https://cdn.test/cart_drawer_inline.js"></script></body></html>`;
 
 const browser = await chromium.launch();
 
 // cod: brix_cod.js's settings (cod_storefront.php?action=config); cartExtra: more cart.js fields.
-async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null, opens = 1, slowProducts = 0, cod = null, cartExtra = null }) {
+async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = null, opens = 1, slowProducts = 0, cod = null, cartExtra = null, headJs = '' }) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await context.newPage();
   const net = { adds: [], storefrontApi: [] };
@@ -64,7 +68,7 @@ async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = nul
     const url = new URL(req.url());
     const json = (d) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(d), headers: { 'Access-Control-Allow-Origin': '*' } });
     if (url.origin === 'https://cdn.test') {
-      const body = { '/cart_drawer_inline.js': JS, '/brix_cod.js': COD_JS, '/cart_drawer_inline.css': CSS, '/brix_cart_ui.css': UI_CSS }[url.pathname];
+      const body = { '/cart_drawer_inline.js': JS, '/brix_cod.js': COD_JS, '/brix_checkout.js': CHECKOUT_JS, '/cart_drawer_inline.css': CSS, '/brix_cart_ui.css': UI_CSS }[url.pathname];
       return route.fulfill({ contentType: url.pathname.endsWith('.js') ? 'application/javascript; charset=utf-8' : 'text/css; charset=utf-8', body });
     }
     if (url.origin === 'https://int.thebrix.io') {
@@ -73,7 +77,7 @@ async function openDrawer({ data, cart = CART, width = 1280, storefrontApi = nul
       return json({ status: 'success', data: [] });
     }
     if (url.origin === 'https://shop.test') {
-      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: drawerPage(Boolean(cod)) });
+      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: drawerPage(Boolean(cod), headJs) });
       if (url.pathname === '/cart.js') {
         return json({ items: current, item_count: current.length, total_price: current.reduce((n, l) => n + l.final_line_price, 0), currency: 'INR', ...(cartExtra || {}) });
       }
@@ -478,6 +482,38 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   const none = await openDrawer({ data: { checkoutName: 'Pay {prepaid_price} {saving}' }, cod: { success: true, enabled: false } });
   check('checkout text (no prepaid offer): {prepaid_price} = total, no {saving}', /^Pay ₹900(\.00)?$/.test(await label(none)), await label(none));
   await close(none);
+}
+
+/* GoKwik checkout (Kwik COD Checkout embed, e.g. fabimore.com): Checkout opens GoKwik */
+{
+  // What GoKwik's embed + gokwik-sso-sdk.js put on the page.
+  const GOKWIK = "window.gkShopDomain='demo.myshopify.com';window.initiateLogin=function(){window.__gkOpened=(window.__gkOpened||0)+1;};";
+  const gk = await openDrawer({ data: {}, headJs: GOKWIK });
+  check('GoKwik: the drawer draws its scripted Checkout button (not a /checkout link)', await gk.locator('#cc-standard-checkout-btn').count() === 1);
+  await gk.click('#cc-standard-checkout-btn');
+  await gk.waitForFunction(() => window.__gkOpened === 1, null, { timeout: 4000 }).catch(() => {});
+  const gkState = await gk.evaluate(() => ({ opened: window.__gkOpened || 0, path: location.pathname, drawerOpen: Boolean(document.querySelector('#cc-overlay.active')) }));
+  check('GoKwik: Checkout opens GoKwik, stays on the page and closes the drawer', gkState.opened === 1 && gkState.path === '/' && !gkState.drawerOpen, JSON.stringify(gkState));
+  await close(gk);
+
+  // fabimore.com: BRIX's Shiprocket switch is on, but the store runs GoKwik (no Shiprocket script).
+  const both = await openDrawer({ data: { shiprocket_enabled: '1' }, headJs: GOKWIK });
+  await both.click('#cc-standard-checkout-btn');
+  await both.waitForFunction(() => window.__gkOpened === 1, null, { timeout: 4000 }).catch(() => {});
+  const bothState = await both.evaluate(() => ({ opened: window.__gkOpened || 0, path: location.pathname }));
+  check('GoKwik + Shiprocket switch on but no Shiprocket on the page: GoKwik opens', bothState.opened === 1 && bothState.path === '/', JSON.stringify(bothState));
+  await close(both);
+
+  // A combo box line is priced by a Shopify Function: Shopify checkout, not GoKwik.
+  const box = await openDrawer({ data: {}, headJs: GOKWIK, cart: [line('k1', 1, 'Boys Joggers', 900, { properties: { _brix_combo_id: '7' } })] });
+  await box.click('#cc-standard-checkout-btn');
+  await box.waitForURL(/\/checkout/, { timeout: 4000 }).catch(() => {});
+  check('GoKwik: a cart with a combo box goes to Shopify checkout', /\/checkout/.test(box.url()) && !(await box.evaluate(() => window.__gkOpened || 0)), box.url());
+  await close(box);
+
+  const plain = await openDrawer({ data: {} });
+  check('no GoKwik: the Checkout link as before', await plain.locator('#cc-standard-checkout-btn').count() === 0 && await plain.locator('#cc-checkout-wrap a[href="/checkout"]').count() === 1);
+  await close(plain);
 }
 
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));

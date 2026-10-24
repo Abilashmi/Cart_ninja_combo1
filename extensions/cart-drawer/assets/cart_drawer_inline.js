@@ -2848,6 +2848,15 @@
     }).catch(function () {});
   }
 
+  // Where the drawer's Checkout goes (brix_checkout.js cartCheckoutVia):
+  // 'shiprocket' | 'gokwik' | 'shopify'. GoKwik = its checkout embed is on the
+  // page and Shiprocket's isn't (even with BRIX's Shiprocket switch on).
+  function ccCheckoutVia() {
+    const sr = Boolean(CONFIG && CONFIG.shiprocketEnabled);
+    if (window.BrixCheckout && window.BrixCheckout.cartCheckoutVia) return window.BrixCheckout.cartCheckoutVia(sr);
+    return sr ? 'shiprocket' : 'shopify';
+  }
+
   function renderCheckoutButton(appliedCouponCodes) {
     const cbStyle = CONFIG.checkoutButtonStyle || {};
     const bg = cbStyle.backgroundColor || '#111827';
@@ -2892,8 +2901,9 @@
     // Shiprocket's theme script swaps any `a[href="/checkout"]` it finds for
     // its own button, which then gets wiped by our next re-render — so on
     // Shiprocket shops the standard button is a plain <button> it won't match,
-    // wired up by initStandardCheckout below. Same look, same label.
-    if (CONFIG.shiprocketEnabled) {
+    // wired up by initStandardCheckout below. Same look, same label. GoKwik
+    // shops get it too, so the tap goes through ccGoToCheckout to GoKwik.
+    if (ccCheckoutVia() !== 'shopify') {
       return `
   <button type="button" id="cc-standard-checkout-btn" data-href="${href}" style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
     <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout Now', _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
@@ -2929,7 +2939,7 @@
   let _ccPrepareTimer = null;
   function ccPrepareCheckoutCode(cart) {
     if (_ccPrepareTimer) clearTimeout(_ccPrepareTimer);
-    if (!CONFIG || !CONFIG.shiprocketEnabled || !window.BrixCod || !window.BrixCod.prepareCartCode) return;
+    if (!CONFIG || ccCheckoutVia() !== 'shiprocket' || !window.BrixCod || !window.BrixCod.prepareCartCode) return;
     if (appliedCouponCodes.length > 0 || !cart || !(cart.items || []).length) return;
     _ccPrepareTimer = setTimeout(() => {
       _ccPrepareTimer = null;
@@ -2946,7 +2956,14 @@
       setTimeout(function () { ccGoToCheckout(href); }, 100);
       return;
     }
-    if (CONFIG && CONFIG.shiprocketEnabled && window.BrixCheckout) {
+    const via = ccCheckoutVia();
+    // GoKwik checkout (its app embed is on): hand the cart to it, as its own
+    // theme buttons do (brix_checkout.js checkoutGoKwik).
+    if (via === 'gokwik') {
+      window.BrixCheckout.checkoutGoKwik({ coupon: appliedCouponCodes[0] || null, fallbackUrl: href, onOpen: closeDrawer });
+      return;
+    }
+    if (via === 'shiprocket' && window.BrixCheckout) {
       const own = appliedCouponCodes[0] || null;
       const prepaid = !own && window.BrixCod && window.BrixCod.prepaidCartCode
         ? window.BrixCod.prepaidCartCode()

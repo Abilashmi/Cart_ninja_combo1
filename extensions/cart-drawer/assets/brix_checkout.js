@@ -1,5 +1,6 @@
 /* Brix checkout router — hands checkout to Shiprocket Checkout (Fastrr) on
- * shops where our backend has switched it on (php_backend/integrations_admin.php).
+ * shops where our backend has switched it on (php_backend/integrations_admin.php),
+ * and to GoKwik's Kwik Checkout on shops with its app embed (checkoutGoKwik).
  *
  * Callers (cart_drawer_inline.js, the app-served combo-page.js) only call in
  * here when that per-shop switch is on; every other shop keeps navigating to
@@ -179,5 +180,66 @@
       .catch(function () { go(fallbackUrl); });
   }
 
-  window.BrixCheckout = { checkoutCart: checkoutCart, checkoutItems: checkoutItems };
+  /* GoKwik (Kwik COD Checkout app embed, e.g. fabimore.com): its
+     gokwik-sso-sdk.js defines window.initiateLogin(), which opens GoKwik's
+     checkout for the cart in /cart.js with the coupon from the
+     `discount_code` cookie. GoKwik only re-wires the theme's own drawer
+     buttons, so the BRIX drawer's Checkout went to Shopify's /checkout. The
+     embed sets window.gkShopDomain at once; the SDK itself loads `defer`. */
+  function goKwikReady() {
+    return typeof window.initiateLogin === 'function' && !window.gkSdkNotRequired;
+  }
+  function hasGoKwik() {
+    return !window.gkSdkNotRequired && (goKwikReady() || Boolean(window.gkShopDomain));
+  }
+  function waitForGoKwik() {
+    return new Promise(function (resolve) {
+      var started = Date.now();
+      (function check() {
+        if (goKwikReady() || Date.now() - started >= SR_WAIT_MS) { resolve(goKwikReady()); return; }
+        setTimeout(check, 100);
+      })();
+    });
+  }
+
+  // Checks out the whole cart in GoKwik. Same rule as Shiprocket: Pack /
+  // combo box lines and ₹0 free gifts are priced by our Shopify Functions, so
+  // those carts stay on Shopify checkout. GoKwik falls back to /checkout itself
+  // when it can't start. options: { coupon, fallbackUrl, onOpen }
+  function checkoutGoKwik(options) {
+    var fallbackUrl = (options && options.fallbackUrl) || rootUrl() + 'checkout';
+    if (busy) return;
+    busy = true;
+    waitForGoKwik()
+      .then(function (ready) {
+        if (!ready) { go(fallbackUrl); return null; }
+        return Promise.all([cartNeedsShopifyCheckout(false), syncCoupon(options && options.coupon)]).then(function (results) {
+          if (results[0]) { go(fallbackUrl); return; }
+          busy = false;
+          // Our drawer closes first; GoKwik's popup then locks the page scroll.
+          if (options && typeof options.onOpen === 'function') { try { options.onOpen(); } catch (e) { /* UI cleanup only */ } }
+          try { window.initiateLogin(); } catch (e) { go(fallbackUrl); }
+        });
+      })
+      .catch(function () { go(fallbackUrl); });
+  }
+
+  // Shiprocket's checkout is on this page (loaded, or its script tag is there
+  // and still loading). fabimore.com has BRIX's Shiprocket switch on but runs
+  // GoKwik: waiting for a Shiprocket that never came sent it to Shopify.
+  function shiprocketOnPage() {
+    return Boolean(shiprocketEvents() || document.querySelector('script[src*="fastrr"], script[src*="pickrr"], script[src*="shiprocket"]'));
+  }
+
+  // Which checkout the cart drawer hands over to: 'shiprocket' (BRIX's switch
+  // on and its script on the page), 'gokwik' (GoKwik's embed on, no
+  // Shiprocket), 'shiprocket' still when the switch is on and neither shows
+  // (it may load late; that path falls back to Shopify), else 'shopify'.
+  function cartCheckoutVia(shiprocketSwitch) {
+    if (shiprocketSwitch && shiprocketOnPage()) return 'shiprocket';
+    if (hasGoKwik()) return 'gokwik';
+    return shiprocketSwitch ? 'shiprocket' : 'shopify';
+  }
+
+  window.BrixCheckout = { checkoutCart: checkoutCart, checkoutItems: checkoutItems, hasGoKwik: hasGoKwik, checkoutGoKwik: checkoutGoKwik, cartCheckoutVia: cartCheckoutVia };
 })();
