@@ -1,0 +1,7 @@
+  ✓ storefront renders custom + store coupons from the same saved config (incl. numeric-only code)
+  ✓ text offers show heading + subtext only (no code, no Copy) on all 3 templates; text escaped
+  ✓ icon (SVG / image / hidden / colour / size), subtitle font and Copied colours on the storefront banner
+  ✓ section title: default, the merchant's text / size / colour / alignment, empty = none, escaped
+  ✓ own headings above the offer ladders / the coupon cards: none unless set, each over its own group, escaped
+  ✓ layout: list stacked, grid 2 columns (1 on phones), carousel / not saved = sliding row
+  ✓ banner width: same as Add to cart (follows it; icon button = full), custom px (phone-safe), not saved = full

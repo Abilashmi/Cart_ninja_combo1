@@ -1,0 +1,48 @@
+PASS  sidebar: "Image Banner" section in the Body group, Off by default
+PASS  preview: while editing, a placeholder marks where the banner goes; nothing else
+PASS  upload: the image is resized in the browser into a raster data URL and shows in the preview — data:image/webp;base64,UklGRoA
+PASS  default placement Above Progress Bar: banner first in the cart (no progress bar on) — banner > items
+PASS  section badge turns On
+PASS  phone preview: mobile image and the mobile row layout — {"src":"https://img.test/mobile.svg","mobile":true,"media":[64]}
+PASS  phone preview: rows clean (title clear of remove, quantity clear of subtotal, nothing outside the card) — [{"inside":true,"titleVsRemove":false,"qtyVsTotal":false,"media":64}]
+PASS  desktop preview: desktop image and the desktop row layout — {"mobile":false,"media":[76]}
+PASS  desktop preview: rows clean and pricing summary aligned — [{"inside":true,"titleVsRemove":false,"qtyVsTotal":false,"media":76}]
+PASS  placement Below Products: banner moves under the items — items > banner
+PASS  placement Above Products: banner above the items
+PASS  empty-cart preview: no pricing summary, no checkout button — {"footer":false,"checkout":false}
+PASS  cart-with-items preview: pricing summary and checkout button
+PASS  save: banner settings go to /api/cart-drawer-config with the other drawer settings — {"is_enabled":1,"checkout_button_text":"Checkout","checkout_footer_text":"Shipping and taxes calculated at checkout","checkout_button_bg_color":"#000000","checkout_button_text_color":"#ffffff","checkout_button_border_radius":8,"custom_css":"","announcement_enabled":0,"announcement_text":"Free shipping on orders over ₹999!","announcement_messages":["Free shipping on orders over ₹999!"],"announcemen
+PASS  banner off and section closed: nothing in the preview
+PASS  preview: product with sizes gets a dropdown on the first in-stock size
+PASS  preview: sold-out size listed but disabled
+PASS  preview: picking a size changes the price
+PASS  preview: sold-out pick replaced by an in-stock product — You may also likeGirls Grey Jeans₹899.005-6 years (Sold out)7-8 years9-10 yearsAddCotton Socks₹199.00Add
+PASS  preview: "Just hide it" leaves the sold-out pick out with no stand-in — You may also likeGirls Grey Jeans₹899.005-6 years (Sold out)7-8 years9-10 yearsAdd
+PASS  coupon slider: reopening shows the drawer's own saved title, not the Coupon Banner's — Unlock your savings
+PASS  coupon slider: saved text card listed
+PASS  coupon slider: a new text card opens with Heading and no code / button fields
+PASS  coupon slider preview: text cards have no Apply button — 0
+PASS  coupon slider: text card editor has icon + subtitle settings, no Copied colours
+PASS  coupon slider preview: icon size and subtitle size follow the settings — {"svgs":["14","30",null,null,null,null],"sub":"16px"}
+PASS  announcements: 2+ messages show auto-rotate, time and arrows settings
+PASS  announcements preview: first message, with side arrows
+PASS  announcements preview: next arrow shows message 2
+PASS  colour code: an invalid code shows a clear message and the colour stays — rgb(17, 24, 39)
+PASS  colour code: a typed #ABC is applied (as #aabbcc) — rgb(170, 187, 204)
+PASS  colour code: the swatch picker follows the typed code
+PASS  upsell preview: own Add button and price colours — {"btn":"rgb(0, 128, 96)","price":"rgb(255, 87, 51)"}
+PASS  coupon preview: card takes the merchant's width and the long label wraps — {"card":true,"wraps":true}
+PASS  free gift: a variant picker for a reward product with sizes; sold-out sizes disabled
+PASS  free gift preview: badge text and chosen variant shown — {"badge":"VIP BONUS","variant":"9-10 years","text":"VIP BONUSGirls Grey Jeans9-10 years₹949.00₹949.00"}
+PASS  checkout button preview: text size and height follow the settings (scaled like the rest of the preview) — {"fs":"16.5px","pt":"15px"}
+PASS  save: checkout button text size and padding go to the storefront blob — {"backgroundColor":"#000000","textColor":"#ffffff","borderRadius":8,"fontSize":19,"paddingY":22,"mobileButtonType":"standard"}
+PASS  save: messages, rotation and the typed colour go to /api/cart-drawer-config — {"m":["Free shipping today","Sale ends Sunday"],"t":"Free shipping today","bg":"#aabbcc"}
+PASS  save: tier variant and badge go to /api/progress-bar — {"min_value":1,"min_quantity":0,"description":"Gift","reward_type":"product","icon_type":"preset","icon_preset":"rupee","icon_custom_svg":null,"products":["gid://shopify/Product/101"],"reward_pricing":"regular","reward_variants":{"gid://shopify/Product/101":"gid://shopify/ProductVariant/3"},"reward_badge_label":"VIP BONUS","reward_note":"","sort_order":0}
+PASS  save: upsell colours go to /api/upsell-settings — {"is_enabled":1,"title":"More","title_color":"#1a1a1a","show_on_empty_cart":false,"layout":"carousel","button_text":"Add","button_bg_color":"#008060","button_text_color":"#ffffff","button_border_radius":6,"button_follow_checkout":0,"product_title_color":"#1e293b","price_color":"#ff5733","show_price":1,"position":"bottom","display_limit":3,"active_template":"carousel","manualRules":[{"id":"r1","triggerType":"all","triggerProductIds":[],"upsellProductIds":["gid://shopify/Product/103"]}]}
+PASS  save: the storefront blob carries the new keys and no stale flat bar colours — {"enabled":true,"template":"template2","position":"top","layout":"carousel","ali
+PASS  reward picked earlier outside the first 50: loaded by id, its name shows
+PASS  reward search finds a product outside the first 50 (asks Shopify)
+PASS  reward found by search shows on the milestone card after saving the selection — Saved Gift Book, Story Book Gift
+PASS  no page errors
+
+46/46 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-cart-editor-shots

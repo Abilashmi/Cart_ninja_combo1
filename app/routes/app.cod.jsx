@@ -2,7 +2,7 @@
 // BRIX COD Checkout dashboard: status, setup checklist, overview and orders.
 // Customizing COD happens on its own page, /app/cod/customize (app.cod_.customize.jsx).
 import { useState } from 'react';
-import { useLoaderData, useNavigate, useRouteError } from 'react-router';
+import { useLoaderData, useNavigate, useNavigation, useRouteError, useSearchParams } from 'react-router';
 import { boundary } from '@shopify/shopify-app-react-router/server';
 import {
   Page, Card, BlockStack, InlineStack, InlineGrid, Text, TextField, Banner, Badge, Button,
@@ -17,25 +17,38 @@ import { getShopPlan } from '../services/plan-permissions.server';
 import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
-import { CodError, getCodSettings, getCodSecrets, msg91Creds, syncCodRuntime, listCodOrders, summarizeCodOrders } from '../services/cod.server';
+import {
+  CodError, getCodSettings, getCodSecrets, msg91Creds, syncCodRuntime, loadCodOrders, summarizeCodOrders, getCodShippingStats, getShopTimezone,
+  COD_ORDERS_VIEW_MAX,
+} from '../services/cod.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
+import { resolveCodRange } from '../utils/cod-dates.shared';
 import CodOrdersChart from '../components/cod/CodOrdersChart';
+import CodDateRange from '../components/cod/CodDateRange';
 import { COD_ADMIN_CSS } from '../components/cod/codAdminStyles';
 
 export async function loader({ request }) {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
-  const [planKey, currency] = await Promise.all([getShopPlan(shop, admin), getShopCurrency(admin, shop)]);
+  const [planKey, currency, timeZone] = await Promise.all([getShopPlan(shop, admin), getShopCurrency(admin, shop), getShopTimezone(admin, shop)]);
   const scopes = String(session.scope || '').split(',').map((s) => s.trim());
+  // The date filter (?range=last7, or ?from=YYYY-MM-DD&to=YYYY-MM-DD), in the shop's days.
+  const params = new URL(request.url).searchParams;
+  const range = resolveCodRange({ range: params.get('range'), from: params.get('from'), to: params.get('to') }, { timeZone });
   let settings = null;
   let orders = [];
+  let ordersTotal = 0;
+  let shippingStats = null;
   let loadError = null;
   let sms = smsProviderStatus();
   try {
     settings = await getCodSettings(shop);
-    await syncCodRuntime(shop);
+    await syncCodRuntime(shop, { admin });
     sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
-    orders = await listCodOrders(admin, shop, 50);
+    ({ orders, total: ordersTotal } = await loadCodOrders(admin, shop, { limit: COD_ORDERS_VIEW_MAX, startMs: range.startMs, endMs: range.endMs }));
+    // Shipping charged on COD orders (recorded since dynamic shipping; older
+    // orders and an older cod_orders.php on the PHP server just show nothing).
+    shippingStats = await getCodShippingStats(shop, range.days, { startMs: range.startMs, endMs: range.endMs }).catch(() => null);
   } catch (error) {
     if (error instanceof CodError && error.code === 'storage_missing') {
       loadError = "COD Checkout's files aren't on the BRIX PHP server yet (php_backend/cod_*.php). Upload them, then reload this page.";
@@ -48,7 +61,11 @@ export async function loader({ request }) {
     shop,
     settings,
     orders,
+    ordersTotal,
+    range,
+    timeZone,
     stats: summarizeCodOrders(orders),
+    shippingStats,
     loadError,
     planState: getFeatureState(planKey, 'cod_checkout'),
     currencyCode: currency.code,
@@ -139,6 +156,50 @@ function CheckItem({ state, title, children, action }) {
   );
 }
 
+// Shipping charged on COD orders in the date filter's period, by delivery option and zone.
+function ShippingStatsCard({ stats, money, dynamic, onCustomize, period }) {
+  const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  const avg = stats.orders ? stats.shipping / stats.orders : 0;
+  const rows = (list, empty) => list.map((g) => (
+    <div key={g.name || '_'} className="cod-ship-row">
+      <span>{g.name || empty}</span>
+      <span>{g.orders} order{g.orders === 1 ? '' : 's'}</span>
+      <span>{money(g.shipping)}</span>
+      <span>{g.orders ? money(g.shipping / g.orders) : '—'} avg</span>
+    </div>
+  ));
+  const zones = stats.byZone.filter((z) => z.name);
+  return (
+    <Card>
+      <div className="cod-ship-stats">
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h3" variant="headingSm">Shipping · {period}</Text>
+          <Button variant="plain" onClick={onCustomize}>{dynamic ? 'Delivery options' : 'Set up dynamic shipping'}</Button>
+        </InlineStack>
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="300">
+          <div><Text as="p" variant="bodySm" tone="subdued">Shipping charged</Text><Text as="p" variant="headingMd">{money(stats.shipping)}</Text></div>
+          <div><Text as="p" variant="bodySm" tone="subdued">Per order</Text><Text as="p" variant="headingMd">{money(avg)}</Text></div>
+          <div><Text as="p" variant="bodySm" tone="subdued">Shipped free</Text><Text as="p" variant="headingMd">{`${pct(stats.free, stats.orders)}%`}</Text><Text as="p" variant="bodySm" tone="subdued">{stats.free} of {stats.orders}</Text></div>
+          <div><Text as="p" variant="bodySm" tone="subdued">Of order value</Text><Text as="p" variant="headingMd">{`${stats.total > 0 ? Math.round((stats.shipping / stats.total) * 1000) / 10 : 0}%`}</Text></div>
+        </InlineGrid>
+        <BlockStack gap="100">
+          <Text as="h4" variant="headingXs">By delivery option</Text>
+          <div className="cod-ship-tab">{rows(stats.byOption, 'One price shipping')}</div>
+        </BlockStack>
+        {zones.length > 0 && (
+          <BlockStack gap="100">
+            <Text as="h4" variant="headingXs">By zone</Text>
+            <div className="cod-ship-tab">{rows(zones)}</div>
+          </BlockStack>
+        )}
+        <Text as="p" variant="bodySm" tone="subdued">Placed COD orders, shipping as charged to the shopper (the COD fee not included). Courier costs aren&apos;t known to BRIX.</Text>
+      </BlockStack>
+      </div>
+    </Card>
+  );
+}
+
 const CUSTOMIZE_URL = '/app/cod/customize';
 
 export default function CodCheckoutPage() {
@@ -150,6 +211,20 @@ export default function CodCheckoutPage() {
   const [orderFilter, setOrderFilter] = useState('all');
   const [orderQuery, setOrderQuery] = useState('');
   const money = (n) => formatMoney(n, { currencyCode: data.currencyCode });
+  // The date filter lives in the URL, so the loader reloads that period's orders.
+  const [, setSearchParams] = useSearchParams();
+  const navigation = useNavigation();
+  const range = data.range;
+  const applyRange = ({ preset, from, to }) => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    ['range', 'from', 'to'].forEach((k) => next.delete(k));
+    if (preset) next.set('range', preset);
+    else { next.set('from', from); next.set('to', to); }
+    return next;
+  }, { preventScrollReset: true });
+  const total = data.ordersTotal ?? data.orders.length;
+  // The period holds more orders than one view loads: amounts count the newest ones.
+  const cut = total > data.orders.length;
 
   if (!data.settings) {
     return (
@@ -260,7 +335,7 @@ export default function CodCheckoutPage() {
   const recent = data.orders.slice(0, 5);
   const VIEWS = [
     { id: 'overview', content: 'Overview' },
-    { id: 'orders', content: 'Orders', badge: data.orders.length ? String(data.orders.length) : undefined },
+    { id: 'orders', content: 'Orders', badge: total ? String(total) : undefined },
   ];
 
   return (
@@ -305,21 +380,24 @@ export default function CodCheckoutPage() {
             </Card>
           )}
 
-          <div className="cod-views">
-            <Tabs tabs={VIEWS} selected={VIEWS.findIndex((v) => v.id === view)} onSelect={(i) => setView(VIEWS[i].id)} />
+          <div className="cod-views cod-views-row">
+            <div className="cod-views-tabs">
+              <Tabs tabs={VIEWS} selected={VIEWS.findIndex((v) => v.id === view)} onSelect={(i) => setView(VIEWS[i].id)} />
+            </div>
+            <CodDateRange range={range} onApply={applyRange} loading={navigation.state !== 'idle'} />
           </div>
 
           {view === 'overview' && (
             <BlockStack gap="400">
               <InlineGrid columns={{ xs: 2, md: 4 }} gap="300">
-                <Kpi label="COD orders" value={data.stats.count} sub={data.stats.count >= 50 ? "Latest 50" : undefined} icon={OrderIcon} tint="#eaf4ff" ink="#00527c" />
+                <Kpi label="COD orders" value={total} sub={cut ? `Amounts from the newest ${data.orders.length}` : range.label} icon={OrderIcon} tint="#eaf4ff" ink="#00527c" />
                 <Kpi label="Cash to collect" value={money(data.stats.toCollect)} sub={`${counts.pending} pending`} icon={ClockIcon} tint="#fff1e3" ink="#8f4700" />
                 <Kpi label="Collected" value={money(data.stats.collected)} sub={`${data.stats.paidCount} paid`} icon={CheckCircleIcon} tint="#cdfee1" ink="#0c5132" />
                 <Kpi label="Cancelled" value={`${data.stats.cancelRate}%`} sub={`${data.stats.cancelledCount} of ${data.stats.count}${data.stats.rtoCount ? ` · ${data.stats.rtoCount} failed delivery` : ''}`} icon={XCircleIcon} tint="#fee9e8" ink="#8e1f0b" />
               </InlineGrid>
               <InlineGrid columns={{ xs: 1, md: ['twoThirds', 'oneThird'] }} gap="400" alignItems="start">
                 <Card>
-                  <CodOrdersChart orders={data.orders} money={money} />
+                  <CodOrdersChart orders={data.orders} money={money} range={range} timeZone={data.timeZone} cut={cut} />
                 </Card>
                 <Card>
                   <BlockStack gap="300">
@@ -346,12 +424,15 @@ export default function CodCheckoutPage() {
                     ) : (
                       <div className="cod-empty-mini">
                         <span className="cod-empty-ic"><Icon source={OrderIcon} /></span>
-                        <Text as="p" variant="bodySm" tone="subdued">No COD orders yet. They show up here as soon as a shopper places one.</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">No COD orders in this period. New ones show up here as soon as a shopper places one.</Text>
                       </div>
                     )}
                   </BlockStack>
                 </Card>
               </InlineGrid>
+              {data.shippingStats?.orders > 0 && (
+                <ShippingStatsCard stats={data.shippingStats} money={money} dynamic={data.settings.shippingMode === 'advanced'} onCustomize={() => openCustomize('shipping')} period={range.label} />
+              )}
               <button type="button" className="cod-cta" onClick={() => openCustomize()}>
                 <span className="cod-cta-ic"><Icon source={PaintBrushFlatIcon} /></span>
                 <span className="cod-cta-t">
@@ -394,12 +475,15 @@ export default function CodCheckoutPage() {
                   <Box padding="600"><Text as="p" alignment="center" tone="subdued">No orders match. Try another filter or search.</Text></Box>
                 )
               ) : (
-                <EmptyState heading="No COD orders yet" image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png">
-                  <p>Orders placed with Cash on Delivery appear here, newest first. Mark them paid in Shopify when the courier collects the cash.</p>
+                <EmptyState heading={`No COD orders · ${range.label}`} image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png">
+                  <p>Pick another period with the date filter above. Orders placed with Cash on Delivery appear here, newest first. Mark them paid in Shopify when the courier collects the cash.</p>
                 </EmptyState>
               )}
               <Box padding="400" paddingBlockStart="200">
-                <Text as="p" variant="bodySm" tone="subdued">Showing the latest 50. Payment status comes live from Shopify; delivery status updates as Shopify sends order changes to BRIX.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {cut ? `Showing the newest ${data.orders.length} of ${total} orders (${range.label}); pick fewer days to see the rest. ` : ''}
+                  Payment status comes live from Shopify; delivery status updates as Shopify sends order changes to BRIX.
+                </Text>
               </Box>
             </Card>
           )}

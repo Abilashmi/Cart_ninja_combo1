@@ -1,0 +1,21 @@
+PASS  picture bar: All + one tile per collection, in page order — all,c:chips,c:nuts,c:sweets
+PASS  names under the pictures
+PASS  picture: the collection's own Shopify image
+PASS  picture: the merchant's own https link wins
+PASS  picture: no https link / collection image → the first product with an image — https://img.test/chips-product.svg?fill=%23f59e0b
+PASS  "All" is selected first and shows all products
+PASS  no text collection chips once pictures are on
+PASS  tapping a collection shows only its products
+PASS  …and marks that tile selected
+PASS  selected tile has the accent ring — rgb(37, 99, 235) 0px 0px 0px 2.5px
+PASS  back to All
+PASS  size and shape settings apply (90px, rounded) — {"w":90,"radius":"16px"}
+PASS  phones get 80% of the size — 72
+PASS  phone: the bar scrolls inside itself, the page doesn't scroll sideways — 0
+PASS  default (text) still draws text chips, no picture bar
+PASS  Go to Cart: text size and padding from the settings — {"fs":"20px","pt":"18px","pl":"34px"}
+PASS  COD button: same padding, its own text size from COD settings — {"fs":"13px","pt":"18px","pl":"34px"}
+PASS  phone: own text size, 2px less padding, sides at most 16px — {"fs":"13px","pt":"16px","pl":"16px"}
+PASS  defaults unchanged: theme text size, 14px / 26px padding — {"fs":"16px","pt":"14px","pl":"26px","themeSize":"16px"}
+
+19/19 passed

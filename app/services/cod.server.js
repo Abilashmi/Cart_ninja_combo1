@@ -20,10 +20,13 @@ import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
 import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
-  maskPhone, splitName, provinceCodeFor, moneyFormatter,
+  maskPhone, splitName, provinceCodeFor, moneyFormatter, codRuleCollections, codShownOnProduct, unlistedCodAllowed,
 } from '../utils/cod.shared.js';
 import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
+import {
+  sanitizeShipping, quoteShipping, deliveryForShopper, deliverySummary, referencedCollections, dateLabel, slotLabel,
+} from '../utils/shipping.shared.js';
 
 export class CodError extends Error {
   constructor(code, message, { status = 400, details } = {}) {
@@ -97,10 +100,11 @@ export async function getCodSettingsWithRuntime(shop) {
 // Facts only this Node server knows, stored next to the settings so the
 // storefront can read everything from php_backend/cod_storefront.php.
 // `prepaid` (from prepaid-discount-shopify.server.js) is kept until the next
-// prepaid sync replaces it.
+// prepaid sync replaces it; `unlisted` (loadUnlistedBlocked) likewise.
 function runtimeFacts(previous, secrets) {
   const facts = { otpAvailable: otpAvailable(secrets) };
   if (previous?.prepaid && typeof previous.prepaid === 'object') facts.prepaid = previous.prepaid;
+  if (previous?.unlisted && typeof previous.unlisted === 'object') facts.unlisted = previous.unlisted;
   return facts;
 }
 
@@ -109,30 +113,175 @@ function runtimeFacts(previous, secrets) {
  * `syncPrepaid(next)`, when given, brings Shopify's prepaid discount in line
  * with the new settings before they are stored, and returns the runtime facts
  * the storefront may rely on ({ verified, percent, ... }); its result is kept
- * in `_runtime.prepaid`.
+ * in `_runtime.prepaid`. `syncUnlisted(next)` returns the unlisted products
+ * COD may not sell (loadUnlistedBlocked), kept in `_runtime.unlisted`.
  */
-export async function saveCodSettings(shop, patch, { syncPrepaid } = {}) {
+export async function saveCodSettings(shop, patch, { syncPrepaid, syncUnlisted } = {}) {
   const raw = await loadStoredSettings(shop);
   const current = sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS);
   const next = sanitizeCodSettings(patch, current);
   const runtime = runtimeFacts(raw?._runtime, await getCodSecrets(shop));
   if (typeof syncPrepaid === 'function') runtime.prepaid = await syncPrepaid(next);
-  await php('cod_settings.php', { action: 'save', shop, settings: { ...next, _runtime: runtime } });
+  if (typeof syncUnlisted === 'function') {
+    runtime.unlisted = await syncUnlisted(next);
+    unlistedCheckedAt.set(shop, Date.now());
+  }
+  await php('cod_settings.php', { action: 'save', shop, settings: withRuntime(next, runtime) });
   return next;
+}
+
+// cod_settings.php refuses a blob over 60,000 bytes, as PHP encodes it ("/" as "\/").
+const SETTINGS_MAX_BYTES = 59000;
+const storedBytes = (value) => Buffer.byteLength(JSON.stringify(value).replace(/\//g, '\\/'));
+
+// The settings with their runtime facts, as stored. A long unlisted list is
+// cut rather than the save refused: products left out still can't be
+// ordered with COD (productRuleError), their pages just keep the button.
+function withRuntime(settings, runtime) {
+  let blob = { ...settings, _runtime: runtime };
+  const list = runtime.unlisted?.blocked;
+  let keep = Array.isArray(list) ? list.length : 0;
+  while (keep > 0 && storedBytes(blob) > SETTINGS_MAX_BYTES) {
+    keep = Math.floor(keep * 0.75);
+    blob = { ...settings, _runtime: { ...runtime, unlisted: { ...runtime.unlisted, blocked: list.slice(0, keep), cut: true } } };
+  }
+  return blob;
 }
 
 /**
  * Re-saves the stored settings when the runtime facts changed since the last
  * save (e.g. an SMS provider was configured), so the storefront's OTP step
- * matches what /api/cod/otp will actually accept. Called by the admin page.
+ * matches what /api/cod/otp will actually accept. Called by the admin pages;
+ * with `admin`, also refreshes the unlisted products list (at most every
+ * UNLISTED_REFRESH_MS per shop and process).
  */
-export async function syncCodRuntime(shop) {
+export async function syncCodRuntime(shop, { admin = null } = {}) {
   const raw = await loadStoredSettings(shop);
   if (!raw) return;
-  const facts = runtimeFacts(raw._runtime, await getCodSecrets(shop));
-  if (JSON.stringify(raw._runtime || null) === JSON.stringify(facts)) return;
   const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
-  await php('cod_settings.php', { action: 'save', shop, settings: { ...settings, _runtime: facts } });
+  const facts = runtimeFacts(raw._runtime, await getCodSecrets(shop));
+  if (admin && Date.now() - (unlistedCheckedAt.get(shop) || 0) > UNLISTED_REFRESH_MS) {
+    unlistedCheckedAt.set(shop, Date.now());
+    const fresh = await loadUnlistedBlocked(admin, settings);
+    // A failed lookup keeps the list it had.
+    if (!fresh.failed && JSON.stringify(fresh.blocked) !== JSON.stringify(facts.unlisted?.blocked || null)) facts.unlisted = fresh;
+  }
+  if (JSON.stringify(raw._runtime || null) === JSON.stringify(facts)) return;
+  await php('cod_settings.php', { action: 'save', shop, settings: withRuntime(settings, facts) });
+}
+
+/* ───────────────────────── unlisted products ───────────────────────── */
+
+// Shopify doesn't tell a product page that its product is unlisted, so the
+// storefront gets the ids of the unlisted products COD may not sell
+// (`_runtime.unlisted.blocked`, numeric) and hides the COD button on such a
+// page while it is also marked noindex (Shopify marks unlisted pages so; a
+// product listed again since keeps its button). Every order is still checked
+// on Shopify's live status (productRuleError).
+const UNLISTED_LIST_MAX = 1000;
+const UNLISTED_REFRESH_MS = 10 * 60 * 1000;
+const unlistedCheckedAt = new Map();
+
+// Up to `cap` numeric product ids matching a products search, 250 a page.
+async function productIdsFor(admin, search, cap) {
+  const query = `#graphql
+    query CodProductIds($q: String!, $after: String) {
+      products(first: 250, after: $after, query: $q) { nodes { id } pageInfo { hasNextPage endCursor } }
+    }`;
+  const ids = [];
+  let after = null;
+  while (ids.length < cap) {
+    const conn = (await gql(admin, query, { q: search, after }))?.products;
+    for (const node of conn?.nodes || []) ids.push(String(node.id).split('/').pop());
+    if (!conn?.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return ids.slice(0, cap);
+}
+
+/**
+ * The store's unlisted products COD may not sell, for the storefront:
+ * { blocked: [numeric ids], at }. Never throws: a failed lookup gives an
+ * empty list (+ failed), so no button is hidden by mistake.
+ */
+export async function loadUnlistedBlocked(admin, settings) {
+  const at = new Date().toISOString();
+  const u = settings?.unlisted || {};
+  if (u.allow && u.mode !== 'only') return { blocked: [], at };
+  try {
+    const all = await productIdsFor(admin, 'status:unlisted', UNLISTED_LIST_MAX);
+    if (!all.length || !u.allow) return { blocked: all, at };
+    const allowed = new Set((u.products || []).map((p) => String(p.id).split('/').pop()));
+    for (const c of u.collections || []) {
+      const ids = await productIdsFor(admin, `status:unlisted AND collection_id:${String(c.id).split('/').pop()}`, UNLISTED_LIST_MAX);
+      ids.forEach((id) => allowed.add(id));
+    }
+    return { blocked: all.filter((id) => !allowed.has(id)), at };
+  } catch (error) {
+    console.warn('[cod] unlisted products could not be listed:', String(error?.message || error).slice(0, 200));
+    return { blocked: [], at, failed: true };
+  }
+}
+
+/* ───────────────────────── dynamic shipping config ───────────────────────── */
+
+// Delivery options, zones, rules, extra charges and delivery dates
+// (utils/shipping.shared.js), used while settings.shippingMode is 'advanced'.
+// Stored by php_backend/cod_shipping.php, apart from the settings blob (PIN
+// code lists are too big for it). Kept for a short while per process, since
+// the popup asks for a new quote on every delivery option or coupon change.
+const SHIPPING_CACHE_MS = 20_000;
+const shippingCache = new Map();
+
+/** The stored config (sanitised), or null when the store never saved one. */
+export async function getCodShipping(shop) {
+  const hit = shippingCache.get(shop);
+  if (hit && Date.now() - hit.at < SHIPPING_CACHE_MS) return hit.config;
+  const { shipping } = await php('cod_shipping.php', { action: 'get', shop });
+  const config = shipping && typeof shipping === 'object' ? sanitizeShipping(shipping) : null;
+  shippingCache.set(shop, { at: Date.now(), config });
+  if (shippingCache.size > 2000) shippingCache.delete(shippingCache.keys().next().value);
+  return config;
+}
+
+// cod_shipping.php stores at most 200 000 bytes (its requests are capped at 256 KB).
+const SHIPPING_MAX_BYTES = 195_000;
+
+export async function saveCodShipping(shop, raw) {
+  const config = sanitizeShipping(raw);
+  const bytes = Buffer.byteLength(JSON.stringify(config));
+  if (bytes > SHIPPING_MAX_BYTES) {
+    throw new CodError('shipping_too_large', `Your shipping settings are too big to save (${Math.ceil(bytes / 1000)} KB of ${SHIPPING_MAX_BYTES / 1000} KB). Use PIN code ranges or prefixes instead of long lists, or pick fewer products in rules.`);
+  }
+  await php('cod_shipping.php', { action: 'save', shop, shipping: config });
+  shippingCache.set(shop, { at: Date.now(), config });
+  return config;
+}
+
+/**
+ * Shipping charged on placed COD orders of the last `days` days, or of the
+ * dashboard's date filter ({ startMs, endMs }), by delivery option and by zone.
+ */
+export async function getCodShippingStats(shop, days = 30, { startMs = null, endMs = null } = {}) {
+  const windowed = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const { rows = [] } = await php('cod_orders.php', {
+    action: 'shipping_stats', shop, days,
+    ...(windowed ? { from_ts: Math.floor(startMs / 1000), to_ts: Math.floor(endMs / 1000) } : {}),
+  });
+  const totals = { orders: 0, shipping: 0, total: 0, free: 0 };
+  const group = (key) => {
+    const map = new Map();
+    for (const r of rows) {
+      const name = r[key] || '';
+      const g = map.get(name) || { name, orders: 0, shipping: 0, free: 0 };
+      g.orders += r.orders; g.shipping += r.shipping; g.free += r.free;
+      map.set(name, g);
+    }
+    return [...map.values()].map((g) => ({ ...g, shipping: Math.round(g.shipping * 100) / 100 })).sort((a, b) => b.orders - a.orders);
+  };
+  for (const r of rows) { totals.orders += r.orders; totals.shipping += r.shipping; totals.total += r.total; totals.free += r.free; }
+  totals.shipping = Math.round(totals.shipping * 100) / 100;
+  return { days, ...totals, byOption: group('option'), byZone: group('zone') };
 }
 
 /* ───────────────────────── tracking secrets ───────────────────────── */
@@ -321,25 +470,110 @@ async function gql(admin, query, variables) {
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
 const amountOf = (bag) => Number(bag?.shopMoney?.amount || 0);
 
-async function loadVariants(admin, lines) {
-  const data = await gql(admin, `#graphql
-    query CodVariants($ids: [ID!]!) {
+/**
+ * Checks every line is still on sale. With `shipping` (advanced shipping on),
+ * also reads what the shipping rules need per variant: its product, tags,
+ * weight, whether it ships at all, and which of the rules' collections it's
+ * in (inCollection, only those). `collections` (gids) = more collections to
+ * check membership of (the merchant's product rules, codRuleCollections).
+ * Returns { tags, info: Map(variantId → …) }.
+ */
+async function loadVariants(admin, lines, { shipping = null, collections = [] } = {}) {
+  const ids = lines.map((l) => toVariantGid(l.variantId));
+  const cols = [...new Set([...(shipping ? referencedCollections(shipping) : []), ...collections])];
+  const query = (withWeight) => `#graphql
+    query CodVariants($ids: [ID!]!${cols.map((_, i) => `, $c${i}: ID!`).join('')}) {
       nodes(ids: $ids) {
-        ... on ProductVariant { id availableForSale product { id title tags status } }
+        ... on ProductVariant {
+          id availableForSale${withWeight ? ' inventoryItem { requiresShipping measurement { weight { value unit } } }' : ''}
+          product { id title tags status${cols.map((_, i) => ` c${i}: inCollection(id: $c${i})`).join('')} }
+        }
       }
-    }`, { ids: lines.map((l) => toVariantGid(l.variantId)) });
+    }`;
+  const variables = { ids, ...Object.fromEntries(cols.map((id, i) => [`c${i}`, id])) };
+  let data;
+  try {
+    data = await gql(admin, query(Boolean(shipping)), variables);
+  } catch (error) {
+    // Weights come from the inventory item (read_products is enough per
+    // Shopify's docs). If a store refuses it anyway, price without weights
+    // rather than refuse COD.
+    if (!shipping || !(error instanceof CodError)) throw error;
+    console.warn('[cod] variant weights unavailable, shipping priced without them:', error.code);
+    data = await gql(admin, query(false), variables);
+  }
   const nodes = data?.nodes || [];
   const tags = [];
+  const info = new Map();
   nodes.forEach((node, i) => {
-    if (!node?.id || node.product?.status !== 'ACTIVE') {
+    // UNLISTED (API 2025-10+) is on sale like ACTIVE, only reached by a direct
+    // link; whether COD may sell it is the merchant's choice (productRuleError).
+    if (!node?.id || !['ACTIVE', 'UNLISTED'].includes(node.product?.status)) {
       throw new CodError('item_unavailable', 'One of the items in your cart is no longer available. Refresh the page and try again.', { status: 409 });
     }
     if (!node.availableForSale) {
       throw new CodError('item_sold_out', `${node.product?.title || 'An item'} is sold out.`, { status: 409, details: { variantId: lines[i].variantId } });
     }
     tags.push(...(node.product?.tags || []));
+    const weight = node.inventoryItem?.measurement?.weight;
+    info.set(String(lines[i].variantId), {
+      productId: node.product?.id || '',
+      title: node.product?.title || '',
+      unlisted: node.product?.status === 'UNLISTED',
+      tags: node.product?.tags || [],
+      unitGrams: weight ? toGrams(weight.value, weight.unit) : null,
+      requiresShipping: node.inventoryItem?.requiresShipping !== false,
+      collections: cols.filter((_, c) => node.product?.[`c${c}`] === true),
+    });
   });
-  return { tags };
+  return { tags, info };
+}
+
+/**
+ * The merchant's product rules for COD, checked on Shopify's own data:
+ * unlisted products only when settings.unlisted allows them, and a product
+ * page order only for a product whose page shows COD (productButton.showOn).
+ * Returns null, or { code, message } safe to show shoppers.
+ */
+function productRuleError(settings, info, surface) {
+  for (const v of info.values()) {
+    const product = { id: v.productId, collections: v.collections };
+    if (v.unlisted && !unlistedCodAllowed(settings, product)) {
+      return { code: 'product_excluded', message: `${v.title || 'One of these products'} isn't available with Cash on Delivery. Please pay online.` };
+    }
+    if (surface === 'product' && !codShownOnProduct(settings, product)) {
+      return { code: 'product_excluded', message: "Cash on Delivery isn't available for this product. Please pay online." };
+    }
+  }
+  return null;
+}
+
+// The order's lines as the shipping engine reads them: Shopify's prices
+// (after line discounts) with each variant's product, tags, weight and collections.
+function shippingLines(calc, info) {
+  return (calc?.lineItems || []).map((li) => {
+    const v = info.get(String(li.variant?.id || '').split('/').pop()) || {};
+    return {
+      productId: v.productId || li.product?.id || '',
+      quantity: li.quantity,
+      value: amountOf(li.discountedTotalSet),
+      unitGrams: v.unitGrams,
+      tags: v.tags || [],
+      collections: v.collections || [],
+      requiresShipping: v.requiresShipping !== false,
+    };
+  });
+}
+
+/** The shopper's pick of delivery option / date / slot from the popup (untrusted). */
+export function cleanDeliveryChoice(value) {
+  const v = value && typeof value === 'object' ? value : {};
+  const pick = (x, re) => (typeof x === 'string' && re.test(x) ? x : null);
+  return {
+    option: pick(v.option, /^[a-z0-9_-]{1,40}$/i),
+    date: pick(v.date, /^\d{4}-\d{2}-\d{2}$/),
+    slot: pick(v.slot, /^\d{2}:\d{2}-\d{2}:\d{2}$/),
+  };
 }
 
 // Every COD line (and the order itself, see placeCodOrder) carries this. The
@@ -620,9 +854,11 @@ async function calculate(admin, input) {
   return result?.calculatedDraftOrder;
 }
 
-function shippingLine(settings, charges, currencyCode) {
+// `option` = the delivery option's name under advanced shipping (its title on the order).
+function shippingLine(settings, charges, currencyCode, option = null) {
+  const cod = charges.codFee > 0 ? 'Cash on Delivery (incl. COD fee)' : 'Cash on Delivery';
   return {
-    title: charges.codFee > 0 ? 'Cash on Delivery (incl. COD fee)' : 'Cash on Delivery',
+    title: option ? `${option} · ${cod}` : cod,
     priceWithCurrency: { amount: charges.total.toFixed(2), currencyCode },
   };
 }
@@ -717,15 +953,28 @@ async function capCoupon(admin, { settings, code, base, calc, format }) {
 
 /**
  * Price the lines through Shopify and apply the merchant's COD rules.
- * Returns { quote, input } — `input` is the DraftOrderInput core reused by placeCodOrder.
+ * Returns { quote, input, shipping } — `input` is the DraftOrderInput core
+ * reused by placeCodOrder; `shipping` is the full quoteShipping result
+ * (advanced shipping only, else null).
+ *
+ * Advanced shipping (settings.shippingMode 'advanced' + `shipping` config):
+ * `destination` ({ pincode, city, state }, null before the address) and
+ * `delivery` (the shopper's { option, date, slot }) choose the delivery
+ * option; `strictDelivery` (placing the order) refuses a pick that is no
+ * longer offered instead of quietly switching it.
  */
 export async function quoteCod(admin, {
   settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false, cartCodes = [], cartAttributes = {},
+  shipping = null, destination = null, delivery = null, strictDelivery = false, now = new Date(),
 }) {
   if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
     throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
   }
-  const { tags } = await loadVariants(admin, lines);
+  const advanced = settings.shippingMode === 'advanced' && shipping ? shipping : null;
+  const where = destination || (pincode ? { pincode } : null);
+  const { tags, info } = await loadVariants(admin, lines, { shipping: advanced, collections: codRuleCollections(settings, surface) });
+  const productError = productRuleError(settings, info, surface);
+  if (productError) throw new CodError(productError.code, productError.message, { status: 422 });
   const format = moneyFormatter(currencyCode);
   const combo = await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode });
   const hasBoxes = combo.boxes.length > 0;
@@ -748,7 +997,7 @@ export async function quoteCod(admin, {
     // that here, COD leaves automatic discounts off for this order instead.
     acceptAutomaticDiscounts: withCartDiscounts,
     ...(codes.length ? { discountCodes: codes } : {}),
-    ...(pincode ? { shippingAddress: { countryCode: 'IN', zip: String(pincode) } } : {}),
+    ...(where?.pincode ? { shippingAddress: { countryCode: 'IN', zip: String(where.pincode) } } : {}),
   };
 
   let calc = await calculate(admin, base);
@@ -760,17 +1009,27 @@ export async function quoteCod(admin, {
   const capped = code ? await capCoupon(admin, { settings, code, base, calc, format }) : null;
   if (capped) ({ base, calc } = capped);
   const subtotal = amountOf(calc.subtotalPriceSet);
-  const ruleError = checkCodRules({ settings, subtotal, pincode, productTags: tags, surface, format });
+  const ruleError = checkCodRules({ settings, subtotal, pincode: where?.pincode, productTags: tags, surface, format });
   if (ruleError) throw new CodError(ruleError.code, ruleError.message, { status: 422 });
 
-  const charges = codCharges(settings, subtotal);
-  const input = { ...base };
-  if (charges.total > 0) {
-    input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode);
-    calc = await calculate(admin, input);
-  } else {
-    input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode);
+  // Advanced shipping: the delivery option's price for this address and cart.
+  let ship = null;
+  if (advanced) {
+    ship = quoteShipping(advanced, { destination: where, subtotal, lines: shippingLines(calc, info), now, choice: delivery || {}, fmt: format });
+    if (ship.blocked) throw new CodError('not_deliverable', ship.blocked.message, { status: 422 });
+    if (where && !ship.noShipping && !ship.options.length) {
+      throw new CodError('no_delivery_option', 'No delivery option is available for this address and cart right now. Please try another address, or pay online.', { status: 422 });
+    }
+    if (strictDelivery && ship.choiceError) {
+      throw new CodError('delivery_changed', ship.choiceError === 'option'
+        ? 'That delivery option is no longer available. Please check your order again.'
+        : 'That delivery day or time is no longer available. Please pick another.', { status: 409 });
+    }
   }
+  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : null);
+  const input = { ...base };
+  input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode, ship?.selected?.name || null);
+  if (charges.total > 0) calc = await calculate(admin, input);
 
   // With a box discount, Items is the price before it, the box discount gets
   // its own row, and Discounts is whatever else Shopify took off (worked out
@@ -812,6 +1071,9 @@ export async function quoteCod(admin, {
     comboDiscount,
     comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor })),
     shipping: charges.shipping,
+    // Advanced shipping: the delivery options for this address and cart, and
+    // which one is picked (null under simple shipping).
+    delivery: ship ? deliveryForShopper(ship) : null,
     codFee: charges.codFee,
     tax: amountOf(calc.totalTaxSet),
     taxesIncluded: Boolean(calc.taxesIncluded),
@@ -835,7 +1097,7 @@ export async function quoteCod(admin, {
   const kept = [...(couponApplied && !capped?.applied ? [code] : []), ...cartCodesApplied.filter((c) => c.applied).map((c) => c.code)];
   if (kept.length) input.discountCodes = kept;
   else delete input.discountCodes;
-  return { quote, input };
+  return { quote, input, shipping: ship };
 }
 
 const CREATE = `#graphql
@@ -917,6 +1179,7 @@ async function trackPlacedOrder({ shop, settings, idemKey, order, quote, phone, 
 export async function placeCodOrder(admin, {
   shop, settings, lines, coupon, address, phone, phoneVerified, surface, attributes = {}, idemKey, currencyCode,
   track = null, clientIp: ip = null, userAgent = null, comboWeightLive = false, cartCodes = [], cartAttributes = {},
+  shipping = null, delivery = null,
 }) {
   if (!/^[\w-]{8,64}$/.test(String(idemKey || ''))) throw new CodError('invalid_request', 'Refresh the page and try again.');
   const hash = phoneHash(shop, phone);
@@ -932,12 +1195,17 @@ export async function placeCodOrder(admin, {
     throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429 });
   }
 
-  const { quote, input } = await quoteCod(admin, { settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive, cartCodes, cartAttributes });
+  const { quote, input, shipping: ship } = await quoteCod(admin, {
+    settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive, cartCodes, cartAttributes,
+    shipping, destination: { pincode: address.pincode, city: address.city, state: address.state }, delivery, strictDelivery: true,
+  });
+  const option = ship?.selected || null;
 
   try {
     await php('cod_orders.php', {
       action: 'begin', shop, idem_key: idemKey, source: surface, phone_hash: hash, phone_masked: maskPhone(phone),
       phone_verified: phoneVerified, customer_name: address.name, pincode: address.pincode, total: quote.total, currency: quote.currency,
+      shipping_amount: quote.shipping, shipping_option: option?.name || null, shipping_zone: ship?.zone?.name || null, delivery_date: ship?.date || null,
     });
   } catch (error) {
     if (error instanceof CodError && error.code === 'duplicate') throw new CodError('in_progress', 'Your order is already being placed. Please wait a moment.', { status: 409 });
@@ -947,7 +1215,19 @@ export async function placeCodOrder(admin, {
   const clearAttempt = () => php('cod_orders.php', { action: 'abandon', shop, idem_key: idemKey }).catch(() => {});
 
   const boxes = quote.comboDiscounts || [];
-  const tags = [...new Set(['COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []), ...settings.orderTags])];
+  const tags = [...new Set([
+    'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []),
+    ...(option ? [`brix-ship-${option.kind.replace(/_/g, '-')}`] : []), ...settings.orderTags,
+  ])];
+  // Advanced shipping: what was booked, for the merchant and their courier.
+  const deliveryAttributes = option ? [
+    { key: 'brix_delivery_option', value: option.name },
+    ...(ship.zone ? [{ key: 'brix_delivery_zone', value: ship.zone.name }] : []),
+    ...(ship.date ? [{ key: 'brix_delivery_date', value: `${ship.date} (${dateLabel(ship.date)})` }] : []),
+    ...(ship.slot ? [{ key: 'brix_delivery_slot', value: slotLabel(ship.slot) }] : []),
+    ...(!ship.date && option.eta ? [{ key: 'brix_delivery_eta', value: option.eta.from === option.eta.to ? option.eta.from : `${option.eta.from} to ${option.eta.to}` }] : []),
+  ] : [];
+  const reserved = new Set(['brix_combo_weight', ...deliveryAttributes.map((a) => a.key)]);
   const customAttributes = [
     { ...COD_MARKER },
     { key: 'payment_method', value: 'Cash on Delivery' },
@@ -957,8 +1237,9 @@ export async function placeCodOrder(admin, {
       key: 'brix_combo_weight',
       value: boxes.map((b) => `combo ${b.templateId}: ${b.title}, ${b.weight}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
     }] : []),
+    ...deliveryAttributes,
     ...Object.entries(attributes || {})
-      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && !k.startsWith('_brix') && k !== 'brix_combo_weight' && v != null && String(v).length <= 200)
+      .filter(([k, v]) => /^[\w ]{1,40}$/.test(k) && !k.startsWith('_brix') && !reserved.has(k) && v != null && String(v).length <= 200)
       .slice(0, 10)
       .map(([key, value]) => ({ key, value: String(value) })),
   ];
@@ -974,7 +1255,7 @@ export async function placeCodOrder(admin, {
     phone: `+91${phone}`,
     ...(address.email ? { email: address.email } : {}),
     tags,
-    note: `Cash on Delivery order placed through BRIX (${where}). Collect ${moneyFormatter(quote.currency)(quote.total)} on delivery.${phoneVerified ? ' Phone verified by OTP.' : ''}`,
+    note: `Cash on Delivery order placed through BRIX (${where}). Collect ${moneyFormatter(quote.currency)(quote.total)} on delivery.${phoneVerified ? ' Phone verified by OTP.' : ''}${option ? ` Delivery: ${deliverySummary(ship)}.` : ''}`,
     customAttributes,
   });
 
@@ -1082,47 +1363,86 @@ export async function syncCodOrderFromWebhook(shop, payload) {
 /* ───────────────────────── admin: orders list ───────────────────────── */
 
 export async function listCodOrders(admin, shop, limit = 50) {
-  const { orders: rows = [] } = await php('cod_orders.php', { action: 'list', shop, limit });
+  return (await loadCodOrders(admin, shop, { limit })).orders;
+}
+
+// The most orders one dashboard view loads (each needs its live status from Shopify).
+export const COD_ORDERS_VIEW_MAX = 500;
+
+/**
+ * Placed COD orders, newest first, with their live payment status from
+ * Shopify. `startMs` / `endMs` = the dashboard's date filter (UTC instants,
+ * end not included). → { orders, total }: total = how many the window holds
+ * (more than `limit` = the list is cut to the newest).
+ */
+export async function loadCodOrders(admin, shop, { limit = 50, startMs = null, endMs = null } = {}) {
+  const windowed = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const { orders: rows = [], total } = await php('cod_orders.php', {
+    action: 'list', shop, limit: Math.min(limit, COD_ORDERS_VIEW_MAX),
+    ...(windowed ? { from_ts: Math.floor(startMs / 1000), to_ts: Math.floor(endMs / 1000) } : {}),
+  });
   const ids = rows.map((r) => r.order_id).filter(Boolean);
   const live = new Map();
   if (ids.length && admin) {
     try {
-      const data = await gql(admin, `#graphql
-        query CodOrders($ids: [ID!]!) {
-          nodes(ids: $ids) { ... on Order { id displayFinancialStatus displayFulfillmentStatus cancelledAt } }
-        }`, { ids });
-      for (const node of data?.nodes || []) if (node?.id) live.set(node.id, node);
+      // nodes() takes at most 250 ids.
+      for (let i = 0; i < ids.length; i += 250) {
+        const data = await gql(admin, `#graphql
+          query CodOrders($ids: [ID!]!) {
+            nodes(ids: $ids) { ... on Order { id displayFinancialStatus displayFulfillmentStatus cancelledAt } }
+          }`, { ids: ids.slice(i, i + 250) });
+        for (const node of data?.nodes || []) if (node?.id) live.set(node.id, node);
+      }
     } catch (error) {
       console.warn('[cod] could not load live order status:', error?.message);
     }
   }
-  return rows.map((r) => {
-    const node = live.get(r.order_id);
-    let status = 'unknown';
-    if (node) {
-      if (node.cancelledAt) status = 'cancelled';
-      else if (node.displayFinancialStatus === 'PAID') status = 'paid';
-      else if (['REFUNDED', 'VOIDED'].includes(node.displayFinancialStatus)) status = 'cancelled';
-      else status = 'pending';
-    }
-    return {
-      orderId: r.order_id,
-      orderName: r.order_name,
-      orderNumericId: String(r.order_id || '').split('/').pop(),
-      source: r.source,
-      phone: r.phone_masked,
-      phoneVerified: r.phone_verified === true,
-      customer: r.customer_name,
-      pincode: r.pincode,
-      total: Number(r.total || 0),
-      currency: r.currency,
-      createdAt: r.created_at || null,
-      lifecycle: r.lifecycle || 'placed',
-      tracking: { ga4: r.ga4_status || null, meta: r.meta_status || null },
-      status,
-      fulfillment: node?.displayFulfillmentStatus || null,
-    };
-  });
+  return { orders: rows.map((r) => codOrderRow(r, live.get(r.order_id))), total: Number.isFinite(Number(total)) ? Number(total) : rows.length };
+}
+
+// One stored row as the dashboard shows it; `node` = Shopify's live order (payment status).
+function codOrderRow(r, node) {
+  let status = 'unknown';
+  if (node) {
+    if (node.cancelledAt) status = 'cancelled';
+    else if (node.displayFinancialStatus === 'PAID') status = 'paid';
+    else if (['REFUNDED', 'VOIDED'].includes(node.displayFinancialStatus)) status = 'cancelled';
+    else status = 'pending';
+  }
+  return {
+    orderId: r.order_id,
+    orderName: r.order_name,
+    orderNumericId: String(r.order_id || '').split('/').pop(),
+    source: r.source,
+    phone: r.phone_masked,
+    phoneVerified: r.phone_verified === true,
+    customer: r.customer_name,
+    pincode: r.pincode,
+    total: Number(r.total || 0),
+    currency: r.currency,
+    createdAt: r.created_at || null,
+    lifecycle: r.lifecycle || 'placed',
+    tracking: { ga4: r.ga4_status || null, meta: r.meta_status || null },
+    status,
+    fulfillment: node?.displayFulfillmentStatus || null,
+  };
+}
+
+const shopTimezones = new Map();
+
+/** The shop's time zone (Shopify `ianaTimezone`), cached an hour; COD is India-first, so Asia/Kolkata if Shopify can't be asked. */
+export async function getShopTimezone(admin, shop) {
+  const hit = shopTimezones.get(shop);
+  if (hit && Date.now() - hit.at < 3600000) return hit.timeZone;
+  let timeZone = 'Asia/Kolkata';
+  try {
+    const data = await gql(admin, '#graphql\n query CodShopTimezone { shop { ianaTimezone } }', {});
+    if (data?.shop?.ianaTimezone) timeZone = data.shop.ianaTimezone;
+    shopTimezones.set(shop, { at: Date.now(), timeZone });
+  } catch (error) {
+    console.warn('[cod] shop time zone unavailable:', error?.code || error?.message);
+  }
+  return timeZone;
 }
 
 export function summarizeCodOrders(orders) {

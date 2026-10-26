@@ -50,8 +50,8 @@ const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-
 // A Dawn-like product page. The theme's own JS sets the hidden variant id
 // WITHOUT firing an event and redraws the price (like Dawn), and its quantity
 // buttons fire `change`.
-function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '', shiprocket = false } = {}) {
-  return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
+function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '', shiprocket = false, noindex = false } = {}) {
+  return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">${noindex ? '<meta name="robots" content="noindex,nofollow">' : ''}
   <style>body{font-family:Arial,sans-serif;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}
   .product{display:grid;grid-template-columns:1fr 1fr;gap:32px}@media (max-width:749px){.product{grid-template-columns:1fr}}
   .media{background:#eee;aspect-ratio:1}button{text-transform:uppercase;letter-spacing:2px;min-height:48px;width:100%}
@@ -91,10 +91,10 @@ const handler = async (route) => {
   const url = new URL(req.url());
   const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data), headers: { 'Access-Control-Allow-Origin': '*' } });
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/') && url.pathname.endsWith('.js')) {
-    return json({ tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
+    return json({ id: 4242, tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/')) {
-    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom') && !url.searchParams.has('sr'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '', shiprocket: url.searchParams.has('sr') }) });
+    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom') && !url.searchParams.has('sr'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '', shiprocket: url.searchParams.has('sr'), noindex: url.searchParams.has('unlisted') }) });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/cart/')) {
     navigations.push(url.pathname);
@@ -663,6 +663,53 @@ await settle(page, 1000);
 s = await state(page);
 check('Buy it now text: not applied while COD replaces Buy it now', s.nativeShown === false && s.nativeText === 'Buy it now', `${s.nativeText} ${s.nativeShown}`);
 await page.close();
+
+/* ── product picks: which product pages show COD, where it goes, unlisted products ── */
+// The page's product is 4242; its collections come from the app embed (?collections=).
+const codOnPage = async (query, productButton, extra = {}) => {
+  config = { ...COD, productButton: { ...COD.productButton, ...productButton }, productPayment: null, ...extra };
+  const p = await openPage(query);
+  await settle(p, 1200);
+  const out = await p.evaluate(() => ({
+    order: [...document.querySelectorAll('[data-brix-cod-slot], .shopify-payment-button')]
+      .filter((e) => !e.matches('[data-brix-cod-slot]') || e.querySelector('[data-brix-cod-btn]'))
+      .filter((e) => getComputedStyle(e).display !== 'none' && (!e.closest('[data-brix-cod-hide-buy-now]') || e.matches('[data-brix-cod-slot]')))
+      .map((e) => (e.matches('[data-brix-cod-slot]') ? 'cod' : 'bin')).join(),
+  }));
+  await p.close();
+  return out.order;
+};
+const NONE = { products: [], collections: [] };
+check('Which product pages, all except this product: no COD, Buy it now kept',
+  (await codOnPage('', { showOn: { mode: 'except', products: ['4242'], collections: [] } })) === 'bin');
+check('Which product pages, all except another product: COD replaces Buy it now as usual',
+  (await codOnPage('', { showOn: { mode: 'except', products: ['1'], collections: [] } })) === 'cod');
+check('Which product pages, only a collection this product is in: COD shown',
+  (await codOnPage('?collections=77,78', { showOn: { mode: 'only', products: [], collections: ['78'] } })) === 'cod');
+check('Which product pages, only a collection it is not in: no COD',
+  (await codOnPage('?collections=77', { showOn: { mode: 'only', products: [], collections: ['78'] } })) === 'bin');
+let picked = await codOnPage('', { buyNowPlacement: 'some', replaceBuyNow: false, replaceOn: { products: ['4242'], collections: [] }, restPlacement: 'below' });
+check('Replace it on some products, this one picked: COD replaces Buy it now', picked === 'cod', picked);
+picked = await codOnPage('?collections=5', { buyNowPlacement: 'some', replaceBuyNow: false, replaceOn: { products: ['1'], collections: ['6'] }, restPlacement: 'below' });
+check('Replace it on some products, not picked: Buy it now kept, COD below it', picked === 'bin,cod', picked);
+picked = await codOnPage('', { buyNowPlacement: 'some', replaceBuyNow: false, replaceOn: NONE });
+check('Replace it on some products, not picked, rest = above (default): COD above Buy it now', picked === 'cod,bin', picked);
+check('unlisted product COD may not sell (in the list, page noindex): no COD',
+  (await codOnPage('?unlisted=1', {}, { unlistedBlocked: ['4242'] })) === 'bin');
+check('in the unlisted list but the page is no longer noindex (listed again since): COD kept',
+  (await codOnPage('', {}, { unlistedBlocked: ['4242'] })) === 'cod');
+check('unlisted page, product allowed (not in the list): COD shown', (await codOnPage('?unlisted=1', {}, { unlistedBlocked: ['999'] })) === 'cod');
+
+// With the payment options on, a left-out product gets only the Pay Online card.
+for (const [label, extra] of [['Which product pages', { productButton: { ...COD.productButton, showOn: { mode: 'except', products: ['4242'], collections: [] } } }], ['unlisted', { unlistedBlocked: ['4242'] }]]) {
+  config = { ...COD, productPayment: PAYMENT, ...extra };
+  page = await openPage(label === 'unlisted' ? '?unlisted=1' : '');
+  await page.locator('[data-brix-pay] .bxpay-card').first().waitFor({ timeout: 5000 });
+  await settle(page);
+  s = await state(page);
+  check(`payment options, product left out (${label}): Pay Online only, no COD card`, Boolean(s.online) && !s.cod && s.nativeShown === true, JSON.stringify({ online: Boolean(s.online), cod: Boolean(s.cod) }));
+  await page.close();
+}
 
 check('no console errors', errors.length === 0, errors.join(' | '));
 await browser.close();

@@ -101,6 +101,31 @@ function offerBadge(text) {
   return 'OFFER';
 }
 
+// Dynamic shipping's delivery options in the popup (brix_cod.js deliveryBlock),
+// for the Test calculator's address and cart. `onPick` previews another option.
+function DeliveryPicker({ ship, money, onPick }) {
+  const sel = ship.selected;
+  const many = ship.options.length > 1;
+  return (
+    <div className="cod-pv-dlv">
+      <span className="cod-pv-ttl">Delivery</span>
+      {ship.options.map((o) => {
+        const when = o.dates ? (o.description ? '' : 'Pick a delivery day') : o.eta ? `Arrives ${/^(Today|Tomorrow)$/.test(o.eta.label) ? o.eta.label.toLowerCase() : o.eta.label}` : '';
+        return (
+          <button type="button" key={o.id} className={`cod-pv-dlo${many && o.id === sel?.id ? ' on' : ''}`} onClick={() => onPick?.(o.id)} disabled={!many}>
+            {many ? <i className="cod-pv-rd" aria-hidden="true" /> : null}
+            <span className="cod-pv-dlo-t"><b>{o.name}</b>{[o.description, when].filter(Boolean).join(' · ')}</span>
+            <b className={o.price > 0 ? undefined : 'cod-pv-free'}>{o.price > 0 ? money(o.price) : 'Free'}</b>
+          </button>
+        );
+      })}
+      {sel?.dates && <div className="cod-pv-dts">{sel.dates.slice(0, 5).map((x) => <span key={x.date} className={x.date === ship.date ? 'on' : undefined}>{x.label}</span>)}</div>}
+      {sel?.slots && <div className="cod-pv-dts">{sel.slots.map((s) => <span key={s.id} className={s.id === ship.slot ? 'on' : undefined}>{s.label}</span>)}</div>}
+      {sel?.freeIn > 0 && <div className="cod-pv-fsh">Add {money(sel.freeIn)} more for free shipping</div>}
+    </div>
+  );
+}
+
 function BrixMark({ height }) {
   return <img src="/brix-logo.png" alt="BRIX" style={{ height, width: 'auto', display: 'block' }} />;
 }
@@ -178,11 +203,22 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
   );
 }
 
+// The sample product stands for a chosen product or another one: does
+// Product page → Which product pages leave it without COD?
+function sampleLeftOut(settings, picked) {
+  const mode = settings.productButton?.showOn?.mode || 'all';
+  return mode === 'only' ? !picked.show : mode === 'except' && Boolean(picked.show);
+}
+
 /**
  * The preview screen for one surface (drawer | product | sheet), plus what the
  * simulator needs. Plain function so the COD customizer can frame it its own way.
+ * `ship` = dynamic shipping's quoteShipping() result for the sample address and
+ * cart (null under one-price shipping); `onPickDelivery(optionId)` picks another option.
+ * `picked` = whether the sample product is among the merchant's product page
+ * picks: { show } (Which product pages), { replace } (Replace it on some products).
  */
-export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false, device = 'desktop' }) {
+export function buildCodScreen({ settings, money, surface, cart, excludedOn = false, loader = false, device = 'desktop', ship = null, onPickDelivery, picked = {} }) {
   const hasTags = settings.excludedProductTags.length > 0;
   const excluded = hasTags && excludedOn;
   // The popup opens from every place, so its preview isn't tied to one
@@ -190,12 +226,17 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
   // popup, or the charges and rules shown in it, look off).
   const ruleSurface = surface === 'sheet' ? undefined : surface;
   const anywhere = Object.values(settings.surfaces || {}).some((on) => on !== false);
+  // Dynamic shipping refuses COD at review when it doesn't deliver to the address (cod.server.js quoteCod).
+  const shipRule = surface !== 'sheet' || !ship ? null
+    : ship.blocked ? { code: 'not_deliverable', message: ship.blocked.message }
+      : !ship.noShipping && !ship.options.length ? { code: 'no_delivery_option', message: 'No delivery option is available for this address and cart right now. Please try another address, or pay online.' }
+        : null;
   const rule = surface === 'sheet' && settings.enabled && !anywhere
     ? { code: 'cod_disabled', message: 'COD is turned off on the cart drawer, product pages and combo pages, so shoppers can’t open this.' }
     : excluded
     ? checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money, productTags: [settings.excludedProductTags[0]] })
-    : checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money });
-  const charges = codCharges(settings, cart);
+    : checkCodRules({ settings, subtotal: cart, surface: ruleSurface, format: money }) || shipRule;
+  const charges = codCharges(settings, cart, ship && !ship.blocked ? (ship.selected?.price ?? 0) : null);
   const total = cart + charges.total;
   const surfaceOff = settings.surfaces[ruleSurface] === false;
   const minMaxReason = rule && (rule.code === 'below_min' || rule.code === 'above_max')
@@ -226,14 +267,17 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
     if (codState?.reason && settings.drawerPlacement === 'replace') caption = 'COD can\'t be used for this cart, so Checkout stays and COD shows as unavailable above it.';
   } else if (surface === 'product' && settings.productPayment?.enabled) {
     // Payment options on: they replace the plain product page COD button.
-    screen = <PaymentOptionsScreen settings={settings} money={money} phone={device === 'mobile'} />;
+    screen = <PaymentOptionsScreen settings={settings} money={money} phone={device === 'mobile'} codHere={!sampleLeftOut(settings, picked)} />;
     caption = 'Sample product. Click a card, size or quantity to try it. Shoppers see the prepaid offer only once the discount is active in Shopify.';
   } else if (surface === 'product') {
     const pb = { ...DEFAULT_COD_SETTINGS.productButton, ...(settings.productButton || {}) };
     const hideForTag = excluded && settings.excludedBehavior === 'hide';
-    const codHidden = !settings.enabled || surfaceOff || hideForTag;
+    const showMode = pb.showOn?.mode || 'all';
+    const leftOut = sampleLeftOut(settings, picked);
+    const codHidden = !settings.enabled || surfaceOff || hideForTag || leftOut;
     let why = settings.enabled ? 'product pages are turned off' : 'COD is off';
     if (settings.enabled && !surfaceOff && hideForTag) why = 'excluded product';
+    else if (settings.enabled && !surfaceOff && leftOut) why = showMode === 'only' ? 'not one of the products you chose' : 'one of the products you left out';
     screen = (
       <div className="cod-scr">
         <div className="cod-scr-img"><span /></div>
@@ -245,7 +289,9 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
             <div className="cod-scr-atc">Add to cart</div>
             {(() => {
               // Where COD sits next to Buy it now (Customize COD → Product page), as on the storefront.
-              const place = pb.buyNowPlacement || (pb.replaceBuyNow === false ? 'above' : 'replace');
+              const place = pb.buyNowPlacement === 'some'
+                ? (picked.replace ? 'replace' : pb.restPlacement === 'below' ? 'below' : 'above')
+                : pb.buyNowPlacement || (pb.replaceBuyNow === false ? 'above' : 'replace');
               const cod = codHidden ? <Hidden key="cod">COD button hidden: {why}</Hidden>
                 : <CodButton key="cod" settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />;
               // Buy it now is only hidden while a usable COD button replaces it, as on the storefront.
@@ -338,6 +384,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
                     )}
                     <div className="cod-pv-tot"><span>Pay on delivery</span><span>{money(total)}</span></div>
                   </div>
+                  {ship && ship.options.length > 0 && <DeliveryPicker ship={ship} money={money} onPick={onPickDelivery} />}
                   {settings.prepaidNudgeText ? <div className="cod-pv-nudge">{settings.prepaidNudgeText} <u>Pay online</u></div> : null}
                   <div className="cod-pv-agr"><span className="cod-pv-box" aria-hidden="true">✓</span>I agree to the {/^https:\/\//.test(look.termsUrl || '') ? <a href={look.termsUrl} target="_blank" rel="noopener noreferrer">Terms and conditions</a> : <u>Terms and conditions</u>}</div>
                   <div className="cod-pv-place">Place COD order · {money(total)}</div>

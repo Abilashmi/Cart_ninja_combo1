@@ -33,7 +33,7 @@ const ageOrders = (hours) => sql(`UPDATE cod_orders SET created_at = created_at 
 const orderRows = () => sql('SELECT * FROM cod_orders ORDER BY id');
 
 async function resetDb() {
-  for (const t of ['cod_settings', 'cod_otp', 'cod_orders', 'cod_secrets']) await sql(`DELETE FROM ${t}`).catch(() => {});
+  for (const t of ['cod_settings', 'cod_otp', 'cod_orders', 'cod_secrets', 'cod_shipping']) await sql(`DELETE FROM ${t}`).catch(() => {});
 }
 after(() => harness.stop());
 
@@ -69,9 +69,19 @@ function fakeAdmin(opts = {}) {
       const money = (amount) => ({ shopMoney: { amount: String(amount), currencyCode: 'INR' } });
       let data;
       if (op === 'CodVariants') {
+        // With dynamic shipping the query also asks for weights and the rules' collections (inCollection as c0, c1, …).
+        const withWeight = /inventoryItem/.test(query);
+        if (withWeight && opts.refuseWeights) throw new Error('fake admin: weights refused');
         data = { nodes: variables.ids.map((id) => (variants[id] ? {
           id, availableForSale: variants[id].soldOut !== true,
-          product: { id: 'gid://shopify/Product/1', title: variants[id].title, tags: variants[id].tags, status: 'ACTIVE' },
+          ...(withWeight ? { inventoryItem: {
+            requiresShipping: variants[id].requiresShipping !== false,
+            measurement: { weight: variants[id].grams ? { value: variants[id].grams, unit: 'GRAMS' } : null },
+          } } : {}),
+          product: {
+            id: variants[id].product || 'gid://shopify/Product/1', title: variants[id].title, tags: variants[id].tags, status: variants[id].status || 'ACTIVE',
+            ...Object.fromEntries(Object.entries(variables).filter(([k]) => /^c\d+$/.test(k)).map(([k, gid]) => [k, (variants[id].collections || []).includes(gid)])),
+          },
         } : null)) };
       } else if (op === 'CodCalculate') {
         const input = variables.input;
@@ -133,6 +143,16 @@ function fakeAdmin(opts = {}) {
         }
       } else if (op === 'CodDraftDelete') {
         data = { draftOrderDelete: { deletedId: variables.input.id } };
+      } else if (op === 'CodProductIds') {
+        // opts.unlisted = the store's unlisted product ids; opts.unlistedIn = { collectionId: [ids] }. Two a page, to page through.
+        if (opts.failProductIds) throw new Error('fake admin: products search failed');
+        const inCol = /collection_id:(\d+)/.exec(variables.q);
+        const all = inCol ? (opts.unlistedIn?.[inCol[1]] || []) : (opts.unlisted || []);
+        const start = Number(variables.after || 0);
+        data = { products: {
+          nodes: all.slice(start, start + 2).map((id) => ({ id: `gid://shopify/Product/${id}` })),
+          pageInfo: { hasNextPage: start + 2 < all.length, endCursor: String(start + 2) },
+        } };
       } else if (op === 'CodOrders') {
         data = { nodes: variables.ids.map((id) => ({ id, displayFinancialStatus: 'PENDING', displayFulfillmentStatus: 'UNFULFILLED', cancelledAt: null })) };
       } else {
@@ -254,6 +274,40 @@ test('quote: Pack / free-gift lines and sold-out items are refused', async () =>
   );
 });
 
+test('quote: unlisted products only when the merchant allows them (all, or picked products / collections)', async () => {
+  const UNLISTED = {
+    'gid://shopify/ProductVariant/11': { price: 899, title: 'Secret Blend', tags: [], status: 'UNLISTED', product: 'gid://shopify/Product/5', collections: ['gid://shopify/Collection/9'] },
+    'gid://shopify/ProductVariant/12': { price: 899, title: 'Steel Tumbler', tags: [] },
+  };
+  const quote = (settings, admin = fakeAdmin({ variants: UNLISTED })) => cod.quoteCod(admin, { settings, lines, surface: 'drawer' });
+  await assert.rejects(quote(settingsOn()), (e) => e.code === 'product_excluded' && /Secret Blend isn't available with Cash on Delivery/.test(e.message), 'off by default');
+  assert.equal((await quote(settingsOn({ unlisted: { allow: true } }))).quote.itemsTotal, 1798, 'all unlisted products');
+  assert.ok(await quote(settingsOn({ unlisted: { allow: true, mode: 'only', products: [{ id: 'gid://shopify/Product/5' }] } })), 'a picked product');
+  await assert.rejects(quote(settingsOn({ unlisted: { allow: true, mode: 'only', products: [{ id: 'gid://shopify/Product/6' }] } })), (e) => e.code === 'product_excluded');
+  // A picked collection: Shopify is asked whether the product is in it.
+  const admin = fakeAdmin({ variants: UNLISTED });
+  assert.ok(await quote(settingsOn({ unlisted: { allow: true, mode: 'only', collections: [{ id: 'gid://shopify/Collection/9' }] } }), admin));
+  assert.equal(admin.calls.find((c) => c.op === 'CodVariants').variables.c0, 'gid://shopify/Collection/9');
+  await assert.rejects(quote(settingsOn({ unlisted: { allow: true, mode: 'only', collections: [{ id: 'gid://shopify/Collection/8' }] } })), (e) => e.code === 'product_excluded');
+  // Draft and archived products are never sold, whatever the setting.
+  for (const status of ['DRAFT', 'ARCHIVED']) {
+    const off = fakeAdmin({ variants: { ...UNLISTED, 'gid://shopify/ProductVariant/11': { ...UNLISTED['gid://shopify/ProductVariant/11'], status } } });
+    await assert.rejects(quote(settingsOn({ unlisted: { allow: true } }), off), (e) => e.code === 'item_unavailable');
+  }
+});
+
+test('quote: product page orders follow "Which product pages"; cart drawer orders don\'t', async () => {
+  const one = [{ variantId: '11', quantity: 1, properties: {} }];
+  const KIT = { 'gid://shopify/ProductVariant/11': { price: 899, title: 'Cold Brew Kit', tags: [], product: 'gid://shopify/Product/1', collections: ['gid://shopify/Collection/7'] } };
+  const quote = (settings, surface = 'product') => cod.quoteCod(fakeAdmin({ variants: KIT }), { settings, lines: one, surface });
+  const except = settingsOn({ productButton: { showOn: { mode: 'except', products: [{ id: 'gid://shopify/Product/1' }] } } });
+  await assert.rejects(quote(except), (e) => e.code === 'product_excluded' && /isn't available for this product/.test(e.message));
+  assert.ok(await quote(except, 'drawer'), 'the cart drawer is not affected');
+  await assert.rejects(quote(settingsOn({ productButton: { showOn: { mode: 'only', collections: [{ id: 'gid://shopify/Collection/8' }] } } })), (e) => e.code === 'product_excluded');
+  assert.ok(await quote(settingsOn({ productButton: { showOn: { mode: 'only', collections: [{ id: 'gid://shopify/Collection/7' }] } } })), 'in a chosen collection');
+  assert.ok(await quote(settingsOn({ productButton: { showOn: { mode: 'except', collections: [{ id: 'gid://shopify/Collection/8' }] } } })));
+});
+
 test('quote: a valid coupon is applied, an unusable one is left off the order', async () => {
   const good = await cod.quoteCod(fakeAdmin(), { settings: settingsOn(), lines, coupon: 'SAVE10', surface: 'drawer' });
   assert.deepEqual(good.quote.coupon, { code: 'SAVE10', applied: true });
@@ -344,6 +398,28 @@ test('admin list reads live payment status and summarizes', async () => {
   assert.equal(orders[0].orderNumericId, '1047');
   assert.equal(orders[0].lifecycle, 'placed');
   assert.deepEqual(cod.summarizeCodOrders(orders), { count: 1, toCollect: 1847, collected: 0, paidCount: 0, cancelledCount: 0, cancelRate: 0, rtoCount: 0 });
+});
+
+test('admin list by date: only the period\'s orders, how many it holds, and its shipping', async () => {
+  const simple = settingsOn({ shippingFee: 60, codFee: 0, codFeeEnabled: false });
+  for (const [n, age] of [[1, 0], [2, 2], [3, 40]]) {
+    await place(fakeAdmin(), { idemKey: `idem-key-date-${n}`, phone: `987654321${n}`, settings: simple });
+    if (age) await sql(`UPDATE cod_orders SET created_at = NOW() - INTERVAL ${age} DAY WHERE idem_key = ?`, [`idem-key-date-${n}`]);
+  }
+  const at = Date.now();
+  const window = (days) => ({ startMs: at - days * 86400000 - 60000, endMs: at + 3600000 });
+  const today = await cod.loadCodOrders(fakeAdmin(), SHOP, { limit: 500, ...window(1) });
+  assert.deepEqual([today.orders.length, today.total], [1, 1]);
+  const week = await cod.loadCodOrders(fakeAdmin(), SHOP, { limit: 500, ...window(7) });
+  assert.deepEqual([week.orders.length, week.total], [2, 2]);
+  assert.equal(week.orders[0].status, 'pending', 'live status still read');
+  const cut = await cod.loadCodOrders(fakeAdmin(), SHOP, { limit: 1, ...window(7) });
+  assert.deepEqual([cut.orders.length, cut.total], [1, 2], 'the list is cut, the count is not');
+  assert.equal((await cod.loadCodOrders(fakeAdmin(), SHOP, { limit: 500 })).total, 3, 'no window: every order');
+  assert.equal((await cod.listCodOrders(fakeAdmin(), SHOP)).length, 3, 'listCodOrders as before');
+  assert.equal((await cod.getCodShippingStats(SHOP, 7, window(7))).orders, 2);
+  assert.equal((await cod.getCodShippingStats(SHOP, 30)).orders, 2, 'by days as before');
+  assert.equal((await cod.getCodShippingStats(SHOP, 90, window(90))).orders, 3);
 });
 
 /* ── ads & analytics: GA4 Measurement Protocol + Meta Conversions API ──────── */
@@ -616,7 +692,11 @@ test('storefront config: returns display settings only, OTP only when Node has S
   assert.deepEqual(json.blockedPincodes, ['744101']);
   assert.deepEqual(json.surfaces, { drawer: true, product: true, combo: false });
   assert.equal(json.buttons.drawerText, 'Pay cash on delivery');
-  assert.deepEqual(json.productButton, { replaceBuyNow: false, buyNowPlacement: 'above', buyNowText: '', buyNowSelector: '', marginTop: 4, marginBottom: 0, paddingY: 18, paddingX: 16, radius: 0 });
+  assert.deepEqual(json.productButton, {
+    replaceBuyNow: false, buyNowPlacement: 'above', replaceOn: { products: [], collections: [] }, restPlacement: 'above',
+    showOn: { mode: 'all', products: [], collections: [] }, buyNowText: '', buyNowSelector: '', marginTop: 4, marginBottom: 0, paddingY: 18, paddingX: 16, radius: 0,
+  });
+  assert.deepEqual(json.unlistedBlocked, [], 'no unlisted list until the admin makes one');
   assert.equal(json.otpRequired, true, 'COD_OTP_DEV_LOG counts as an SMS provider in tests');
   assert.equal('_runtime' in json, false);
   assert.equal('orderTags' in json, false, 'merchant-only fields are not exposed');
@@ -640,6 +720,54 @@ test('storefront config: returns display settings only, OTP only when Node has S
     process.env.COD_OTP_DEV_LOG = '1';
     await cod.syncCodRuntime(SHOP);
   }
+});
+
+test('unlisted list for the storefront: made on save, picked ones left out, sent by cod_storefront.php', async () => {
+  await setPlan('pro');
+  const admin = fakeAdmin({ unlisted: ['5', '6', '7'], unlistedIn: { 9: ['6'] } });
+  const save = (patch) => cod.saveCodSettings(SHOP, patch, { syncUnlisted: (next) => cod.loadUnlistedBlocked(admin, next) });
+  await save({ enabled: true });
+  assert.deepEqual((await storefront(`action=config&shop=${SHOP}`)).json.unlistedBlocked, ['5', '6', '7'], 'off: every unlisted product (paged)');
+  await save({ unlisted: { allow: true, mode: 'only', products: [{ id: 'gid://shopify/Product/5' }], collections: [{ id: 'gid://shopify/Collection/9', title: 'Hidden' }] } });
+  assert.deepEqual((await storefront(`action=config&shop=${SHOP}`)).json.unlistedBlocked, ['7'], 'the picked product and the picked collection\'s are allowed');
+  await save({ unlisted: { mode: 'all' } });
+  assert.deepEqual((await storefront(`action=config&shop=${SHOP}`)).json.unlistedBlocked, [], 'all allowed: nothing blocked, no lookup');
+  // A failed lookup hides nothing.
+  const failed = await cod.loadUnlistedBlocked(fakeAdmin({ failProductIds: true }), sanitizeCodSettings({ enabled: true }));
+  assert.deepEqual([failed.blocked, failed.failed], [[], true]);
+
+  // The picks reach the storefront as numeric ids.
+  await cod.saveCodSettings(SHOP, { productButton: {
+    buyNowPlacement: 'some', replaceOn: { products: [{ id: 'gid://shopify/Product/1', title: 'Kit' }] }, restPlacement: 'below',
+    showOn: { mode: 'except', collections: [{ id: 'gid://shopify/Collection/7', title: 'Gift cards' }] },
+  } });
+  const { json } = await storefront(`action=config&shop=${SHOP}`);
+  assert.deepEqual([json.productButton.buyNowPlacement, json.productButton.restPlacement, json.productButton.replaceBuyNow], ['some', 'below', false]);
+  assert.deepEqual(json.productButton.replaceOn, { products: ['1'], collections: [] });
+  assert.deepEqual(json.productButton.showOn, { mode: 'except', products: [], collections: ['7'] });
+  assert.equal('unlisted' in json, false, 'the merchant\'s unlisted picks are not sent');
+});
+
+test('unlisted list: a long one is cut to fit cod_settings.php, never refusing the save', async () => {
+  const ids = Array.from({ length: 1000 }, (_, i) => String(9000000000000 + i));
+  const logo = `data:image/png;base64,${'A'.repeat(39970)}`;
+  await cod.saveCodSettings(SHOP, { enabled: true, sheet: { logo } }, { syncUnlisted: () => ({ blocked: ids, at: new Date().toISOString() }) });
+  const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
+  assert.equal(stored.sheet.logo, logo);
+  assert.ok(stored._runtime.unlisted.blocked.length > 0 && stored._runtime.unlisted.blocked.length < 1000, `kept ${stored._runtime.unlisted.blocked.length}`);
+  assert.equal(stored._runtime.unlisted.cut, true);
+});
+
+test('unlisted list: refreshed when the COD admin opens, kept on a failed lookup', async () => {
+  const shop = 'refresh-demo.myshopify.com';
+  await cod.saveCodSettings(shop, { enabled: true });
+  const read = async () => JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [shop]))[0].settings_json)._runtime.unlisted;
+  await cod.syncCodRuntime(shop, { admin: fakeAdmin({ unlisted: ['5'] }) });
+  assert.deepEqual((await read()).blocked, ['5']);
+  await cod.syncCodRuntime(shop, { admin: fakeAdmin({ unlisted: ['5', '6'] }) });
+  assert.deepEqual((await read()).blocked, ['5'], 'at most every 10 minutes');
+  await cod.syncCodRuntime(shop);
+  assert.deepEqual((await read()).blocked, ['5'], 'kept by a sync without admin');
 });
 
 test('storefront config: each place gets its own button look; turning the drawer off leaves the rest on', async () => {
@@ -1071,4 +1199,133 @@ test('storefront config: PHP re-checks payment option values stored by anything 
   assert.equal(pp.layout.radius, 24);
   assert.equal(pp.online.label.length, 40);
   assert.equal(pp.prepaid, null, 'a percentage outside 1–50 is never offered');
+});
+
+/* ── dynamic shipping (settings.shippingMode 'advanced') ──────────────────── */
+const ship = await import('../../app/utils/shipping.shared.js');
+// Monday 26 Oct 2026, 10:00 in India.
+const MON_10 = new Date('2026-10-26T04:30:00Z');
+const SHIP_VARIANTS = {
+  'gid://shopify/ProductVariant/11': { price: 899, title: 'Cold Brew Kit', tags: ['coffee'], grams: 1200, product: 'gid://shopify/Product/11' },
+  'gid://shopify/ProductVariant/12': { price: 899, title: 'Steel Tumbler', tags: ['Fragile'], grams: 400, product: 'gid://shopify/Product/12', collections: ['gid://shopify/Collection/77'] },
+};
+const shipOn = (patch = {}) => settingsOn({ shippingMode: 'advanced', codFee: 0, codFeeEnabled: false, ...patch });
+const BLR = { pincode: '560001', city: 'Bangalore', state: 'Karnataka' };
+const JAIPUR = { pincode: '302001', city: 'Jaipur', state: 'Rajasthan' };
+const plainLines = lines.map((l) => ({ ...l, properties: {} }));
+function shipConfig(patch = {}) {
+  return ship.sanitizeShipping({
+    zones: [{ id: 'metro', name: 'Metro', cities: ['Bengaluru'], states: [], pins: [] }],
+    methods: [
+      // ₹50 up to 500 g, then ₹20 per started 500 g; ₹30 flat in Metro.
+      { ...ship.newMethod('standard'), rate: { type: 'weight', base: 50, baseGrams: 500, step: 20, stepGrams: 500 }, zoneRates: [{ zone: 'metro', rate: { type: 'flat', amount: 30 } }] },
+      { ...ship.newMethod('express', 'express'), rate: { type: 'flat', amount: 120 }, zones: ['metro'] },
+    ],
+    // Fragile items by tag; the rule by collection makes the server ask Shopify about collection 77.
+    charges: [{ ...ship.newCharge('fragile'), amount: 25 }],
+    rules: [{ ...ship.newRule('discount'), name: 'Tumbler promo', when: { collections: [{ id: 'gid://shopify/Collection/77', title: 'Tumblers' }], states: ['Rajasthan'] }, then: { type: 'discount', percent: 50 } }],
+    blocked: { zones: [], states: [], cities: [], pins: ['744*'], message: 'No delivery to the islands yet.' },
+    ...patch,
+  });
+}
+const shipQuote = (admin, extra = {}) => cod.quoteCod(admin, {
+  settings: shipOn(), lines: plainLines, surface: 'drawer', shipping: shipConfig(), now: MON_10, ...extra,
+});
+
+test('shipping config: stored apart from the settings by cod_shipping.php, sanitised, refused without the secret or when too large', async () => {
+  const saved = await cod.saveCodShipping(SHOP, { methods: [{ ...ship.newMethod('standard'), rate: { type: 'flat', amount: '49' } }], zones: [{ id: 'z', name: 'Z', pins: '560001, 5600x1' }] });
+  assert.equal(saved.methods[0].rate.amount, 49, 'typed text becomes numbers');
+  assert.deepEqual(saved.zones[0].pins, ['560001'], 'bad PIN entries dropped');
+  const [row] = await sql('SELECT config_json FROM cod_shipping WHERE shop = ?', [SHOP]);
+  assert.deepEqual(JSON.parse(row.config_json), saved);
+  assert.equal((await sql('SELECT shop FROM cod_settings')).length, 0, 'the COD settings blob is untouched');
+
+  const post = (body, headers = {}) => fetch(`${harness.baseUrl}/cod_shipping.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  assert.equal((await post({ action: 'get', shop: SHOP })).status, 403, 'Node only');
+  const big = await post({ action: 'save', shop: SHOP, shipping: { junk: 'x'.repeat(210000) } }, { 'X-Forge-Secret': harness.secret });
+  assert.equal(big.status, 400);
+  assert.equal((await big.json()).code, 'shipping_too_large');
+  const got = await (await post({ action: 'get', shop: 'other.myshopify.com' }, { 'X-Forge-Secret': harness.secret })).json();
+  assert.equal(got.shipping, null, 'a store that never saved one');
+});
+
+test('shipping quote: zone price by city (old name too), weights from Shopify, extra charges, options shoppers see', async () => {
+  const admin = fakeAdmin({ variants: SHIP_VARIANTS });
+  const { quote, input, shipping } = await shipQuote(admin, { destination: BLR });
+  const v = admin.calls.find((c) => c.op === 'CodVariants');
+  assert.equal(v.variables.c0, 'gid://shopify/Collection/77', 'only the collections the rules use are asked about');
+  assert.equal(shipping.zone.name, 'Metro', 'Bangalore = Bengaluru');
+  // Metro: ₹30 standard + ₹25 for the one fragile tumbler.
+  assert.equal(quote.shipping, 55);
+  assert.equal(quote.total, 1798 + 55);
+  assert.equal(input.shippingLine.title, 'Standard delivery · Cash on Delivery');
+  assert.equal(input.shippingLine.priceWithCurrency.amount, '55.00');
+  assert.deepEqual(quote.delivery.options.map((o) => [o.id, o.price]), [['standard', 55], ['express', 145]]);
+  assert.equal(quote.delivery.selected, 'standard');
+  assert.equal(quote.delivery.options[0].eta.label, '30 Oct – 2 Nov');
+  assert.ok(!('steps' in quote.delivery.options[0]), 'price steps (rule names) stay on the server');
+
+  // Jaipur: no zone, by weight: 1.6 kg = ₹50 + 3 × ₹20 = ₹110, halved by the tumbler promo = ₹55, + ₹25 fragile. No express.
+  const far = await shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }), { destination: JAIPUR });
+  assert.equal(far.quote.shipping, 80);
+  assert.deepEqual(far.quote.delivery.options.map((o) => o.id), ['standard']);
+});
+
+test('shipping quote: the shopper\'s pick, a blocked area, before the address, and one-price shipping', async () => {
+  const picked = await shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }), { destination: BLR, delivery: { option: 'express' } });
+  assert.equal(picked.quote.delivery.selected, 'express');
+  assert.equal(picked.quote.shipping, 145);
+  assert.equal(picked.input.shippingLine.title, 'Express delivery · Cash on Delivery');
+
+  await assert.rejects(
+    shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }), { destination: { pincode: '744101', city: 'Port Blair', state: 'Andaman and Nicobar Islands' } }),
+    (e) => e.code === 'not_deliverable' && e.message === 'No delivery to the islands yet.',
+  );
+  // No address yet (the popup's first check): priced without zones, nothing blocked.
+  const early = await shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }));
+  assert.deepEqual(early.quote.delivery.options.map((o) => o.id), ['standard']);
+  // Placing the order: a pick that's no longer offered is refused, not switched.
+  await assert.rejects(
+    shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }), { destination: JAIPUR, delivery: { option: 'express' }, strictDelivery: true }),
+    (e) => e.code === 'delivery_changed',
+  );
+  // A store whose Admin API refuses weights is still priced (as 0 g) rather than losing COD.
+  const realError = console.error;
+  const realWarn = console.warn;
+  console.error = () => {};
+  console.warn = () => {};
+  try {
+    const noWeights = await shipQuote(fakeAdmin({ variants: SHIP_VARIANTS, refuseWeights: true }), { destination: JAIPUR });
+    assert.equal(noWeights.quote.shipping, 25 + 25, '₹50 base halved by the promo, + fragile');
+  } finally { console.error = realError; console.warn = realWarn; }
+  // One-price shipping ignores the config.
+  const simple = await shipQuote(fakeAdmin({ variants: SHIP_VARIANTS }), { settings: settingsOn({ shippingFee: 70, codFee: 0, codFeeEnabled: false }), destination: BLR });
+  assert.equal(simple.quote.shipping, 70);
+  assert.equal(simple.quote.delivery, null);
+});
+
+test('shipping order: the booked option on the order, its row, and the shipping stats', async () => {
+  const admin = fakeAdmin({ variants: SHIP_VARIANTS });
+  await place(admin, { settings: shipOn(), lines: plainLines, shipping: shipConfig(), delivery: { option: 'express' } });
+  const create = admin.calls.find((c) => c.op === 'CodCreate').variables.input;
+  assert.ok(create.tags.includes('brix-ship-express'));
+  const attr = Object.fromEntries(create.customAttributes.map((a) => [a.key, a.value]));
+  assert.equal(attr.brix_delivery_option, 'Express delivery');
+  assert.equal(attr.brix_delivery_zone, 'Metro');
+  assert.match(attr.brix_delivery_eta, /^\d{4}-\d{2}-\d{2}/);
+  assert.match(create.note, /Delivery: Express delivery, arrives/);
+  assert.equal(create.shippingLine.title, 'Express delivery · Cash on Delivery');
+
+  const [row] = await orderRows();
+  assert.equal(Number(row.shipping_amount), 145);
+  assert.equal(row.shipping_option, 'Express delivery');
+  assert.equal(row.shipping_zone, 'Metro');
+
+  // A one-price order counts too (no option, no zone).
+  await place(fakeAdmin(), { idemKey: 'idem-key-0002', phone: '9876543211', settings: settingsOn({ shippingFee: 60, codFee: 0, codFeeEnabled: false }) });
+  const stats = await cod.getCodShippingStats(SHOP, 30);
+  assert.equal(stats.orders, 2);
+  assert.equal(stats.shipping, 205);
+  assert.deepEqual(stats.byOption.map((o) => [o.name, o.orders, o.shipping]).sort(), [['', 1, 60], ['Express delivery', 1, 145]]);
+  assert.deepEqual(stats.byZone.find((z) => z.name === 'Metro'), { name: 'Metro', orders: 1, shipping: 145, free: 0 });
 });

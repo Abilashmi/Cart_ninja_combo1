@@ -12,7 +12,7 @@ import { unauthenticated } from '../shopify.server';
 import { getFeatureState } from '../config/plans';
 import { getShopPlan } from './plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
-import { CodError, getCodSettings, getCodSecrets, otpAvailable, rateLimit, clientIp } from './cod.server';
+import { CodError, getCodSettings, getCodSecrets, getCodShipping, otpAvailable, rateLimit, clientIp } from './cod.server';
 import { COD_SURFACES } from '../utils/cod.shared.js';
 import { BOX_PRICING_FEATURES } from '../utils/combo-weight.shared.js';
 
@@ -61,8 +61,9 @@ export function limitByIp(request, bucket, max, windowMs) {
 /**
  * Everything a COD request needs about the shop. `live` is true only when the
  * merchant turned COD on AND their plan publishes it to the storefront.
+ * `withShipping` also loads the advanced shipping config (quote and order only).
  */
-export async function loadCodContext(shop, { needAdmin = true } = {}) {
+export async function loadCodContext(shop, { needAdmin = true, withShipping = false } = {}) {
   let admin = null;
   if (needAdmin) {
     try {
@@ -77,6 +78,8 @@ export async function loadCodContext(shop, { needAdmin = true } = {}) {
   return {
     admin,
     settings,
+    // Delivery options, zones and rules (settings.shippingMode 'advanced'); null = simple flat shipping.
+    shipping: withShipping && settings.shippingMode === 'advanced' ? await getCodShipping(shop) : null,
     planState,
     live: settings.enabled && planState === 'enabled',
     // The store's own MSG91 keys, else the BRIX server's.

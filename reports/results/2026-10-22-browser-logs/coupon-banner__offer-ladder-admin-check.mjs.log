@@ -1,0 +1,9 @@
+
+Coupon Banner — offer ladder admin checks
+  ✓ Add an offer ladder: editor opens with two offers (text only), preview is just the text
+  ✓ button + auto-apply are opt-in; Save posts a clean ladder
+  ✓ a saved ladder loads back; ladder above a coupon card; editing it leaves the card's look alone
+  ✓ offers direction, button position and box size: preview follows, Save posts them
+  ✓ coupon ticket: cut-out shape, a line under each offer, left text, button in the stub; Save posts them
+
+5/5 passed

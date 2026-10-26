@@ -2575,9 +2575,9 @@
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.setAttribute('readonly', '');
-      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;';
       document.body.appendChild(ta);
-      ta.focus();
+      try { ta.focus({ preventScroll: true }); } catch (_f) { ta.focus(); }
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);

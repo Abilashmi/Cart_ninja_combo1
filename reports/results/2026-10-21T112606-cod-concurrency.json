@@ -1,0 +1,45 @@
+{
+  "startedAt": "2026-10-21T11:26:06.063Z",
+  "burst": 12,
+  "workers": 4,
+  "checks": [
+    {
+      "name": "OTP create burst, same phone",
+      "rule": "one code per phone per 30 s, max 5 per hour (each accepted create = one SMS sent by Node)",
+      "expected": "1 accepted, the rest 429 otp_too_soon; 1 row",
+      "observed": "2 accepted, rows stored = 2; responses {\"200:ok\":2,\"429:otp_too_soon\":10}",
+      "outcome": "FAIL"
+    },
+    {
+      "name": "OTP verify burst, wrong codes",
+      "rule": "at most 5 wrong tries per code, then locked",
+      "expected": "attempts column ≤ 5 (later guesses answered \"locked\" without being compared)",
+      "observed": "attempts column = 6 after 24 concurrent wrong guesses; responses {\"wrong\":5,\"locked\":19}",
+      "outcome": "FAIL",
+      "detail": {
+        "evaluated": 24
+      }
+    },
+    {
+      "name": "OTP verify burst, right code",
+      "rule": "a code can be verified once",
+      "expected": "1 \"ok\", the rest \"expired\"",
+      "observed": "1 \"ok\"; responses {\"ok\":1,\"expired\":11}",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Order begin burst, same idempotency key",
+      "rule": "one order attempt per (shop, idem_key) — a double tap can never create two orders",
+      "expected": "1 accepted, the rest 409 duplicate; 1 row",
+      "observed": "1 accepted, rows = 1; responses {\"200:ok\":1,\"409:duplicate\":11}",
+      "outcome": "PASS"
+    },
+    {
+      "name": "Daily COD limit, 5 sheets at once for one phone (limit 1)",
+      "rule": "settings.dailyLimitPerPhone placed orders per phone per 24 h",
+      "expected": "1 placed, the rest \"daily_limit\"",
+      "observed": "5 placed; outcomes {\"placed\":5} (simulated Node sequence; Node's own per-phone limiter allows 5 per 10 min per process)",
+      "outcome": "FAIL"
+    }
+  ]
+}

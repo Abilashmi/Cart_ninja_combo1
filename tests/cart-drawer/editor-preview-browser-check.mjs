@@ -407,6 +407,26 @@ for (const behavior of ['replace', 'hide']) {
   await rp.close();
 }
 
+// ── Sidebar: opening the section under a long open one starts at its header, not its end ──
+{
+  const sb = await ctx.newPage();
+  sb.on('pageerror', (e) => errors.push(e.message));
+  await sb.goto('https://admin.test/app/cartdrawer');
+  await sb.waitForSelector('text=Announcements');
+  await sb.locator('[data-section="imageBanner"] > button').click();
+  await sb.waitForTimeout(300);
+  await sb.evaluate(() => { const l = document.querySelector('[data-section="imageBanner"]').parentElement.parentElement; l.scrollTop = l.scrollHeight; });
+  await sb.locator('[data-section="progressBar"] > button').click();
+  await sb.waitForTimeout(300);
+  const at = await sb.evaluate(() => {
+    const head = document.querySelector('[data-section="progressBar"]');
+    const l = head.parentElement.parentElement;
+    return { gap: Math.round(head.getBoundingClientRect().top - l.getBoundingClientRect().top), scrolls: l.scrollHeight > l.clientHeight };
+  });
+  check('sidebar: opening a section scrolls its header to the top of the list', at.scrolls && Math.abs(at.gap) <= 1, JSON.stringify(at));
+  await sb.close();
+}
+
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok);

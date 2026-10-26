@@ -11,15 +11,20 @@ require_once __DIR__ . '/cod_helpers.php';
  *   POST { action: 'find',   shop, idem_key }                  → { order: row|null }
  *   POST { action: 'count_recent', shop, phone_hash }           → { count }   placed orders in the last 24 h
  *   POST { action: 'begin',  shop, idem_key, source, phone_hash, phone_masked, phone_verified,
- *                            customer_name, pincode, total, currency }  → {}  | 409 duplicate
+ *                            customer_name, pincode, total, currency,
+ *                            shipping_amount?, shipping_option?, shipping_zone?, delivery_date? }  → {}  | 409 duplicate
  *   POST { action: 'complete', shop, idem_key, draft_order_id, order_id, order_name, total, currency } → {}
  *   POST { action: 'abandon', shop, idem_key }                  → {}   drops an unfinished attempt so it can be retried
- *   POST { action: 'list',   shop, limit }                      → { orders: row[] }  newest first
+ *   POST { action: 'list',   shop, limit (≤ 500), from_ts?, to_ts? } → { orders: row[], total }  newest first;
+ *        from_ts / to_ts = Unix seconds of the dashboard's date filter, total = orders in that window
  *   POST { action: 'tracking', shop, idem_key, ga4_status, meta_status } → {}   result of the server-side Purchase
  *   POST { action: 'sync',   shop, order_id, financial_status, fulfillment_status, shipment_status,
  *                            cancelled_at, refunded_total }     → { matched, previous, lifecycle, order_name, total, currency }
  *        from Shopify's order webhooks (refunded_total = all refunds so far); matches nothing for
  *        orders BRIX didn't place
+ *   POST { action: 'shipping_stats', shop, days, from_ts?, to_ts? } → { rows: [{ option, zone, orders, shipping, total, free }] }
+ *        placed orders of the last `days` days (1–365), or of the from_ts / to_ts window, that recorded
+ *        their shipping, by delivery option and zone
  */
 
 const COD_SOURCES = ['drawer', 'product', 'combo'];
@@ -55,6 +60,10 @@ function cod_public_order($row) {
         'refunded_total' => isset($row['refunded_total']) ? (float)$row['refunded_total'] : 0,
         'ga4_status' => $row['ga4_status'] ?? null,
         'meta_status' => $row['meta_status'] ?? null,
+        'shipping_amount' => isset($row['shipping_amount']) ? (float)$row['shipping_amount'] : null,
+        'shipping_option' => $row['shipping_option'] ?? null,
+        'shipping_zone' => $row['shipping_zone'] ?? null,
+        'delivery_date' => $row['delivery_date'] ?? null,
         // MySQL DATETIME (server time) as ISO 8601 UTC for the admin list.
         'created_at' => gmdate('Y-m-d\TH:i:s\Z', strtotime($row['created_at'])),
     ];
@@ -84,15 +93,21 @@ if ($action === 'begin') {
     $source = in_array($body['source'] ?? '', COD_SOURCES, true) ? $body['source'] : cod_fail(400, 'invalid_source', 'Invalid source');
     $phoneHash = cod_hash($body['phone_hash'] ?? '', 'phone_hash');
     $masked = cod_str($body['phone_masked'] ?? '', 16);
+    $deliveryDate = cod_str($body['delivery_date'] ?? '', 10);
     $values = [
         $shop, $idem, $source, $phoneHash, $masked, !empty($body['phone_verified']) ? 1 : 0,
         cod_str($body['customer_name'] ?? '', 120), cod_str($body['pincode'] ?? '', 10),
         cod_money($body['total'] ?? null), cod_str($body['currency'] ?? '', 8),
+        cod_money($body['shipping_amount'] ?? null),
+        cod_str($body['shipping_option'] ?? '', 60) ?: null,
+        cod_str($body['shipping_zone'] ?? '', 60) ?: null,
+        preg_match('/^\d{4}-\d{2}-\d{2}$/', $deliveryDate) ? $deliveryDate : null,
     ];
     cod_db($pdo, function ($pdo) use ($values) {
         $stmt = $pdo->prepare(
-            "INSERT INTO cod_orders (shop, idem_key, status, source, phone_hash, phone_masked, phone_verified, customer_name, pincode, total, currency)
-             VALUES (?, ?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO cod_orders (shop, idem_key, status, source, phone_hash, phone_masked, phone_verified, customer_name, pincode, total, currency,
+                                     shipping_amount, shipping_option, shipping_zone, delivery_date)
+             VALUES (?, ?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
         $stmt->execute($values);
         cod_ok();
@@ -121,12 +136,50 @@ if ($action === 'abandon') {
     });
 }
 
+// Optional time window from the dashboard's date filter: from_ts / to_ts are
+// Unix seconds (from included, to not). FROM_UNIXTIME gives the session's
+// time, the same clock NOW() wrote created_at with. Returns [sql, params].
+function cod_window($body) {
+    $from = $body['from_ts'] ?? null;
+    $to = $body['to_ts'] ?? null;
+    if (!is_numeric($from) || !is_numeric($to) || (int)$from < 0 || (int)$to <= (int)$from) return ['', []];
+    return [' AND created_at >= FROM_UNIXTIME(?) AND created_at < FROM_UNIXTIME(?)', [(int)$from, (int)$to]];
+}
+
 if ($action === 'list') {
-    $limit = max(1, min(200, (int)($body['limit'] ?? 50)));
-    cod_db($pdo, function ($pdo) use ($shop, $limit) {
-        $stmt = $pdo->prepare("SELECT * FROM cod_orders WHERE shop = ? AND status = 'placed' ORDER BY id DESC LIMIT " . $limit);
-        $stmt->execute([$shop]);
-        cod_ok(['orders' => array_map('cod_public_order', $stmt->fetchAll(PDO::FETCH_ASSOC))]);
+    $limit = max(1, min(500, (int)($body['limit'] ?? 50)));
+    [$windowSql, $windowParams] = cod_window($body);
+    cod_db($pdo, function ($pdo) use ($shop, $limit, $windowSql, $windowParams) {
+        $stmt = $pdo->prepare("SELECT * FROM cod_orders WHERE shop = ? AND status = 'placed'$windowSql ORDER BY id DESC LIMIT " . $limit);
+        $stmt->execute(array_merge([$shop], $windowParams));
+        $orders = array_map('cod_public_order', $stmt->fetchAll(PDO::FETCH_ASSOC));
+        // How many the window holds in all (more than `limit` = the list is cut).
+        $count = $pdo->prepare("SELECT COUNT(*) FROM cod_orders WHERE shop = ? AND status = 'placed'$windowSql");
+        $count->execute(array_merge([$shop], $windowParams));
+        cod_ok(['orders' => $orders, 'total' => (int)$count->fetchColumn()]);
+    });
+}
+
+if ($action === 'shipping_stats') {
+    $days = max(1, min(365, (int)($body['days'] ?? 30)));
+    [$windowSql, $windowParams] = cod_window($body);
+    if ($windowSql === '') $windowSql = " AND created_at > DATE_SUB(NOW(), INTERVAL $days DAY)";
+    cod_db($pdo, function ($pdo) use ($shop, $windowSql, $windowParams) {
+        $stmt = $pdo->prepare(
+            "SELECT COALESCE(shipping_option, '') AS opt, COALESCE(shipping_zone, '') AS zone, COUNT(*) AS orders,
+                    SUM(shipping_amount) AS shipping, SUM(total) AS total, SUM(CASE WHEN shipping_amount = 0 THEN 1 ELSE 0 END) AS free
+             FROM cod_orders
+             WHERE shop = ? AND status = 'placed' AND shipping_amount IS NOT NULL$windowSql
+             GROUP BY opt, zone ORDER BY orders DESC LIMIT 200"
+        );
+        $stmt->execute(array_merge([$shop], $windowParams));
+        $rows = array_map(function ($r) {
+            return [
+                'option' => $r['opt'], 'zone' => $r['zone'], 'orders' => (int)$r['orders'],
+                'shipping' => round((float)$r['shipping'], 2), 'total' => round((float)$r['total'], 2), 'free' => (int)$r['free'],
+            ];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        cod_ok(['rows' => $rows]);
     });
 }
 

@@ -1,0 +1,18 @@
+PASS  AI endpoint called once with shop + template id
+PASS  no suggestion row before anything is picked
+PASS  row shows the AI picks for the chosen product — Vitamin C Serum, SPF 50 Gel, Rose Face Wash
+PASS  default heading is shown
+PASS  "Add" on a single-variant suggestion adds it to the combo — 2px solid rgb(34, 197, 94)
+PASS  row drops picked products and mixes in the newest pick's matches — SPF 50 Gel, Niacinamide Serum, Rose Face Wash
+PASS  multi-variant suggestion says "Choose"
+PASS  "Choose" highlights the product card instead of guessing a variant
+PASS  row hides once the combo is full
+PASS  no row while the AI answer is still loading
+PASS  row appears once the late AI answer arrives
+PASS  toggle off: AI endpoint never called
+PASS  toggle off: no suggestion row
+PASS  custom heading is used
+PASS  layout2: Niacinamide card not on the face-wash tab
+PASS  layout2: "Choose" switches to the Serums tab and shows the card
+
+16/16 passed

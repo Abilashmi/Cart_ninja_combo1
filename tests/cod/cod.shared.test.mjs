@@ -5,6 +5,7 @@ import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, normalizeIndianPhone, checkCodRules, codCharges, normalizeLines,
   validateAddress, provinceCodeFor, isCheckoutOnlyLine, maskPhone, splitName, parsePincodes, moneyFormatter,
   isValidCodLogo, parseCodOffers, sanitizeCodTrack, codButtonLook, codFeeOf,
+  sanitizeCodPicks, codPicksMatch, codShownOnProduct, codBuyNowPlacementFor, unlistedCodAllowed, codRuleCollections, COD_PICK_MAX,
 } from '../../app/utils/cod.shared.js';
 
 const on = (patch = {}) => sanitizeCodSettings({ enabled: true, ...patch });
@@ -86,7 +87,10 @@ test('product page button: replace Buy it now by default, sizes clamped, partial
   assert.deepEqual(sanitizeCodSettings({}).productButton, DEFAULT_COD_SETTINGS.productButton);
   assert.equal(DEFAULT_COD_SETTINGS.productButton.replaceBuyNow, true);
   const s = sanitizeCodSettings({ productButton: { replaceBuyNow: false, marginTop: 999, paddingY: -3, paddingX: '20', radius: 'x', bogus: 1 } });
-  assert.deepEqual(s.productButton, { replaceBuyNow: false, buyNowPlacement: 'above', buyNowText: '', buyNowSelector: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12 });
+  assert.deepEqual(s.productButton, {
+    replaceBuyNow: false, buyNowPlacement: 'above', buyNowText: '', buyNowSelector: '', marginTop: 60, marginBottom: 0, paddingY: 4, paddingX: 20, radius: 12,
+    replaceOn: { products: [], collections: [] }, restPlacement: 'above', showOn: { mode: 'all', products: [], collections: [] },
+  });
   const next = sanitizeCodSettings({ productButton: { radius: 0 } }, s);
   assert.deepEqual(next.productButton, { ...s.productButton, radius: 0 });
 });
@@ -316,6 +320,71 @@ test('product page: COD replaces, or goes above or below, Shopify\'s Buy it now'
   // The old switch still works for callers that only send it.
   assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }).productButton.buyNowPlacement, 'above');
   assert.equal(sanitizeCodSettings({ productButton: { replaceBuyNow: false } }, below).productButton.buyNowPlacement, 'below', 'turning replace off keeps Below');
+});
+
+const P = (n, title = '') => ({ id: `gid://shopify/Product/${n}`, title });
+const C = (n, title = '') => ({ id: `gid://shopify/Collection/${n}`, title });
+
+test('product picks: gids or numeric ids, unique, capped, junk dropped, merged on later saves', () => {
+  const picks = sanitizeCodPicks({
+    products: [P(1, '  Tee   shirt '), '2', P(1), { id: 'gid://shopify/Collection/9' }, 'abc', null, { id: '3', title: 'x'.repeat(200) }],
+    collections: [C(7, 'Summer'), 'gid://shopify/Product/4'],
+  });
+  assert.deepEqual(picks.products.map((p) => p.id), ['gid://shopify/Product/1', 'gid://shopify/Product/2', 'gid://shopify/Product/3']);
+  assert.equal(picks.products[0].title, 'Tee shirt');
+  assert.equal(picks.products[2].title.length, 60);
+  assert.deepEqual(picks.collections, [{ id: 'gid://shopify/Collection/7', title: 'Summer' }]);
+  const many = sanitizeCodPicks({ products: Array.from({ length: 80 }, (_, i) => String(i + 1)), collections: Array.from({ length: 40 }, (_, i) => String(i + 1)) });
+  assert.deepEqual([many.products.length, many.collections.length], [COD_PICK_MAX.products, COD_PICK_MAX.collections]);
+  assert.deepEqual(sanitizeCodPicks({ collections: [] }, picks).products, picks.products, 'a list left out keeps the saved one');
+
+  const s = sanitizeCodSettings({ productButton: { buyNowPlacement: 'some', replaceOn: { products: [P(1)] }, restPlacement: 'below', showOn: { mode: 'except', collections: [C(7)] } } });
+  assert.deepEqual([s.productButton.buyNowPlacement, s.productButton.replaceBuyNow, s.productButton.restPlacement], ['some', false, 'below']);
+  assert.deepEqual(s.productButton.showOn, { mode: 'except', products: [], collections: [{ id: 'gid://shopify/Collection/7', title: '' }] });
+  const kept = sanitizeCodSettings({ productButton: { marginTop: 4, restPlacement: 'sideways', showOn: { mode: 'nope' } } }, s);
+  assert.deepEqual(kept.productButton.replaceOn, s.productButton.replaceOn, 'other saves keep the picks');
+  assert.equal(kept.productButton.restPlacement, 'below');
+  assert.deepEqual(kept.productButton.showOn, s.productButton.showOn, 'a bad mode keeps the saved one');
+});
+
+test('product page picks: which pages show COD, and where it goes next to Buy it now', () => {
+  const tee = { id: 'gid://shopify/Product/1', collections: [] };
+  const mug = { id: '2', collections: ['gid://shopify/Collection/7'] };
+  const other = { id: '3', collections: ['8'] };
+  assert.equal(codShownOnProduct(sanitizeCodSettings({}), other), true, 'all products by default');
+  const except = sanitizeCodSettings({ productButton: { showOn: { mode: 'except', products: [P(1)], collections: [C(7)] } } });
+  assert.deepEqual([tee, mug, other].map((p) => codShownOnProduct(except, p)), [false, false, true]);
+  const only = sanitizeCodSettings({ productButton: { showOn: { mode: 'only', products: [P(1)], collections: [C(7)] } } });
+  assert.deepEqual([tee, mug, other].map((p) => codShownOnProduct(only, p)), [true, true, false]);
+  assert.equal(codPicksMatch(only.productButton.showOn, { id: 'gid://shopify/Product/2', collections: ['7'] }), true, 'gids and numeric ids match each other');
+
+  const some = sanitizeCodSettings({ productButton: { buyNowPlacement: 'some', replaceOn: { collections: [C(7)] } } });
+  assert.deepEqual([tee, mug].map((p) => codBuyNowPlacementFor(some, p)), ['above', 'replace'], 'replace on the picks, above on the rest');
+  const someBelow = sanitizeCodSettings({ productButton: { restPlacement: 'below' } }, some);
+  assert.equal(codBuyNowPlacementFor(someBelow, tee), 'below');
+  for (const place of ['replace', 'above', 'below']) {
+    assert.equal(codBuyNowPlacementFor(sanitizeCodSettings({ productButton: { buyNowPlacement: place } }), tee), place, 'one place for every product');
+  }
+  assert.equal(codBuyNowPlacementFor({ productButton: { replaceBuyNow: false } }, tee), 'above', 'settings from before buyNowPlacement');
+});
+
+test('unlisted products: off by default, all or only the picked ones', () => {
+  const unlisted = { id: '5', collections: ['gid://shopify/Collection/9'] };
+  assert.deepEqual(DEFAULT_COD_SETTINGS.unlisted, { allow: false, mode: 'all', products: [], collections: [] });
+  assert.equal(unlistedCodAllowed(sanitizeCodSettings({}), unlisted), false);
+  assert.equal(unlistedCodAllowed(sanitizeCodSettings({ unlisted: { allow: true } }), unlisted), true);
+  const only = sanitizeCodSettings({ unlisted: { allow: true, mode: 'only', collections: [C(9)] } });
+  assert.equal(unlistedCodAllowed(only, unlisted), true, 'in a picked collection');
+  assert.equal(unlistedCodAllowed(only, { id: '6', collections: [] }), false);
+  assert.equal(unlistedCodAllowed(sanitizeCodSettings({ unlisted: { products: [P(6)] } }, only), { id: '6', collections: [] }), true, 'picked product');
+  assert.equal(sanitizeCodSettings({ codFee: 10 }, only).unlisted.mode, 'only', 'other saves keep it');
+  assert.equal(sanitizeCodSettings({ unlisted: { mode: 'bad' } }, only).unlisted.mode, 'only');
+
+  // The collections the server must look up: unlisted picks always, "show COD on" picks for product page orders.
+  const s = sanitizeCodSettings({ unlisted: { allow: true, mode: 'only', collections: [C(9)] }, productButton: { showOn: { mode: 'only', collections: [C(7), C(9)] } } });
+  assert.deepEqual(codRuleCollections(s, 'drawer'), ['gid://shopify/Collection/9']);
+  assert.deepEqual(codRuleCollections(s, 'product'), ['gid://shopify/Collection/9', 'gid://shopify/Collection/7']);
+  assert.deepEqual(codRuleCollections(sanitizeCodSettings({}), 'product'), []);
 });
 
 test('drawer button padding: defaults 14 / 16, clamped, kept on other saves', () => {

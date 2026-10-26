@@ -703,14 +703,18 @@ function renderSlider(el,data,ctx){
   var tpl=data.selectedTemplate||'template1';
   var r=getStyles(data,tpl);
   var def=r.def,map=r.map,conds=r.conds||[];
-  var titleCfg=(def&&typeof def.title==='object')?def.title:{};
-  var titleText=(titleCfg&&titleCfg.text!==undefined)?String(titleCfg.text):'Apply Coupon';
-  var titleFontSize=parseInt(titleCfg&&titleCfg.fontSize,10);
-  if(!titleFontSize||isNaN(titleFontSize))titleFontSize=14;
-  var titleColor=(titleCfg&&/^#[0-9a-f]{3,8}$/i.test(String(titleCfg.textColor||'')))?String(titleCfg.textColor):'#111827';
-  titleFontSize=Math.max(10,Math.min(32,titleFontSize));
-  var titleAlign=(titleCfg&&titleCfg.alignment)?String(titleCfg.alignment):'left';
-  if(['left','center','right'].indexOf(titleAlign)===-1)titleAlign='left';
+  /* Headings: title = above the whole banner (not saved = "Apply Coupon"); ladderTitle /
+     cardsTitle = optional own headings above the offer ladders / the coupon cards (not saved = none). */
+  function headingHtml(cfg,cls,fallback){
+    cfg=(cfg&&typeof cfg==='object')?cfg:{};
+    var text=cfg.text!==undefined&&cfg.text!==null?String(cfg.text):fallback;
+    if(text.trim()==='')return '';
+    var size=parseInt(cfg.fontSize,10);
+    size=(!size||isNaN(size))?14:Math.max(10,Math.min(32,size));
+    var color=/^#[0-9a-f]{3,8}$/i.test(String(cfg.textColor||''))?String(cfg.textColor):'#111827';
+    var align=['left','center','right'].indexOf(cfg.alignment)!==-1?cfg.alignment:'left';
+    return '<div class="'+cls+'" style="text-align:'+align+';color:'+color+';font-size:'+size+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+escapeHtmlJs(text)+'</div>';
+  }
   var normalizedMap={};
   Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
   var explicitIds=asArray(
@@ -792,8 +796,9 @@ function renderSlider(el,data,ctx){
   var slides=layout==='carousel'&&cards.length>1;
   el.innerHTML=
     '<div class="ps-slider'+(single?' ps-slider--single':'')+' ps-slider--'+layout+'">'
-      +(String(titleText).trim()===''?'':'<div class="ps-section-title" style="text-align:'+titleAlign+';color:'+titleColor+';font-size:'+titleFontSize+'px;font-weight:700;margin-bottom:10px;line-height:1.2;">'+escapeHtmlJs(titleText)+'</div>')
-      +(ladders.length?'<div class="ps-ladders">'+ladders.map(function(){return '<div class="ps-ladder"></div>';}).join('')+'</div>':'')
+      +headingHtml(def&&def.title,'ps-section-title','Apply Coupon')
+      +(ladders.length?headingHtml(def&&def.ladderTitle,'ps-group-title ps-ladders-title','')+'<div class="ps-ladders">'+ladders.map(function(){return '<div class="ps-ladder"></div>';}).join('')+'</div>':'')
+      +(cards.length?headingHtml(def&&def.cardsTitle,'ps-group-title ps-cards-title',''):'')
       +(cards.length?'<div class="ps-slider-row">'
         +(slides?'<button class="ps-nav ps-prev" aria-label="Previous coupon">&#8592;</button>':'')
         +'<div class="ps-coupon-wrapper"></div>'
@@ -810,8 +815,12 @@ function renderSlider(el,data,ctx){
   /* Only ladders, each as wide as Add to cart (and the banner itself full
      width): the title takes that width and place too, so it sits centred over
      them (it was centred over the full width, off to one side). */
-  var titleEl=el.querySelector('.ps-section-title');
-  if(titleEl&&!cards.length&&ladders.length&&def.bannerWidth!=='atc'&&def.bannerWidth!=='custom'&&ladders.every(function(x){return x.ladder.boxSize==='atc';}))watchAtcFit(titleEl);
+  /* The offer ladders' own heading always sits over them, so it follows the same rule with cards too. */
+  if(ladders.length&&def.bannerWidth!=='atc'&&def.bannerWidth!=='custom'&&ladders.every(function(x){return x.ladder.boxSize==='atc';})){
+    var titleEl=el.querySelector('.ps-section-title'),ladderTitleEl=el.querySelector('.ps-ladders-title');
+    if(titleEl&&!cards.length)watchAtcFit(titleEl);
+    if(ladderTitleEl)watchAtcFit(ladderTitleEl);
+  }
   if(!cards.length)return;
 
   var w=el.querySelector('.ps-coupon-wrapper');
@@ -945,7 +954,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 </script>
 <style>
 .ps-slider{width:100%;padding:4px 0}
-.ps-section-title{margin:0 0 10px}
+.ps-section-title,.ps-group-title{margin:0 0 10px}
 /* Offer ladders: full-width bars above the coupon cards */
 .ps-ladders{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
 .ps-ladders:last-child{margin-bottom:0}

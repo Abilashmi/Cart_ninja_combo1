@@ -1,0 +1,26 @@
+
+Coupon Banner — Custom Coupon checks
+  ✓ existing coupons still load, select and deselect; Save posts their real codes
+  ✓ screenshot: Custom Coupon button in the selection panel
+  ✓ dialog shows the two flows; empty / whitespace code is rejected without posting
+  ✓ Just add: trims, posts only the code, shows "Adding coupon…", then lists it selected with a Custom coupon label
+  ✓ Save sends the custom coupon through the normal selection + couponCode path
+  ✓ duplicates: an existing custom code or store code says "Coupon already exists." and nothing is posted
+  ✓ server-side refusal / failure shows a friendly message and keeps the dialog open
+  ✓ after a refresh: saved custom coupon is listed, labelled and still selected
+  ✓ Create in BRIX: no post, opens the Discount Creator with the code already filled in
+  ✓ Create in BRIX also refuses a duplicate code
+  ✓ Create in BRIX warns about unsaved changes
+
+Coupon Banner — saved texts and text offers
+  ✓ reopening the page shows each coupon's saved heading / subtext / button text (template2 too)
+  ✓ banner layout: the preview arranges the coupons as the store will (list / grid / carousel)
+  ✓ Add a text offer: selected, editable, saved with no code; preview has no button
+  ✓ a saved text offer comes back in the list with its heading
+  ✓ subtitle font, Copied colours and icon: in the preview and saved
+  ✓ text offers have no Copied colour settings
+  ✓ section title: defaults to "Apply Coupon", editable (text, size, colour, alignment), previewed, saved; empty hides it
+  ✓ own headings above the offer ladder and above the coupon cards: off by default, previewed in place, saved, load back
+  ✓ banner width: full / same as Add to cart / custom; preview follows; saved; loads back
+
+20/20 passed

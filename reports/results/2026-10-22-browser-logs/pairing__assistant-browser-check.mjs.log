@@ -1,0 +1,22 @@
+
+Pairing Assistant — FBT page
+  ✓ FBT Manual mode offers Pick products / Describe in words / From past orders; Pick is the default
+  ✓ Describe in words: prompt is posted, suggested rules + warnings shown, chosen ones join Saved rules and Save posts them
+  ✓ From past orders: pairs with order counts and shares; one-way, both-ways and inactive products
+  ✓ From past orders: bulk "Add N rules (top 3 per product)" adds one rule per active product, skipping existing
+  ✓ AI-Powered: instructions box; Configure AI sends them with regenerateAi and shows what they became
+  ✓ AI-Powered: saved instructions come back on reload and plain Save keeps them without regenerating
+  ✓ Bundle offer: switch on, % and text; preview shows the offer; Save sends it and shows Shopify's state
+  ✓ Saved rule: own offer (% off this set) is sent with the rule
+  ✓ Images and spacing: preview follows; Save sends them in the template
+  ✓ Spacing inside products + image popup: preview follows; Save sends them
+  ✓ Preview starts like the store: Quick Add = "Add" buttons, nothing selected, no Add-to-cart button
+  ✓ "Start with every product selected": Quick Add preview starts added; Save sends it; Bundle can't turn it off
+  ✓ Templates bring their arrangement: Modern Cards = grid, Vertical List = list, Classic Grid = row
+
+Pairing Assistant — Cart Editor upsell
+  ✓ Upsell manual rules: "Describe in words" opens the assistant; added rules use the upsell shape and the cart limit
+  ✓ Upsell: "From past orders" opens straight on the orders tab and adds a one-way rule
+  ✓ phone width: the assistant fits without sideways scrolling
+
+16/16 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-pairing

@@ -1,0 +1,17 @@
+
+Coupon Banner — offer ladder storefront checks
+  ✓ default: just the offers text above the coupon card; no progress, no button, cart untouched
+  ✓ button "Copy code": copies the code, shows the done text, then goes back
+  ✓ button "Apply coupon": puts the code on the cart next to the shopper's own, then says Applied!
+  ✓ button needs a code: switched on without one = no button
+  ✓ auto-apply: code at 2, swapped at 3, off at 4 (automatic discount), back at 2; shopper's code kept; gifts don't count
+  ✓ auto-apply: a code Shopify won't take is tried once, no loop
+  ✓ looks: ticker scrolls (a still line under reduced motion), rotate changes offer
+  ✓ phone width: no sideways scroll, offers and button wrap
+  ✓ button position: right edge / centred next to the text / below, centred
+  ✓ offers vertical: one under another, no dividers
+  ✓ ticket on a theme that hides empty divs (Dawn): the strip and stub show; an Add to cart wide ladder gets its title over it
+  ✓ box size: same as Add to cart (width, left edge, at least its height), custom width, spacing
+  ✓ no offers saved: nothing drawn for the ladder; the coupon still shows
+
+13/13 passed

@@ -1,0 +1,22 @@
+PASS  monthly by default: Starter $29 / month with per-order overage
+PASS  monthly: 14-day trial
+PASS  yearly: Starter $290 / year, $24.17 a month, 2 months free — Most Popular | Starter |  | Grow your AOV |  | $290 | / year | 
+PASS  yearly: no per-order charge, the storefront pauses at 500
+PASS  yearly: AI BRIX credits without a per-credit charge
+PASS  yearly: Growth $590 / year, 1000 orders then pause
+PASS  yearly: Pro $790 / year, unlimited orders
+PASS  yearly: Free stays free
+PASS  yearly: the footer explains the yearly limits
+PASS  yearly: the plan dialog says billed yearly, 14-day trial
+PASS  yearly: Starter posts interval ANNUAL — [{"planKey":"starter","interval":"ANNUAL"}]
+PASS  no page errors
+PASS  yearly shop: the page opens on Yearly
+PASS  yearly shop: Growth yearly is the current plan
+PASS  yearly shop on Monthly: Growth offers "Switch to monthly billing"
+PASS  switching to monthly posts EVERY_30_DAYS for Growth — [{"planKey":"growth","interval":"EVERY_30_DAYS"}]
+PASS  yearly shop: downgrading says the paid year is kept
+PASS  no page errors
+PASS  phone: no sideways scroll with the Yearly switch — 0px
+PASS  no page errors
+
+20/20 passed

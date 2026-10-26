@@ -1,0 +1,10 @@
+PASS  dashboard: Overview and Orders only; customizing is on its own page
+PASS  dashboard: Customize button opens /app/cod/customize
+PASS  dashboard: the "Customize COD" card opens the customizer
+PASS  dashboard at 1400px: no sideways scroll
+PASS  orders: payment filter works
+order row: #1047Ananya Rao98XXXX3210SuccessOTP560001Cart drawer₹499.00Attention IncompletePayment pendingInfoShippedSuccessGA4SuccessMeta22 Oct, 10:59
+errors: none
+PASS  no page or console errors
+
+6/6 passed

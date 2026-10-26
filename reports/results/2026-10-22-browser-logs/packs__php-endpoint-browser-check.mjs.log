@@ -1,0 +1,42 @@
+
+BRIX Packs widget — PHP endpoint (client pricing) checks
+  ✓ calls the PHP endpoint with shop + productId and prices tiers from the page variant (80.00)
+  ✓ inventory cap from Liquid (deny policy, 2 in stock) disables the 3-pack
+  ✓ multi-variant pack gets per-variant prices (L = 100.00 when selected)
+  ✓ fixed discount is converted to the presentment currency with Shopify.currency.rate
+  ✓ anchor variant not on the page -> nothing rendered
+  ✓ missing Liquid product data -> nothing rendered
+  ✓ default placement: right below the product price (not a recommendations price, not the installment form)
+  ✓ Dawn: theme Add to cart, quantity and Buy it now hidden (the Pack has its own Buy Now)
+  ✓ Dawn: a Pack that offers every variant also hides the theme variant picker; shown again when no Pack applies
+  ✓ Dawn: no Pack for this product -> theme controls untouched
+  ✓ Packs saved with the old buy-button placements show below the price
+  ✓ placement custom moves into the BRIX Packs position block
+  ✓ placement custom without the block falls back to below the price
+  ✓ a theme with no recognisable price block: falls back to above the buy buttons
+  ✓ if the theme re-renders the product info and drops the Pack, it is put back below the new price
+  ✓ Horizontal Select + Quick Add: pack cards sit side by side with name, item count, price, savings and badge
+  ✓ Image Variant Select: packs as rows (old design); only the chosen row opens, with one item card per item
+  ✓ Horizontal Select (Mix & Match): Pack N -> N slots, one dropdown per Shopify option, must complete every slot
+  ✓ duplicates follow the Pack rule: Mix & Match allows the same variant twice -> one cart line of 2
+  ✓ option values cascade from real variants: Color = Red -> L is unavailable; an impossible combination is flagged, never swapped
+  ✓ three options (Size, Color, Material): three dropdowns in Horizontal Select; three rows of buttons in Image Variant Select
+  ✓ Image Variant Select: Size and Color side by side like Horizontal Select, both with variant photos; nothing pre-selected
+  ✓ Image Variant Select: every value has its own photo -> photo dropdowns for both; no photos at all -> plain dropdowns
+  ✓ Image Variant Select: a variant with 1 left can only fill one item
+  ✓ all variants, 3 of 6 sold out (incl. the saved first one): the Pack still shows, offers only the 3 in stock, priced from them
+  ✓ Quick Add Picker: + adds, count updates, a full pack blocks more, remove frees a slot
+  ✓ Quick Add Picker: the same variant twice (duplicates allowed) and Shopify stock caps per variant
+  ✓ stock: two slots on a variant with 1 in stock is flagged and cannot be added
+  ✓ Same Variant Pack: Horizontal Select / Image Variant Select give Buy 2 two separate selections (nothing pre-selected); Quick Add lets each item be a different variant
+  ✓ product with no options: nothing to choose, its photo is shown, the real variant is added
+  ✓ keyboard: arrow keys move between pack cards; focus stays on a dropdown after choosing
+  ✓ mobile (375px): every template fits without page-level horizontal scroll; Image Variant Select stacks
+  ✓ Buy Now: checks out ONLY the Pack (own cart, with Pack markers) and never touches the shopper cart; the theme Buy it now is hidden
+  ✓ Buy Now: a Shopify cart error is shown, the shopper stays on the page and the cart is untouched
+  ✓ Add to Cart still adds the Pack to the shopper cart
+  ✓ button customization: colors, shape, stacked + Buy Now first; old Packs keep the outline Buy Now look
+  ✓ Buy Now switched off: no Pack Buy Now, theme Buy it now stays; a saved "classic"/"stacked" Pack shows as Horizontal Select
+  ✓ custom Buy Now label; saved "premium"/"tabs" Packs show as Horizontal Select, "visual" as Image Variant Select
+
+38/38 passed

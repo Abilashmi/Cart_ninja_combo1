@@ -321,7 +321,7 @@ await check('section title: defaults to "Apply Coupon", editable (text, size, co
   const { page, context, posts } = await open();
   await couponRow(page, 'SAVE10').click();
   await page.getByRole('button', { name: /^Layout/ }).first().click();
-  const field = page.getByLabel('Title above the coupons');
+  const field = page.getByLabel('Banner title');
   assert.equal(await field.inputValue(), 'Apply Coupon');
   assert.equal(await page.locator('.pw-section-title').textContent(), 'Apply Coupon');
   await field.fill('Exclusive offers for you');
@@ -338,6 +338,43 @@ await check('section title: defaults to "Apply Coupon", editable (text, size, co
   await field.fill('');
   assert.equal(await page.locator('.pw-section-title').count(), 0, 'empty = no title in the preview');
   assert.equal(await page.getByLabel('Title size').count(), 0, 'size / colour / alignment hidden while empty');
+  await context.close();
+});
+
+await check('own headings above the offer ladder and above the coupon cards: off by default, previewed in place, saved, load back', async () => {
+  const data = pageData({ selected: ['ladder:abc', 'gid://shopify/DiscountCodeNode/1'] });
+  data.couponConfig.temp1CouponStyle = { 'ladder:abc': { ladder: true, tiers: [{ text: 'Buy any 2 Get 10% Off', qty: 2 }] } };
+  let { page, context, posts, errors } = await open({ data });
+  await page.getByRole('button', { name: 'Layout' }).click();
+  assert.equal(await page.getByLabel('Offer ladder heading').inputValue(), '', 'not saved = no ladder heading');
+  assert.equal(await page.getByLabel('Coupon cards heading').inputValue(), '', 'not saved = no cards heading');
+  assert.equal(await page.locator('.pw-ladders-title, .pw-cards-title').count(), 0);
+  assert.equal(await page.getByLabel('Ladder heading size').count(), 0, 'style fields hidden while empty');
+  await page.getByLabel('Banner title').fill('');
+  await page.getByLabel('Offer ladder heading').fill('Bundle offers');
+  await page.getByLabel('Ladder heading size').fill('18');
+  await page.getByRole('textbox', { name: /^Ladder heading colour/ }).fill('#be185d');
+  await page.getByLabel('Ladder heading alignment').selectOption('center');
+  await page.getByLabel('Coupon cards heading').fill('Apply a coupon');
+  await page.waitForTimeout(200);
+  // Preview order: ladder heading → ladder → cards heading → cards.
+  const order = await page.evaluate(() => [...document.querySelectorAll('.pw-banner .pw-section-title, .pw-banner .pw-ladders-title, .pw-banner .pw-ladders, .pw-banner .pw-cards-title, .pw-banner .pw-layout')].map((e) => e.className));
+  assert.deepEqual(order, ['pw-ladders-title', 'pw-ladders', 'pw-cards-title', 'pw-layout']);
+  const pv = await page.locator('.pw-ladders-title').evaluate((e) => [e.textContent, getComputedStyle(e).fontSize, getComputedStyle(e).color, getComputedStyle(e).textAlign]);
+  assert.deepEqual(pv, ['Bundle offers', '18px', 'rgb(190, 24, 93)', 'center']);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+  const save = posts.find((p) => p.template);
+  assert.equal(save.template.title.text, '');
+  assert.deepEqual(save.template.ladderTitle, { text: 'Bundle offers', fontSize: 18, textColor: '#be185d', alignment: 'center' });
+  assert.deepEqual(save.template.cardsTitle, { text: 'Apply a coupon', fontSize: 14, textColor: '#111827', alignment: 'left' });
+  assert.deepEqual(errors, []);
+  await context.close();
+  data.couponConfig.templates = { ...data.couponConfig.templates, template1: { ...data.couponConfig.templates.template1, ladderTitle: save.template.ladderTitle, cardsTitle: save.template.cardsTitle } };
+  ({ page, context } = await open({ data }));
+  await page.getByRole('button', { name: 'Layout' }).click();
+  assert.equal(await page.getByLabel('Offer ladder heading').inputValue(), 'Bundle offers');
+  assert.equal(await page.locator('.pw-cards-title').textContent(), 'Apply a coupon');
   await context.close();
 });
 

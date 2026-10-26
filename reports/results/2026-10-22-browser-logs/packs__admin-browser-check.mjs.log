@@ -1,0 +1,28 @@
+
+BRIX Packs admin — browser checks
+  ✓ routing: list -> Create Pack opens the builder (not the list); /new and refresh work; back returns to the list
+  ✓ list: View opens the product page on the live store in a new tab; inactive Packs cannot be viewed
+  ✗ list: rows show product, variant, offer summary, status, updated; filters; Enable is gated by plan; actions link to the right pack 
+      locator.isDisabled: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByRole('button', { name: 'Enable Pack for Mug' })[22m
+  ✗ list: enable/disable posts to /api/packs and shows the server error inline when refused; load errors are visible with Try again 
+      locator.click: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByRole('button', { name: /Enable Pack for Tee/ })[22m
+  ✗ builder: full 5-step create flow (product -> template -> tiers -> customization -> review -> save draft) sends a correct, server-verifiable payload 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByText('Choose a Shopify product and variant first.') to be visible[22m
+  ✗ tiers: inline validation (quantity, duplicates, percentage, fixed) blocks progress; add/remove limits; sorting 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+  ✗ customization: invalid values are reported and block continuing; preview reflects valid ones 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+  ✗ edit: opens at ?step=customization with the pack prefilled; active pack saves with status "keep"; duplicate -> clear banner + link to existing pack 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+  ✗ review: server-side preview errors are shown; Starter/Pro can save & activate; activation payload is only a request 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+  ✓ detail: shows tiers/price math and status; delete waits for the server, shows failures, and only navigates on success
+  ✗ detail: Free plan cannot enable; enabling posts the request; invalid pack ids never reach the UI silently 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByRole('tab', { name: /Step 4: Customization/ }) to be visible[22m
+  ✗ drafts: autosave -> stale draft is OFFERED (not applied) -> restore / discard; scoped per pack; autosave keeps working after discard 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+  ✓ drafts: stale local draft older than the saved pack is dropped in edit mode; successful save clears the draft
+  ✗ mobile (375px): list, builder steps and review have no horizontal overflow 
+      locator.waitFor: Timeout 30000ms exceeded. | Call log: | [2m  - waiting for getByLabel('Variant') to be visible[22m
+
+4/14 passed

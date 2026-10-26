@@ -38,7 +38,7 @@
   var PRODUCT_COLLECTIONS = String((script && script.getAttribute('data-product-collections')) || '').split(',').filter(function (id) { return /^\d+$/.test(id); });
   var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v6'; // bump when the config shape changes (v6: product page payment options)
+  var CONFIG_KEY = 'brix_cod_config_v7'; // bump when the config shape changes (v7: product picks, unlisted products)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -264,6 +264,10 @@
       };
       if (coupon) ga.coupon = coupon;
       if (name === 'add_payment_info') ga.payment_type = 'Cash on Delivery';
+      // Dynamic shipping: the delivery option picked (GA4's shipping_tier).
+      var dlv = quote.delivery;
+      var tier = dlv && dlv.options ? dlv.options.filter(function (o) { return o.id === dlv.selected; })[0] : null;
+      if (tier && order) ga.shipping_tier = tier.name;
       if (order) {
         ga.transaction_id = order.orderName;
         ga.tax = round2(quote.tax);
@@ -551,6 +555,26 @@
     '.nud{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);color:#1e3a8a;font-size:13px}',
     '.nud .cb{flex:1}',
     '.nud .b{width:auto;padding:8px 12px;font-size:13px;border-radius:10px;background:#fff;color:#1e3a8a;border-color:#c7d2fe;flex:none}',
+    /* delivery options (dynamic shipping) */
+    '.dlv{display:flex;flex-direction:column;gap:8px}',
+    '.dlo{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:14px;background:#fff;font-size:14px;transition:border-color .15s,background .15s}',
+    'button.dlo{cursor:pointer}button.dlo:hover{border-color:#d1d5db}',
+    '.dlo.on{border-color:var(--cod-bg,#111827);background:var(--tint)}',
+    '.dlo:focus-visible,.dt:focus-visible{outline:2px solid var(--cod-bg,#2563eb);outline-offset:2px}',
+    '.dlo .rd{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid #d0d5dd;background:#fff;display:grid;place-items:center}',
+    '.dlo.on .rd{border-color:var(--cod-bg,#111827)}',
+    '.dlo.on .rd:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--cod-bg,#111827)}',
+    '.dlo>svg{flex:none;color:var(--cod-bg,#111827)}',
+    '.dlo .cb{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35}',
+    '.dlo .cb b{font-size:14.5px}.dlo .cb span{font-size:12.5px;color:#6b7280}',
+    '.dlo .pr{font-weight:750;white-space:nowrap;font-variant-numeric:tabular-nums}.dlo .pr.fr{color:#067647}',
+    // flex:none: a scrolling row would otherwise shrink to nothing in the .bd column.
+    '.dts{flex:none;display:flex;gap:8px;overflow-x:auto;padding:2px;margin:-2px;scrollbar-width:none}.dts::-webkit-scrollbar{display:none}',
+    '.dt{all:unset;box-sizing:border-box;cursor:pointer;flex:none;display:inline-flex;align-items:center;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:13px;font-weight:650;white-space:nowrap;background:#fff}',
+    '.dt.on{border-color:var(--cod-bg,#111827);background:var(--tint);color:var(--cod-bg,#111827)}',
+    '.fsh{display:flex;align-items:center;gap:8px;font-size:13px;color:#93370d;background:#fffaeb;border-radius:12px;padding:9px 12px}',
+    '.fsh svg{flex:none}',
+    '.r-soft .dlo,.r-soft .dt,.r-soft .fsh{border-radius:8px}.r-sharp .dlo,.r-sharp .dt,.r-sharp .fsh{border-radius:3px}',
     '.num{font-variant-numeric:tabular-nums;white-space:nowrap}',
     '.st{text-decoration:line-through;color:#9ca3af;font-weight:400;margin-right:6px}',
     /* done */
@@ -949,11 +973,25 @@
       '<div>' + icon('shield', 20) + (this.otpFlow() ? 'Verified by OTP' : 'Secure checkout') + '</div></div>';
   };
 
+  // A quote request. With the address it also carries city and state (dynamic
+  // shipping prices by zone, state, city or PIN code) and the delivery option
+  // the shopper picked, which the server checks again.
+  Sheet.prototype.quoteBody = function (coupon, withAddress) {
+    var body = { surface: this.opts.surface, items: this.items, coupon: coupon, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes };
+    if (withAddress) {
+      body.pincode = this.addr.pincode;
+      body.city = this.addr.city;
+      body.state = this.addr.state;
+      if (this.delivery) body.delivery = this.delivery;
+    }
+    return body;
+  };
+
   /* --- start: a first quote without address fails fast on min/max, sold out, excluded products --- */
   Sheet.prototype.start = function () {
     var self = this;
     this.loading('Checking Cash on Delivery\u2026');
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
+    api('quote', this.quoteBody(this.coupon, false)).then(function (json) {
       self.afterLoader(function () {
         if (!json.success) { self.fail(json.error); return; }
         self.quote = json.quote;
@@ -1144,13 +1182,19 @@
     var self = this;
     this.frame('Review your order', 'address', 'review',
       '<div class="sk" role="status" aria-label="Getting your total" style="padding:6px 0"><i class="bx"></i><i style="width:70%"></i><i style="width:45%"></i><i class="bx" style="height:96px"></i><i class="bx" style="height:72px"></i></div>', '');
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: this.coupon, pincode: this.addr.pincode, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
+    var asked = this.delivery && this.delivery.option;
+    api('quote', this.quoteBody(this.coupon, true)).then(function (json) {
       if (self.view !== 'review') return;
       if (!json.success) {
         self.frame('Review your order', 'address', 'review', '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(json.error) + '</span></div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
         return;
       }
       self.quote = json.quote;
+      self.syncDelivery();
+      // The option picked earlier isn't offered for this address or cart any more.
+      if (asked && self.delivery && self.delivery.option !== asked && !self.reviewNotice) {
+        self.reviewNotice = 'Your earlier delivery choice isn\'t available for this address, so we picked ' + self.deliveryName() + '.';
+      }
       self.track('add_payment_info');
       if (json.quote.coupon && !json.quote.coupon.applied) {
         self.couponDraft = json.quote.coupon.code;
@@ -1212,7 +1256,7 @@
   Sheet.prototype.requote = function (code, done) {
     var self = this;
     this.busy = true;
-    api('quote', { surface: this.opts.surface, items: this.items, coupon: code, pincode: this.addr.pincode, cartCodes: this.cartCodes, cartAttributes: this.cartAttributes }).then(function (json) {
+    api('quote', this.quoteBody(code, true)).then(function (json) {
       self.busy = false;
       if (self.view !== 'review') return;
       done(json);
@@ -1233,6 +1277,7 @@
         self.couponError = json.error || 'We couldn\'t check that code. Please try again.';
       } else if (json.quote.coupon && json.quote.coupon.applied) {
         self.quote = json.quote;
+        self.syncDelivery();
         self.coupon = code;
         self.couponError = '';
         self.couponDraft = '';
@@ -1252,7 +1297,116 @@
     var btn = this.sh.querySelector('[data-act="coupon-remove"]');
     if (btn) btn.textContent = 'Removing\u2026';
     this.requote(null, function (json) {
-      if (json.success) { self.quote = json.quote; self.coupon = null; self.couponOpen = false; }
+      if (json.success) { self.quote = json.quote; self.syncDelivery(); self.coupon = null; self.couponOpen = false; }
+      self.renderReview();
+    });
+  };
+
+  /* --- delivery options (dynamic shipping): prices and dates come from the server's quote --- */
+
+  // The pick the next quote and the order carry: what the last quote selected.
+  Sheet.prototype.syncDelivery = function () {
+    var d = this.quote && this.quote.delivery;
+    this.delivery = d && d.selected ? { option: d.selected, date: d.date || null, slot: d.slot || null } : null;
+  };
+
+  Sheet.prototype.selectedOption = function () {
+    var d = this.quote && this.quote.delivery;
+    if (!d || !d.options) return null;
+    for (var i = 0; i < d.options.length; i++) if (d.options[i].id === d.selected) return d.options[i];
+    return null;
+  };
+
+  Sheet.prototype.deliveryName = function () {
+    var o = this.selectedOption();
+    return o ? o.name : 'another option';
+  };
+
+  function arrivesText(eta) {
+    if (!eta) return '';
+    return 'Arrives ' + (eta.label === 'Today' || eta.label === 'Tomorrow' ? eta.label.toLowerCase() : eta.label);
+  }
+
+  // "Standard delivery · Arrives 28–30 Oct" / "Scheduled delivery · Tue, 28 Oct, 10 AM – 1 PM" (done screen).
+  Sheet.prototype.deliveryText = function () {
+    var d = this.quote && this.quote.delivery, o = this.selectedOption();
+    if (!o) return '';
+    if (d.date && o.dates) {
+      var day = o.dates.filter(function (x) { return x.date === d.date; })[0];
+      var slot = d.slot && o.slots ? o.slots.filter(function (s) { return s.id === d.slot; })[0] : null;
+      return o.name + ' \u00b7 ' + (day ? day.label : d.date) + (slot ? ', ' + slot.label : '');
+    }
+    return o.name + (o.eta ? ' \u00b7 ' + arrivesText(o.eta) : '');
+  };
+
+  Sheet.prototype.deliveryBlock = function () {
+    var d = this.quote && this.quote.delivery;
+    if (!d || !d.options || !d.options.length) return '';
+    var fmt = this.fmt, sel = this.selectedOption(), many = d.options.length > 1;
+    var html = '<div class="ttl">Delivery</div><div class="dlv"' + (many ? ' role="radiogroup" aria-label="Delivery options"' : '') + '>';
+    d.options.forEach(function (o) {
+      var on = many && o.id === d.selected;
+      // Scheduled delivery: its days are the chips below.
+      var sub = [o.description, o.dates ? (o.description ? '' : 'Pick a delivery day') : arrivesText(o.eta)].filter(Boolean).join(' \u00b7 ');
+      var inner = (many ? '<span class="rd" aria-hidden="true"></span>' : icon('truck', 20)) +
+        '<span class="cb"><b>' + esc(o.name) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>' +
+        '<span class="pr' + (o.price > 0 ? '' : ' fr') + '">' + (o.price > 0 ? fmt(o.price) : 'Free') + '</span>';
+      html += many
+        ? '<button type="button" class="dlo' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv" data-id="' + esc(o.id) + '">' + inner + '</button>'
+        : '<div class="dlo">' + inner + '</div>';
+    });
+    html += '</div>';
+    if (sel && sel.dates && sel.dates.length) {
+      html += '<div class="dts" role="radiogroup" aria-label="Delivery day">' + sel.dates.map(function (x) {
+        var on = x.date === d.date;
+        return '<button type="button" class="dt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv-date" data-date="' + esc(x.date) + '">' + esc(x.label) + '</button>';
+      }).join('') + '</div>';
+      if (sel.slots && sel.slots.length) {
+        html += '<div class="dts" role="radiogroup" aria-label="Delivery time">' + sel.slots.map(function (s) {
+          var on = s.id === d.slot;
+          return '<button type="button" class="dt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv-slot" data-slot="' + esc(s.id) + '">' + esc(s.label) + '</button>';
+        }).join('') + '</div>';
+      }
+    }
+    if (sel && sel.freeIn > 0) html += '<div class="fsh">' + icon('truck', 16) + '<span>Add ' + fmt(sel.freeIn) + ' more for free shipping</span></div>';
+    return html;
+  };
+
+  // A tap on an option, day or time: re-priced by the server, then redrawn.
+  Sheet.prototype.pickDelivery = function (act, el) {
+    var d = this.quote && this.quote.delivery;
+    if (!d) return;
+    var prev = this.delivery;
+    var next = { option: d.selected, date: d.date || null, slot: d.slot || null };
+    if (act === 'dlv') {
+      if (el.getAttribute('data-id') === d.selected) return;
+      next = { option: el.getAttribute('data-id'), date: null, slot: null };
+    } else if (act === 'dlv-date') {
+      if (el.getAttribute('data-date') === d.date) return;
+      next.date = el.getAttribute('data-date');
+    } else {
+      if (el.getAttribute('data-slot') === d.slot) return;
+      next.slot = el.getAttribute('data-slot');
+    }
+    var self = this;
+    this.delivery = next;
+    // Show the tap at once; the new price arrives with the quote.
+    var group = el.parentNode ? el.parentNode.querySelectorAll('[role="radio"]') : [];
+    for (var i = 0; i < group.length; i++) {
+      group[i].classList.toggle('on', group[i] === el);
+      group[i].setAttribute('aria-checked', String(group[i] === el));
+    }
+    var price = act === 'dlv' ? el.querySelector('.pr') : null;
+    if (price) price.innerHTML = '<span class="sp" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle"></span>';
+    this.requote(this.coupon, function (json) {
+      if (!json.success) {
+        self.delivery = prev;
+        self.renderReview();
+        self.setError(json.error);
+        return;
+      }
+      self.quote = json.quote;
+      self.syncDelivery();
       self.renderReview();
     });
   };
@@ -1319,7 +1473,7 @@
       icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
     this.frame('Review your order', 'address', 'review',
       this.lineList(q) + this.couponBlock() + save + rows +
-      '<div class="ttl">Deliver to</div>' + ship +
+      '<div class="ttl">Deliver to</div>' + ship + this.deliveryBlock() +
       '<div class="ttl">Payment</div>' + pay + nudge + '<div data-err></div>',
       '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
       '<span>I agree to the <a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">Terms and conditions</a></span></label>' +
@@ -1327,6 +1481,8 @@
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
     if (body) body.scrollTop = scrollTop;
+    // e.g. the delivery option changed since the shopper last saw it.
+    if (this.reviewNotice) { this.setError(this.reviewNotice); this.reviewNotice = null; }
     if (couponFailed) {
       vibrate(50);
       var field = this.sh.querySelector('[name="coupon"]');
@@ -1351,7 +1507,7 @@
       '<div class="amt"><div class="mu">Keep this amount ready at delivery</div><div class="big">' + fmt(order.total) + '</div></div>' +
       '<div class="tl">' +
       '<div class="on"><i>' + icon('check', 14) + '</i><span><b>Order placed</b><span class="mu">The store has your order.</span></span></div>' +
-      '<div><i>' + icon('box', 14) + '</i><span><b>Packed and shipped</b><span class="mu">The store prepares and sends it to you.</span></span></div>' +
+      '<div><i>' + icon('box', 14) + '</i><span><b>Packed and shipped</b><span class="mu">' + esc(this.deliveryText() || 'The store prepares and sends it to you.') + '</span></span></div>' +
       '<div><i>' + icon('cash', 14) + '</i><span><b>Pay on delivery</b><span class="mu">Pay ' + fmt(order.total) + ' when it arrives.</span></span></div>' +
       '</div></div><div class="ft">' +
       (order.statusPageUrl ? '<a href="' + esc(order.statusPageUrl) + '" class="b s">View order status</a>' : '') +
@@ -1402,6 +1558,7 @@
       return;
     }
     if (act === 'coupon-remove') { this.removeCoupon(); return; }
+    if (act === 'dlv' || act === 'dlv-date' || act === 'dlv-slot') { e.preventDefault(); this.pickDelivery(act, t); return; }
     if (act === 'coupon-paste') {
       // Paste and claim in one tap.
       var self = this;
@@ -1563,11 +1720,14 @@
       phone: this.phone,
       token: this.otpFlow() && this.token ? this.token.token : null,
       address: this.addr,
+      delivery: this.delivery,
       track: Track.context(),
     }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
         if (json.code === 'otp_required') { writeStore('sessionStorage', TOKEN_KEY, null); self.token = null; self.go('phone'); self.setError(json.error); return; }
+        // The delivery option, day or time is gone (cut-off passed): show the fresh choices.
+        if (json.code === 'delivery_changed') { self.idem = idemKey(); self.reviewNotice = json.error; self.go('review'); return; }
         if (json.code !== 'in_progress') self.idem = idemKey();
         self.setError(json.error);
         return;
@@ -2366,25 +2526,66 @@
     };
   }
 
-  // Tags (for excluded tags) and variant ids (to find the right form) of the
-  // product on this page.
+  // Id (for the merchant's product picks), tags (for excluded tags) and
+  // variant ids (to find the right form) of the product on this page.
   function productInfo() {
     var meta = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
     var metaIds = meta && Array.isArray(meta.variants) ? meta.variants.map(function (v) { return String(v.id); }) : [];
+    var metaId = meta && meta.id ? String(meta.id) : '';
     var m = /\/products\/([^/?#]+)/.exec(window.location.pathname);
-    if (!m) return Promise.resolve({ tags: [], variantIds: metaIds, variants: [] });
+    if (!m) return Promise.resolve({ id: metaId, tags: [], variantIds: metaIds, variants: [] });
     return window.fetch(ROOT + 'products/' + m[1] + '.js', { headers: { Accept: 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (p) {
         var ids = Array.isArray(p.variants) ? p.variants.map(function (v) { return String(v.id); }) : [];
         return {
+          id: p.id ? String(p.id) : metaId,
           tags: Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(','),
           variantIds: metaIds.length ? metaIds : ids,
           // Prices for the payment options (in the shopper's currency, in cents).
           variants: Array.isArray(p.variants) ? p.variants.map(function (v) { return { id: String(v.id), price: Number(v.price) }; }) : [],
         };
       })
-      .catch(function () { return { tags: [], variantIds: metaIds, variants: [] }; });
+      .catch(function () { return { id: metaId, tags: [], variantIds: metaIds, variants: [] }; });
+  }
+
+  // Is this page's product among the merchant's picks ({ products, collections }:
+  // numeric ids)? Collections are the ones the app embed sees on the page.
+  // Mirrors codPicksMatch in app/utils/cod.shared.js.
+  function picksMatch(picks, info) {
+    if (!picks) return false;
+    var id = String((info && info.id) || '');
+    if (id && (picks.products || []).map(String).indexOf(id) !== -1) return true;
+    return (picks.collections || []).some(function (c) { return PRODUCT_COLLECTIONS.indexOf(String(c)) !== -1; });
+  }
+
+  // COD on this product's page at all (Product page → Which products; codShownOnProduct).
+  // The server refuses a product page COD order for a product left out either way.
+  function codShownHere(cfg, info) {
+    var showOn = cfg && cfg.productButton && cfg.productButton.showOn;
+    if (!showOn || (showOn.mode !== 'except' && showOn.mode !== 'only')) return true;
+    var hit = picksMatch(showOn, info);
+    return showOn.mode === 'only' ? hit : !hit;
+  }
+
+  // An unlisted product COD may not sell (Eligibility → Unlisted products):
+  // in the list BRIX made from Shopify, and the page is still marked noindex,
+  // as Shopify marks unlisted product pages, so a product listed again since
+  // the list was made keeps its button. The server checks every order anyway.
+  function unlistedBlockedHere(cfg, info) {
+    var list = (cfg && cfg.unlistedBlocked) || [];
+    if (!info || !info.id || list.map(String).indexOf(String(info.id)) === -1) return false;
+    var robots = document.querySelector('meta[name="robots"]');
+    return Boolean(robots && /noindex/i.test(robots.getAttribute('content') || ''));
+  }
+
+  // replace | above | below Shopify's Buy it now for this product
+  // (codBuyNowPlacementFor): "some" = replace on the picked products only.
+  function placementFor(cfg, info) {
+    var pb = (cfg && cfg.productButton) || {};
+    if (pb.buyNowPlacement === 'some') return picksMatch(pb.replaceOn, info) ? 'replace' : pb.restPlacement === 'below' ? 'below' : 'above';
+    if (pb.buyNowPlacement === 'replace' || pb.buyNowPlacement === 'above' || pb.buyNowPlacement === 'below') return pb.buyNowPlacement;
+    return pb.replaceBuyNow === false ? 'above' : 'replace';
   }
 
   // Shopify's "Buy it now" (dynamic checkout) button. The payment_button filter
@@ -2554,9 +2755,8 @@
     if (!form) return;
     if (m && m.slot.getAttribute('data-brix-cod-slot') === 'auto' && m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
     var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, cfg.productButton || {});
-    // replace | above | below Shopify's Buy it now (older settings: replaceBuyNow).
-    var where = look.buyNowPlacement === 'above' || look.buyNowPlacement === 'below' || look.buyNowPlacement === 'replace'
-      ? look.buyNowPlacement : look.replaceBuyNow === false ? 'above' : 'replace';
+    // replace | above | below Shopify's Buy it now, for this product.
+    var where = placementFor(cfg, info);
     if (excluded && where === 'replace') where = 'above'; // an unavailable COD button never hides Buy it now
     var replacing = where === 'replace';
     var addBtn = submitButtonFor(form);
@@ -2881,7 +3081,7 @@
     // COD on this product, for this amount: { shown, reason }.
     function codState(subtotal) {
       var cfg = st.cfg;
-      if (!st.pp.cod.enabled || !cfg) return { shown: false };
+      if (!st.pp.cod.enabled || !cfg || st.codOff) return { shown: false };
       if (st.excluded) return cfg.excludedBehavior === 'hide' ? { shown: false } : { shown: true, reason: 'Not available for this product' };
       if (subtotal != null && cfg.minOrder > 0 && subtotal < cfg.minOrder) return { shown: true, reason: 'Available on orders from ' + st.fmt(cfg.minOrder) };
       if (subtotal != null && cfg.maxOrder > 0 && subtotal > cfg.maxOrder) return { shown: true, reason: 'Available on orders up to ' + st.fmt(cfg.maxOrder) };
@@ -3167,6 +3367,9 @@
           info: info,
           form: form,
           excluded: Boolean(cfg) && hasExcludedTag(info.tags, excludedTags(cfg)),
+          // No COD card for a product the merchant's picks leave out, or an
+          // unlisted product COD may not sell (as without payment options).
+          codOff: Boolean(cfg) && (!codShownHere(cfg, info) || unlistedBlockedHere(cfg, info)),
           method: null,
           colors: colors,
           fmt: shortMoney((window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY),
@@ -3242,6 +3445,8 @@
       if (paymentValue && paymentValue.cards !== false) { Pay.start(cfg, paymentValue); return; }
       if (!cfg || cfg.surfaces.product === false) return;
       productInfo().then(function (info) {
+        // Left out by the merchant's product picks, or an unlisted product COD may not sell.
+        if (!codShownHere(cfg, info) || unlistedBlockedHere(cfg, info)) return;
         var excluded = hasExcludedTag(info.tags, excludedTags(cfg));
         if (excluded && cfg.excludedBehavior === 'hide') return;
         mountProductButton(cfg, info, excluded);

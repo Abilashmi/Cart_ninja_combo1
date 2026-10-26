@@ -1,0 +1,83 @@
+PASS  two opens at once: one drawer — 1
+PASS  announcements: one message at a time, first one first — ["One"]
+PASS  announcements: side arrows shown
+PASS  announcements: text is escaped
+PASS  announcements: next arrow moves to message 2 — ["Two <b>bold</b>"]
+PASS  announcements: previous arrow wraps around to the last message — ["Three"]
+PASS  announcements: rotates on its own every interval — ["One"]
+PASS  announcements: hovering pauses the rotation
+PASS  announcements (375px): no horizontal overflow, compact height — {"overflow":false,"page":false,"h":29.5}
+PASS  announcements: a bar saved before rotation shows its one text, no arrows
+PASS  progress bar: background colour from the picker, not the stale key — {"track":"rgb(255, 0, 0)","fill":"rgb(0, 170, 0)","msg":"rgb(0, 0, 255)"}
+PASS  progress bar: fill colour from the picker — rgb(0, 170, 0)
+PASS  progress bar: progress message uses the message colour (like the preview) — rgb(0, 0, 255)
+PASS  coupons template2 (1280px): card is the merchant's 200px wide — 200
+PASS  coupons template2 (1280px): card at least the merchant's 150px tall, growing with long text — 150
+PASS  coupons template2 (1280px): long code / label shown in full, nothing clipped or overflowing — {"clipped":false,"overflowing":false}
+PASS  coupons template2 (1280px): button stays inside the card, no page scroll
+PASS  coupons template2 (375px): card is the merchant's 200px wide — 200
+PASS  coupons template2 (375px): card at least the merchant's 150px tall, growing with long text — 150
+PASS  coupons template2 (375px): long code / label shown in full, nothing clipped or overflowing — {"clipped":false,"overflowing":false}
+PASS  coupons template2 (375px): button stays inside the card, no page scroll
+PASS  coupons template1 (1280px): card is the merchant's 200px wide — 200
+PASS  coupons template1 (1280px): card at least the merchant's 150px tall, growing with long text — 150
+PASS  coupons template1 (1280px): long code / label shown in full, nothing clipped or overflowing — {"clipped":false,"overflowing":false}
+PASS  coupons template1 (1280px): button stays inside the card, no page scroll
+PASS  coupons template3 (375px): card is the merchant's 200px wide — 200
+PASS  coupons template3 (375px): card at least the merchant's 150px tall, growing with long text — 150
+PASS  coupons template3 (375px): long code / label shown in full, nothing clipped or overflowing — {"clipped":false,"overflowing":false}
+PASS  coupons template3 (375px): button stays inside the card, no page scroll
+PASS  coupons template3 (1280px): card is the merchant's 200px wide — 200
+PASS  coupons template3 (1280px): card at least the merchant's 150px tall, growing with long text — 150
+PASS  coupons template3 (1280px): long code / label shown in full, nothing clipped or overflowing — {"clipped":false,"overflowing":false}
+PASS  coupons template3 (1280px): button stays inside the card, no page scroll
+PASS  coupons (320px phone): a 360px card is capped at 85% of the screen — 272
+PASS  coupons: ₹ icon drawn from SVG paths
+PASS  upsell: the merchant's title text, colour and alignment reach the store — ["rgb(255, 0, 0)","center"]
+PASS  upsell: own Add button colours — {"btnBg":"rgb(0, 128, 96)","btnFg":"rgb(0, 0, 0)","title":"rgb(51, 51, 51)","price":"rgb(255, 87, 51)","heading":["rgb(255, 0, 0)","center"]}
+PASS  upsell: product title and price colours — {"btnBg":"rgb(0, 128, 96)","btnFg":"rgb(0, 0, 0)","title":"rgb(51, 51, 51)","price":"rgb(255, 87, 51)","heading":["rgb(255, 0, 0)","center"]}
+PASS  upsell: drawers saved before keep the checkout button colours — rgb(17, 17, 17)
+PASS  free gift: the variant the merchant picked is added — [{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1013,"quantity":1,"properties":{"_brixReward":"true"}}]}]
+PASS  free gift: the badge shows the merchant's text — VIP BONUS
+PASS  free gift past the first 250 products: found by id and added (in-stock variant) — [{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":90012,"quantity":1,"properties":{"_brixReward":"true"}}]}]
+PASS  free gift past the first 250 products: one Storefront API lookup by product id — [{"query":"query BrixRewards($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { id title handle featuredImage { url } variants(first: 100) { nodes { id title availableForSale price { amount } compareAtPrice { amount } image { url } } } } } }","variables":{"ids":["gid://shopify/Product/9001"]}}]
+PASS  free gift saved with an empty older `products` list next to rewardProducts: still added — [{"items":[{"id":1011,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1011,"quantity":1,"properties":{"_brixReward":"true"}}]},{"items":[{"id":1011,"quantity":1,"properties":{"_bri
+PASS  free gift not on the Online Store: nothing added, looked up once per visit — 1
+PASS  free gift: text saying "free" is not shown on a charged gift — REWARD
+PASS  fbt: heading colour — rgb(255, 0, 0)
+PASS  fbt: product title colour — rgb(0, 170, 0)
+PASS  fbt: Classic "Added" uses the merchant's selected colours (not fixed green) — ["Added","rgb(18, 52, 86)","rgb(254, 220, 186)"]
+PASS  fbt: Add-all hover colour
+PASS  fbt: "Adding..." uses the loading colour
+PASS  fbt: "Added" (success) uses the success colours — ["rgb(0, 0, 255)","rgb(255, 255, 0)"]
+PASS  fbt: Add-all returns to its normal colour afterwards — ["Add 2 to Cart","rgb(17, 24, 39)"]
+PASS  fbt: a widget saved before keeps its heading colour and green "Added" — ["rgb(17, 24, 39)","rgb(0, 128, 96)"]
+PASS  coupon banner template1 (1280px): card is the merchant's 260px — 260
+PASS  coupon banner template1 (1280px): long heading, subtext shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":false,"page":false}
+PASS  coupon banner template1 (1280px): no page scroll
+PASS  coupon banner template1 (375px): card fits the phone — 260
+PASS  coupon banner template1 (375px): long heading, subtext shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":false,"page":false}
+PASS  coupon banner template1 (375px): no page scroll
+PASS  coupon banner template2 (1280px): card is the merchant's 260px — 260
+PASS  coupon banner template2 (1280px): long heading, subtext and code shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":true,"page":false}
+PASS  coupon banner template2 (1280px): no page scroll
+PASS  coupon banner template2 (375px): card fits the phone — 260
+PASS  coupon banner template2 (375px): long heading, subtext and code shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":true,"page":false}
+PASS  coupon banner template2 (375px): no page scroll
+PASS  coupon banner template3 (1280px): card is the merchant's 260px — 260
+PASS  coupon banner template3 (1280px): long heading, subtext and code shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":true,"page":false}
+PASS  coupon banner template3 (1280px): no page scroll
+PASS  coupon banner template3 (375px): card fits the phone — 260
+PASS  coupon banner template3 (375px): long heading, subtext and code shown in full — {"w":260,"clipped":false,"overflowing":[],"hasCode":true,"page":false}
+PASS  coupon banner template3 (375px): no page scroll
+PASS  checkout button: the merchant's text size and padding — {"fs":"19px","pt":"22px","pb":"22px","h":66}
+PASS  checkout button: drawers saved before keep 15px text and 16px padding — {"fs":"15px","pt":"16px","pb":"16px","h":53}
+PASS  checkout button: out-of-range values are clamped (22px, 8px) — {"fs":"22px","pt":"8px","pb":"8px","h":42}
+PASS  swipe button: height follows the padding (64px), thumb fits, label size — {"h":64,"thumb":58,"fs":"16px"}
+PASS  checkout text: {price} = the cart total — Pay ₹900.00 now
+PASS  checkout text (show-only prepaid): {prepaid_price} and {saving} — Pay ₹810.00 · save ₹90.00
+PASS  checkout text (prepaid in the cart): the total already has it, {saving} from the cart — Pay ₹810.00 · save ₹90.00
+PASS  checkout text (no prepaid offer): {prepaid_price} = total, no {saving} — Pay ₹900.00
+PASS  no page errors
+
+81/81 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-customization

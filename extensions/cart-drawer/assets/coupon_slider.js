@@ -222,7 +222,7 @@
                     ta.setAttribute('readonly', '');
                     ta.style.cssText = 'position:fixed;top:0;left:0;width:2px;height:2px;opacity:0;';
                     document.body.appendChild(ta);
-                    ta.focus();
+                    try { ta.focus({ preventScroll: true }); } catch (_f) { ta.focus(); }
                     ta.select();
                     document.execCommand('copy');
                     document.body.removeChild(ta);

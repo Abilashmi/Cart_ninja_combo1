@@ -1,0 +1,74 @@
+PASS  theme drawer: COD added to Dawn's own cart drawer while the BRIX drawer is off — {"slots":1,"text":"Cash on Delivery+₹40.00 Cash on Delivery Fee"}
+PASS  theme drawer: one button per drawer (Shop Pay button and cart page ignored)
+PASS  Above Checkout: COD sits above Checkout, Checkout still shown
+PASS  Above Checkout: COD gets its own full-width row, not squeezed into the flex row — drawer__footer, 328 vs 328
+PASS  fee: "+₹40 Cash on Delivery Fee" under the button — Cash on Delivery+₹40.00 Cash on Delivery Fee
+PASS  theme CSS does not restyle the COD button (no uppercase, merchant radius, merchant colour) — none 12px rgb(13, 107, 76)
+PASS  the BRIX Cart Drawer did not take over the theme drawer
+PASS  clicking COD opens the COD popup for the whole cart — {"surface":"drawer","items":[{"variantId":100,"quantity":1,"properties":{}},{"variantId":101,"quantity":1,"properties":{}}]}
+PASS  Below Checkout: COD sits below Checkout, Checkout still shown
+PASS  Shiprocket switch published even with the BRIX drawer off
+PASS  Shiprocket: "Pay online" hands the cart to Shiprocket, not the theme's Shopify checkout — {"sr":[{"kind":"cart","fallbackUrl":"/checkout","coupon":null}],"posts":[]}
+PASS  Replace Checkout: Checkout hidden, COD in its place
+PASS  Replace Checkout: Shop Pay / accelerated buttons are left alone
+PASS  Replace Checkout: "Pay online" submits the theme's own (hidden) Checkout button — posts=["checkout="]
+PASS  Replace Checkout + below the minimum: Checkout stays, COD shown unavailable above it — Cash on DeliveryAvailable on orders from ₹2,000.00
+PASS  excluded tag (Pre-Order vs pre-order): COD shown as unavailable, Checkout kept — Cash on DeliveryNot available for some items in your cart
+PASS  excluded tags: tags read from the storefront's products/<handle>.js
+PASS  drawer redrawn by the theme: COD button comes back next to the new Checkout — {"slots":1,"buttons":1,"text":"Cash on DeliveryNot available for some items in your cart","disabled":[true],"before":true,"checkoutShown":true,"inMain":false,"slotParent":"drawer__footer","btnWidth":328,"coWidth":328,"transform":"none","radius":"12px","bg":"rgb(13, 107, 76)","shadow":"none","sheet":false}
+PASS  multiple tags: a second excluded tag (fragile) also makes COD unavailable
+PASS  cart without excluded products: COD usable again and Replace hides Checkout — {"disabled":[false],"shown":false}
+PASS  Hide COD completely: no COD button, Checkout shown — {"buttons":0,"shown":true}
+PASS  fee title: the merchant's title is used under the button — Cash on Delivery+₹40.00 Handling fee
+PASS  show fee off: the button doesn't mention the fee — Cash on Delivery
+PASS  fee switched off (PHP sends 0): no fee line — Cash on Delivery
+PASS  Outline style: transparent with a border in the button colour, merchant radius — rgba(0, 0, 0, 0) rgb(13, 107, 76) 0px 0px 0px 1.5px inset 0px
+PASS  flex row (Checkout next to View cart): COD goes on its own line under the row — {"parent":"mini-cart__footer","before":false}
+PASS  link Checkout (<a href="/checkout">): replaced and hidden
+PASS  unknown theme without a selector: nothing is added
+PASS  unknown theme + merchant's Checkout selector: COD added there
+PASS  COD off: no COD button and the theme's Checkout untouched — {"buttons":0,"shown":true}
+PASS  cart drawer turned off in BRIX: no COD button and the theme's Checkout untouched — {"buttons":0,"shown":true}
+PASS  empty cart: no COD button and the theme's Checkout untouched — {"buttons":0,"shown":true}
+PASS  BRIX drawer on: no COD added to the theme's drawer — {"slots":0}
+PASS  BRIX drawer, above Checkout: COD placed as chosen — {"button":true,"before":true,"checkoutShown":true,"checkoutButton":true}
+PASS  BRIX drawer, below Checkout: COD placed as chosen — {"button":true,"before":false,"checkoutShown":true,"checkoutButton":true}
+PASS  BRIX drawer, replace Checkout: COD placed as chosen — {"button":true,"before":true,"checkoutShown":false,"checkoutButton":true}
+PASS  BRIX drawer, Replace + excluded product: COD unavailable, Checkout kept — {"disabled":true,"checkoutShown":true}
+PASS  phone width: COD fills the drawer width, no sideways scroll — 328px
+PASS  looks: the drawer button uses the cart drawer look (colour, corners, size, capitals, icon) — {"size":"17px","icon":true,"bg":"rgb(12, 122, 67)","radius":"20px","transform":"uppercase"}
+PASS  looks: combo pages get their own look and text from BrixCod.comboButton() — {"text":"Pay cash","css":"background:transparent;color:#be185d;box-shadow:none;border:none;border-radius:4px;font-size:16px;font-weight:500;text-transform:none;letter-spacing:normal;"}
+PASS  looks: with the cart drawer off, combo pages still get their COD button
+PASS  Checkout text: the theme drawer's Checkout says "Pay online ₹1,299" — Pay online ₹1,299
+PASS  Checkout text: kept after the theme redraws its drawer
+PASS  CSS label theme: what shoppers see (::after) is "Prepaid ₹…", not "Proceed to Checkout" — {"text":"Prepaid ₹1,109","after":"\"Prepaid ₹1,109\"","shopPay":"\"\""}
+PASS  CSS label theme: an empty ::before / ::after (borders, effects) is left alone — ""
+PASS  price tags use the cart total after its discounts — "Prepaid ₹1,109" | Cash on Delivery+₹40.00 Cash on Delivery Fee
+PASS  price tags: drawer button says "Buy it for ₹1,339 COD" (cart + fee), with no separate fee line — Buy it for ₹1,339 COD
+PASS  price tags: follow the cart (₹999 + ₹40) — Buy it for ₹1,039 COD
+PASS  combo: BrixCod.comboButton() gives the position, fee and a price-filled text — {"placement":"replace","codFee":40,"text":"Pay {{cod_price}} cash","label":"Pay ₹1,540 cash"}
+PASS  combo: Below Checkout by default; text without tags unchanged — {"placement":"below","label":"Cash on Delivery"}
+PASS  BRIX drawer: Checkout shows COD's "Pay online {price}" text with the price, arrow kept — {"text":"Pay online ₹1,299","arrow":true}
+PASS  BRIX drawer: empty COD text keeps the Cart Editor's own Checkout text — Checkout Now
+PASS  prepaid in cart: COD button = ₹1,299 + ₹40 fee (no prepaid saving on COD), not ₹1,169.10 + ₹40 — {"cod":"Cash on Delivery ₹1,339","checkout":"Pay Now ₹1,169.10","summary":["Subtotal","₹1,299.00","Prepaid discount","-₹129.90","Total","₹1,169.10"],"count":"2 ITEMS"}
+PASS  prepaid in cart: Pay Now keeps the prepaid price ₹1,169.10 — Pay Now ₹1,169.10
+PASS  prepaid in cart: summary = Subtotal ₹1,299, Prepaid discount -₹129.90, Total ₹1,169.10 — ["Subtotal","₹1,299.00","Prepaid discount","-₹129.90","Total","₹1,169.10"]
+PASS  item count: two lines of one unit = "2 ITEMS" — 2 ITEMS
+PASS  prepaid in cart (no title sent): still left out of the COD price — {"cod":"Cash on Delivery ₹1,339","checkout":"Pay Now ₹1,169.10","summary":["Subtotal","₹1,299.00","Pay online offer","-₹129.90","Total","₹1,169.10"],"count":"4 ITEMS"}
+PASS  item count: units, not lines (2 lines × 2 = "4 ITEMS") — 4 ITEMS
+PASS  show only: Pay Now shows the prepaid price ₹1,169.10 (no discount in the cart) — Pay Now ₹1,169.10
+PASS  show only: COD button = ₹1,299 + ₹40 fee — {"cod":"Cash on Delivery ₹1,339","checkout":"Pay Now ₹1,169.10","summary":["Subtotal","₹1,299.00","Total","₹1,299.00"],"count":"2 ITEMS"}
+PASS  Shiprocket: drawer Checkout sends the cart with the prepaid code — [{"kind":"cart","fallbackUrl":"/checkout","coupon":"PPTESTCODE01"}]
+PASS  Shiprocket: the code covers the paid lines only (free reward gift left out) — {"endpoint":"prepaid-code","shop":"demo.myshopify.com","items":[{"variantId":100,"quantity":1},{"variantId":101,"quantity":1}],"gifts":[{"variantId":999,"quantity":1}],"prepaid":true}
+PASS  Shiprocket: code can't be made → Shopify checkout (where the saving applies), not Shiprocket at full price — {"nav":["/checkout"],"calls":[]}
+PASS  Shiprocket: no prepaid saving in the cart → no code asked, Shiprocket as before — [{"kind":"cart","fallbackUrl":"/checkout","coupon":null}]
+PASS  hide decimals: summary ₹1,299 / -₹130 / ₹1,169, Pay Now ₹1,169, COD ₹1,339 — {"cod":"Cash on Delivery ₹1,339","checkout":"Pay Now ₹1,169","summary":["Subtotal","₹1,299","Prepaid discount","-₹130","Total","₹1,169"],"count":"2 ITEMS"}
+PASS  other order discount: COD price after it (₹1,169.10 + ₹40), summary names it — {"cod":"Cash on Delivery ₹1,209.10","checkout":"Pay Now ₹1,169.10","summary":["Subtotal","₹1,299.00","Summer sale","-₹129.90","Total","₹1,169.10"],"count":"2 ITEMS"}
+PASS  % fee: ₹1,299 cart → "Buy it for ₹1,428.90 COD" — Buy it for ₹1,428.90 COD
+PASS  % fee: below ₹1,000 → the fixed ₹80 (₹1,079) — Buy it for ₹1,079 COD
+PASS  % fee: the fee line under the button shows the % amount (+₹129.90) — Cash on Delivery+₹129.90 Cash on Delivery Fee
+PASS  drawer COD button: the merchant's padding — {"pt":"22px","pl":"30px"}
+PASS  drawer COD button: settings from before keep 14px / 16px — {"pt":"14px","pl":"16px"}
+PASS  no page errors
+
+72/72 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-cod-theme

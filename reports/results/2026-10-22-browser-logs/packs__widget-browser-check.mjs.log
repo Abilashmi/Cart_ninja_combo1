@@ -1,0 +1,34 @@
+
+BRIX Packs storefront widget — browser checks
+  ✗ same_variant: renders tiers with shop currency (₹), savings, badge only where set, widget sits before the product form 
+      fetch failed
+  ✗ selecting a tier works (aria + keyboard) and add-to-cart sends the REAL variant with the tier quantity and pack markers 
+      fetch failed
+  ✗ add-to-cart failure shows Shopify's message; network failure is explained; button recovers 
+      fetch failed
+  ✗ visual_offer renders a genuinely different layout (card grid + product image + pill) 
+      fetch failed
+  ✗ visual_offer honours image settings (disabled / left) 
+      fetch failed
+  ✗ choose_each_item: one variant picker per item, only sellable variants, price updates, cart gets one line per variant 
+      fetch failed
+  ✗ customization is applied (colors, radius, weight, alignment, shadow, promo text, hidden savings) 
+      fetch failed
+  ✗ save-as-percent mode and injection-safe rendering (hostile text/colors) 
+      fetch failed
+  ✗ currency: zero-decimal (JPY) and non-shop presentment currency 
+      fetch failed
+  ✗ no false savings claims: unverified checkout discount -> no widget for shoppers; merchant preview shows a warning banner 
+      fetch failed
+  ✗ errors are visible in preview mode and silent (console only) for shoppers; loading always resolves 
+      fetch failed
+  ✗ inventory: sold-out disables everything; stock cap disables larger tiers 
+      fetch failed
+  ✗ variant switching: shows the Pack that belongs to the selected variant, hides otherwise 
+      fetch failed
+  ✗ mobile (375px): no horizontal overflow for every template 
+      fetch failed
+  ✗ widget CSS is scoped: theme elements keep their own styles 
+      fetch failed
+
+0/15 passed

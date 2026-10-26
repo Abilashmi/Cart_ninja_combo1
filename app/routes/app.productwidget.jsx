@@ -702,19 +702,45 @@ function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateD
 }
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
-// The Coupon Banner's section title ("Apply Coupon" above the coupons), as
-// the storefront reads it from the template style (title: { text, fontSize,
-// textColor, alignment }). Not saved yet = the storefront's own defaults.
-function readSectionTitle(tpl) {
-    const t = tpl && typeof tpl.title === "object" && tpl.title ? tpl.title : {};
+// The Coupon Banner's headings, as the storefront reads them from the
+// template style ({ text, fontSize, textColor, alignment }): title = above the
+// whole banner ("Apply Coupon"), ladderTitle / cardsTitle = optional own
+// headings above the offer ladders / the coupon cards (not saved = none).
+// Not saved yet = the storefront's own defaults.
+function readSectionTitle(tpl, key = "title", fallback = "Apply Coupon") {
+    const t = tpl && typeof tpl[key] === "object" && tpl[key] ? tpl[key] : {};
     const size = parseInt(t.fontSize, 10);
     return {
-        text: t.text !== undefined && t.text !== null ? String(t.text) : "Apply Coupon",
+        text: t.text !== undefined && t.text !== null ? String(t.text) : fallback,
         fontSize: size >= 11 && size <= 28 ? size : 14,
         textColor: /^#[0-9a-f]{6}$/i.test(t.textColor || "") ? t.textColor : "#111827",
         alignment: ["left", "center", "right"].includes(t.alignment) ? t.alignment : "left",
     };
 }
+
+// One heading's text, size, colour and alignment (Layout → Headings).
+function HeadingFields({ label, name, placeholder, helpText, value, onChange }) {
+    return (
+        <BlockStack gap="200">
+            <TextField label={label} value={value.text} onChange={(v) => onChange("text", v)} autoComplete="off" maxLength={60} placeholder={placeholder} helpText={helpText} />
+            {value.text.trim() !== "" && (
+                <>
+                    <SliderField label={`${name} size`} value={value.fontSize} min={11} max={28} suffix="px" onChange={(v) => onChange("fontSize", v)} />
+                    <ColorField label={`${name} colour`} value={value.textColor} onChange={(v) => onChange("textColor", v)} />
+                    <Select
+                        label={`${name} alignment`}
+                        options={[{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }]}
+                        value={value.alignment}
+                        onChange={(v) => onChange("alignment", v)}
+                    />
+                </>
+            )}
+        </BlockStack>
+    );
+}
+
+// The storefront's heading look (coupon-slider-render.liquid headingHtml).
+const headingStyle = (h) => ({ textAlign: h.alignment, color: h.textColor, fontSize: `${h.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2 });
 
 export default function ProductWidgetPage() {
     const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
@@ -757,6 +783,9 @@ export default function ProductWidgetPage() {
     // tempNDefaultStyle.title (coupon-slider-render.liquid renderSlider).
     const [sectionTitle, setSectionTitle] = useState(() => readSectionTitle(activeTpl));
     const setTitleKey = (key) => (v) => { setSectionTitle((prev) => ({ ...prev, [key]: v })); mark(); };
+    // Own headings above the offer ladders and above the coupon cards (empty = none).
+    const [ladderTitle, setLadderTitle] = useState(() => readSectionTitle(activeTpl, "ladderTitle", ""));
+    const [cardsTitle, setCardsTitle] = useState(() => readSectionTitle(activeTpl, "cardsTitle", ""));
     const [heading,     setHeading]     = useState(activeTpl.headingText || "GET 10% OFF!");
     const [subtext,     setSubtext]     = useState(activeTpl.subtextText || "Apply at checkout for savings");
     const [bgColor,     setBgColor]     = useState(activeTpl.bgColor     || "#ffffff");
@@ -886,6 +915,8 @@ export default function ProductWidgetPage() {
         if (src) {
             setHeading(src.headingText); setSubtext(src.subtextText);
             setSectionTitle(readSectionTitle(src));
+            setLadderTitle(readSectionTitle(src, "ladderTitle", ""));
+            setCardsTitle(readSectionTitle(src, "cardsTitle", ""));
             setBgColor(src.bgColor); setTextColor(src.textColor);
             setAccentColor(src.accentColor); setButtonColor(src.buttonColor);
             setBtnTextColor(src.buttonTextColor);
@@ -942,7 +973,7 @@ export default function ProductWidgetPage() {
                 activeTemplate: tplKeyMap[selectedTemplate] || "template1",
                 isEnabled,
                 selectedActiveCoupons: selectedCouponIds,
-                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding, cardWidth, cardMinHeight, bannerWidth, bannerWidthPx, title: { ...sectionTitle, text: sectionTitle.text.trim() } },
+                template: { headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, borderRadius, fontSize, padding, cardWidth, cardMinHeight, bannerWidth, bannerWidthPx, title: { ...sectionTitle, text: sectionTitle.text.trim() }, ladderTitle: { ...ladderTitle, text: ladderTitle.text.trim() }, cardsTitle: { ...cardsTitle, text: cardsTitle.text.trim() } },
                 couponStyles,
                 couponConditions,
                 layout: couponLayout,
@@ -963,6 +994,9 @@ export default function ProductWidgetPage() {
     const selectedLadderIds = selectedCouponIds.filter(isLadderId);
     const cardIds = selectedCouponIds.filter((cid) => !isLadderId(cid));
     const cardEditId = isLadderId(editingCouponId) ? (cardIds[0] || "") : editingCouponId;
+    // Every ladder as wide as Add to cart (banner itself full width): headings over them take that width too.
+    const laddersAtAtc = selectedLadderIds.length > 0 && bannerWidth !== "atc" && bannerWidth !== "custom"
+        && selectedLadderIds.every((id) => offerLadder.normalize(couponOverrides[id] || {}).boxSize === "atc");
     // Effective values for the coupon currently being customized (override → global default)
     const editOv = couponOverrides[cardEditId] || {};
     const editingCoupon = allCoupons.find((c) => c.id === cardEditId);
@@ -1195,29 +1229,34 @@ export default function ProductWidgetPage() {
 
                                     <AccordionSection id="design" icon={ColorIcon} title="Layout" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
                                         <BlockStack gap="400">
-                                            <BlockStack gap="200">
-                                                <Text as="h3" variant="headingSm">Section title</Text>
-                                                <TextField
-                                                    label="Title above the coupons"
-                                                    value={sectionTitle.text}
-                                                    onChange={setTitleKey("text")}
-                                                    autoComplete="off"
-                                                    maxLength={60}
+                                            <BlockStack gap="300">
+                                                <Text as="h3" variant="headingSm">Headings</Text>
+                                                <HeadingFields
+                                                    label="Banner title"
+                                                    name="Title"
                                                     placeholder="Apply Coupon"
-                                                    helpText="Leave empty to show no title."
+                                                    helpText="Above the whole banner. Leave empty to show no title."
+                                                    value={sectionTitle}
+                                                    onChange={(key, v) => setTitleKey(key)(v)}
                                                 />
-                                                {sectionTitle.text.trim() !== "" && (
-                                                    <>
-                                                        <SliderField label="Title size" value={sectionTitle.fontSize} min={11} max={28} suffix="px" onChange={setTitleKey("fontSize")} />
-                                                        <ColorField label="Title colour" value={sectionTitle.textColor} onChange={setTitleKey("textColor")} />
-                                                        <Select
-                                                            label="Title alignment"
-                                                            options={[{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }]}
-                                                            value={sectionTitle.alignment}
-                                                            onChange={setTitleKey("alignment")}
-                                                        />
-                                                    </>
-                                                )}
+                                                <Divider />
+                                                <HeadingFields
+                                                    label="Offer ladder heading"
+                                                    name="Ladder heading"
+                                                    placeholder="e.g. Bundle offers"
+                                                    helpText={selectedLadderIds.length ? "Just above the offer ladders. Leave empty for none." : "Shows above your offer ladders once you add one in Coupon Selection. Leave empty for none."}
+                                                    value={ladderTitle}
+                                                    onChange={(key, v) => { setLadderTitle((prev) => ({ ...prev, [key]: v })); mark(); }}
+                                                />
+                                                <Divider />
+                                                <HeadingFields
+                                                    label="Coupon cards heading"
+                                                    name="Cards heading"
+                                                    placeholder="e.g. Apply a coupon"
+                                                    helpText="Just above the coupon cards. Leave empty for none."
+                                                    value={cardsTitle}
+                                                    onChange={(key, v) => { setCardsTitle((prev) => ({ ...prev, [key]: v })); mark(); }}
+                                                />
                                             </BlockStack>
                                             <Divider />
                                             <BlockStack gap="200">
@@ -1328,11 +1367,12 @@ export default function ProductWidgetPage() {
                                     {sectionTitle.text.trim() !== "" && (
                                         // Only ladders as wide as Add to cart: the title takes their width
                                         // (the storefront fits it to the button the same way).
-                                        <div className="pw-section-title" style={{ textAlign: sectionTitle.alignment, color: sectionTitle.textColor, fontSize: `${sectionTitle.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2,
-                                            ...(cardIds.length === 0 && selectedLadderIds.length > 0 && bannerWidth !== "atc" && bannerWidth !== "custom"
-                                                && selectedLadderIds.every((id) => offerLadder.normalize(couponOverrides[id] || {}).boxSize === "atc") ? { width: "78%" } : {}) }}>
+                                        <div className="pw-section-title" style={{ ...headingStyle(sectionTitle), ...(cardIds.length === 0 && laddersAtAtc ? { width: "78%" } : {}) }}>
                                             {sectionTitle.text}
                                         </div>
+                                    )}
+                                    {selectedLadderIds.length > 0 && ladderTitle.text.trim() !== "" && (
+                                        <div className="pw-ladders-title" style={{ ...headingStyle(ladderTitle), ...(laddersAtAtc ? { width: "78%" } : {}) }}>{ladderTitle.text}</div>
                                     )}
                                     {selectedLadderIds.length > 0 && (
                                         <div className="pw-ladders" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: cardIds.length ? "12px" : 0 }}>
@@ -1340,6 +1380,9 @@ export default function ProductWidgetPage() {
                                                 <OfferLadderPreview key={id} style={{ ...(couponOverrides[id] || {}), borderRadius }} />
                                             ))}
                                         </div>
+                                    )}
+                                    {(cardIds.length > 0 || selectedLadderIds.length === 0) && cardsTitle.text.trim() !== "" && (
+                                        <div className="pw-cards-title" style={headingStyle(cardsTitle)}>{cardsTitle.text}</div>
                                     )}
                                     {(cardIds.length > 0 || selectedLadderIds.length === 0) && (() => {
                                         // The banner layout (storefront: coupon-slider-render.liquid ps-slider--*):

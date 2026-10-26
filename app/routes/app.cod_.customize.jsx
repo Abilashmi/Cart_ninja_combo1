@@ -13,26 +13,35 @@ import {
   ArrowLeftIcon, ChevronDownIcon, DesktopIcon, MobileIcon, CashRupeeIcon, CartIcon, ProductIcon,
   CollectionIcon, ReceiptIcon, DeliveryIcon, FilterIcon, ShieldCheckMarkIcon, PaintBrushFlatIcon, DiscountIcon,
   ChartVerticalIcon, OrderIcon, DeleteIcon, SendIcon, PaymentIcon, CreditCardPercentIcon, ColorIcon, ChatIcon,
+  LocationIcon, ListBulletedIcon, PackageIcon, CalendarIcon, DisabledIcon, CalculatorIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from '../shopify.server';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
+import { useScrollOpenSectionToTop } from '../utils/accordion-scroll';
 import {
   CodError, getCodSettings, getCodSettingsWithRuntime, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets, msg91Creds,
+  getCodShipping, saveCodShipping, loadUnlistedBlocked,
 } from '../services/cod.server';
+import { quoteShipping, shippingErrors, shippingFromSimple } from '../utils/shipping.shared';
+import {
+  SHIP_ERROR_PREFIXES, SHIP_CSS, DEFAULT_SHIP_TEST, countShipErrors, toShipDraft, shipTestLines, shipTestDestination, shipTestNow,
+  ShippingChargesSection, ShippingZonesSection, ShippingRulesSection, ShippingExtraChargesSection, DeliveryDatesSection,
+  DontDeliverSection, ShippingTestSection, RefPicker,
+} from '../components/cod/ShippingSections';
 import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, codButtonLook, hasPriceTags } from '../utils/cod.shared';
+import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags } from '../utils/cod.shared';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
 import { buildCodScreen, cartSliderMax, suggestedValue } from '../components/cod/CodPreview';
 import { CodFlow, PlacementPicker, COMBO_PLACEMENT_OPTIONS, FeeSummary, ExcludedTagsInput } from '../components/cod/CodSettingsCards';
 import {
-  toForm, toSettings, formErrors, secretsPatch, productButtonForm, PB_SIZES, HEX, RADII,
+  toForm, toSettings, formErrors, secretsPatch, PB_SIZES, HEX, RADII,
 } from '../components/cod/codSettingsForm';
 import ButtonDesignEditor from '../components/cod/ButtonDesignEditor';
 import { ColorField } from '../components/sections/ColorField';
@@ -55,11 +64,26 @@ export async function loader({ request }) {
   let prepaidStatus = null;
   let loadError = null;
   let sms = smsProviderStatus();
+  // Dynamic shipping: the saved config, else one that charges what the simple
+  // settings charge (the starting point when a store switches).
+  let shipping = null;
+  let shippingStored = false;
+  let shippingLoadError = null;
   try {
     const stored = await getCodSettingsWithRuntime(shop);
     settings = stored.settings;
     prepaidStatus = stored.runtime.prepaid || null;
-    await syncCodRuntime(shop);
+    try {
+      shipping = await getCodShipping(shop);
+      shippingStored = Boolean(shipping);
+    } catch (error) {
+      shippingLoadError = error instanceof CodError && error.code === 'storage_missing'
+        ? "Dynamic shipping needs php_backend/cod_shipping.php on the BRIX PHP server. Upload it, then reload this page."
+        : 'Your delivery options could not be loaded. Reload the page before changing them.';
+      if (!(error instanceof CodError)) console.error('[app.cod.customize] shipping load failed:', String(error?.message || error).slice(0, 300));
+    }
+    if (!shipping) shipping = shippingFromSimple(settings);
+    await syncCodRuntime(shop, { admin });
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
     sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
@@ -83,6 +107,9 @@ export async function loader({ request }) {
     couponOptions,
     secretsStatus,
     prepaidStatus,
+    shipping,
+    shippingStored,
+    shippingLoadError,
   };
 }
 
@@ -96,6 +123,15 @@ export async function action({ request }) {
       return { success: true, intent: 'test_tracking', result: await sendCodTestEvents({ settings, secrets }) };
     }
     if (body.secrets && typeof body.secrets === 'object') await saveCodSecrets(session.shop, body.secrets);
+    // Dynamic shipping is stored on its own, before the settings that switch it on.
+    let shipping = null;
+    if (body.shipping && typeof body.shipping === 'object') {
+      if (Object.keys(shippingErrors(body.shipping)).length) return { success: false, error: 'Fix the highlighted shipping settings first.' };
+      shipping = await saveCodShipping(session.shop, body.shipping);
+    }
+    if (body.settings?.shippingMode === 'advanced' && !shipping && !(await getCodShipping(session.shop))) {
+      return { success: false, error: 'Set up your delivery options (Shipping charges), then save.' };
+    }
     // The prepaid discount (product page payment options) is brought in line
     // with Shopify on every save; the storefront offers it only when verified.
     let prepaid = null;
@@ -114,8 +150,10 @@ export async function action({ request }) {
         prepaid.message = result.message;
         return prepaid;
       },
+      // Unlisted products COD may not sell, so their product pages hide the button.
+      syncUnlisted: (next) => loadUnlistedBlocked(admin, next),
     });
-    return { success: true, settings, prepaid };
+    return { success: true, settings, prepaid, shipping };
   } catch (error) {
     const message = error instanceof CodError ? error.message : 'Settings could not be saved. Please try again.';
     if (!(error instanceof CodError)) console.error('[app.cod.customize] save failed:', String(error?.message || error).slice(0, 300));
@@ -131,7 +169,7 @@ function ProductButtonSizes({ form, set, setForm }) {
         <InlineStack align="space-between" blockAlign="center">
           <Text as="h3" variant="headingMd">Size and spacing</Text>
           {!PB_SIZES.every(({ key, field }) => form[field] === DEFAULT_COD_SETTINGS.productButton[key]) && (
-            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...productButtonForm({ buyNowPlacement: f.pbBuyNowPlacement, buyNowText: f.pbBuyNowText, buyNowSelector: f.pbBuyNowSelector }) }))}>Reset</Button>
+            <Button variant="plain" onClick={() => setForm((f) => ({ ...f, ...Object.fromEntries(PB_SIZES.map(({ key, field }) => [field, DEFAULT_COD_SETTINGS.productButton[key]])) }))}>Reset</Button>
           )}
         </InlineStack>
         {PB_SIZES.map(({ key, field, label }) => {
@@ -140,6 +178,19 @@ function ProductButtonSizes({ form, set, setForm }) {
         })}
       </FormLayout>
     </Card>
+  );
+}
+
+// Products and collections picked for a COD rule: { products: [{ id, title }], collections: [...] }.
+function PicksField({ value, onChange, error, help }) {
+  const v = value || { products: [], collections: [] };
+  return (
+    <BlockStack gap="200">
+      <RefPicker type="product" value={v.products} max={COD_PICK_MAX.products} onChange={(products) => onChange({ ...v, products })} />
+      <RefPicker type="collection" value={v.collections} max={COD_PICK_MAX.collections} onChange={(collections) => onChange({ ...v, collections })} />
+      {help ? <Text as="p" variant="bodySm" tone="subdued">{help}</Text> : null}
+      {error ? <Text as="p" variant="bodySm" tone="critical">{error}</Text> : null}
+    </BlockStack>
   );
 }
 
@@ -225,7 +276,7 @@ const GROUPS = [
     title: 'COD button',
     items: [
       { id: 'position', label: 'Cart drawer', icon: CartIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color', 'drawerSelector'], toggle: 'drawer' },
-      { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton', 'pbBuyNowSelector', 'productBg', 'productColor'], toggle: 'product' },
+      { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton', 'pbBuyNowSelector', 'productBg', 'productColor', 'pbShowOn', 'pbReplaceOn'], toggle: 'product' },
       { id: 'combo', label: 'Combo page', icon: CollectionIcon, preview: 'combo', fields: ['comboText', 'comboBg', 'comboColor'], toggle: 'combo' },
     ],
   },
@@ -244,9 +295,22 @@ const GROUPS = [
     title: 'Charges & rules',
     items: [
       { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom'], toggle: 'codFeeEnabled' },
-      { id: 'shipping', label: 'Shipping', icon: DeliveryIcon, preview: 'sheet', fields: ['shippingFee', 'freeShippingAbove'] },
-      { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder'] },
+      { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder', 'unlistedPicks'] },
       { id: 'fraud', label: 'Fraud protection', icon: ShieldCheckMarkIcon, preview: 'sheet', fields: ['dailyLimitPerPhone', 'blockedPincodes'] },
+    ],
+  },
+  {
+    // `ship` = the shipping config keys whose errors belong to the section;
+    // `advanced` = shown only with dynamic shipping on.
+    title: 'Shipping',
+    items: [
+      { id: 'shipping', label: 'Shipping charges', icon: DeliveryIcon, preview: 'sheet', fields: ['shippingFee', 'freeShippingAbove'], ship: SHIP_ERROR_PREFIXES.shipping },
+      { id: 'shipzones', label: 'Zones', icon: LocationIcon, preview: 'sheet', fields: [], ship: SHIP_ERROR_PREFIXES.shipzones, advanced: true },
+      { id: 'shiprules', label: 'Rules', icon: ListBulletedIcon, preview: 'sheet', fields: [], ship: SHIP_ERROR_PREFIXES.shiprules, advanced: true },
+      { id: 'shipcharges', label: 'Extra charges', icon: PackageIcon, preview: 'sheet', fields: [], ship: SHIP_ERROR_PREFIXES.shipcharges, advanced: true },
+      { id: 'shipdates', label: 'Delivery dates', icon: CalendarIcon, preview: 'sheet', fields: [], ship: SHIP_ERROR_PREFIXES.shipdates, advanced: true },
+      { id: 'shipblock', label: 'Don’t deliver to', icon: DisabledIcon, preview: 'sheet', fields: [], ship: SHIP_ERROR_PREFIXES.shipblock, advanced: true },
+      { id: 'shiptest', label: 'Test calculator', icon: CalculatorIcon, preview: 'sheet', fields: [], advanced: true },
     ],
   },
   {
@@ -267,6 +331,8 @@ const GROUPS = [
   },
 ];
 const SECTIONS = GROUPS.flatMap((g) => g.items);
+// Errors shown only once Save was pressed (empty product / collection picks).
+const PICK_ERRORS = ['pbShowOn', 'pbReplaceOn', 'unlistedPicks'];
 // Sections that were folded into their place's section.
 const MOVED_SECTIONS = { button: 'position', theme: 'position', productbtn: 'product', combobtn: 'combo' };
 const SURFACES = [['drawer', 'Cart drawer'], ['product', 'Product page'], ['combo', 'Combo page'], ['sheet', 'COD checkout']];
@@ -311,17 +377,27 @@ export default function CodCustomizePage() {
   const [form, setForm] = useState(() => (data.settings ? toForm(data.settings) : null));
   const [saved, setSaved] = useState(() => (data.settings ? toForm(data.settings) : null));
   const [toast, setToast] = useState(null);
+  // Every section starts closed, unless a link names one (?section=status).
   const [open, setOpen] = useState(() => {
     const asked = MOVED_SECTIONS[searchParams.get('section')] || searchParams.get('section');
-    return SECTIONS.some((s) => s.id === asked) ? asked : 'position';
+    return SECTIONS.some((s) => s.id === asked) ? asked : null;
   });
+  const listRef = useRef(null);
+  useScrollOpenSectionToTop(listRef, open);
   const [surface, setSurface] = useState(() => SECTIONS.find((s) => s.id === open)?.preview || 'drawer');
   const [device, setDevice] = useState('desktop');
   const [loader, setLoader] = useState(false);
   const [excludedOn, setExcludedOn] = useState(false);
+  // Product page preview: is the sample product one of the picked ones?
+  const [picked, setPicked] = useState({ show: false, replace: false });
   const [cart, setCart] = useState(() => (data.settings ? suggestedValue(data.settings) : 1299));
   const [offerDraft, setOfferDraft] = useState('');
   const [offerProblem, setOfferProblem] = useState('');
+  // Dynamic shipping: the draft config, the saved one, and the Test calculator's sample address and cart.
+  const [ship, setShip] = useState(() => toShipDraft(data.shipping));
+  const [shipSaved, setShipSaved] = useState(() => toShipDraft(data.shipping));
+  const [shipStored, setShipStored] = useState(data.shippingStored);
+  const [shipTest, setShipTest] = useState(() => ({ ...DEFAULT_SHIP_TEST }));
   const money = (n) => formatMoney(n, { currencyCode: data.currencyCode });
   const screenRef = useRef(null);
   const fitRef = useRef(null);
@@ -330,10 +406,38 @@ export default function CodCustomizePage() {
   const fit = useFitToFrame(screenRef, fitRef, fitPad, device === 'desktop', [surface, device, Boolean(form)]);
 
   const saving = fetcher.state !== 'idle';
-  const errors = useMemo(() => (form ? formErrors(form) : {}), [form]);
-  const dirty = Boolean(form && saved && JSON.stringify(form) !== JSON.stringify(saved));
+  const allErrors = useMemo(() => (form ? formErrors(form) : {}), [form]);
+  // "Choose at least one product or collection" waits for Save: picking
+  // "Only these" before choosing anything isn't a mistake yet.
+  const [saveTried, setSaveTried] = useState(false);
+  const errors = useMemo(
+    () => (saveTried ? allErrors : Object.fromEntries(Object.entries(allErrors).filter(([key]) => !PICK_ERRORS.includes(key)))),
+    [allErrors, saveTried],
+  );
+  // Once every list has something chosen, the next empty one waits for Save again.
+  useEffect(() => {
+    if (saveTried && !PICK_ERRORS.some((key) => allErrors[key])) setSaveTried(false);
+  }, [saveTried, allErrors]);
+  const advanced = form?.shippingMode === 'advanced';
+  const shipDirty = JSON.stringify(ship) !== JSON.stringify(shipSaved);
+  // Shipping problems count only while dynamic shipping is on (its sections are hidden otherwise).
+  const shipErrs = useMemo(() => (advanced ? shippingErrors(ship) : {}), [advanced, ship]);
+  const dirty = Boolean(form && saved && JSON.stringify(form) !== JSON.stringify(saved)) || shipDirty;
   // What shoppers would get with the settings on screen (same sanitising as the server).
   const preview = useMemo(() => (form ? sanitizeCodSettings(toSettings(form)) : null), [form]);
+  // The delivery options for the Test calculator's address and cart (also drawn in the preview).
+  const shipResult = useMemo(() => {
+    if (!advanced) return null;
+    try {
+      return quoteShipping(ship, {
+        destination: shipTestDestination(shipTest), subtotal: cart, lines: shipTestLines(shipTest, cart), now: shipTestNow(shipTest),
+        choice: shipTest.choice, fmt: (n) => formatMoney(n, { currencyCode: data.currencyCode }),
+      });
+    } catch (error) {
+      console.error('[app.cod.customize] shipping preview failed:', error);
+      return null;
+    }
+  }, [advanced, ship, shipTest, cart, data.currencyCode]);
 
   useEffect(() => {
     if (fetcher.state !== 'idle' || !fetcher.data) return;
@@ -341,6 +445,13 @@ export default function CodCustomizePage() {
       const next = toForm(fetcher.data.settings);
       setForm(next);
       setSaved(next);
+      setSaveTried(false);
+      if (fetcher.data.shipping) {
+        const draft = toShipDraft(fetcher.data.shipping);
+        setShip(draft);
+        setShipSaved(draft);
+        setShipStored(true);
+      }
       setToast({ content: 'Saved' });
     } else {
       setToast({ content: fetcher.data.error || 'Save failed', error: true });
@@ -366,16 +477,30 @@ export default function CodCustomizePage() {
     if (sec?.preview && sec.preview !== surface) showSurface(sec.preview);
   };
   const save = () => {
-    const bad = Object.keys(errors);
-    if (bad.length) {
-      const first = SECTIONS.find((s) => s.fields.some((f) => bad.includes(f)));
+    const bad = Object.keys(allErrors);
+    if (bad.length || Object.keys(shipErrs).length) {
+      setSaveTried(true);
+      const first = SECTIONS.find((s) => s.fields.some((f) => bad.includes(f)) || (s.ship && countShipErrors(shipErrs, s.ship)));
       if (first) setOpen(first.id);
       setToast({ content: 'Fix the highlighted fields first', error: true });
       return;
     }
-    fetcher.submit(JSON.stringify({ settings: toSettings(form), secrets: secretsPatch(form) }), { method: 'post', encType: 'application/json' });
+    // The shipping config goes along when it changed, or when dynamic shipping
+    // is switched on before one was ever saved. Edits left behind after
+    // switching back to one price are kept only if they're valid.
+    const sendShip = advanced ? shipDirty || !shipStored : shipDirty && !Object.keys(shippingErrors(ship)).length;
+    fetcher.submit(JSON.stringify({ settings: toSettings(form), secrets: secretsPatch(form), ...(sendShip ? { shipping: ship } : {}) }), { method: 'post', encType: 'application/json' });
   };
-  const discard = () => setForm(saved);
+  const discard = () => { setForm(saved); setShip(shipSaved); setSaveTried(false); };
+  const onShipMode = (mode) => {
+    // First switch to dynamic shipping: start from what the one price charges now.
+    if (mode === 'advanced' && ((!shipStored && !shipDirty) || !ship)) {
+      const seeded = toShipDraft(shippingFromSimple(toSettings(form)));
+      setShip(seeded);
+      setShipSaved(seeded);
+    }
+    set('shippingMode')(mode);
+  };
   const goBack = () => {
     // eslint-disable-next-line no-alert
     if (dirty && !window.confirm('You have unsaved changes. Leave without saving?')) return;
@@ -529,6 +654,26 @@ export default function CodCustomizePage() {
             <FormLayout>
               <Text as="h3" variant="headingMd">Position</Text>
               <Checkbox label="Show COD on product pages" checked={form.product} onChange={set('product')} />
+              {form.product && (
+                <ChoiceList
+                  title="Which product pages"
+                  choices={[
+                    { label: 'All products', value: 'all' },
+                    { label: 'All except these', value: 'except', helpText: 'No COD on the products and collections you choose; Buy it now stays as your theme has it.' },
+                    { label: 'Only these', value: 'only', helpText: 'COD only on the products and collections you choose.' },
+                  ]}
+                  selected={[form.pbShowMode]}
+                  onChange={(v) => set('pbShowMode')(v[0])}
+                />
+              )}
+              {form.product && form.pbShowMode !== 'all' && (
+                <PicksField
+                  value={form.pbShowOn}
+                  onChange={set('pbShowOn')}
+                  error={errors.pbShowOn}
+                  help="Collections count as your Online Store shows them on the product page. COD orders from other product pages are refused too. Cart drawers aren't affected (use Eligibility for that)."
+                />
+              )}
               {form.product && !form.pp.enabled && (
                 <ChoiceList
                   title="Next to Shopify's Buy it now button"
@@ -536,10 +681,23 @@ export default function CodCustomizePage() {
                     { label: 'Replace Buy it now', value: 'replace', helpText: "Buy it now is hidden and COD takes its place." },
                     { label: 'Above Buy it now', value: 'above', helpText: 'Add to cart, then COD, then Buy it now.' },
                     { label: 'Below Buy it now', value: 'below', helpText: 'Add to cart, then Buy it now, then COD.' },
+                    { label: 'Replace it on some products', value: 'some', helpText: 'COD replaces Buy it now on the products you choose, and goes above or below it on the rest.' },
                   ]}
                   selected={[form.pbBuyNowPlacement]}
                   onChange={(v) => set('pbBuyNowPlacement')(v[0])}
                 />
+              )}
+              {form.product && !form.pp.enabled && form.pbBuyNowPlacement === 'some' && (
+                <>
+                  <Text as="p" fontWeight="semibold">Replace Buy it now on</Text>
+                  <PicksField value={form.pbReplaceOn} onChange={set('pbReplaceOn')} error={errors.pbReplaceOn} />
+                  <Select
+                    label="On every other product"
+                    options={[{ label: 'Above Buy it now', value: 'above' }, { label: 'Below Buy it now', value: 'below' }]}
+                    value={form.pbRestPlacement}
+                    onChange={set('pbRestPlacement')}
+                  />
+                </>
               )}
             </FormLayout>
           </Card>
@@ -708,16 +866,20 @@ export default function CodCustomizePage() {
         </BlockStack>
       );
     }
-    if (id === 'shipping') {
+    if (id.startsWith('ship')) {
+      const shipProps = { ship, setShip, shipErrors: shipErrs, cur: data.currencyCode, fmt: money };
+      const body = id === 'shipping'
+        ? <ShippingChargesSection form={form} set={set} errors={errors} {...shipProps} onModeChange={onShipMode} />
+        : id === 'shipzones' ? <ShippingZonesSection {...shipProps} />
+          : id === 'shiprules' ? <ShippingRulesSection {...shipProps} />
+            : id === 'shipcharges' ? <ShippingExtraChargesSection {...shipProps} />
+              : id === 'shipdates' ? <DeliveryDatesSection {...shipProps} />
+                : id === 'shipblock' ? <DontDeliverSection {...shipProps} />
+                  : <ShippingTestSection test={shipTest} setTest={setShipTest} cart={cart} setCart={setCart} result={shipResult} money={money} cur={data.currencyCode} />;
       return (
         <BlockStack gap="400">
-          <Text as="p" tone="subdued">Shipping charged on COD orders, shown to shoppers before they order.</Text>
-          <Card>
-            <FormLayout>
-              <TextField label="Shipping" type="number" min={0} value={form.shippingFee} onChange={set('shippingFee')} placeholder="Free" prefix={data.currencyCode} error={errors.shippingFee} helpText="Leave empty for free shipping" autoComplete="off" />
-              <TextField label="Free shipping from" type="number" min={0} value={form.freeShippingAbove} onChange={set('freeShippingAbove')} placeholder="Never" prefix={data.currencyCode} error={errors.freeShippingAbove} helpText="Order value after discounts" autoComplete="off" />
-            </FormLayout>
-          </Card>
+          {data.shippingLoadError && <Banner tone="warning">{data.shippingLoadError}</Banner>}
+          {body}
         </BlockStack>
       );
     }
@@ -737,6 +899,33 @@ export default function CodCustomizePage() {
                 selected={[form.excludedBehavior]}
                 onChange={([v]) => set('excludedBehavior')(v)}
               />
+            </FormLayout>
+          </Card>
+          <Card>
+            <FormLayout>
+              <Text as="h3" variant="headingMd">Unlisted products</Text>
+              <Checkbox
+                label="Allow COD on unlisted products"
+                checked={form.unlistedAllow}
+                onChange={set('unlistedAllow')}
+                helpText={form.unlistedAllow
+                  ? 'Shoppers who open an unlisted product can pay for it with COD.'
+                  : "Unlisted is a Shopify product status: the product opens only from a direct link, not from search or collections. Off: COD isn't offered on its page, and COD orders with it are refused."}
+              />
+              {form.unlistedAllow && (
+                <ChoiceList
+                  title="Which unlisted products"
+                  choices={[
+                    { label: 'All unlisted products', value: 'all' },
+                    { label: 'Only these', value: 'only', helpText: 'Other unlisted products stay without COD.' },
+                  ]}
+                  selected={[form.unlistedMode]}
+                  onChange={([v]) => set('unlistedMode')(v)}
+                />
+              )}
+              {form.unlistedAllow && form.unlistedMode === 'only' && (
+                <PicksField value={form.unlistedPicks} onChange={set('unlistedPicks')} error={errors.unlistedPicks} help="Pick the unlisted products themselves, or collections they are in." />
+              )}
             </FormLayout>
           </Card>
           <Card>
@@ -1019,13 +1208,22 @@ export default function CodCustomizePage() {
   }
 
   const isActive = form.enabled;
-  const built = buildCodScreen({ settings: preview, money, surface, cart, excludedOn, loader, device });
+  const built = buildCodScreen({
+    settings: preview, money, surface, cart, excludedOn, loader, device, picked,
+    ship: shipResult, onPickDelivery: (option) => setShipTest((t) => ({ ...t, choice: { option } })),
+  });
   const isDesktop = device === 'desktop';
+  // Preview toggles for the product page picks, only while a rule uses them.
+  const pickToggles = surface === 'product' && preview ? [
+    preview.productButton.showOn.mode !== 'all' && ['show', 'Sample is a chosen product'],
+    // The Buy it now position doesn't apply while payment options are on.
+    !preview.productPayment?.enabled && preview.productButton.buyNowPlacement === 'some' && ['replace', 'Sample is in "Replace Buy it now on"'],
+  ].filter(Boolean) : [];
   const sliderMax = cartSliderMax(preview);
 
   return (
     <Frame>
-      <style>{COD_ADMIN_CSS + COD_SETTINGS_CSS + COD_CUSTOMIZE_CSS + PAY_PREVIEW_CSS}</style>
+      <style>{COD_ADMIN_CSS + COD_SETTINGS_CSS + COD_CUSTOMIZE_CSS + PAY_PREVIEW_CSS + SHIP_CSS}</style>
       {toast && <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} />}
       <div className="bcz">
         {/* ── Sidebar ── */}
@@ -1040,16 +1238,16 @@ export default function CodCustomizePage() {
             </div>
             {data.planState !== 'enabled' && <p className="bcz-note">Shoppers see COD on the Starter or Pro plan.</p>}
           </div>
-          <div className="bcz-list">
+          <div ref={listRef} className="bcz-list">
             {GROUPS.map((g) => (
               <div key={g.title}>
                 <div className="bcz-group">{g.title}</div>
-                {g.items.map((item) => {
+                {g.items.filter((item) => !item.advanced || advanced).map((item) => {
                   const isOpen = open === item.id;
-                  const n = item.fields.filter((f) => errors[f]).length;
+                  const n = item.fields.filter((f) => errors[f]).length + (item.ship ? countShipErrors(shipErrs, item.ship) : 0);
                   const toggled = typeof item.toggle === 'function' ? item.toggle(form) : form[item.toggle];
                   return (
-                    <div key={item.id} className="bcz-item">
+                    <div key={item.id} className="bcz-item" data-section={item.id}>
                       <button type="button" className={`bcz-row${isOpen ? ' is-open' : ''}`} aria-expanded={isOpen} onClick={() => toggleSection(item.id)}>
                         <span className="bcz-row-ic"><Icon source={item.icon} /></span>
                         <span className="bcz-row-l">{item.label}</span>
@@ -1111,6 +1309,9 @@ export default function CodCustomizePage() {
               {built.hasTags && surface !== 'sheet' && (
                 <Checkbox label="Excluded product in cart" checked={excludedOn} onChange={setExcludedOn} />
               )}
+              {pickToggles.map(([key, label]) => (
+                <Checkbox key={key} label={label} checked={picked[key]} onChange={(on) => setPicked((p) => ({ ...p, [key]: on }))} />
+              ))}
               <div className="bcz-cart">
                 <span>Cart value</span>
                 <input type="range" min={0} max={sliderMax} step={50} value={Math.min(cart, sliderMax)} onChange={(e) => setCart(Number(e.target.value))} aria-label="Cart value" />

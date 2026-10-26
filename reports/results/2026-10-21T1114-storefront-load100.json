@@ -1,0 +1,263 @@
+{
+  "name": "storefront-load100",
+  "startedAt": "2026-10-21T11:14:14.663Z",
+  "durationSeconds": 81.9,
+  "maxVus": 100,
+  "stages": [
+    {
+      "duration": 20,
+      "target": 100
+    },
+    {
+      "duration": 60,
+      "target": 100
+    }
+  ],
+  "thinkMs": [
+    1000,
+    3000
+  ],
+  "timeoutMs": 10000,
+  "workers": 4,
+  "overall": {
+    "requests": 3290,
+    "rps": 40.2,
+    "avgMs": 187.5,
+    "minMs": 3.3,
+    "p50Ms": 83.8,
+    "p90Ms": 504.9,
+    "p95Ms": 726.8,
+    "p99Ms": 1390.9,
+    "maxMs": 2002,
+    "failed": 0,
+    "failRate": 0,
+    "timeouts": 0,
+    "rateLimited": 0,
+    "statuses": {
+      "200": 3290
+    },
+    "failReasons": {}
+  },
+  "byScenario": {
+    "config": {
+      "requests": 1024,
+      "rps": 12.5,
+      "avgMs": 231.5,
+      "minMs": 30.8,
+      "p50Ms": 124.8,
+      "p90Ms": 548.4,
+      "p95Ms": 759,
+      "p99Ms": 1383.2,
+      "maxMs": 2002,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1024
+      },
+      "failReasons": {}
+    },
+    "config_banner": {
+      "requests": 127,
+      "rps": 1.6,
+      "avgMs": 262.3,
+      "minMs": 42.8,
+      "p50Ms": 144.7,
+      "p90Ms": 619.3,
+      "p95Ms": 754.6,
+      "p99Ms": 1183,
+      "maxMs": 2001.2,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 127
+      },
+      "failReasons": {}
+    },
+    "coupons": {
+      "requests": 1175,
+      "rps": 14.4,
+      "avgMs": 150.7,
+      "minMs": 3.7,
+      "p50Ms": 35.1,
+      "p90Ms": 467.4,
+      "p95Ms": 694.1,
+      "p99Ms": 1390.9,
+      "maxMs": 1837.8,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1175
+      },
+      "failReasons": {}
+    },
+    "fbt": {
+      "requests": 498,
+      "rps": 6.1,
+      "avgMs": 205.8,
+      "minMs": 17.1,
+      "p50Ms": 81.9,
+      "p90Ms": 576.6,
+      "p95Ms": 737.6,
+      "p99Ms": 1446.9,
+      "maxMs": 1667.7,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 498
+      },
+      "failReasons": {}
+    },
+    "cod_config": {
+      "requests": 316,
+      "rps": 3.9,
+      "avgMs": 139.8,
+      "minMs": 3.3,
+      "p50Ms": 37.4,
+      "p90Ms": 375.4,
+      "p95Ms": 572.5,
+      "p99Ms": 1315.5,
+      "maxMs": 1833.7,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 316
+      },
+      "failReasons": {}
+    },
+    "packs": {
+      "requests": 150,
+      "rps": 1.8,
+      "avgMs": 151.5,
+      "minMs": 10.1,
+      "p50Ms": 46,
+      "p90Ms": 392.1,
+      "p95Ms": 524.8,
+      "p99Ms": 1588.2,
+      "maxMs": 1715.1,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 150
+      },
+      "failReasons": {}
+    }
+  },
+  "environment": {
+    "type": "local-isolated",
+    "php": {
+      "version": "8.2.12",
+      "opcache": true,
+      "workers": 4
+    },
+    "shops": {
+      "shops": 2000,
+      "bannerShops": 200,
+      "bannerChars": 600000
+    },
+    "machine": "Intel(R) Core(TM) i3-7020U CPU @ 2.30GHz, 4 logical CPUs, 8 GB RAM, win32",
+    "loadGenerator": "same machine (competes for CPU with PHP + MariaDB)"
+  },
+  "resources": {
+    "php": {
+      "before": {
+        "cpuSeconds": 0.75,
+        "workingSetMb": 91,
+        "peakWorkingSetMb": 93
+      },
+      "after": {
+        "cpuSeconds": 10.69,
+        "workingSetMb": 99,
+        "peakWorkingSetMb": 104
+      }
+    },
+    "mysqld": {
+      "before": {
+        "cpuSeconds": 11.41,
+        "workingSetMb": 221,
+        "peakWorkingSetMb": 256
+      },
+      "after": {
+        "cpuSeconds": 59.7,
+        "workingSetMb": 223,
+        "peakWorkingSetMb": 256
+      }
+    },
+    "db": {
+      "Aborted_connects": 0,
+      "Bytes_sent": 186612986,
+      "Com_create_table": 0,
+      "Com_delete": 0,
+      "Com_insert": 0,
+      "Com_select": 8693,
+      "Com_show_fields": 7001,
+      "Com_update": 0,
+      "Connections": 3290,
+      "Created_tmp_disk_tables": 7001,
+      "Innodb_row_lock_waits": 0,
+      "Max_used_connections": 8,
+      "Questions": 18985,
+      "Slow_queries": 38,
+      "Threads_connected": 1,
+      "questionsPerRequest": 5.8
+    }
+  },
+  "slowQueries": {
+    "count": 88,
+    "top": [
+      {
+        "seconds": 1.281396,
+        "sql": "SHOW COLUMNS FROM fbt_widget;"
+      },
+      {
+        "seconds": 0.530789,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.525319,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.511794,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.500961,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      }
+    ]
+  },
+  "preflight": {
+    "config": "ok (3/3)",
+    "config_banner": "ok (3/3)",
+    "coupons": "ok (3/3)",
+    "fbt": "ok (3/3)",
+    "cod_config": "ok (3/3)",
+    "packs": "ok (3/3)"
+  },
+  "variant": "none (php_backend files as in the repo)",
+  "criteria": {
+    "p95Ms": 500,
+    "maxFailPct": 1
+  },
+  "verdicts": {
+    "overall": "FAIL",
+    "config": "FAIL",
+    "config_banner": "FAIL",
+    "coupons": "FAIL",
+    "fbt": "FAIL",
+    "cod_config": "FAIL",
+    "packs": "FAIL"
+  }
+}

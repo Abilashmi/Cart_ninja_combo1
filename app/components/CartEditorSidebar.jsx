@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFetcher } from 'react-router';
 import { useCartEditor } from '../context/CartEditorContext';
+import { useScrollOpenSectionToTop } from '../utils/accordion-scroll';
 import { featureStore } from './ai-agent/featureStore';
 import BrixBar from './ai-agent/BrixBar';
 import { HANDOFF_RECEIVED_EVENT } from '../utils/ai-handoff';
@@ -47,6 +48,8 @@ export function CartEditorSidebar({ onDiscard }) {
   } = useCartEditor();
 
   const [openSection, setOpenSection] = useState(null);
+  const listRef = useRef(null);
+  useScrollOpenSectionToTop(listRef, openSection);
   // The Checkout Button section's money icon follows the store's currency.
   const { code: currencyCode } = useCurrency();
   const cashIcon = currencyCode === 'INR' ? CashRupeeIcon : CashDollarIcon;
@@ -171,7 +174,7 @@ export function CartEditorSidebar({ onDiscard }) {
       </div>
 
       {/* ── Accordion ── */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
         {SECTION_GROUPS.map((group) => (
           <div key={group.title}>
             <div className="cart-editor-group-label" style={{ padding: '4px 12px 2px', fontWeight: 700, textTransform: 'uppercase', color: '#8c9196', letterSpacing: '0.6px' }}>
@@ -185,7 +188,7 @@ export function CartEditorSidebar({ onDiscard }) {
               const SectionComponent = SECTION_COMPONENT_MAP[item.id];
 
               return (
-                <div key={item.id} style={{ borderBottom: '1px solid #f1f2f3' }}>
+                <div key={item.id} data-section={item.id} style={{ borderBottom: '1px solid #f1f2f3' }}>
                   <button
                     onClick={() => toggleSection(item.id)}
                     style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 7, padding: '5px 12px', width: '100%', background: isOpen ? '#f0f7f5' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}

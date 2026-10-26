@@ -1,0 +1,28 @@
+PASS  sold-out pick hidden, its spot filled by Shopify related (in stock, not in cart) — ["Girls Grey Denim Jeans","Cotton Socks","Blue Co-ord Set"]
+PASS  related products asked for the sold-out product first — ["102"]
+PASS  multi-variant product gets a dropdown
+PASS  dropdown defaults to the first IN-STOCK size
+PASS  sold-out size is listed but cannot be picked — [{"v":"1011","d":true,"t":"5-6 years (Sold out)"},{"v":"1012","d":false,"t":"7-8 years"},{"v":"1013","d":false,"t":"9-10 years"}]
+PASS  single-variant product has no dropdown
+PASS  dropdown fits the card (theme select styles overridden) — {"x":913,"y":526.8125,"width":142,"height":30}
+PASS  Add adds the in-stock size, not the sold-out first variant — [1012]
+PASS  picking a size updates the price — ₹949.00
+PASS  Add adds the picked size — [1012,1013]
+PASS  a refused add says Sold out
+PASS  refused size is marked sold out and the dropdown moves to an in-stock size — {"value":"1012","refusedDisabled":true}
+PASS  no page errors
+PASS  shopify mode: complementary first, then related, sold-out and in-cart left out, up to the limit — ["Matching Tee","Kids Cap","Sun Hat"]
+PASS  shopify mode: the merchant's rules are not used
+PASS  shopify mode: asked Shopify about the cart's product — ["complementary:1","related:1"]
+PASS  shopify mode: no page errors
+PASS  ai mode: no rule for the cart → Shopify's recommendations instead of nothing — ["Matching Tee","Kids Cap"]
+PASS  manual mode: no rule matches → no upsells, nothing asked of Shopify — []
+PASS  hide: sold-out pick left out, nothing added in its place — ["Girls Grey Denim Jeans","Cotton Socks"]
+PASS  hide: no related products fetched
+PASS  slow catalogue: the drawer opens with the cart at once — 399 ms
+PASS  slow catalogue: the upsells fill in once it answers, drawer still open — ["Girls Grey Denim Jeans","Cotton Socks","Blue Co-ord Set"]
+PASS  slow catalogue: no page errors
+PASS  grid card has the dropdown on the in-stock size
+PASS  compact card has the dropdown on the in-stock size
+
+26/26 passed

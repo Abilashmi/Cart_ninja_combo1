@@ -108,7 +108,7 @@ function cssVars(pp) {
  * Product page mock with the payment options, interactive: pick a card, a
  * size and a quantity. `settings` = sanitized COD settings on screen.
  */
-export function PaymentOptionsScreen({ settings, money, phone }) {
+export function PaymentOptionsScreen({ settings, money, phone, codHere = true }) {
   const pp = settings.productPayment;
   const [variant, setVariant] = useState(SAMPLE_PRODUCT.variants[0].id);
   const [qty, setQty] = useState(1);
@@ -116,7 +116,8 @@ export function PaymentOptionsScreen({ settings, money, phone }) {
 
   const unit = SAMPLE_PRODUCT.variants.find((v) => v.id === variant).price;
   const codFee = codFeeOf(settings, Math.round(unit * qty * 100) / 100);
-  const codOn = settings.enabled && settings.surfaces.product !== false;
+  // codHere = false: the merchant's product picks leave the sample product out.
+  const codOn = settings.enabled && settings.surfaces.product !== false && codHere;
   const prepaid = pp.online.enabled && pp.prepaid.enabled ? pp.prepaid : null;
   const pr = productPaymentPricing({ unitPrice: unit, quantity: qty, prepaid, codFee });
   const shown = visiblePaymentMethods(pp, { codAvailable: codOn });

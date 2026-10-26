@@ -57,7 +57,7 @@ export async function startHarness({ extraFiles = [], portOffset = 0 } = {}) {
   await db.query('CREATE TABLE IF NOT EXISTS shops (shop_domain VARCHAR(255) PRIMARY KEY, plan_name VARCHAR(50) NULL)');
 
   const backend = path.resolve('php_backend');
-  for (const f of ['cod_helpers.php', 'cod_settings.php', 'cod_otp.php', 'cod_orders.php', 'cod_storefront.php', 'cod_checkout.php', 'plan_helpers.php', 'plan_config.php', ...extraFiles]) fs.copyFileSync(path.join(backend, f), path.join(webDir, f));
+  for (const f of ['cod_helpers.php', 'cod_settings.php', 'cod_otp.php', 'cod_orders.php', 'cod_shipping.php', 'cod_storefront.php', 'cod_checkout.php', 'plan_helpers.php', 'plan_config.php', ...extraFiles]) fs.copyFileSync(path.join(backend, f), path.join(webDir, f));
   fs.writeFileSync(path.join(webDir, 'config.php'), `<?php
 $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charset=utf8mb4', 'root', '', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 `);

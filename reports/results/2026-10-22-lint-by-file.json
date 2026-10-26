@@ -1,0 +1,682 @@
+[
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\AiUpsellSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\AnnouncementRotator.jsx",
+  "errors": 8,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CartEditorPage.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CartEditorSidebar.jsx",
+  "errors": 1,
+  "warnings": 1
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CartPreview.jsx",
+  "errors": 173,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CdoPreviewBar.jsx",
+  "errors": 90,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CouponSliderEditor.jsx",
+  "errors": 44,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\CurrencyContext.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\MilestoneProgressBarPreview.jsx",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\PlanContext.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ProgressBarEditor.jsx",
+  "errors": 56,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\UpsellComponents.jsx",
+  "errors": 44,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\UpsellProductEditor.jsx",
+  "errors": 28,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\VideoTutorialCard.jsx",
+  "errors": 10,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\BrixAiPage.jsx",
+  "errors": 11,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\BrixBar.jsx",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\MarkdownMessage.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\TipCards.jsx",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\widgets\\DiscountFormWidget.jsx",
+  "errors": 12,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\widgets\\SalesReportWidget.jsx",
+  "errors": 57,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\ai-agent\\widgets\\ThemeColorsWidget.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\bundles\\CartDrawerEmbedBanner.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\bundles\\CartDrawerEmbedModal.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\bundles\\ComboSetupTour.jsx",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\bundles\\TemplateManager.jsx",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\coupon-banner\\OfferLadder.jsx",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\AdvancedSection.jsx",
+  "errors": 30,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\BannerSection.jsx",
+  "errors": 21,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\BehaviorSection.jsx",
+  "errors": 52,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\BuilderActionBar.jsx",
+  "errors": 15,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\BuilderSidebar.jsx",
+  "errors": 46,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\ContentSection.jsx",
+  "errors": 36,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\DesignSection.jsx",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\GeneralSection.jsx",
+  "errors": 40,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\LayoutSection.jsx",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\OfferSection.jsx",
+  "errors": 37,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\ProductsSection.jsx",
+  "errors": 32,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\QuickShopPreview.jsx",
+  "errors": 13,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\QuickShopSections.jsx",
+  "errors": 127,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\SectionCard.jsx",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\StylingSection.jsx",
+  "errors": 39,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\TemplatePreviewThumb.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\ThemePresets.jsx",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\ValidationPanel.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\customization\\WeightMeter.jsx",
+  "errors": 30,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\feature\\BrowserTabStrip.jsx",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\feature\\FeatureHeaderBar.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\plan\\PlanGate.jsx",
+  "errors": 15,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\AnnouncementsSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\CheckoutSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\CountdownTimerSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\CouponSliderSection.jsx",
+  "errors": 32,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\CustomCSSSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\DesignSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\EmptyCartSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\GeneralSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\HeaderSection.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\ProgressBarSection.jsx",
+  "errors": 18,
+  "warnings": 1
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\sections\\UpsellSection.jsx",
+  "errors": 14,
+  "warnings": 1
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\ColorField.jsx",
+  "errors": 8,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\CouponStyleFields.jsx",
+  "errors": 8,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\FeatureToggle.jsx",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\PairingAssistant.jsx",
+  "errors": 18,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\ProductPickerBody.jsx",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\shared\\SliderField.jsx",
+  "errors": 9,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\components\\tour\\TourPointer.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\context\\CartEditorContext.jsx",
+  "errors": 12,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.ai.conversations.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.ai.messages.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.analytics.insights.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.cartdrawer-config.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.coupon-slider.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.create_coupon-sample.jsx",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.shophandler.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.shopify-coupons.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.suggestions.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\api.test-php.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app._index.jsx",
+  "errors": 46,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.additional.jsx",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.analytics.jsx",
+  "errors": 31,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.billing.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.bundles.analytics.jsx",
+  "errors": 10,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.bundles.customize.jsx",
+  "errors": 208,
+  "warnings": 3
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.cartdrawer.old.jsx",
+  "errors": 125,
+  "warnings": 3
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.coupons.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.discount.jsx",
+  "errors": 4,
+  "warnings": 4
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.discounts.create.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.fbt.jsx",
+  "errors": 63,
+  "warnings": 1
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.productwidget.jsx",
+  "errors": 72,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.setup.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\app.subscribe.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\click[.]php.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\preview.$templateId.jsx",
+  "errors": 336,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\save_cart_drawer[.]php.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\save_coupon_slider_widget[.]php.jsx",
+  "errors": 3,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\store.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\webhooks.app_purchases_one_time_update.jsx",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\webhooks.customers.data_request.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\webhooks.customers.redact.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\routes\\webhooks.shop.redact.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\ai-safety.server.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\analytics.server.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\cart-drawer-record.server.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\coupon-sample.server.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\coupons.server.js",
+  "errors": 5,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\services\\storefront-upsell-integration.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\app\\utils\\api-helpers.js",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\dbsetup.js",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\cart_drawer.js",
+  "errors": 9,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\cart_drawer_inline.js",
+  "errors": 16,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\cartdrawer.js",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\coupon_slider.js",
+  "errors": 7,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\fbt_widget.js",
+  "errors": 6,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\extensions\\cart-drawer\\assets\\fbt_widget_render.js",
+  "errors": 8,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\scripts\\generate-pdf-report.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\ai-handoff\\harness\\dist\\assets\\index-DjYGdUn3.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\ai-handoff\\harness\\dist\\assets\\index-Dkp5DWBQ.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\ai-handoff\\harness\\dist\\assets\\index-DulnYKc1.js",
+  "errors": 14,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\ai-handoff\\harness\\dist\\assets\\index-k0hpOanU.js",
+  "errors": 1041,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\ai-handoff\\harness\\main.jsx",
+  "errors": 2,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\billing\\harness\\main.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\combo-ai\\harness\\dist\\assets\\index-BBoBknOd.js",
+  "errors": 965,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\combo-ai\\harness\\dist\\assets\\index-BCogkTGI.js",
+  "errors": 14,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\combo-ai\\harness\\dist\\assets\\index-DjYGdUn3.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\combo-ai\\harness\\dist\\assets\\index-Dkp5DWBQ.js",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\combo-ai\\harness\\main.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\coupon-banner\\harness\\dist\\assets\\index-CRxy7A1P.js",
+  "errors": 759,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\coupon-banner\\harness\\main.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\fixtures\\phpApi.ts",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\packs\\harness\\dist\\assets\\index-DRIKFxs5.js",
+  "errors": 838,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\packs\\harness\\dist\\assets\\packs_widget-FQNL_jcE.js",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\packs\\harness\\main.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\packs\\preview-harness\\dist\\assets\\index-BknZb2az.js",
+  "errors": 107,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\packs\\preview-harness\\dist\\assets\\packs_widget-FQNL_jcE.js",
+  "errors": 4,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\pairing\\harness\\main.jsx",
+  "errors": 1,
+  "warnings": 0
+ },
+ {
+  "file": "C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\specs\\storefront\\cart-drawer-regressions.spec.ts",
+  "errors": 1,
+  "warnings": 0
+ }
+]

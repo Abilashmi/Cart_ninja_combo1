@@ -1,0 +1,9 @@
+
+PackPreview (admin) — template checks
+  ✓ Horizontal Select: horizontal packs, a slot per item with Shopify option dropdowns; Add to cart is simulated
+  ✓ Quick Add Picker: variant cards with +, selected count, blocked when full
+  ✓ Image Variant Select: packs as rows; per item a photo and Size / Color photo dropdowns side by side
+  ✓ thumbnail (demo): second pack chosen with one item already picked
+  ✓ Same Variant Pack, single-variant product: one entry per item, no dropdowns, ready to add, no Default Title
+
+5/5 passed

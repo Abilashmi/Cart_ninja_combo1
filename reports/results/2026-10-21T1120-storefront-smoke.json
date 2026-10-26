@@ -1,0 +1,240 @@
+{
+  "name": "storefront-smoke",
+  "startedAt": "2026-10-21T11:20:17.648Z",
+  "durationSeconds": 30.8,
+  "maxVus": 2,
+  "stages": [
+    {
+      "duration": 5,
+      "target": 2
+    },
+    {
+      "duration": 25,
+      "target": 2
+    }
+  ],
+  "thinkMs": [
+    1000,
+    3000
+  ],
+  "timeoutMs": 10000,
+  "workers": 4,
+  "overall": {
+    "requests": 27,
+    "rps": 0.9,
+    "avgMs": 35.3,
+    "minMs": 4.1,
+    "p50Ms": 27,
+    "p90Ms": 75.4,
+    "p95Ms": 78.3,
+    "p99Ms": 81.1,
+    "maxMs": 81.1,
+    "failed": 0,
+    "failRate": 0,
+    "timeouts": 0,
+    "rateLimited": 0,
+    "statuses": {
+      "200": 27
+    },
+    "failReasons": {}
+  },
+  "byScenario": {
+    "config": {
+      "requests": 9,
+      "rps": 0.3,
+      "avgMs": 69.2,
+      "minMs": 62.2,
+      "p50Ms": 66.6,
+      "p90Ms": 81.1,
+      "p95Ms": 81.1,
+      "p99Ms": 81.1,
+      "maxMs": 81.1,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 9
+      },
+      "failReasons": {}
+    },
+    "config_banner": {
+      "requests": 0,
+      "rps": 0,
+      "avgMs": 0,
+      "minMs": null,
+      "p50Ms": null,
+      "p90Ms": null,
+      "p95Ms": null,
+      "p99Ms": null,
+      "maxMs": null,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {},
+      "failReasons": {}
+    },
+    "coupons": {
+      "requests": 11,
+      "rps": 0.4,
+      "avgMs": 13.4,
+      "minMs": 4.4,
+      "p50Ms": 8,
+      "p90Ms": 27,
+      "p95Ms": 31.4,
+      "p99Ms": 31.4,
+      "maxMs": 31.4,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 11
+      },
+      "failReasons": {}
+    },
+    "fbt": {
+      "requests": 4,
+      "rps": 0.1,
+      "avgMs": 35.1,
+      "minMs": 26.4,
+      "p50Ms": 26.8,
+      "p90Ms": 54.3,
+      "p95Ms": 54.3,
+      "p99Ms": 54.3,
+      "maxMs": 54.3,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 4
+      },
+      "failReasons": {}
+    },
+    "cod_config": {
+      "requests": 2,
+      "rps": 0.1,
+      "avgMs": 7.2,
+      "minMs": 4.1,
+      "p50Ms": 4.1,
+      "p90Ms": 10.2,
+      "p95Ms": 10.2,
+      "p99Ms": 10.2,
+      "maxMs": 10.2,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 2
+      },
+      "failReasons": {}
+    },
+    "packs": {
+      "requests": 1,
+      "rps": 0,
+      "avgMs": 29.1,
+      "minMs": 29.1,
+      "p50Ms": 29.1,
+      "p90Ms": 29.1,
+      "p95Ms": 29.1,
+      "p99Ms": 29.1,
+      "maxMs": 29.1,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1
+      },
+      "failReasons": {}
+    }
+  },
+  "environment": {
+    "type": "local-isolated",
+    "php": {
+      "version": "8.2.12",
+      "opcache": true,
+      "workers": 4
+    },
+    "shops": {
+      "shops": 2000,
+      "bannerShops": 200,
+      "bannerChars": 600000
+    },
+    "machine": "Intel(R) Core(TM) i3-7020U CPU @ 2.30GHz, 4 logical CPUs, 8 GB RAM, win32",
+    "loadGenerator": "same machine (competes for CPU with PHP + MariaDB)"
+  },
+  "resources": {
+    "php": {
+      "before": {
+        "cpuSeconds": 0.77,
+        "workingSetMb": 91,
+        "peakWorkingSetMb": 93
+      },
+      "after": {
+        "cpuSeconds": 0.83,
+        "workingSetMb": 94,
+        "peakWorkingSetMb": 96
+      }
+    },
+    "mysqld": {
+      "before": {
+        "cpuSeconds": 15.19,
+        "workingSetMb": 222,
+        "peakWorkingSetMb": 256
+      },
+      "after": {
+        "cpuSeconds": 15.48,
+        "workingSetMb": 222,
+        "peakWorkingSetMb": 256
+      }
+    },
+    "db": {
+      "Aborted_connects": 0,
+      "Bytes_sent": 271632,
+      "Com_create_table": 0,
+      "Com_delete": 0,
+      "Com_insert": 0,
+      "Com_select": 69,
+      "Com_show_fields": 54,
+      "Com_update": 0,
+      "Connections": 27,
+      "Created_tmp_disk_tables": 54,
+      "Innodb_row_lock_waits": 0,
+      "Max_used_connections": 2,
+      "Questions": 151,
+      "Slow_queries": 0,
+      "Threads_connected": 1,
+      "questionsPerRequest": 5.6
+    }
+  },
+  "slowQueries": {
+    "count": 0,
+    "top": []
+  },
+  "preflight": {
+    "config": "ok (3/3)",
+    "config_banner": "ok (3/3)",
+    "coupons": "ok (3/3)",
+    "fbt": "ok (3/3)",
+    "cod_config": "ok (3/3)",
+    "packs": "ok (3/3)"
+  },
+  "variant": "none (php_backend files as in the repo)",
+  "criteria": {
+    "p95Ms": 500,
+    "maxFailPct": 1
+  },
+  "verdicts": {
+    "overall": "PASS",
+    "config": "PASS",
+    "config_banner": "NOT RUN",
+    "coupons": "PASS",
+    "fbt": "PASS",
+    "cod_config": "PASS",
+    "packs": "PASS"
+  }
+}

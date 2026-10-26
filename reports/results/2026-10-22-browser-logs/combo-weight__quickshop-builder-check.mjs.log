@@ -1,0 +1,94 @@
+PASS  preview shows both collections' products — 4
+PASS  compare-at price + % OFF + badge on the serum — BestsellerVitamin C SerumVitamin C Serum for daily care13% OFF$699$799
+PASS  chips: All + both collections, Brand menu
+PASS  chip filters the preview
+PASS  + adds to the preview box and shows the bar
+PASS  bar: 1 item more for 5% OFF — Add 1 item more to unlock 5% OFF
+PASS  3 items: You unlocked FREE DELIVERY (merchant label) — You unlocked FREE DELIVERY
+PASS  Style tab has Top progress, Bottom bar, Page colours
+PASS  Steps style shows in the preview
+PASS  Hidden removes the top progress
+PASS  Ring bar shows the item count
+PASS  button text follows the setting
+PASS  no Shiprocket choice on a shop without Shiprocket
+PASS  box list shows each line's price by default
+PASS  "Prices in the box list" off hides them, lines stay
+PASS  clicking a card opens Product cards
+PASS  …and previews the product popup, inside the preview
+PASS  the builder has the popup switch
+PASS  the popup closes
+PASS  turning Brand off removes it from the page
+PASS  normal cards: an Add button under each card, no + on the image
+PASS  normal cards: a card already in the box shows a stepper
+PASS  Add button text follows the setting
+PASS  max per product: the message field appears
+PASS  max per product: + on a product already in the box is off
+PASS  max per product: the preview refuses with the merchant's text — Only 1 of each
+PASS  max per product: emptied = no limit, + is back
+PASS  no count Progress Bar / AI sections for a box template
+PASS  Quantity Box: priced by items, no measure picker
+PASS  "Buy N for X" adds a box price tier and sets the max items — 2 items+: 5% off · 3 items+: 10% off · 4 items+: box for $999 (max 4 items)
+PASS  rare settings are under More options
+PASS  More options opens them
+PASS  saved: layout7, box-priced, measured by quantity, with the box price tier — {"layout":"layout7","measure":"quantity","tiers":[{"id":"t1","min_grams":2,"type":"percentage","value":5,"label":""},{"id":"t2","min_grams":3,"type":"percentage","value":10,"label":"FREE DELIVERY"},{"id":"tmvj3xbf3","min_grams":4,"type":"fixed_price","value":999,"label":""}]}
+PASS  saved: the style choices
+PASS  picker: Quantity Box, Weight Box, Value Box — Quantity Box, Weight Box, Value Box
+PASS  plans on the cards: Starter $29, Growth $59, Growth $59
+PASS  starts with sample products until collections are chosen
+PASS  Value Box preset: spend tiers ($999 → $100 OFF, $1999 → 15% OFF) — Unlock offers on your boxAdd $999 more to unlock $100 OFF$100 OFF$99915% OFF$1999
+PASS  save needs a collection
+PASS  Quantity Box preset: 2 items → 5% OFF, 4 items → 10% OFF — Unlock offers on your boxAdd 2 items more to unlock 5% OFF5% OFF2 items10% OFF4 items
+PASS  Starter: Quantity Box usable
+PASS  Starter: Value Box offers the Growth upgrade
+PASS  Starter: Weight Box offers the Growth upgrade
+PASS  Free: Quantity Box offers the Starter upgrade
+PASS  Growth: all three usable
+PASS  told it is a Value Box now
+PASS  preview shows the value tiers — Unlock offers on your boxAdd $999 more to unlock $100 OFF$100 OFF$99915% OFF$1999
+PASS  Offer: priced by box value, no measure picker
+PASS  saved as value — {"measure":"value","unit":"kg","max_grams":null,"qualify":{"mode":"layout_collections","collection_ids":[],"product_ids":[]},"tiers":[{"id":"t1","min_grams":999,"type":"fixed_amount","value":100,"label":""},{"id":"t2","min_grams":1999,"type":"percentage","value":15,"label":""}],"messages":{"locked":"Add {{remaining}} more to unlock {{tier}}","unlocked":"You unlocked {{tier}}","over_max":"Your box is full. Remove something to add this."}}
+PASS  Page loader section with the default round spinner preview
+PASS  picking Dots changes the preview
+PASS  a logo link shows in the preview
+PASS  logo above the loader
+PASS  text shows in the preview
+PASS  turning it off hides the options
+PASS  turning it back on keeps the settings
+PASS  saved: loader settings — {"s":"dots","l":"https://cdn.example.com/logo.png","p":"above","t":"Packing your box…"}
+PASS  phone preview uses the phone layout
+PASS  one icon picker per tier — 2
+PASS  picking an icon changes that milestone in the preview — <path d="m3 7 4.5 4L12 5l4.5 6L21 7l-2 11H5z"></path>
+PASS  % can be picked on every tier — ["<path d=\"M19 5 5 19\"></path><circle cx=\"6.5\" cy=\"6.5\" r=\"2.5\"></circle><circle cx=\"17.5\" cy=\"17.5\" r=\"2.5\"></circle>","<path d=\"M19 5 5 19\"></path><circle cx=\"6.5\" cy=\"6.5\" r=\"2.5\"></circle><circle cx=\"17.5\" cy=\"17.5\" r=\"2.5\"></circle>"]
+PASS  no emoji in the sidebar or preview
+PASS  Content switch hides the Quick Shop title
+PASS  Layout tab has the Banner section
+PASS  banner shows in the preview
+PASS  Shiprocket shop: Checkout with offered, Shopify by default
+PASS  Shiprocket + BRIX code explains the one-time code
+PASS  Cart page destination hides Checkout with
+PASS  builder: Pictures with names shows the picture bar in the preview — All,Face Wash,Serums
+PASS  builder: shape, size and one picture field per collection
+PASS  builder: a picture link shows on its tile
+PASS  builder: a non-https link is flagged
+PASS  builder: shape follows the setting
+PASS  builder: tapping a tile filters the preview
+PASS  builder: button size fields
+PASS  builder: the preview button follows the sizes — {"pt":"20px","fs":"19px"}
+PASS  saved: picture bar settings and button sizes — {"style":"images","shape":"square","images":{"face-wash":"https://cdn.example.com/face.jpg","serums":"http://insecure.example.com/s.jpg"},"py":20,"fs":19}
+PASS  Weight Box offer types include "Price per kg" — Percentage off, Amount off, Box price, Price per kg
+PASS  …and it is the saved tier's type
+PASS  value field says "Price per kg" with the 1.5 × example
+PASS  no max weight needed (no error)
+PASS  preview names the tier "₹999/KG"
+PASS  collections: chips as before (Shopify names, saved order) — ["All","Face Wash","Serums"]
+PASS  collections: own name shows on the chip — ["All","Cleansers","Serums"]
+PASS  collections: ↑ moves Serums first — ["All","Serums","Cleansers"]
+PASS  collections: the own name follows its collection
+PASS  collections: one grid until sections are switched on
+PASS  sections: one per collection, in the new order, own names — [["Serums","left"],["Cleansers","left"]]
+PASS  sections: title alignment
+PASS  sections: title size
+PASS  chips alignment: centre
+PASS  remove: the other collection stays — face-wash
+
+92/92 passed

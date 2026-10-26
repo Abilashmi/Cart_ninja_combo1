@@ -1,0 +1,23 @@
+PASS  fully sold-out product: Add button says "Sold out" and is disabled
+PASS  fully sold-out product: + is disabled too
+PASS  forced click on a sold-out product shows "Sold out: <name>" and adds nothing
+PASS  first size sold out → card opens on the in-stock size
+PASS  sold-out size is labelled in the dropdown — Small (Sold out) | Large
+PASS  in-stock size: Add is enabled
+PASS  switching to the sold-out size shows Sold out, disabled
+PASS  checkout carries only in-stock variants — /cart/21:1,30:1
+PASS  popup lists the sold-out size as "(Sold out)"
+PASS  picking it shows the sold-out message
+PASS  …and the card is not selected
+PASS  Quick Shop: fully sold-out card shows Out of stock with no + button
+PASS  Quick Shop: first size sold out → card opens on the in-stock size with a + button
+PASS  Quick Shop: the cart gets only in-stock variants — ["21:2","30:1"]
+PASS  Quick Shop: + stops at the 2 in stock (disabled)
+PASS  …box holds 2 — 2
+PASS  …forcing a 3rd shows "Only 2 left: Two Left Cookies" and keeps 2
+PASS  Quick Shop: a tracked variant with 0 left is out of stock
+PASS  Quick Shop: no limit when Shopify sells past 0 or doesn't track
+PASS  classic layout: + disabled at the 2 in stock
+PASS  classic layout: 0 left = "Sold out" button
+
+21/21 passed

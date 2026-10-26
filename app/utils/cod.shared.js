@@ -17,7 +17,21 @@ export const COD_DRAWER_PLACEMENTS = ['replace', 'above', 'below'];
 // Where it goes on a combo page, relative to the combo's Checkout button.
 export const COD_COMBO_PLACEMENTS = COD_DRAWER_PLACEMENTS;
 // Where it goes on a product page, relative to Shopify's Buy it now button.
-export const COD_BUY_NOW_PLACEMENTS = ['replace', 'above', 'below'];
+// 'some' = replace it only on the products picked in productButton.replaceOn,
+// and productButton.restPlacement (above | below) on every other product.
+export const COD_BUY_NOW_PLACEMENTS = ['replace', 'above', 'below', 'some'];
+export const COD_REST_PLACEMENTS = ['above', 'below'];
+// Which product pages show the COD button (productButton.showOn): every one,
+// all but the picked products / collections, or only those.
+export const COD_SHOW_ON_MODES = ['all', 'except', 'only'];
+// Unlisted products (Shopify status UNLISTED: opened by direct link only, not
+// in search or collection pages) take COD only when settings.unlisted allows
+// it: all of them, or only the picked products / collections.
+export const COD_UNLISTED_MODES = ['all', 'only'];
+// The most products / collections one pick list holds (all settings share
+// cod_settings.php's 60,000 byte limit).
+export const COD_PICK_MAX = Object.freeze({ products: 50, collections: 25 });
+export const COD_SHIPPING_MODES = ['simple', 'advanced'];
 
 // Price tags in button texts ({price}, {cod_price}, ...): price-tags.shared.js.
 export { COD_PRICE_TAGS, hasPriceTags, showsCodFee, fillPriceTags, codPriceValues, paymentPriceValues } from './price-tags.shared.js';
@@ -47,6 +61,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   codFeeLabel: COD_FEE_LABEL_DEFAULT,
   shippingFee: 0,
   freeShippingAbove: 0, // 0 = shippingFee always applies
+  // 'simple' = shippingFee / freeShippingAbove above; 'advanced' = delivery
+  // options, zones and rules (utils/shipping.shared.js, stored in cod_shipping).
+  shippingMode: 'simple',
   minOrder: 0, // 0 = no minimum
   maxOrder: 0, // 0 = no maximum
   requireOtp: true,
@@ -97,12 +114,23 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
     // CSS selector of the theme's Buy it now, for themes BRIX doesn't find it
     // in by itself. '' = find it automatically.
     buyNowSelector: '',
+    // buyNowPlacement 'some': COD replaces Buy it now on these products and
+    // the products in these collections ([{ id: gid, title }])...
+    replaceOn: { products: [], collections: [] },
+    // ...and sits above or below it on every other product.
+    restPlacement: 'above',
+    // Which product pages show the COD button at all: all | except | only.
+    showOn: { mode: 'all', products: [], collections: [] },
     marginTop: 10,
     marginBottom: 0,
     paddingY: 14,
     paddingX: 16,
     radius: 12,
   },
+  // Unlisted products (Shopify status UNLISTED). Off: COD never sells them
+  // (the order is refused, and product pages BRIX knows are unlisted hide the
+  // button). On: all of them (mode 'all') or only the picked ones.
+  unlisted: { allow: false, mode: 'all', products: [], collections: [] },
   // Look of the shopper's COD checkout popup (extensions/cart-drawer/assets/brix_cod.js).
   sheet: {
     logo: '', // '' | https URL | small data:image/... URL (resized in the admin)
@@ -226,6 +254,111 @@ export function parseTags(value) {
   return [...new Set(list(value).map((t) => String(t).trim()).filter((t) => TAG_RE.test(t)))].slice(0, 50);
 }
 
+const PICK_GID_RE = { products: /^gid:\/\/shopify\/Product\/\d{1,20}$/, collections: /^gid:\/\/shopify\/Collection\/\d{1,20}$/ };
+
+/**
+ * Picked products and collections: { products: [{ id: gid, title }],
+ * collections: [...] }, unique, at most COD_PICK_MAX each. A list missing
+ * from `value` keeps `base`'s. Numeric ids become gids.
+ */
+export function sanitizeCodPicks(value, base = null) {
+  const v = value && typeof value === 'object' ? value : {};
+  const b = base && typeof base === 'object' ? base : {};
+  const clean = (items, kind) => {
+    const type = kind === 'products' ? 'Product' : 'Collection';
+    const seen = new Set();
+    const out = [];
+    for (const item of Array.isArray(items) ? items : []) {
+      const raw = String((item && typeof item === 'object' ? item.id : item) ?? '');
+      const id = /^\d{1,20}$/.test(raw) ? `gid://shopify/${type}/${raw}` : raw;
+      if (!PICK_GID_RE[kind].test(id) || seen.has(id)) continue;
+      seen.add(id);
+      const title = item && typeof item === 'object' && typeof item.title === 'string' ? item.title.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+      out.push({ id, title });
+      if (out.length >= COD_PICK_MAX[kind]) break;
+    }
+    return out;
+  };
+  return {
+    products: clean('products' in v ? v.products : b.products, 'products'),
+    collections: clean('collections' in v ? v.collections : b.collections, 'collections'),
+  };
+}
+
+function sanitizeShowOn(patch, base) {
+  const q = patch && typeof patch === 'object' ? patch : {};
+  const b = base && typeof base === 'object' ? base : {};
+  return {
+    mode: COD_SHOW_ON_MODES.includes(q.mode) ? q.mode : COD_SHOW_ON_MODES.includes(b.mode) ? b.mode : 'all',
+    ...sanitizeCodPicks(q, b),
+  };
+}
+
+function sanitizeUnlisted(patch, base) {
+  const q = patch && typeof patch === 'object' ? patch : {};
+  const b = base && typeof base === 'object' ? base : DEFAULT_COD_SETTINGS.unlisted;
+  return {
+    allow: 'allow' in q ? Boolean(q.allow) : Boolean(b.allow),
+    mode: COD_UNLISTED_MODES.includes(q.mode) ? q.mode : COD_UNLISTED_MODES.includes(b.mode) ? b.mode : 'all',
+    ...sanitizeCodPicks(q, b),
+  };
+}
+
+// The number at the end of a gid ("gid://shopify/Product/42" → "42"), or the id itself.
+function numericId(value) {
+  const m = /(\d{1,20})$/.exec(String(value ?? ''));
+  return m ? m[1] : '';
+}
+
+/**
+ * Is the product among the picks? `product` = { id, collections }: its id and
+ * the collections it is in (gids or numeric ids), as far as the caller knows.
+ * Mirrored by brix_cod.js picksMatch.
+ */
+export function codPicksMatch(picks, product) {
+  const id = numericId(product?.id);
+  if (id && (picks?.products || []).some((p) => numericId(p.id) === id)) return true;
+  const mine = new Set((product?.collections || []).map(numericId).filter(Boolean));
+  return (picks?.collections || []).some((c) => mine.has(numericId(c.id)));
+}
+
+/** Product pages: does this product's page show the COD button (productButton.showOn)? */
+export function codShownOnProduct(settings, product) {
+  const showOn = settings?.productButton?.showOn;
+  if (!showOn || !COD_SHOW_ON_MODES.includes(showOn.mode) || showOn.mode === 'all') return true;
+  const hit = codPicksMatch(showOn, product);
+  return showOn.mode === 'only' ? hit : !hit;
+}
+
+/** Where COD goes next to Buy it now on this product's page: replace | above | below. Mirrored by brix_cod.js placementFor. */
+export function codBuyNowPlacementFor(settings, product) {
+  const pb = settings?.productButton || {};
+  if (pb.buyNowPlacement === 'some') return codPicksMatch(pb.replaceOn, product) ? 'replace' : pb.restPlacement === 'below' ? 'below' : 'above';
+  if (['replace', 'above', 'below'].includes(pb.buyNowPlacement)) return pb.buyNowPlacement;
+  return pb.replaceBuyNow === false ? 'above' : 'replace';
+}
+
+/** May an unlisted product (Shopify status UNLISTED) be bought with COD (settings.unlisted)? */
+export function unlistedCodAllowed(settings, product) {
+  const u = settings?.unlisted;
+  if (!u || !u.allow) return false;
+  return u.mode !== 'only' || codPicksMatch(u, product);
+}
+
+/**
+ * Collections (gids) the server has to check an order's products against:
+ * the picked unlisted collections, and for product page orders the "show COD
+ * on" collections. Picked products match by id with no lookup.
+ */
+export function codRuleCollections(settings, surface) {
+  const out = new Set();
+  const u = settings?.unlisted;
+  if (u?.allow && u.mode === 'only') (u.collections || []).forEach((c) => out.add(c.id));
+  const showOn = settings?.productButton?.showOn;
+  if (surface === 'product' && showOn && showOn.mode !== 'all') (showOn.collections || []).forEach((c) => out.add(c.id));
+  return [...out];
+}
+
 export const COD_BUTTON_FONT_SIZES = [12, 22];
 // Cart drawer COD button padding, px: [min, max] (same ranges as the product page's).
 export const COD_BUTTON_PADDING = Object.freeze({ paddingY: [4, 32], paddingX: [4, 48] });
@@ -302,10 +435,16 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
   const productButton = { ...DEFAULT_COD_SETTINGS.productButton, ...(b.productButton || {}) };
   // Stored before buyNowPlacement existed: its replaceBuyNow decides.
   if (!COD_BUY_NOW_PLACEMENTS.includes(b.productButton?.buyNowPlacement)) productButton.buyNowPlacement = b.productButton?.replaceBuyNow === false ? 'above' : 'replace';
+  productButton.replaceOn = sanitizeCodPicks(null, productButton.replaceOn);
+  if (!COD_REST_PLACEMENTS.includes(productButton.restPlacement)) productButton.restPlacement = 'above';
+  productButton.showOn = sanitizeShowOn(null, productButton.showOn);
   if (p.productButton && typeof p.productButton === 'object') {
     const q = p.productButton;
     if (COD_BUY_NOW_PLACEMENTS.includes(q.buyNowPlacement)) productButton.buyNowPlacement = q.buyNowPlacement;
     else if ('replaceBuyNow' in q) productButton.buyNowPlacement = q.replaceBuyNow ? 'replace' : (productButton.buyNowPlacement === 'below' ? 'below' : 'above');
+    if (q.replaceOn && typeof q.replaceOn === 'object') productButton.replaceOn = sanitizeCodPicks(q.replaceOn, productButton.replaceOn);
+    if (COD_REST_PLACEMENTS.includes(q.restPlacement)) productButton.restPlacement = q.restPlacement;
+    if (q.showOn && typeof q.showOn === 'object') productButton.showOn = sanitizeShowOn(q.showOn, productButton.showOn);
     if ('buyNowSelector' in q) productButton.buyNowSelector = isValidDrawerSelector(String(q.buyNowSelector ?? '')) ? String(q.buyNowSelector).trim() : '';
     if ('buyNowText' in q) productButton.buyNowText = typeof q.buyNowText === 'string' ? q.buyNowText.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
     for (const [key, [min, max]] of Object.entries(COD_PRODUCT_BUTTON_LIMITS)) {
@@ -369,6 +508,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     codFeeLabel: text(has('codFeeLabel') ? p.codFeeLabel : b.codFeeLabel, COD_FEE_LABEL_DEFAULT, 40),
     shippingFee: has('shippingFee') ? money(p.shippingFee, b.shippingFee) : money(b.shippingFee),
     freeShippingAbove: has('freeShippingAbove') ? money(p.freeShippingAbove, b.freeShippingAbove) : money(b.freeShippingAbove),
+    shippingMode: pick('shippingMode', COD_SHIPPING_MODES),
     minOrder: has('minOrder') ? money(p.minOrder, b.minOrder) : money(b.minOrder),
     maxOrder: has('maxOrder') ? money(p.maxOrder, b.maxOrder) : money(b.maxOrder),
     requireOtp: has('requireOtp') ? Boolean(p.requireOtp) : Boolean(b.requireOtp),
@@ -376,6 +516,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     blockedPincodes: parsePincodes(has('blockedPincodes') ? p.blockedPincodes : b.blockedPincodes),
     excludedProductTags: parseTags(has('excludedProductTags') ? p.excludedProductTags : b.excludedProductTags),
     excludedBehavior: pick('excludedBehavior', COD_EXCLUDED_BEHAVIORS),
+    unlisted: sanitizeUnlisted(p.unlisted, b.unlisted),
     allowCoupons: has('allowCoupons') ? Boolean(p.allowCoupons) : b.allowCoupons !== false,
     couponMaxDiscount: has('couponMaxDiscount') ? money(p.couponMaxDiscount, b.couponMaxDiscount) : money(b.couponMaxDiscount),
     cartDiscounts: has('cartDiscounts') ? Boolean(p.cartDiscounts) : b.cartDiscounts !== false,
@@ -468,11 +609,18 @@ export function codFeeOf(settings, subtotal = null) {
   return money(settings.codFee);
 }
 
-/** Shipping + COD fee charged as the order's shipping line. */
-export function codCharges(settings, subtotal) {
-  const shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
-    ? settings.shippingFee
-    : 0;
+/**
+ * Shipping + COD fee charged as the order's shipping line. `shipping` = the
+ * chosen delivery option's price under advanced shipping (shipping.shared.js
+ * quoteShipping); without it, the simple flat fee and free-shipping threshold.
+ */
+export function codCharges(settings, subtotal, shipping = null) {
+  if (shipping == null) {
+    shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
+      ? settings.shippingFee
+      : 0;
+  }
+  shipping = money(shipping);
   const codFee = codFeeOf(settings, subtotal);
   return { shipping, codFee, total: money(shipping + codFee) };
 }

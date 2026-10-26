@@ -1,0 +1,22 @@
+node:internal/errors:984
+  const err = new Error(message);
+              ^
+
+Error: Command failed: C:\nvm4w\nodejs\node.exe node_modules\vite\bin\vite.js build --config C:\xampp\htdocs\cartdrawerv2_ui\tests\ai-handoff\harness\vite.config.mjs
+    at genericNodeError (node:internal/errors:984:15)
+    at wrappedFn (node:internal/errors:538:14)
+    at checkExecSyncError (node:child_process:891:11)
+    at execFileSync (node:child_process:927:15)
+    at file:///C:/xampp/htdocs/cartdrawerv2_ui/tests/ai-handoff/browser-check.mjs:19:38
+    at ModuleJob.run (node:internal/modules/esm/module_job:263:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:540:24)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {
+  status: 1,
+  signal: null,
+  output: [ null, null, null ],
+  pid: 19692,
+  stdout: null,
+  stderr: null
+}
+
+Node.js v20.19.4

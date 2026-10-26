@@ -1,0 +1,8 @@
+PASS  quote carries the cart's applicable codes + the drawer code, not the dead one — ["KO10","SLIDER5"]
+PASS  quote carries the cart attributes
+PASS  the drawer code is not sent as a popup coupon (Coupons is off)
+PASS  review names each discount — Items₹2,000.00Buy 2, save 100−₹100.00KO10−₹200.00OLDCODE doesn't apply to this orderShippingFreePay on delivery₹1,700.00
+PASS  review says which cart code did not apply — Items₹2,000.00Buy 2, save 100−₹100.00KO10−₹200.00OLDCODE doesn't apply to this orderShippingFreePay on delivery₹1,700.00
+PASS  order carries the same cart codes and attributes — {"codes":["KO10","SLIDER5"],"attrs":{"gift_note":"For Amma","app-ref":"abc"}}
+
+6/6 passed

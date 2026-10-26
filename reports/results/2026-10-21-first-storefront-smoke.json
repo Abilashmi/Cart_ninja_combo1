@@ -1,0 +1,250 @@
+{
+  "name": "storefront-smoke",
+  "startedAt": "2026-10-21T10:50:47.065Z",
+  "durationSeconds": 32.2,
+  "maxVus": 2,
+  "stages": [
+    {
+      "duration": 5,
+      "target": 2
+    },
+    {
+      "duration": 25,
+      "target": 2
+    }
+  ],
+  "thinkMs": [
+    1000,
+    3000
+  ],
+  "timeoutMs": 10000,
+  "workers": 4,
+  "overall": {
+    "requests": 25,
+    "rps": 0.8,
+    "avgMs": 76.2,
+    "minMs": 12.4,
+    "p50Ms": 48.8,
+    "p90Ms": 197.9,
+    "p95Ms": 232.5,
+    "p99Ms": 351.8,
+    "maxMs": 351.8,
+    "failed": 0,
+    "failRate": 0,
+    "timeouts": 0,
+    "rateLimited": 0,
+    "statuses": {
+      "200": 25
+    },
+    "failReasons": {}
+  },
+  "byScenario": {
+    "config": {
+      "requests": 9,
+      "rps": 0.3,
+      "avgMs": 159.9,
+      "minMs": 56.2,
+      "p50Ms": 131.7,
+      "p90Ms": 351.8,
+      "p95Ms": 351.8,
+      "p99Ms": 351.8,
+      "maxMs": 351.8,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 9
+      },
+      "failReasons": {}
+    },
+    "config_banner": {
+      "requests": 0,
+      "rps": 0,
+      "avgMs": 0,
+      "minMs": null,
+      "p50Ms": null,
+      "p90Ms": null,
+      "p95Ms": null,
+      "p99Ms": null,
+      "maxMs": null,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {},
+      "failReasons": {}
+    },
+    "coupons": {
+      "requests": 9,
+      "rps": 0.3,
+      "avgMs": 17.8,
+      "minMs": 13,
+      "p50Ms": 15.2,
+      "p90Ms": 26.5,
+      "p95Ms": 26.5,
+      "p99Ms": 26.5,
+      "maxMs": 26.5,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 9
+      },
+      "failReasons": {}
+    },
+    "fbt": {
+      "requests": 0,
+      "rps": 0,
+      "avgMs": 0,
+      "minMs": null,
+      "p50Ms": null,
+      "p90Ms": null,
+      "p95Ms": null,
+      "p99Ms": null,
+      "maxMs": null,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {},
+      "failReasons": {}
+    },
+    "cod_config": {
+      "requests": 6,
+      "rps": 0.2,
+      "avgMs": 42.6,
+      "minMs": 12.4,
+      "p50Ms": 36.9,
+      "p90Ms": 71.8,
+      "p95Ms": 71.8,
+      "p99Ms": 71.8,
+      "maxMs": 71.8,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 6
+      },
+      "failReasons": {}
+    },
+    "packs": {
+      "requests": 1,
+      "rps": 0,
+      "avgMs": 48.8,
+      "minMs": 48.8,
+      "p50Ms": 48.8,
+      "p90Ms": 48.8,
+      "p95Ms": 48.8,
+      "p99Ms": 48.8,
+      "maxMs": 48.8,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1
+      },
+      "failReasons": {}
+    }
+  },
+  "environment": {
+    "type": "local-isolated",
+    "php": {
+      "version": "8.2.12",
+      "opcache": true,
+      "workers": 4
+    },
+    "shops": {
+      "shops": 2000,
+      "bannerShops": 200,
+      "bannerChars": 600000
+    },
+    "machine": "Intel(R) Core(TM) i3-7020U CPU @ 2.30GHz, 4 logical CPUs, 8 GB RAM, win32",
+    "loadGenerator": "same machine (competes for CPU with PHP + MariaDB)"
+  },
+  "resources": {
+    "php": {
+      "before": {
+        "cpuSeconds": 0.88,
+        "workingSetMb": 87,
+        "peakWorkingSetMb": 89
+      },
+      "after": {
+        "cpuSeconds": 1.08,
+        "workingSetMb": 91,
+        "peakWorkingSetMb": 91
+      }
+    },
+    "mysqld": {
+      "before": {
+        "cpuSeconds": 13.13,
+        "workingSetMb": 222,
+        "peakWorkingSetMb": 256
+      },
+      "after": {
+        "cpuSeconds": 13.77,
+        "workingSetMb": 222,
+        "peakWorkingSetMb": 256
+      }
+    },
+    "db": {
+      "Aborted_connects": 0,
+      "Bytes_sent": 207470,
+      "Com_create_table": 0,
+      "Com_delete": 0,
+      "Com_insert": 0,
+      "Com_select": 60,
+      "Com_show_fields": 50,
+      "Com_update": 0,
+      "Connections": 25,
+      "Created_tmp_disk_tables": 50,
+      "Innodb_row_lock_waits": 0,
+      "Max_used_connections": 2,
+      "Questions": 136,
+      "Slow_queries": 1,
+      "Threads_connected": 1,
+      "questionsPerRequest": 5.4
+    }
+  },
+  "slowQueries": {
+    "count": 54,
+    "top": [
+      {
+        "seconds": 0.60728,
+        "sql": "INSERT INTO fbt_widget (shopDomain, temp1, temp2, temp3, selectedTemp, selectedMode, `condition`, ai_enabled, ai_product_count) VALUES ('perf-shop-0000.myshopif"
+      },
+      {
+        "seconds": 0.597478,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.536211,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.505066,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.502074,
+        "sql": "CREATE TABLE coupons ("
+      }
+    ]
+  },
+  "criteria": {
+    "p95Ms": 500,
+    "maxFailPct": 1
+  },
+  "verdicts": {
+    "overall": "PASS",
+    "config": "PASS",
+    "config_banner": "NOT RUN",
+    "coupons": "PASS",
+    "fbt": "NOT RUN",
+    "cod_config": "PASS",
+    "packs": "PASS"
+  }
+}

@@ -1,0 +1,3202 @@
+TAP version 13
+# [BRIX AGENCY DEBUG] shop=a.myshopify.com status_endpoint=/internal/shopify/agency/store-status http_status=200 stage=AUTHORIZATION_REQUIRED
+# Subtest: a healthy dashboard answer is passed through
+ok 1 - a healthy dashboard answer is passed through
+  ---
+  duration_ms: 113.1077
+  ...
+# [BRIX AGENCY DEBUG] shop=a.myshopify.com status_endpoint=/internal/shopify/agency/store-status error=TimeoutError message=The operation was aborted due to timeout
+# Subtest: a dashboard that never answers fails open within the time limit instead of holding Home
+ok 2 - a dashboard that never answers fails open within the time limit instead of holding Home
+  ---
+  duration_ms: 221.8304
+  ...
+# [BRIX AGENCY DEBUG] shop=a.myshopify.com status_endpoint=/internal/shopify/agency/store-status error=TimeoutError message=The operation was aborted due to timeout
+# Subtest: a dashboard that sends headers then stalls mid-body is also cut off
+ok 3 - a dashboard that sends headers then stalls mid-body is also cut off
+  ---
+  duration_ms: 222.3443
+  ...
+# [BRIX AGENCY DEBUG] shop=a.myshopify.com status_endpoint=/internal/shopify/agency/store-status error=SyntaxError message=Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+# Subtest: an HTML page instead of JSON (a wrong or dev-tunnel URL) fails open without throwing
+ok 4 - an HTML page instead of JSON (a wrong or dev-tunnel URL) fails open without throwing
+  ---
+  duration_ms: 12.8577
+  ...
+# [BRIX AGENCY DEBUG] shop=a.myshopify.com status_endpoint=/internal/shopify/agency/store-status error=TimeoutError message=The operation was aborted due to timeout
+# Subtest: the default limit is short enough that Home is never held for long
+ok 5 - the default limit is short enough that Home is never held for long
+  ---
+  duration_ms: 3014.6042
+  ...
+# Subtest: module routes point at real route files
+ok 6 - module routes point at real route files
+  ---
+  duration_ms: 17.2676
+  ...
+# Subtest: detects the spec examples
+ok 7 - detects the spec examples
+  ---
+  duration_ms: 5.7677
+  ...
+# Subtest: multiple Cart Editor features stay one module, ordered as written
+ok 8 - multiple Cart Editor features stay one module, ordered as written
+  ---
+  duration_ms: 2.0428
+  ...
+# Subtest: announcement wording variants and typos
+ok 9 - announcement wording variants and typos
+  ---
+  duration_ms: 2.077
+  ...
+# Subtest: the other Cart Editor features map
+ok 10 - the other Cart Editor features map
+  ---
+  duration_ms: 0.7545
+  ...
+# Subtest: never guesses: no module or several modules -> null
+ok 11 - never guesses: no module or several modules -> null
+  ---
+  duration_ms: 0.3402
+  ...
+# Subtest: already on the module -> no navigation
+ok 12 - already on the module -> no navigation
+  ---
+  duration_ms: 2.8214
+  ...
+# Subtest: from the global page -> navigates to the real module route
+ok 13 - from the global page -> navigates to the real module route
+  ---
+  duration_ms: 1.2696
+  ...
+# Subtest: getModuleForPath is segment-aware
+ok 14 - getModuleForPath is segment-aware
+  ---
+  duration_ms: 0.3734
+  ...
+# Subtest: handoff carries the exact original message and required fields
+ok 15 - handoff carries the exact original message and required fields
+  ---
+  duration_ms: 1.222
+  ...
+# Subtest: a handoff is consumed exactly once (refresh / back-forward / double effect)
+ok 16 - a handoff is consumed exactly once (refresh / back-forward / double effect)
+  ---
+  duration_ms: 0.7526
+  ...
+# Subtest: a handoff still runs only once if storage removal fails
+ok 17 - a handoff still runs only once if storage removal fails
+  ---
+  duration_ms: 0.406
+  ...
+# Subtest: wrong module leaves the handoff for its own module
+ok 18 - wrong module leaves the handoff for its own module
+  ---
+  duration_ms: 0.3909
+  ...
+# Subtest: expired handoffs are dropped, not run
+ok 19 - expired handoffs are dropped, not run
+  ---
+  duration_ms: 0.9337
+  ...
+# Subtest: corrupt or forged records are discarded with an error
+ok 20 - corrupt or forged records are discarded with an error
+  ---
+  duration_ms: 0.5861
+  ...
+# Subtest: storage blocked entirely: handoff still works via the in-memory fallback, once
+ok 21 - storage blocked entirely: handoff still works via the in-memory fallback, once
+  ---
+  duration_ms: 0.7902
+  ...
+# Subtest: Coupon Banner is its own module, distinct from the cart drawer Coupon Slider
+ok 22 - Coupon Banner is its own module, distinct from the cart drawer Coupon Slider
+  ---
+  duration_ms: 0.413
+  ...
+# Subtest: only change requests redirect; questions and analytics stay in the current chat
+ok 23 - only change requests redirect; questions and analytics stay in the current chat
+  ---
+  duration_ms: 35.4534
+  ...
+# Subtest: milestone / threshold / free-gift wording routes to the Cart Editor progress bar
+ok 24 - milestone / threshold / free-gift wording routes to the Cart Editor progress bar
+  ---
+  duration_ms: 3.3576
+  ...
+# Subtest: a typo in the verb still redirects a change request, but read topics stay
+ok 25 - a typo in the verb still redirects a change request, but read topics stay
+  ---
+  duration_ms: 0.6659
+  ...
+# [fbt-offer] sync failed: Cannot read properties of undefined (reading 'currencyCode')
+# [fbt-offer] sync failed: Cannot read properties of undefined (reading 'currencyCode')
+# Subtest: FBT (never set up): asks template first, then where it shows, then which products
+ok 26 - FBT (never set up): asks template first, then where it shows, then which products
+  ---
+  duration_ms: 45.7785
+  ...
+# Subtest: FBT: already-configured store is not asked for a template again; answers pass the gate
+ok 27 - FBT: already-configured store is not asked for a template again; answers pass the gate
+  ---
+  duration_ms: 36.9463
+  ...
+# Subtest: Countdown timer: turning one on asks only the duration; styling changes are not asked
+ok 28 - Countdown timer: turning one on asks only the duration; styling changes are not asked
+  ---
+  duration_ms: 12.0174
+  ...
+# Subtest: Combo: asks layout, then collection, then discount; the page name is never asked
+ok 29 - Combo: asks layout, then collection, then discount; the page name is never asked
+  ---
+  duration_ms: 2.9575
+  ...
+# Subtest: Progress bar: a NEW bar asks for its reward; an existing bar is not re-asked
+ok 30 - Progress bar: a NEW bar asks for its reward; an existing bar is not re-asked
+  ---
+  duration_ms: 1.8283
+  ...
+# Subtest: the tour walks the whole combo flow in order, and ends on the app embed
+ok 31 - the tour walks the whole combo flow in order, and ends on the app embed
+  ---
+  duration_ms: 3.118
+  ...
+# Subtest: never started -> null; start / go to step / dismiss / finish are remembered
+ok 32 - never started -> null; start / go to step / dismiss / finish are remembered
+  ---
+  duration_ms: 0.8585
+  ...
+# Subtest: corrupt or out-of-range storage is handled safely
+ok 33 - corrupt or out-of-range storage is handled safely
+  ---
+  duration_ms: 0.4599
+  ...
+# Subtest: nextStepOnPage finds the neighbouring step on the same screen
+ok 34 - nextStepOnPage finds the neighbouring step on the same screen
+  ---
+  duration_ms: 0.4954
+  ...
+# Subtest: the tour is remembered per store: another store starts fresh
+ok 35 - the tour is remembered per store: another store starts fresh
+  ---
+  duration_ms: 0.5873
+  ...
+# Subtest: a new banner asks for template, then coupons, then where — nothing written until all three
+ok 36 - a new banner asks for template, then coupons, then where — nothing written until all three
+  ---
+  duration_ms: 49.0043
+  ...
+# Subtest: full setup: latest coupon, all pages -> saved, read back, reported truthfully
+ok 37 - full setup: latest coupon, all pages -> saved, read back, reported truthfully
+  ---
+  duration_ms: 11.0356
+  ...
+# Subtest: template default text uses the store currency symbol, not a hardcoded rupee
+ok 38 - template default text uses the store currency symbol, not a hardcoded rupee
+  ---
+  duration_ms: 5.006
+  ...
+# Subtest: specific products / collections become per-coupon conditions with real handles
+ok 39 - specific products / collections become per-coupon conditions with real handles
+  ---
+  duration_ms: 13.9797
+  ...
+# Subtest: bad input fails before any write: unknown/ambiguous product, unknown coupon, no coupons
+ok 40 - bad input fails before any write: unknown/ambiguous product, unknown coupon, no coupons
+  ---
+  duration_ms: 5.6079
+  ...
+# Subtest: free plan: designed but honestly reported as not live
+ok 41 - free plan: designed but honestly reported as not live
+  ---
+  duration_ms: 6.3646
+  ...
+# Subtest: changing only the layout keeps coupons, conditions, styles and other templates
+ok 42 - changing only the layout keeps coupons, conditions, styles and other templates
+  ---
+  duration_ms: 8.4916
+  ...
+# Subtest: a cart-drawer style position ("top") is corrected to a valid banner placement
+ok 43 - a cart-drawer style position ("top") is corrected to a valid banner placement
+  ---
+  duration_ms: 3.4126
+  ...
+# Subtest: needs_info results carry quick-reply buttons for the merchant
+ok 44 - needs_info results carry quick-reply buttons for the merchant
+  ---
+  duration_ms: 4.6187
+  ...
+# Subtest: USD store: foreign symbols before an amount become $
+ok 45 - USD store: foreign symbols before an amount become $
+  ---
+  duration_ms: 2.8081
+  ...
+# Subtest: store symbol and unrelated text are left alone
+ok 46 - store symbol and unrelated text are left alone
+  ---
+  duration_ms: 3.8127
+  ...
+# Subtest: INR store: $ becomes ₹, ₹ untouched
+ok 47 - INR store: $ becomes ₹, ₹ untouched
+  ---
+  duration_ms: 0.8948
+  ...
+# Subtest: dollar-family store keeps its own $ but swaps others
+ok 48 - dollar-family store keeps its own $ but swaps others
+  ---
+  duration_ms: 0.6017
+  ...
+# Subtest: letter symbols get a space; euro store
+ok 49 - letter symbols get a space; euro store
+  ---
+  duration_ms: 0.4613
+  ...
+# Subtest: deep: strings only, numbers/keys untouched
+ok 50 - deep: strings only, numbers/keys untouched
+  ---
+  duration_ms: 1.4508
+  ...
+# [db_proxy] raw response body: {"success":false,"error":"SQLSTATE[HY000] DB Connection Failed at 10.0.0.5"}
+# [db_proxy] transient DB connection failure, retrying once: SQLSTATE[HY000] DB Connection Failed at 10.0.0.5
+# Subtest: validation: empty / whitespace rejected, trimmed, case kept, duplicates case-insensitive
+ok 51 - validation: empty / whitespace rejected, trimmed, case kept, duplicates case-insensitive
+  ---
+  duration_ms: 5.2231
+  ...
+# Subtest: adds an external code: self-heals the column, stores only custom_coupons, returns a selectable coupon
+ok 52 - adds an external code: self-heals the column, stores only custom_coupons, returns a selectable coupon
+  ---
+  duration_ms: 42.6582
+  ...
+# Subtest: duplicate of a custom code or an active Shopify code is refused and nothing is written
+ok 53 - duplicate of a custom code or an active Shopify code is refused and nothing is written
+  ---
+  duration_ms: 6.837
+  ...
+# Subtest: newest custom coupon first; list survives a "refresh" (fresh read)
+ok 54 - newest custom coupon first; list survives a "refresh" (fresh read)
+  ---
+  duration_ms: 4.4879
+  ...
+# Subtest: no discount is created: only the read-only DiscountList query is sent to Shopify
+ok 55 - no discount is created: only the read-only DiscountList query is sent to Shopify
+  ---
+  duration_ms: 2.0478
+  ...
+# [db_proxy] raw response body: {"success":false,"error":"SQLSTATE[HY000] DB Connection Failed at 10.0.0.5"}
+# [coupon-banner] could not save custom coupon: SQLSTATE[HY000] DB Connection Failed at 10.0.0.5
+# Subtest: storage failure -> friendly message, no SQL or host leaked
+ok 56 - storage failure -> friendly message, no SQL or host leaked
+  ---
+  duration_ms: 412.8124
+  ...
+# Subtest: shop with no custom coupons (or no row) lists nothing
+ok 57 - shop with no custom coupons (or no row) lists nothing
+  ---
+  duration_ms: 2.1113
+  ...
+# Subtest: real co-purchase history wins over the same-product-type fallback
+ok 58 - real co-purchase history wins over the same-product-type fallback
+  ---
+  duration_ms: 2.3621
+  ...
+# Subtest: falls back to same product type, ranked by price proximity, when there is no purchase history
+ok 59 - falls back to same product type, ranked by price proximity, when there is no purchase history
+  ---
+  duration_ms: 0.5975
+  ...
+# Subtest: falls back to a shared collection when product type is blank — the real-world case (a catalog with no Product Type set on anything, but real merchant-curated collections)
+ok 60 - falls back to a shared collection when product type is blank — the real-world case (a catalog with no Product Type set on anything, but real merchant-curated collections)
+  ---
+  duration_ms: 0.5367
+  ...
+# Subtest: ranks same-collection candidates by how many collections they share before price proximity
+ok 61 - ranks same-collection candidates by how many collections they share before price proximity
+  ---
+  duration_ms: 0.5877
+  ...
+# Subtest: a product with neither co-purchase data nor a same-type peer is skipped, never given an invented pairing
+ok 62 - a product with neither co-purchase data nor a same-type peer is skipped, never given an invented pairing
+  ---
+  duration_ms: 0.2882
+  ...
+# Subtest: co-purchase offers are capped at countPerProduct even when more history exists
+ok 63 - co-purchase offers are capped at countPerProduct even when more history exists
+  ---
+  duration_ms: 1.692
+  ...
+# Subtest: a co-purchased id that no longer exists in the current catalog is silently dropped, not crashed on
+ok 64 - a co-purchased id that no longer exists in the current catalog is silently dropped, not crashed on
+  ---
+  duration_ms: 0.4152
+  ...
+# Subtest: toFbtOfferShape only carries the fields the storefront widget actually reads
+ok 65 - toFbtOfferShape only carries the fields the storefront widget actually reads
+  ---
+  duration_ms: 0.2569
+  ...
+# Subtest: shapeAiUpsellRules reshapes into the Upsell widget's own manual-rule format, matched by specific trigger product
+ok 66 - shapeAiUpsellRules reshapes into the Upsell widget's own manual-rule format, matched by specific trigger product
+  ---
+  duration_ms: 2.1698
+  ...
+# Subtest: shapeAiUpsellRules ids are unique per rule (no accidental collisions when idPrefix is shared)
+ok 67 - shapeAiUpsellRules ids are unique per rule (no accidental collisions when idPrefix is shared)
+  ---
+  duration_ms: 0.5884
+  ...
+# Subtest: maxCount: spare picks past 10 for size matching, ranked the same way; the default cap stays 10
+ok 68 - maxCount: spare picks past 10 for size matching, ranked the same way; the default cap stays 10
+  ---
+  duration_ms: 1.0876
+  ...
+# Subtest: the tool is registered
+ok 69 - the tool is registered
+  ---
+  duration_ms: 5.5997
+  ...
+# Subtest: turn on with no image: saved on, then asks for the image link
+ok 70 - turn on with no image: saved on, then asks for the image link
+  ---
+  duration_ms: 49.961
+  ...
+# Subtest: an image link makes it visible; turning off keeps the image
+ok 71 - an image link makes it visible; turning off keeps the image
+  ---
+  duration_ms: 14.7277
+  ...
+# Subtest: space above / below: set from chat, clamped, other fields kept
+ok 72 - space above / below: set from chat, clamped, other fields kept
+  ---
+  duration_ms: 9.5996
+  ...
+# Subtest: a non-https / non-image link is refused and nothing is written
+ok 73 - a non-https / non-image link is refused and nothing is written
+  ---
+  duration_ms: 1.0327
+  ...
+# Subtest: uploaded (data URL) images never reach the model
+ok 74 - uploaded (data URL) images never reach the model
+  ---
+  duration_ms: 11.0615
+  ...
+# Subtest: image banner requests route to the Cart Editor, not the Coupon Banner
+ok 75 - image banner requests route to the Cart Editor, not the Coupon Banner
+  ---
+  duration_ms: 7.3427
+  ...
+# Subtest: free product goal: product is resolved and saved as the tier Reward Product
+ok 76 - free product goal: product is resolved and saved as the tier Reward Product
+  ---
+  duration_ms: 88.7706
+  ...
+# Subtest: naming a product implies a product reward even if the type was omitted
+ok 77 - naming a product implies a product reward even if the type was omitted
+  ---
+  duration_ms: 14.315
+  ...
+# Subtest: a free-product reward with no product is refused, nothing written, asks which product
+ok 78 - a free-product reward with no product is refused, nothing written, asks which product
+  ---
+  duration_ms: 0.9952
+  ...
+# Subtest: unknown / ambiguous product names fail before any write
+ok 79 - unknown / ambiguous product names fail before any write
+  ---
+  duration_ms: 2.2137
+  ...
+# Subtest: changing only the goal keeps the existing reward product
+ok 80 - changing only the goal keeps the existing reward product
+  ---
+  duration_ms: 30.9497
+  ...
+# Subtest: switching the reward away from a product clears the products
+ok 81 - switching the reward away from a product clears the products
+  ---
+  duration_ms: 28.6383
+  ...
+# Subtest: tiers tool: per-tier reward products saved; unresolved product blocks the whole replace
+ok 82 - tiers tool: per-tier reward products saved; unresolved product blocks the whole replace
+  ---
+  duration_ms: 38.9151
+  ...
+# Subtest: a reward product without a pricing choice asks the free-or-regular question and writes nothing
+ok 83 - a reward product without a pricing choice asks the free-or-regular question and writes nothing
+  ---
+  duration_ms: 6.2722
+  ...
+# Subtest: regular price: saved as regular, no free-gift discount is set up
+ok 84 - regular price: saved as regular, no free-gift discount is set up
+  ---
+  duration_ms: 8.5209
+  ...
+# Subtest: free but the extension is not deployed: saved, config written, and it says plainly it is not free yet
+ok 85 - free but the extension is not deployed: saved, config written, and it says plainly it is not free yet
+  ---
+  duration_ms: 11.6431
+  ...
+# Subtest: free with the extension deployed: verified active
+ok 86 - free with the extension deployed: verified active
+  ---
+  duration_ms: 6.7278
+  ...
+# Subtest: changing only the goal keeps the pricing choice
+ok 87 - changing only the goal keeps the pricing choice
+  ---
+  duration_ms: 24.4602
+  ...
+# Subtest: not-free-yet result carries the exact reason and forbids the manual-steps fallback
+ok 88 - not-free-yet result carries the exact reason and forbids the manual-steps fallback
+  ---
+  duration_ms: 23.1191
+  ...
+# Subtest: gift line is 100% off once the paid cart reaches the milestone
+ok 89 - gift line is 100% off once the paid cart reaches the milestone
+  ---
+  duration_ms: 3.9945
+  ...
+# Subtest: below the milestone nothing is free (gift never helps pay for its own unlock)
+ok 90 - below the milestone nothing is free (gift never helps pay for its own unlock)
+  ---
+  duration_ms: 0.6029
+  ...
+# Subtest: only one unit of a gift line is free
+ok 91 - only one unit of a gift line is free
+  ---
+  duration_ms: 0.5019
+  ...
+# Subtest: a line without the marker, or for a product that is not a reward, is never free
+ok 92 - a line without the marker, or for a product that is not a reward, is never free
+  ---
+  duration_ms: 0.4066
+  ...
+# Subtest: item-count milestones use the number of non-gift items
+ok 93 - item-count milestones use the number of non-gift items
+  ---
+  duration_ms: 0.3846
+  ...
+# Subtest: a cart in a different currency than the milestone gets no discount (never guess)
+ok 94 - a cart in a different currency than the milestone gets no discount (never guess)
+  ---
+  duration_ms: 0.2844
+  ...
+# Subtest: no config, wrong discount class, or empty cart -> no discount
+ok 95 - no config, wrong discount class, or empty cart -> no discount
+  ---
+  duration_ms: 0.4827
+  ...
+# Subtest: a milestone the paid cart has not reached shows no reward
+ok 96 - a milestone the paid cart has not reached shows no reward
+  ---
+  duration_ms: 2.7495
+  ...
+# Subtest: reaching a milestone unlocks its reward products, free or regular as configured
+ok 97 - reaching a milestone unlocks its reward products, free or regular as configured
+  ---
+  duration_ms: 2.7229
+  ...
+# Subtest: item-count mode compares the item count, and unknown products still show a generic line
+ok 98 - item-count mode compares the item count, and unknown products still show a generic line
+  ---
+  duration_ms: 0.3413
+  ...
+# Subtest: tiers without a real threshold are ignored, and a product is listed once
+ok 99 - tiers without a real threshold are ignored, and a product is listed once
+  ---
+  duration_ms: 0.2927
+  ...
+# Subtest: totals: free rewards cost nothing, regular-price rewards add their price
+ok 100 - totals: free rewards cost nothing, regular-price rewards add their price
+  ---
+  duration_ms: 0.5419
+  ...
+# Subtest: free-gift function config: only free-priced tiers with products, numeric ids, only when the bar is on
+ok 101 - free-gift function config: only free-priced tiers with products, numeric ids, only when the bar is on
+  ---
+  duration_ms: 0.7309
+  ...
+# Subtest: numbered advice becomes intro + tip cards + outro
+ok 102 - numbered advice becomes intro + tip cards + outro
+  ---
+  duration_ms: 4.6825
+  ...
+# Subtest: title with the colon inside the bold is handled
+ok 103 - title with the colon inside the bold is handled
+  ---
+  duration_ms: 1.2919
+  ...
+# Subtest: plain answers, single items and untitled bullets are left alone
+ok 104 - plain answers, single items and untitled bullets are left alone
+  ---
+  duration_ms: 0.2854
+  ...
+# Subtest: bold-titled bullets also become cards
+ok 105 - bold-titled bullets also become cards
+  ---
+  duration_ms: 0.2593
+  ...
+# Subtest: report periods resolve to the right local dates
+ok 106 - report periods resolve to the right local dates
+  ---
+  duration_ms: 1.8089
+  ...
+# Subtest: plain manual steps stay a numbered list, only titled ideas become cards
+ok 107 - plain manual steps stay a numbered list, only titled ideas become cards
+  ---
+  duration_ms: 0.4814
+  ...
+# Subtest: whole amounts lose ".00" but never a thousands group
+ok 108 - whole amounts lose ".00" but never a thousands group
+  ---
+  duration_ms: 90.3468
+  ...
+# Subtest: embed detection reads settings_data.json blocks
+ok 109 - embed detection reads settings_data.json blocks
+  ---
+  duration_ms: 2.3511
+  ...
+# Subtest: getEmbedStatus: warns only when the theme was read and the embed is confirmed off
+ok 110 - getEmbedStatus: warns only when the theme was read and the embed is confirmed off
+  ---
+  duration_ms: 39.4565
+  ...
+# Subtest: getEmbedStatus: any failure to read the theme is "unknown", never a false warning
+ok 111 - getEmbedStatus: any failure to read the theme is "unknown", never a false warning
+  ---
+  duration_ms: 7.4143
+  ...
+# Subtest: the embed handle and deep link match the real extension
+ok 112 - the embed handle and deep link match the real extension
+  ---
+  duration_ms: 3.2409
+  ...
+# Subtest: generating on a paid plan saves AI mode (and the rules) in the drawer record, keeping the rest
+ok 113 - generating on a paid plan saves AI mode (and the rules) in the drawer record, keeping the rest
+  ---
+  duration_ms: 49.1394
+  ...
+# Subtest: never writes back a copy the plan may have trimmed: Free plan
+ok 114 - never writes back a copy the plan may have trimmed: Free plan
+  ---
+  duration_ms: 0.4552
+  ...
+# Subtest: never writes back while the drawer reads as off (a paused order cap looks the same)
+ok 115 - never writes back while the drawer reads as off (a paused order cap looks the same)
+  ---
+  duration_ms: 4.5819
+  ...
+# [cart-drawer-record] PHP fetch failed, trying local fallback: network
+# Subtest: no drawer record yet, or the backend failing: nothing written, never throws
+ok 116 - no drawer record yet, or the backend failing: nothing written, never throws
+  ---
+  duration_ms: 17.2959
+  ...
+# Subtest: a promise that settles in time passes its value straight through
+ok 117 - a promise that settles in time passes its value straight through
+  ---
+  duration_ms: 2.5251
+  ...
+# Subtest: a promise that never settles resolves to the fallback instead of hanging
+ok 118 - a promise that never settles resolves to the fallback instead of hanging
+  ---
+  duration_ms: 24.0251
+  ...
+# Subtest: the default fallback is the TIMED_OUT marker, distinguishable from a real null
+ok 119 - the default fallback is the TIMED_OUT marker, distinguishable from a real null
+  ---
+  duration_ms: 15.4237
+  ...
+# Subtest: a rejection still rejects rather than being swallowed as a timeout
+ok 120 - a rejection still rejects rather than being swallowed as a timeout
+  ---
+  duration_ms: 2.3239
+  ...
+# Subtest: the pending timer does not keep the event loop alive after the promise wins
+ok 121 - the pending timer does not keep the event loop alive after the promise wins
+  ---
+  duration_ms: 0.4936
+  ...
+# Subtest: intervals: Shopify ANNUAL / annual / yearly = annual, anything else = monthly
+ok 122 - intervals: Shopify ANNUAL / annual / yearly = annual, anything else = monthly
+  ---
+  duration_ms: 1.9208
+  ...
+# Subtest: yearly price is 10 × monthly (two months free) on every paid plan
+ok 123 - yearly price is 10 × monthly (two months free) on every paid plan
+  ---
+  duration_ms: 0.2707
+  ...
+# Subtest: order cap: monthly Starter / Growth bill overage, yearly ones pause, Free and Pro have none
+ok 124 - order cap: monthly Starter / Growth bill overage, yearly ones pause, Free and Pro have none
+  ---
+  duration_ms: 0.3198
+  ...
+# Subtest: AI BRIX: monthly keeps going past the credits (charged), yearly stops at them
+ok 125 - AI BRIX: monthly keeps going past the credits (charged), yearly stops at them
+  ---
+  duration_ms: 0.2789
+  ...
+# Subtest: trial: 14 days, monthly or yearly; a promo code replaces it
+ok 126 - trial: 14 days, monthly or yearly; a promo code replaces it
+  ---
+  duration_ms: 0.2595
+  ...
+# Subtest: PHP mirror: a yearly Starter / Growth pauses at the cap (overage only when billed monthly)
+ok 127 - PHP mirror: a yearly Starter / Growth pauses at the cap (overage only when billed monthly)
+  ---
+  duration_ms: 3.7368
+  ...
+# Subtest: a shop with no banner yet: the storefront GET adds the columns itself and returns no banner
+ok 128 - a shop with no banner yet: the storefront GET adds the columns itself and returns no banner
+  ---
+  duration_ms: 323.8783
+  ...
+# Subtest: save: banner settings stored next to the other drawer settings (Node adds columns if missing)
+ok 129 - save: banner settings stored next to the other drawer settings (Node adds columns if missing)
+  ---
+  duration_ms: 118.0801
+  ...
+# Subtest: save: other saves keep the banner; bad values are refused; empty removes an image
+ok 130 - save: other saves keep the banner; bad values are refused; empty removes an image
+  ---
+  duration_ms: 97.1428
+  ...
+# Subtest: storefront GET: image URLs only (never the uploaded data), placement, alt
+ok 131 - storefront GET: image URLs only (never the uploaded data), placement, alt
+  ---
+  duration_ms: 65.1381
+  ...
+# Subtest: cart_banner_image.php: the uploaded image as a real, long-cached file
+ok 132 - cart_banner_image.php: the uploaded image as a real, long-cached file
+  ---
+  duration_ms: 88.7129
+  ...
+# Subtest: a new upload gets a new link (so shoppers never see a cached old banner)
+ok 133 - a new upload gets a new link (so shoppers never see a cached old banner)
+  ---
+  duration_ms: 139.6314
+  ...
+# Subtest: space above / below: saved, clamped to 0-40, kept by other saves, sent to the storefront
+ok 134 - space above / below: saved, clamped to 0-40, kept by other saves, sent to the storefront
+  ---
+  duration_ms: 148.6218
+  ...
+# Subtest: banner turned off: the storefront gets banner_enabled 0
+ok 135 - banner turned off: the storefront gets banner_enabled 0
+  ---
+  duration_ms: 91.0248
+  ...
+# Subtest: placements: the five options, Above Progress Bar by default
+ok 136 - placements: the five options, Above Progress Bar by default
+  ---
+  duration_ms: 3.3819
+  ...
+# Subtest: images: https links and raster data URLs only
+ok 137 - images: https links and raster data URLs only
+  ---
+  duration_ms: 1.2923
+  ...
+# Subtest: mobile falls back to desktop and desktop to mobile; nothing without images
+ok 138 - mobile falls back to desktop and desktop to mobile; nothing without images
+  ---
+  duration_ms: 0.6928
+  ...
+# Subtest: slot: progress-bar placements follow the bar; products / checkout are fixed
+ok 139 - slot: progress-bar placements follow the bar; products / checkout are fixed
+  ---
+  duration_ms: 0.4382
+  ...
+# Subtest: spacing: whole px from 0 to 40, junk / empty falls back
+ok 140 - spacing: whole px from 0 to 40, junk / empty falls back
+  ---
+  duration_ms: 0.3664
+  ...
+# Subtest: colour codes: \#rgb and \#rrggbb (with or without \#) are valid and stored as \#rrggbb
+ok 141 - colour codes: \#rgb and \#rrggbb (with or without \#) are valid and stored as \#rrggbb
+  ---
+  duration_ms: 2.6283
+  ...
+# Subtest: announcements: the stored list wins, else the single text; blanks dropped, max 10
+ok 142 - announcements: the stored list wins, else the single text; blanks dropped, max 10
+  ---
+  duration_ms: 1.793
+  ...
+# Subtest: progress bar: old flat colour keys are folded into colors and never saved again
+ok 143 - progress bar: old flat colour keys are folded into colors and never saved again
+  ---
+  duration_ms: 0.5041
+  ...
+# Subtest: FBT: empty extra colours follow the base colours, so saved widgets look the same
+ok 144 - FBT: empty extra colours follow the base colours, so saved widgets look the same
+  ---
+  duration_ms: 1.048
+  ...
+# Subtest: free gift: the chosen variant is added while in stock, else the first in-stock one
+ok 145 - free gift: the chosen variant is added while in stock, else the first in-stock one
+  ---
+  duration_ms: 1.2588
+  ...
+# Subtest: free gift badge: own text, else FREE GIFT / REWARD; "free" text only on a free gift
+ok 146 - free gift badge: own text, else FREE GIFT / REWARD; "free" text only on a free gift
+  ---
+  duration_ms: 0.6076
+  ...
+# Subtest: coupon icons: a ₹ (rupee) icon is offered and drawn as SVG paths, not text
+ok 147 - coupon icons: a ₹ (rupee) icon is offered and drawn as SVG paths, not text
+  ---
+  duration_ms: 1.8335
+  ...
+# Subtest: a bar saved before rotation: the storefront GET adds the columns and keeps one message
+ok 148 - a bar saved before rotation: the storefront GET adds the columns and keeps one message
+  ---
+  duration_ms: 269.7375
+  ...
+# Subtest: several messages: saved, first one mirrored into announcement_text, sent to the storefront
+ok 149 - several messages: saved, first one mirrored into announcement_text, sent to the storefront
+  ---
+  duration_ms: 198.7323
+  ...
+# Subtest: the AI setting only the text changes the first message and keeps the rest
+ok 150 - the AI setting only the text changes the first message and keeps the rest
+  ---
+  duration_ms: 31.0885
+  ...
+# Subtest: upsell colours: new columns self-heal; the button follows checkout unless turned off
+ok 151 - upsell colours: new columns self-heal; the button follows checkout unless turned off
+  ---
+  duration_ms: 143.567
+  ...
+# Subtest: free gift: chosen variant and badge text saved per tier, cleaned, and kept when tiers are rewritten without them
+ok 152 - free gift: chosen variant and badge text saved per tier, cleaned, and kept when tiers are rewritten without them
+  ---
+  duration_ms: 286.1767
+  ...
+# Subtest: Shiprocket not on the page: goes to the normal Shopify checkout URL
+ok 153 - Shiprocket not on the page: goes to the normal Shopify checkout URL
+  ---
+  duration_ms: 21.336
+  ...
+# Subtest: Shiprocket present: opens its cart checkout, with the coupon in the cookie it reads
+ok 154 - Shiprocket present: opens its cart checkout, with the coupon in the cookie it reads
+  ---
+  duration_ms: 6.4698
+  ...
+# Subtest: Shiprocket script that finishes loading after the tap is still used
+ok 155 - Shiprocket script that finishes loading after the tap is still used
+  ---
+  duration_ms: 4.2952
+  ...
+# Subtest: coupon still reaches Shiprocket when the /discount request fails
+ok 156 - coupon still reaches Shiprocket when the /discount request fails
+  ---
+  duration_ms: 6.3081
+  ...
+# Subtest: removing the coupon clears only a cookie this helper set
+ok 157 - removing the coupon clears only a cookie this helper set
+  ---
+  duration_ms: 6.1127
+  ...
+# Subtest: a discount cookie from the merchant's own link is left alone
+ok 158 - a discount cookie from the merchant's own link is left alone
+  ---
+  duration_ms: 3.7658
+  ...
+# Subtest: cart with a Pack line stays on Shopify checkout (Shiprocket would not apply the pack price)
+ok 159 - cart with a Pack line stays on Shopify checkout (Shiprocket would not apply the pack price)
+  ---
+  duration_ms: 3.0361
+  ...
+# Subtest: cart with a weight combo box stays on Shopify checkout (Shiprocket would not apply the box price)
+ok 160 - cart with a weight combo box stays on Shopify checkout (Shiprocket would not apply the box price)
+  ---
+  duration_ms: 4.6711
+  ...
+# Subtest: cart with a free reward gift stays on Shopify checkout
+ok 161 - cart with a free reward gift stays on Shopify checkout
+  ---
+  duration_ms: 6.6255
+  ...
+# Subtest: a regular-priced reward product does not block Shiprocket
+ok 162 - a regular-priced reward product does not block Shiprocket
+  ---
+  duration_ms: 4.2196
+  ...
+# Subtest: cart cannot be read: stays on Shopify checkout
+ok 163 - cart cannot be read: stays on Shopify checkout
+  ---
+  duration_ms: 3.9353
+  ...
+# Subtest: Shiprocket throws: goes to Shopify checkout
+ok 164 - Shiprocket throws: goes to Shopify checkout
+  ---
+  duration_ms: 3.1774
+  ...
+# Subtest: Shiprocket never opens its popup: goes to Shopify checkout after the timeout
+ok 165 - Shiprocket never opens its popup: goes to Shopify checkout after the timeout
+  ---
+  duration_ms: 6.1762
+  ...
+# Subtest: double tap starts one checkout, and a later tap works again
+ok 166 - double tap starts one checkout, and a later tap works again
+  ---
+  duration_ms: 8.301
+  ...
+# Subtest: combo checkout: Shiprocket gets the same items, code and attributes as the cart link
+ok 167 - combo checkout: Shiprocket gets the same items, code and attributes as the cart link
+  ---
+  duration_ms: 7.4826
+  ...
+# Subtest: combo checkout: no Shiprocket, or no direct checkout support, uses the cart link
+ok 168 - combo checkout: no Shiprocket, or no direct checkout support, uses the cart link
+  ---
+  duration_ms: 5.2291
+  ...
+# [cod] Shopify GraphQL error: [{"message":"Field 'platformDiscounts' doesn't exist on type 'CalculatedDraftOrder'"}]
+# [cod] draftOrderCalculate without platformDiscounts from now on
+# [cod] Shopify GraphQL error: [{"message":"boom"}]
+# Subtest: cartDiscounts defaults to on, and an explicit off sticks
+ok 169 - cartDiscounts defaults to on, and an explicit off sticks
+  ---
+  duration_ms: 6.2252
+  ...
+# Subtest: on: automatic discounts + the cart's codes, each named; unused codes left off the order
+ok 170 - on: automatic discounts + the cart's codes, each named; unused codes left off the order
+  ---
+  duration_ms: 7.6296
+  ...
+# Subtest: off: no automatic discounts and no cart codes reach Shopify
+ok 171 - off: no automatic discounts and no cart codes reach Shopify
+  ---
+  duration_ms: 1.2146
+  ...
+# Subtest: off still lets a code the shopper types in the popup through (Coupons section)
+ok 172 - off still lets a code the shopper types in the popup through (Coupons section)
+  ---
+  duration_ms: 1.538
+  ...
+# Subtest: a typed coupon and the same cart code are sent once
+ok 173 - a typed coupon and the same cart code are sent once
+  ---
+  duration_ms: 1.817
+  ...
+# Subtest: an API version without platformDiscounts falls back and still prices the order
+ok 174 - an API version without platformDiscounts falls back and still prices the order
+  ---
+  duration_ms: 4.0777
+  ...
+# Subtest: coupon cap: a code worth more becomes a fixed discount of exactly the cap
+ok 175 - coupon cap: a code worth more becomes a fixed discount of exactly the cap
+  ---
+  duration_ms: 3.1404
+  ...
+# Subtest: coupon cap: within the cap the code applies as usual; no cap = as before
+ok 176 - coupon cap: within the cap the code applies as usual; no cap = as before
+  ---
+  duration_ms: 3.0543
+  ...
+# Subtest: coupon cap: a code with a usage limit (or an unknown one) is refused over the cap
+ok 177 - coupon cap: a code with a usage limit (or an unknown one) is refused over the cap
+  ---
+  duration_ms: 3.7498
+  ...
+# Subtest: coupon cap: works without platformDiscounts (difference against the draft without the code)
+ok 178 - coupon cap: works without platformDiscounts (difference against the draft without the code)
+  ---
+  duration_ms: 1.8261
+  ...
+# Subtest: coupon cap: settings keep it; empty = no limit
+ok 179 - coupon cap: settings keep it; empty = no limit
+  ---
+  duration_ms: 0.5476
+  ...
+# Subtest: settings: save merges onto what is stored
+ok 180 - settings: save merges onto what is stored
+  ---
+  duration_ms: 648.5072
+  ...
+# Subtest: OTP: send, wrong code counts an attempt, right code returns a token bound to shop + phone
+ok 181 - OTP: send, wrong code counts an attempt, right code returns a token bound to shop + phone
+  ---
+  duration_ms: 296.0407
+  ...
+# Subtest: OTP: resend is throttled to one per 30 seconds and five per hour
+ok 182 - OTP: resend is throttled to one per 30 seconds and five per hour
+  ---
+  duration_ms: 743.268
+  ...
+# Subtest: OTP: five wrong tries lock the code
+ok 183 - OTP: five wrong tries lock the code
+  ---
+  duration_ms: 333.102
+  ...
+# Subtest: quote: priced by Shopify, COD fee added as the shipping line, rules applied to the real subtotal
+ok 184 - quote: priced by Shopify, COD fee added as the shipping line, rules applied to the real subtotal
+  ---
+  duration_ms: 19.0436
+  ...
+# Subtest: quote: Pack / free-gift lines and sold-out items are refused
+ok 185 - quote: Pack / free-gift lines and sold-out items are refused
+  ---
+  duration_ms: 8.222
+  ...
+# Subtest: quote: a valid coupon is applied, an unusable one is left off the order
+ok 186 - quote: a valid coupon is applied, an unusable one is left off the order
+  ---
+  duration_ms: 12.3709
+  ...
+# Subtest: order: creates a payment-pending Shopify order tagged COD with the address and note
+ok 187 - order: creates a payment-pending Shopify order tagged COD with the address and note
+  ---
+  duration_ms: 395.2571
+  ...
+# Subtest: order: a repeated tap with the same key returns the first order, never a second one
+ok 188 - order: a repeated tap with the same key returns the first order, never a second one
+  ---
+  duration_ms: 140.0307
+  ...
+# Subtest: order: daily per-phone limit
+ok 189 - order: daily per-phone limit
+  ---
+  duration_ms: 352.9392
+  ...
+# [cod] draftOrderComplete userErrors: [{"field":null,"message":"Inventory unavailable"}]
+# Subtest: order: when Shopify refuses to complete, the draft is deleted and the shopper can retry
+ok 190 - order: when Shopify refuses to complete, the draft is deleted and the shopper can retry
+  ---
+  duration_ms: 404.2653
+  ...
+# Subtest: order: an unknown province code is retried with the state in the city line
+ok 191 - order: an unknown province code is retried with the state in the city line
+  ---
+  duration_ms: 180.0662
+  ...
+# Subtest: admin list reads live payment status and summarizes
+ok 192 - admin list reads live payment status and summarizes
+  ---
+  duration_ms: 191.2127
+  ...
+# Subtest: secrets: saved separately, kept when blank, removed with null; admin only sees the last 4
+not ok 193 - secrets: saved separately, kept when blank, removed with null; admin only sees the last 4
+  ---
+  duration_ms: 70.9417
+  location: 'C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\cod\\cod-server.test.mjs:364:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      {
+        ga4ApiSecret: 'ga4-secret-ABCD',
+        metaCapiToken: 'EAAGtoken1234',
+        metaTestCode: 'TEST999',
+    +   msg91AuthKey: '',
+    +   msg91TemplateId: ''
+      }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    ga4ApiSecret: 'ga4-secret-ABCD'
+    metaCapiToken: 'EAAGtoken1234'
+    metaTestCode: 'TEST999'
+  actual:
+    ga4ApiSecret: 'ga4-secret-ABCD'
+    metaCapiToken: 'EAAGtoken1234'
+    metaTestCode: 'TEST999'
+    msg91AuthKey: ''
+    msg91TemplateId: ''
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/xampp/htdocs/cartdrawerv2_ui/tests/cod/cod-server.test.mjs:367:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: order: server-side GA4 purchase + Meta Purchase with the browser ids, hashed customer data
+ok 194 - order: server-side GA4 purchase + Meta Purchase with the browser ids, hashed customer data
+  ---
+  duration_ms: 588.7115
+  ...
+# Subtest: order: no consent, no GA client id, or no keys → nothing sent, recorded why
+ok 195 - order: no consent, no GA client id, or no keys → nothing sent, recorded why
+  ---
+  duration_ms: 871.5247
+  ...
+# [cod-tracking] GA4 purchase rejected: 500 {"error":{"message":"boom"}}
+# [cod-tracking] Meta CAPI Purchase rejected: 500 {"error":{"message":"boom"}}
+# Subtest: order: GA4 / Meta being down never fails the order
+ok 196 - order: GA4 / Meta being down never fails the order
+  ---
+  duration_ms: 316.6958
+  ...
+# Subtest: webhooks: shipped → delivered → cash collected, from Shopify order payloads
+ok 197 - webhooks: shipped → delivered → cash collected, from Shopify order payloads
+  ---
+  duration_ms: 208.5865
+  ...
+# Subtest: webhooks: only BRIX COD orders are touched; unknown ids match nothing
+ok 198 - webhooks: only BRIX COD orders are touched; unknown ids match nothing
+  ---
+  duration_ms: 197.4027
+  ...
+# Subtest: webhooks: cancelled / refunded orders send one GA4 refund, even when two webhooks arrive
+ok 199 - webhooks: cancelled / refunded orders send one GA4 refund, even when two webhooks arrive
+  ---
+  duration_ms: 638.4866
+  ...
+# Subtest: webhooks: a full refund on a paid COD order
+ok 200 - webhooks: a full refund on a paid COD order
+  ---
+  duration_ms: 367.9789
+  ...
+# Subtest: rate limiter
+ok 201 - rate limiter
+  ---
+  duration_ms: 6.38
+  ...
+# Subtest: PHP: every COD endpoint refuses calls without the Forge secret
+ok 202 - PHP: every COD endpoint refuses calls without the Forge secret
+  ---
+  duration_ms: 60.6637
+  ...
+# Subtest: PHP: rejects bad shops, non-hash phones, unknown actions and bad sources
+ok 203 - PHP: rejects bad shops, non-hash phones, unknown actions and bad sources
+  ---
+  duration_ms: 52.0692
+  ...
+# Subtest: PHP: tables hold only hashes, never the raw phone number or OTP code
+ok 204 - PHP: tables hold only hashes, never the raw phone number or OTP code
+  ---
+  duration_ms: 221.5901
+  ...
+# Subtest: PHP: settings round-trip through cod_settings.php
+ok 205 - PHP: settings round-trip through cod_settings.php
+  ---
+  duration_ms: 83.2917
+  ...
+# Subtest: storefront config: off until COD is on AND the plan publishes it
+ok 206 - storefront config: off until COD is on AND the plan publishes it
+  ---
+  duration_ms: 598.8229
+  ...
+# Subtest: storefront config: returns display settings only, OTP only when Node has SMS
+not ok 207 - storefront config: returns display settings only, OTP only when Node has SMS
+  ---
+  duration_ms: 117.3145
+  location: 'C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\cod\\cod-server.test.mjs:596:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    popup look + coupon options reach the storefront (bad offer codes dropped)
+    + actual - expected ... Lines skipped
+    
+      {
+        accent: '#7c3aed',
+    ...
+        showSummary: true,
+        showTrust: false,
+    +   termsUrl: '',
+        thankYouText: 'Thank you for shopping with us!'
+      }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    logo: 'data:image/png;base64,iVBORw0KGgo='
+    logoSize: 'md'
+    accent: '#7c3aed'
+    radius: 'soft'
+    showSummary: true
+    showTrust: false
+    thankYouText: 'Thank you for shopping with us!'
+    showCoupon: true
+    couponLabel: 'Got a code?'
+    couponOpen: true
+    offers:
+      0:
+        code: 'SAVE10'
+        text: '10% off above ₹999'
+  actual:
+    logo: 'data:image/png;base64,iVBORw0KGgo='
+    logoSize: 'md'
+    accent: '#7c3aed'
+    radius: 'soft'
+    showSummary: true
+    showTrust: false
+    thankYouText: 'Thank you for shopping with us!'
+    termsUrl: ''
+    showCoupon: true
+    couponLabel: 'Got a code?'
+    couponOpen: true
+    offers:
+      0:
+        code: 'SAVE10'
+        text: '10% off above ₹999'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/xampp/htdocs/cartdrawerv2_ui/tests/cod/cod-server.test.mjs:624:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: storefront config: each place gets its own button look; turning the drawer off leaves the rest on
+not ok 208 - storefront config: each place gets its own button look; turning the drawer off leaves the rest on
+  ---
+  duration_ms: 114.4912
+  location: 'C:\\xampp\\htdocs\\cartdrawerv2_ui\\tests\\cod\\cod-server.test.mjs:645:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected ... Lines skipped
+    
+      {
+        bg: '#0c7a43',
+    ...
+        fontSize: 17,
+        icon: true,
+    +   paddingX: 16,
+    +   paddingY: 14,
+        radius: 20,
+        style: 'filled',
+        uppercase: false
+      }
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    style: 'filled'
+    bg: '#0c7a43'
+    color: '#ffffff'
+    fontSize: 17
+    bold: true
+    uppercase: false
+    icon: true
+    radius: 20
+  actual:
+    style: 'filled'
+    bg: '#0c7a43'
+    color: '#ffffff'
+    fontSize: 17
+    bold: true
+    uppercase: false
+    icon: true
+    radius: 20
+    paddingY: 14
+    paddingX: 16
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///C:/xampp/htdocs/cartdrawerv2_ui/tests/cod/cod-server.test.mjs:661:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)
+  ...
+# Subtest: storefront config: drawer placement, button style, fee switch / title / visibility and excluded behaviour
+ok 209 - storefront config: drawer placement, button style, fee switch / title / visibility and excluded behaviour
+  ---
+  duration_ms: 298.2745
+  ...
+# Subtest: storefront config: GA4 / Meta Pixel IDs reach the popup, the API secret and token never do
+ok 210 - storefront config: GA4 / Meta Pixel IDs reach the popup, the API secret and token never do
+  ---
+  duration_ms: 165.925
+  ...
+# Subtest: storefront pincode: validates, reports blocked PINs
+ok 211 - storefront pincode: validates, reports blocked PINs
+  ---
+  duration_ms: 2939.1827
+  ...
+# Subtest: relay: forwards otp/quote/order to the app server with the secret and the shopper IP
+ok 212 - relay: forwards otp/quote/order to the app server with the secret and the shopper IP
+  ---
+  duration_ms: 222.6878
+  ...
+# Subtest: relay: passes the app server's errors through unchanged
+ok 213 - relay: passes the app server's errors through unchanged
+  ---
+  duration_ms: 9.7837
+  ...
+# Subtest: relay: a missing or broken app server becomes a clean shopper message
+ok 214 - relay: a missing or broken app server becomes a clean shopper message
+  ---
+  duration_ms: 12.6838
+  ...
+# Subtest: relay: only otp, quote and order can be reached
+ok 215 - relay: only otp, quote and order can be reached
+  ---
+  duration_ms: 58.1518
+  ...
+# Subtest: Node trusts the relayed shopper IP only with the Forge secret
+ok 216 - Node trusts the relayed shopper IP only with the Forge secret
+  ---
+  duration_ms: 3.2677
+  ...
+# Subtest: Node trusts the relayed shopper User-Agent only with the Forge secret
+ok 217 - Node trusts the relayed shopper User-Agent only with the Forge secret
+  ---
+  duration_ms: 2.6903
+  ...
+# Subtest: PHP: tracking secrets need the Forge secret and look like keys
+ok 218 - PHP: tracking secrets need the Forge secret and look like keys
+  ---
+  duration_ms: 31.3789
+  ...
+# Subtest: order: a shopper cannot remove or fake the COD marker through order attributes
+ok 219 - order: a shopper cannot remove or fake the COD marker through order attributes
+  ---
+  duration_ms: 124.2079
+  ...
+# Subtest: settings: productPayment is saved, sanitized, and old settings get safe defaults (off)
+ok 220 - settings: productPayment is saved, sanitized, and old settings get safe defaults (off)
+  ---
+  duration_ms: 208.373
+  ...
+# Subtest: settings: the prepaid sync result is kept in _runtime, and survives later saves and syncCodRuntime
+ok 221 - settings: the prepaid sync result is kept in _runtime, and survives later saves and syncCodRuntime
+  ---
+  duration_ms: 354.3104
+  ...
+# Subtest: combo box: the 10% tier as a line discount; markers stripped; other automatic discounts still accepted
+ok 222 - combo box: the 10% tier as a line discount; markers stripped; other automatic discounts still accepted
+  ---
+  duration_ms: 13.3784
+  ...
+# Subtest: combo box: an automatic discount on the other items applies, as in checkout
+ok 223 - combo box: an automatic discount on the other items applies, as in checkout
+  ---
+  duration_ms: 4.7664
+  ...
+# Subtest: combo box: if Shopify stacks an automatic discount on a box line, COD leaves automatic discounts off
+ok 224 - combo box: if Shopify stacks an automatic discount on a box line, COD leaves automatic discounts off
+  ---
+  duration_ms: 4.8738
+  ...
+# Subtest: combo box: collection membership is asked per counted collection, not read from a capped list
+ok 225 - combo box: collection membership is asked per counted collection, not read from a capped list
+  ---
+  duration_ms: 5.214
+  ...
+# Subtest: combo box: a fixed box price split exactly across lines (uneven units split the line)
+ok 226 - combo box: a fixed box price split exactly across lines (uneven units split the line)
+  ---
+  duration_ms: 5.2641
+  ...
+# [cod] combo box discount did not price as expected; refusing COD for this box.
+# Subtest: combo box: if Shopify reads line discounts per line, that is detected; if it applies neither way, COD is refused
+ok 227 - combo box: if Shopify reads line discounts per line, that is detected; if it applies neither way, COD is refused
+  ---
+  duration_ms: 12.7388
+  ...
+# Subtest: combo box: locked, over the max, not Pro, discount inactive, unknown template → full price
+ok 228 - combo box: locked, over the max, not Pro, discount inactive, unknown template → full price
+  ---
+  duration_ms: 14.199
+  ...
+# Subtest: combo box: products that do not qualify or have no weight do not count and are not discounted
+ok 229 - combo box: products that do not qualify or have no weight do not count and are not discounted
+  ---
+  duration_ms: 10.4994
+  ...
+# Subtest: combo box: a coupon still goes to Shopify and is shown apart from the box discount
+ok 230 - combo box: a coupon still goes to Shopify and is shown apart from the box discount
+  ---
+  duration_ms: 6.1905
+  ...
+# Subtest: combo box order: tagged brix-combo-weight with what was applied; the attribute cannot be forged
+ok 231 - combo box order: tagged brix-combo-weight with what was applied; the attribute cannot be forged
+  ---
+  duration_ms: 169.5608
+  ...
+# Subtest: storefront config: payment options only when on, on a plan that publishes COD
+ok 232 - storefront config: payment options only when on, on a plan that publishes COD
+  ---
+  duration_ms: 244.1416
+  ...
+# Subtest: storefront config: the prepaid offer is sent only when the server verified it, with the numbers Shopify has
+ok 233 - storefront config: the prepaid offer is sent only when the server verified it, with the numbers Shopify has
+  ---
+  duration_ms: 573.3398
+  ...
+# Subtest: storefront config: which payment cards are offered
+ok 234 - storefront config: which payment cards are offered
+  ---
+  duration_ms: 736.0733
+  ...
+# Subtest: storefront config: PHP re-checks payment option values stored by anything else
+ok 235 - storefront config: PHP re-checks payment option values stored by anything else
+  ---
+  duration_ms: 103.851
+  ...
+# Subtest: MSG91: the store's own keys first, then the server's, else nothing
+ok 236 - MSG91: the store's own keys first, then the server's, else nothing
+  ---
+  duration_ms: 9.7083
+  ...
+# Subtest: MSG91: the code goes out with the store's key and template
+ok 237 - MSG91: the code goes out with the store's key and template
+  ---
+  duration_ms: 64.5934
+  ...
+# Subtest: MSG91 keys are write-only secrets in the admin form
+ok 238 - MSG91 keys are write-only secrets in the admin form
+  ---
+  duration_ms: 8.211
+  ...
+# Subtest: Terms and conditions link: empty = the store's terms page; https or a store path only
+ok 239 - Terms and conditions link: empty = the store's terms page; https or a store path only
+  ---
+  duration_ms: 4.1042
+  ...
+# Subtest: Buy it now text: kept, cleaned, and round-trips through the form
+ok 240 - Buy it now text: kept, cleaned, and round-trips through the form
+  ---
+  duration_ms: 2.2703
+  ...
+# Subtest: Buy it now selector and the theme drawer's Checkout text
+ok 241 - Buy it now selector and the theme drawer's Checkout text
+  ---
+  duration_ms: 3.4549
+  ...
+# Subtest: storefront and PHP: "Terms and conditions", no data policy; PHP passes buyNowText and termsUrl
+ok 242 - storefront and PHP: "Terms and conditions", no data policy; PHP passes buyNowText and termsUrl
+  ---
+  duration_ms: 5.4183
+  ...
+# Subtest: button looks: drawer, product page and combo page each have their own
+ok 243 - button looks: drawer, product page and combo page each have their own
+  ---
+  duration_ms: 6.4328
+  ...
+# Subtest: button looks: product follows the drawer until split; old settings keep the old combo look
+ok 244 - button looks: product follows the drawer until split; old settings keep the old combo look
+  ---
+  duration_ms: 1.8157
+  ...
+# Subtest: defaults: COD starts off, every surface on, OTP on
+ok 245 - defaults: COD starts off, every surface on, OTP on
+  ---
+  duration_ms: 0.6263
+  ...
+# Subtest: sanitize merges a partial patch onto saved settings without resetting other fields
+ok 246 - sanitize merges a partial patch onto saved settings without resetting other fields
+  ---
+  duration_ms: 1.2276
+  ...
+# Subtest: sanitize rejects bad values
+ok 247 - sanitize rejects bad values
+  ---
+  duration_ms: 0.7449
+  ...
+# Subtest: product page button: replace Buy it now by default, sizes clamped, partial patches keep the rest
+ok 248 - product page button: replace Buy it now by default, sizes clamped, partial patches keep the rest
+  ---
+  duration_ms: 1.0751
+  ...
+# Subtest: Indian phone numbers normalize to 10 digits
+ok 249 - Indian phone numbers normalize to 10 digits
+  ---
+  duration_ms: 0.5858
+  ...
+# Subtest: COD rules: off, surface off, min, max, blocked PIN, excluded tag, allowed
+ok 250 - COD rules: off, surface off, min, max, blocked PIN, excluded tag, allowed
+  ---
+  duration_ms: 2.5355
+  ...
+# Subtest: charges: a % COD fee from an order value, the fixed fee below it (₹80 below ₹1,000, 10% from ₹1,000)
+ok 251 - charges: a % COD fee from an order value, the fixed fee below it (₹80 below ₹1,000, 10% from ₹1,000)
+  ---
+  duration_ms: 1.9244
+  ...
+# Subtest: rule messages use the store currency
+ok 252 - rule messages use the store currency
+  ---
+  duration_ms: 0.8925
+  ...
+# Subtest: charges: shipping waived above the free-shipping threshold, COD fee always applies
+ok 253 - charges: shipping waived above the free-shipping threshold, COD fee always applies
+  ---
+  duration_ms: 0.6002
+  ...
+# Subtest: lines: GIDs accepted, duplicates merged, bad input rejected
+ok 254 - lines: GIDs accepted, duplicates merged, bad input rejected
+  ---
+  duration_ms: 1.214
+  ...
+# Subtest: address validation
+ok 255 - address validation
+  ---
+  duration_ms: 0.582
+  ...
+# Subtest: state names map to Shopify province codes
+ok 256 - state names map to Shopify province codes
+  ---
+  duration_ms: 0.3913
+  ...
+# Subtest: Pack and free-gift lines are checkout-only
+ok 257 - Pack and free-gift lines are checkout-only
+  ---
+  duration_ms: 0.2721
+  ...
+# Subtest: misc helpers
+ok 258 - misc helpers
+  ---
+  duration_ms: 0.3856
+  ...
+# Subtest: popup look (sheet): only safe logos, known options, merged on later saves
+ok 259 - popup look (sheet): only safe logos, known options, merged on later saves
+  ---
+  duration_ms: 0.9442
+  ...
+# Subtest: popup coupon options: valid unique codes, short text, at most 5
+ok 260 - popup coupon options: valid unique codes, short text, at most 5
+  ---
+  duration_ms: 0.9567
+  ...
+# Subtest: tracking IDs: only real GA4 / Meta Pixel IDs, merged on later saves
+ok 261 - tracking IDs: only real GA4 / Meta Pixel IDs, merged on later saves
+  ---
+  duration_ms: 1.0719
+  ...
+# Subtest: shopper tracking context: well-formed cookies only, consent defaults to no
+ok 262 - shopper tracking context: well-formed cookies only, consent defaults to no
+  ---
+  duration_ms: 0.7257
+  ...
+# Subtest: drawer placement, excluded behaviour and button style: defaults, allowed values only, kept on other saves
+ok 263 - drawer placement, excluded behaviour and button style: defaults, allowed values only, kept on other saves
+  ---
+  duration_ms: 0.8361
+  ...
+# Subtest: drawer selector: CSS selectors only, never markup
+ok 264 - drawer selector: CSS selectors only, never markup
+  ---
+  duration_ms: 0.9527
+  ...
+# Subtest: COD fee switch: charged only while on; title and visibility; settings from before the switch keep charging
+ok 265 - COD fee switch: charged only while on; title and visibility; settings from before the switch keep charging
+  ---
+  duration_ms: 0.8223
+  ...
+# Subtest: excluded tags: any matching product tag blocks COD, case-insensitive, many tags
+ok 266 - excluded tags: any matching product tag blocks COD, case-insensitive, many tags
+  ---
+  duration_ms: 0.7702
+  ...
+# Subtest: product page: COD replaces, or goes above or below, Shopify's Buy it now
+ok 267 - product page: COD replaces, or goes above or below, Shopify's Buy it now
+  ---
+  duration_ms: 1.2787
+  ...
+# Subtest: drawer button padding: defaults 14 / 16, clamped, kept on other saves
+ok 268 - drawer button padding: defaults 14 / 16, clamped, kept on other saves
+  ---
+  duration_ms: 1.5939
+  ...
+# Subtest: the offer comes only from saved + verified settings on a live plan
+ok 269 - the offer comes only from saved + verified settings on a live plan
+  ---
+  duration_ms: 4.05
+  ...
+# Subtest: a one-time code: X% of the Shopify prices + one paisa, a fixed amount on the items, never with order discounts
+ok 270 - a one-time code: X% of the Shopify prices + one paisa, a fixed amount on the items, never with order discounts
+  ---
+  duration_ms: 46.8204
+  ...
+# Subtest: below the offer minimum, or nothing priced = no code
+ok 271 - below the offer minimum, or nothing priced = no code
+  ---
+  duration_ms: 6.0068
+  ...
+# Subtest: items in an excluded collection are left out of the code, like the Function
+ok 272 - items in an excluded collection are left out of the code, like the Function
+  ---
+  duration_ms: 3.254
+  ...
+# Subtest: the offer carries the verified excluded collections
+ok 273 - the offer carries the verified excluded collections
+  ---
+  duration_ms: 0.5023
+  ...
+# Subtest: no live offer = no code and no Shopify call
+ok 274 - no live offer = no code and no Shopify call
+  ---
+  duration_ms: 0.2961
+  ...
+# Subtest: Shopify refusing the code is an error (the storefront then uses Shopify checkout)
+ok 275 - Shopify refusing the code is an error (the storefront then uses Shopify checkout)
+  ---
+  duration_ms: 2.7886
+  ...
+# Subtest: a cap: the code takes off at most the cap (+ one paisa, like X% normally)
+ok 276 - a cap: the code takes off at most the cap (+ one paisa, like X% normally)
+  ---
+  duration_ms: 2.861
+  ...
+# Subtest: gift + prepaid: one code = 10% of the paid lines + the gift + one paisa, on the paid lines and the gift
+ok 277 - gift + prepaid: one code = 10% of the paid lines + the gift + one paisa, on the paid lines and the gift
+  ---
+  duration_ms: 4.0559
+  ...
+# Subtest: gift only (no prepaid saving in the cart): the gift + one paisa
+ok 278 - gift only (no prepaid saving in the cart): the gift + one paisa
+  ---
+  duration_ms: 3.3743
+  ...
+# Subtest: a gift the cart has not earned, or the merchant does not give free, is never covered
+ok 279 - a gift the cart has not earned, or the merchant does not give free, is never covered
+  ---
+  duration_ms: 4.2978
+  ...
+# Subtest: count milestones are measured in paid items, gifts left out
+ok 280 - count milestones are measured in paid items, gifts left out
+  ---
+  duration_ms: 1.778
+  ...
+# Subtest: show only ("Create the discount" off): no Shiprocket code for the prepaid saving
+ok 281 - show only ("Create the discount" off): no Shiprocket code for the prepaid saving
+  ---
+  duration_ms: 0.5663
+  ...
+# Subtest: COD button: {price}, {cod_fee} and {cod_price} for a ₹200 product with a ₹100 fee
+ok 282 - COD button: {price}, {cod_fee} and {cod_price} for a ₹200 product with a ₹100 fee
+  ---
+  duration_ms: 2.3257
+  ...
+# Subtest: COD button: no fee, unknown price, no tags
+ok 283 - COD button: no fee, unknown price, no tags
+  ---
+  duration_ms: 0.3809
+  ...
+# Subtest: which texts have tags, and which already show the fee
+ok 284 - which texts have tags, and which already show the fee
+  ---
+  duration_ms: 1.654
+  ...
+# Subtest: Buy it now: {prepaid_price}, {price}, {saving}; no "· Save 10%" suffix on tagged text
+ok 285 - Buy it now: {prepaid_price}, {price}, {saving}; no "· Save 10%" suffix on tagged text
+  ---
+  duration_ms: 0.9585
+  ...
+# Subtest: tagMoney drops ".00" from whole amounts only
+ok 286 - tagMoney drops ".00" from whole amounts only
+  ---
+  duration_ms: 1.9227
+  ...
+# Subtest: combo page position: below by default (where it always was), replace/above/below only
+ok 287 - combo page position: below by default (where it always was), replace/above/below only
+  ---
+  duration_ms: 8.0172
+  ...
+# Subtest: the storefront (brix_cod.js) uses the same tags, and PHP passes the combo position
+ok 288 - the storefront (brix_cod.js) uses the same tags, and PHP passes the combo position
+  ---
+  duration_ms: 4.0657
+  ...
+# [prepaid-discount] sync failed: network down
+# Subtest: defaults: off for existing merchants, both methods shown when turned on, prepaid off, 10%
+ok 289 - defaults: off for existing merchants, both methods shown when turned on, prepaid off, 10%
+  ---
+  duration_ms: 6.5607
+  ...
+# Subtest: percent: 1–50 only, never 0, negative or above 50
+ok 290 - percent: 1–50 only, never 0, negative or above 50
+  ---
+  duration_ms: 1.0345
+  ...
+# Subtest: minimum amount: non-negative money, empty = none
+ok 291 - minimum amount: non-negative money, empty = none
+  ---
+  duration_ms: 0.7932
+  ...
+# Subtest: text: trimmed, control characters removed, length-limited, empty falls back
+ok 292 - text: trimmed, control characters removed, length-limited, empty falls back
+  ---
+  duration_ms: 0.9208
+  ...
+# Subtest: enums, colours, radius and booleans are validated; unknown keys dropped
+ok 293 - enums, colours, radius and booleans are validated; unknown keys dropped
+  ---
+  duration_ms: 0.8136
+  ...
+# Subtest: admin form: round-trips, and flags bad values before saving
+ok 294 - admin form: round-trips, and flags bad values before saving
+  ---
+  duration_ms: 16.519
+  ...
+# Subtest: cards: both, online only, COD only, both off, selector off, COD unavailable
+ok 295 - cards: both, online only, COD only, both off, selector off, COD unavailable
+  ---
+  duration_ms: 1.1903
+  ...
+# Subtest: pricing: ₹1,100 with 10% prepaid → online ₹990, COD ₹1,100
+ok 296 - pricing: ₹1,100 with 10% prepaid → online ₹990, COD ₹1,100
+  ---
+  duration_ms: 0.4683
+  ...
+# Subtest: pricing: quantity 2 → online ₹1,980, COD ₹2,200
+ok 297 - pricing: quantity 2 → online ₹1,980, COD ₹2,200
+  ---
+  duration_ms: 0.4127
+  ...
+# Subtest: pricing: variant ₹1,500 → online ₹1,350, COD ₹1,500 (recalculated, nothing stale)
+ok 298 - pricing: variant ₹1,500 → online ₹1,350, COD ₹1,500 (recalculated, nothing stale)
+  ---
+  duration_ms: 0.4161
+  ...
+# Subtest: pricing: COD fee is added to COD only, never discounted
+ok 299 - pricing: COD fee is added to COD only, never discounted
+  ---
+  duration_ms: 0.2765
+  ...
+# Subtest: pricing: minimum not met → no saving promised; met → saving
+ok 300 - pricing: minimum not met → no saving promised; met → saving
+  ---
+  duration_ms: 0.6589
+  ...
+# Subtest: pricing: prepaid off / not verified → no saving anywhere
+ok 301 - pricing: prepaid off / not verified → no saving anywhere
+  ---
+  duration_ms: 0.367
+  ...
+# Subtest: button text: "· Save 10%" once, only with the badge on, never stacked
+ok 302 - button text: "· Save 10%" once, only with the badge on, never stacked
+  ---
+  duration_ms: 0.5029
+  ...
+# Subtest: merchant text: {percent} {amount} {min} {price} filled in
+ok 303 - merchant text: {percent} {amount} {min} {price} filled in
+  ---
+  duration_ms: 0.4568
+  ...
+# Subtest: Function: online checkout gets the configured % off the order subtotal
+ok 304 - Function: online checkout gets the configured % off the order subtotal
+  ---
+  duration_ms: 24.9878
+  ...
+# Subtest: Function: a cart marked _brixCod (COD order) gets nothing — order or any line
+ok 305 - Function: a cart marked _brixCod (COD order) gets nothing — order or any line
+  ---
+  duration_ms: 0.8806
+  ...
+# Subtest: Function: minimum subtotal, in the shop currency only
+ok 306 - Function: minimum subtotal, in the shop currency only
+  ---
+  duration_ms: 1.3364
+  ...
+# Subtest: Function: free gifts are left out of the subtotal and the minimum
+ok 307 - Function: free gifts are left out of the subtotal and the minimum
+  ---
+  duration_ms: 8.4693
+  ...
+# Subtest: Function: products in an excluded collection are left out of the discount and the minimum
+ok 308 - Function: products in an excluded collection are left out of the discount and the minimum
+  ---
+  duration_ms: 24.8262
+  ...
+# Subtest: settings: excluded collections are cleaned (collection ids only, unique, at most 50)
+ok 309 - settings: excluded collections are cleaned (collection ids only, unique, at most 50)
+  ---
+  duration_ms: 2.2089
+  ...
+# Subtest: Function: off, missing, or tampered config → nothing; never a shopper-chosen percentage
+ok 310 - Function: off, missing, or tampered config → nothing; never a shopper-chosen percentage
+  ---
+  duration_ms: 0.8136
+  ...
+# Subtest: sync: config comes from saved settings only, and is off unless the plan publishes it
+ok 311 - sync: config comes from saved settings only, and is off unless the plan publishes it
+  ---
+  duration_ms: 3.5266
+  ...
+# Subtest: sync: writes the metafield, creates the automatic ORDER discount once, verifies ACTIVE
+ok 312 - sync: writes the metafield, creates the automatic ORDER discount once, verifies ACTIVE
+  ---
+  duration_ms: 82.9371
+  ...
+# Subtest: sync: honest states — not deployed, inactive, plan locked, off; never throws
+ok 313 - sync: honest states — not deployed, inactive, plan locked, off; never throws
+  ---
+  duration_ms: 23.3283
+  ...
+# Subtest: cap: settings keep it, empty = no cap; pricing never promises more than the cap
+ok 314 - cap: settings keep it, empty = no cap; pricing never promises more than the cap
+  ---
+  duration_ms: 0.5825
+  ...
+# Subtest: Function: over the cap takes exactly the cap off; under it, the percentage
+ok 315 - Function: over the cap takes exactly the cap off; under it, the percentage
+  ---
+  duration_ms: 0.5905
+  ...
+# Subtest: sync: the cap reaches the Function config only when set
+ok 316 - sync: the cap reaches the Function config only when set
+  ---
+  duration_ms: 0.9229
+  ...
+# Subtest: Function: combo box lines (already at the box price) never get the prepaid discount
+ok 317 - Function: combo box lines (already at the box price) never get the prepaid discount
+  ---
+  duration_ms: 0.4704
+  ...
+# Subtest: Function: a BRIX box code (Shiprocket box checkout) keeps the prepaid discount out
+ok 318 - Function: a BRIX box code (Shiprocket box checkout) keeps the prepaid discount out
+  ---
+  duration_ms: 0.8346
+  ...
+# Subtest: show only: no discount of BRIX's (config off), the price details kept for the storefront
+ok 319 - show only: no discount of BRIX's (config off), the price details kept for the storefront
+  ---
+  duration_ms: 25.5622
+  ...
+# Subtest: collects each product once, with collection names and plain-text descriptions
+ok 320 - collects each product once, with collection names and plain-text descriptions
+  ---
+  duration_ms: 6.3517
+  ...
+# Subtest: caps the product list sent to the AI
+ok 321 - caps the product list sent to the AI
+  ---
+  duration_ms: 1.9492
+  ...
+# Subtest: parses fenced replies and drops self, out-of-range, duplicate and non-numeric picks
+ok 322 - parses fenced replies and drops self, out-of-range, duplicate and non-numeric picks
+  ---
+  duration_ms: 2.0524
+  ...
+# Subtest: puts picks from other collections ahead of same-collection picks
+ok 323 - puts picks from other collections ahead of same-collection picks
+  ---
+  duration_ms: 1.4066
+  ...
+# Subtest: accepts a reply without the "pairs" wrapper
+ok 324 - accepts a reply without the "pairs" wrapper
+  ---
+  duration_ms: 1.67
+  ...
+# Subtest: returns null for unusable replies
+ok 325 - returns null for unusable replies
+  ---
+  duration_ms: 1.3144
+  ...
+# Subtest: the prompt lists every product by index and asks for raw JSON
+ok 326 - the prompt lists every product by index and asks for raw JSON
+  ---
+  duration_ms: 2.1772
+  ...
+# Subtest: a single-product combo never calls the AI
+ok 327 - a single-product combo never calls the AI
+  ---
+  duration_ms: 0.6053
+  ...
+# [combo-ai-suggestions] unusable AI reply: no idea
+# [combo-ai-suggestions] failed: Admin API down
+# Subtest: caches per template version and shares one AI call between concurrent requests
+ok 328 - caches per template version and shares one AI call between concurrent requests
+  ---
+  duration_ms: 61.1564
+  ...
+# Subtest: an AI failure returns no picks and is not retried on every request
+ok 329 - an AI failure returns no picks and is not retried on every request
+  ---
+  duration_ms: 2.4104
+  ...
+# Subtest: a failure says why (for the builder) and the builder can retry sooner
+ok 330 - a failure says why (for the builder) and the builder can retry sooner
+  ---
+  duration_ms: 8.363
+  ...
+# Subtest: a loader error returns no picks instead of throwing
+ok 331 - a loader error returns no picks instead of throwing
+  ---
+  duration_ms: 3.258
+  ...
+# Subtest: a box collection loads every product (1349), in the collection order, drafts left out
+ok 332 - a box collection loads every product (1349), in the collection order, drafts left out
+  ---
+  duration_ms: 102.8215
+  ...
+# Subtest: the older designs keep their first 50 in one query
+ok 333 - the older designs keep their first 50 in one query
+  ---
+  duration_ms: 15.1743
+  ...
+# Subtest: THROTTLED waits and tries again; a query Shopify finds too costly is split
+ok 334 - THROTTLED waits and tries again; a query Shopify finds too costly is split
+  ---
+  duration_ms: 327.0536
+  ...
+# Subtest: any other Shopify error fails the load (so nothing wrong is cached)
+ok 335 - any other Shopify error fails the load (so nothing wrong is cached)
+  ---
+  duration_ms: 5.5382
+  ...
+# Subtest: stock for 1349 variants: 100 per query, a few at once
+ok 336 - stock for 1349 variants: 100 per query, a few at once
+  ---
+  duration_ms: 66.9965
+  ...
+# Subtest: cache: fresh = no load; stale = old value at once + one background load; failures not kept
+ok 337 - cache: fresh = no load; stale = old value at once + one background load; failures not kept
+  ---
+  duration_ms: 9.1158
+  ...
+# Subtest: 40 cards at first, "Show more" adds the next 40; the button says how many are left
+ok 338 - 40 cards at first, "Show more" adds the next 40; the button says how many are left
+  ---
+  duration_ms: 21.4652
+  ...
+# Subtest: filters search every product: "2-4 years" finds all 333, not the 6 in the first 50
+ok 339 - filters search every product: "2-4 years" finds all 333, not the 6 in the first 50
+  ---
+  duration_ms: 13.3563
+  ...
+# Subtest: a new filter starts again from the first cards
+ok 340 - a new filter starts again from the first cards
+  ---
+  duration_ms: 12.2752
+  ...
+# Subtest: page size: 12-200, empty / junk = 40, own button text
+ok 341 - page size: 12-200, empty / junk = 40, own button text
+  ---
+  duration_ms: 2.498
+  ...
+# Subtest: small pages draw as before: no button
+ok 342 - small pages draw as before: no button
+  ---
+  duration_ms: 1.9624
+  ...
+# Subtest: a box that reaches a tier gets a one-time code worth exactly its discount
+ok 343 - a box that reaches a tier gets a one-time code worth exactly its discount
+  ---
+  duration_ms: 56.2817
+  ...
+# Subtest: fixed box price: the code is the difference to the box price
+ok 344 - fixed box price: the code is the difference to the box price
+  ---
+  duration_ms: 3.7646
+  ...
+# Subtest: only the lines that count toward the box are on the code
+ok 345 - only the lines that count toward the box are on the code
+  ---
+  duration_ms: 3.826
+  ...
+# Subtest: no code when the box has no discount
+ok 346 - no code when the box has no discount
+  ---
+  duration_ms: 4.0587
+  ...
+# Subtest: a Shopify refusal is an error, so the storefront falls back to Shopify checkout
+ok 347 - a Shopify refusal is an error, so the storefront falls back to Shopify checkout
+  ---
+  duration_ms: 3.6683
+  ...
+# Subtest: cleanup deletes only BRIX box codes that have expired, at most once an hour
+ok 348 - cleanup deletes only BRIX box codes that have expired, at most once an hour
+  ---
+  duration_ms: 2.558
+  ...
+# Subtest: checkout choice and code format
+ok 349 - checkout choice and code format
+  ---
+  duration_ms: 0.854
+  ...
+# Subtest: pricing: extra / no-offer products only change the hash when set
+ok 350 - pricing: extra / no-offer products only change the hash when set
+  ---
+  duration_ms: 8.583
+  ...
+# Subtest: synced Function config: extras count, no-offer products are listed
+ok 351 - synced Function config: extras count, no-offer products are listed
+  ---
+  duration_ms: 1.8293
+  ...
+# Subtest: checkout Function: a no-offer product never counts, an extra one does
+ok 352 - checkout Function: a no-offer product never counts, an extra one does
+  ---
+  duration_ms: 2.2049
+  ...
+# Subtest: page: extra products shown, hidden products and hidden collections left off
+ok 353 - page: extra products shown, hidden products and hidden collections left off
+  ---
+  duration_ms: 5.4683
+  ...
+# Subtest: page: a no-offer product says so on its card
+ok 354 - page: a no-offer product says so on its card
+  ---
+  duration_ms: 6.5373
+  ...
+# Subtest: box pricing feature per template: Quantity Box = Starter+, Weight / Value Box = Growth+, Pro unlimited
+ok 355 - box pricing feature per template: Quantity Box = Starter+, Weight / Value Box = Growth+, Pro unlimited
+  ---
+  duration_ms: 4.4598
+  ...
+# Subtest: each box template has one measure; only the older Classic designs choose
+ok 356 - each box template has one measure; only the older Classic designs choose
+  ---
+  duration_ms: 0.6919
+  ...
+# Subtest: design list and classic layouts
+ok 357 - design list and classic layouts
+  ---
+  duration_ms: 0.3104
+  ...
+# Subtest: switching design carries the collections over and keeps everything else
+ok 358 - switching design carries the collections over and keeps everything else
+  ---
+  duration_ms: 0.8538
+  ...
+# Subtest: "Buy 2 for 999" on a Classic Combo: quantity box price, needs a max
+ok 359 - "Buy 2 for 999" on a Classic Combo: quantity box price, needs a max
+  ---
+  duration_ms: 3.1688
+  ...
+# Subtest: value tiers: progress and message in money
+ok 360 - value tiers: progress and message in money
+  ---
+  duration_ms: 1.5263
+  ...
+# Subtest: nothing set: Shopify names, chips left, one grid (as before)
+ok 361 - nothing set: Shopify names, chips left, one grid (as before)
+  ---
+  duration_ms: 13.752
+  ...
+# Subtest: own names replace the Shopify names on chips and the picture bar; empty = Shopify name
+ok 362 - own names replace the Shopify names on chips and the picture bar; empty = Shopify name
+  ---
+  duration_ms: 1.7065
+  ...
+# Subtest: the collections order is the chips order
+ok 363 - the collections order is the chips order
+  ---
+  duration_ms: 0.7155
+  ...
+# Subtest: chips alignment: centre / right on the chip row and the picture bar
+ok 364 - chips alignment: centre / right on the chip row and the picture bar
+  ---
+  duration_ms: 5.0258
+  ...
+# Subtest: sections: one per collection in order, a product in two shows in the first, own names and alignment
+ok 365 - sections: one per collection in order, a product in two shows in the first, own names and alignment
+  ---
+  duration_ms: 2.5885
+  ...
+# Subtest: sections follow the filters: a collection chip leaves one section, empty sections are dropped
+ok 366 - sections follow the filters: a collection chip leaves one section, empty sections are dropped
+  ---
+  duration_ms: 1.2099
+  ...
+# Subtest: products added by hand come last, under their own title or none
+ok 367 - products added by hand come last, under their own title or none
+  ---
+  duration_ms: 1.4247
+  ...
+# Subtest: phones follow desktop unless the merchant set a phone alignment
+ok 368 - phones follow desktop unless the merchant set a phone alignment
+  ---
+  duration_ms: 3.0544
+  ...
+# Subtest: the storefront kit uses the same rule
+ok 369 - the storefront kit uses the same rule
+  ---
+  duration_ms: 0.725
+  ...
+# [combo-weight] reactivate refused: [{"field":null,"message":"nope","code":"INVALID"}]
+# [combo-weight] sync failed: Could not reach Shopify: network down
+# Subtest: build: only active, valid weight templates on a plan that has it
+ok 370 - build: only active, valid weight templates on a plan that has it
+  ---
+  duration_ms: 14.5919
+  ...
+# Subtest: build: "selected" products and collections are used as chosen
+ok 371 - build: "selected" products and collections are used as chosen
+  ---
+  duration_ms: 1.7471
+  ...
+# Subtest: weightPricingLive: only Pro + active + ACTIVE discount + matching hash
+ok 372 - weightPricingLive: only Pro + active + ACTIVE discount + matching hash
+  ---
+  duration_ms: 0.9818
+  ...
+# Subtest: weightPricingReason: says exactly why the box discount is not live
+ok 373 - weightPricingReason: says exactly why the box discount is not live
+  ---
+  duration_ms: 1.3007
+  ...
+# Subtest: sync on Pro: writes the config, creates the discount with its input variables, verified
+ok 374 - sync on Pro: writes the config, creates the discount with its input variables, verified
+  ---
+  duration_ms: 66.3326
+  ...
+# Subtest: sync on Starter: Weight / Value Box and older Classic tiers are locked; the config is emptied
+ok 375 - sync on Starter: Weight / Value Box and older Classic tiers are locked; the config is emptied
+  ---
+  duration_ms: 3.0069
+  ...
+# Subtest: sync on Starter: the Quantity Box goes live
+ok 376 - sync on Starter: the Quantity Box goes live
+  ---
+  duration_ms: 4.9762
+  ...
+# Subtest: sync on Growth: all three box templates and older Classic tiers go live
+ok 377 - sync on Growth: all three box templates and older Classic tiers go live
+  ---
+  duration_ms: 7.3027
+  ...
+# Subtest: sync: inactive templates are dropped; nothing stored and nothing wanted → no writes
+ok 378 - sync: inactive templates are dropped; nothing stored and nothing wanted → no writes
+  ---
+  duration_ms: 2.4649
+  ...
+# Subtest: sync: an expired box discount (deactivated in Shopify admin) is turned back on
+ok 379 - sync: an expired box discount (deactivated in Shopify admin) is turned back on
+  ---
+  duration_ms: 4.1154
+  ...
+# Subtest: sync: Function not deployed, discount turned off, and too-large configs are reported honestly
+ok 380 - sync: Function not deployed, discount turned off, and too-large configs are reported honestly
+  ---
+  duration_ms: 63.1467
+  ...
+# Subtest: sync: too large still stops discounting combos that were deleted, turned off or changed
+ok 381 - sync: too large still stops discounting combos that were deleted, turned off or changed
+  ---
+  duration_ms: 31.6479
+  ...
+# Subtest: sync never throws when Shopify is unreachable
+ok 382 - sync never throws when Shopify is unreachable
+  ---
+  duration_ms: 32.8
+  ...
+# Subtest: syncComboWeightIfNeeded: only weight combos cause Shopify calls
+ok 383 - syncComboWeightIfNeeded: only weight combos cause Shopify calls
+  ---
+  duration_ms: 7.442
+  ...
+# Subtest: status: verified only when the discount is ACTIVE and the hash matches; storefront status is cached
+ok 384 - status: verified only when the discount is ACTIVE and the hash matches; storefront status is cached
+  ---
+  duration_ms: 7.7522
+  ...
+# Subtest: unit conversion: grams, kilograms, ounces, pounds; no weight → null
+ok 385 - unit conversion: grams, kilograms, ounces, pounds; no weight → null
+  ---
+  duration_ms: 2.3852
+  ...
+# Subtest: 999.99 g stays locked, 1000 g unlocks
+ok 386 - 999.99 g stays locked, 1000 g unlocks
+  ---
+  duration_ms: 1.4942
+  ...
+# Subtest: the books brief: ~1 kg of ₹100–120 books for ₹900
+ok 387 - the books brief: ~1 kg of ₹100–120 books for ₹900
+  ---
+  duration_ms: 0.9154
+  ...
+# Subtest: max weight: over the max gives no discount at all
+ok 388 - max weight: over the max gives no discount at all
+  ---
+  duration_ms: 0.3943
+  ...
+# Subtest: allocations always add up exactly and never exceed a line
+ok 389 - allocations always add up exactly and never exceed a line
+  ---
+  duration_ms: 2.0651
+  ...
+# Subtest: fixed amount is capped at the box subtotal; a fixed price above the subtotal gives 0
+ok 390 - fixed amount is capped at the box subtotal; a fixed price above the subtotal gives 0
+  ---
+  duration_ms: 0.3974
+  ...
+# Subtest: JPY: zero-decimal currency, rate applied to fixed amounts
+ok 391 - JPY: zero-decimal currency, rate applied to fixed amounts
+  ---
+  duration_ms: 0.6218
+  ...
+# Subtest: lines without weight or that do not qualify do not count and are never discounted
+ok 392 - lines without weight or that do not qualify do not count and are never discounted
+  ---
+  duration_ms: 0.4285
+  ...
+# Subtest: percentage is rounded per line, like checkout
+ok 393 - percentage is rounded per line, like checkout
+  ---
+  duration_ms: 0.6304
+  ...
+# Subtest: several boxes are priced independently
+ok 394 - several boxes are priced independently
+  ---
+  duration_ms: 0.4424
+  ...
+# Subtest: normalize: valid config, defaults and a stable hash
+ok 395 - normalize: valid config, defaults and a stable hash
+  ---
+  duration_ms: 2.8796
+  ...
+# Subtest: normalize: the validation rules
+ok 396 - normalize: the validation rules
+  ---
+  duration_ms: 4.9515
+  ...
+# Subtest: normalize: qualifying ids are cleaned; layout mode keeps none
+ok 397 - normalize: qualifying ids are cleaned; layout mode keeps none
+  ---
+  duration_ms: 1.4437
+  ...
+# Subtest: the factory is self-contained: its source text runs on its own (as the storefront ships it)
+ok 398 - the factory is self-contained: its source text runs on its own (as the storefront ships it)
+  ---
+  duration_ms: 3.6439
+  ...
+# Subtest: The Weight Box (layout5) is always a weight combo and counts its collection pills
+ok 399 - The Weight Box (layout5) is always a weight combo and counts its collection pills
+  ---
+  duration_ms: 0.6407
+  ...
+# Subtest: layout collection handles and message placeholders
+ok 400 - layout collection handles and message placeholders
+  ---
+  duration_ms: 0.6349
+  ...
+# Subtest: price per kg: the box costs the rate × its exact weight (1.02 kg at ₹999/kg = ₹1018.98)
+ok 401 - price per kg: the box costs the rate × its exact weight (1.02 kg at ₹999/kg = ₹1018.98)
+  ---
+  duration_ms: 0.3955
+  ...
+# Subtest: price per item on a quantity box; not allowed on a spend (value) box
+ok 402 - price per item on a quantity box; not allowed on a spend (value) box
+  ---
+  duration_ms: 0.8368
+  ...
+# Subtest: price per kg: own hash, labels "₹999/kg" and "₹250 each"
+ok 403 - price per kg: own hash, labels "₹999/kg" and "₹250 each"
+  ---
+  duration_ms: 0.4852
+  ...
+# Subtest: a 1.05 kg box gets the 10% tier on every box line, with the tier label
+ok 404 - a 1.05 kg box gets the 10% tier on every box line, with the tier label
+  ---
+  duration_ms: 4.6379
+  ...
+# Subtest: a 0.9 kg box is locked; over the max weight gets nothing
+ok 405 - a 0.9 kg box is locked; over the max weight gets nothing
+  ---
+  duration_ms: 0.5247
+  ...
+# Subtest: fixed box price: the discount is split across lines and adds up exactly
+ok 406 - fixed box price: the discount is split across lines and adds up exactly
+  ---
+  duration_ms: 0.9466
+  ...
+# Subtest: kilogram / ounce weights are converted
+ok 407 - kilogram / ounce weights are converted
+  ---
+  duration_ms: 0.5339
+  ...
+# Subtest: a forged id on a product that does not qualify gets nothing, and adds no weight
+ok 408 - a forged id on a product that does not qualify gets nothing, and adds no weight
+  ---
+  duration_ms: 0.9168
+  ...
+# Subtest: unknown template, missing markers, no config, wrong discount class → nothing
+ok 409 - unknown template, missing markers, no config, wrong discount class → nothing
+  ---
+  duration_ms: 0.7839
+  ...
+# Subtest: lines without a weight do not count
+ok 410 - lines without a weight do not count
+  ---
+  duration_ms: 0.6152
+  ...
+# Subtest: two boxes in one cart are priced separately
+ok 411 - two boxes in one cart are priced separately
+  ---
+  duration_ms: 0.5372
+  ...
+# Subtest: presentment rate other than 1 converts the fixed box price
+ok 412 - presentment rate other than 1 converts the fixed box price
+  ---
+  duration_ms: 0.6423
+  ...
+# Subtest: an oversized or malformed config never throws
+ok 413 - an oversized or malformed config never throws
+  ---
+  duration_ms: 0.4657
+  ...
+# Subtest: checkout: price per kg — 1.5 kg at ₹999/kg costs ₹1,498.50
+ok 414 - checkout: price per kg — 1.5 kg at ₹999/kg costs ₹1,498.50
+  ---
+  duration_ms: 0.5862
+  ...
+# Subtest: defaults: a round spinner on white, on
+ok 415 - defaults: a round spinner on white, on
+  ---
+  duration_ms: 2.6066
+  ...
+# Subtest: merchant settings are checked: bad colours, sizes and styles fall back
+ok 416 - merchant settings are checked: bad colours, sizes and styles fall back
+  ---
+  duration_ms: 0.5128
+  ...
+# Subtest: logo: https links and small raster uploads only
+ok 417 - logo: https links and small raster uploads only
+  ---
+  duration_ms: 0.7516
+  ...
+# Subtest: logo inside the ring: the ring grows round it; above: logo first
+ok 418 - logo inside the ring: the ring grows round it; above: logo first
+  ---
+  duration_ms: 0.67
+  ...
+# Subtest: text is escaped
+ok 419 - text is escaped
+  ---
+  duration_ms: 0.3687
+  ...
+# Subtest: subset keeps only the loader keys (what the endpoint and the browser cache hold)
+ok 420 - subset keeps only the loader keys (what the endpoint and the browser cache hold)
+  ---
+  duration_ms: 3.0682
+  ...
+# Subtest: the builder preview is drawn inline at its own height
+ok 421 - the builder preview is drawn inline at its own height
+  ---
+  duration_ms: 0.7935
+  ...
+# Subtest: the limit: 1-99, empty / 0 / nonsense = none
+ok 422 - the limit: 1-99, empty / 0 / nonsense = none
+  ---
+  duration_ms: 3.9348
+  ...
+# Subtest: counts every variant of a product together; only a product that grows is refused
+ok 423 - counts every variant of a product together; only a product that grows is refused
+  ---
+  duration_ms: 1.2953
+  ...
+# Subtest: cards: + and Add are off once the product is at the limit, in any size
+ok 424 - cards: + and Add are off once the product is at the limit, in any size
+  ---
+  duration_ms: 21.2366
+  ...
+# Subtest: normal card layout and the box lines follow the limit too
+ok 425 - normal card layout and the box lines follow the limit too
+  ---
+  duration_ms: 2.9665
+  ...
+# Subtest: a weight box hashes and normalizes exactly as before measures existed
+ok 426 - a weight box hashes and normalizes exactly as before measures existed
+  ---
+  duration_ms: 4.8611
+  ...
+# Subtest: quantity: 3 items unlock, weight does not matter, lines without a weight still count
+ok 427 - quantity: 3 items unlock, weight does not matter, lines without a weight still count
+  ---
+  duration_ms: 4.6719
+  ...
+# Subtest: quantity: any 3 for ₹499 needs a max, and over the max gives nothing
+ok 428 - quantity: any 3 for ₹499 needs a max, and over the max gives nothing
+  ---
+  duration_ms: 3.5676
+  ...
+# Subtest: quantity: thresholds and max must be whole numbers
+ok 429 - quantity: thresholds and max must be whole numbers
+  ---
+  duration_ms: 1.0269
+  ...
+# Subtest: value: spend ₹999 → ₹100 off; threshold checked before the discount; no max
+ok 430 - value: spend ₹999 → ₹100 off; threshold checked before the discount; no max
+  ---
+  duration_ms: 3.0212
+  ...
+# Subtest: value: thresholds are in the shop currency, converted with the rate
+ok 431 - value: thresholds are in the shop currency, converted with the rate
+  ---
+  duration_ms: 0.9963
+  ...
+# Subtest: value: a box price is not allowed
+ok 432 - value: a box price is not allowed
+  ---
+  duration_ms: 1.0185
+  ...
+# Subtest: labels and messages speak each measure
+ok 433 - labels and messages speak each measure
+  ---
+  duration_ms: 3.0727
+  ...
+# Subtest: progressOf: fill and tier marks on a scale ending at the biggest tier (not the max)
+ok 434 - progressOf: fill and tier marks on a scale ending at the biggest tier (not the max)
+  ---
+  duration_ms: 2.432
+  ...
+# Subtest: Quick Shop is always box-priced; the Weight Box too
+ok 435 - Quick Shop is always box-priced; the Weight Box too
+  ---
+  duration_ms: 0.8397
+  ...
+# Subtest: sync: non-weight boxes carry their measure into the Function config; weight boxes do not
+ok 436 - sync: non-weight boxes carry their measure into the Function config; weight boxes do not
+  ---
+  duration_ms: 3.815
+  ...
+# Subtest: Function, quantity: 3 lines without any weight get 10% off
+ok 437 - Function, quantity: 3 lines without any weight get 10% off
+  ---
+  duration_ms: 3.2986
+  ...
+# Subtest: Function, value: ₹100 off once the box reaches ₹999
+ok 438 - Function, value: ₹100 off once the box reaches ₹999
+  ---
+  duration_ms: 1.3888
+  ...
+# Subtest: box templates: Quantity Box on Starter+, Weight Box and Value Box on Growth+, in both files
+ok 439 - box templates: Quantity Box on Starter+, Weight Box and Value Box on Growth+, in both files
+  ---
+  duration_ms: 4.5016
+  ...
+# Subtest: combo template limits: Starter 3, Growth 10, Pro unlimited
+ok 440 - combo template limits: Starter 3, Growth 10, Pro unlimited
+  ---
+  duration_ms: 0.3735
+  ...
+# Subtest: both files list the same plans in the same order
+ok 441 - both files list the same plans in the same order
+  ---
+  duration_ms: 0.4762
+  ...
+# Subtest: every feature has the same states in plans.js and plan_config.php
+ok 442 - every feature has the same states in plans.js and plan_config.php
+  ---
+  duration_ms: 0.727
+  ...
+# [collection-members] collection lookup failed: [{"message":"Throttled"}]
+# Subtest: filterGroups keeps only valid groups, at most 5 × 15, no repeats
+ok 443 - filterGroups keeps only valid groups, at most 5 × 15, no repeats
+  ---
+  duration_ms: 3.9354
+  ...
+# Subtest: a dropdown group lists its collections with products on the page
+ok 444 - a dropdown group lists its collections with products on the page
+  ---
+  duration_ms: 8.1174
+  ...
+# Subtest: picking options filters, and two groups combine
+ok 445 - picking options filters, and two groups combine
+  ---
+  duration_ms: 2.2233
+  ...
+# Subtest: a removed group or a collection not loaded yet does not filter
+ok 446 - a removed group or a collection not loaded yet does not filter
+  ---
+  duration_ms: 3.0703
+  ...
+# Subtest: page collections count as known members
+ok 447 - page collections count as known members
+  ---
+  duration_ms: 1.3055
+  ...
+# Subtest: chips group: tap picks, tap again clears; Clear resets every group
+ok 448 - chips group: tap picks, tap again clears; Clear resets every group
+  ---
+  duration_ms: 0.9955
+  ...
+# Subtest: render draws the dropdown and the chip row, escaped
+ok 449 - render draws the dropdown and the chip row, escaped
+  ---
+  duration_ms: 8.9921
+  ...
+# Subtest: milestone icon size: default as before, merchant size, phone size
+ok 450 - milestone icon size: default as before, merchant size, phone size
+  ---
+  duration_ms: 3.9583
+  ...
+# Subtest: label lines can be hidden and resized
+ok 451 - label lines can be hidden and resized
+  ---
+  duration_ms: 9.1091
+  ...
+# Subtest: the same label options apply to the bar and steps styles
+ok 452 - the same label options apply to the bar and steps styles
+  ---
+  duration_ms: 2.0251
+  ...
+# Subtest: loadCollectionMembers asks inCollection for the page products
+ok 453 - loadCollectionMembers asks inCollection for the page products
+  ---
+  duration_ms: 2.5222
+  ...
+# Subtest: loadCollectionMembers pages products and never throws
+ok 454 - loadCollectionMembers pages products and never throws
+  ---
+  duration_ms: 7.4214
+  ...
+# Subtest: weight filter, automatic: one option per variant weight on the page
+ok 455 - weight filter, automatic: one option per variant weight on the page
+  ---
+  duration_ms: 1.3631
+  ...
+# Subtest: picking a weight keeps products with that variant and shows that variant
+ok 456 - picking a weight keeps products with that variant and shows that variant
+  ---
+  duration_ms: 3.121
+  ...
+# Subtest: the + and − buttons name the variant the card shows
+ok 457 - the + and − buttons name the variant the card shows
+  ---
+  duration_ms: 2.8793
+  ...
+# Subtest: weight filter, ranges: named, checked, only ranges with products
+ok 458 - weight filter, ranges: named, checked, only ranges with products
+  ---
+  duration_ms: 2.1917
+  ...
+# Subtest: weight works next to collection groups
+ok 459 - weight works next to collection groups
+  ---
+  duration_ms: 0.9905
+  ...
+# Subtest: the card selling price can be hidden; the popup keeps it
+ok 460 - the card selling price can be hidden; the popup keeps it
+  ---
+  duration_ms: 2.6388
+  ...
+# Subtest: weight and price sliders: ends on round steps, picked span filters and picks the variant
+ok 461 - weight and price sliders: ends on round steps, picked span filters and picks the variant
+  ---
+  duration_ms: 2.749
+  ...
+# Subtest: price slider uses each variant price
+ok 462 - price slider uses each variant price
+  ---
+  duration_ms: 1.5297
+  ...
+# Subtest: filters on the left (desktop only): every filter open as a list
+ok 463 - filters on the left (desktop only): every filter open as a list
+  ---
+  duration_ms: 3.1971
+  ...
+# Subtest: slider inside a dropdown: chip names the span, stays open after letting go
+ok 464 - slider inside a dropdown: chip names the span, stays open after letting go
+  ---
+  duration_ms: 1.2592
+  ...
+# Subtest: text sizes: only set ones become CSS variables; 6px allowed
+ok 465 - text sizes: only set ones become CSS variables; 6px allowed
+  ---
+  duration_ms: 1.8149
+  ...
+# Subtest: slots: shown before anything is added, one empty box per item of the first offer
+ok 466 - slots: shown before anything is added, one empty box per item of the first offer
+  ---
+  duration_ms: 1.4945
+  ...
+# Subtest: slots: items fill boxes with their pictures (tap = take one out); target moves to the next offer
+ok 467 - slots: items fill boxes with their pictures (tap = take one out); target moves to the next offer
+  ---
+  duration_ms: 2.1516
+  ...
+# Subtest: slots: at most 8 boxes (5 on phones), the last one counts
+ok 468 - slots: at most 8 boxes (5 on phones), the last one counts
+  ---
+  duration_ms: 2.1152
+  ...
+# Subtest: slots: weight / value boxes get the full bar instead
+ok 469 - slots: weight / value boxes get the full bar instead
+  ---
+  duration_ms: 1.1123
+  ...
+# Subtest: box list: line prices shown by default, hidden with qs_sheet_show_price off
+ok 470 - box list: line prices shown by default, hidden with qs_sheet_show_price off
+  ---
+  duration_ms: 0.9966
+  ...
+# [ComboPage] stock limits skipped: [{"message":"Access denied for inventoryQuantity field."}]
+# [ComboPage] stock limits skipped: network
+# Subtest: only tracked, stop-at-zero variants get a number; the rest stay unlimited
+ok 471 - only tracked, stop-at-zero variants get a number; the rest stay unlimited
+  ---
+  duration_ms: 60.932
+  ...
+# Subtest: Shopify refusing the query (e.g. scope) leaves the page as before: no limits, no error
+ok 472 - Shopify refusing the query (e.g. scope) leaves the page as before: no limits, no error
+  ---
+  duration_ms: 5.4166
+  ...
+# Subtest: the storefront snippet carries the shared block verbatim
+ok 473 - the storefront snippet carries the shared block verbatim
+  ---
+  duration_ms: 5.689
+  ...
+# Subtest: normalize: merchant order kept, item count optional, codes trimmed, max 5
+ok 474 - normalize: merchant order kept, item count optional, codes trimmed, max 5
+  ---
+  duration_ms: 3.215
+  ...
+# Subtest: button: only when switched on with a code; default texts per action
+ok 475 - button: only when switched on with a code; default texts per action
+  ---
+  duration_ms: 0.7752
+  ...
+# Subtest: cartCount skips BRIX reward gifts
+ok 476 - cartCount skips BRIX reward gifts
+  ---
+  duration_ms: 0.4471
+  ...
+# Subtest: codesFor: only with auto-apply; reached code replaces the ladder's others, shopper codes stay
+ok 477 - codesFor: only with auto-apply; reached code replaces the ladder's others, shopper codes stay
+  ---
+  duration_ms: 1.0777
+  ...
+# Subtest: html: text only by default, every look, escaped, optional button
+ok 478 - html: text only by default, every look, escaped, optional button
+  ---
+  duration_ms: 2.7377
+  ...
+# Subtest: ids and the new-ladder defaults
+ok 479 - ids and the new-ladder defaults
+  ---
+  duration_ms: 0.9466
+  ...
+# Subtest: layout + box size: direction, button position, width modes, spacing
+ok 480 - layout + box size: direction, button position, width modes, spacing
+  ---
+  duration_ms: 1.0425
+  ...
+# Subtest: ticket: cut-out shape, a line under each offer, left-aligned by default
+ok 481 - ticket: cut-out shape, a line under each offer, left-aligned by default
+  ---
+  duration_ms: 1.2174
+  ...
+# Subtest: ticket with a button: the button sits in the stub, not next to the offers
+ok 482 - ticket with a button: the button sits in the stub, not next to the offers
+  ---
+  duration_ms: 2.4984
+  ...
+# Subtest: existing ladders are drawn as before: plain, centred, no stub, sub line only when set
+ok 483 - existing ladders are drawn as before: plain, centred, no stub, sub line only when set
+  ---
+  duration_ms: 1.4565
+  ...
+# Subtest: the old ENUM column is widened to text once; a text column is left alone
+ok 484 - the old ENUM column is widened to text once; a text column is left alone
+  ---
+  duration_ms: 8.846
+  ...
+# Subtest: saved values read back as the app's own names; the lost ones are empty (then the template decides)
+ok 485 - saved values read back as the app's own names; the lost ones are empty (then the template decides)
+  ---
+  duration_ms: 29.4779
+  ...
+# Subtest: first save: writes the trusted config, creates the discount, puts the offer on live rules only
+ok 486 - first save: writes the trusted config, creates the discount, puts the offer on live rules only
+  ---
+  duration_ms: 75.8927
+  ...
+# Subtest: discount not deployed: honest state and no offer shown on the storefront
+ok 487 - discount not deployed: honest state and no offer shown on the storefront
+  ---
+  duration_ms: 9.4751
+  ...
+# Subtest: discount switched off in Shopify: inactive, no offer shown
+ok 488 - discount switched off in Shopify: inactive, no offer shown
+  ---
+  duration_ms: 9.5286
+  ...
+# Subtest: offer off and no rule offers: config emptied, nothing shown, no discount created
+ok 489 - offer off and no rule offers: config emptied, nothing shown, no discount created
+  ---
+  duration_ms: 7.1691
+  ...
+# Subtest: AI mode uses the AI rules
+ok 490 - AI mode uses the AI rules
+  ---
+  duration_ms: 9.8253
+  ...
+# Subtest: plan without FBT: nothing goes live
+ok 491 - plan without FBT: nothing goes live
+  ---
+  duration_ms: 7.7841
+  ...
+# Subtest: show only: no BRIX discount (empty config, none created), the offer still shown on the widget
+ok 492 - show only: no BRIX discount (empty config, none created), the offer still shown on the widget
+  ---
+  duration_ms: 7.0749
+  ...
+# Subtest: show only has no metafield size limit: every rule with an offer shows it (knitnknot: 143 AI rules)
+ok 493 - show only has no metafield size limit: every rule with an offer shows it (knitnknot: 143 AI rules)
+  ---
+  duration_ms: 54.5095
+  ...
+# Subtest: show only with "offer from 4 items": the widget gets the minimum and "any" wording
+ok 494 - show only with "offer from 4 items": the widget gets the minimum and "any" wording
+  ---
+  duration_ms: 12.6884
+  ...
+# Subtest: widget offer: defaults off, values cleaned, percent capped at 90
+ok 495 - widget offer: defaults off, values cleaned, percent capped at 90
+  ---
+  duration_ms: 3.1622
+  ...
+# Subtest: rule offer: own value, none, or the widget's
+ok 496 - rule offer: own value, none, or the widget's
+  ---
+  duration_ms: 0.5666
+  ...
+# Subtest: config: one set per rule with an offer; triggers never repeated as offers; bad rules skipped
+ok 497 - config: one set per rule with an offer; triggers never repeated as offers; bad rules skipped
+  ---
+  duration_ms: 1.0901
+  ...
+# Subtest: config stays under the size Shopify passes to the Function
+ok 498 - config stays under the size Shopify passes to the Function
+  ---
+  duration_ms: 7.8723
+  ...
+# Subtest: text: {count} and {discount} filled in
+ok 499 - text: {count} and {discount} filled in
+  ---
+  duration_ms: 0.9377
+  ...
+# Subtest: storefront condition: offer only on live rules, removed everywhere else
+ok 500 - storefront condition: offer only on live rules, removed everywhere else
+  ---
+  duration_ms: 0.6092
+  ...
+# Subtest: function: viewed product + every recommended one → 10% off one unit of each
+ok 501 - function: viewed product + every recommended one → 10% off one unit of each
+  ---
+  duration_ms: 1.6003
+  ...
+# Subtest: function: nothing when one recommended product or the viewed product is missing
+ok 502 - function: nothing when one recommended product or the viewed product is missing
+  ---
+  duration_ms: 0.4695
+  ...
+# Subtest: function: two of a product still discounts one unit
+ok 503 - function: two of a product still discounts one unit
+  ---
+  duration_ms: 0.6719
+  ...
+# Subtest: function: free gifts, Packs and combo box lines never count or get the discount
+ok 504 - function: free gifts, Packs and combo box lines never count or get the discount
+  ---
+  duration_ms: 0.7404
+  ...
+# Subtest: function: fixed amount split by price, never more than the set costs; other currency = no fixed offer
+ok 505 - function: fixed amount split by price, never more than the set costs; other currency = no fixed offer
+  ---
+  duration_ms: 1.3026
+  ...
+# Subtest: function: rule on every page needs another product; overlapping sets — the bigger saving wins, each line once
+ok 506 - function: rule on every page needs another product; overlapping sets — the bigger saving wins, each line once
+  ---
+  duration_ms: 0.6898
+  ...
+# Subtest: function: no config, wrong class or tampered config = nothing
+ok 507 - function: no config, wrong class or tampered config = nothing
+  ---
+  duration_ms: 0.3841
+  ...
+# Subtest: start selected: style defaults unless the merchant chose; Bundle always
+ok 508 - start selected: style defaults unless the merchant chose; Bundle always
+  ---
+  duration_ms: 1.3438
+  ...
+# Subtest: offer text style: defaults look as before, merchant values validated
+ok 509 - offer text style: defaults look as before, merchant values validated
+  ---
+  duration_ms: 21.0595
+  ...
+# Subtest: fbtOfferSavings: one unit of each, viewed product included, a fixed amount shared by price
+ok 510 - fbtOfferSavings: one unit of each, viewed product included, a fixed amount shared by price
+  ---
+  duration_ms: 2.6802
+  ...
+# Subtest: sizes match across spellings; ranges hold their ages; years never match months
+ok 511 - sizes match across spellings; ranges hold their ages; years never match months
+  ---
+  duration_ms: 6.4119
+  ...
+# Subtest: the size option: the merchant's name, else Size / Age / Years
+ok 512 - the size option: the merchant's name, else Size / Age / Years
+  ---
+  duration_ms: 1.0007
+  ...
+# Subtest: pick: the exact size beats a range; the default colour is kept when it has the size
+ok 513 - pick: the exact size beats a range; the default colour is kept when it has the size
+  ---
+  duration_ms: 2.7006
+  ...
+# Subtest: replace: a suggestion without the size gives its place to a spare in that size
+ok 514 - replace: a suggestion without the size gives its place to a spare in that size
+  ---
+  duration_ms: 19.7545
+  ...
+# Subtest: applies the 10% tier to a marked 3-unit line (brief example: 80 x3 -> 216)
+ok 515 - applies the 10% tier to a marked 3-unit line (brief example: 80 x3 -> 216)
+  ---
+  duration_ms: 38.7743
+  ...
+# Subtest: no discount without markers, config, or when quantity does not match a tier
+ok 516 - no discount without markers, config, or when quantity does not match a tier
+  ---
+  duration_ms: 0.6355
+  ...
+# Subtest: multiples of a tier quantity still discount (two Buy-3 packs merged into 6 units)
+ok 517 - multiples of a tier quantity still discount (two Buy-3 packs merged into 6 units)
+  ---
+  duration_ms: 0.3677
+  ...
+# Subtest: forged properties cannot discount the wrong product or variant
+ok 518 - forged properties cannot discount the wrong product or variant
+  ---
+  duration_ms: 0.5759
+  ...
+# Subtest: different packs / groups discount independently
+ok 519 - different packs / groups discount independently
+  ---
+  duration_ms: 0.4223
+  ...
+# Subtest: fixed discount: total off per pack, only in the shop currency
+ok 520 - fixed discount: total off per pack, only in the shop currency
+  ---
+  duration_ms: 1.7307
+  ...
+# Subtest: choose-each-item: mixed variants in one group share one pack discount
+ok 521 - choose-each-item: mixed variants in one group share one pack discount
+  ---
+  duration_ms: 1.0513
+  ...
+# Subtest: variantScope="all": a same_variant Pack accepts ANY variant of its product, not just its anchor
+ok 522 - variantScope="all": a same_variant Pack accepts ANY variant of its product, not just its anchor
+  ---
+  duration_ms: 0.3852
+  ...
+# Subtest: variantScope="selected": only variants in allowedVariantIds are trusted, even for the same product
+ok 523 - variantScope="selected": only variants in allowedVariantIds are trusted, even for the same product
+  ---
+  duration_ms: 0.5235
+  ...
+# Subtest: buildFunctionConfig (server) produces exactly the shape the function reads
+ok 524 - buildFunctionConfig (server) produces exactly the shape the function reads
+  ---
+  duration_ms: 1.3141
+  ...
+# Subtest: never crashes on malformed input
+ok 525 - never crashes on malformed input
+  ---
+  duration_ms: 1.0808
+  ...
+# Subtest: resolveSaveStatus: server-side plan gate (Free/Starter/Pro)
+ok 526 - resolveSaveStatus: server-side plan gate (Free/Starter/Pro)
+  ---
+  duration_ms: 3.1325
+  ...
+# [db_proxy] raw response body: {"success":false,"error":"SQLSTATE[42S02]: Base table or view not found: 1146 Table 'u123_secretdb.brix_packs' doesn't exist"}
+# [packs.server] brix_packs table missing: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'u123_secretdb.brix_packs' doesn't exist
+# [db_proxy] raw response body: {"success":false,"error":"DB Connection Failed: Access denied for user u123@10.0.0.9 (password: YES)"}
+# [db_proxy] transient DB connection failure, retrying once: DB Connection Failed: Access denied for user u123@10.0.0.9 (password: YES)
+# Subtest: plans config: Free=preview, Starter/Pro=enabled
+ok 527 - plans config: Free=preview, Starter/Pro=enabled
+  ---
+  duration_ms: 12.4312
+  ...
+# Subtest: save + read round trip; ids stored numeric; customization deep-merged with defaults
+ok 528 - save + read round trip; ids stored numeric; customization deep-merged with defaults
+  ---
+  duration_ms: 47.1728
+  ...
+# Subtest: duplicate product+variant is a clear PackError with the existing id; other shops/variants are fine
+ok 529 - duplicate product+variant is a clear PackError with the existing id; other shops/variants are fine
+  ---
+  duration_ms: 20.0346
+  ...
+# Subtest: shop isolation: another shop cannot read, edit, delete or activate a pack
+ok 530 - shop isolation: another shop cannot read, edit, delete or activate a pack
+  ---
+  duration_ms: 7.2521
+  ...
+# Subtest: active-pack lookup matches product ids exactly (123 never matches 1123), both id spellings
+ok 531 - active-pack lookup matches product ids exactly (123 never matches 1123), both id spellings
+  ---
+  duration_ms: 8.5054
+  ...
+# Subtest: draft packs are never returned to the storefront lookup; status changes and delete work
+ok 532 - draft packs are never returned to the storefront lookup; status changes and delete work
+  ---
+  duration_ms: 6.7584
+  ...
+# Subtest: invalid pack ids are rejected before touching the database
+ok 533 - invalid pack ids are rejected before touching the database
+  ---
+  duration_ms: 0.8751
+  ...
+# [db_proxy] raw response body: {"success":false,"error":"DB Connection Failed: Access denied for user u123@10.0.0.9 (password: YES)"}
+# [packs.server] database error: DB Connection Failed: Access denied for user u123@10.0.0.9 (password: YES)
+# [packs] unexpected error: SELECT secret FROM users; token shpat_abc
+# [packs-shopify] GraphQL errors: [{"message":"token shpat_secret invalid"}]
+# [packs-shopify] request failed: boom
+# [packs-shopify] request failed: down
+# [packs-shopify] discountAutomaticAppCreate userErrors: [{"field":["automaticAppDiscount","functionHandle"],"message":"Could not find Function brix-packs-discount","code":"INVALID"}]
+# [packs-shopify] discountAutomaticAppCreate userErrors: [{"message":"Could not find Function","code":"INVALID"}]
+# [packs-shopify] checkout discount sync incomplete: function_not_deployed
+# Subtest: database failures never leak SQL, hosts or credentials
+ok 534 - database failures never leak SQL, hosts or credentials
+  ---
+  duration_ms: 419.6843
+  ...
+# Subtest: verifyProductVariant trusts only Shopify data and explains failures
+ok 535 - verifyProductVariant trusts only Shopify data and explains failures
+  ---
+  duration_ms: 2.2655
+  ...
+# Subtest: verifyPackCoverage: some sold-out variants never block a Pack; it anchors on the first in-stock one
+ok 536 - verifyPackCoverage: some sold-out variants never block a Pack; it anchors on the first in-stock one
+  ---
+  duration_ms: 1.7582
+  ...
+# Subtest: hydratePacks recalculates every tier from the LIVE price and flags broken packs
+ok 537 - hydratePacks recalculates every tier from the LIVE price and flags broken packs
+  ---
+  duration_ms: 48.1219
+  ...
+# Subtest: checkout discount status is only "verified" when discount is ACTIVE and config is in sync
+ok 538 - checkout discount status is only "verified" when discount is ACTIVE and config is in sync
+  ---
+  duration_ms: 1.7037
+  ...
+# Subtest: ensurePacksDiscount reports an undeployed function instead of pretending it worked
+ok 539 - ensurePacksDiscount reports an undeployed function instead of pretending it worked
+  ---
+  duration_ms: 3.5858
+  ...
+# Subtest: Shopify id helpers match exactly, never by suffix
+ok 540 - Shopify id helpers match exactly, never by suffix
+  ---
+  duration_ms: 2.1217
+  ...
+# Subtest: tier calculation matches the brief example (80 x3 @10%)
+ok 541 - tier calculation matches the brief example (80 x3 @10%)
+  ---
+  duration_ms: 0.7046
+  ...
+# Subtest: fixed discount, none discount and clamping
+ok 542 - fixed discount, none discount and clamping
+  ---
+  duration_ms: 0.3196
+  ...
+# Subtest: no float drift (0.1 + 0.2 style)
+ok 543 - no float drift (0.1 + 0.2 style)
+  ---
+  duration_ms: 0.3061
+  ...
+# Subtest: currency decimals and formatted values follow the shop currency
+ok 544 - currency decimals and formatted values follow the shop currency
+  ---
+  duration_ms: 48.876
+  ...
+# Subtest: calculateTierFromPrices handles mixed-variant packs
+ok 545 - calculateTierFromPrices handles mixed-variant packs
+  ---
+  duration_ms: 0.2812
+  ...
+# Subtest: validateTiers rejects invalid structures
+ok 546 - validateTiers rejects invalid structures
+  ---
+  duration_ms: 1.2192
+  ...
+# Subtest: normalizeTiers sorts and coerces
+ok 547 - normalizeTiers sorts and coerces
+  ---
+  duration_ms: 1.6154
+  ...
+# Subtest: customization merge preserves nested defaults
+ok 548 - customization merge preserves nested defaults
+  ---
+  duration_ms: 1.7197
+  ...
+# Subtest: normalizeVariantIds dedupes and coerces GIDs to numeric strings
+ok 549 - normalizeVariantIds dedupes and coerces GIDs to numeric strings
+  ---
+  duration_ms: 0.5551
+  ...
+# Subtest: validateVariantCoverage: a Pack belongs to a product first, then declares which variants it covers
+ok 550 - validateVariantCoverage: a Pack belongs to a product first, then declares which variants it covers
+  ---
+  duration_ms: 1.3277
+  ...
+# Subtest: sanitizeCustomization validates and drops unknown fields
+ok 551 - sanitizeCustomization validates and drops unknown fields
+  ---
+  duration_ms: 1.1799
+  ...
+# Subtest: only the three current templates are offered; removed ones map to the closest current template
+ok 552 - only the three current templates are offered; removed ones map to the closest current template
+  ---
+  duration_ms: 1.1581
+  ...
+# Subtest: Buy Now is on by default and its label is validated
+ok 553 - Buy Now is on by default and its label is validated
+  ---
+  duration_ms: 0.5377
+  ...
+# Subtest: button customization: validated; Packs saved before it keep their old button look
+ok 554 - button customization: validated; Packs saved before it keep their old button look
+  ---
+  duration_ms: 1.1148
+  ...
+# Subtest: placement is below the price or custom; old buy-button placements become below the price
+ok 555 - placement is below the price or custom; old buy-button placements become below the price
+  ---
+  duration_ms: 0.5042
+  ...
+# Subtest: options come from Shopify data: any names, any count, only values the variants use
+ok 556 - options come from Shopify data: any names, any count, only values the variants use
+  ---
+  duration_ms: 1.0248
+  ...
+# Subtest: no real options (Default Title) -> nothing to choose, the one variant resolves; missing option data falls back to titles
+ok 557 - no real options (Default Title) -> nothing to choose, the one variant resolves; missing option data falls back to titles
+  ---
+  duration_ms: 0.8589
+  ...
+# Subtest: variant resolution is exact; unavailable combinations never fall back to another variant
+ok 558 - variant resolution is exact; unavailable combinations never fall back to another variant
+  ---
+  duration_ms: 0.7257
+  ...
+# Subtest: option choices cascade from earlier options and flag sold-out / missing values
+ok 559 - option choices cascade from earlier options and flag sold-out / missing values
+  ---
+  duration_ms: 0.7601
+  ...
+# Subtest: selection rules follow the Pack type; quick-add blocks full packs, duplicates (if disallowed) and stock
+ok 560 - selection rules follow the Pack type; quick-add blocks full packs, duplicates (if disallowed) and stock
+  ---
+  duration_ms: 0.5671
+  ...
+# Subtest: cart lines: one per real variant with the units picked
+ok 561 - cart lines: one per real variant with the units picked
+  ---
+  duration_ms: 0.6323
+  ...
+# [ai-llm] provider error 500 {"error":{"message":"down"}}
+# [pairing-assistant] model call failed 500 down
+# Subtest: order pairs merge Shopify orders with older recorded ones, skip test/cancelled, flag inactive products
+ok 562 - order pairs merge Shopify orders with older recorded ones, skip test/cancelled, flag inactive products
+  ---
+  duration_ms: 131.6106
+  ...
+# Subtest: order scan is cached per shop and window; fresh re-reads
+ok 563 - order scan is cached per shop and window; fresh re-reads
+  ---
+  duration_ms: 7.862
+  ...
+# Subtest: prompt → model plan → rules with only real products; one credit used
+ok 564 - prompt → model plan → rules with only real products; one credit used
+  ---
+  duration_ms: 27.1484
+  ...
+# Subtest: model down → plain-text parser still builds the rule
+ok 565 - model down → plain-text parser still builds the rule
+  ---
+  duration_ms: 12.6006
+  ...
+# Subtest: no AI key → no credit used, parser used
+ok 566 - no AI key → no credit used, parser used
+  ---
+  duration_ms: 22.9384
+  ...
+# Subtest: model asks a question when the prompt has no pairing
+ok 567 - model asks a question when the prompt has no pairing
+  ---
+  duration_ms: 4.7176
+  ...
+# Subtest: "what customers buy with it" uses past orders for every product in the group
+ok 568 - "what customers buy with it" uses past orders for every product in the group
+  ---
+  duration_ms: 6.5685
+  ...
+# Subtest: FBT instructions: resolved once, then reused from the saved result while the text is unchanged
+ok 569 - FBT instructions: resolved once, then reused from the saved result while the text is unchanged
+  ---
+  duration_ms: 5.0477
+  ...
+# Subtest: FBT instructions: nothing understood → warning, not cached; empty text → nothing at all
+ok 570 - FBT instructions: nothing understood → warning, not cached; empty text → nothing at all
+  ---
+  duration_ms: 3.4847
+  ...
+# Subtest: order pairs: counts orders together, shares and lift; one product per order counted once
+ok 571 - order pairs: counts orders together, shares and lift; one product per order counted once
+  ---
+  duration_ms: 3.9734
+  ...
+# Subtest: order pairs: minTogether drops rare pairs; orders without products are ignored
+ok 572 - order pairs: minTogether drops rare pairs; orders without products are ignored
+  ---
+  duration_ms: 0.4099
+  ...
+# Subtest: partnersOf ranks the products bought most with a product, either side of the pair
+ok 573 - partnersOf ranks the products bought most with a product, either side of the pair
+  ---
+  duration_ms: 20.6434
+  ...
+# Subtest: matchProducts: exact title, every-word group, plural tolerant, and title-in-sentence
+ok 574 - matchProducts: exact title, every-word group, plural tolerant, and title-in-sentence
+  ---
+  duration_ms: 2.5021
+  ...
+# Subtest: plan → rules: a group to a bigger group gives each product its own picks; never itself
+ok 575 - plan → rules: a group to a bigger group gives each product its own picks; never itself
+  ---
+  duration_ms: 3.3702
+  ...
+# Subtest: plan → rules: small groups stay one shared rule
+ok 576 - plan → rules: small groups stay one shared rule
+  ---
+  duration_ms: 0.8224
+  ...
+# Subtest: plan → rules: when several offers match, the ones bought together most win
+ok 577 - plan → rules: when several offers match, the ones bought together most win
+  ---
+  duration_ms: 0.7991
+  ...
+# Subtest: plan → rules: collections, product types and tags resolve to real products
+ok 578 - plan → rules: collections, product types and tags resolve to real products
+  ---
+  duration_ms: 1.2858
+  ...
+# Subtest: plan → rules: unknown products are reported and never invented; empty offers drop the rule
+ok 579 - plan → rules: unknown products are reported and never invented; empty offers drop the rule
+  ---
+  duration_ms: 1.6421
+  ...
+# Subtest: plan → rules: "what customers buy with it" makes one rule per trigger from past orders
+ok 580 - plan → rules: "what customers buy with it" makes one rule per trigger from past orders
+  ---
+  duration_ms: 0.9564
+  ...
+# Subtest: plan → rules: history with no orders for a product warns instead of guessing
+ok 581 - plan → rules: history with no orders for a product warns instead of guessing
+  ---
+  duration_ms: 0.3943
+  ...
+# Subtest: plan → rules: "all products" trigger and duplicate rules merged
+ok 582 - plan → rules: "all products" trigger and duplicate rules merged
+  ---
+  duration_ms: 0.4463
+  ...
+# Subtest: heuristic parser handles the common phrasings
+ok 583 - heuristic parser handles the common phrasings
+  ---
+  duration_ms: 5.086
+  ...
+# Subtest: surface shapes: FBT and upsell rules, and their keys match the generic rule key
+ok 584 - surface shapes: FBT and upsell rules, and their keys match the generic rule key
+  ---
+  duration_ms: 0.897
+  ...
+# Subtest: instructions: named products get their offers first, AI fills up to the count; others untouched
+ok 585 - instructions: named products get their offers first, AI fills up to the count; others untouched
+  ---
+  duration_ms: 1.2192
+  ...
+# Subtest: instructions: more offers than the count are all kept; a product AI skipped still gets its rule
+ok 586 - instructions: more offers than the count are all kept; a product AI skipped still gets its rule
+  ---
+  duration_ms: 0.4159
+  ...
+# Subtest: instructions: "every product" offers go on every catalog product, never on themselves
+ok 587 - instructions: "every product" offers go on every catalog product, never on themselves
+  ---
+  duration_ms: 0.5539
+  ...
+# Subtest: instructions: no instructions = the automatic rules unchanged
+ok 588 - instructions: no instructions = the automatic rules unchanged
+  ---
+  duration_ms: 0.7148
+  ...
+# Subtest: instructionsHash changes with the text or the count, not with spacing
+ok 589 - instructionsHash changes with the text or the count, not with spacing
+  ---
+  duration_ms: 0.5155
+  ...
+# Subtest: "match the bottom and top": both ways, tops and bottoms found by their usual names
+ok 590 - "match the bottom and top": both ways, tops and bottoms found by their usual names
+  ---
+  duration_ms: 5.4859
+  ...
+# Subtest: group words prefer the store's own collection, type or tag over the built-in word list
+ok 591 - group words prefer the store's own collection, type or tag over the built-in word list
+  ---
+  duration_ms: 0.847
+  ...
+# Subtest: more phrasings: "pair X & Y", "X and Y together", and "with" still one way
+ok 592 - more phrasings: "pair X & Y", "X and Y together", and "with" still one way
+  ---
+  duration_ms: 0.4525
+  ...
+# Subtest: unknown group word still warns instead of guessing
+ok 593 - unknown group word still warns instead of guessing
+  ---
+  duration_ms: 0.6467
+  ...
+# Subtest: a name that is exactly one of the store's product types means that type (not co-ords that mention it)
+ok 594 - a name that is exactly one of the store's product types means that type (not co-ords that mention it)
+  ---
+  duration_ms: 0.4608
+  ...
+# Subtest: ranking: same gender first, a boys' item never ahead of a girls' one for a girls' product
+ok 595 - ranking: same gender first, a boys' item never ahead of a girls' one for a girls' product
+  ---
+  duration_ms: 0.4896
+  ...
+# Subtest: steps-style prompt: instruction lines ignored, "if it's a top, recommend bottoms like jeans" understood
+ok 596 - steps-style prompt: instruction lines ignored, "if it's a top, recommend bottoms like jeans" understood
+  ---
+  duration_ms: 0.6326
+  ...
+# Subtest: model reply read even when wrapped in text or cut off mid-way
+ok 597 - model reply read even when wrapped in text or cut off mid-way
+  ---
+  duration_ms: 0.8485
+  ...
+# Subtest: a long title copied only in part still finds the product
+ok 598 - a long title copied only in part still finds the product
+  ---
+  duration_ms: 0.2897
+  ...
+# Subtest: kinds: the store's own types sorted into topwear, bottomwear, dresses, co-ord sets, sets
+ok 599 - kinds: the store's own types sorted into topwear, bottomwear, dresses, co-ord sets, sets
+  ---
+  duration_ms: 1.8198
+  ...
+# Subtest: a mix for one product = one rule, offers in the order asked; picks alternate between the named types
+ok 600 - a mix for one product = one rule, offers in the order asked; picks alternate between the named types
+  ---
+  duration_ms: 3.2939
+  ...
+# Subtest: a general idea with one example reaches every type; boys get boys' items only
+ok 601 - a general idea with one example reaches every type; boys get boys' items only
+  ---
+  duration_ms: 6.6541
+  ...
+# Subtest: "dresses" and "dress" are the same word
+ok 602 - "dresses" and "dress" are the same word
+  ---
+  duration_ms: 0.2731
+  ...
+# [price-display] read failed: network down
+# Subtest: read: off when never set, on when saved, off when Shopify fails
+ok 603 - read: off when never set, on when saved, off when Shopify fails
+  ---
+  duration_ms: 39.8119
+  ...
+# Subtest: save: an app-data metafield brix.display on the app installation
+ok 604 - save: an app-data metafield brix.display on the app installation
+  ---
+  duration_ms: 4.5622
+  ...
+1..604
+# tests 604
+# suites 0
+# pass 601
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 64271.4038

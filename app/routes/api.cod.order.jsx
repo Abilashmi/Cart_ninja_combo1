@@ -1,4 +1,4 @@
-import { CodError, clientIp, clientUa, codErrorResponse, placeCodOrder, rateLimit, readPhoneToken } from '../services/cod.server';
+import { CodError, cleanDeliveryChoice, clientIp, clientUa, codErrorResponse, placeCodOrder, rateLimit, readPhoneToken } from '../services/cod.server';
 import {
   COD_CORS_HEADERS, assertLive, corsPreflight, limitByIp, loadCodContext, ok, parseShop, parseSurface, readJson,
 } from '../services/cod-storefront.server';
@@ -9,6 +9,7 @@ import { normalizeIndianPhone, normalizeLines, sanitizeCodTrack, validateAddress
  *   { shop, surface, items, coupon?, attributes?, idemKey,
  *     phone, token?,            // token from /api/cod/otp when the store requires OTP
  *     address: { name, address1, address2, city, state, pincode, email },
+ *     delivery?: { option, date, slot },   // the delivery option picked (advanced shipping)
  *     track?: { gaClientId, gaSessionId, fbp, fbc, consent: { analytics, marketing }, pageUrl } }
  * → { order: { orderName, orderId, statusPageUrl, total, currency, repeated? } }
  *
@@ -58,6 +59,9 @@ export async function action({ request }) {
       // The cart's discount codes and attributes (used only as the merchant's cart-discount setting allows).
       cartCodes: body.cartCodes,
       cartAttributes: body.cartAttributes,
+      // Advanced shipping: the config and the shopper's pick, checked again here.
+      shipping: ctx.shipping,
+      delivery: cleanDeliveryChoice(body.delivery),
       // Server-side GA4 / Meta Purchase (cod-tracking.server.js); consent comes from the browser.
       track: sanitizeCodTrack(body.track),
       clientIp: clientIp(request),

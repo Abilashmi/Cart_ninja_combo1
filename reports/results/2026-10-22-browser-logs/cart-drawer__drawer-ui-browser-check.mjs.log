@@ -1,0 +1,136 @@
+PASS  1440px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  1440px: every row part stays inside its card
+PASS  1440px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  1440px: remove button top-right of each row
+PASS  1440px: long title wraps instead of being cut on one line — lines 2,3
+PASS  1440px: desktop layout (image 76px, quantity control 34px tall) — [[76,34],[76,34]]
+PASS  1440px: subtotal on one line
+PASS  1440px: pricing summary labels left-aligned, amounts right-aligned
+PASS  1440px: banner fits the drawer, keeps its aspect ratio, desktop image — {"src":"https://img.test/desktop.svg","w":388,"h":97,"ratio":4,"bodyW":420,"alt":"Free shipping over ₹999"}
+PASS  1440px: only the desktop banner image is downloaded — /desktop.svg,/desktop.svg,/tee.svg
+PASS  1440px: footer with checkout shown for a cart with items
+PASS  1280px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  1280px: every row part stays inside its card
+PASS  1280px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  1280px: remove button top-right of each row
+PASS  1280px: long title wraps instead of being cut on one line — lines 2,3
+PASS  1280px: desktop layout (image 76px, quantity control 34px tall) — [[76,34],[76,34]]
+PASS  1280px: subtotal on one line
+PASS  1280px: pricing summary labels left-aligned, amounts right-aligned
+PASS  1280px: banner fits the drawer, keeps its aspect ratio, desktop image — {"src":"https://img.test/desktop.svg","w":388,"h":97,"ratio":4,"bodyW":420,"alt":"Free shipping over ₹999"}
+PASS  1280px: only the desktop banner image is downloaded — /desktop.svg,/desktop.svg,/tee.svg
+PASS  1280px: footer with checkout shown for a cart with items
+PASS  1024px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  1024px: every row part stays inside its card
+PASS  1024px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  1024px: remove button top-right of each row
+PASS  1024px: long title wraps instead of being cut on one line — lines 2,3
+PASS  1024px: desktop layout (image 76px, quantity control 34px tall) — [[76,34],[76,34]]
+PASS  1024px: subtotal on one line
+PASS  1024px: pricing summary labels left-aligned, amounts right-aligned
+PASS  1024px: banner fits the drawer, keeps its aspect ratio, desktop image — {"src":"https://img.test/desktop.svg","w":388,"h":97,"ratio":4,"bodyW":420,"alt":"Free shipping over ₹999"}
+PASS  1024px: only the desktop banner image is downloaded — /desktop.svg,/desktop.svg,/tee.svg
+PASS  1024px: footer with checkout shown for a cart with items
+PASS  430px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  430px: every row part stays inside its card
+PASS  430px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  430px: remove button top-right of each row
+PASS  430px: long title wraps instead of being cut on one line — lines 1,3
+PASS  430px: mobile layout (image 64px, quantity control 36px tall) — [[64,36],[64,36]]
+PASS  430px: subtotal on one line
+PASS  430px: pricing summary labels left-aligned, amounts right-aligned
+PASS  430px: banner fits the drawer, keeps its aspect ratio, mobile image — {"src":"https://img.test/mobile.svg","w":406,"h":203,"ratio":2,"bodyW":430,"alt":"Free shipping over ₹999"}
+PASS  430px: only the mobile banner image is downloaded — /mobile.svg,/mobile.svg,/tee.svg
+PASS  430px: footer with checkout shown for a cart with items
+PASS  390px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  390px: every row part stays inside its card
+PASS  390px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  390px: remove button top-right of each row
+PASS  390px: long title wraps instead of being cut on one line — lines 1,3
+PASS  390px: mobile layout (image 64px, quantity control 36px tall) — [[64,36],[64,36]]
+PASS  390px: subtotal on one line
+PASS  390px: pricing summary labels left-aligned, amounts right-aligned
+PASS  390px: banner fits the drawer, keeps its aspect ratio, mobile image — {"src":"https://img.test/mobile.svg","w":366,"h":183,"ratio":2,"bodyW":390,"alt":"Free shipping over ₹999"}
+PASS  390px: only the mobile banner image is downloaded — /mobile.svg,/mobile.svg,/tee.svg
+PASS  390px: footer with checkout shown for a cart with items
+PASS  375px: no horizontal scrolling (drawer, body, page) — {"d":false,"b":false,"p":false}
+PASS  375px: every row part stays inside its card
+PASS  375px: title never collides with remove, price, quantity or subtotal — [[false,false,false,false],[false,false,false,false]]
+PASS  375px: remove button top-right of each row
+PASS  375px: long title wraps instead of being cut on one line — lines 2,3
+PASS  375px: mobile layout (image 64px, quantity control 36px tall) — [[64,36],[64,36]]
+PASS  375px: subtotal on one line
+PASS  375px: pricing summary labels left-aligned, amounts right-aligned
+PASS  375px: banner fits the drawer, keeps its aspect ratio, mobile image — {"src":"https://img.test/mobile.svg","w":351,"h":176,"ratio":2,"bodyW":375,"alt":"Free shipping over ₹999"}
+PASS  375px: only the mobile banner image is downloaded — /mobile.svg,/mobile.svg,/tee.svg
+PASS  375px: footer with checkout shown for a cart with items
+PASS  quantity: minus disabled at 1, enabled at 2
+PASS  quantity + and remove call /cart/change.js and redraw the drawer — [{"id":"k1","quantity":2},{"id":"k2","quantity":0}]
+PASS  removing the last product: empty state, no pricing summary, no checkout — {"empty":true,"footer":false,"checkout":false}
+PASS  empty cart (1280px): empty state shown, no checkout footer, no checkout button, no totals — {"empty":true,"footer":false,"checkout":false}
+PASS  empty cart (1280px): banner still shows above where products go — banner > empty
+PASS  empty cart (390px): empty state shown, no checkout footer, no checkout button, no totals — {"empty":true,"footer":false,"checkout":false}
+PASS  empty cart (390px): banner still shows above where products go — banner > empty
+PASS  placement above_progress with progress bar at the top: banner > progress > items — banner > progress > items
+PASS  placement below_progress with progress bar at the top: progress > banner > items — progress > banner > items
+PASS  placement above_products with progress bar at the top: progress > banner > items — progress > banner > items
+PASS  placement below_products with progress bar at the top: progress > items > banner — progress > items > banner
+PASS  placement above_checkout with progress bar at the top: progress > items > banner — progress > items > banner
+PASS  placement above_checkout (with bar): banner is the last thing before the checkout footer — cc-image-banner
+PASS  placement above_progress with progress bar at the bottom: items > banner > progress — items > banner > progress
+PASS  placement below_progress with progress bar at the bottom: items > progress > banner — items > progress > banner
+PASS  placement above_checkout with progress bar at the bottom: items > progress > banner — items > progress > banner
+PASS  placement above_checkout (with bar): banner is the last thing before the checkout footer — cc-image-banner
+PASS  placement above_progress with no progress bar: banner > items — banner > items
+PASS  placement below_products with no progress bar: items > banner — items > banner
+PASS  banner off: nothing rendered
+PASS  banner on but no image: nothing rendered
+PASS  only a desktop image: phones use it
+PASS  only a mobile image: desktops use it
+PASS  banner image has the merchant's alt text
+PASS  banner spacing 0/0px (1280px): the gaps match — {"above":0,"below":0}
+PASS  banner spacing 24/6px (1280px): the gaps match — {"above":24,"below":6}
+PASS  banner spacing 0/0px (390px): the gaps match — {"above":0,"below":0}
+PASS  banner spacing 24/6px (390px): the gaps match — {"above":24,"below":6}
+PASS  phone: body and footer padding are tight — {"bodyTop":"10px","bodyBottom":"12px","gap":"8px","footerTop":"12px"}
+PASS  coupon section: text card shows its heading and description — [{"text":"Free shipping <b>today</b> No code needed","buttons":[],"bold":0},{"text":"SAVE10 10% off Copy","buttons":["ccApplyCoupon('SAVE10')"],"bold":0}]
+PASS  coupon section: text card has no Apply/Copy button
+PASS  coupon section: the real coupon still applies its own code
+PASS  coupon style: picked SVG icon in its colour and size — {"fill":"#ff0000","size":"26","img":null,"sub":["15px","800","rgb(0, 255, 0)"]}
+PASS  coupon style: subtitle font size / weight / colour — ["15px","800","rgb(0, 255, 0)"]
+PASS  coupon style: own icon image — {"fill":null,"size":null,"img":"https://img.test/tee.svg","sub":["9px","400","rgb(255, 255, 255)"]}
+PASS  coupon style: icon hidden — {"fill":null,"size":null,"img":null,"sub":["9px","400","rgb(255, 255, 255)"]}
+PASS  coupon style: Copied state uses the merchant colours — ["Copied","rgb(18, 52, 86)","rgb(254, 220, 186)"]
+PASS  checkout button still goes to /checkout — /checkout
+PASS  halo theme: our drawer closed to start
+PASS  halo theme: a menu sidebar class never opens our cart
+PASS  halo theme: the theme sidebar never shows, not even for a frame — 0 frames
+PASS  halo theme: the page never goes white (body stays shown) — {"body":"block","themeCart":"block/hidden","bodyClassLeft":false}
+PASS  halo theme: the theme cart is hidden and its body class cleared — {"body":"block","themeCart":"block/hidden","bodyClassLeft":false}
+PASS  halo theme: our drawer opens instead
+PASS  instant: the drawer opens at the tap with the product, before Shopify answers — 68 ms
+PASS  instant: the waiting line shows size and picture, no remove / stepper yet — {"remove":false,"stepper":false,"variant":"M","img":"https://img.test/p.svg"}
+PASS  instant: Shopify's answer replaces it with the real line
+PASS  instant: closed before the answer, it stays closed
+PASS  instant: a refused add takes the line back out and says why — {"during":true,"toast":"All 2 Sold Tee are in your cart."}
+PASS  instant: no page errors
+PASS  held cart reads: the drawer shows the item from the first answer, not the newest render's — 1480 ms
+PASS  held cart reads: still open with the item after the late renders
+PASS  held cart reads: no page errors
+PASS  held answer: the theme's add opens the drawer when Shopify answered, not 500 ms later — 1084 ms
+PASS  held answer: closed by the shopper, the late answer doesn't bring it back
+PASS  held answer: BRIX's own form add opens the drawer when Shopify answered — 1181 ms
+PASS  held answer: a refused add opens nothing
+PASS  held answer: no page errors
+PASS  slow add: nothing drawn from the cart before Shopify answers — []
+PASS  slow add: the drawer opens with the item right after the answer (no extra wait) — 1066 ms
+PASS  refused add: our drawer stays closed, the theme's message shows
+PASS  failed add: nothing opens
+PASS  fast add: one add straight from the form, the theme's handler never runs — {"adds":1,"themeHandled":1,"counter":"5"}
+PASS  fast add: the drawer shows the item as soon as Shopify answers — 1213 ms
+PASS  fast add: the theme's cart counter follows — 5
+PASS  fast add: the theme's stock cap is kept (no add, a clear message) — {"capToast":"You can't add more of this item. You already have 2 in your cart."}
+PASS  fast add: Shopify's refusal message shows
+PASS  no page errors
+
+134/134 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-drawer-ui

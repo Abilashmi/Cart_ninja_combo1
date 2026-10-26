@@ -1,0 +1,7 @@
+
+Cart drawer — money display
+  ✓ USD: $45.90 each, $91.80 subtotal and total — no rounding to $46 / $92
+  ✓ INR: ₹45.90 shown exactly too (the amount Shopify charges)
+  ✓ JPY has no decimals, so it shows whole yen
+
+3/3 passed

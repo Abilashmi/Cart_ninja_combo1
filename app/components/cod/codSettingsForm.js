@@ -30,10 +30,18 @@ export function sheetForm(sheet) {
   };
 }
 
+// Picked products / collections: { products: [{ id, title }], collections: [...] }.
+const picksForm = (p) => ({ products: [...(p?.products || [])], collections: [...(p?.collections || [])] });
+const nonePicked = (p) => !(p?.products?.length || p?.collections?.length);
+
 export function productButtonForm(pb) {
   const b = { ...DEFAULT_COD_SETTINGS.productButton, ...(pb || {}) };
   return {
     pbBuyNowPlacement: b.buyNowPlacement || (b.replaceBuyNow === false ? 'above' : 'replace'),
+    pbReplaceOn: picksForm(b.replaceOn),
+    pbRestPlacement: b.restPlacement === 'below' ? 'below' : 'above',
+    pbShowMode: b.showOn?.mode || 'all',
+    pbShowOn: picksForm(b.showOn),
     pbBuyNowText: b.buyNowText || '',
     pbBuyNowSelector: b.buyNowSelector || '',
     pbMarginTop: b.marginTop,
@@ -117,6 +125,7 @@ export function toForm(s) {
     codFeeLabel: s.codFeeLabel,
     shippingFee: numText(s.shippingFee),
     freeShippingAbove: numText(s.freeShippingAbove),
+    shippingMode: s.shippingMode === 'advanced' ? 'advanced' : 'simple',
     minOrder: numText(s.minOrder),
     maxOrder: numText(s.maxOrder),
     requireOtp: s.requireOtp,
@@ -124,6 +133,9 @@ export function toForm(s) {
     blockedPincodes: s.blockedPincodes.join(', '),
     excludedProductTags: s.excludedProductTags.join(', '),
     excludedBehavior: s.excludedBehavior,
+    unlistedAllow: Boolean(s.unlisted?.allow),
+    unlistedMode: s.unlisted?.mode === 'only' ? 'only' : 'all',
+    unlistedPicks: picksForm(s.unlisted),
     allowCoupons: s.allowCoupons,
     couponMaxDiscount: numText(s.couponMaxDiscount),
     cartDiscounts: s.cartDiscounts !== false,
@@ -187,6 +199,7 @@ export function toSettings(f) {
     codFeeLabel: f.codFeeLabel,
     shippingFee: Number(f.shippingFee) || 0,
     freeShippingAbove: Number(f.freeShippingAbove) || 0,
+    shippingMode: f.shippingMode,
     minOrder: Number(f.minOrder) || 0,
     maxOrder: Number(f.maxOrder) || 0,
     requireOtp: f.requireOtp,
@@ -194,6 +207,7 @@ export function toSettings(f) {
     blockedPincodes: f.blockedPincodes,
     excludedProductTags: f.excludedProductTags,
     excludedBehavior: f.excludedBehavior,
+    unlisted: { allow: f.unlistedAllow, mode: f.unlistedMode, ...f.unlistedPicks },
     allowCoupons: f.allowCoupons,
     couponMaxDiscount: Number(f.couponMaxDiscount) || 0,
     cartDiscounts: f.cartDiscounts,
@@ -219,6 +233,9 @@ export function toSettings(f) {
     productButton: {
       buyNowPlacement: f.pbBuyNowPlacement,
       replaceBuyNow: f.pbBuyNowPlacement === 'replace',
+      replaceOn: f.pbReplaceOn,
+      restPlacement: f.pbRestPlacement,
+      showOn: { mode: f.pbShowMode, ...f.pbShowOn },
       buyNowText: f.pbBuyNowText,
       buyNowSelector: f.pbBuyNowSelector.trim(),
       marginTop: f.pbMarginTop,
@@ -259,6 +276,10 @@ export function formErrors(f) {
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0) && !(Number(f.codFeePercent) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
   if (f.pbBuyNowSelector.trim() && !isValidDrawerSelector(f.pbBuyNowSelector)) e.pbBuyNowSelector = 'That doesn\'t look like a CSS selector, e.g. .product-form__buy-now';
+  if (f.product && f.pbShowMode !== 'all' && nonePicked(f.pbShowOn)) e.pbShowOn = 'Choose at least one product or collection.';
+  // The Buy it now position is hidden (and unused) while payment options are on.
+  if (f.product && !f.pp?.enabled && f.pbBuyNowPlacement === 'some' && nonePicked(f.pbReplaceOn)) e.pbReplaceOn = 'Choose the products where COD replaces Buy it now.';
+  if (f.unlistedAllow && f.unlistedMode === 'only' && nonePicked(f.unlistedPicks)) e.unlistedPicks = 'Choose at least one product or collection.';
   if (f.sheetTermsUrl.trim() && !isValidTermsUrl(f.sheetTermsUrl)) e.sheetTermsUrl = 'Use a link starting with https:// or a page on your store, like /pages/terms.';
   if (f.codFeeEnabled && !f.codFeeLabel.trim()) e.codFeeLabel = 'Enter the name shoppers see for this fee.';
   const selector = f.drawerSelector.trim();

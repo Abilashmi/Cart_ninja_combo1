@@ -1,0 +1,85 @@
+PASS  loads: one payment selector, two cards — {"boxes":1}
+PASS  loads: Pay Online selected by default
+PASS  Pay Online card: "Save 10%" and ₹990 (was ₹1,100), savings ₹110 — Pay OnlineSave 10%Get instant savingsGet it for ₹990₹1,100 (save ₹110)Pay online: ₹990 instead of ₹1,100.
+PASS  COD card: ₹1,100 + ₹50 COD fee, no discount — Cash on DeliveryPay when your order arrivesPay ₹1,100 + ₹50 Cash on Delivery Fee
+PASS  offer banner: "10% off when you pay online · Pay online and save ₹110" — 10% off when you pay onlinePay online and save ₹110
+PASS  Shopify Buy it now relabelled "Buy it now · Save 10%" and shown — Buy it now · Save 10%
+PASS  no COD button while Pay Online is selected; old COD button not added
+PASS  placement: above the purchase buttons
+PASS  desktop: cards side by side — [292,292]
+PASS  select COD: COD card selected, Pay Online not
+PASS  select COD: "Buy with Cash on Delivery" shown, Buy it now hidden — {"codBtn":"Buy with Cash on Delivery","native":false}
+PASS  back to Pay Online: Buy it now · Save 10% again, COD button gone
+PASS  variant ₹1,500: online ₹1,350, COD ₹1,500 — Pay OnlineSave 10%Get instant savingsGet it for ₹1,350₹1,500 (save ₹150)Pay online: ₹1,350 instead of ₹1,500. | Cash on DeliveryPay when your order arrivesPay ₹1,500 + ₹50 Cash on Delivery Fee
+PASS  variant: banner savings updated (₹150) — 10% off when you pay onlinePay online and save ₹150
+PASS  quantity 2 of ₹1,100: online ₹1,980, COD ₹2,200 — Pay OnlineSave 10%Get instant savingsGet it for ₹1,980₹2,200 (save ₹220)Pay online: ₹1,980 instead of ₹2,200. | Cash on DeliveryPay when your order arrivesPay ₹2,200 + ₹50 Cash on Delivery Fee
+PASS  quantity: Buy it now label never stacks — Buy it now · Save 10%
+PASS  snapshot: variant 21 × 2, subtotal 2200, online 1980 — {"method":"online","shown":{"online":true,"cod":true},"pricing":{"subtotal":2200,"percent":10,"qualifies":true,"minMissing":false,"savings":220,"online":1980,"cod":2200,"codFee":50,"codTotal":2250},"variantId":"21","quantity":2}
+PASS  redraw: still one selector and one purchase slot — {"boxes":1,"ctas":1}
+PASS  redraw: new Buy it now relabelled once ("Buy it now · Save 10%") — Buy it now · Save 10%
+PASS  redraw with copied text: no duplicate "Save 10%" — Buy it now · Save 10%
+PASS  MutationObserver: busy page does not re-fire events or relabel again — ["brix_payment_method_viewed","brix_prepaid_offer_viewed","brix_payment_method_selected:cod","brix_payment_method_selected:online"]
+PASS  keyboard: Arrow key moves to Cash on Delivery, selects and focuses it — cod
+PASS  keyboard: back with Arrow, Space keeps it, focus stays
+PASS  a11y: radiogroup labelled "Choose payment method", roving tabindex, radio dot (not colour only) — {"label":"Choose payment method","tab":[0,-1],"radio":true}
+PASS  analytics: viewed once, prepaid offer viewed once — ["brix_payment_method_viewed","brix_prepaid_offer_viewed","brix_payment_method_selected:cod","brix_payment_method_selected:online","brix_payment_method_selected:cod","brix_payment_method_selected:online"]
+PASS  analytics: one "selected" per real change (cod, online, cod, online) — ["brix_payment_method_viewed","brix_prepaid_offer_viewed","brix_payment_method_selected:cod","brix_payment_method_selected:online","brix_payment_method_selected:cod","brix_payment_method_selected:online"]
+PASS  analytics: pushed to GTM dataLayer too — 6 vs 6
+PASS  COD: opens the existing BRIX COD popup, priced through the PHP relay — {"endpoint":"quote","shop":"demo.myshopify.com","surface":"product","items":[{"variantId":"21","quantity":2,"properties":{}}],"coupon":null,"cartCodes":[],"cartAttributes":null}
+PASS  COD: buys the selected variant and quantity — [{"variantId":"21","quantity":2,"properties":{}}]
+PASS  COD popup: no payment selector inside it
+PASS  refresh: back to the configured default (Pay Online)
+PASS  mobile: cards stack, easy to tap (≥ 44px), no horizontal scroll — {"stacked":true,"minH":93.28125,"overflow":false}
+PASS  below minimum (₹799 < ₹999): no "Save", plain "Pay ₹799" — Pay OnlineGet instant savingsPay ₹799
+PASS  below minimum: banner says "Get 10% off on orders above ₹999" — Get 10% off on orders above ₹999
+PASS  below minimum: Buy it now keeps its own text — Buy it now
+PASS  variant over the minimum: saving appears (₹1,350) — Pay OnlineSave 10%Get instant savingsGet it for ₹1,350₹1,500 (save ₹150)Pay online: ₹1,350 instead of ₹1,500. | Buy it now · Save 10%
+PASS  no verified prepaid: no "Save", no banner, Buy it now untouched — {"t":"Pay OnlineGet instant savingsPay ₹1,100","b":null,"n":"Buy it now"}
+PASS  excluded collection: no "Save", no banner, Buy it now untouched, COD still offered — {"t":"Pay OnlineGet instant savingsPay ₹1,100","b":null,"n":"Buy it now"}
+PASS  other collections: the saving still shows — Pay OnlineSave 10%Get instant savingsGet it for ₹990₹1,100 (save ₹110)Pay online: ₹990 instead of ₹1,100. | Buy it now · Save 10%
+PASS  % COD fee: ₹1,100 product → "Pay ₹1,100 + ₹110 Cash on Delivery Fee" — Cash on DeliveryPay when your order arrivesPay ₹1,100 + ₹110 Cash on Delivery Fee
+PASS  % COD fee follows the variant (₹1,500 → + ₹150) — Cash on DeliveryPay when your order arrivesPay ₹1,500 + ₹150 Cash on Delivery Fee
+PASS  % COD fee: below the start (₹799) → the fixed ₹50 — Cash on DeliveryPay when your order arrivesPay ₹799 + ₹50 Cash on Delivery Fee
+PASS  online only: just the Pay Online card, Buy it now shown, no COD button anywhere
+PASS  COD only: just the COD card, selected; COD button shown, Buy it now hidden
+PASS  both off: no selector, no empty container, no COD button, page unchanged — {"boxes":0,"ctas":0,"online":null,"cod":null,"banner":null,"nativeShown":true,"nativeText":"Buy it now","codBtn":null,"onlineBtn":null,"legacyCod":0,"events":[],"dataLayer":0}
+PASS  COD off: Pay Online card with "Save 10%", no COD card
+PASS  no Buy it now: BRIX "Buy it now · Save 10%" button — Buy it now · Save 10%
+PASS  Pay Online: goes to Shopify checkout with this item (prepaid discount applied there) — /cart/21:1
+PASS  Shiprocket: BRIX Pay Online asks the relay for a prepaid code for this item — [{"endpoint":"prepaid-code","shop":"demo.myshopify.com","items":[{"variantId":21,"quantity":1}]}]
+PASS  Shiprocket: opens Shiprocket with the item and the code (Shopify checkout only as fallback) — [{"items":[{"variantId":21,"quantity":1}],"coupon":"PPABCDEFGHJK","fallbackUrl":"/cart/21:1"}]
+PASS  Shiprocket: Buy it now goes to Shiprocket with the code and quantity, not Shopify checkout — {"sr":[{"items":[{"variantId":21,"quantity":2}],"coupon":"PPABCDEFGHJK","fallbackUrl":"/cart/21:2"}],"nav":[]}
+PASS  Shiprocket: no code → Shopify checkout with this item
+PASS  Shiprocket: no saving on this order → Shiprocket without a code, none requested — {"sr":[{"items":[{"variantId":21,"quantity":1}],"coupon":null,"fallbackUrl":"/cart/21:1"}],"req":[]}
+PASS  placement below price; offer inside the Pay Online card, shown once — {"afterPrice":true,"inCard":"10% off when you pay online","banners":0}
+PASS  placement below the variant options — VARIANT-SELECTS
+PASS  placement below the quantity — product-form__input product-form__quantity
+PASS  theme block: shown inside the "Payment options" block
+PASS  config unavailable: nothing added, Buy it now untouched, no errors
+PASS  not a product page: no payment selector
+PASS  price tags: Shopify Buy it now says "Buy it now ₹990 Prepaid" (no "· Save 10%" added) — Buy it now ₹990 Prepaid
+PASS  price tags: COD button says "Buy it for ₹1,150 COD" (price + fee) — Buy it for ₹1,150 COD
+PASS  price tags: follow the variant (₹1,500 + ₹50) — Buy it for ₹1,550 COD
+PASS  price tags: follow the quantity (2 × ₹1,100 − 10% = ₹1,980) — Buy it now ₹1,980 Prepaid
+PASS  product COD button: "Buy it for ₹1,150 COD", and no separate "+₹50" line — Buy it for ₹1,150 COD
+PASS  product COD button: follows the variant (₹1,550) — Buy it for ₹1,550 COD
+PASS  product COD button: follows the quantity (2 × ₹1,500 + ₹50 = ₹3,050) — Buy it for ₹3,050 COD
+PASS  options off + prepaid on: plain COD button, no payment option cards
+PASS  Buy it now text: Shopify's Buy it now says "Buy it now ₹1,100" and stays shown — Buy it now ₹1,100 true
+PASS  Buy it now text: follows the variant (₹1,500) — Buy it now ₹1,500
+PASS  Buy it now text with the prepaid discount: "Pay Now ₹990 (save ₹110)" (10% off ₹1,100) — Pay Now ₹990 (save ₹110)
+PASS  Buy it now text with the prepaid discount: follows the variant (₹1,350) — Pay Now ₹1,350 (save ₹150)
+PASS  Buy it now text: below the prepaid minimum, {prepaid_price} is the plain price — Pay Now ₹1,100
+PASS  custom theme Buy it now, no selector: not found, left as it is
+PASS  custom theme Buy it now + selector: text "Buy it now ₹1,100", icon kept — {"text":"Buy it now ₹1,100","icon":true,"shown":true}
+PASS  custom theme Buy it now + selector: follows the variant
+PASS  custom theme Buy it now + selector + Replace: hidden, COD in its place
+PASS  Shiprocket Buy Now as the selector: COD goes below the product's Buy Now, not into the cart drawer — {"inDrawer":false,"afterBuyNow":true,"visible":true}
+PASS  payment options + Shiprocket selector: COD chosen hides Shiprocket's Buy Now — {"shown":false,"text":"Buy it now · Save 10%"}
+PASS  payment options + Shiprocket selector: Pay Online shows it again, with the saving — {"shown":true,"text":"Buy it now · Save 10%"}
+PASS  product COD above Buy it now: cod,bin, Buy it now still shown — cod,bin
+PASS  product COD below Buy it now: bin,cod, Buy it now still shown — bin,cod
+PASS  Buy it now text: not applied while COD replaces Buy it now — Buy it now false
+PASS  no console errors
+
+83/83 passed (screenshots: C:\Users\HP\AppData\Local\Temp\brix-pay-*.png)

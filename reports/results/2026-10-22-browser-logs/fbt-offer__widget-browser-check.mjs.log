@@ -1,0 +1,77 @@
+PASS  loading: grey blocks visible on a theme that hides empty divs — [[118,64,"rgb(230, 232, 236)"],[100,11,"rgb(230, 232, 236)"],[65,11,"rgb(230, 232, 236)"]]
+PASS  loading: the real heading shows at once
+PASS  loading: placeholders shown in place (no empty gap, no pop-in) — {"shown":"block","cards":0,"busy":true}
+PASS  loading: real cards replace them
+PASS  re-created widget: cards on the next frames, never hidden — block:2 | block:2 | block:2 | block:2 | block:2 | block:2
+PASS  re-created widget: nothing downloaded again — {"before":{"config":1,"catalog":1},"after":{"config":1,"catalog":1}}
+PASS  size 12: jeans (no 12 in stock) hidden, sizeless socks kept — Top|Socks
+PASS  size 12: the top shows its 12 Y, priced
+PASS  Add all adds the 12 Y top — {"items":[{"id":"9302","quantity":1,"productId":"gid://shopify/Product/203","productTitle":"Top"},{"id":"9201","quantity":1,"productId":"gid://shopify/Product/201","productTitle":"Socks"}]}
+PASS  size changed to 10: jeans back in 10 Y, top switches to 10 Y — Top|Jeans|Socks
+PASS  note mode: jeans shown greyed "Not in 12 Years"
+PASS  note mode: no bundle offer (the set isn't complete in this size)
+PASS  note mode: Add all skips the greyed jeans — {"items":[{"id":"9302","quantity":1,"productId":"gid://shopify/Product/203","productTitle":"Top"},{"id":"9201","quantity":1,"productId":"gid://shopify/Product/201","productTitle":"Socks"}]}
+PASS  replace: shorts (in 11-12 Y) take the jeans' place, dress (no 12) skipped — Top|Shorts|Socks
+PASS  replace: Add all adds the shorts in 11-12 Y — {"items":[{"id":"9302","quantity":1,"productId":"gid://shopify/Product/203","productTitle":"Top"},{"id":"9501","quantity":1,"productId":"gid://shopify/Product/205","productTitle":"Shorts"},{"id":"9201","quantity":1,"productId":"gid://shopify/Product/201","productTitle":"Socks"}]}
+PASS  replace: at 10 Years the jeans come back (no spare needed) — Top|Jeans|Socks
+PASS  manual mode (not live): no size matching, every product shown
+PASS  variant picker: only on the product with options; sold-out listed but not pickable — Small|Large|XL - Sold out!
+PASS  savings line: 10% of ₹800 + ₹199 + ₹500 — You save ₹149.9
+PASS  bundle total struck through with the new one — ₹1,499₹1,349.1
+PASS  total label names the whole set
+PASS  each product: old price struck, price after its share
+PASS  picking Large updates the savings and prices — You save ₹154.9
+PASS  not the whole set: no savings shown, plain total
+PASS  Add all adds the picked variant (Large) — 1005,9203,9202
+PASS  switches off by default: no picker, no savings line, plain total
+PASS  offer: "Buy all 3 together and save 10%" (2 recommended + the viewed product) — Buy all 3 together and save 10%
+PASS  offer: the button says it adds the whole set
+PASS  offer: Add all also adds the viewed product (the variant chosen on the page) — 1005,9201,9202
+PASS  offer: viewed product already in the cart is not added again — 9201,9202
+PASS  no offer on the rule: no offer text
+PASS  no offer: Add all adds only the recommended products
+PASS  set product sold out: no offer text
+PASS  any N: "Buy any 2 together and save 10%"
+PASS  any N: everything picked = 10% of ₹800 + ₹199 + ₹500 — You save ₹149.9
+PASS  any N: 2 items (viewed + socks) still get it: ₹99.9 — You save ₹99.9
+PASS  any N: below 2 items, no saving shown
+PASS  amount offer: "Save ₹150 when you take all 3"
+PASS  offer style: the merchant's colours, size, weight, italic, left, Poppins — {"color":"rgb(185, 28, 28)","bg":"rgb(254, 243, 199)","size":"17px","weight":"500","style":"italic","align":"left","family":"Poppins, sans-serif"}
+PASS  offer style: the Google font is loaded once
+PASS  offer style: unset = as before (price colour, 13px bold, centred) — {"color":"rgb(5, 150, 105)","bg":"rgba(5, 150, 105, 0.08)","size":"13px","weight":"700","style":"normal","align":"center","family":"Arial"}
+PASS  offer style: bad values clamped / ignored — {"color":"rgb(5, 150, 105)","bg":"rgba(5, 150, 105, 0.08)","size":"24px","weight":"700","style":"normal","align":"center","family":"Arial"}
+PASS  amount offer with paise: "Save ₹150.50 on all 3"
+PASS  hide decimals: "Save ₹151 on all 3"
+PASS  vertical + Quick Add at 1100px: rows one under the other — {"layout":"vertical","cls":"ps-fbt-products list","rows":[[21,100,1058],[21,205,1058]],"cards":0}
+PASS  vertical + Quick Add at 390px: rows one under the other — {"layout":"vertical","cls":"ps-fbt-products list","rows":[[15,94,360],[15,199,360]],"cards":0}
+PASS  Classic, start selected off: products show "Add", cart button hidden — ["Add","Add"]
+PASS  …one tap adds just that product
+PASS  Classic, not set: starts all "Added" as before
+PASS  Quick Add, start selected on: steppers at 1, "Add 2 to Cart"
+PASS  Quick Add, not set: starts with "Add" buttons as before
+PASS  Bundle always starts with everything ticked
+PASS  defaults unchanged: 20px padding, 10px gap, 140px cards, 64px images, 8px corners, whole image, 16px margins — {"pad":"20px","gap":"10px","cardW":140,"cardPad":"10px","imgH":64,"imgR":"8px","imgBg":"rgba(229, 231, 235, 0.133)","fit":"contain","margin":["16px","16px"]}
+PASS  custom: widget padding, gap, card width and padding — {"pad":"32px","gap":"24px","cardW":200,"cardPad":"16px","imgH":120,"imgR":"60px","imgBg":"rgb(255, 238, 170)","fit":"cover","margin":["40px","8px"]}
+PASS  custom: image height, corners, fill and background — {"pad":"32px","gap":"24px","cardW":200,"cardPad":"16px","imgH":120,"imgR":"60px","imgBg":"rgb(255, 238, 170)","fit":"cover","margin":["40px","8px"]}
+PASS  custom: space above and below the widget — 40px,8px
+PASS  phone: widget padding is 70% (21px)
+PASS  list rows: image 75% of the size (60px), padding +2 (16px) — {"img":60,"pad":"16px"}
+PASS  bad values are clamped / ignored — {"pad":"20px","gap":"0px","cardW":140,"cardPad":"10px","imgH":200,"imgR":"8px","imgBg":"rgba(229, 231, 235, 0.133)","fit":"contain","margin":["16px","16px"]}
+PASS  spacing defaults unchanged: cards 8px image to text, 4px title to price — {"gap":"8px","priceTop":"4px","listGap":"10px"}
+PASS  spacing defaults unchanged: rows 12px / 2px, no space between rows — {"gap":"12px","priceTop":"2px","listGap":"0px"}
+PASS  spacing custom (cards): image to text 20px, title to price 10px — {"gap":"20px","priceTop":"10px","listGap":"10px"}
+PASS  spacing custom (list): 20px / 10px, 14px between rows — {"gap":"20px","priceTop":"10px","listGap":"14px"}
+PASS  popup: images are tappable
+PASS  popup: opens on the card picture, in the product's order, no duplicate — {"title":"Socks","count":"2 / 3","thumbs":3,"src":"http://shop.test/socks.svg?v=2","price":"₹199","link":"/products/socks","label":"Socks","overflow":"hidden","visible":true}
+PASS  popup: title, price, product link, dialog label — {"title":"Socks","count":"2 / 3","thumbs":3,"src":"http://shop.test/socks.svg?v=2","price":"₹199","link":"/products/socks","label":"Socks","overflow":"hidden","visible":true}
+PASS  popup: page scroll locked while open
+PASS  popup: next arrow
+PASS  popup: → wraps to the first
+PASS  popup: thumbnail picks the picture — {"title":"Socks","count":"3 / 3","thumbs":3,"src":"http://shop.test/socks-back.svg","price":"₹199","link":"/products/socks","label":"Socks","overflow":"hidden","visible":true}
+PASS  popup: Esc closes and gives scroll back
+PASS  popup: a product without more pictures shows its one image, no arrows — {"title":"Cap","count":"","thumbs":0,"src":"http://shop.test/cap.svg","price":"₹500","link":"/products/cap","label":"Cap","overflow":"hidden","visible":true}
+PASS  popup: tap outside closes
+PASS  popup (phone): a bottom sheet the full width — {"bottom":900,"width":390,"vh":900}
+PASS  popup off: images are not tappable
+
+75/75 passed · screenshots in C:\Users\HP\AppData\Local\Temp\brix-fbt-widget

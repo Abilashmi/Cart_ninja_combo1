@@ -17,6 +17,7 @@
  *   cod_secrets   per-shop GA4 Measurement Protocol secret + Meta Conversions API token
  *                 + the store's MSG91 auth key and OTP template id (OTP SMS)
  *                 (never served to the storefront; the admin only sees "set / last 4")
+ *   cod_shipping  dynamic shipping config per shop (created by cod_shipping.php itself)
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -152,6 +153,12 @@ function cod_ensure_order_columns($pdo) {
         'cancelled_at'       => 'DATETIME NULL',
         'ga4_status'         => 'VARCHAR(24) NULL',
         'meta_status'        => 'VARCHAR(24) NULL',
+        // Dynamic shipping (shipping analytics): what this order paid for delivery,
+        // the delivery option and zone, and the day booked (scheduled delivery).
+        'shipping_amount'    => 'DECIMAL(12,2) NULL',
+        'shipping_option'    => 'VARCHAR(60) NULL',
+        'shipping_zone'      => 'VARCHAR(60) NULL',
+        'delivery_date'      => 'VARCHAR(10) NULL',
     ];
     $missing = array_diff_key($add, array_flip($have));
     foreach ($missing as $column => $definition) {

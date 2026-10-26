@@ -1,0 +1,12 @@
+PASS  coupon timer: loop mode starts again after reaching zero — {"label":"Offer expires in","text":"00:58"}
+PASS  coupon timer: loop mode keeps looping — {"label":"Offer expires in","text":"00:58"}
+PASS  coupon timer: session mode still ends on the expired label — {"label":"Offer expired!","text":""}
+PASS  fbt: product with a higher compare-at price shows it struck through — {"text":"₹299₹199","struck":"₹299"}
+PASS  fbt: product without a compare-at price shows the price only — {"text":"₹500","struck":""}
+PASS  fbt: total shows the compare-at total struck through — {"text":"₹799₹699","struck":"₹799"}
+PASS  fbt: "Added" button has no tick
+PASS  fbt: total without a discounted item drops the strike — {"text":"₹500","struck":""}
+PASS  fbt: Add all shows "Added" with no tick
+PASS  fbt: adds the live variant — {"items":[{"id":"9202","quantity":1,"productId":"gid://shopify/Product/202","productTitle":"Cap"}]}
+
+10/10 passed

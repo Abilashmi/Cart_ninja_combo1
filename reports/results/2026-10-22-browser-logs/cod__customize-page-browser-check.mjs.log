@@ -1,0 +1,97 @@
+PASS  customizer: titled "Customize COD" with an Active / Inactive pill, like the Cart Editor — Customize COD · Active
+PASS  customizer: section groups Get started / COD button / Product page payments / Charges & rules / Checkout popup / Advanced — Get started|COD button|Product page payments|Charges & rules|Checkout popup|Advanced
+PASS  customizer: opens on Position in cart drawer
+PASS  customizer: one section per place, nothing else for the button — How COD works|Cart drawer|Product page|Combo page|Payment options|Prepaid discount|Payment options design|COD fee|Shipping|Eligibility|Fraud protection|Popup design|Cart discounts|Coupons|OTP SMS (MSG91)|Ads & analytics|Order settings
+PASS  preview at 1400x1000: toolbar and bottom bar take one line each — {"bar":43,"foot":39,"items":2,"place":[555,555,555]}
+PASS  preview at 1400x1000: the cart drawer shows both sample items — {"bar":43,"foot":39,"items":2,"place":[555,555,555]}
+PASS  Position: one option per row, full width of the section — [555,555,555]
+PASS  layout at 1400px: sections left, live preview right, device frame in view
+PASS  layout at 1400px: no sideways scroll
+PASS  Position: badge shows the cart drawer is On
+PASS  Position: three placement cards; preview Above Checkout by default
+PASS  Replace Checkout: preview shows only COD
+PASS  Below Checkout: preview shows Checkout, then COD
+PASS  Opening a section closes the other (one at a time)
+PASS  COD button: text, Outline style and border radius update the preview — rgba(0, 0, 0, 0) 4px
+PASS  COD button: colour updates the preview
+PASS  COD button: padding updates the preview (14 → 24, 16 → 30 at the preview's scale) — {"before":[14,16],"after":[24,30]}
+PASS  Price tags: {cod_price} shows the cart total plus the COD fee — {"label":"Buy it for ₹1,348 COD","sub":"","subtotal":"₹1,299.00"}
+PASS  Price tags: the "+fee" line under the button goes once the text shows the fee — {"label":"Buy it for ₹1,348 COD","sub":"","subtotal":"₹1,299.00"}
+PASS  Price tags: the help text explains the tags
+PASS  Price tags: {price} shows the cart total, and the fee line stays — {"label":"Buy it for ₹1,299 COD","sub":"+₹49.00 Cash on Delivery Fee","subtotal":"₹1,299.00"}
+PASS  Preview: Mobile shows a phone frame
+PASS  Position in product page: show and Replace Buy it now are here, the text is not
+PASS  Product page: preview switches to the product page
+PASS  Product page: position, COD text, Buy it now text and class, design and size all in one section
+PASS  Product page button: follows the cart drawer button by default
+PASS  Product page button: its own colour and font size — {"bg":"rgb(190, 24, 93)","size":"15.2px","text":"Buy with Cash on Delivery+₹49.00 Cash on Delivery Fee"}
+PASS  …and the cart drawer button keeps its own colour
+PASS  Combo pages off: the combo preview says the button is hidden
+PASS  Position in combo page: Below Checkout by default (where it always was) — ["checkout","cod"]
+PASS  Position in combo page: Above Checkout puts COD first — ["cod","checkout"]
+PASS  Position in combo page: Replace Checkout shows only COD — ["cod"]
+PASS  Combo pages: its own button text
+PASS  Combo page button: the preview switches to a combo page; old outline look kept by default — {"bg":"rgba(0, 0, 0, 0)","shadow":"rgb(17, 24, 39) 0px 0px 0px 1.5px inset","text":"Pay cash for this combo","icon":false}
+PASS  Combo page button: style, colour and icon change only the combo button — {"bg":"rgb(12, 122, 67)","shadow":"none","text":"Pay cash for this combo","icon":true}
+PASS  Drawer off: combo page still shows its COD button
+PASS  Drawer off: product page still shows its COD button
+PASS  Drawer off: the COD checkout popup preview is not "unavailable"
+PASS  Position in cart drawer: the button text is here too
+PASS  Checkout button text: the drawer preview's Checkout says "Pay online ₹…" — Pay online ₹1,299
+PASS  Position in combo page: the button text is here too
+PASS  Position in product page: COD button text here too
+PASS  Buy it now text: explains it is hidden while COD replaces it
+PASS  Buy it now selector: a non-selector is flagged
+PASS  Below Buy it now: the preview shows Add to cart, Buy it now, then COD
+PASS  Buy it now text: preview shows it with the price filled in — Buy it now ₹1,299
+PASS  Payment options: off by default (badge Off), preview is the plain product page
+PASS  Payment options: on → preview shows the Pay Online and Cash on Delivery cards, Pay Online selected
+PASS  Payment options: COD card shows the existing COD fee
+PASS  Payment options on: Position in product page edits the Pay Online / Buy it now text
+PASS  Prepaid 10%: preview shows Save 10%, ₹990 online, ₹1,100 COD, "Buy it now · Save 10%" — Classic Cotton Tee₹1,100.00SizeMLQuantity−1+10% off when you pay onlinePay online and save ₹110.00Choose payment methodPay OnlineSave 10%Get instant savingsGet it for ₹990.00₹1,100.00 (save ₹110.00)Cash on DeliveryPay when your order arrivesPay ₹1,100.00 + ₹49.00 Cash on Delivery FeeAdd to cartBuy i
+PASS  Prepaid: honest status — not live until saved and verified
+PASS  Prepaid: "Leave out these collections" with a Choose collections button
+PASS  Prepaid: 60% refused (1–50)
+PASS  Prepaid minimum ₹1,200 not met by ₹1,100: no false saving, "Get 10% off on orders above ₹1,200" — Classic Cotton Tee₹1,100.00SizeMLQuantity−1+Get 10% off on orders above ₹1,200.00Choose payment methodPay OnlineGet instant savingsPay ₹1,100.00Cash on DeliveryPay when your order arrivesPay ₹1,100.00 + ₹49.00 Cash on Delivery FeeAdd to cartBuy it now
+PASS  Preview variant L (₹1,500): minimum met → ₹1,350 online — Classic Cotton Tee₹1,500.00SizeMLQuantity−1+10% off when you pay onlinePay online and save ₹150.00Choose payment methodPay OnlineSave 10%Get instant savingsGet it for ₹1,350.00₹1,500.00 (save ₹150.00)Cash on DeliveryPay when your order arrivesPay ₹1,500.00 + ₹49.00 Cash on Delivery FeeAdd to cartBuy
+PASS  Preview quantity 2: ₹1,980 online, ₹2,200 COD — Classic Cotton Tee₹1,100.00SizeMLQuantity−2+10% off when you pay onlinePay online and save ₹220.00Choose payment methodPay OnlineSave 10%Get instant savingsGet it for ₹1,980.00₹2,200.00 (save ₹220.00)Cash on DeliveryPay when your order arrivesPay ₹2,200.00 + ₹49.00 Cash on Delivery FeeAdd to cartBuy
+PASS  Preview: picking COD shows the COD button instead of Buy it now
+PASS  Design: Stacked cards in the preview
+PASS  Checkout text: {prepaid_price} = ₹1,299 less 10% (₹1,169.10), {saving} = ₹129.90 — Pay Now ₹1,169.10 save ₹129.90
+PASS  COD fee: preview switches to the COD checkout
+PASS  COD fee: settings saved before the switch (codFee 49) show the fee as on
+PASS  COD fee: Subtotal ₹1,299, the fee under its title, Total ₹1,339 — Subtotal₹1,299.00 | Handling fee₹40.00 | Total₹1,339.00
+PASS  COD fee: the COD checkout preview lists the fee under its title
+PASS  Show fee off: the preview shows one "Delivery charges" line
+PASS  % fee: "From order value" waits for a percentage
+PASS  % fee: ₹1,299 sample → Handling fee ₹129.90, Total ₹1,428.90 — Subtotal₹1,299.00 | Handling fee₹129.90 | Total₹1,428.90
+PASS  % fee: the help text spells out both rules
+PASS  % fee: over 50% refused
+PASS  Excluded tags: chips, duplicates refused, removable — no-cod,fragile · NO-COD is already added.
+PASS  Excluded behaviour: "Show COD as unavailable" by default
+PASS  Preview: excluded product shows COD unavailable, Checkout kept — {"order":["checkout","cod"],"codText":"Pay cash on deliveryNot available for some items in your cart","codBg":"rgb(29, 78, 216)","codRadius":"4px","codOpacity":"0.5"}
+PASS  Preview: "Hide COD completely" removes the button for that cart — {"order":["checkout"],"codText":null,"codBg":null,"codRadius":null,"codOpacity":null}
+PASS  Popup design: preview shows the logo and soft corners
+PASS  Popup: "I agree to the Terms and conditions" (no data policy)
+PASS  Terms link: a link without https:// is flagged
+PASS  OTP SMS: says codes go from the BRIX server until the store adds its own keys
+PASS  Coupons: a Shopify code added as an offer
+PASS  Desktop · Cart drawer: like the Cart Editor (360px frame, fully in view), no scrolling, everything visible — {"frameW":360,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Desktop · Product page: like the Cart Editor (360px frame, fully in view), no scrolling, everything visible — {"frameW":360,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Desktop · COD checkout: like the Cart Editor (360px frame, fully in view), no scrolling, everything visible — {"frameW":360,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Mobile · Cart drawer: like the Cart Editor (320px frame, fully in view), no scrolling, everything visible — {"frameW":320,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Mobile · Product page: like the Cart Editor (320px frame, fully in view), no scrolling, everything visible — {"frameW":320,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Mobile · COD checkout: like the Cart Editor (320px frame, fully in view), no scrolling, everything visible — {"frameW":320,"frameFits":true,"scrolls":false,"lastVisible":true}
+PASS  Ads & analytics: saved Meta token shown only as last 4
+PASS  Errors: the section with a problem is flagged in the sidebar
+PASS  Errors: Save opens that section and sends nothing
+PASS  Active pill: switches COD off (saved with Save)
+PASS  Save: the MSG91 keys go as write-only secrets, not in the settings — {"msg91AuthKey":"authKEY12345","msg91TemplateId":"tmpl6789"}
+PASS  Save: Buy it now text, Replace off and the Terms link are sent — {"pb":{"buyNowPlacement":"below","replaceBuyNow":false,"buyNowText":"Buy it now {price}","buyNowSelector":".hk-buy-now","marginTop":10,"marginBottom":0,"paddingY":14,"paddingX":16,"radius":12},"terms":"/pages/terms"}
+PASS  Save: every change is sent — {"p":"below","cp":"above","b":{"drawerText":"Pay cash on delivery","productText":"Buy with Cash on Delivery","comboText":"Pay cash for this combo","bg":"#1d4ed8","color":"#ffffff","style":"filled","radius":4,"fontSize":15,"paddingY":24,"paddingX":30,"bold":true,"uppercase":false,"icon":true,"product":{"same":false,"style":"filled","bg":"#be185d","color":"#ffffff","fontSize":19,"bold":true,"uppercase":false,"icon":true,"radius":4,"paddingY":24,"paddingX":30},"combo":{"same":false,"style":"filled","bg":"#0c7a43","color":"#ffffff","radius":8,"fontSize":15,"bold":true,"uppercase":false,"icon":true}},"fee":[true,40,"Handling fee"]}
+PASS  Saved: cart drawer button padding — {"py":24,"px":30}
+PASS  Back arrow: asks before leaving unsaved changes, then returns to the dashboard — You have unsaved changes. Leave without saving?
+errors: none
+PASS  no page or console errors
+
+94/94 passed

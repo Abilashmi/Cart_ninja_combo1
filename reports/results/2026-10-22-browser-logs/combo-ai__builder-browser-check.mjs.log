@@ -1,0 +1,18 @@
+PASS  builder asks the AI for its preview products — 1 call(s), 5 products
+PASS  products carry collection titles
+PASS  no row before anything is picked
+PASS  builder says where the row appears before a pick — AI suggestions — Add a product above to see AI suggestions here. Shoppers see this row on the live page as they pick items.
+PASS  row appears after picking a product — Vitamin C Serum, SPF 50 Gel, Rose Face Wash
+PASS  default heading
+PASS  "Add" adds it to the preview combo — SPF 50 Gel, Niacinamide Serum, Rose Face Wash
+PASS  multi-variant suggestion says "Choose"
+PASS  "Choose" highlights the product card
+PASS  empty step collection: preview still shows products
+PASS  empty step collection: AI request is still sent for the products on screen — 1 call(s)
+PASS  empty step collection: suggestion cards appear after a pick — Vitamin C Serum, SPF 50 Gel, Rose Face Wash
+PASS  AI failure is shown with its reason — AI suggestions — AI suggestions couldn't load: The AI service did not answer: You exceeded your current quota
+PASS  server/auth failure is shown with the HTTP status — AI suggestions — AI suggestions couldn't load: The app server didn't answer (HTTP 410). Reload the page and try again.
+PASS  toggle off: no AI call
+PASS  toggle off: no row
+
+16/16 passed

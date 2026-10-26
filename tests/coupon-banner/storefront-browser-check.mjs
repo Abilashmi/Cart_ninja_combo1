@@ -104,6 +104,21 @@ assert.ok(styled.every((c) => !c.emoji), 'no emoji icon any more');
 await page.locator('ps-coupon-slider .ps-btn').first().click();
 const copied = await page.locator('ps-coupon-slider .ps-btn').first().evaluate((b) => [b.innerText, getComputedStyle(b).backgroundColor, getComputedStyle(b).color]);
 assert.deepEqual(copied, ['Copied!', 'rgb(18, 52, 86)', 'rgb(254, 220, 186)'], 'Copied state uses the merchant colours');
+// Copy never moves the page (the copy helper's textarea at top:-9999px used to scroll it to the top).
+const scrollAfterCopy = await page.evaluate(async () => {
+  const pad = document.createElement('div');
+  pad.style.height = '3000px';
+  document.body.insertBefore(pad, document.body.firstChild);
+  document.body.appendChild(Object.assign(document.createElement('div'), { style: 'height:3000px' }));
+  const btn = document.querySelectorAll('ps-coupon-slider .ps-btn')[1];
+  btn.scrollIntoView({ block: 'center' });
+  const before = window.scrollY;
+  btn.click();
+  await new Promise((r) => setTimeout(r, 100));
+  return [before, window.scrollY];
+});
+assert.ok(scrollAfterCopy[0] > 1000, 'page was scrolled down to the banner');
+assert.equal(scrollAfterCopy[1], scrollAfterCopy[0], 'Copy keeps the page where it was');
 config.data.selectedTemplate = 'template1';
 config.data.temp1DefaultStyle = { headingText: 'Deal' };
 config.data.temp1CouponStyle = { 'gid://shopify/DiscountCodeNode/1': { couponCode: 'A1' }, 'gid://shopify/DiscountCodeNode/2': { couponCode: 'B2', iconShow: true, icon: 'star' } };
@@ -130,6 +145,33 @@ await page.goto('http://shop.test/products/tee');
 await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 2, null, { timeout: 10000 });
 assert.equal((await titleOf()).length, 0, 'empty title: no heading at all');
 console.log('  ✓ section title: default, the merchant\'s text / size / colour / alignment, empty = none, escaped');
+
+// Own headings above the offer ladders and above the coupon cards: none unless
+// set; each sits just over its group; a group that isn't shown has no heading.
+const groupOrder = () => page.evaluate(() => [...document.querySelectorAll('ps-coupon-slider .ps-slider > *')].map((e) => e.className.split(' ').pop()));
+const savedSelection = config.data.selectedCouponsGlobal;
+const savedStyles = config.data.temp1CouponStyle;
+config.data.selectedCouponsGlobal = ['ladder:abc', 'gid://shopify/DiscountCodeNode/1'];
+config.data.temp1CouponStyle = { 'ladder:abc': { ladder: true, tiers: [{ text: 'Buy any 2 Get 10% Off', qty: 2 }] }, 'gid://shopify/DiscountCodeNode/1': { couponCode: 'SAVE10' } };
+config.data.temp1DefaultStyle = { headingText: 'Deal' };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 1, null, { timeout: 10000 });
+assert.deepEqual(await groupOrder(), ['ps-section-title', 'ps-ladders', 'ps-slider-row'], 'not saved: only the banner title, as before');
+config.data.temp1DefaultStyle = { headingText: 'Deal', title: { text: '' }, ladderTitle: { text: 'Bundle <i>offers</i>', fontSize: 18, textColor: '#be185d', alignment: 'center' }, cardsTitle: { text: 'Apply a coupon' } };
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 1, null, { timeout: 10000 });
+assert.deepEqual(await groupOrder(), ['ps-ladders-title', 'ps-ladders', 'ps-cards-title', 'ps-slider-row']);
+const lt = await page.locator('.ps-ladders-title').evaluate((e) => [e.textContent, getComputedStyle(e).fontSize, getComputedStyle(e).color, getComputedStyle(e).textAlign, e.querySelectorAll('i').length]);
+assert.deepEqual(lt, ['Bundle <i>offers</i>', '18px', 'rgb(190, 24, 93)', 'center', 0], 'ladder heading: text, size, colour, alignment; escaped');
+assert.deepEqual(await page.locator('.ps-cards-title').evaluate((e) => [e.textContent, getComputedStyle(e).fontSize, getComputedStyle(e).textAlign]), ['Apply a coupon', '14px', 'left'], 'cards heading with default look');
+config.data.selectedCouponsGlobal = ['ladder:abc'];
+delete config.data.temp1CouponStyle['gid://shopify/DiscountCodeNode/1'];
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-ladder').length === 1, null, { timeout: 10000 });
+assert.deepEqual(await groupOrder(), ['ps-ladders-title', 'ps-ladders'], 'no cards: no cards heading');
+config.data.selectedCouponsGlobal = savedSelection;
+config.data.temp1CouponStyle = savedStyles;
+console.log('  ✓ own headings above the offer ladders / the coupon cards: none unless set, each over its own group, escaped');
 // Banner layout (Coupon Banner → Layout): list = stacked full width, grid = 2
 // columns (1 on phones), carousel = the sliding row with arrows; not saved =
 // carousel, as before.

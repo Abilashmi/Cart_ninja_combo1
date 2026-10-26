@@ -1,0 +1,179 @@
+PASS  all 5 products from both collections
+PASS  combo page hides the theme page title
+PASS  combo page hides the page text and other sections
+PASS  combo page keeps the header, footer and the theme cart drawer
+PASS  card: eyebrow, subtitle, badge, OFF and compare price — Bestseller8 MINSNandus Chicken Curry Cut - SkinlessNo Antibiotics500 g1 kg6% OFF₹168₹179
+PASS  card: variant dropdown with weights
+PASS  card: single variant shows its weight
+PASS  card: sold out has no + button
+PASS  no bar while the box is empty
+PASS  top milestones: first tier message — Unlock offers on your boxAdd 3 items more to unlock 5% OFF5% OFF3 items10% OFF5 items
+PASS  chips: All + collections + Type / Brand / Cut / Sort menus — ,All,Chicken,Mutton,Type,Brand,Cut,Sort By
+PASS  collection chip filters
+PASS  Brand menu filters to Licious
+PASS  Cut (tags) + Brand together — Licious Chicken Curry Cut (Large Pieces)
+PASS  clear filters shows all again
+PASS  sort high to low
+PASS  sort by biggest discount — Licious Chicken Curry Cut (Large Pieces)
+PASS  + turns into a stepper with 1
+PASS  bar appears: 1 Item, ₹11 saved (compare-at) — Add 2 items more to unlock 5% OFF1 Item₹11 saved, more coming up!Go to Cart
+PASS  bar message: 2 more items for 5% OFF — Add 2 items more to unlock 5% OFF
+PASS  3 items unlock 5% OFF, bolded, celebrating — You unlocked 5% OFF3 Items₹72.30 saved, more coming up!Go to Cart
+PASS  savings = compare-at + box discount, "more coming up" — You unlocked 5% OFF3 Items₹72.30 saved, more coming up!Go to Cart
+PASS  progress fill shows on a theme that hides div:empty — [["block",552]]
+PASS  bottom bar sits above theme sticky/fixed bits and chat widgets (on <body>, top layer)
+PASS  milestone 1 hit, 2 is next
+PASS  celebrates once, not on every render
+PASS  variant switch shows the 1 kg price and + again
+PASS  items sheet lists the box
+PASS  sheet + adds one
+PASS  Go to Cart adds the box with combo properties and goes to checkout — {"add":[{"items":[{"id":10,"quantity":2,"properties":{"_brix_combo_id":"9","_brix_combo_version":"279a29d3c2197827","_brix_combo_group":"bmvj3vxse3o7s6p"}},{"id":20,"quantity":1,"properties":{"_brix_combo_id":"9","_brix_combo_version":"279a29d3c2197827","_brix_combo_group":"bmvj3vxse3o7s6p"}},{"id":30,"quantity":1,"properties":{"_brix_combo_id":"9","_brix_combo_version":"279a29d3c2197827","_brix_combo_group":"bmvj3vxse3o7s6p"}}]}],"update":[{"attributes":{"combo_source":"ComboForge","combo_template_id":"9","combo_template_name":"Meat Box"}}],"navigations":["/checkout"],"cod":[],"boxCode":[],"loader":1}
+PASS  title follows Content: centred, 30px, red — {"align":"center","size":"30px","color":"rgb(255, 0, 0)"}
+PASS  description follows its own alignment
+PASS  banner shows above the title
+PASS  milestones draw SVG icons, never emoji (old 🎁 kept as the gift icon) — [{"svg":true,"text":""},{"svg":true,"text":""}]
+PASS  each tier gets a different icon
+PASS  bar icon is an SVG, no emoji
+PASS  no emoji anywhere on the page
+PASS  the same icon can be picked for every tier — ["<path d=\"M19 5 5 19\"></path><circle cx=\"6.5\" cy=\"6.5\" r=\"2.5\"></circle><circle cx=\"17.5\" cy=\"17.5\" r=\"2.5\"></circle>","<path d=\"M19 5 5 19\"></path><circle cx=\"6.5\" cy=\"6.5\" r=\"2.5\"></circle><circle cx=\"17.5\" cy=\"17.5\" r=\"2.5\"></circle>"]
+PASS  phone: title uses the mobile alignment
+PASS  Show title & description off hides the title
+PASS  Show banner off hides the banner
+PASS  Shiprocket: asks BRIX for the box code with the box items (simple CORS request) — {"body":{"shop":"demo.myshopify.com","templateId":9,"items":[{"variantId":10,"quantity":1},{"variantId":20,"quantity":1},{"variantId":30,"quantity":1}]},"contentType":"text/plain"}
+PASS  Shiprocket: opens with the items and the code, nothing added to the cart — [{"items":[{"variantId":10,"quantity":1},{"variantId":20,"quantity":1},{"variantId":30,"quantity":1}],"coupon":"BXTESTCODE22","attributes":{"combo_source":"ComboForge","combo_template_id":"9","combo_template_name":"Meat Box"},"fallbackUrl":"/cart/10:1,20:1,30:1?attributes%5Bcombo_source%5D=ComboForge&attributes%5Bcombo_template_id%5D=9&attributes%5Bcombo_template_name%5D=Meat+Box&discount=BXTESTCODE22"}]
+PASS  Shiprocket: Shopify fallback carries the same items and code — /cart/10:1,20:1,30:1?attributes%5Bcombo_source%5D=ComboForge&attributes%5Bcombo_template_id%5D=9&attributes%5Bcombo_template_name%5D=Meat+Box&discount=BXTESTCODE22
+PASS  Shiprocket own offer: no BRIX code asked for or sent — [{"items":[{"variantId":10,"quantity":1}],"coupon":null,"attributes":{"combo_source":"ComboForge","combo_template_id":"9","combo_template_name":"Meat Box"},"fallbackUrl":"/cart/10:1?attributes%5Bcombo_source%5D=ComboForge&attributes%5Bcombo_template_id%5D=9&attributes%5Bcombo_template_name%5D=Meat+Box"}]
+PASS  Shiprocket: no code → box goes to Shopify checkout as before — {"add":[{"items":[{"id":10,"quantity":1,"properties":{"_brix_combo_id":"9","_brix_combo_version":"279a29d3c2197827","_brix_combo_group":"bmvj3w19qwv1bey"}}]}],"update":[{"attributes":{"combo_source":"ComboForge","combo_template_id":"9","combo_template_name":"Meat Box"}}],"navigations":["/checkout"],"cod":[],"boxCode":[{"body":{"shop":"demo.myshopify.com","templateId":9,"items":[{"variantId":10,"quantity":1}]},"contentType":"text/plain"}],"loader":1}
+PASS  Shiprocket off for the shop: Shopify checkout
+PASS  value: Add ₹241 more to unlock FREE DELIVERY — Add ₹241 more to unlock FREE DELIVERY
+PASS  slim bar has its line
+PASS  top progress uses the bar style with tick labels
+PASS  value: ₹658 unlocks FREE DELIVERY
+PASS  Go to Cart → /cart when the merchant picks the cart — ["/cart"]
+PASS  Quantity Box is drawn with the box design
+PASS  normal cards: Add button under each card, no + on the image
+PASS  normal cards: the merchant's button text — Add to box
+PASS  added card turns into a stepper
+PASS  2 items unlock the box price — You unlocked Any 2 for ₹999
+PASS  max 2 items enforced
+PASS  checkout: box lines carry the combo id — {"items":[{"id":10,"quantity":1,"properties":{"_brix_combo_id":"9","_brix_combo_version":"04386739c6cf47f5","_brix_combo_group":"bmvj3w3q44txqeo"}},{"id":20,"quantity":1,"properties":{"_brix_combo_id":"9","_brix_combo_version":"04386739c6cf47f5","_brix_combo_group":"bmvj3w3q44txqeo"}}]}
+PASS  max per product: 2 of the 500 g, then + is off
+PASS  max per product: the 1 kg of the same product can't be added either
+PASS  max per product: the page refuses it and says why — Max 2 of each item
+PASS  max per product: another product still goes in up to its own 2
+PASS  max per product: one out, + is back
+PASS  max per product: the box holds 3 items — 3
+PASS  sections: chips follow the merchant's order and names — ["All","Mutton","Chicken cuts"]
+PASS  sections: one per collection, mutton first, centred — [["Mutton","center"],["Chicken cuts","center"]]
+PASS  sections: chips row centred
+PASS  sections: adding from a section still works
+PASS  sections: a chip leaves its own section
+PASS  big collection: 40 cards at first — 40
+PASS  big collection: "Show more" says how many are left — Show more (90)
+PASS  big collection: Show more draws the next 40
+PASS  big collection: a card from the second lot goes in the box
+PASS  big collection: adding keeps the cards shown
+PASS  big collection: a new filter starts from the first 40 of its 117 — Show more (77)
+PASS  loader: the default round spinner shows at once
+PASS  loader: the theme page text is hidden while loading
+PASS  loader: the merchant's loader replaces it (dots, logo above, text, colours)
+PASS  loader: gone once the products are shown
+PASS  loader: asked the loader endpoint once — 1
+PASS  loader: on the next visit the merchant's loader shows straight away
+PASS  loader: no second loader request on the next visit — 1
+PASS  loader off: nothing drawn while loading
+PASS  loader: if the combo can't load, the theme page comes back
+PASS  weight: 1 kg unlocks 10% OFF — 10% OFF unlocked!
+PASS  ring shows the item count
+PASS  weight max blocks adding past 2 kg — −4+
+PASS  steps style renders a step per tier
+PASS  not live: no top progress
+PASS  not live: no unlock message, only compare-at savings — 3 Items₹41 saved!Go to Cart
+PASS  not live: lines carry no box properties
+PASS  phone layout class
+PASS  phone: 2 columns
+PASS  COD button after Go to Cart — checkout,cod
+PASS  COD opens with the box items + properties
+PASS  phone: no sideways scroll
+PASS  popup: card picture and name open it (marked clickable)
+PASS  popup: name, price, full description, 1 / 3 and three thumbnails (first selected) — {"text":"1 / 3Nandus Chicken Breast Boneless₹259450 gAddClean, lean and boneless chicken breast pieces","thumbs":3,"on":0}
+PASS  popup: the page behind stops scrolling
+PASS  popup: a thumbnail switches the big picture
+PASS  popup: next wraps round to the first picture
+PASS  popup: ← goes back (to the last picture)
+PASS  popup: Esc closes it and the page scrolls again
+PASS  popup: Add puts it in the box and closes the popup — Add 2 items more to unlock 5% OFF1 Item₹259Go to Cart
+PASS  popup: already in the box → the stepper's + adds one more and the popup stays — −2+
+PASS  popup: tapping outside closes it
+PASS  popup on a phone: a full-width sheet from the bottom — {"left":0,"right":390,"bottom":844,"w":390,"h":844}
+PASS  popup on a phone: no sideways scroll
+PASS  popup switched off: pictures and names are not clickable
+PASS  sticky progress: stays just below a 120px sticky theme header, not behind it — 120
+PASS  sticky progress: adding a product never moves the bar (no flash to the top) — [120]
+PASS  sticky progress: moves up to the top when the theme hides its header — 0
+PASS  sticky progress: back under the header when it comes back — 120
+PASS  sticky progress: no sticky header → the merchant's own space (60px) still applies
+PASS  phone: a long option name stays inside its card — {"docW":390,"W":390,"selRight":180,"cardRight":190,"title":"center","ratio":1.5,"fit":"cover"}
+PASS  phone: nothing scrolls sideways — 390 > 390
+PASS  phone: title follows desktop Center (old saved phone "left" ignored) — center
+PASS  Tall (2:3) frame, filled — {"docW":390,"W":390,"selRight":180,"cardRight":190,"title":"center","ratio":1.5,"fit":"cover"}
+PASS  transformed theme: the popup is on screen (a sheet at the bottom), not lost in the page — {"box":[0,176,390,844],"h":844,"w":390,"closeOnTop":true,"onBody":true}
+PASS  transformed theme: above the sticky header (its close button is what you tap) — {"box":[0,176,390,844],"h":844,"w":390,"closeOnTop":true,"onBody":true}
+PASS  popup on a phone: the big picture stays inside the screen
+PASS  transformed theme: thumbnails still work
+PASS  transformed theme: Add works and closes it
+PASS  chat widget over the corner: Go to Cart is what you tap
+PASS  locked (1 item, first offer at 3): dimmed but not dead
+PASS  locked: a tap says why ("Add 2 items more to unlock 5% OFF") — Add 2 items more to unlock 5% OFF
+PASS  the message shows on screen (not lost inside the transformed page)
+PASS  first offer reached: a real Go to Cart, still on top of the chat frame
+PASS  the page keeps room at its end for the bar
+PASS  hide decimals: bar shows ₹72 saved, no paise anywhere — You unlocked 5% OFF3 Items₹72 saved, more coming up!Go to Cart
+PASS  hide decimals: no prices with paise on the page
+PASS  decimals shown by default (₹72.30 saved)
+PASS  store-wide "Hide decimals" also applies to box pages (₹72 saved)
+PASS  phone milestones (1 kg / 2 kg / 5 kg): no label overlaps another — [[113,188],[199,280],[288,368]]
+PASS  phone milestones: evenly spaced — [89,89]
+PASS  phone milestones: labels stay inside the progress box — [175,175,175] vs 189
+PASS  phone milestones: at 1 kg the fill ends on the first dot — 151 vs 151
+PASS  weight dropdown shown
+PASS  weight options = the page's variant weights
+PASS  1 kg: only the product with a 1 kg variant — Nandus Chicken Curry Cut - Skinless
+PASS  1 kg: the card shows its 1 kg variant and price
+PASS  + added the 1 kg variant; it stays picked after clearing
+PASS  two sliders: weight and price
+PASS  weight slider spans the lightest to heaviest
+PASS  dragging updates the text only (no filtering yet) — 900 g – 1 kg
+PASS  letting go filters: 900 g – 1 kg
+PASS  handles can't cross
+PASS  price slider spans ₹145 – ₹450 (round steps) — ₹145 – ₹450
+PASS  price ₹145 – ₹200: two products — Nandus Chicken Curry Cut - Skinless|Licious Chicken Curry Cut (Large Pieces)
+PASS  the large-pieces card shows its ₹199 variant (in budget)
+PASS  phone: slider fits the screen — {"w":235.59375,"right":298.265625}
+PASS  collection group chips: options with products only
+PASS  collection group filters
+PASS  tap again clears
+PASS  left column beside the grid — {"w":240,"left":true,"top":true}
+PASS  left column: picking 1 kg filters
+PASS  left column: Clear all
+PASS  slider dropdown: filters and stays open
+PASS  slider dropdown: chip shows the span
+PASS  1280px: the Weight list opens right under its chip — {"dy":6,"dx":0}
+PASS  1280px: and stays there while the page scrolls — {"dy":6,"dx":0}
+PASS  390px: the Weight list opens right under its chip — {"dy":6,"dx":0}
+PASS  390px: and stays there while the page scrolls — {"dy":6,"dx":0}
+PASS  1280px, transformed theme: the Weight list opens right under its chip — {"dy":6,"dx":0}
+PASS  1280px, transformed theme: and stays there while the page scrolls — {"dy":6,"dx":0}
+PASS  milestone icon 30px in a 46px circle — {"dot":46,"icon":30}
+PASS  milestone amount hidden, name 16px
+PASS  card selling price hidden, MRP kept
+PASS  slots: on arrival, "Select 3 more…" over 3 empty boxes, no button yet — {"msg":"Select 3 items more to get the bundle at ₹469","slots":3,"filled":0,"go":false}
+PASS  slots: two items = two pictures, one + left, Go to Cart shown — {"msg":"Select 1 item more to get the bundle at ₹469","imgs":2,"go":true}
+PASS  slots: tapping a picture takes that item out
+PASS  slots: the bar fits the phone screen
+PASS  theme svg rules: every milestone icon is 18px, its svg fills it — [[18,18,18],[18,18,18],[18,18,18],[18,18,18],[18,18,18]]
+PASS  theme svg rules: + icon keeps 22px — 22
+PASS  theme svg rules: dropdown arrows keep 16px — 16
+PASS  theme svg rules: bottom bar icon keeps 26px — 26
+
+177/177 passed

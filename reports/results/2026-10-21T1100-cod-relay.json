@@ -1,0 +1,284 @@
+{
+  "startedAt": "2026-10-21T11:00:06.214Z",
+  "upstreamMs": 800,
+  "workers": 4,
+  "steps": [
+    {
+      "name": "cod-relay-2vu",
+      "startedAt": "2026-10-21T11:00:06.219Z",
+      "durationSeconds": 30.7,
+      "maxVus": 2,
+      "stages": [
+        {
+          "duration": 5,
+          "target": 2
+        },
+        {
+          "duration": 25,
+          "target": 2
+        }
+      ],
+      "thinkMs": [
+        1000,
+        2000
+      ],
+      "timeoutMs": 60000,
+      "workers": 4,
+      "overall": {
+        "requests": 24,
+        "rps": 0.8,
+        "avgMs": 828.7,
+        "minMs": 810.5,
+        "p50Ms": 828.1,
+        "p90Ms": 833.9,
+        "p95Ms": 845.9,
+        "p99Ms": 874.3,
+        "maxMs": 874.3,
+        "failed": 0,
+        "failRate": 0,
+        "timeouts": 0,
+        "rateLimited": 0,
+        "statuses": {
+          "200": 24
+        },
+        "failReasons": {}
+      },
+      "byScenario": {
+        "cod_quote_relay": {
+          "requests": 24,
+          "rps": 0.8,
+          "avgMs": 828.7,
+          "minMs": 810.5,
+          "p50Ms": 828.1,
+          "p90Ms": 833.9,
+          "p95Ms": 845.9,
+          "p99Ms": 874.3,
+          "maxMs": 874.3,
+          "failed": 0,
+          "failRate": 0,
+          "timeouts": 0,
+          "rateLimited": 0,
+          "statuses": {
+            "200": 24
+          },
+          "failReasons": {}
+        }
+      },
+      "appMaxInFlight": 2,
+      "queueingMsP50": 28
+    },
+    {
+      "name": "cod-relay-4vu",
+      "startedAt": "2026-10-21T11:00:36.925Z",
+      "durationSeconds": 31.5,
+      "maxVus": 4,
+      "stages": [
+        {
+          "duration": 5,
+          "target": 4
+        },
+        {
+          "duration": 25,
+          "target": 4
+        }
+      ],
+      "thinkMs": [
+        1000,
+        2000
+      ],
+      "timeoutMs": 60000,
+      "workers": 4,
+      "overall": {
+        "requests": 50,
+        "rps": 1.6,
+        "avgMs": 825.5,
+        "minMs": 810.5,
+        "p50Ms": 822.6,
+        "p90Ms": 839.3,
+        "p95Ms": 843.3,
+        "p99Ms": 851.3,
+        "maxMs": 851.3,
+        "failed": 0,
+        "failRate": 0,
+        "timeouts": 0,
+        "rateLimited": 0,
+        "statuses": {
+          "200": 50
+        },
+        "failReasons": {}
+      },
+      "byScenario": {
+        "cod_quote_relay": {
+          "requests": 50,
+          "rps": 1.6,
+          "avgMs": 825.5,
+          "minMs": 810.5,
+          "p50Ms": 822.6,
+          "p90Ms": 839.3,
+          "p95Ms": 843.3,
+          "p99Ms": 851.3,
+          "maxMs": 851.3,
+          "failed": 0,
+          "failRate": 0,
+          "timeouts": 0,
+          "rateLimited": 0,
+          "statuses": {
+            "200": 50
+          },
+          "failReasons": {}
+        }
+      },
+      "appMaxInFlight": 3,
+      "queueingMsP50": 23
+    },
+    {
+      "name": "cod-relay-8vu",
+      "startedAt": "2026-10-21T11:01:08.392Z",
+      "durationSeconds": 31.3,
+      "maxVus": 8,
+      "stages": [
+        {
+          "duration": 5,
+          "target": 8
+        },
+        {
+          "duration": 25,
+          "target": 8
+        }
+      ],
+      "thinkMs": [
+        1000,
+        2000
+      ],
+      "timeoutMs": 60000,
+      "workers": 4,
+      "overall": {
+        "requests": 98,
+        "rps": 3.1,
+        "avgMs": 851.9,
+        "minMs": 808.5,
+        "p50Ms": 824.8,
+        "p90Ms": 932.9,
+        "p95Ms": 1063.2,
+        "p99Ms": 1173,
+        "maxMs": 1173,
+        "failed": 0,
+        "failRate": 0,
+        "timeouts": 0,
+        "rateLimited": 0,
+        "statuses": {
+          "200": 98
+        },
+        "failReasons": {}
+      },
+      "byScenario": {
+        "cod_quote_relay": {
+          "requests": 98,
+          "rps": 3.1,
+          "avgMs": 851.9,
+          "minMs": 808.5,
+          "p50Ms": 824.8,
+          "p90Ms": 932.9,
+          "p95Ms": 1063.2,
+          "p99Ms": 1173,
+          "maxMs": 1173,
+          "failed": 0,
+          "failRate": 0,
+          "timeouts": 0,
+          "rateLimited": 0,
+          "statuses": {
+            "200": 98
+          },
+          "failReasons": {}
+        }
+      },
+      "appMaxInFlight": 4,
+      "queueingMsP50": 25
+    },
+    {
+      "name": "cod-relay-16vu",
+      "startedAt": "2026-10-21T11:01:39.726Z",
+      "durationSeconds": 31.8,
+      "maxVus": 16,
+      "stages": [
+        {
+          "duration": 5,
+          "target": 16
+        },
+        {
+          "duration": 25,
+          "target": 16
+        }
+      ],
+      "thinkMs": [
+        1000,
+        2000
+      ],
+      "timeoutMs": 60000,
+      "workers": 4,
+      "overall": {
+        "requests": 149,
+        "rps": 4.7,
+        "avgMs": 1623.8,
+        "minMs": 809.9,
+        "p50Ms": 1703.8,
+        "p90Ms": 1949.7,
+        "p95Ms": 2004.9,
+        "p99Ms": 2144.2,
+        "maxMs": 2191.3,
+        "failed": 0,
+        "failRate": 0,
+        "timeouts": 0,
+        "rateLimited": 0,
+        "statuses": {
+          "200": 149
+        },
+        "failReasons": {}
+      },
+      "byScenario": {
+        "cod_quote_relay": {
+          "requests": 149,
+          "rps": 4.7,
+          "avgMs": 1623.8,
+          "minMs": 809.9,
+          "p50Ms": 1703.8,
+          "p90Ms": 1949.7,
+          "p95Ms": 2004.9,
+          "p99Ms": 2144.2,
+          "maxMs": 2191.3,
+          "failed": 0,
+          "failRate": 0,
+          "timeouts": 0,
+          "rateLimited": 0,
+          "statuses": {
+            "200": 149
+          },
+          "failReasons": {}
+        }
+      },
+      "appMaxInFlight": 4,
+      "queueingMsP50": 904
+    }
+  ],
+  "headOfLine": {
+    "probe": "__perf_probe.php (no database)",
+    "idle": {
+      "samples": 38,
+      "p50Ms": 5,
+      "p95Ms": 9,
+      "maxMs": 14
+    },
+    "duringCodLoad": {
+      "codVus": 16,
+      "samples": 12,
+      "p50Ms": 1588,
+      "p95Ms": 1641,
+      "maxMs": 1641
+    }
+  },
+  "appDown": {
+    "status": 503,
+    "code": "app_unavailable",
+    "ms": 12
+  }
+}

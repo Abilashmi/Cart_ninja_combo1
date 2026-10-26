@@ -1,0 +1,144 @@
+{
+  "startedAt": "2026-10-21T10:54:39.600Z",
+  "php": {
+    "version": "8.2.12",
+    "opcache": true,
+    "workers": 1
+  },
+  "shops": 2000,
+  "endpoints": {
+    "save_cart_drawer.php GET (no banner)": {
+      "p50Ms": 68.1,
+      "p95Ms": 128.4,
+      "maxMs": 146,
+      "statementsPerRequest": 10.5,
+      "showColumnsPerRequest": 5,
+      "selectsPerRequest": 4.5,
+      "diskTempTablesPerRequest": 5,
+      "dbBytesSentPerRequest": 20237,
+      "responseBytes": 12827
+    },
+    "save_cart_drawer.php GET (2 uploaded banners)": {
+      "p50Ms": 112.8,
+      "p95Ms": 154,
+      "maxMs": 196.8,
+      "statementsPerRequest": 10.5,
+      "showColumnsPerRequest": 5,
+      "selectsPerRequest": 4.5,
+      "diskTempTablesPerRequest": 5,
+      "dbBytesSentPerRequest": 1220250,
+      "responseBytes": 13044
+    },
+    "save_coupon.php GET": {
+      "p50Ms": 10.4,
+      "p95Ms": 30.8,
+      "maxMs": 45.4,
+      "statementsPerRequest": 2,
+      "showColumnsPerRequest": 0,
+      "selectsPerRequest": 1,
+      "diskTempTablesPerRequest": 0,
+      "dbBytesSentPerRequest": 1372,
+      "responseBytes": 2325
+    },
+    "save_fbt_widget.php GET": {
+      "p50Ms": 40.2,
+      "p95Ms": 73,
+      "maxMs": 85.2,
+      "statementsPerRequest": 6.5,
+      "showColumnsPerRequest": 2,
+      "selectsPerRequest": 3.5,
+      "diskTempTablesPerRequest": 2,
+      "dbBytesSentPerRequest": 17497,
+      "responseBytes": 31057
+    },
+    "cod_storefront.php config (COD on)": {
+      "p50Ms": 15.2,
+      "p95Ms": 34.1,
+      "maxMs": 67,
+      "statementsPerRequest": 4,
+      "showColumnsPerRequest": 1,
+      "selectsPerRequest": 2,
+      "diskTempTablesPerRequest": 1,
+      "dbBytesSentPerRequest": 2156,
+      "responseBytes": 929
+    },
+    "cod_storefront.php config (no COD settings)": {
+      "p50Ms": 8.3,
+      "p95Ms": 29,
+      "maxMs": 33.3,
+      "statementsPerRequest": 2,
+      "showColumnsPerRequest": 0,
+      "selectsPerRequest": 1,
+      "diskTempTablesPerRequest": 0,
+      "dbBytesSentPerRequest": 230,
+      "responseBytes": 32
+    },
+    "packs_storefront.php GET": {
+      "p50Ms": 22.6,
+      "p95Ms": 45.5,
+      "maxMs": 55,
+      "statementsPerRequest": 4.1,
+      "showColumnsPerRequest": 1,
+      "selectsPerRequest": 2.1,
+      "diskTempTablesPerRequest": 1,
+      "dbBytesSentPerRequest": 2688,
+      "responseBytes": 451
+    }
+  },
+  "showColumns": {
+    "table": "cart_drawer_config",
+    "p50Ms": 8.6,
+    "p95Ms": 21.2
+  },
+  "drawerSelect": {
+    "noBanner": {
+      "p50Ms": 1.8,
+      "p95Ms": 2.3
+    },
+    "twoBanners": {
+      "p50Ms": 15.4,
+      "p95Ms": 34.4
+    }
+  },
+  "joinPlan": {
+    "cart_drawer_config utf8mb4_unicode_ci": {
+      "type": "const",
+      "key": "uniq_shop_domain",
+      "rows": 1,
+      "extra": "Using index"
+    },
+    "cart_drawer_config utf8mb4_general_ci": {
+      "type": "index",
+      "key": "uniq_shop_domain",
+      "rows": 2000,
+      "extra": "Using where; Using index"
+    }
+  },
+  "opcache": {
+    "method": "same database, one worker each, interleaved on/off per request",
+    "workers": {
+      "on": true,
+      "off": false
+    },
+    "config": {
+      "on": {
+        "p50Ms": 59.6,
+        "p95Ms": 155.6
+      },
+      "off": {
+        "p50Ms": 66.8,
+        "p95Ms": 97.4
+      }
+    },
+    "coupons": {
+      "on": {
+        "p50Ms": 6.8,
+        "p95Ms": 23.5
+      },
+      "off": {
+        "p50Ms": 7.4,
+        "p95Ms": 27.9
+      }
+    }
+  }
+}

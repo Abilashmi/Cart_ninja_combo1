@@ -1,0 +1,56 @@
+PASS  meter starts at 0 kg of 2.2 kg max
+PASS  locked message names the first tier
+PASS  weight chip on a weighed book
+PASS  "Not counted" on a book without weight
+PASS  "Not counted" on a product that does not qualify
+PASS  checkout disabled below the first tier
+PASS  0.9 kg box is locked
+PASS  unweighed item noted in the meter
+PASS  1.35 kg unlocks the 10% tier and points at the next one — Your box1.35 kg / 2.2 kg max✓10% off1 kg2 kg box for ₹17002 kg10% off unlocked! Add 0.65 kg more to unlock 2 kg box for ₹17001 selected item has no weight and doesn't count toward the box.
+PASS  checkout enabled once a tier is reached
+PASS  price shows the box discount from the shared core — 2 kg box for ₹1700 | 10% off unlocked! Add 0.65 kg more to unlock 2 kg box for ₹1700 | ₹550.00 | ₹505.00 | ₹110.00 | ₹120.00 | ₹100.00 | ₹900.00 | Total: ₹550.00 | Final: ₹505.00
+PASS  adding past the max weight is blocked with the merchant message — Your box can weigh up to 2.2 kg. Remove something to add this.
+PASS  meter stays at 2.1 kg after the block
+PASS  the earlier box of this combo is removed, other cart lines stay — [{"updates":{"old-line-1":0}},{"attributes":{"combo_source":"ComboForge","combo_template_id":"7","combo_template_name":"Book Box"}}]
+PASS  /cart/add.js gets the box with its line properties — [{"items":[{"id":20,"quantity":3,"properties":{"_brix_combo_id":"7","_brix_combo_version":"31318d7eddf9a75a","_brix_combo_group":"bmvj3xzngjxdzhd"}}]}]
+PASS  combo attributes go to /cart/update.js
+PASS  then Shopify checkout (never Shiprocket, never a discount code)
+PASS  Shiprocket not used for a weight box
+PASS  cart error is shown and the page stays
+PASS  checkout can be tried again
+PASS  combo COD button uses the combo page button design from COD settings — {"text":"Pay cash","bg":"rgb(190, 24, 93)","radius":"4px"}
+PASS  COD sheet gets the items with box properties and no coupon — {"surface":"combo","items":[{"variantId":20,"quantity":3,"properties":{"_brix_combo_id":"7","_brix_combo_version":"31318d7eddf9a75a","_brix_combo_group":"bmvj3y1e186b6q4"}}],"coupon":null,"attributes":{"combo_source":"ComboForge","combo_template_id":"7","combo_template_name":"Book Box"}}
+PASS  no tier promises when the discount is not live
+PASS  no discounted price shown
+PASS  box added without BRIX properties — [{"items":[{"id":20,"quantity":3}]}]
+PASS  Weight Box is drawn with the Quick Shop design (not the old box page)
+PASS  top progress shows the weight tiers — Unlock offers on your boxAdd 1 kg more to unlock 10% off10% off1 kg2 kg box for ₹17002 kg
+PASS  filter chips: All + both collections
+PASS  1.35 kg unlocks the 1 kg tier in the bottom bar (the store's own wording) — 10% off unlocked!
+PASS  chip switches the grid
+PASS  checkout puts the box in the cart (combo properties) and goes to checkout — {"items":[{"id":20,"quantity":3,"properties":{"_brix_combo_id":"7","_brix_combo_version":"31318d7eddf9a75a","_brix_combo_group":"bmvj3y2yg6lqfer"}}]}
+PASS  phone: Quick Shop phone layout with the sticky bottom bar
+PASS  phone: bottom bar counts the item
+PASS  combo bar, COD not set (old settings): checkout,cod — checkout,cod
+PASS  combo bar, COD above: cod,checkout — cod,checkout
+PASS  combo bar: COD text gets the combo price filled in (label(finalPrice)) — Pay Rs 150 cash
+PASS  combo bar, COD replace: cod — cod
+PASS  combo bar, COD below: checkout,cod — checkout,cod
+PASS  Weight Box, COD above: cod,checkout — cod,checkout
+PASS  Weight Box, COD replace: cod — cod
+PASS  layout2 quantity meter: milestones with the offers — Your box0 items / 3 items maxAny 2 for ₹1992 items20% OFF3 itemsAdd 2 items more to unlock Any 2 for ₹199
+PASS  no weight chip on cards of an items box
+PASS  checkout disabled before the first tier
+PASS  1 item: names the next offer — Your box1 item / 3 items maxAny 2 for ₹1992 items20% OFF3 itemsAdd 1 item more to unlock Any 2 for ₹199
+PASS  2 items unlock "Any 2 for ₹199" — Your box2 items / 3 items max✓Any 2 for ₹1992 items20% OFF3 itemsAny 2 for ₹199 unlocked! Add 1 item more to unlock 20% OFF
+PASS  the 2 items cost ₹199 (Novel 110 + Atlas 120) — ₹230.00 | ₹199.00 | Any 2 for ₹199 | Any 2 for ₹199 unlocked! Add 1 item more to unlock 20% OFF | ₹110.00 | ₹120.00 | ₹100.00 | ₹900.00 | Total: ₹230.00 | Final: ₹199.00
+PASS  max 3 items enforced
+PASS  checkout: box lines carry the combo id and go to Shopify checkout — {"items":[{"id":10,"quantity":1,"properties":{"_brix_combo_id":"7","_brix_combo_version":"8c921e3c448151e0","_brix_combo_group":"bmvj3y6bollm8oy"}},{"id":20,"quantity":1,"properties":{"_brix_combo_id":"7","_brix_combo_version":"8c921e3c448151e0","_brix_combo_group":"bmvj3y6bollm8oy"}},{"id":30,"quantity":1,"properties":{"_brix_combo_id":"7","_brix_combo_version":"8c921e3c448151e0","_brix_combo_group":"bmvj3y6bollm8oy"}}]}
+PASS  layout4 value meter: bar style, money amounts — Your box₹0₹200₹1000Add ₹200 more to unlock ₹30 OFF
+PASS  ₹110 box: asks for ₹90 more — Your box₹110₹200₹1000Add ₹90 more to unlock ₹30 OFF
+PASS  ₹230 box unlocks ₹30 off — Your box₹230₹200₹1000₹30 OFF unlocked! Add ₹770 more to unlock 10% OFF
+PASS  checkout enabled once the first tier is reached
+PASS  no weight meter on a count combo
+PASS  count combo still checks out through the /cart permalink — ["/cart/10:1,20:1?attributes%5Bcombo_source%5D=ComboForge&attributes%5Bcombo_template_id%5D=7&attributes%5Bcombo_template_name%5D=Book+Box"]
+
+54/54 passed

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { sanitizeCodSettings } from '../../app/utils/cod.shared.js';
+import { shippingFromSimple } from '../../app/utils/shipping.shared.js';
 
 const ROOT = process.cwd();
 const OUT = path.join(os.tmpdir(), 'brix-cod-customize-check');
@@ -18,7 +19,7 @@ const STUBS = {
   'plan-permissions.server': 'export const getShopPlan = () => {};',
   'currency.server': 'export const getShopCurrency = () => {};',
   'prepaid-discount-shopify.server': 'export const syncPrepaidDiscount = () => {}, prepaidRuntime = () => ({});',
-  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({});',
+  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShipping=()=>{}, saveCodShipping=()=>{}, loadUnlistedBlocked=()=>{};',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
   'cod-sms.server': 'export const smsProviderStatus = () => {};',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',
@@ -92,6 +93,8 @@ const data = {
     paidCount: orders.filter((o) => o.status === 'paid').length, cancelledCount: orders.filter((o) => o.status === 'cancelled').length,
     cancelRate: Math.round((orders.filter((o) => o.status === 'cancelled').length / orders.length) * 100),
   },
+  // A store that never saved dynamic shipping: the loader sends what the one price charges.
+  shipping: shippingFromSimple(settings), shippingStored: false, shippingLoadError: null,
   loadError: null, planState: scenario === 'warn' ? 'preview' : 'enabled', currencyCode: 'INR',
   sms: { configured: scenario === 'live', source: scenario === 'live' ? 'server' : null }, hasOrderScope: true,
   secretsStatus: { ga4ApiSecret: { set: false, last4: '' }, metaCapiToken: { set: true, last4: 'x9Zq' }, metaTestCode: { set: false, last4: '' } },
@@ -155,9 +158,10 @@ const layout = await page.evaluate(() => {
   };
 });
 check('customizer: titled "Customize COD" with an Active / Inactive pill, like the Cart Editor', layout.title === 'Customize COD' && layout.pill === (scenario === 'off' ? 'Inactive' : 'Active'), `${layout.title} · ${layout.pill}`);
-check('customizer: section groups Get started / COD button / Product page payments / Charges & rules / Checkout popup / Advanced',
-  layout.groups.join('|') === 'Get started|COD button|Product page payments|Charges & rules|Checkout popup|Advanced', layout.groups.join('|'));
-check('customizer: opens on Position in cart drawer', layout.openRow === 'Cart drawer');
+check('customizer: section groups Get started / COD button / Product page payments / Charges & rules / Shipping / Checkout popup / Advanced',
+  layout.groups.join('|') === 'Get started|COD button|Product page payments|Charges & rules|Shipping|Checkout popup|Advanced', layout.groups.join('|'));
+check('customizer: opens with every section closed', layout.openRow === undefined && await page.locator('.bcz-body').count() === 0, String(layout.openRow));
+await openSec('Cart drawer');
 {
   const rows = await page.evaluate(() => [...document.querySelectorAll('.bcz-row-l')].map((r) => r.textContent));
   check('customizer: one section per place, nothing else for the button', ['Cart drawer', 'Product page', 'Combo page'].every((r) => rows.includes(r)) && !rows.some((r) => /button$|Theme compatibility|^Position/.test(r)), rows.join('|'));
@@ -355,6 +359,52 @@ if (scenario === 'live') {
   }
   await shot('buy-it-now-text');
 
+  // Product picks: which product pages show COD, and "Replace it on some products".
+  // Shopify's resource picker is stubbed: products → Masala Chai, collections → Gift boxes.
+  await page.evaluate(() => {
+    window.shopify = {
+      resourcePicker: async ({ type }) => (type === 'product' ? [{ id: 'gid://shopify/Product/42', title: 'Masala Chai' }] : [{ id: 'gid://shopify/Collection/7', title: 'Gift boxes' }]),
+      toast: { show() {} },
+    };
+  });
+  const buys = () => page.evaluate(() => [...document.querySelectorAll('.bcz-screen .cod-scr-buys > *')]
+    .map((e) => (e.classList.contains('cod-scr-atc') ? 'atc' : e.classList.contains('cod-scr-bin') ? 'bin' : e.classList.contains('cod-pv-hidden') ? 'hidden' : 'cod')).join());
+  check('Which product pages: All products by default', await page.getByRole('radio', { name: 'All products' }).isChecked());
+  await page.getByText('Only these', { exact: true }).click();
+  await page.waitForTimeout(150);
+  check('Only these, nothing chosen yet: no error before Save', await page.getByText('Choose at least one product or collection.').count() === 0 && !/error/.test(await badge('Product page')));
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(200);
+  check('Only these, nothing chosen, Save: "Choose at least one product or collection.", sidebar error, nothing sent',
+    await page.getByText('Choose at least one product or collection.').count() === 1 && /error/.test(await badge('Product page')) && !(await page.evaluate(() => window.__SUBMITTED__)));
+  await page.getByRole('button', { name: 'Choose products' }).click();
+  await page.waitForTimeout(200);
+  check('Only these: the chosen product shows as a tag, error gone', await page.locator('.Polaris-Tag', { hasText: 'Masala Chai' }).count() === 1 && await page.getByText('Choose at least one product or collection.').count() === 0);
+  check('Only these: preview sample is another product → COD hidden, Buy it now kept', (await buys()) === 'atc,bin,hidden' && (await page.locator('.bcz-screen .cod-pv-hidden').textContent()).includes('not one of the products you chose'), await buys());
+  await page.getByLabel('Sample is a chosen product').check();
+  await page.waitForTimeout(150);
+  check('Only these: "Sample is a chosen product" → COD shown again (below Buy it now)', (await buys()) === 'atc,bin,cod', await buys());
+  await page.getByText('Replace it on some products', { exact: true }).click();
+  await page.waitForTimeout(150);
+  check('Replace it on some products, nothing chosen yet: no error before Save (even after an earlier one was fixed)', await page.getByText('Choose the products where COD replaces Buy it now.').count() === 0);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(200);
+  check('Replace it on some products, nothing chosen, Save: flagged', await page.getByText('Choose the products where COD replaces Buy it now.').count() === 1);
+  await page.getByRole('button', { name: 'Choose collections' }).last().click();
+  await page.waitForTimeout(200);
+  check('Replace it on some products: sample not chosen → COD above Buy it now on the rest', (await buys()) === 'atc,cod,bin', await buys());
+  await page.getByLabel('Sample is in "Replace Buy it now on"').check();
+  await page.waitForTimeout(150);
+  check('Replace it on some products: sample chosen → COD replaces Buy it now', (await buys()) === 'atc,cod', await buys());
+  await page.getByLabel('On every other product').selectOption('below');
+  await shot('product-picks');
+  // Back to the placement and pages the rest of this check expects; the picks stay.
+  // Polaris keeps the real radio inputs invisible; the label text also appears in the select's options.
+  await page.getByRole('radio', { name: 'Below Buy it now', exact: true }).check({ force: true });
+  await page.getByRole('radio', { name: 'All products', exact: true }).check({ force: true });
+  await page.waitForTimeout(150);
+  check('Back to All products / Below: preview as before', (await buys()) === 'atc,bin,cod', await buys());
+
   // Product page payments: payment options + prepaid discount
   await openSec('Payment options');
   check('Payment options: off by default (badge Off), preview is the plain product page', await badge('Payment options') === 'Off' && await page.locator('.bcz-screen [data-pv-selector]').count() === 0);
@@ -469,6 +519,18 @@ if (scenario === 'live') {
   p = await pv();
   check('Preview: "Hide COD completely" removes the button for that cart', p.codText === null && p.order.join() === 'checkout', JSON.stringify(p));
   await page.getByLabel('Excluded product in cart').uncheck();
+  // Unlisted products: off by default; allow only the picked collection.
+  check('Unlisted products: COD off for them by default', !(await page.getByLabel('Allow COD on unlisted products').isChecked()));
+  await page.getByLabel('Allow COD on unlisted products').check();
+  await page.getByText('Only these', { exact: true }).click();
+  await page.waitForTimeout(150);
+  check('Unlisted, only these, nothing chosen yet: no error before Save', await page.getByText('Choose at least one product or collection.').count() === 0 && !/error/.test(await badge('Eligibility')));
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(200);
+  check('Unlisted, only these, nothing chosen, Save: flagged', await page.getByText('Choose at least one product or collection.').count() === 1 && /error/.test(await badge('Eligibility')));
+  await page.getByRole('button', { name: 'Choose collections' }).click();
+  await page.waitForTimeout(200);
+  check('Unlisted, only these: the chosen collection is listed, error gone', await page.locator('.Polaris-Tag', { hasText: 'Gift boxes' }).count() === 1 && await page.getByText('Choose at least one product or collection.').count() === 0);
   await shot('eligibility');
 
   // Popup + coupons + tracking
@@ -531,7 +593,7 @@ if (scenario === 'live') {
   await page.evaluate(() => { window.__SUBMITTED__ = null; });
   await openSec('COD fee');
   await page.getByLabel('Fee amount').fill('');
-  await openSec('Shipping');
+  await openSec('Shipping charges');
   check('Errors: the section with a problem is flagged in the sidebar', await badge('COD fee') === '1 error');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForTimeout(200);
@@ -557,12 +619,110 @@ if (scenario === 'live') {
     && saved.productPayment?.prepaid?.minSubtotal === 0 && saved.productPayment?.layout?.cardLayout === 'vertical' && saved.productPayment?.layout?.placement === 'below_price',
     JSON.stringify({ p: saved.drawerPlacement, cp: saved.comboPlacement, b: saved.buttons, fee: [saved.codFeeEnabled, saved.codFee, saved.codFeeLabel] }));
   check('Saved: cart drawer button padding', saved.buttons?.paddingY === 24 && saved.buttons?.paddingX === 30, JSON.stringify({ py: saved.buttons?.paddingY, px: saved.buttons?.paddingX }));
+  check('Saved: product picks (kept while All products / Below are chosen) and the unlisted products rule',
+    saved.productButton?.showOn?.mode === 'all' && saved.productButton?.showOn?.products?.[0]?.id === 'gid://shopify/Product/42'
+    && saved.productButton?.replaceOn?.collections?.[0]?.title === 'Gift boxes' && saved.productButton?.restPlacement === 'below'
+    && saved.unlisted?.allow === true && saved.unlisted?.mode === 'only' && saved.unlisted?.collections?.[0]?.id === 'gid://shopify/Collection/7',
+    JSON.stringify({ showOn: saved.productButton?.showOn, replaceOn: saved.productButton?.replaceOn, unlisted: saved.unlisted }));
   let asked = '';
   page.once('dialog', (d) => { asked = d.message(); d.accept(); });
   await page.locator('.bcz-back').click();
   await page.waitForTimeout(100);
   check('Back arrow: asks before leaving unsaved changes, then returns to the dashboard', /unsaved/i.test(asked) && await page.evaluate(() => window.__NAV__) === '/app/cod', asked);
 }
+if (width > 900) {
+  // Dynamic shipping: switch from one price, add a Metro zone and an Express
+  // option there, try two addresses in the Test calculator, then save.
+  await page.evaluate(() => { window.__SUBMITTED__ = null; });
+  await openSec('Shipping charges');
+  check('Shipping: one price by default; zones, rules and the rest hidden', await page.getByLabel('One price').isChecked() && (await row('Zones').count()) === 0);
+  await page.getByLabel('Dynamic shipping').check({ force: true }); // Polaris draws its own radio over the input
+  await page.waitForTimeout(150);
+  const std = await page.locator('.shp-card').first().textContent();
+  check('Shipping: dynamic starts from the one price (₹60, free from ₹999)', /Standard delivery/.test(std) && /60/.test(std) && /999/.test(std), std);
+  check('Shipping: the Zones, Rules, Extra charges, Delivery dates, Don\'t deliver to and Test calculator sections appear',
+    (await Promise.all(['Zones', 'Rules', 'Extra charges', 'Delivery dates', 'Don’t deliver to', 'Test calculator'].map((l) => row(l).count()))).every((n) => n === 1));
+  await openSec('Zones');
+  await page.locator('.shp-adder button').click();
+  await page.waitForTimeout(150);
+  check('Zones: Metro cities added from the preset, with its cities', (await page.locator('.shp-card.is-open').textContent()).includes('Bengaluru'));
+  await openSec('Shipping charges');
+  await page.getByLabel('Add a delivery option').selectOption('express');
+  await page.locator('.shp-adder button').click();
+  await page.waitForTimeout(150);
+  const express = page.locator('.shp-card.is-open');
+  await express.getByLabel('Metro cities').check({ force: true });
+  await express.getByLabel('Amount').fill('');
+  await page.waitForTimeout(100);
+  check('Shipping: an empty price is flagged on the option and in the sidebar', await badge('Shipping charges') === '1 error' && (await express.locator('.Polaris-Badge').textContent()).includes('1 error'));
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(150);
+  check('Shipping: Save stops on the error and sends nothing', !(await page.evaluate(() => window.__SUBMITTED__)));
+  await express.getByLabel('Amount').fill('99');
+  await express.getByRole('button', { name: 'Limits, zone prices and zone delivery times' }).click();
+  await shot('shipping-options');
+
+  await openSec('Test calculator');
+  await page.getByLabel('Order value', { exact: true }).fill('700');
+  await page.waitForTimeout(150);
+  const res = () => page.locator('.shp-res').allTextContents();
+  let r = await res();
+  check('Test calculator: Bengaluru gets both options, Standard ₹60 with ₹299 to free shipping', r.length === 2 && /Standard delivery₹60/.test(r[0]) && /299/.test(r[0]) && /Express delivery₹99/.test(r[1]), r.join(' | '));
+  check('Test calculator: the zone is named', (await page.locator('.bcz-body .Polaris-Badge').first().textContent()).includes('Metro cities'));
+  check('Preview: the COD popup shows the same delivery options', (await page.locator('.bcz-screen .cod-pv-dlo').count()) === 2);
+  await page.locator('.shp-res').nth(1).click();
+  await page.waitForTimeout(100);
+  check('Test calculator: clicking Express picks it in the preview too', (await page.locator('.bcz-screen .cod-pv-dlo.on').textContent()).includes('Express'));
+  await shot('shipping-test');
+  await page.getByLabel('PIN code').fill('302001');
+  await page.getByLabel('City', { exact: true }).fill('Jaipur');
+  await page.getByLabel('State', { exact: true }).selectOption('Rajasthan');
+  await page.waitForTimeout(150);
+  r = await res();
+  check('Test calculator: Jaipur gets Standard only, Express listed as not offered there', r.length === 1 && (await page.locator('.bcz-body').textContent()).includes('Express delivery: Not offered in this area'), r.join(' | '));
+
+  // A rule with conditions: free shipping in Metro cities from ₹500.
+  await openSec('Rules');
+  await page.getByLabel('Add a rule').selectOption('free');
+  await page.locator('.shp-adder button').click();
+  const rule = page.locator('.shp-card.is-open');
+  await rule.getByRole('button', { name: 'Order value' }).click();
+  await rule.getByLabel('At least').fill('500');
+  await rule.getByRole('button', { name: 'Place' }).click();
+  await rule.getByLabel('Metro cities').check({ force: true });
+  await page.waitForTimeout(100);
+  const ruleSummary = await rule.locator('.shp-card-s').textContent();
+  check('Rules: the rule reads back in words', /^If Metro cities · order from ₹500(\.00)? → free shipping$/.test(ruleSummary), ruleSummary);
+  await shot('shipping-rule');
+  await openSec('Test calculator');
+  r = await res();
+  check('Rules: Jaipur still pays ₹60', /Standard delivery₹60/.test(r[0]), r.join(' | '));
+  await page.getByLabel('PIN code').fill('560001');
+  await page.getByLabel('City', { exact: true }).fill('Bengaluru');
+  await page.getByLabel('State', { exact: true }).selectOption('Karnataka');
+  await page.waitForTimeout(150);
+  r = await res();
+  check('Rules: Bengaluru ships free on both options, the rule named in the breakdown', r.length === 2 && r.every((t) => /Free/.test(t) && /Rule "Rule 1"/.test(t)), r.join(' | '));
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  const sent = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
+  check('Save: dynamic shipping switched on, with its delivery options and zone',
+    sent.settings?.shippingMode === 'advanced' && sent.shipping?.methods?.length === 2 && sent.shipping.zones.length === 1
+    && sent.shipping.methods[1].zones[0] === sent.shipping.zones[0].id && sent.shipping.methods[1].rate.amount === '99',
+    JSON.stringify({ mode: sent.settings?.shippingMode, methods: sent.shipping?.methods?.map((m) => [m.kind, m.rate, m.zones]) }));
+}
+if (width > 900) {
+  // Opening the section under a long open one: the new one starts at the top of the list, not scrolled to its end.
+  await openSec('Cart drawer');
+  await page.evaluate(() => { const l = document.querySelector('.bcz-list'); l.scrollTop = l.scrollHeight; });
+  await openSec('Product page');
+  const gap = await page.evaluate(() => Math.round(document.querySelector('[data-section="product"]').getBoundingClientRect().top - document.querySelector('.bcz-list').getBoundingClientRect().top));
+  check('Opening a section scrolls its header to the top of the list', Math.abs(gap) <= 1, `${gap}px`);
+}
+await page.addInitScript(() => { window.__SEARCH__ = 'section=status'; });
+await page.reload();
+await page.waitForSelector('.bcz-side');
+check('A ?section= link still opens that section', (await page.locator('.bcz-row.is-open .bcz-row-l').textContent()) === 'How COD works');
 console.log('errors:', errors.length ? errors.join('\n') : 'none');
 check('no page or console errors', errors.length === 0);
 await browser.close();

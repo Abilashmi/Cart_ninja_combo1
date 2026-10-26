@@ -1,0 +1,41 @@
+PASS  weight mode is selected for a weight template
+PASS  status card says the discount is live
+PASS  live summary of the tiers — 1 kg+: 10% off · 2 kg+: box for $1700 (max 2.2 kg)
+PASS  preview shows the weight meter with the unlocked tier — Your box1.45 kg / 2.2 kg max✓10% OFF1 kgBox at $17002 kg10% OFF unlocked! Add 0.55 kg more to unlock Box at $1700Create Your ComboSelect items to build your perfect com
+PASS  summary follows the edit
+PASS  says the change is not saved yet
+PASS  weight audit lists the product without a weight
+PASS  validation error shown
+PASS  save is blocked with the error
+PASS  saved config carries weight mode and the edited pricing — {"unit":"kg","max_grams":2500,"tiers":[{"id":"t1","min_grams":1000,"type":"percentage","value":15,"label":""},{"id":"t2","min_grams":2000,"type":"fixed_price","value":1700,"label":""}]}
+PASS  no coupon is saved with a weight box
+PASS  after save, the status card shows why it is not live
+PASS  and the merchant is told (and stays on the page)
+PASS  count template on Starter: weight option disabled
+PASS  Growth badge shown next to it (Classic Combo tiers are Growth+)
+PASS  coupon controls still there for item-count combos
+PASS  tiered template after a downgrade: explained and locked
+PASS  picker shows 3 templates: Quantity Box, Weight Box, Value Box — Quantity Box, Weight Box, Value Box
+PASS  Weight Box card is marked Growth $59
+PASS  picking it opens the Quick Shop design in the preview (no old box panel)
+PASS  top progress starts with sample weight tiers (1 kg 10%, 2 kg 15%) — Unlock offers on your boxAdd 1 kg more to unlock 10% OFF10% OFF1 kg15% OFF2 kg
+PASS  fresh: sample products, hint names "Box Collections"
+PASS  adding 1.4 kg unlocks the 1 kg tier in the bottom bar — You unlocked 10% OFF
+PASS  Style tab: Quick Shop's Top progress / Bottom bar / Page colours
+PASS  Offer: always by weight (no item-count or measure choice)
+PASS  Layout tab: "Box Collections" section
+PASS  save needs a collection for the box
+PASS  Starter: Weight Box card offers the Growth upgrade instead
+PASS  Starter: Quantity Box usable
+PASS  an older Guided Architect combo opens on its design
+PASS  switching to Velocity Stream selects it
+PASS  the Layout tab now shows the tab collections
+PASS  Editorial Split selectable too
+PASS  Growth: tiered progress bar can be chosen
+PASS  measure choice shown for a Classic design, starting on Quantity
+PASS  "Buy N for X" adds a box price tier and sets the max items — 3 items+: 10% off · 4 items+: box for $999 (max 4 items)
+PASS  preview meter: items, milestone offers — Your box3 items / 4 items max✓10% OFF3 itemsAny 4 for $9994 items10% OFF unlocked! Add 1 item more to unlock Any 4 for $999
+PASS  saved: tiered, by quantity, with the box price tier — {"measure":"quantity","unit":"kg","max_grams":4,"qualify":{"mode":"layout_collections","collection_ids":[],"product_ids":[]},"tiers":[{"id":"t1","min_grams":3,"type":"percentage","value":10,"label":""},{"id":"tmvj3vo1z","min_grams":4,"type":"fixed_price","value":999,"label":""}],"messages":{"locked":"Add {{remaining}} more to unlock {{tier}}","unlocked":"{{tier}} unlocked!","over_max":"Your box can hold up to {{max}}. Remove something to add this."}}
+PASS  Growth: Weight Box and Value Box usable
+
+39/39 passed

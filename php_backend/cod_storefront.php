@@ -81,6 +81,22 @@ function cods_sheet($sheet) {
     ];
 }
 
+// Picked products / collections ([{ id: gid, title }] in the settings) as the
+// storefront compares them: { products: [numeric ids], collections: [...] }.
+function cods_picks($picks) {
+    $q = is_array($picks) ? $picks : [];
+    $ids = function ($list, $type, $max) {
+        $out = [];
+        foreach (is_array($list) ? $list : [] as $item) {
+            $id = is_array($item) ? (string)($item['id'] ?? '') : (string)$item;
+            if (preg_match('#^(?:gid://shopify/' . $type . '/)?(\d{1,20})$#', $id, $m) && !in_array($m[1], $out, true)) $out[] = $m[1];
+            if (count($out) >= $max) break;
+        }
+        return $out;
+    };
+    return ['products' => $ids($q['products'] ?? [], 'Product', 50), 'collections' => $ids($q['collections'] ?? [], 'Collection', 25)];
+}
+
 // The product page button: replace "Buy it now" + spacing in px. Mirrors
 // sanitizeCodSettings' "productButton" rules (COD_PRODUCT_BUTTON_LIMITS).
 function cods_product_button($pb) {
@@ -88,10 +104,17 @@ function cods_product_button($pb) {
     $size = function ($key, $default, $min, $max) use ($q) {
         return is_numeric($q[$key] ?? null) ? max($min, min($max, (int)$q[$key])) : $default;
     };
+    $showOn = is_array($q['showOn'] ?? null) ? $q['showOn'] : [];
     return [
         'replaceBuyNow' => ($q['replaceBuyNow'] ?? true) !== false,
-        // replace | above | below Shopify's Buy it now; saved before it existed: from replaceBuyNow.
-        'buyNowPlacement' => cods_enum($q['buyNowPlacement'] ?? '', ['replace', 'above', 'below'], ($q['replaceBuyNow'] ?? true) !== false ? 'replace' : 'above'),
+        // replace | above | below Shopify's Buy it now, or "some" = replace on
+        // the replaceOn products, restPlacement on the rest; saved before it
+        // existed: from replaceBuyNow.
+        'buyNowPlacement' => cods_enum($q['buyNowPlacement'] ?? '', ['replace', 'above', 'below', 'some'], ($q['replaceBuyNow'] ?? true) !== false ? 'replace' : 'above'),
+        'replaceOn' => cods_picks($q['replaceOn'] ?? null),
+        'restPlacement' => cods_enum($q['restPlacement'] ?? '', ['above', 'below'], 'above'),
+        // Which product pages show the COD button: all | except | only the picks.
+        'showOn' => array_merge(['mode' => cods_enum($showOn['mode'] ?? '', ['all', 'except', 'only'], 'all')], cods_picks($showOn)),
         // Text for Shopify's Buy it now while it shows; may hold price tags. '' = Shopify's own.
         'buyNowText' => cods_text($q['buyNowText'] ?? '', '', 60),
         // The theme's Buy it now, when BRIX can't find it by itself. '' = automatic.
@@ -194,17 +217,24 @@ function cods_tracking($tracking) {
     ];
 }
 
-// Merchant text: no control characters, trimmed, at most $max characters.
 function cods_collection_ids($list) {
+    return cods_id_list($list, 50);
+}
+
+// Numeric ids, unique, at most $max.
+function cods_id_list($list, $max) {
     $out = [];
+    $seen = [];
     if (!is_array($list)) return $out;
     foreach ($list as $id) {
         $id = (string)$id;
-        if (preg_match('/^\d{1,20}$/', $id) && !in_array($id, $out, true)) $out[] = $id;
-        if (count($out) >= 50) break;
+        if (preg_match('/^\d{1,20}$/', $id) && !isset($seen[$id])) { $seen[$id] = true; $out[] = $id; }
+        if (count($out) >= $max) break;
     }
     return $out;
 }
+
+// Merchant text: no control characters, trimmed, at most $max characters.
 
 function cods_text($value, $default, $max) {
     if (!is_string($value)) return $default;
@@ -386,6 +416,10 @@ if ($action === 'config') {
         'blockedPincodes' => cods_str_list($s['blockedPincodes'] ?? []),
         'excludedProductTags' => cods_str_list($s['excludedProductTags'] ?? []),
         'excludedBehavior' => cods_enum($s['excludedBehavior'] ?? '', ['unavailable', 'hide'], 'unavailable'),
+        // Unlisted products COD may not sell (numeric ids, listed by the Node
+        // app on save): their product pages hide the button. Orders are
+        // checked on Shopify's live status either way.
+        'unlistedBlocked' => cods_id_list($s['_runtime']['unlisted']['blocked'] ?? [], 1000),
         'allowCoupons' => ($s['allowCoupons'] ?? true) !== false,
         'prepaidNudgeText' => (string)($s['prepaidNudgeText'] ?? ''),
         'buttons' => [

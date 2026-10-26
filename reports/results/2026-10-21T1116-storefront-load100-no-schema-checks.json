@@ -1,0 +1,263 @@
+{
+  "name": "storefront-load100",
+  "startedAt": "2026-10-21T11:16:22.991Z",
+  "durationSeconds": 82.7,
+  "maxVus": 100,
+  "stages": [
+    {
+      "duration": 20,
+      "target": 100
+    },
+    {
+      "duration": 60,
+      "target": 100
+    }
+  ],
+  "thinkMs": [
+    1000,
+    3000
+  ],
+  "timeoutMs": 10000,
+  "workers": 4,
+  "overall": {
+    "requests": 3494,
+    "rps": 42.3,
+    "avgMs": 13.7,
+    "minMs": 3.4,
+    "p50Ms": 7.8,
+    "p90Ms": 28.8,
+    "p95Ms": 36.4,
+    "p99Ms": 58.7,
+    "maxMs": 151.6,
+    "failed": 0,
+    "failRate": 0,
+    "timeouts": 0,
+    "rateLimited": 0,
+    "statuses": {
+      "200": 3494
+    },
+    "failReasons": {}
+  },
+  "byScenario": {
+    "config": {
+      "requests": 1156,
+      "rps": 14,
+      "avgMs": 10.2,
+      "minMs": 4.5,
+      "p50Ms": 7.4,
+      "p90Ms": 19.9,
+      "p95Ms": 24.9,
+      "p99Ms": 37.5,
+      "maxMs": 132.2,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1156
+      },
+      "failReasons": {}
+    },
+    "config_banner": {
+      "requests": 152,
+      "rps": 1.8,
+      "avgMs": 27.3,
+      "minMs": 12.7,
+      "p50Ms": 24.7,
+      "p90Ms": 41.2,
+      "p95Ms": 48.7,
+      "p99Ms": 103,
+      "maxMs": 124.1,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 152
+      },
+      "failReasons": {}
+    },
+    "coupons": {
+      "requests": 1202,
+      "rps": 14.5,
+      "avgMs": 8.3,
+      "minMs": 3.4,
+      "p50Ms": 5.4,
+      "p90Ms": 18.1,
+      "p95Ms": 22.2,
+      "p99Ms": 35.9,
+      "maxMs": 151.6,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 1202
+      },
+      "failReasons": {}
+    },
+    "fbt": {
+      "requests": 490,
+      "rps": 5.9,
+      "avgMs": 30,
+      "minMs": 16.1,
+      "p50Ms": 26.3,
+      "p90Ms": 45.9,
+      "p95Ms": 52.1,
+      "p99Ms": 79.8,
+      "maxMs": 140.9,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 490
+      },
+      "failReasons": {}
+    },
+    "cod_config": {
+      "requests": 329,
+      "rps": 4,
+      "avgMs": 12.3,
+      "minMs": 3.4,
+      "p50Ms": 8.2,
+      "p90Ms": 24.7,
+      "p95Ms": 27.8,
+      "p99Ms": 50.2,
+      "maxMs": 92.7,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 329
+      },
+      "failReasons": {}
+    },
+    "packs": {
+      "requests": 165,
+      "rps": 2,
+      "avgMs": 19.4,
+      "minMs": 9.6,
+      "p50Ms": 15,
+      "p90Ms": 33,
+      "p95Ms": 38.7,
+      "p99Ms": 78,
+      "maxMs": 99.7,
+      "failed": 0,
+      "failRate": 0,
+      "timeouts": 0,
+      "rateLimited": 0,
+      "statuses": {
+        "200": 165
+      },
+      "failReasons": {}
+    }
+  },
+  "environment": {
+    "type": "local-isolated",
+    "php": {
+      "version": "8.2.12",
+      "opcache": true,
+      "workers": 4
+    },
+    "shops": {
+      "shops": 2000,
+      "bannerShops": 200,
+      "bannerChars": 600000
+    },
+    "machine": "Intel(R) Core(TM) i3-7020U CPU @ 2.30GHz, 4 logical CPUs, 8 GB RAM, win32",
+    "loadGenerator": "same machine (competes for CPU with PHP + MariaDB)"
+  },
+  "resources": {
+    "php": {
+      "before": {
+        "cpuSeconds": 0.7,
+        "workingSetMb": 91,
+        "peakWorkingSetMb": 93
+      },
+      "after": {
+        "cpuSeconds": 7.11,
+        "workingSetMb": 99,
+        "peakWorkingSetMb": 104
+      }
+    },
+    "mysqld": {
+      "before": {
+        "cpuSeconds": 11.89,
+        "workingSetMb": 222,
+        "peakWorkingSetMb": 256
+      },
+      "after": {
+        "cpuSeconds": 23.66,
+        "workingSetMb": 223,
+        "peakWorkingSetMb": 256
+      }
+    },
+    "db": {
+      "Aborted_connects": 0,
+      "Bytes_sent": 209269050,
+      "Com_create_table": 0,
+      "Com_delete": 0,
+      "Com_insert": 0,
+      "Com_select": 9477,
+      "Com_show_fields": 1260,
+      "Com_update": 0,
+      "Connections": 3494,
+      "Created_tmp_disk_tables": 1260,
+      "Innodb_row_lock_waits": 0,
+      "Max_used_connections": 6,
+      "Questions": 14232,
+      "Slow_queries": 0,
+      "Threads_connected": 1,
+      "questionsPerRequest": 4.1
+    }
+  },
+  "slowQueries": {
+    "count": 40,
+    "top": [
+      {
+        "seconds": 0.516882,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.515948,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.502843,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.502675,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      },
+      {
+        "seconds": 0.499918,
+        "sql": "INSERT INTO cart_drawer_config (shop_domain, announcement_enabled, announcement_text, header_title, design_width, empty_cart_message, banner_enabled, banner_des"
+      }
+    ]
+  },
+  "preflight": {
+    "config": "ok (3/3)",
+    "config_banner": "ok (3/3)",
+    "coupons": "ok (3/3)",
+    "fbt": "ok (3/3)",
+    "cod_config": "ok (3/3)",
+    "packs": "ok (3/3)"
+  },
+  "variant": "no-schema-checks",
+  "criteria": {
+    "p95Ms": 500,
+    "maxFailPct": 1
+  },
+  "verdicts": {
+    "overall": "PASS",
+    "config": "PASS",
+    "config_banner": "PASS",
+    "coupons": "PASS",
+    "fbt": "PASS",
+    "cod_config": "PASS",
+    "packs": "PASS"
+  }
+}

@@ -1,79 +1,76 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useMemo, useState } from 'react';
 import { BlockStack, InlineStack, Text } from '@shopify/polaris';
+import { localDate, localHour, rangeDays } from '../../utils/cod-dates.shared';
 
-const DAYS = 14;
+const dayLabel = (ymd) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', day: 'numeric', month: 'short' });
+const hourLabel = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 
-function dayKey(d) {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-}
-
-// COD orders per day for the last two weeks, from the orders the page already
-// loaded (the latest 50), so it never claims more than it knows.
-export default function CodOrdersChart({ orders, money }) {
+// COD orders in the date filter's period: per day, or per hour when the
+// period is one day. Days and hours are the shop's (timeZone). Counts only
+// the orders the page loaded (`cut` = the period held more), so it never
+// claims more than it knows.
+export default function CodOrdersChart({ orders, money, range, timeZone, cut = false }) {
   const [hover, setHover] = useState(null);
-  const days = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const list = [];
-    const index = {};
-    for (let i = DAYS - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const entry = { date: d, count: 0, total: 0 };
-      index[dayKey(d)] = entry;
-      list.push(entry);
-    }
+  const hourly = range.from === range.to;
+  const buckets = useMemo(() => {
+    const list = hourly
+      ? Array.from({ length: 24 }, (_, h) => ({ key: h, label: `${dayLabel(range.from)}, ${hourLabel(h)}`, count: 0, total: 0 }))
+      : rangeDays(range.from, range.to).map((d) => ({ key: d, label: dayLabel(d), count: 0, total: 0 }));
+    const index = new Map(list.map((b) => [b.key, b]));
     for (const o of orders) {
       if (!o.createdAt) continue;
-      const entry = index[dayKey(new Date(o.createdAt))];
-      if (entry) { entry.count += 1; entry.total += o.total; }
+      const day = localDate(o.createdAt, timeZone);
+      const b = hourly ? (day === range.from ? index.get(localHour(o.createdAt, timeZone)) : null) : index.get(day);
+      if (b) { b.count += 1; b.total += o.total; }
     }
     return list;
-  }, [orders]);
+  }, [orders, range.from, range.to, timeZone, hourly]);
 
-  const max = Math.max(1, ...days.map((d) => d.count));
-  const inRange = days.reduce((n, d) => n + d.count, 0);
-  const label = (d) => d.date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  const inRange = buckets.reduce((n, b) => n + b.count, 0);
+  const n = buckets.length;
+  const xLabels = hourly
+    ? ['12 AM', '12 PM', '11 PM']
+    : [dayLabel(range.from), dayLabel(buckets[Math.floor(n / 2)].key), range.to === range.today ? 'Today' : dayLabel(range.to)];
 
   return (
     <BlockStack gap="300">
       <InlineStack align="space-between" blockAlign="baseline">
-        <Text as="h3" variant="headingSm">COD orders per day</Text>
-        <Text as="span" variant="bodySm" tone="subdued">Last {DAYS} days · {inRange} {inRange === 1 ? 'order' : 'orders'}</Text>
+        <Text as="h3" variant="headingSm">{hourly ? 'COD orders per hour' : 'COD orders per day'}</Text>
+        <Text as="span" variant="bodySm" tone="subdued">{range.label} · {inRange} {inRange === 1 ? 'order' : 'orders'}</Text>
       </InlineStack>
-      <div className="cod-chart" role="group" aria-label={`COD orders per day, last ${DAYS} days`}>
+      <div className="cod-chart" role="group" aria-label={`COD orders per ${hourly ? 'hour' : 'day'}, ${range.label}`}>
         <span className="cod-chart-max">{max}</span>
-        <div className="cod-chart-plot">
-          {days.map((d, i) => (
+        <div className="cod-chart-plot" style={{ gap: n > 120 ? 0 : n > 45 ? 1 : 2 }}>
+          {buckets.map((b, i) => (
             <button
               type="button"
-              key={i}
+              key={b.key}
               className={`cod-bar${hover === i ? ' on' : ''}`}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
-              aria-label={`${label(d)}: ${d.count} ${d.count === 1 ? 'order' : 'orders'}, ${money(d.total)}`}
+              aria-label={`${b.label}: ${b.count} ${b.count === 1 ? 'order' : 'orders'}, ${money(b.total)}`}
             >
-              <span className="cod-bar-fill" style={{ height: d.count ? `${Math.max(6, (d.count / max) * 100)}%` : 0 }} />
+              <span className="cod-bar-fill" style={{ height: b.count ? `${Math.max(6, (b.count / max) * 100)}%` : 0 }} />
               {hover === i && (
-                <span className={`cod-tip${i > DAYS - 4 ? ' left' : ''}`} role="presentation">
-                  <b>{label(d)}</b>
-                  <span>{d.count} {d.count === 1 ? 'order' : 'orders'}</span>
-                  <span>{money(d.total)}</span>
+                <span className={`cod-tip${i > n - 4 ? ' left' : ''}`} role="presentation">
+                  <b>{b.label}</b>
+                  <span>{b.count} {b.count === 1 ? 'order' : 'orders'}</span>
+                  <span>{money(b.total)}</span>
                 </span>
               )}
             </button>
           ))}
         </div>
         <div className="cod-chart-x">
-          <span>{label(days[0])}</span>
-          <span>{label(days[Math.floor(DAYS / 2)])}</span>
-          <span>Today</span>
+          {xLabels.map((l, i) => <span key={i}>{l}</span>)}
         </div>
       </div>
-      {!inRange && <Text as="p" variant="bodySm" tone="subdued">No COD orders in the last {DAYS} days yet.</Text>}
+      {!inRange && <Text as="p" variant="bodySm" tone="subdued">No COD orders in this period.</Text>}
+      {cut && <Text as="p" variant="bodySm" tone="subdued">This period has more orders than the dashboard loads; the chart counts the newest ones. Pick fewer days for every order.</Text>}
     </BlockStack>
   );
 }

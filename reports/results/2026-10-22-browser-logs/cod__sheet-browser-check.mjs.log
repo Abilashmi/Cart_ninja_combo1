@@ -1,0 +1,77 @@
+PASS  product page: button injected under Add to cart
+PASS  product page: fee shown on the button
+PASS  drawer: disabled below the minimum, with the reason
+PASS  drawer: disabled for Pack carts
+PASS  drawer: enabled for an eligible cart
+PASS  loader: the BRIX logo shows first while COD is checked
+PASS  drawer: the COD sheet opens in front of the cart drawer
+PASS  flow: starts on the phone step when OTP is on
+PASS  sheet: uses the storefront font, not the browser default
+PASS  look: store logo in the header, step title in the body
+PASS  look: Powered by BRIX under the sheet
+PASS  look: accent colour and soft corners applied
+PASS  phone step: labelled stepper, order summary and trust badges shown
+PASS  phone step: order summary expands to show the items
+PASS  phone step: no tick for an incomplete number
+PASS  phone step: invalid number highlights the field
+PASS  phone step: tick shown once the number is valid
+PASS  flow: OTP step shows the number
+PASS  otp: typed digits paint into the boxes
+PASS  otp: wrong code turns the boxes red
+PASS  flow: wrong code shows the server message
+PASS  flow: correct code moves to the address step, phone marked verified
+PASS  flow: blocked PIN code refuses COD and offers Pay online
+PASS  flow: PIN lookup fills city and state
+PASS  address: PIN lookup confirms the place inline
+PASS  address: a short street highlights that field
+PASS  address: typing clears the highlight
+PASS  review: shows the COD fee under its title, total and the prepaid message
+PASS  coupon: a code Shopify rejects shows why and keeps the price
+PASS  coupon: Enter applies the code (does not place the order)
+PASS  coupon: applied card shows the saving and the new total
+PASS  coupon: Remove goes back to the full price
+PASS  coupon: merchant label and suggested offer shown
+PASS  coupon: tapping an offer applies it
+PASS  coupon: Paste fills and claims the code in one tap
+PASS  Terms and conditions: consent ticked by default, links to the store's terms page in a new tab — I agree to the Terms and conditions
+PASS  Terms and conditions: unticked blocks the order with a message
+PASS  done: order number and amount to pay shown
+PASS  done: merchant thank-you message shown
+PASS  done: copy button and next-steps timeline shown
+PASS  done: cart cleared and onSuccess called
+PASS  order request: the claimed coupon is sent with the order
+PASS  order request: verified token, surface, cart items and address sent
+PASS  order request: GA client id, Meta _fbp, consent and page sent for the server-side purchase
+PASS  GA4: funnel fires once per step, in order — begin_checkout → cod_otp_verified → add_shipping_info → add_payment_info → purchase
+PASS  GA4: sent only to the merchant's property, existing gtag reused
+PASS  GA4: purchase has the order name as transaction_id, coupon, value and items
+PASS  Meta: pixel already on the page is not initialised twice
+PASS  Meta: standard + custom events to this pixel only — InitiateCheckout → CodOtpVerified → CodAddressAdded → AddPaymentInfo → Purchase
+PASS  Meta: Purchase carries eventID brixcod_<order id> for dedup with the server
+PASS  GTM: brix_cod_* events pushed to the dataLayer
+PASS  brix:cod:track DOM event fired for each step
+PASS  consent: declined in the cookie banner → no GA4 or Meta events
+PASS  consent: the DOM event still fires, marked as not consented
+PASS  returning shopper: verified phone and saved address reused
+PASS  returning shopper: saved address shown as a card with the form folded away
+PASS  returning shopper: Change opens the filled form
+PASS  product page: buys the selected variant, quantity and line properties
+PASS  combo: rule error shown before asking for any details
+PASS  combo: Pay online hands back to the normal checkout
+PASS  no tags: nothing loaded before the popup is used
+PASS  no tags: gtag.js and fbevents.js loaded on begin_checkout — https://www.googletagmanager.com/gtag/js?id=G-TEST123, https://connect.facebook.net/en_US/fbevents.js
+PASS  no tags: GA4 configured without a page view, pixel initialised once
+PASS  product page (Dawn layout): one visible button, on the main Add to cart form — [{"form":"product-form-main","shown":true}]
+PASS  product page: COD button takes the place of Buy it now, which is hidden — {"buttons":1,"beforeBuyNow":true,"buyNowHidden":true,"slotMargin":"0px","style":"none normal 14px 16px 12px 0px 10px"}
+PASS  product page: theme button CSS does not change the COD button — none normal 14px 16px 12px 0px 10px
+PASS  product page: button comes back after the theme redraws the form — {"buttons":1,"beforeBuyNow":true,"buyNowHidden":true,"slotMargin":"0px","style":"none normal 14px 16px 12px 0px 10px"}
+PASS  product page: Buy it now kept when replacing is off, COD button under Add to cart — {"afterAddToCart":true,"buyNowShown":true,"style":"4px 6px 20px 24px 0px"}
+PASS  product page: merchant spacing applied — 4px 6px 20px 24px 0px
+PASS  product page + Shiprocket: "Pay online" opens Shiprocket with just this item — {"sr":[{"kind":"items","items":[{"variantId":21,"quantity":1}],"fallbackUrl":"/cart/21:1"}],"navs":[]}
+PASS  product page without Shiprocket: "Pay online" goes to a Shopify checkout with just this item — ["/cart/21:1"]
+PASS  settings and PIN lookups come from the PHP backend
+PASS  OTP, pricing and the order go through the PHP relay
+PASS  the browser never calls the app server directly
+PASS  no page errors
+
+75/75 passed
