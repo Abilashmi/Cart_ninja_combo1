@@ -400,7 +400,7 @@
   // is dropped when the amount already starts with it (it showed "₹₹2,524.00").
   function ccFillMoneyTag(text, tag, value) {
     var str = String(value);
-    var sign = (str.match(/^[^\d\s.,-]+/) || [''])[0];
+    var sign = (str.match(/^[^\d\s,-]+/) || [''])[0]; // "Rs." keeps its dot
     var out = String(text);
     if (sign) out = out.split(sign + ' ' + tag).join(tag).split(sign + tag).join(tag);
     return out.split(tag).join(str);
@@ -871,7 +871,7 @@
 
   function parseCheckoutButtonStyle(d) {
     const raw = d.checkout_button_style;
-    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard' };
+    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard', continueShopping: ccContinueShopping(null) };
     const data = typeof raw === 'string' ? parseJSON(raw) : raw;
     const clampNum = (v, def, min, max) => { const n = parseInt(v, 10); return isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
     return {
@@ -882,7 +882,65 @@
       fontSize: clampNum(data.fontSize, 15, 12, 22),
       paddingY: clampNum(data.paddingY, 16, 8, 28),
       mobileButtonType: (data.mobileButtonType === 'swipe' || data.mobileButtonType === 'animated') ? data.mobileButtonType : 'standard',
+      continueShopping: ccContinueShopping(data.continueShopping),
     };
+  }
+
+  // "Continue shopping" next to Checkout (Cart Editor → Checkout Button), off
+  // by default. Same rules as app/utils/continue-shopping.shared.js
+  // sanitizeContinueShopping (and brix_cod.js continueLook): keep in step.
+  function ccContinueShopping(raw) {
+    const d = raw && typeof raw === 'object' ? raw : {};
+    const pick = (v, list, def) => (list.indexOf(v) !== -1 ? v : def);
+    const hex = (v, def) => (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(v || '')) ? String(v) : def);
+    const num = (v, def, min, max) => { const n = Math.round(Number(v)); return isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
+    const url = String(d.url || '').trim();
+    const urlOk = url.length <= 300 && (/^\/(?!\/)[^\s<>"'\\]*$/.test(url) || /^https:\/\/[^\s<>"'\\]+$/i.test(url));
+    return {
+      enabled: d.enabled === true,
+      text: String(d.text || '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Continue shopping',
+      placement: pick(d.placement, ['above', 'below'], 'below'),
+      style: pick(d.style, ['outline', 'filled', 'link'], 'outline'),
+      bg: hex(d.bg, '#111827'),
+      color: hex(d.color, '#ffffff'),
+      fontSize: num(d.fontSize, 14, 11, 20),
+      radius: num(d.radius, 8, 0, 40),
+      paddingY: num(d.paddingY, 12, 4, 24),
+      action: pick(d.action, ['close', 'link'], 'close'),
+      url: url && urlOk ? url : '',
+    };
+  }
+
+  // The button, in its own #cc-continue-wrap outside Checkout + the COD slot
+  // (above = before both, below = after both). brix_cod.js hides it while
+  // COD's own Continue shopping (COD → Customize → Cart drawer) is on.
+  function renderContinueShopping(cs) {
+    if (!cs || !cs.enabled) return '';
+    const link = cs.style === 'link';
+    const gap = cs.placement === 'above' ? 'margin:0 0 10px 0;' : 'margin:10px 0 0 0;';
+    const pad = link ? Math.max(2, Math.round(cs.paddingY / 2)) + 'px 8px' : cs.paddingY + 'px 16px';
+    const paint = cs.style === 'filled'
+      ? 'background:' + cs.bg + ';color:' + cs.color + ';box-shadow:none;'
+      : 'background:transparent;color:' + cs.bg + ';box-shadow:' + (link ? 'none' : 'inset 0 0 0 1.5px ' + cs.bg) + ';';
+    return `<div id="cc-continue-wrap" style="${gap}"><button type="button" id="cc-continue-btn" data-action="${cs.action}" data-href="${escapeHtml(cs.url || '/collections/all')}" style="box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;display:block;margin:0;padding:${pad};${paint}border:none;border-radius:${link ? 0 : cs.radius}px;font-family:inherit;font-size:${cs.fontSize}px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;text-shadow:none;text-align:center;text-decoration:${link ? 'underline' : 'none'};text-underline-offset:3px;cursor:pointer;">${escapeHtml(cs.text)}</button></div>`;
+  }
+
+  // Close = the drawer closes; link = a store path (under the market's
+  // route root) or an https link.
+  function ccContinueGo(action, href) {
+    if (action !== 'link') { closeDrawer(); return; }
+    if (/^https:\/\//i.test(href)) { window.location.href = href; return; }
+    const root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    window.location.href = root.replace(/\/$/, '') + (href || '/collections/all');
+  }
+
+  function initContinueShopping() {
+    const btn = document.getElementById('cc-continue-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      ccContinueGo(btn.getAttribute('data-action'), btn.getAttribute('data-href'));
+    });
   }
 
   function parseCouponData(d) {
@@ -2998,9 +3056,12 @@
     window.BrixCod.mountDrawerButton(slot, {
       cart,
       checkout: document.getElementById('cc-checkout-wrap'),
+      // The Cart Editor's Continue shopping, hidden while COD's own is on.
+      continueWrap: document.getElementById('cc-continue-wrap'),
       coupon: appliedCouponCodes[0] || null,
       onPayOnline: () => ccGoToCheckout(href),
       onSuccess: () => closeDrawer(),
+      onContinue: () => closeDrawer(),
     });
   }
 
@@ -3821,12 +3882,15 @@
         }
       });
       const finalTotal = Math.max(0, subtotal - totalDiscount);
+      const continueCfg = (CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.continueShopping) || ccContinueShopping(null);
 
       drawerHtml += `
 <div id="cc-drawer-footer" style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
   ${renderSummaryHtml(shownSubtotal, totalDiscount, finalTotal, cartLevelOff > 0 ? cartDiscounts : [])}
+  ${continueCfg.enabled && continueCfg.placement === 'above' ? renderContinueShopping(continueCfg) : ''}
   <div id="cc-cod-slot"></div>
   <div id="cc-checkout-wrap">${(_ccCheckoutPrice = { cart: cart, total: finalTotal }, renderCheckoutButton(appliedCouponCodes))}</div>
+  ${continueCfg.enabled && continueCfg.placement !== 'above' ? renderContinueShopping(continueCfg) : ''}
   <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
@@ -3874,6 +3938,7 @@
       initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
+      initContinueShopping();
       initCodButton(cart);
       ccRefreshCheckoutTags();
     } else {
@@ -3897,6 +3962,7 @@
       initStandardCheckout();
       initSwipeCheckout();
       initAnimatedCheckout();
+      initContinueShopping();
       initCodButton(cart);
       ccRefreshCheckoutTags();
     }

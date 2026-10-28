@@ -282,7 +282,7 @@ await check('14. global -> Coupon Banner: original message shown in that page ch
   await context.close();
 });
 
-await check('15. "Try Brix AI Agent" cue: black/white, blinks ~3s, disappears, never shows again', async () => {
+await check('15. "Try Brix AI Agent" cue: dark pill, glows ~3s, disappears, shows again on reload', async () => {
   const { page, context } = await newPage();
   await page.goto(`${base}/app/cartdrawer`);
   const pill = page.locator('.brix-ai-discovery-pill');
@@ -292,11 +292,12 @@ await check('15. "Try Brix AI Agent" cue: black/white, blinks ~3s, disappears, n
     const cs = getComputedStyle(el);
     return { anim: cs.animationName, iterations: cs.animationIterationCount, duration: cs.animationDuration, borderColor: cs.borderTopColor };
   });
-  assert.equal(colors.anim, 'brix-ai-discovery-blink-pill');
-  assert.equal(colors.iterations, '5');
-  assert.equal(colors.duration, '0.6s'); // 5 x 0.6s = 3 seconds of blinking
-  assert.equal(colors.borderColor, 'rgb(0, 0, 0)');
-  // Sample the pill's colours over its lifetime: only black/white shades, and both states seen.
+  // The dark pill with a soft white glow (BrixBar.jsx, since b1a150b).
+  assert.equal(colors.anim, 'brix-ai-discovery-glow');
+  assert.equal(colors.iterations, '2');
+  assert.equal(colors.duration, '1.5s'); // 2 x 1.5s = 3 seconds of glowing
+  assert.equal(colors.borderColor, 'rgba(255, 255, 255, 0.14)');
+  // Sample the pill's colours over its lifetime: always the dark pill with white text (it glows, never swaps colours).
   const seen = new Set();
   const t0 = Date.now();
   while (Date.now() - t0 < 2800) {
@@ -309,23 +310,13 @@ await check('15. "Try Brix AI Agent" cue: black/white, blinks ~3s, disappears, n
     await page.waitForTimeout(80);
   }
   const palette = [...seen].filter((s) => s !== 'gone');
-  assert.ok(palette.every((s) => /^(rgb\(0, 0, 0\)\|rgb\(255, 255, 255\)|rgb\(255, 255, 255\)\|rgb\(0, 0, 0\))$/.test(s)), `non black/white colour seen: ${palette}`);
-  assert.equal(palette.length, 2, `expected both black and white states, saw: ${palette}`);
+  assert.deepEqual(palette, ['rgb(11, 11, 13)|rgb(255, 255, 255)'], `pill colours: ${palette}`);
   await pill.waitFor({ state: 'detached', timeout: 2500 });
+  // It shows again on every page load or refresh (BrixBar.jsx), then leaves again.
   await page.reload();
-  await page.locator('.bxb-input').waitFor();
-  await page.waitForTimeout(1500);
-  assert.equal(await page.locator('.brix-ai-discovery-pill').count(), 0, 'cue came back after a reload');
-  await page.goto(`${base}/app/fbt`);
-  await page.goto(`${base}/app/cartdrawer`);
-  await page.waitForTimeout(1200);
-  assert.equal(await page.locator('.brix-ai-discovery-pill').count(), 0, 'cue came back on a later visit');
+  await page.locator('.brix-ai-discovery-pill').waitFor({ state: 'visible', timeout: 3000 });
+  await page.locator('.brix-ai-discovery-pill').waitFor({ state: 'detached', timeout: 6000 });
   await context.close();
-  // a brand-new browser profile sees it once
-  const fresh = await newPage();
-  await fresh.page.goto(`${base}/app/cartdrawer`);
-  await fresh.page.locator('.brix-ai-discovery-pill').waitFor({ state: 'visible' });
-  await fresh.context.close();
 });
 
 await check('16. Build a Combo embed notice: steps, theme-editor deep link, check-again button', async () => {

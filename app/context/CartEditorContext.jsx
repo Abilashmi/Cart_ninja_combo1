@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
+import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 
 function parseJSONSafe(v) {
   if (!v) return {};
@@ -41,6 +42,7 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.fontSize != null ? { fontSize: Number(cbStyle.fontSize) } : {}),
         ...(cbStyle.paddingY != null ? { paddingY: Number(cbStyle.paddingY) } : {}),
         ...(cbStyle.mobileButtonType ? { mobileButtonType: cbStyle.mobileButtonType } : {}),
+        ...(cbStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cbStyle.continueShopping) } : {}),
       },
       customCSS: record.customCSS || base.footer.customCSS,
       watermarkEnabled: record.watermark_enabled != null ? dbFlag(record.watermark_enabled) : base.footer.watermarkEnabled,
@@ -287,6 +289,7 @@ function mergeConfigIntoState(base, cfg) {
           borderRadius: cfg.checkoutButtonStyle.borderRadius ?? next.footer.checkoutButton.borderRadius,
           fontSize: cfg.checkoutButtonStyle.fontSize ?? next.footer.checkoutButton.fontSize,
           paddingY: cfg.checkoutButtonStyle.paddingY ?? next.footer.checkoutButton.paddingY,
+          ...(cfg.checkoutButtonStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cfg.checkoutButtonStyle.continueShopping) } : {}),
         },
       },
     };

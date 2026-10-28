@@ -4,6 +4,12 @@ import { useCartEditor } from '../../context/CartEditorContext';
 import { ColorField } from './ColorField';
 import { SliderField } from '../shared/SliderField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
+import { ContinueShoppingFields } from '../shared/ContinueShoppingFields';
+
+const CONTINUE_PLACEMENTS = [
+  { label: 'Below the Checkout button', value: 'below' },
+  { label: 'Above the Checkout button', value: 'above' },
+];
 
 export function CheckoutSection() {
   const { footer, updateCheckoutButton } = useCartEditor();
@@ -73,6 +79,13 @@ export function CheckoutSection() {
           />
         </FormLayout>
       </Card>
+      <ContinueShoppingFields
+        value={checkoutButton.continueShopping}
+        onChange={(v) => updateCheckoutButton({ continueShopping: v })}
+        placementOptions={CONTINUE_PLACEMENTS}
+        intro="Lets shoppers close the cart and keep browsing. Shown while the cart has items (an empty cart has its own button, in Empty Cart)."
+        note="With BRIX COD on in the drawer, COD → Customize → Cart drawer → Continue shopping takes its place when it's switched on there."
+      />
       <CustomizableLockedSection featureKey="mobile_swipe_checkout">
       <Card>
         <FormLayout>

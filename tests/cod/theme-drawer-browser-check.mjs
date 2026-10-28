@@ -86,7 +86,7 @@ const browser = await chromium.launch();
 
 // shiprocket: the shop has Shiprocket on (integrations_admin.php); BRIX's
 // hand-off (brix_checkout.js) is stubbed and records its calls in window.__sr.
-async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket = false, viewport = { width: 1280, height: 800 }, wholePrices = false } = {}) {
+async function open(theme, { cfg = {}, cart = CART, brixOn = false, brixData = {}, shiprocket = false, viewport = { width: 1280, height: 800 }, wholePrices = false } = {}) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   // Account → Price display → "Hide decimals in prices" (printed by the app embed).
@@ -140,7 +140,7 @@ async function open(theme, { cfg = {}, cart = CART, brixOn = false, shiprocket =
     if (url.origin === BRIX_PHP) {
       if (url.pathname === '/save_cart_drawer.php') {
         const sr = shiprocket ? { shiprocket_enabled: 1 } : {};
-        return json(brixOn ? { status: 'success', data: { cartStatus: '1', checkoutName: 'Checkout Now', ...sr } } : { status: 'success', data: { cartStatus: '0', ...sr } });
+        return json(brixOn ? { status: 'success', data: { cartStatus: '1', checkoutName: 'Checkout Now', ...sr, ...brixData } } : { status: 'success', data: { cartStatus: '0', ...sr } });
       }
       if (url.pathname === '/save_coupon.php') return json({ status: 'success', data: [] });
       return json({ status: 'success' });
@@ -683,6 +683,112 @@ const done = async (page, name) => {
   check('drawer COD button: settings from before keep 14px / 16px', d && d.pt === '14px' && d.pl === '16px', JSON.stringify(d));
   allErrors.push(...plain.errors);
   await plain.context().close();
+}
+
+/* 19. Continue shopping (COD → Customize → Cart drawer; Cart Editor → Checkout Button) */
+{
+  const CONT = '[data-brix-cod-continue] [data-brix-cod-continue-btn]';
+  const order = (page, coSel) => page.evaluate(({ coSel, CONT }) => {
+    const co = document.querySelector(coSel);
+    const slot = document.querySelector('[data-brix-cod-drawer], #cc-cod-slot');
+    const cont = document.querySelector(CONT) || document.querySelector('#cc-continue-btn');
+    if (!co || !cont) return { cont: Boolean(cont) };
+    const after = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_PRECEDING); // b before a
+    const cs = getComputedStyle(cont);
+    return {
+      cont: true,
+      text: cont.textContent.trim(),
+      belowBoth: after(cont, co) && after(cont, slot),
+      aboveBoth: after(co, cont) && after(slot, cont),
+      transform: cs.textTransform,
+      shadow: cs.boxShadow,
+      bg: cs.backgroundColor,
+      width: Math.round(cont.getBoundingClientRect().width),
+      coWidth: Math.round(co.getBoundingClientRect().width),
+      count: document.querySelectorAll(CONT).length + document.querySelectorAll('#cc-continue-btn').length,
+    };
+  }, { coSel, CONT });
+
+  // Off by default: nothing added.
+  const off = await open('dawn');
+  await waitButton(off);
+  check('continue shopping: off by default (theme drawer)', (await order(off, DAWN_CO)).cont === false);
+  allErrors.push(...off.errors);
+  await off.context().close();
+
+  // Theme drawer, below (default), outline: closes the drawer with its close button.
+  const below = await open('dawn', { cfg: { drawerContinue: { enabled: true, text: 'Keep shopping', placement: 'below', style: 'outline', bg: '#0d6b4c', fontSize: 14, radius: 8, paddingY: 12, action: 'close', url: '' } } });
+  await below.evaluate(() => {
+    const x = document.createElement('button');
+    x.className = 'drawer__close'; x.type = 'button'; x.textContent = '×';
+    x.onclick = () => { window.__closed = true; };
+    document.querySelector('.drawer__header').appendChild(x);
+  });
+  await waitButton(below);
+  await below.waitForSelector(CONT, { timeout: 5000 }).catch(() => null);
+  let o = await order(below, DAWN_CO);
+  check('continue shopping (theme drawer): below Checkout and COD, full width, theme CSS kept off', o.cont && o.belowBoth && o.transform === 'none' && /inset/.test(o.shadow) && Math.abs(o.width - o.coWidth) < 2, JSON.stringify(o));
+  await below.screenshot({ path: path.join(shotDir, 'continue-theme.png') });
+  await below.click(CONT);
+  const closed = await below.evaluate(() => window.__closed === true);
+  check('continue shopping (theme drawer): tap = the theme\'s close button', closed);
+  // Dawn redraws its drawer after a cart change: put back once.
+  await below.evaluate(() => { window.rerender('₹1,299.00'); document.querySelector('.drawer__header').innerHTML += ''; });
+  await settle(below, 1500);
+  o = await order(below, DAWN_CO);
+  check('continue shopping (theme drawer): back after the theme redraws, only once', o.cont && o.count === 1, JSON.stringify(o));
+  allErrors.push(...below.errors);
+  await below.context().close();
+
+  // Theme drawer, above, link to a page.
+  const above = await open('dawn', { cfg: { drawerPlacement: 'below', drawerContinue: { enabled: true, text: 'Shop new arrivals', placement: 'above', style: 'filled', bg: '#222222', color: '#ffffff', action: 'link', url: '/collections/new' } } });
+  await waitButton(above);
+  await above.waitForSelector(CONT, { timeout: 5000 }).catch(() => null);
+  o = await order(above, DAWN_CO);
+  check('continue shopping (theme drawer): above Checkout and COD (COD below Checkout)', o.cont && o.aboveBoth && o.bg === 'rgb(34, 34, 34)', JSON.stringify(o));
+  const nav = above.waitForURL('**/collections/new', { timeout: 4000 }).then(() => true).catch(() => false);
+  await above.click(CONT);
+  check('continue shopping (theme drawer): "Open a page" goes to /collections/new', await nav, above.url());
+  allErrors.push(...above.errors);
+  await above.context().close();
+
+  // BRIX drawer: the Cart Editor's own button (checkout_button_style.continueShopping).
+  const editor = await open('dawn', { brixOn: true, brixData: { checkout_button_style: JSON.stringify({ backgroundColor: '#111111', continueShopping: { enabled: true, text: 'Back to the shop', placement: 'above', style: 'link', bg: '#333333' } }) } });
+  await editor.waitForFunction(() => window.__brixCartDrawerActive === true, null, { timeout: 5000 }).catch(() => null);
+  await editor.evaluate(() => window.testCart());
+  await editor.waitForSelector('#cc-cod-slot [data-brix-cod-btn]', { timeout: 6000 }).catch(() => null);
+  await settle(editor, 500);
+  o = await order(editor, '#cc-checkout-wrap');
+  check('continue shopping (BRIX drawer, Cart Editor): above Checkout and COD, as a link, theme CSS kept off', o.cont && o.text === 'Back to the shop' && o.aboveBoth && o.transform === 'none', JSON.stringify(o));
+  await editor.click('#cc-continue-btn');
+  await settle(editor, 600);
+  const open1 = await editor.evaluate(() => Boolean(document.querySelector('#cc-overlay.active')));
+  check('continue shopping (BRIX drawer): tap closes the drawer', !open1);
+  allErrors.push(...editor.errors);
+  await editor.context().close();
+
+  // BRIX drawer + COD's own on: COD's takes the place of the Cart Editor's.
+  const both = await open('dawn', {
+    brixOn: true,
+    brixData: { checkout_button_style: JSON.stringify({ continueShopping: { enabled: true, text: 'Editor one', placement: 'above' } }) },
+    cfg: { drawerContinue: { enabled: true, text: 'COD one', placement: 'below', style: 'outline', bg: '#0d6b4c', action: 'close' } },
+  });
+  await both.waitForFunction(() => window.__brixCartDrawerActive === true, null, { timeout: 5000 }).catch(() => null);
+  await both.evaluate(() => window.testCart());
+  await both.waitForSelector('#cc-footer-x, ' + CONT, { timeout: 6000 }).catch(() => null);
+  await settle(both, 500);
+  const shown = await both.evaluate((CONT) => ({
+    editorShown: (() => { const w = document.getElementById('cc-continue-wrap'); return Boolean(w) && getComputedStyle(w).display !== 'none'; })(),
+    cod: document.querySelector(CONT)?.textContent.trim() || null,
+  }), CONT);
+  o = await order(both, '#cc-checkout-wrap');
+  check('continue shopping (BRIX drawer): COD\'s own replaces the Cart Editor\'s, below Pay now + COD', !shown.editorShown && shown.cod === 'COD one' && o.belowBoth, JSON.stringify({ ...shown, belowBoth: o.belowBoth }));
+  await both.screenshot({ path: path.join(shotDir, 'continue-brix.png') });
+  await both.click(CONT);
+  await settle(both, 600);
+  check('continue shopping (BRIX drawer, COD\'s): tap closes the drawer', !(await both.evaluate(() => Boolean(document.querySelector('#cc-overlay.active')))));
+  allErrors.push(...both.errors);
+  await both.context().close();
 }
 
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));

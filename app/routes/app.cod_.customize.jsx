@@ -44,6 +44,7 @@ import {
   toForm, toSettings, formErrors, secretsPatch, PB_SIZES, HEX, RADII,
 } from '../components/cod/codSettingsForm';
 import ButtonDesignEditor from '../components/cod/ButtonDesignEditor';
+import { ContinueShoppingFields } from '../components/shared/ContinueShoppingFields';
 import { ColorField } from '../components/sections/ColorField';
 import { SliderField } from '../components/shared/SliderField';
 import { COD_ADMIN_CSS } from '../components/cod/codAdminStyles';
@@ -262,6 +263,12 @@ function SecretField({ label, value, status, onChange, helpText, error, placehol
 }
 
 
+// Continue shopping (Cart drawer section): around the Pay now + COD pair.
+const CONTINUE_PLACEMENTS = [
+  { label: 'Below Pay now and COD', value: 'below' },
+  { label: 'Above Pay now and COD', value: 'above' },
+];
+
 // Sidebar sections, grouped like the Cart Editor's. `preview` = screen the live
 // preview switches to when the section opens; `fields` = form fields whose
 // errors belong to it; `toggle` = form flag shown as an On/Off badge on the row.
@@ -275,7 +282,7 @@ const GROUPS = [
     // texts, the other button's text and class, and the design.
     title: 'COD button',
     items: [
-      { id: 'position', label: 'Cart drawer', icon: CartIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color', 'drawerSelector'], toggle: 'drawer' },
+      { id: 'position', label: 'Cart drawer', icon: CartIcon, preview: 'drawer', fields: ['drawerText', 'bg', 'color', 'drawerSelector', 'drawerContinueUrl'], toggle: 'drawer' },
       { id: 'product', label: 'Product page', icon: ProductIcon, preview: 'product', fields: ['productText', 'ppOnlineButton', 'pbBuyNowSelector', 'productBg', 'productColor', 'pbShowOn', 'pbReplaceOn'], toggle: 'product' },
       { id: 'combo', label: 'Combo page', icon: CollectionIcon, preview: 'combo', fields: ['comboText', 'comboBg', 'comboColor'], toggle: 'combo' },
     ],
@@ -636,6 +643,12 @@ export default function CodCustomizePage() {
                   />
                 </FormLayout>
               </Card>
+              <ContinueShoppingFields
+                value={form.drawerContinue}
+                onChange={set('drawerContinue')}
+                placementOptions={CONTINUE_PLACEMENTS}
+                intro="A button that closes the cart so shoppers can keep browsing, next to Pay now and COD. In the BRIX Cart Drawer it takes the place of the Cart Editor's own Continue shopping."
+              />
               <Text as="h3" variant="headingMd">COD button design</Text>
               <ButtonDesignEditor look={drawerLook} onChange={setDrawerLook} showPadding errors={{ bg: errors.bg, color: errors.color }} />
             </>

@@ -251,6 +251,30 @@ function cods_bool($value, $default) {
     return is_bool($value) ? $value : $default;
 }
 
+// "Continue shopping" next to the drawer's Pay now + COD buttons (COD →
+// Customize → Cart drawer). Mirrors sanitizeContinueShopping in
+// app/utils/continue-shopping.shared.js. null = off.
+function cods_continue($raw) {
+    $c = is_array($raw) ? $raw : [];
+    if (($c['enabled'] ?? false) !== true) return null;
+    $int = function ($v, $def, $min, $max) { return is_numeric($v) ? max($min, min($max, (int)round((float)$v))) : $def; };
+    $url = trim((string)($c['url'] ?? ''));
+    $urlOk = strlen($url) <= 300 && (preg_match('#^/(?!/)[^\s<>"\'\\\\]*$#', $url) || preg_match('#^https://[^\s<>"\'\\\\]+$#i', $url));
+    return [
+        'enabled' => true,
+        'text' => cods_text($c['text'] ?? '', 'Continue shopping', 40),
+        'placement' => cods_enum($c['placement'] ?? '', ['above', 'below'], 'below'),
+        'style' => cods_enum($c['style'] ?? '', ['outline', 'filled', 'link'], 'outline'),
+        'bg' => cods_hex($c['bg'] ?? '', '#111827'),
+        'color' => cods_hex($c['color'] ?? '', '#ffffff'),
+        'fontSize' => $int($c['fontSize'] ?? null, 14, 11, 20),
+        'radius' => $int($c['radius'] ?? null, 8, 0, 40),
+        'paddingY' => $int($c['paddingY'] ?? null, 12, 4, 24),
+        'action' => cods_enum($c['action'] ?? '', ['close', 'link'], 'close'),
+        'url' => $url !== '' && $urlOk ? $url : '',
+    ];
+}
+
 /**
  * Product page payment selector (Pay Online / Cash on Delivery). Mirrors
  * sanitizeProductPayment in app/utils/product-payment.shared.js. null = off.
@@ -403,6 +427,8 @@ if ($action === 'config') {
         'drawerSelector' => cods_selector($s['drawerSelector'] ?? ''),
         // Text for the theme drawer's Checkout button; may hold price tags. '' = the theme's.
         'drawerCheckoutText' => cods_text($s['drawerCheckoutText'] ?? '', '', 60),
+        // Continue shopping next to Pay now + COD in the drawer; null = off.
+        'drawerContinue' => cods_continue($s['drawerContinue'] ?? null),
         // The fee actually charged (0 while the fee switch is off).
         'codFee' => $feeOn ? cods_num($s['codFee'] ?? 0) : 0,
         // From codFeePercentFrom on, the fee is codFeePercent % of the order

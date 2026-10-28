@@ -361,11 +361,29 @@ for (const behavior of ['replace', 'hide']) {
   });
   check('checkout button preview: text size and height follow the settings (scaled like the rest of the preview)', cbPrev && cbPrev.fs === '16.5px' && cbPrev.pt === '15px', JSON.stringify(cbPrev));
 
+  // Continue shopping: off by default, then on above Checkout with its own text and style.
+  const contPrev = () => ed.evaluate(() => {
+    const all = [...document.querySelectorAll('.bxcd-root button')];
+    const cont = all.find((x) => x.textContent.trim() === 'Back to shop');
+    const co = all.find((x) => /→/.test(x.textContent));
+    return cont && co ? { above: cont.getBoundingClientRect().bottom <= co.getBoundingClientRect().top, filled: getComputedStyle(cont).backgroundColor } : null;
+  });
+  check('continue shopping: off by default in the Cart Editor preview', (await contPrev()) === null);
+  await ed.getByLabel('Show a "Continue shopping" button').check();
+  await ed.getByLabel('Button text', { exact: true }).fill('Back to shop');
+  await ed.getByLabel('Placement').selectOption('above');
+  await ed.getByLabel('Style').selectOption('filled');
+  await ed.waitForTimeout(250);
+  const cont = await contPrev();
+  check('continue shopping preview: above Checkout, filled, the merchant\'s text', cont && cont.above && cont.filled === 'rgb(17, 24, 39)', JSON.stringify(cont));
+
   await ed.getByRole('button', { name: 'Save', exact: true }).click();
   await ed.waitForTimeout(800);
   const body = (p) => saves.find((s) => s.path === p)?.body || {};
   const cbSaved = JSON.parse((await ed.evaluate(() => window.__LEGACY__))?.checkout_button_style || '{}');
   check('save: checkout button text size and padding go to the storefront blob', cbSaved.fontSize === 19 && cbSaved.paddingY === 22, JSON.stringify(cbSaved));
+  const csSaved = cbSaved.continueShopping || {};
+  check('save: Continue shopping goes to the storefront blob', csSaved.enabled === true && csSaved.text === 'Back to shop' && csSaved.placement === 'above' && csSaved.style === 'filled', JSON.stringify(csSaved));
   const c = body('/api/cart-drawer-config');
   check('save: messages, rotation and the typed colour go to /api/cart-drawer-config',
     JSON.stringify(c.announcement_messages) === '["Free shipping today","Sale ends Sunday"]' && c.announcement_text === 'Free shipping today' && c.announcement_auto_rotate === 1 && c.announcement_show_arrows === 1 && c.announcement_bg_color === '#aabbcc',

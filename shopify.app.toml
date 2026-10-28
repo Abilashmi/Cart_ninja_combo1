@@ -1,82 +1,77 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-
+ 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Brix"
-application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
+application_url = "https://cartdrawer.fly.dev"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = false
-
+ 
 [webhooks]
 api_version = "2026-04"
- 
   [[webhooks.subscriptions]]
-  
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "app_subscriptions/update" ]
   uri = "/webhooks/app_subscriptions_update"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "app_purchases_one_time/update" ]
   uri = "/webhooks/app_purchases_one_time_update"
-
+ 
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "/webhooks/compliance"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "orders/paid" ]
   uri = "/webhooks/orders/paid"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
   uri = "/webhooks/orders/create"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "orders/updated" ]
   uri = "/webhooks/orders/updated"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "orders/cancelled" ]
   uri = "/webhooks/orders/cancelled"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "refunds/create" ]
   uri = "/webhooks/refunds/create"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "carts/create" ]
   uri = "/webhooks/carts/create"
-
+ 
   [[webhooks.subscriptions]]
   topics = [ "carts/update" ]
   uri = "/webhooks/carts/update"
-
+ 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_discounts,write_discounts,read_products,read_online_store_pages,write_online_store_pages,read_themes,read_orders,write_draft_orders"
-
+ 
 [auth]
 redirect_urls = [
   "https://cartdrawer.fly.dev/auth/callback",
   "https://cartdrawer.fly.dev/auth/shopify/callback",
   "https://cartdrawer.fly.dev/api/auth/callback"
 ]
-
+ 
 [app_proxy]
-
+ 
 url ="https://int.thebrix.io"
 prefix = "apps"
 subpath = "cart-app"
-
-
-
  

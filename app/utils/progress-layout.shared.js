@@ -57,7 +57,7 @@ function ccProgressFill(value, targets, positions) {
 // is dropped when the amount already starts with it (it showed "₹₹2,524.00").
 function ccFillMoneyTag(text, tag, value) {
   var str = String(value);
-  var sign = (str.match(/^[^\d\s.,-]+/) || [''])[0];
+  var sign = (str.match(/^[^\d\s,-]+/) || [''])[0]; // "Rs." keeps its dot
   var out = String(text);
   if (sign) out = out.split(sign + ' ' + tag).join(tag).split(sign + tag).join(tag);
   return out.split(tag).join(str);
