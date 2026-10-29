@@ -414,6 +414,46 @@ await check('banner width: full / same as Add to cart / custom; preview follows;
   await context.close();
 });
 
+await check("Shopify's save bar: opens on an edit; its Discard rebuilds the page from the saved settings, no reload", async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  // App Bridge stand-in: window.shopify.saveBar + a <ui-save-bar> with show()/hide().
+  await context.addInitScript(() => {
+    window.shopify = { saveBar: { show() {}, hide() {} }, toast: { show() {} } };
+    customElements.define('ui-save-bar', class extends HTMLElement {
+      show() { this.setAttribute('data-shown', ''); }
+      hide() { this.removeAttribute('data-shown'); }
+    });
+  });
+  const page = await context.newPage();
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.addInitScript((d) => { window.__DATA__ = { page: d }; }, pageData());
+  await page.route('http://harness.test/**', async (route) => {
+    const url = new URL(route.request().url());
+    const file = path.join(dist, url.pathname === '/' ? 'index.html' : url.pathname);
+    if (fs.existsSync(file) && fs.statSync(file).isFile()) return route.fulfill({ contentType: MIME[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
+    return route.fulfill({ status: 404, body: '' });
+  });
+  await page.goto('http://harness.test/');
+  await page.getByRole('button', { name: 'Layout' }).waitFor();
+  const shown = () => page.evaluate(() => document.querySelector('ui-save-bar')?.hasAttribute('data-shown') ?? null);
+  await page.getByRole('button', { name: 'Layout' }).click();
+  const before = await page.getByLabel('Banner layout').inputValue();
+  assert.equal(await shown(), false, `hidden before any edit (errors: ${errs.join(' | ')})`);
+  await page.getByLabel('Banner layout').selectOption(before === 'grid' ? 'list' : 'grid');
+  await page.waitForTimeout(200);
+  assert.equal(await shown(), true, 'shown after an edit');
+  await page.evaluate(() => { window.__sameDocument = true; });
+  await page.locator('ui-save-bar button', { hasText: 'Discard' }).click();
+  await page.waitForTimeout(300);
+  assert.equal(await shown(), false, 'hidden after Discard');
+  assert.equal(await page.evaluate(() => window.__sameDocument === true), true, 'no reload');
+  if (!(await page.getByLabel('Banner layout').count())) await page.getByRole('button', { name: 'Layout' }).click();
+  assert.equal(await page.getByLabel('Banner layout').inputValue(), before, 'layout back to the saved one');
+  assert.deepEqual(errs, []);
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

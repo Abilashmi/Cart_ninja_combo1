@@ -554,7 +554,7 @@ export default function AppDiscounts() {
             action={{ content: "Create Coupon", onAction: () => navigate("/app/discounts/create") }}
             image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
           >
-            <p>Start offering discounts to boost conversions and drive more sales.</p>
+            <p>Create your first discount to offer it in the cart drawer and coupon banner.</p>
           </EmptyState>
         </Card>
       </Page>

@@ -225,7 +225,7 @@ export function CartEditorSidebar({ onDiscard }) {
 
       {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ── */}
       <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5' }}>
-        <BrixBar size="sm" floating={false} discoveryHint />
+        <BrixBar size="sm" floating={false} />
       </div>
     </div>
   );

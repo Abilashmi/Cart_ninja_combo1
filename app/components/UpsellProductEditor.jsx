@@ -59,7 +59,7 @@ export default function UpsellProductEditor({
           <InlineStack align="space-between" blockAlign="center">
             <BlockStack gap="100">
               <Text variant="headingLg" as="h1">Upsell Products</Text>
-              <Text variant="bodySm" tone="subdued">Boost sales with smart product recommendations.</Text>
+              <Text variant="bodySm" tone="subdued">Recommend products that go with what is in the cart.</Text>
             </BlockStack>
             <Button variant="primary" onClick={handleSaveUpsellRules} loading={upsellSaving}>Save Upsell Config</Button>
           </InlineStack>

@@ -1,7 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { getDb } from '../services/db.server';
 import { checkComboPlanGate, createComboTemplate } from '../services/combo-templates.server';
-import { ensureComboForgeTemplate } from '../services/combo-page.server';
 import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
 import { boxPricingFeature, fixedMeasureFor, isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
@@ -70,20 +69,13 @@ function buildPreviewUrl(shop, handle, isPublished) {
 
 // ── Shopify page helpers ───────────────────────────────────────────────────────
 
-// namespace/key here must match what the provisioned section reads via
-// `page.metafields.combo_forge.template_id` (see combo-page.server.js's
-// ensureComboForgeTemplate / comboForgeSectionLiquid).
-function comboForgePageFields(shop, templateId, hasGuaranteedTemplate) {
-  const fields = { body: buildPageBody(shop, templateId) };
-  if (hasGuaranteedTemplate) {
-    fields.templateSuffix = 'combo-forge';
-    fields.metafields = [{ namespace: 'combo_forge', key: 'template_id', type: 'number_integer', value: String(templateId) }];
-  }
-  return fields;
+// The page's own body holds the combo root; the app embed's combo-page.js
+// draws it (the app writes no theme files, see combo-page.server.js).
+function comboForgePageFields(shop, templateId) {
+  return { body: buildPageBody(shop, templateId) };
 }
 
 async function createShopifyPage(admin, title, handle, shop, templateId) {
-  const hasGuaranteedTemplate = await ensureComboForgeTemplate(admin);
   const res = await admin.graphql(`#graphql
     mutation pageCreate($page: PageCreateInput!) {
       pageCreate(page: $page) {
@@ -91,7 +83,7 @@ async function createShopifyPage(admin, title, handle, shop, templateId) {
         userErrors { field message }
       }
     }
-  `, { variables: { page: { title, handle, ...comboForgePageFields(shop, templateId, hasGuaranteedTemplate) } } });
+  `, { variables: { page: { title, handle, ...comboForgePageFields(shop, templateId) } } });
   const json = await res.json();
   if (json.data?.pageCreate?.userErrors?.length > 0) {
     throw new Error(json.data.pageCreate.userErrors.map(e => e.message).join('; '));
@@ -184,10 +176,9 @@ export async function action({ request }) {
         if (existingPage) {
           await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [existingPage.handle, existingPage.id, Number(id)]);
           try {
-            const hasGuaranteedTemplate = await ensureComboForgeTemplate(admin);
             await admin.graphql(`#graphql
               mutation pageUpdate($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }
-            `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id, hasGuaranteedTemplate) } });
+            `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id) } });
           } catch (e) {
             // Intentionally non-fatal: the existing page is already usable at
             // its current handle/body even if this best-effort sync of the

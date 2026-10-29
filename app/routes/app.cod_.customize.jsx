@@ -44,6 +44,7 @@ import {
   toForm, toSettings, formErrors, secretsPatch, PB_SIZES, HEX, RADII,
 } from '../components/cod/codSettingsForm';
 import ButtonDesignEditor from '../components/cod/ButtonDesignEditor';
+import AppSaveBar from '../components/shared/AppSaveBar';
 import { ContinueShoppingFields } from '../components/shared/ContinueShoppingFields';
 import { ColorField } from '../components/sections/ColorField';
 import { SliderField } from '../components/shared/SliderField';
@@ -1236,6 +1237,7 @@ export default function CodCustomizePage() {
 
   return (
     <Frame>
+      <AppSaveBar id="cod-customize-save-bar" open={dirty} onSave={save} onDiscard={discard} saving={saving} />
       <style>{COD_ADMIN_CSS + COD_SETTINGS_CSS + COD_CUSTOMIZE_CSS + PAY_PREVIEW_CSS + SHIP_CSS}</style>
       {toast && <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} />}
       <div className="bcz">

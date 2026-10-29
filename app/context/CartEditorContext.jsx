@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
@@ -659,6 +659,18 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     setState(prev => ({ ...prev, isDirty: false }));
   }, []);
 
+  // The editor as last loaded or saved: kept while nothing is unsaved (so
+  // hydration and AI agent updates, which don't mark it dirty, count as
+  // saved), frozen once the merchant edits. Shopify's save bar Discard puts
+  // it back (CartEditorPage); reloading the iframe isn't safe in the admin.
+  const savedStateRef = useRef(state);
+  useEffect(() => {
+    if (!state.isDirty) savedStateRef.current = state;
+  }, [state]);
+  const discardChanges = useCallback(() => {
+    setState({ ...savedStateRef.current, isDirty: false });
+  }, []);
+
   const resetAll = useCallback(() => {
     setState(defaultCartEditorState);
   }, []);
@@ -718,6 +730,7 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     removeUpsellRule,
     updateUpsellRule,
     resetDirty,
+    discardChanges,
     resetAll,
   };
 

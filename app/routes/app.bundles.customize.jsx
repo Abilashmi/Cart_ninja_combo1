@@ -57,6 +57,7 @@ import { isClassicLayout } from '../utils/combo-design.shared.js';
 import { PLANS, getMinPlanForFeature } from '../config/plans';
 import { QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, measureOf, boxMessage, computeBox, decimalsFor, defaultWeightPricing, fillMessage, formatItems, formatWeight, isWeightCombo, normalizeWeightPricing, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { comboAlign } from '../utils/combo-align.shared.js';
+import AppSaveBar from '../components/shared/AppSaveBar';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →)
 // — 1em/currentColor so each inherits the calling element's own font-size/
@@ -1795,7 +1796,13 @@ const TEMPLATE_CATALOGUE = [
   },
 ];
 
+// Shopify's save bar Discard rebuilds the page from its loaded settings (reloaded by React Router after every save); reloading the admin iframe isn't safe.
 export default function Customize() {
+  const [resetKey, setResetKey] = useState(0);
+  return <CustomizeEditor key={resetKey} onDiscard={() => setResetKey((k) => k + 1)} />;
+}
+
+function CustomizeEditor({ onDiscard }) {
   const shopify = useAppBridge();
   const { symbol: currencySymbol } = useCurrency();
   const { canPublishFeature } = usePlan();
@@ -3557,6 +3564,8 @@ export default function Customize() {
             </FormLayout>
           </Modal.Section>
         </Modal>
+      {/* Shopify's save bar while an existing template has unsaved changes; Save opens the Save Template dialog. */}
+      <AppSaveBar id="combo-builder-save-bar" open={saveStatus === 'unsaved' && !saveModalOpen} onSave={handleSaveClick} onDiscard={() => { setSaveStatus('saved'); onDiscard(); }} />
       <CartDrawerEmbedModal
         open={embedModal.open}
         checked={embedModal.checked}

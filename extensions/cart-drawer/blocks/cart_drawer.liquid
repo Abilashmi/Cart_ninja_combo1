@@ -6,20 +6,22 @@
   {%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
   <script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
   <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
-  <!-- BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
+  {%- comment -%} BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
        product pages and combo pages. Shows nothing unless the merchant turned
        COD on in BRIX. The browser only talks to the PHP backend (data-php),
        which relays order placement to the BRIX app server. Must load before
-       cart_drawer_inline.js. -->
+       cart_drawer_inline.js. {%- endcomment -%}
   <script src="{{ 'brix_cod.js' | asset_url }}" data-brix-logo="{{ 'brix_logo.png' | asset_url }}" data-php="https://int.thebrix.io" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"{% if product %} data-product-collections="{{ product.collections | map: 'id' | join: ',' }}"{% endif %} defer></script>
   <script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>
 
-  <!-- Combo pages: auto-detects /pages/* URLs that match a published combo
-       template and injects the product picker into the page's main content,
-       since Shopify Pages don't render Liquid in their own body content and
-       writing a dedicated theme template requires a Shopify exemption we
-       don't have yet (see app/services/combo-page.server.js). -->
+  {%- comment -%} Combo pages: auto-detects /pages/* URLs that match a published combo
+       template and injects the product picker into the page's main content
+       (the app writes no theme files, see app/services/combo-page.server.js).
+       Loaded only on Shopify Pages: other pages used to download it for
+       nothing (Built for Shopify storefront speed). {%- endcomment -%}
+  {%- if request.page_type == 'page' -%}
   <script src="https://cartdrawer.fly.dev/combo-page.js" defer></script>
+  {%- endif -%}
 {% endif %}
 {% schema %}
 {

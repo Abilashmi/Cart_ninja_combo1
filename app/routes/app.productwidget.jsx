@@ -26,6 +26,7 @@ import { ColorField } from "../components/shared/ColorField";
 import { couponIconHtml, couponSubtitleStyle } from "../utils/coupon-style.shared.js";
 import { offerLadder, isLadderId, newLadderId, NEW_LADDER_STYLE, LADDER_STYLE_KEYS } from "../utils/offer-ladder.shared.js";
 import { OfferLadderFields, OfferLadderPreview } from "../components/coupon-banner/OfferLadder";
+import AppSaveBar from "../components/shared/AppSaveBar";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -288,10 +289,10 @@ const TEMPLATES = [
 ];
 
 const SECTION_TIPS = {
-    coupon:  "Displaying a coupon directly on the product page increases add-to-cart rates by up to 28% — shoppers act sooner when the deal is visible before checkout.",
-    text:    "Clear, benefit-led headings outperform vague ones — \"Save 10% today\" converts up to 2× better than just showing the coupon code.",
-    design:  "High-contrast coupon widget designs see 15–25% more coupon code copies — make your offer impossible to miss.",
-    timer:   "Countdown timers on product pages boost purchase intent by up to 65% — the visible deadline gives shoppers the nudge they need to act right now.",
+    coupon:  "Showing the coupon on the product page lets shoppers see the deal before checkout.",
+    text:    "Say what the shopper gets, like \"Save 10% today\", not just the code.",
+    design:  "Pick colours that stand out from the page so the offer is easy to spot.",
+    timer:   "Use a countdown only for a real deadline, so the time shown is true.",
 };
 
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
@@ -742,7 +743,13 @@ function HeadingFields({ label, name, placeholder, helpText, value, onChange }) 
 // The storefront's heading look (coupon-slider-render.liquid headingHtml).
 const headingStyle = (h) => ({ textAlign: h.alignment, color: h.textColor, fontSize: `${h.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2 });
 
+// Shopify's save bar Discard rebuilds the page from its loaded settings (reloaded by React Router after every save); reloading the admin iframe isn't safe.
 export default function ProductWidgetPage() {
+  const [resetKey, setResetKey] = useState(0);
+  return <ProductWidgetEditor key={resetKey} onDiscard={() => setResetKey((k) => k + 1)} />;
+}
+
+function ProductWidgetEditor({ onDiscard }) {
     const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
     const customCouponFetcher = useFetcher();
@@ -1093,6 +1100,7 @@ export default function ProductWidgetPage() {
 
     return (
         <Frame>
+            <AppSaveBar id="coupon-banner-save-bar" open={hasChanges} onSave={handleSave} onDiscard={() => { setHasChanges(false); onDiscard(); }} saving={isSaving} />
             {toastActive && <Toast content="Settings saved!" onDismiss={() => setToastActive(false)} />}
             <CustomCouponModal
                 open={customCouponOpen}
