@@ -12,9 +12,9 @@
 
 const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro'];
 
-// Every plan has every feature; plans differ by orders a month (orderCap:
-// past it Free pauses the storefront widgets, a monthly paid plan bills
-// overageRate per extra order, a yearly one pauses; Pro has no cap yet).
+// Every plan has every feature; plans differ by orders a month. orderCap is
+// a hard limit: past it the storefront widgets pause until next month. No
+// plan bills extra orders (overageRate 0 everywhere).
 const PLANS = [
     'free' => [
         'key' => 'free',
@@ -29,7 +29,7 @@ const PLANS = [
         'key' => 'lite',
         'label' => 'Lite',
         'orderCap' => 200,
-        'overageRate' => 0.10,
+        'overageRate' => 0.0,
         'aiBrixCredits' => 20,
         'comboTemplateLimit' => null,
         'watermarkRemovable' => true,
@@ -38,7 +38,7 @@ const PLANS = [
         'key' => 'starter',
         'label' => 'Starter',
         'orderCap' => 500,
-        'overageRate' => 0.03,
+        'overageRate' => 0.0,
         'aiBrixCredits' => 30,
         'comboTemplateLimit' => null,
         'watermarkRemovable' => true,
@@ -47,7 +47,7 @@ const PLANS = [
         'key' => 'growth',
         'label' => 'Growth',
         'orderCap' => 1000,
-        'overageRate' => 0.02,
+        'overageRate' => 0.0,
         'aiBrixCredits' => 60,
         'comboTemplateLimit' => null,
         'watermarkRemovable' => true,
@@ -55,7 +55,7 @@ const PLANS = [
     'pro' => [
         'key' => 'pro',
         'label' => 'Pro',
-        'orderCap' => null,
+        'orderCap' => 2000,
         'overageRate' => 0.0,
         'aiBrixCredits' => 90,
         'comboTemplateLimit' => null,

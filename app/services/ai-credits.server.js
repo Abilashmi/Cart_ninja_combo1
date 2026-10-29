@@ -10,12 +10,11 @@ function currentPeriodKey() {
   return `${now.getUTCFullYear()}-${month}`;
 }
 
-// Increments the shop's message count for this period and — once that count
-// passes the plan's monthly cap — bills the overage credit via Shopify usage
-// billing (see chargeAiCreditOverage). Monthly plans are never blocked: past
-// the cap, the shop pays per extra credit at its plan's overage rate. Yearly
-// plans can't be billed usage, so they stop at the cap (allowed: false, no
-// credit used) until next month.
+// Increments the shop's message count for this period. Past the plan's
+// monthly cap, a plan with a credit overage rate billed monthly would pay per
+// extra credit (chargeAiCreditOverage); no plan has one today, so every shop
+// stops at its cap (allowed: false, no credit used) until next month
+// (aiCreditAllowed in config/plans.js).
 export async function checkAndConsumeCredit(shop, admin) {
   const db = getDb();
   await ensurePlanTables(db);

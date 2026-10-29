@@ -29,12 +29,12 @@ test('both files list the same plans in the same order', () => {
   for (const key of PLAN_KEYS) assert.match(php, new RegExp(`'key' => '${key}'`));
 });
 
-test('plans differ by orders: Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000', () => {
+test('plans differ by orders: Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000 (hard limits)', () => {
   assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].price.monthly), [0, 9, 29, 59, 79]);
   assert.deepEqual(PLAN_KEYS.map((k) => getOrderRange(k)), [
     { from: 1, to: 50 }, { from: 51, to: 200 }, { from: 201, to: 500 }, { from: 501, to: 1000 }, { from: 1001, to: 2000 },
   ]);
-  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].orderCap), [50, 200, 500, 1000, null], 'Pro: no cap above 2000 yet');
+  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].orderCap), [50, 200, 500, 1000, 2000], 'the top of each range is the limit');
 });
 
 test('every feature is enabled on every plan, combo templates unlimited', () => {

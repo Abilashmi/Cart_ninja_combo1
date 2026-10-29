@@ -47,17 +47,17 @@ const card = (page, label) => page.locator('div', { has: page.getByRole('heading
 {
   const { page, posts, errors } = await open({ currentPlanKey: 'free', currentInterval: 'monthly', promoTrialDays: 0 });
   const starter = card(page, 'Starter');
-  check('monthly by default: Starter $29 / month with per-order overage', /\$29\s*\/ month/.test(await starter.innerText()) && /201–500 orders \/ month — then \$0\.03\/order/.test(await starter.innerText()));
-  check('monthly: five plans, each with its order range', /Up to 50 orders \/ month — storefront pauses after that/.test(await card(page, 'Free').innerText()) && /\$9\s*\/ month/.test(await card(page, 'Lite').innerText()) && /51–200 orders \/ month — then \$0\.10\/order/.test(await card(page, 'Lite').innerText()));
-  check('monthly: every feature on Free', /Every feature included:/.test(await card(page, 'Free').innerText()) && /Weight Box combos/.test(await card(page, 'Free').innerText()) && !/Try it for free/.test(await page.innerText('body')));
+  check('monthly by default: Starter $29 / month, 201–500 orders, no extra charge', /\$29\s*\/ month/.test(await starter.innerText()) && /201–500 orders \/ month/.test(await starter.innerText()) && /Past 500 orders your storefront features pause until next month\. No extra charges\./.test(await starter.innerText()) && !/\/order|\/credit/.test(await page.innerText('body')));
+  check('monthly: five plans, each with its order range', /Up to 50 orders \/ month/.test(await card(page, 'Free').innerText()) && /\$9\s*\/ month/.test(await card(page, 'Lite').innerText()) && /51–200 orders \/ month/.test(await card(page, 'Lite').innerText()) && /Past 2,000 orders/.test(await card(page, 'Pro').innerText()));
+  check('monthly: every card lists every feature', (await Promise.all(['Free', 'Lite', 'Starter', 'Growth', 'Pro'].map(async (n) => ((t) => /Every feature included:/.test(t) && /Weight Box combos/.test(t) && /COD Checkout/.test(t) && /AI Analytics/.test(t))(await card(page, n).innerText())))).every(Boolean) && !/Try it for free/.test(await page.innerText('body')));
   check('monthly: 14-day trial', /14-day free trial/.test(await page.innerText('body')) && /Upgrade to Starter — 14-day trial/.test(await starter.innerText()));
   await page.getByRole('radio', { name: /Yearly/ }).click();
   const st = await starter.innerText();
   check('yearly: Starter $290 / year, $24.17 a month, 2 months free', /\$290\s*\/ year/.test(st) && /Billed yearly — \$24\.17\/month, 2 months free/.test(st), st.split('\n').slice(0, 8).join(' | '));
-  check('yearly: no per-order charge, the storefront pauses at 500', /201–500 orders \/ month — storefront pauses after that/.test(st) && !/then \$0\.03\/order/.test(st));
+  check('yearly: no per-order charge, the storefront pauses at 500', /201–500 orders \/ month/.test(st) && /Past 500 orders your storefront features pause/.test(st) && !/\/order/.test(st));
   check('yearly: AI BRIX credits without a per-credit charge', /AI BRIX — 30 credits \/ month$/m.test(st));
   const growth = await card(page, 'Growth').innerText();
-  check('yearly: Growth $590 / year, 501–1,000 orders then pause', /\$590\s*\/ year/.test(growth) && /501–1,000 orders \/ month — storefront pauses after that/.test(growth));
+  check('yearly: Growth $590 / year, 501–1,000 orders then pause', /\$590\s*\/ year/.test(growth) && /501–1,000 orders \/ month/.test(growth) && /Past 1,000 orders/.test(growth));
   check('yearly: Pro $790 / year, 1,001–2,000 orders', /\$790\s*\/ year/.test(await card(page, 'Pro').innerText()) && /1,001–2,000 orders \/ month/.test(await card(page, 'Pro').innerText()));
   check('yearly: Free stays free', /\$0\s*\/ month/.test(await card(page, 'Free').innerText()) && /Always free/.test(await card(page, 'Free').innerText()));
   check('yearly: the footer explains the yearly limits', /Yearly plans include a 14-day free trial/.test(await page.innerText('body')));
@@ -84,8 +84,8 @@ const card = (page, label) => page.locator('div', { has: page.getByRole('heading
   if (await dialog.count()) await dialog.getByRole('button', { name: 'Continue' }).click();
   await page.waitForTimeout(400);
   check('switching to monthly posts EVERY_30_DAYS for Growth', posts.at(-1)?.planKey === 'growth' && posts.at(-1)?.interval === 'EVERY_30_DAYS', JSON.stringify(posts));
-  await card(page, 'Free').getByRole('button', { name: 'Downgrade to Free' }).click();
-  check('yearly shop: downgrading says the paid year is kept', /You keep your yearly plan until the year you paid for ends/.test(await page.getByRole('dialog').innerText()));
+  const freeBtn = card(page, 'Free').getByRole('button', { name: 'Free after your paid year' });
+  check('yearly shop: Free waits for the paid year to end (never cancelled early)', (await freeBtn.count()) === 1 && await freeBtn.isDisabled());
   check('no page errors', errors.length === 0, errors.join(' | '));
   await page.close();
 }

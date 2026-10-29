@@ -10,10 +10,12 @@ export const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro'];
 // the ones a BRIX feature touched; see countBillableOrder in
 // services/billable-orders.server.js), AI BRIX credits and the watermark.
 // `ordersUpTo` is the top of the plan's order range on the plan page
-// (Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000);
-// `orderCap` is what's enforced: past it Free pauses the storefront widgets,
-// a monthly paid plan bills `overageRate` per extra order (a yearly one
-// pauses), and Pro (null) has no cap yet: pricing above 2000 isn't decided.
+// (Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000)
+// and `orderCap` is the hard limit: past it the storefront features pause
+// until next month. No extra charges of any kind: `overageRate` (per order)
+// and `aiBrixOverageRate` (per AI credit) are 0 on every plan, so AI BRIX
+// stops at the month's credits too. The overage code stays, driven by these
+// rates, in case a plan bills usage again.
 export const PLANS = {
   free: {
     key: 'free',
@@ -25,7 +27,7 @@ export const PLANS = {
     orderCap: 50,
     overageRate: 0,
     aiBrixCredits: 10,
-    aiBrixOverageRate: 0.10,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: false,
   },
@@ -37,9 +39,9 @@ export const PLANS = {
     rank: 1,
     ordersUpTo: 200,
     orderCap: 200,
-    overageRate: 0.10,
+    overageRate: 0,
     aiBrixCredits: 20,
-    aiBrixOverageRate: 0.05,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true,
   },
@@ -51,9 +53,9 @@ export const PLANS = {
     rank: 2,
     ordersUpTo: 500,
     orderCap: 500,
-    overageRate: 0.03,
+    overageRate: 0,
     aiBrixCredits: 30,
-    aiBrixOverageRate: 0.03,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true,
   },
@@ -65,9 +67,9 @@ export const PLANS = {
     rank: 3,
     ordersUpTo: 1000,
     orderCap: 1000,
-    overageRate: 0.02,
+    overageRate: 0,
     aiBrixCredits: 60,
-    aiBrixOverageRate: 0.02,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true,
   },
@@ -78,10 +80,10 @@ export const PLANS = {
     price: { monthly: 79, annual: 790 },
     rank: 4,
     ordersUpTo: 2000,
-    orderCap: null,
+    orderCap: 2000,
     overageRate: 0,
     aiBrixCredits: 90,
-    aiBrixOverageRate: 0.01,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true,
   },
@@ -204,10 +206,11 @@ export function dayOverageOrders(monthToDate, dayOrders, orderCap) {
 
 // ── Billing interval (monthly | annual) ──
 // Paid plans can be billed every 30 days or yearly (price.annual = 10 ×
-// monthly, two months free), both with the same 14-day trial. Shopify doesn't allow usage charges on a yearly subscription, so
-// a yearly plan can't bill per-order or AI BRIX overage: past the monthly
-// order cap its storefront widgets pause until next month (like Free; Pro has
-// no cap), and AI BRIX stops at the monthly credits. Mirrored by
+// monthly, two months free), both with the same 14-day trial. Shopify doesn't
+// allow usage charges on a yearly subscription, so even a plan with an
+// overage rate couldn't bill one yearly. Today no plan bills usage: past the
+// monthly order cap every plan's storefront widgets pause until next month,
+// and AI BRIX stops at the monthly credits. Mirrored by
 // plan_order_cap_exceeded in php_backend/plan_helpers.php.
 export const BILLING_INTERVALS = ['monthly', 'annual'];
 export const TRIAL_DAYS = 14;
@@ -230,9 +233,10 @@ export function orderCapBehavior(planKey, interval) {
 }
 
 // Whether one more AI BRIX credit may be used: past the monthly credits only
-// plans that bill usage keep going (charged per credit).
+// a plan that bills usage (a credit rate, billed monthly) keeps going.
 export function aiCreditAllowed(planKey, interval, creditsUsed) {
-  return billsUsage(interval) || creditsUsed < resolvePlan(planKey).aiBrixCredits;
+  const plan = resolvePlan(planKey);
+  return (plan.aiBrixOverageRate > 0 && billsUsage(interval)) || creditsUsed < plan.aiBrixCredits;
 }
 
 // Trial length for a new subscription, monthly or yearly: a redeemed promo

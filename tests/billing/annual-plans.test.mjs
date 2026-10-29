@@ -23,14 +23,14 @@ test('yearly price is 10 × monthly (two months free) on every paid plan', () =>
   assert.equal(PLANS.growth.orderCap, 1000, 'Growth: 1000 orders a month');
 });
 
-test('order cap: monthly Lite / Starter / Growth bill overage, yearly ones pause, Free pauses, Pro has none', () => {
-  for (const key of ['lite', 'starter', 'growth']) {
-    assert.equal(orderCapBehavior(key, 'monthly'), 'charge', key);
+test('no extra charges: every plan, monthly or yearly, pauses at its monthly orders', () => {
+  for (const key of ['free', 'lite', 'starter', 'growth', 'pro']) {
+    assert.equal(PLANS[key].overageRate, 0, `${key}: no per-order charge`);
+    assert.equal(PLANS[key].aiBrixOverageRate, 0, `${key}: no per-credit charge`);
+    assert.equal(orderCapBehavior(key, 'monthly'), 'pause', key);
     assert.equal(orderCapBehavior(key, 'annual'), 'pause', key);
   }
-  assert.equal(orderCapBehavior('free', 'monthly'), 'pause', 'Free pauses at 50 orders');
-  assert.equal(orderCapBehavior('pro', 'annual'), 'none');
-  assert.equal(orderCapBehavior('pro', 'monthly'), 'none');
+  assert.deepEqual(['free', 'lite', 'starter', 'growth', 'pro'].map((k) => PLANS[k].orderCap), [50, 200, 500, 1000, 2000]);
 });
 
 test('overage is per month: a day bills only the orders that took the month past the cap', () => {
@@ -47,12 +47,14 @@ test('overage is per month: a day bills only the orders that took the month past
   assert.equal(billed, 900 - 500);
 });
 
-test('AI BRIX: monthly keeps going past the credits (charged), yearly stops at them', () => {
-  const cap = PLANS.starter.aiBrixCredits;
-  assert.equal(aiCreditAllowed('starter', 'monthly', cap + 5), true);
-  assert.equal(aiCreditAllowed('starter', 'annual', cap - 1), true, 'the last credit');
-  assert.equal(aiCreditAllowed('starter', 'annual', cap), false, 'all used');
-  assert.equal(aiCreditAllowed('pro', 'annual', PLANS.pro.aiBrixCredits), false);
+test('AI BRIX: every plan stops at its monthly credits, monthly or yearly', () => {
+  for (const key of ['free', 'lite', 'starter', 'growth', 'pro']) {
+    const cap = PLANS[key].aiBrixCredits;
+    for (const interval of ['monthly', 'annual']) {
+      assert.equal(aiCreditAllowed(key, interval, cap - 1), true, `${key} ${interval}: the last credit`);
+      assert.equal(aiCreditAllowed(key, interval, cap), false, `${key} ${interval}: all used`);
+    }
+  }
 });
 
 test('trial: 14 days, monthly or yearly; a promo code replaces it', () => {

@@ -268,12 +268,12 @@ export default function BillingDashboard() {
         <Layout.Section>
           <Card padding="600">
             <BlockStack gap="300">
-              <Text variant="headingMd" fontWeight="bold">Usage-Based Billing</Text>
+              <Text variant="headingMd" fontWeight="bold">{today.charges_overage === false ? 'Monthly Limits' : 'Usage-Based Billing'}</Text>
               <Text tone="subdued">
                 {unlimited
                   ? `Your ${plan.label} plan has no monthly order limit — no overage charges.`
                   : today.charges_overage === false
-                    ? `Your ${plan.label} plan includes ${freeOrders} orders per month (every order your store gets, COD included). Past that, storefront features pause until next month.`
+                    ? `Your ${plan.label} plan includes ${freeOrders} orders and ${plan.aiBrixCredits} AI BRIX credits per month (every order your store gets, COD included). Past that, storefront features pause and AI BRIX stops until next month — there are no extra charges.`
                     : `Your ${plan.label} plan includes ${freeOrders} orders per month (every order your store gets, COD included). Each additional order that month is charged at $${plan.overageRate.toFixed(2)}. Usage charges are recorded automatically and added to your next invoice — no separate approval needed.`}
               </Text>
             </BlockStack>

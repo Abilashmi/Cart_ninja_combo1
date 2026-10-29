@@ -79,10 +79,9 @@ function plan_billing_interval($pdo, $shopDomain) {
 
 /**
  * Whether this shop's storefront widgets are paused for the rest of the
- * month: its plan pauses at the cap (Free, or a capped plan billed yearly,
- * since Shopify allows no usage charges on a yearly subscription) and the
- * month's orders have reached it. A monthly paid plan bills per extra order
- * instead (app/services/billing.server.js) and Pro has no cap. Orders =
+ * month: the month's orders have reached the plan's cap. Every plan pauses
+ * there today (no overage rates); a plan with an overage rate, billed
+ * monthly, would bill extra orders instead (app/services/billing.server.js). Orders =
  * every paid order of the store this calendar month (billable_order_count,
  * services/billable-orders.server.js). Every storefront endpoint checks it:
  * cart drawer (upsells inside it), FBT, coupon slider, COD, Packs (combo
