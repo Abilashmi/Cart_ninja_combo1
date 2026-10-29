@@ -15,7 +15,7 @@ import { PLANS, PLAN_KEYS, FEATURES, trialDaysFor, getOrderRange } from "../conf
 // combo_tier_pricing only keeps tiers working on older Classic combos; not a selling point.
 const FEATURE_ROWS = Object.keys(FEATURES).filter((key) => key !== 'combo_tier_pricing');
 
-// Trial length: 14 days, monthly or yearly; a redeemed promo code
+// Trial length: 7 days (TRIAL_DAYS), monthly or yearly; a redeemed promo code
 // overrides it with whatever that code was configured with (trialDaysFor in
 // app/config/plans.js).
 
@@ -224,10 +224,9 @@ export async function action({ request }) {
     // charges; past its limits the storefront pauses and AI BRIX stops,
     // orderCapBehavior / aiCreditAllowed in config/plans.js).
 
-    // Every merchant gets the standard trial by default: 14 days monthly, 60
-    // days yearly. A redeemed promo code overrides it with whatever that code
-    // was configured with (e.g. 30 days; on yearly only when longer) — see
-    // app/services/promo.server.js. No new trial while replacing a yearly
+    // Every merchant gets the standard trial by default: 7 days, monthly or
+    // yearly (TRIAL_DAYS). A redeemed promo code overrides it with whatever that
+    // code was configured with (e.g. 30 days) — see app/services/promo.server.js. No new trial while replacing a yearly
     // plan the merchant is already paying for.
     const promoTrialDays = await getPromoTrialDays(shop);
     const trialDays = replacingAnnual ? 0 : trialDaysFor(promoTrialDays);
@@ -307,12 +306,20 @@ function featureRowLabel(featureKey, planKey, state) {
     return FEATURES[featureKey].label + featureLabelSuffix(state);
 }
 
-// The plan's monthly orders on its card: "51–200 orders / month". The top of
+// The plan's monthly orders on its card: "51–250 orders / month". The top of
 // the range is a hard limit (no extra charges); the card says so below it.
+// Enterprise has no top.
 function ordersLine(planKey) {
     const { from, to } = getOrderRange(planKey);
+    if (to === null) return 'Unlimited orders';
     const range = from <= 1 ? `Up to ${to.toLocaleString('en-US')}` : `${from.toLocaleString('en-US')}–${to.toLocaleString('en-US')}`;
     return `${range} orders / month`;
+}
+
+function limitLine(planKey) {
+    const cap = PLANS[planKey].orderCap;
+    if (cap === null) return 'No order limit — your storefront features never pause. No extra charges.';
+    return `Past ${cap.toLocaleString('en-US')} orders your storefront features pause until next month. No extra charges.`;
 }
 
 const CARD_BADGES = {
@@ -320,13 +327,15 @@ const CARD_BADGES = {
     lite: 'Your First Sales',
     starter: 'Most Popular',
     growth: 'Growing Fast',
+    scale: 'High Volume',
+    enterprise: 'No Limits',
     pro: 'Best Value',
 };
 
 export default function SubscribePage() {
     const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays } = useLoaderData();
     // Monthly or yearly prices on the cards (yearly = 10 × monthly, same
-    // 14-day trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
+    // 7-day trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
     const [billing, setBilling] = useState(currentInterval === 'annual' ? 'annual' : 'monthly');
     const isYearly = billing === 'annual';
     const intervalParam = isYearly ? 'ANNUAL' : 'EVERY_30_DAYS';
@@ -484,7 +493,7 @@ export default function SubscribePage() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'stretch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(max(230px, calc((100% - 60px) / 4)), 1fr))', gap: 20, alignItems: 'stretch' }}>
                     {PLAN_KEYS.map((planKey) => {
                         const p = PLANS[planKey];
                         const isCurrent = isCurrentChoice(planKey);
@@ -542,7 +551,7 @@ export default function SubscribePage() {
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 20 }}>
                                         <Text as="p" variant="bodyXs" tone="subdued">
-                                            {`Past ${PLANS[planKey].orderCap.toLocaleString('en-US')} orders your storefront features pause until next month. No extra charges.`}
+                                            {limitLine(planKey)}
                                         </Text>
                                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
                                             <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>

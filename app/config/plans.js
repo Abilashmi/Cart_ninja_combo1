@@ -3,16 +3,16 @@
 // To add a plan or feature: edit this file only — do not hardcode plan
 // names or feature availability anywhere else in the app.
 
-export const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro'];
+export const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise'];
 
 // Every plan has every feature: plans differ only in how many orders a month
 // they include (orders = every paid order the store gets that month, not only
 // the ones a BRIX feature touched; see countBillableOrder in
 // services/billable-orders.server.js), AI BRIX credits and the watermark.
 // `ordersUpTo` is the top of the plan's order range on the plan page
-// (Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000)
-// and `orderCap` is the hard limit: past it the storefront features pause
-// until next month. No extra charges of any kind: `overageRate` (per order)
+// (Free 1-50, Lite 51-250, Starter 251-500, Growth 501-2000, Pro 2001-5000,
+// Scale 5001-10000, Enterprise no top) and `orderCap` is the hard limit: past
+// it the storefront features pause until next month (Enterprise: null, never). No extra charges of any kind: `overageRate` (per order)
 // and `aiBrixOverageRate` (per AI credit) are 0 on every plan, so AI BRIX
 // stops at the month's credits too. The overage code stays, driven by these
 // rates, in case a plan bills usage again.
@@ -37,8 +37,8 @@ export const PLANS = {
     tagline: 'Your first sales',
     price: { monthly: 9, annual: 90 },
     rank: 1,
-    ordersUpTo: 200,
-    orderCap: 200,
+    ordersUpTo: 250,
+    orderCap: 250,
     overageRate: 0,
     aiBrixCredits: 20,
     aiBrixOverageRate: 0,
@@ -65,8 +65,8 @@ export const PLANS = {
     tagline: 'Scaling stores',
     price: { monthly: 59, annual: 590 },
     rank: 3,
-    ordersUpTo: 1000,
-    orderCap: 1000,
+    ordersUpTo: 2000,
+    orderCap: 2000,
     overageRate: 0,
     aiBrixCredits: 60,
     aiBrixOverageRate: 0,
@@ -79,10 +79,38 @@ export const PLANS = {
     tagline: 'High-volume brands',
     price: { monthly: 79, annual: 790 },
     rank: 4,
-    ordersUpTo: 2000,
-    orderCap: 2000,
+    ordersUpTo: 5000,
+    orderCap: 5000,
     overageRate: 0,
     aiBrixCredits: 90,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
+    watermarkRemovable: true,
+  },
+  scale: {
+    key: 'scale',
+    label: 'Scale',
+    tagline: 'Big catalogues, busy months',
+    price: { monthly: 99, annual: 990 },
+    rank: 5,
+    ordersUpTo: 10000,
+    orderCap: 10000,
+    overageRate: 0,
+    aiBrixCredits: 120,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
+    watermarkRemovable: true,
+  },
+  enterprise: {
+    key: 'enterprise',
+    label: 'Enterprise',
+    tagline: 'No order limit',
+    price: { monthly: 199, annual: 1990 },
+    rank: 6,
+    ordersUpTo: null,
+    orderCap: null,
+    overageRate: 0,
+    aiBrixCredits: 200,
     aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true,
@@ -185,7 +213,8 @@ export function getOrderCap(planKey) {
   return resolvePlan(planKey).orderCap;
 }
 
-// The plan's order range for the plan page: { from, to } (Lite = 51-200).
+// The plan's order range for the plan page: { from, to } (Lite = 51-250;
+// Enterprise = { from: 10001, to: null }).
 export function getOrderRange(planKey) {
   const plan = resolvePlan(planKey);
   const prev = PLANS[PLAN_KEYS[PLAN_KEYS.indexOf(plan.key) - 1]];
@@ -206,14 +235,14 @@ export function dayOverageOrders(monthToDate, dayOrders, orderCap) {
 
 // ── Billing interval (monthly | annual) ──
 // Paid plans can be billed every 30 days or yearly (price.annual = 10 ×
-// monthly, two months free), both with the same 14-day trial. Shopify doesn't
+// monthly, two months free), both with the same 7-day trial. Shopify doesn't
 // allow usage charges on a yearly subscription, so even a plan with an
 // overage rate couldn't bill one yearly. Today no plan bills usage: past the
 // monthly order cap every plan's storefront widgets pause until next month,
 // and AI BRIX stops at the monthly credits. Mirrored by
 // plan_order_cap_exceeded in php_backend/plan_helpers.php.
 export const BILLING_INTERVALS = ['monthly', 'annual'];
-export const TRIAL_DAYS = 14;
+export const TRIAL_DAYS = 7;
 
 export function normalizeBillingInterval(value) {
   return /annual|year/i.test(String(value || '')) ? 'annual' : 'monthly';
@@ -240,7 +269,7 @@ export function aiCreditAllowed(planKey, interval, creditsUsed) {
 }
 
 // Trial length for a new subscription, monthly or yearly: a redeemed promo
-// code's length, else the standard 14 days.
+// code's length, else the standard 7 days.
 export function trialDaysFor(promoTrialDays = 0) {
   const promo = Number(promoTrialDays) || 0;
   return promo > 0 ? promo : TRIAL_DAYS;

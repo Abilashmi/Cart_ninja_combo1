@@ -24,17 +24,22 @@ function phpPlans() {
 }
 
 test('both files list the same plans in the same order', () => {
-  assert.deepEqual(PLAN_KEYS, ['free', 'lite', 'starter', 'growth', 'pro']);
-  assert.match(php, /const PLAN_KEYS = \['free', 'lite', 'starter', 'growth', 'pro'\];/);
+  assert.deepEqual(PLAN_KEYS, ['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise']);
+  assert.match(php, /const PLAN_KEYS = \['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise'\];/);
   for (const key of PLAN_KEYS) assert.match(php, new RegExp(`'key' => '${key}'`));
 });
 
-test('plans differ by orders: Free 1-50, Lite 51-200, Starter 201-500, Growth 501-1000, Pro 1001-2000 (hard limits)', () => {
-  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].price.monthly), [0, 9, 29, 59, 79]);
+test('plans differ by orders: Free 1-50, Lite 51-250, Starter 251-500, Growth 501-2000, Pro 2001-5000, Scale 5001-10000, Enterprise (hard limits)', () => {
+  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].price.monthly), [0, 9, 29, 59, 79, 99, 199]);
   assert.deepEqual(PLAN_KEYS.map((k) => getOrderRange(k)), [
-    { from: 1, to: 50 }, { from: 51, to: 200 }, { from: 201, to: 500 }, { from: 501, to: 1000 }, { from: 1001, to: 2000 },
+    { from: 1, to: 50 }, { from: 51, to: 250 }, { from: 251, to: 500 }, { from: 501, to: 2000 },
+    { from: 2001, to: 5000 }, { from: 5001, to: 10000 }, { from: 10001, to: null },
   ]);
-  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].orderCap), [50, 200, 500, 1000, 2000], 'the top of each range is the limit');
+  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].orderCap), [50, 250, 500, 2000, 5000, 10000, null], 'the top of each range is the limit; Enterprise has none');
+  assert.deepEqual(PLAN_KEYS.map((k) => PLANS[k].aiBrixCredits), [10, 20, 30, 60, 90, 120, 200]);
+  // Prices are unique, so a subscription's price names its plan (reconcilePlanFromShopify).
+  const prices = PLAN_KEYS.filter((k) => k !== 'free').flatMap((k) => [PLANS[k].price.monthly, PLANS[k].price.annual]);
+  assert.equal(new Set(prices).size, prices.length);
 });
 
 test('every feature is enabled on every plan, combo templates unlimited', () => {

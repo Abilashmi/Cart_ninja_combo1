@@ -126,7 +126,7 @@ export default function AccountPage() {
   const { canAccessFeature } = usePlan();
 
   const plan = PLANS[planKey] || PLANS.free;
-  const isPro = planKey === 'pro';
+  const isPro = planKey === 'pro' || planKey === 'scale' || planKey === 'enterprise';
   const planName = plan.label;
   const planPrice = plan.price.monthly > 0 ? `$${plan.price.monthly}/mo` : 'Free';
 
@@ -174,9 +174,9 @@ export default function AccountPage() {
               }
             />
             <InfoRow label="Billing" value="Through Shopify billing" />
-            {!isPro && (
+            {plan.orderCap !== null && (
               <Banner tone="info">
-                <p>Every plan has every feature. Your plan includes {plan.orderCap} orders a month; upgrade for more orders and AI BRIX credits.</p>
+                <p>Every plan has every feature. Your plan includes {plan.orderCap.toLocaleString('en-US')} orders a month; upgrade for more orders and AI BRIX credits.</p>
               </Banner>
             )}
           </BlockStack>

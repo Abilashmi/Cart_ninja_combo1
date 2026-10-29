@@ -1,5 +1,5 @@
 // Run with: node --import ./tests/packs/register.mjs --test tests/billing/annual-plans.test.mjs
-// Yearly billing (app/config/plans.js): same 14-day trial, no usage charges (Shopify
+// Yearly billing (app/config/plans.js): same 7-day trial, no usage charges (Shopify
 // allows none on a yearly subscription), so past the monthly order cap the
 // storefront pauses and AI BRIX stops at its credits. The PHP mirror of the
 // order cap is plan_order_cap_exceeded in php_backend/plan_helpers.php.
@@ -19,18 +19,19 @@ test('intervals: Shopify ANNUAL / annual / yearly = annual, anything else = mont
 });
 
 test('yearly price is 10 × monthly (two months free) on every paid plan', () => {
-  for (const key of ['lite', 'starter', 'growth', 'pro']) assert.equal(PLANS[key].price.annual, PLANS[key].price.monthly * 10, key);
-  assert.equal(PLANS.growth.orderCap, 1000, 'Growth: 1000 orders a month');
+  for (const key of ['lite', 'starter', 'growth', 'pro', 'scale', 'enterprise']) assert.equal(PLANS[key].price.annual, PLANS[key].price.monthly * 10, key);
+  assert.equal(PLANS.growth.orderCap, 2000, 'Growth: 2000 orders a month');
 });
 
-test('no extra charges: every plan, monthly or yearly, pauses at its monthly orders', () => {
-  for (const key of ['free', 'lite', 'starter', 'growth', 'pro']) {
+test('no extra charges: every capped plan, monthly or yearly, pauses at its monthly orders; Enterprise never does', () => {
+  for (const key of ['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise']) {
     assert.equal(PLANS[key].overageRate, 0, `${key}: no per-order charge`);
     assert.equal(PLANS[key].aiBrixOverageRate, 0, `${key}: no per-credit charge`);
-    assert.equal(orderCapBehavior(key, 'monthly'), 'pause', key);
-    assert.equal(orderCapBehavior(key, 'annual'), 'pause', key);
+    const expected = key === 'enterprise' ? 'none' : 'pause';
+    assert.equal(orderCapBehavior(key, 'monthly'), expected, key);
+    assert.equal(orderCapBehavior(key, 'annual'), expected, key);
   }
-  assert.deepEqual(['free', 'lite', 'starter', 'growth', 'pro'].map((k) => PLANS[k].orderCap), [50, 200, 500, 1000, 2000]);
+  assert.deepEqual(['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise'].map((k) => PLANS[k].orderCap), [50, 250, 500, 2000, 5000, 10000, null]);
 });
 
 test('overage is per month: a day bills only the orders that took the month past the cap', () => {
@@ -48,7 +49,7 @@ test('overage is per month: a day bills only the orders that took the month past
 });
 
 test('AI BRIX: every plan stops at its monthly credits, monthly or yearly', () => {
-  for (const key of ['free', 'lite', 'starter', 'growth', 'pro']) {
+  for (const key of ['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise']) {
     const cap = PLANS[key].aiBrixCredits;
     for (const interval of ['monthly', 'annual']) {
       assert.equal(aiCreditAllowed(key, interval, cap - 1), true, `${key} ${interval}: the last credit`);
@@ -57,12 +58,12 @@ test('AI BRIX: every plan stops at its monthly credits, monthly or yearly', () =
   }
 });
 
-test('trial: 14 days, monthly or yearly; a promo code replaces it', () => {
-  assert.equal(TRIAL_DAYS, 14);
-  assert.equal(trialDaysFor(), 14);
-  assert.equal(trialDaysFor(0), 14);
+test('trial: 7 days, monthly or yearly; a promo code replaces it', () => {
+  assert.equal(TRIAL_DAYS, 7);
+  assert.equal(trialDaysFor(), 7);
+  assert.equal(trialDaysFor(0), 7);
   assert.equal(trialDaysFor(30), 30);
-  assert.equal(trialDaysFor(7), 7);
+  assert.equal(trialDaysFor(14), 14);
 });
 
 test('PHP mirror: a yearly Lite / Starter / Growth pauses at the cap (overage only when billed monthly)', () => {
@@ -70,5 +71,5 @@ test('PHP mirror: a yearly Lite / Starter / Growth pauses at the cap (overage on
   assert.match(php, /if \(\$plan\['overageRate'\] > 0 && plan_billing_interval\(\$pdo, \$shopDomain\) !== 'annual'\) return false;/);
   assert.match(php, /ADD COLUMN `billing_interval` VARCHAR\(10\) NOT NULL DEFAULT 'monthly'/);
   const cfg = fs.readFileSync(new URL('../../php_backend/plan_config.php', import.meta.url), 'utf8');
-  assert.match(cfg, /'orderCap' => 1000,/, 'Growth cap in PHP too');
+  assert.match(cfg, /'orderCap' => 2000,/, 'Growth cap in PHP too');
 });

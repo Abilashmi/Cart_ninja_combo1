@@ -10,11 +10,11 @@
  * in BOTH files.
  */
 
-const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro'];
+const PLAN_KEYS = ['free', 'lite', 'starter', 'growth', 'pro', 'scale', 'enterprise'];
 
 // Every plan has every feature; plans differ by orders a month. orderCap is
 // a hard limit: past it the storefront widgets pause until next month. No
-// plan bills extra orders (overageRate 0 everywhere).
+// plan bills extra orders (overageRate 0 everywhere). Enterprise has no cap.
 const PLANS = [
     'free' => [
         'key' => 'free',
@@ -28,7 +28,7 @@ const PLANS = [
     'lite' => [
         'key' => 'lite',
         'label' => 'Lite',
-        'orderCap' => 200,
+        'orderCap' => 250,
         'overageRate' => 0.0,
         'aiBrixCredits' => 20,
         'comboTemplateLimit' => null,
@@ -46,7 +46,7 @@ const PLANS = [
     'growth' => [
         'key' => 'growth',
         'label' => 'Growth',
-        'orderCap' => 1000,
+        'orderCap' => 2000,
         'overageRate' => 0.0,
         'aiBrixCredits' => 60,
         'comboTemplateLimit' => null,
@@ -55,9 +55,27 @@ const PLANS = [
     'pro' => [
         'key' => 'pro',
         'label' => 'Pro',
-        'orderCap' => 2000,
+        'orderCap' => 5000,
         'overageRate' => 0.0,
         'aiBrixCredits' => 90,
+        'comboTemplateLimit' => null,
+        'watermarkRemovable' => true,
+    ],
+    'scale' => [
+        'key' => 'scale',
+        'label' => 'Scale',
+        'orderCap' => 10000,
+        'overageRate' => 0.0,
+        'aiBrixCredits' => 120,
+        'comboTemplateLimit' => null,
+        'watermarkRemovable' => true,
+    ],
+    'enterprise' => [
+        'key' => 'enterprise',
+        'label' => 'Enterprise',
+        'orderCap' => null,
+        'overageRate' => 0.0,
+        'aiBrixCredits' => 200,
         'comboTemplateLimit' => null,
         'watermarkRemovable' => true,
     ],
@@ -65,7 +83,7 @@ const PLANS = [
 
 // state: 'enabled' | 'preview' | 'locked'. Every feature is 'enabled' on
 // every plan; the states stay so a feature can be limited again later.
-const EVERY_PLAN = ['free' => 'enabled', 'lite' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled'];
+const EVERY_PLAN = ['free' => 'enabled', 'lite' => 'enabled', 'starter' => 'enabled', 'growth' => 'enabled', 'pro' => 'enabled', 'scale' => 'enabled', 'enterprise' => 'enabled'];
 
 const FEATURES = [
     'cart_drawer'              => EVERY_PLAN,
