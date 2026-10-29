@@ -199,7 +199,7 @@ BrixBar is a real tool-calling agent, not a keyword matcher: any request in its 
 React Router v7 file-based routing. Patterns:
 - `app.*.jsx` — embedded Shopify admin pages (authenticated via `authenticate.admin`)
 - `api.*.jsx` — JSON API endpoints used by the frontend fetchers
-- `webhooks.*.jsx` — Shopify webhook handlers
+- `webhooks.*.jsx` — Shopify webhook handlers. The order, refund and cart ones answer 200 as soon as `authenticate.webhook` passes and do their DB work after (`services/webhook-queue.server.js` `afterResponse`, at most 4 at once): every DB statement is an HTTPS round trip to `db_proxy.php`, and awaiting them missed Shopify's 5 s limit ("No response from app" in the Partner Dashboard). An order's line items are one multi-row INSERT. Tests: `tests/webhooks/`.
 - `*.php.jsx` — PHP-compatible endpoint proxies (e.g., `save_cart_drawer[.]php.jsx` accepts POST from the storefront extension)
 
 ### Shopify Extension

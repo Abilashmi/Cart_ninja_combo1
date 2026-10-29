@@ -54,28 +54,31 @@ export async function upsertOrderFromPayload(db, shop, payload, { financialStatu
     ]
   );
 
+  // All line items in one statement: every statement is an HTTPS round trip
+  // to db_proxy.php, and one per item made big orders miss Shopify's 5 s.
   const lineItems = Array.isArray(payload.line_items) ? payload.line_items : [];
-  for (const item of lineItems) {
+  if (lineItems.length > 0) {
+    const rows = lineItems.map((item) => [
+      shop, orderId, String(item.id),
+      item.product_id ? String(item.product_id) : null,
+      item.variant_id ? String(item.variant_id) : null,
+      item.title || item.name || "",
+      item.sku || null,
+      Number(item.quantity) || 0,
+      toNum(item.price),
+      toNum(item.total_discount),
+      toNum(item.price) * (Number(item.quantity) || 0) - toNum(item.total_discount),
+      createdAtShopify,
+    ]);
     await db.execute(
       `INSERT INTO store_order_line_items
          (shop_domain, order_id, line_item_id, product_id, variant_id, product_title,
           sku, quantity, price, total_discount, line_revenue, created_at_shopify)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES ${rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}
        ON DUPLICATE KEY UPDATE
          quantity = VALUES(quantity), price = VALUES(price),
          total_discount = VALUES(total_discount), line_revenue = VALUES(line_revenue)`,
-      [
-        shop, orderId, String(item.id),
-        item.product_id ? String(item.product_id) : null,
-        item.variant_id ? String(item.variant_id) : null,
-        item.title || item.name || "",
-        item.sku || null,
-        Number(item.quantity) || 0,
-        toNum(item.price),
-        toNum(item.total_discount),
-        toNum(item.price) * (Number(item.quantity) || 0) - toNum(item.total_discount),
-        createdAtShopify,
-      ]
+      rows.flat()
     );
   }
 
