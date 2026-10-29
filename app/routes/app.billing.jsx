@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLoaderData } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
 import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getShopPlan, confirmPlanFromWebhook } from "../services/plan-permissions.server";
@@ -67,7 +67,6 @@ export default function BillingDashboard() {
   const [today, setToday] = useState(null);
   const [charges, setCharges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [chargeLoading, setChargeLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -95,24 +94,6 @@ export default function BillingDashboard() {
       })
       .catch(e => console.error("Failed to load charges:", e));
   }, []);
-
-  const handleCreateCharge = async () => {
-    setChargeLoading(true);
-    try {
-      const r = await fetch("/api/billing/trigger-charge", { method: "POST" });
-      const d = await r.json();
-      if (d.success) {
-        setError(null);
-        // Refresh data
-        setTimeout(() => location.reload(), 1500);
-      } else {
-        setError(d.error || "Failed to create charge");
-      }
-    } catch (e) {
-      setError(e.message);
-    }
-    setChargeLoading(false);
-  };
 
   if (loading) {
     return (
@@ -161,26 +142,26 @@ export default function BillingDashboard() {
               >
                 <Text as="p">
                   {monthlyCapStatus.exceeded
-                    ? `Your ${plan.label} plan's monthly order limit has been reached, so your storefront widgets (cart drawer, FBT, coupon slider) are paused until next month or you upgrade.`
-                    : `Your ${plan.label} plan includes ${monthlyCapStatus.orderCap} orders per month. Storefront widgets pause for the rest of the month if you go over — no charge either way.`}
+                    ? `Your ${plan.label} plan's monthly order limit has been reached, so your storefront features (cart drawer, FBT, coupon banner, COD, Packs, combo pages) are paused until next month or you upgrade.`
+                    : `Your ${plan.label} plan includes ${monthlyCapStatus.orderCap} orders per month (every order your store gets). Storefront features pause for the rest of the month if you go over — no charge either way.`}
                 </Text>
               </Banner>
             </Box>
           )}
 
-          {/* Today's Usage Card */}
+          {/* This month's usage (every order the store gets counts) */}
           <Card padding="600">
             <BlockStack gap="500">
               <InlineStack align="space-between" blockAlign="center">
-                <Text variant="headingMd" fontWeight="bold">Today's Usage</Text>
-                <Badge tone="info">{new Date().toLocaleDateString()}</Badge>
+                <Text variant="headingMd" fontWeight="bold">This Month's Usage</Text>
+                <Badge tone="info">{new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Badge>
               </InlineStack>
 
               {/* Progress Bar */}
               {!unlimited && (
                 <BlockStack gap="200">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text variant="bodySm" tone="subdued">Orders: {totalOrders} / {freeOrders} (free)</Text>
+                    <Text variant="bodySm" tone="subdued">Orders this month: {totalOrders} / {freeOrders} included</Text>
                     <Text variant="bodySm" tone="subdued">{percentUsed.toFixed(1)}%</Text>
                   </InlineStack>
                   <ProgressBar
@@ -192,7 +173,7 @@ export default function BillingDashboard() {
               )}
 
               {unlimited && (
-                <Text variant="bodySm" tone="subdued">Orders today: {totalOrders} — unlimited on the {plan.label} plan, no overage charges.</Text>
+                <Text variant="bodySm" tone="subdued">Orders this month: {totalOrders} — no order limit on the {plan.label} plan, no overage charges.</Text>
               )}
 
               {/* Source breakdown — reporting only. Buckets can overlap (an
@@ -206,27 +187,19 @@ export default function BillingDashboard() {
                 </InlineStack>
               )}
 
-              {/* Overage Alert */}
+              {/* Overage Alert. Extra orders are billed automatically once a
+                  day (runDailyOverageBilling), so there's no button here. */}
               {hasOverage && (
                 <Box padding="400" background="bg-surface-critical-subdued" borderRadius="200">
-                  <BlockStack gap="300">
-                    <InlineStack gap="200" blockAlign="start">
-                      <Icon source={AlertCircleIcon} tone="critical" />
-                      <BlockStack gap="100">
-                        <Text fontWeight="bold">Overage Charges</Text>
-                        <Text>{overageOrders} orders above limit × ${plan.overageRate.toFixed(2)}/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text></Text>
-                      </BlockStack>
-                    </InlineStack>
-                    <Button
-                      onClick={handleCreateCharge}
-                      loading={chargeLoading}
-                      tone="critical"
-                      variant="primary"
-                      fullWidth
-                    >
-                      Record Usage Charge
-                    </Button>
-                  </BlockStack>
+                  <InlineStack gap="200" blockAlign="start">
+                    <Icon source={AlertCircleIcon} tone="critical" />
+                    <BlockStack gap="100">
+                      <Text fontWeight="bold">{today.charges_overage === false ? 'Monthly order limit reached' : 'Overage Charges'}</Text>
+                      {today.charges_overage === false
+                        ? <Text>{overageOrders} orders above your {freeOrders}-order limit this month.</Text>
+                        : <Text>{overageOrders} orders above limit this month × ${plan.overageRate.toFixed(2)}/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text>, added to your Shopify invoice day by day.</Text>}
+                    </BlockStack>
+                  </InlineStack>
                 </Box>
               )}
 
@@ -234,7 +207,7 @@ export default function BillingDashboard() {
                 <Box padding="300" background="bg-surface-success-subdued" borderRadius="200">
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={CheckCircleIcon} tone="success" />
-                    <Text tone="success">All orders within free limit</Text>
+                    <Text tone="success">{"All orders within your plan's monthly limit"}</Text>
                   </InlineStack>
                 </Box>
               )}
@@ -298,8 +271,10 @@ export default function BillingDashboard() {
               <Text variant="headingMd" fontWeight="bold">Usage-Based Billing</Text>
               <Text tone="subdued">
                 {unlimited
-                  ? `Your ${plan.label} plan includes unlimited orders per day — no overage charges.`
-                  : `Your ${plan.label} plan includes ${freeOrders} completed orders per day. Each additional order is charged at $${plan.overageRate.toFixed(2)}. Usage charges are recorded automatically and added to your next monthly invoice — no separate approval needed.`}
+                  ? `Your ${plan.label} plan has no monthly order limit — no overage charges.`
+                  : today.charges_overage === false
+                    ? `Your ${plan.label} plan includes ${freeOrders} orders per month (every order your store gets, COD included). Past that, storefront features pause until next month.`
+                    : `Your ${plan.label} plan includes ${freeOrders} orders per month (every order your store gets, COD included). Each additional order that month is charged at $${plan.overageRate.toFixed(2)}. Usage charges are recorded automatically and added to your next invoice — no separate approval needed.`}
               </Text>
             </BlockStack>
           </Card>

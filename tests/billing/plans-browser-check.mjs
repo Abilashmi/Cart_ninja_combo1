@@ -47,16 +47,18 @@ const card = (page, label) => page.locator('div', { has: page.getByRole('heading
 {
   const { page, posts, errors } = await open({ currentPlanKey: 'free', currentInterval: 'monthly', promoTrialDays: 0 });
   const starter = card(page, 'Starter');
-  check('monthly by default: Starter $29 / month with per-order overage', /\$29\s*\/ month/.test(await starter.innerText()) && /500 orders \/ month — then \$0\.03\/order/.test(await starter.innerText()));
+  check('monthly by default: Starter $29 / month with per-order overage', /\$29\s*\/ month/.test(await starter.innerText()) && /201–500 orders \/ month — then \$0\.03\/order/.test(await starter.innerText()));
+  check('monthly: five plans, each with its order range', /Up to 50 orders \/ month — storefront pauses after that/.test(await card(page, 'Free').innerText()) && /\$9\s*\/ month/.test(await card(page, 'Lite').innerText()) && /51–200 orders \/ month — then \$0\.10\/order/.test(await card(page, 'Lite').innerText()));
+  check('monthly: every feature on Free', /Every feature included:/.test(await card(page, 'Free').innerText()) && /Weight Box combos/.test(await card(page, 'Free').innerText()) && !/Try it for free/.test(await page.innerText('body')));
   check('monthly: 14-day trial', /14-day free trial/.test(await page.innerText('body')) && /Upgrade to Starter — 14-day trial/.test(await starter.innerText()));
   await page.getByRole('radio', { name: /Yearly/ }).click();
   const st = await starter.innerText();
   check('yearly: Starter $290 / year, $24.17 a month, 2 months free', /\$290\s*\/ year/.test(st) && /Billed yearly — \$24\.17\/month, 2 months free/.test(st), st.split('\n').slice(0, 8).join(' | '));
-  check('yearly: no per-order charge, the storefront pauses at 500', /500 orders \/ month — storefront pauses after that/.test(st) && !/then \$0\.03\/order/.test(st));
+  check('yearly: no per-order charge, the storefront pauses at 500', /201–500 orders \/ month — storefront pauses after that/.test(st) && !/then \$0\.03\/order/.test(st));
   check('yearly: AI BRIX credits without a per-credit charge', /AI BRIX — 30 credits \/ month$/m.test(st));
   const growth = await card(page, 'Growth').innerText();
-  check('yearly: Growth $590 / year, 1000 orders then pause', /\$590\s*\/ year/.test(growth) && /1000 orders \/ month — storefront pauses after that/.test(growth));
-  check('yearly: Pro $790 / year, unlimited orders', /\$790\s*\/ year/.test(await card(page, 'Pro').innerText()) && /Unlimited orders/.test(await card(page, 'Pro').innerText()));
+  check('yearly: Growth $590 / year, 501–1,000 orders then pause', /\$590\s*\/ year/.test(growth) && /501–1,000 orders \/ month — storefront pauses after that/.test(growth));
+  check('yearly: Pro $790 / year, 1,001–2,000 orders', /\$790\s*\/ year/.test(await card(page, 'Pro').innerText()) && /1,001–2,000 orders \/ month/.test(await card(page, 'Pro').innerText()));
   check('yearly: Free stays free', /\$0\s*\/ month/.test(await card(page, 'Free').innerText()) && /Always free/.test(await card(page, 'Free').innerText()));
   check('yearly: the footer explains the yearly limits', /Yearly plans include a 14-day free trial/.test(await page.innerText('body')));
   await starter.getByRole('button', { name: /Upgrade to Starter — 14-day trial/ }).click();

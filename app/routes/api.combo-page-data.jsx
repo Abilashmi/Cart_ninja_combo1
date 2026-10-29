@@ -1,5 +1,6 @@
 import { loadComboPageData, loadComboPageDataByHandle } from '../services/combo-page.server';
 import { isShiprocketEnabled } from '../services/shop-integrations.server';
+import { isStorefrontPaused } from '../services/billing.server';
 
 // Public JSON endpoint for the storefront combo-page script
 // (app/routes/combo-page[.]js.jsx) — no admin auth, since the caller is an
@@ -23,6 +24,16 @@ export async function loader({ request }) {
     return Response.json(
       { success: false, error: 'shop and either templateId or handle are required' },
       { status: 400, headers: CORS_HEADERS }
+    );
+  }
+
+  // Past the plan's monthly orders (Free, or a capped yearly plan) combo pages
+  // pause with the other storefront features; the script then puts the
+  // theme's own page back.
+  if (await isStorefrontPaused(shop)) {
+    return Response.json(
+      { success: false, error: 'paused', reason: 'order_cap_reached' },
+      { status: 403, headers: CORS_HEADERS }
     );
   }
 

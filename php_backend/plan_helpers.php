@@ -38,13 +38,14 @@ function plan_alias_legacy_plan_name($planName) {
     if (!$planName) return 'free';
     $normalized = strtolower($planName);
     if ($normalized === 'free') return 'free';
+    if (strpos($normalized, 'lite') !== false) return 'lite';
     if (strpos($normalized, 'growth') !== false) return 'growth';
     if (strpos($normalized, 'pro') !== false) return 'pro';
     return 'starter';
 }
 
 /**
- * Resolves a shop domain to its canonical plan key ('free'|'starter'|'growth'|'pro').
+ * Resolves a shop domain to its canonical plan key ('free'|'lite'|'starter'|'growth'|'pro').
  * Reads shops.plan_key first, falling back to alias-mapping the legacy
  * plan_name for rows that predate the plan_key column.
  */
@@ -77,17 +78,16 @@ function plan_billing_interval($pdo, $shopDomain) {
 }
 
 /**
- * Whether this shop's plan enforces a hard storefront cutoff (a capped,
- * zero-overage-rate plan like Free) and the shop has hit that cap for the
- * current calendar month. Plans that bill per-order overage instead (a
- * positive overageRate, e.g. Starter) or have no cap (Pro) never cut off —
- * they just get billed by the existing usage-charge path in
- * app/services/billing.server.js. Storefront widgets read this directly
- * (see save_cart_drawer.php / save_fbt_widget.php /
- * save_coupon_slider_widget.php) since analytics_daily_rollup lives in the
- * same database PHP already connects to. Resets itself automatically each
- * month — no cron/reset job needed, since the SUM below is always scoped to
- * the current calendar month to date.
+ * Whether this shop's storefront widgets are paused for the rest of the
+ * month: its plan pauses at the cap (Free, or a capped plan billed yearly,
+ * since Shopify allows no usage charges on a yearly subscription) and the
+ * month's orders have reached it. A monthly paid plan bills per extra order
+ * instead (app/services/billing.server.js) and Pro has no cap. Orders =
+ * every paid order of the store this calendar month (billable_order_count,
+ * services/billable-orders.server.js). Every storefront endpoint checks it:
+ * cart drawer (upsells inside it), FBT, coupon slider, COD, Packs (combo
+ * pages and the COD order API ask Node's isStorefrontPaused, same rule). Resets itself
+ * each month, since the SUM below is scoped to the current calendar month.
  */
 function plan_order_cap_exceeded($pdo, $shopDomain, $planKey) {
     if (!$shopDomain) return false;
@@ -95,18 +95,23 @@ function plan_order_cap_exceeded($pdo, $shopDomain, $planKey) {
     $plan = plan_get_config($planKey);
     if ($plan['orderCap'] === null) return false;
     // A plan that bills per-order overage only does so when billed monthly:
-    // Shopify allows no usage charges on a yearly subscription, so a yearly
-    // Starter / Growth pauses at the cap like Free (orderCapBehavior in
-    // app/config/plans.js).
+    // a yearly Lite / Starter / Growth pauses at the cap like Free
+    // (orderCapBehavior in app/config/plans.js).
     if ($plan['overageRate'] > 0 && plan_billing_interval($pdo, $shopDomain) !== 'annual') return false;
 
-    $stmt = $pdo->prepare(
-        "SELECT COALESCE(SUM(billable_order_count), 0) AS total
-         FROM analytics_daily_rollup
-         WHERE shop_domain = :shop AND date >= DATE_FORMAT(NOW(), '%Y-%m-01')"
-    );
-    $stmt->execute([':shop' => $shopDomain]);
-    $total = (int) ($stmt->fetch()['total'] ?? 0);
+    // A count that can't be read never pauses a store.
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT COALESCE(SUM(billable_order_count), 0) AS total
+             FROM analytics_daily_rollup
+             WHERE shop_domain = :shop AND date >= DATE_FORMAT(NOW(), '%Y-%m-01')"
+        );
+        $stmt->execute([':shop' => $shopDomain]);
+        $total = (int) ($stmt->fetch()['total'] ?? 0);
+    } catch (PDOException $e) {
+        error_log('[plan_order_cap_exceeded] ' . $e->getMessage());
+        return false;
+    }
 
     return $total >= $plan['orderCap'];
 }

@@ -7,7 +7,7 @@ import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@sho
 import { authenticate } from "../shopify.server";
 import { getShopPlan, getShopBillingInterval, setPendingPlanKey } from "../services/plan-permissions.server";
 import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
-import { PLANS, PLAN_KEYS, FEATURES, trialDaysFor } from "../config/plans";
+import { PLANS, PLAN_KEYS, FEATURES, trialDaysFor, getOrderRange } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
 // FEATURES registry — adding/removing a feature there updates this page
@@ -357,23 +357,32 @@ function featureLabelSuffix(state) {
     return '';
 }
 
-// Full Analytics is fully "enabled" (in the gating sense) on both Starter
-// and Pro, but Starter's actual analytics page only surfaces Overview and
-// Build a Combo data — Pro adds the rest. The generic state-based suffix
-// above can't express that (both tiers share the same 'enabled' state), so
-// this is a presentation-only override scoped to this one row on this one
-// page — does not affect app/config/plans.js or the analytics page's own
-// gating logic, which is intentionally left untouched.
 function featureRowLabel(featureKey, planKey, state) {
-    if (featureKey === 'full_analytics' && (planKey === 'starter' || planKey === 'growth')) {
-        return 'Full Analytics — Overview & Build a Combo only';
-    }
     if (featureKey === 'build_a_combo' && state === 'enabled') {
         const limit = PLANS[planKey].comboTemplateLimit;
         return limit === null ? 'Build a Combo — unlimited templates' : `Build a Combo — up to ${limit} templates`;
     }
     return FEATURES[featureKey].label + featureLabelSuffix(state);
 }
+
+// The plan's monthly orders on its card: "51–200 orders / month", then what
+// happens past the top of the range.
+function ordersLine(planKey, yearly) {
+    const p = PLANS[planKey];
+    const { from, to } = getOrderRange(planKey);
+    const range = from <= 1 ? `Up to ${to.toLocaleString('en-US')}` : `${from.toLocaleString('en-US')}–${to.toLocaleString('en-US')}`;
+    if (p.orderCap === null) return `${range} orders / month`;
+    if (p.overageRate > 0 && !yearly) return `${range} orders / month — then $${p.overageRate.toFixed(2)}/order`;
+    return `${range} orders / month — storefront pauses after that`;
+}
+
+const CARD_BADGES = {
+    free: 'Free To Start With',
+    lite: 'Your First Sales',
+    starter: 'Most Popular',
+    growth: 'Growing Fast',
+    pro: 'Best Value',
+};
 
 export default function SubscribePage() {
     const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays } = useLoaderData();
@@ -498,7 +507,7 @@ export default function SubscribePage() {
                 <div style={{ textAlign: 'center', paddingTop: 16 }}>
                     <Text as="h1" variant="headingXl" fontWeight="bold">Simple, transparent pricing</Text>
                     <div style={{ marginTop: 8 }}>
-                        <Text as="p" variant="bodyMd" tone="subdued">Start free — upgrade as your store grows. No hidden fees.</Text>
+                        <Text as="p" variant="bodyMd" tone="subdued">Every feature on every plan — pick the one that fits your monthly orders. No hidden fees.</Text>
                     </div>
 
                     {isPromoEligible && (
@@ -527,7 +536,7 @@ export default function SubscribePage() {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20, alignItems: 'stretch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 20, alignItems: 'stretch' }}>
                     {PLAN_KEYS.map((planKey) => {
                         const p = PLANS[planKey];
                         const prevPlanKey = PLAN_KEYS[PLAN_KEYS.indexOf(planKey) - 1];
@@ -544,7 +553,7 @@ export default function SubscribePage() {
 
                                 <div style={{ padding: '9px 22px', background: isHighlightPlan ? '#1a9de0' : '#f9fafb', borderBottom: `1px solid ${isHighlightPlan ? '#0e8bc8' : '#e5e7eb'}` }}>
                                     <span style={{ fontSize: 11, fontWeight: 700, color: isHighlightPlan ? '#fff' : '#6b7280', letterSpacing: '0.3px' }}>
-                                        {isHighlightPlan ? 'Most Popular' : planKey === 'pro' ? 'Best Value' : planKey === 'growth' ? 'Weight & Value Boxes' : 'Free To Start With'}
+                                        {CARD_BADGES[planKey]}
                                     </span>
                                 </div>
 
@@ -569,20 +578,14 @@ export default function SubscribePage() {
                                     <div style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: 8, background: '#1a1a1a', borderRadius: 8, padding: '9px 14px' }}>
                                         <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0 }}><Icon source={TargetIcon} tone="base" /></span>
                                         <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>
-                                            {p.orderCap === null
-                                                ? 'Unlimited orders'
-                                                : p.overageRate > 0 && !yearlyCard
-                                                    ? `${p.orderCap} orders / month — then $${p.overageRate.toFixed(2)}/order`
-                                                    : `${p.orderCap} orders / month — storefront pauses after that`}
+                                            {ordersLine(planKey, yearlyCard)}
                                         </span>
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 20 }}>
-                                        {planKey !== 'free' && (
-                                            <Text as="p" variant="bodyXs" fontWeight="bold" tone="subdued">
-                                                Everything in {PLANS[prevPlanKey].label}, plus:
-                                            </Text>
-                                        )}
+                                        <Text as="p" variant="bodyXs" fontWeight="bold" tone="subdued">
+                                            {planKey === 'free' ? 'Every feature included:' : `Everything in ${PLANS[prevPlanKey].label}, plus:`}
+                                        </Text>
                                         {FEATURE_ROWS.filter((featureKey) => {
                                             // Every card used to render every feature row regardless of plan,
                                             // so Starter/Pro repeated the exact same checkmarks Free already
@@ -723,10 +726,10 @@ export default function SubscribePage() {
                                 </Text>
                             )}
                             <Text as="p">
-                                Downgrading cancels your current subscription. Features like Progress Bar, AI Cart
-                                Upsell, Full Analytics, Custom CSS, and Build a Combo will be locked. FBT and Coupon
-                                Lock Pro will switch to preview-only and stop showing on your storefront. Your saved
-                                designs are kept — nothing is deleted.
+                                Downgrading cancels your current subscription. Free keeps every feature for up to{' '}
+                                {PLANS.free.orderCap} orders a month; past that your storefront widgets pause until next
+                                month, and the {'"Powered by BRIX"'} watermark shows. Your saved designs are kept — nothing
+                                is deleted.
                             </Text>
                         </BlockStack>
                     </Modal.Section>

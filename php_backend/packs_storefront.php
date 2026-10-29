@@ -112,8 +112,12 @@ if (!$productId) packs_fail(400, 'invalid_product', 'A valid productId is requir
 $empty = ['packs' => [], 'checkoutDiscount' => null, 'preview' => $preview];
 
 try {
-    if (plan_get_feature_state(resolve_plan_key($pdo, $shop), 'packs') !== 'enabled') {
+    $planKey = resolve_plan_key($pdo, $shop);
+    if (plan_get_feature_state($planKey, 'packs') !== 'enabled') {
         packs_ok(array_merge($empty, ['reason' => 'plan_restricted']));
+    }
+    if (plan_order_cap_exceeded($pdo, $shop, $planKey)) {
+        packs_ok(array_merge($empty, ['reason' => 'order_cap_reached']));
     }
 
     $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");

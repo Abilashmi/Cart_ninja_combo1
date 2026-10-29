@@ -658,15 +658,26 @@ const storefront = (query) => fetch(`${harness.baseUrl}/cod_storefront.php?${que
 const setPlan = (plan) => sql('REPLACE INTO shops (shop_domain, plan_name, plan_key) VALUES (?, ?, ?)', [SHOP, plan, plan])
   .catch(() => sql('REPLACE INTO shops (shop_domain, plan_name) VALUES (?, ?)', [SHOP, plan]));
 
-test('storefront config: off until COD is on AND the plan publishes it', async () => {
+// The month's orders the plan counts (plan_order_cap_exceeded reads the rollup).
+const setMonthOrders = async (count) => {
+  await sql('CREATE TABLE IF NOT EXISTS analytics_daily_rollup (shop_domain VARCHAR(255) NOT NULL, date DATE NOT NULL, billable_order_count INT NOT NULL DEFAULT 0, PRIMARY KEY (shop_domain, date))');
+  await sql('DELETE FROM analytics_daily_rollup WHERE shop_domain = ?', [SHOP]);
+  if (count) await sql('INSERT INTO analytics_daily_rollup (shop_domain, date, billable_order_count) VALUES (?, CURDATE(), ?)', [SHOP, count]);
+};
+
+test('storefront config: off until COD is on; every plan publishes it until Free reaches its 50 orders', async () => {
   assert.deepEqual((await storefront(`action=config&shop=${SHOP}`)).json, { success: true, enabled: false }, 'no settings yet');
   await cod.saveCodSettings(SHOP, { enabled: true });
   await setPlan('free');
-  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.enabled, false, 'Free plan = preview only');
-  await sql('UPDATE shops SET plan_key = ? WHERE shop_domain = ?', ['starter', SHOP]);
+  await setMonthOrders(49);
   const res = await storefront(`action=config&shop=${SHOP}`);
   assert.equal(res.cors, '*');
-  assert.equal(res.json.enabled, true);
+  assert.equal(res.json.enabled, true, 'Free has COD');
+  await setMonthOrders(50);
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.enabled, false, 'paused for the rest of the month');
+  await sql('UPDATE shops SET plan_key = ? WHERE shop_domain = ?', ['starter', SHOP]);
+  assert.equal((await storefront(`action=config&shop=${SHOP}`)).json.enabled, true, 'a monthly Starter bills extra orders, never pauses at 50');
+  await setMonthOrders(0);
 });
 
 test('storefront config: returns display settings only, OTP only when Node has SMS', async () => {
@@ -1134,9 +1145,11 @@ test('storefront config: payment options only when on, on a plan that publishes 
   assert.equal('_runtime' in json, false);
 
   await setPlan('free');
-  const free = (await storefront(`action=config&shop=${SHOP}`)).json;
-  assert.equal(free.enabled, false);
-  assert.equal(free.productPayment, undefined, 'Free plan = preview only, nothing for shoppers');
+  await setMonthOrders(50);
+  const paused = (await storefront(`action=config&shop=${SHOP}`)).json;
+  assert.equal(paused.enabled, false);
+  assert.equal(paused.productPayment, undefined, 'Free past its monthly orders: nothing for shoppers');
+  await setMonthOrders(0);
 });
 
 test('storefront config: the prepaid offer is sent only when the server verified it, with the numbers Shopify has', async () => {

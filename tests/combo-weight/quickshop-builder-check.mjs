@@ -167,7 +167,7 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   const page = await open({ fresh: true, quickShop: null });
   const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
   check('picker: Quantity Box, Weight Box, Value Box', titles.join('|') === 'Quantity Box|Weight Box|Value Box', titles.join(', '));
-  check('plans on the cards: Starter $29, Growth $59, Growth $59', (await cardOf(page, 'Quantity Box').textContent()).includes('Starter · $29') && (await cardOf(page, 'Weight Box').textContent()).includes('Growth · $59') && (await cardOf(page, 'Value Box').textContent()).includes('Growth · $59'));
+  check('no plan badges on the cards (every plan has all three)', (await page.locator('.tpl-pick-card .tpl-pick-pro').count()) === 0);
   await cardOf(page, 'Value Box').locator('button:has-text("Use This Template")').click();
   await page.waitForSelector('.bxq', { timeout: 15000 });
   check('starts with sample products until collections are chosen', (await page.textContent('body')).includes('Sample products'));
@@ -184,19 +184,11 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   check('Quantity Box preset: 2 items → 5% OFF, 4 items → 10% OFF', ((t) => t.includes('5% OFF') && t.includes('10% OFF') && t.includes('2 items') && t.includes('4 items'))(await text(qty, '.bxq-top')), await text(qty, '.bxq-top'));
   await qty.close();
 
-  const starter = await open({ fresh: true, plan: 'starter', quickShop: null });
-  check('Starter: Quantity Box usable', (await cardOf(starter, 'Quantity Box').locator('button:has-text("Use This Template")').count()) === 1);
-  check('Starter: Value Box offers the Growth upgrade', (await cardOf(starter, 'Value Box').locator('button').last().textContent()).includes('Upgrade to Growth'));
-  check('Starter: Weight Box offers the Growth upgrade', (await cardOf(starter, 'Weight Box').locator('button').last().textContent()).includes('Upgrade to Growth'));
-  await starter.close();
-
-  const free = await open({ fresh: true, plan: 'free', quickShop: null });
-  check('Free: Quantity Box offers the Starter upgrade', (await cardOf(free, 'Quantity Box').locator('button').last().textContent()).includes('Upgrade to Starter'));
-  await free.close();
-
-  const growth = await open({ fresh: true, plan: 'growth', quickShop: null });
-  check('Growth: all three usable', (await growth.locator('.tpl-pick-card button:has-text("Use This Template")').count()) === 3);
-  await growth.close();
+  for (const plan of ['free', 'lite', 'starter']) {
+    const p = await open({ fresh: true, plan, quickShop: null });
+    check(`${plan}: all three usable`, (await p.locator('.tpl-pick-card button:has-text("Use This Template")').count()) === 3);
+    await p.close();
+  }
 }
 
 // ── an older Quick Shop priced by items becomes a Value Box ──

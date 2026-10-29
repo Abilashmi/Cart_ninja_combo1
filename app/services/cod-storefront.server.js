@@ -11,6 +11,7 @@
 import { unauthenticated } from '../shopify.server';
 import { getFeatureState } from '../config/plans';
 import { getShopPlan } from './plan-permissions.server';
+import { isStorefrontPaused } from './billing.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { CodError, getCodSettings, getCodSecrets, getCodShipping, otpAvailable, rateLimit, clientIp } from './cod.server';
 import { COD_SURFACES } from '../utils/cod.shared.js';
@@ -72,7 +73,7 @@ export async function loadCodContext(shop, { needAdmin = true, withShipping = fa
       throw new CodError('shop_not_installed', 'This store is not connected to BRIX.', { status: 404 });
     }
   }
-  const [settings, planKey] = await Promise.all([getCodSettings(shop), getShopPlan(shop)]);
+  const [settings, planKey, paused] = await Promise.all([getCodSettings(shop), getShopPlan(shop), isStorefrontPaused(shop)]);
   const planState = getFeatureState(planKey, 'cod_checkout');
   const currency = admin ? await getShopCurrency(admin, shop) : null;
   return {
@@ -81,7 +82,10 @@ export async function loadCodContext(shop, { needAdmin = true, withShipping = fa
     // Delivery options, zones and rules (settings.shippingMode 'advanced'); null = simple flat shipping.
     shipping: withShipping && settings.shippingMode === 'advanced' ? await getCodShipping(shop) : null,
     planState,
-    live: settings.enabled && planState === 'enabled',
+    // Past the plan's monthly orders (Free, or a capped yearly plan) COD
+    // pauses with the other storefront features, as cod_storefront.php does.
+    paused,
+    live: settings.enabled && planState === 'enabled' && !paused,
     // The store's own MSG91 keys, else the BRIX server's.
     otpRequired: settings.requireOtp && otpAvailable(await getCodSecrets(shop).catch(() => null)),
     currencyCode: currency?.code || 'INR',

@@ -26,7 +26,7 @@ function WatermarkToggle() {
           <Text as="p" variant="bodyMd">
             {removable
               ? '"Powered by BRIX" watermark is automatically removed on your current plan.'
-              : 'The Free plan always displays the "Powered by BRIX" watermark on your storefront. Upgrade to Starter or Pro to remove it automatically.'}
+              : 'The Free plan always displays the "Powered by BRIX" watermark on your storefront. Upgrade to any paid plan to remove it automatically.'}
           </Text>
         </InlineStack>
       </BlockStack>

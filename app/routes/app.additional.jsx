@@ -176,7 +176,7 @@ export default function AccountPage() {
             <InfoRow label="Billing" value="Through Shopify billing" />
             {!isPro && (
               <Banner tone="info">
-                <p>Upgrade to Pro to unlock unlimited coupons, upsell products, and AI recommendations.</p>
+                <p>Every plan has every feature. Your plan includes {plan.orderCap} orders a month; upgrade for more orders and AI BRIX credits.</p>
               </Banner>
             )}
           </BlockStack>

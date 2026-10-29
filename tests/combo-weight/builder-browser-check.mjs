@@ -118,20 +118,14 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   await page.close();
 }
 
-// ── Starter: weight pricing is locked ──
+// ── Free: every plan has tiered pricing, so it's open on the lowest one ──
 {
-  const page = await open({ plan: 'starter', weight: null, status: null });
+  const page = await open({ plan: 'free', weight: null, status: null });
   await openOffer(page);
-  check('count template on Starter: weight option disabled', await page.isDisabled('input[type="radio"][value="weight"]'));
-  check('Growth badge shown next to it (Classic Combo tiers are Growth+)', (await sidebar(page)).includes('Growth'));
+  check('count template on Free: weight option usable', !(await page.isDisabled('input[type="radio"][value="weight"]')));
+  check('no plan badge or upgrade note in Offer', !/Requires the|part of the \w+ plan/.test(await sidebar(page)));
   check('coupon controls still there for item-count combos', (await sidebar(page)).includes('Offer a coupon?'));
   await page.close();
-
-  const locked = await open({ plan: 'starter', status: null });
-  await openOffer(locked);
-  const text = await sidebar(locked);
-  check('tiered template after a downgrade: explained and locked', text.includes('part of the Growth plan') && text.includes('Requires the Growth plan'));
-  await locked.close();
 }
 
 // ── Template picker: Quantity Box + Weight Box + Value Box ──
@@ -140,7 +134,7 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
   check('picker shows 3 templates: Quantity Box, Weight Box, Value Box', titles.join('|') === 'Quantity Box|Weight Box|Value Box', titles.join(', '));
   const card = page.locator('.tpl-pick-card', { hasText: 'Weight Box' });
-  check('Weight Box card is marked Growth $59', (await card.textContent()).includes('Growth · $59'));
+  check('Weight Box card has no plan badge (every plan has it)', (await card.locator('.tpl-pick-pro').count()) === 0);
   await page.screenshot({ path: path.join(SHOTS, 'picker.png'), fullPage: true });
   await card.locator('button:has-text("Use This Template")').click();
   await page.waitForSelector('.bxq', { timeout: 15000 });
@@ -165,11 +159,10 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   check('save needs a collection for the box', (await toasts(page)).some((t) => t.startsWith('!Choose at least one collection for the box')));
   await page.close();
 
-  const starter = await open({ fresh: true, plan: 'starter' });
-  const lockedCard = starter.locator('.tpl-pick-card', { hasText: 'Weight Box' });
-  check('Starter: Weight Box card offers the Growth upgrade instead', (await lockedCard.locator('button').last().textContent()).includes('Upgrade to Growth'));
-  check('Starter: Quantity Box usable', (await starter.locator('.tpl-pick-card', { hasText: 'Quantity Box' }).locator('button:has-text("Use This Template")').count()) === 1);
-  await starter.close();
+  const free = await open({ fresh: true, plan: 'free' });
+  check('Free: all three box templates usable', (await free.locator('.tpl-pick-card button:has-text("Use This Template")').count()) === 3);
+  check('Free: no upgrade offer on the picker', !(await free.textContent('body')).includes('Upgrade to'));
+  await free.close();
 }
 
 // ── older Classic combos (layout1/2/4): design switch + tiered progress bar on Growth ──

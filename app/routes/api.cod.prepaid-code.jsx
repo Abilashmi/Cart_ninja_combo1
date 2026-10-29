@@ -41,7 +41,7 @@ export async function action({ request }) {
       getCodSettingsWithRuntime(shop),
       giftLines.lines.length ? fetchProgressBar(getDb(), shop).catch(() => null) : null,
     ]);
-    const offer = prepaidOffer(stored.settings, stored.runtime, ctx.planState === 'enabled');
+    const offer = prepaidOffer(stored.settings, stored.runtime, ctx.planState === 'enabled' && !ctx.paused);
     const rewardTiers = progressBar ? buildRewardConfig(progressBar).tiers : null;
     const result = await createPrepaidCode(ctx.admin, { offer, items: lines, gifts: giftLines.lines, rewardTiers, prepaid: body.prepaid !== false });
     if (result.code) cleanupExpiredCodes(ctx.admin, shop, PREPAID_CODE_TITLE_PREFIX).catch(() => {});

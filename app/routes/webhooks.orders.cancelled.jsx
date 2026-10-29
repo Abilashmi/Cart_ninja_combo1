@@ -31,6 +31,9 @@ export const action = async ({ request }) => {
 
     if (wasCountedAsRevenue && !wasAlreadyCancelled) {
       await applyOrderDelta(shop, dateStr, -revenue, -1, wasBillable ? -1 : 0, wasFbtOrder ? -1 : 0, wasComboOrder ? -1 : 0);
+    } else if (wasBillable && !wasAlreadyCancelled) {
+      // Counted toward the plan's orders when it came in, never paid (e.g. COD).
+      await applyOrderDelta(shop, dateStr, 0, 0, -1);
     }
   } catch (error) {
     console.error("[Webhook orders/cancelled] Failed to record cancellation:", error.message);

@@ -389,12 +389,14 @@ $action = $_GET['action'] ?? 'config';
 if ($action === 'config') {
     $s = cods_settings($pdo, $shop);
     // The plan publishes COD and the product page payment options (with the
-    // prepaid offer) together: feature `cod_checkout`.
+    // prepaid offer) together: feature `cod_checkout`, paused with the other
+    // widgets once the month's orders reach the plan's cap.
     $planLive = false;
     $wanted = $s && (!empty($s['enabled']) || (($s['productPayment']['enabled'] ?? false) === true));
     if ($wanted) {
         try {
-            $planLive = plan_get_feature_state(resolve_plan_key($pdo, $shop), 'cod_checkout') === 'enabled';
+            $planKey = resolve_plan_key($pdo, $shop);
+            $planLive = plan_get_feature_state($planKey, 'cod_checkout') === 'enabled' && !plan_order_cap_exceeded($pdo, $shop, $planKey);
         } catch (Throwable $e) {
             error_log('[cod_storefront] plan lookup: ' . $e->getMessage());
         }

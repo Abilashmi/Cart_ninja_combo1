@@ -24,6 +24,7 @@ function aliasLegacyPlanName(planName) {
   if (!planName) return 'free';
   const normalized = String(planName).toLowerCase();
   if (normalized === 'free') return 'free';
+  if (normalized.includes('lite')) return 'lite';
   if (normalized.includes('growth')) return 'growth';
   if (normalized.includes('pro')) return 'pro';
   // Any other historical subscription name ("Cart Ninja Pro" was actually

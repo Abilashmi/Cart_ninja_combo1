@@ -3317,7 +3317,8 @@ export default function Customize() {
                   {tpl.featureKey && (() => {
                     const plan = PLANS[getMinPlanForFeature(tpl.featureKey)];
                     const open = canPublishFeature(tpl.featureKey);
-                    return plan && <span className={`tpl-pick-pro${open ? '' : ' is-locked'}`}>{open ? '' : '🔒 '}{plan.label} · ${plan.price.monthly}</span>;
+                    // No badge when every plan has it (lowest plan = Free).
+                    return plan && plan.price.monthly > 0 && <span className={`tpl-pick-pro${open ? '' : ' is-locked'}`}>{open ? '' : '🔒 '}{plan.label} · ${plan.price.monthly}</span>;
                   })()}
                 </div>
                 <Text variant="bodySm" tone="subdued">{tpl.description}</Text>
