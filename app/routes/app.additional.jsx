@@ -250,9 +250,9 @@ export default function AccountPage() {
         </Card>
       </BlockStack>
 
-      {/* Clears the floating BrixBar (position: fixed, bottom: 20) so it
+      {/* Clears the floating BrixBar (--brix-bar-clearance, app/global.css) so it
           doesn't cover the last section when scrolled to the bottom. */}
-      <div style={{ height: 100 }} aria-hidden="true" />
+      <div style={{ height: "var(--brix-bar-clearance, 160px)" }} aria-hidden="true" />
     </Page>
   );
 }

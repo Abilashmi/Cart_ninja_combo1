@@ -4,6 +4,7 @@ import { Frame, Toast } from '@shopify/polaris';
 import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { announcementMessages, clampInterval } from '../utils/announcement.shared.js';
+import { footerExtras } from '../utils/cart-footer-extras.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
 import '../styles/cart-editor.css';
@@ -69,6 +70,8 @@ function CartEditorContent() {
         fontSize:         cb.fontSize,
         paddingY:         cb.paddingY,
         mobileButtonType: cb.mobileButtonType,
+        paymentCards:     footerExtras.cardsConfig(footer.paymentCards),
+        trustBadges:      footerExtras.trustConfig(footer.trustBadges),
       }),
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });
 

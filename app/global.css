@@ -776,12 +776,46 @@ p {
   }
 }
 
-/* The floating Brix AI bar (BrixBar) uses zIndex 9998 to stay above page
-   content; Polaris toasts default to a much lower stacking context
-   (--p-z-index-12, 520) and end up hidden behind it. Toasts are transient
-   confirmations (e.g. "Settings saved!") so they must always win. */
+/* Shopify's admin draws its own "Work with Sidekick" bar over the bottom
+   centre of the app's frame (about the bottom 64px). Nothing inside the app
+   can sit above it, so the Brix AI bar (BrixBar) stays clear of that strip:
+   - --brix-sidekick-space: the strip to leave free (Sidekick's bar + a gap);
+     the Cart Editor sidebar keeps it under its inline BrixBar.
+   - --brix-bar-bottom: the floating BrixBar's distance from the bottom.
+   - --brix-bar-clearance: space pages keep at their end so the floating
+     BrixBar never covers the last field (bar bottom + its height + a gap).
+   Inline styles repeat these numbers as var() fallbacks for pages rendered
+   without this stylesheet (test harnesses). */
+:root {
+  --brix-sidekick-space: 80px;
+  --brix-bar-bottom: var(--brix-sidekick-space);
+  --brix-bar-clearance: 160px;
+}
+
+/* Notifications (Polaris toasts: "Saved", "Settings saved!" …) show at the
+   top centre of the app, on every page. Polaris puts them at the bottom,
+   where they sat under the floating Brix AI bar (BrixBar, z-index 9998) and
+   under Shopify's own AI bar, which the admin draws over the bottom of the
+   app's frame (no z-index inside the app can beat that). Polaris stacks
+   toasts upward: ToastManager sets --pc-toast-manager-translate-y-in to
+   -(toast height + stacking offset) on each one. These rules mirror it: the
+   newest toast's top edge sits at the top, older ones peek out below it, and
+   a toast slides in from above. Selectors use two classes so they win over
+   Polaris's own whatever order the stylesheets load in. */
 .Polaris-Frame-ToastManager {
-  z-index: 10000 !important;
+  top: 16px;
+  bottom: auto !important;
+  z-index: 2147483000 !important;
+}
+.Polaris-Frame-ToastManager .Polaris-Frame-ToastManager__ToastWrapper,
+.Polaris-Frame-ToastManager .Polaris-Frame-ToastManager__ToastWrapper--enter {
+  transform: translateY(calc(-100% - 24px)) scale(var(--pc-toast-manager-scale-out));
+}
+.Polaris-Frame-ToastManager .Polaris-Frame-ToastManager--toastWrapperEnterDone {
+  transform: translateY(calc(-1 * var(--pc-toast-manager-translate-y-in) - 100%)) scale(var(--pc-toast-manager-scale-in));
+}
+.Polaris-Frame-ToastManager .Polaris-Frame-ToastManager__ToastWrapper--exit {
+  transform: translateY(calc(-100% - 24px)) scale(var(--pc-toast-manager-scale-out));
 }
 
 /* Same conflict as the toast fix above, but for Polaris Modals: the
