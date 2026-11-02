@@ -14,6 +14,7 @@ import { fillPriceTags } from '../utils/price-tags.shared';
 import { sanitizeContinueShopping, continueShoppingStyle } from '../utils/continue-shopping.shared.js';
 import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
+import { footerExtras } from '../utils/cart-footer-extras.shared';
 import { milestonePositions, progressFill, fillMoneyTag } from '../utils/progress-layout.shared.js';
 // The storefront drawer's own stylesheet for item rows, pricing summary and the
 // image banner, so the preview draws them exactly like the live drawer. Linked
@@ -34,6 +35,8 @@ const SECTION_LABELS = {
   countdownTimer: 'Countdown Timer',
   emptyCart: 'Empty Cart',
   checkoutButton: 'Checkout Button',
+  paymentCards: 'Cards',
+  trustBadges: 'Trust Badges',
   customCSS: 'Custom CSS',
 };
 
@@ -634,6 +637,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   const { formatMoney } = useCurrency();
   // Chosen variant per product; default = first in-stock variant.
   const [picked, setPicked] = useState({});
+  const rowRef = useRef(null);
   const variantOf = (product) => {
     const variants = product.variants || [];
     return variants.find((v) => v.id === picked[product.id]) || variants.find((v) => v.available) || variants[0] || null;
@@ -689,7 +693,18 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>{lockBadge}</div>
       )}
       {isHorizontal ? (
-        <div style={isGrid ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' } : { display: 'flex', gap: '7px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        <div style={{ position: 'relative' }}>
+        {/* ‹ › on the left and right edges of the row (like the storefront), only when it can scroll */}
+        {!isGrid && products.length > 2 && ['left', 'right'].map((side) => (
+          <button
+            key={side}
+            type="button"
+            aria-label={side === 'left' ? 'Scroll left' : 'Scroll right'}
+            onClick={(e) => { e.stopPropagation(); rowRef.current?.scrollBy({ left: side === 'left' ? -120 : 120, behavior: 'smooth' }); }}
+            style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: -8, zIndex: 2, width: 24, height: 24, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}
+          >{side === 'left' ? '←' : '→'}</button>
+        ))}
+        <div ref={rowRef} style={isGrid ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' } : { display: 'flex', gap: '7px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {products.map((product) => (
             <div key={product.id} style={{ flexShrink: isGrid ? undefined : 0, width: isGrid ? undefined : '100px', border: '1px solid #e1e3e5', borderRadius: '7px', overflow: 'hidden', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
               <div style={{ height: '70px', backgroundColor: '#f1f2f3', backgroundImage: product.image ? `url(${product.image})` : undefined, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', flexShrink: 0 }} />
@@ -704,6 +719,7 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
               </div>
             </div>
           ))}
+        </div>
         </div>
       ) : (
         products.map((product) => (
@@ -752,6 +768,8 @@ function PreviewImageBanner({ banner, device, editing }) {
 
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
+  const cardsHtml = footerExtras.cardsHtml(footerExtras.cardsConfig(footer.paymentCards));
+  const trustHtml = footerExtras.trustHtml(footerExtras.trustConfig(footer.trustBadges));
   // The preview draws the drawer smaller than the storefront (13px text and
   // 11px padding for the storefront's 15 / 16); the Checkout button's text
   // size and height keep that ratio.
@@ -1007,7 +1025,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', top: 0, zIndex: 5, background: '#fff', boxShadow: '0 6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
@@ -1041,7 +1059,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', bottom: 0, zIndex: 5, background: '#fff', boxShadow: '0 -6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
                       <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
@@ -1122,6 +1140,9 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                           {checkoutLabel} →
                         </button>
                       )}
+                      {/* Cards + trust badges: the storefront's own HTML (cart-footer-extras.shared.js) */}
+                      {cardsHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('paymentCards'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: cardsHtml }} />}
+                      {trustHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />}
                       {continueShopping.enabled && continueShopping.placement !== 'above' && continueButton}
                       {/* Footer note */}
                       <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>

@@ -2013,7 +2013,7 @@ function FBTEditor({ onDiscard }) {
           {/* Left column — settings (scrolls internally). Extra bottom padding
               keeps the last field from hiding behind the floating BrixBar
               (fixed at 20px from viewport bottom). */}
-          <div style={{ overflowY: 'auto', padding: '12px 12px 100px', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ overflowY: 'auto', padding: '12px 12px var(--brix-bar-clearance, 160px)', borderRight: '1px solid #e1e3e5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
               {/* Theme embed status — only relevant once the plan can actually
                   publish this; on Free the toggle above is already locked off. */}
@@ -2283,7 +2283,7 @@ function FBTEditor({ onDiscard }) {
 
           {/* Right column — Preview. Extra bottom padding keeps the preview
               footer from hiding behind the floating BrixBar. */}
-          <div style={{ overflowY: 'auto', padding: '8px 8px 100px' }}>
+          <div style={{ overflowY: 'auto', padding: '8px 8px var(--brix-bar-clearance, 160px)' }}>
             <Card>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">Preview</Text>
