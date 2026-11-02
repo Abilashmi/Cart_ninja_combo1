@@ -25,6 +25,8 @@ import { EmptyCartSection } from './sections/EmptyCartSection';
 import { ImageBannerSection } from './sections/ImageBannerSection';
 import { CheckoutSection } from './sections/CheckoutSection';
 import { CustomCSSSection } from './sections/CustomCSSSection';
+import { PaymentCardsSection } from './sections/PaymentCardsSection';
+import { TrustBadgesSection } from './sections/TrustBadgesSection';
 
 const ICON_MAP = {
   color: ColorIcon, settings: SettingsIcon, 'layout-header': LayoutHeaderIcon,
@@ -38,6 +40,7 @@ const SECTION_COMPONENT_MAP = {
   couponSlider: CouponSliderSection, upsellProducts: UpsellSection,
   countdownTimer: CountdownTimerSection,
   emptyCart: EmptyCartSection, checkoutButton: CheckoutSection, customCSS: CustomCSSSection,
+  paymentCards: PaymentCardsSection, trustBadges: TrustBadgesSection,
 };
 
 export function CartEditorSidebar({ onDiscard }) {
@@ -223,8 +226,12 @@ export function CartEditorSidebar({ onDiscard }) {
         <div style={{ height: 32 }} />
       </div>
 
-      {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ── */}
-      <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5' }}>
+      {/* ── BrixBar pinned at bottom of sidebar (inline, not floating) ──
+          Kept above the strip Shopify's "Work with Sidekick" bar covers at the
+          bottom of the app frame (--brix-sidekick-space, app/global.css): on
+          frames under ~1300px wide that bar reaches into this sidebar and hid
+          the send button. */}
+      <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5', paddingBottom: 'var(--brix-sidekick-space, 80px)' }}>
         <BrixBar size="sm" floating={false} />
       </div>
     </div>

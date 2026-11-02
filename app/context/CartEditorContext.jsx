@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
+import { footerExtras } from '../utils/cart-footer-extras.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 
@@ -47,6 +48,8 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.phoneLayout ? { phoneLayout: sanitizeDrawerLayout(cbStyle.phoneLayout, 'phone') } : {}),
         ...(cbStyle.desktopLayout ? { desktopLayout: sanitizeDrawerLayout(cbStyle.desktopLayout, 'desktop') } : {}),
       },
+      paymentCards: cbStyle.paymentCards ? footerExtras.cardsConfig(cbStyle.paymentCards) : base.footer.paymentCards,
+      trustBadges: cbStyle.trustBadges ? footerExtras.trustConfig(cbStyle.trustBadges) : base.footer.trustBadges,
       customCSS: record.customCSS || base.footer.customCSS,
       watermarkEnabled: record.watermark_enabled != null ? dbFlag(record.watermark_enabled) : base.footer.watermarkEnabled,
     },
@@ -596,6 +599,22 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     }));
   }, []);
 
+  const updatePaymentCards = useCallback((data) => {
+    setState(prev => ({
+      ...prev,
+      footer: { ...prev.footer, paymentCards: { ...prev.footer.paymentCards, ...data } },
+      isDirty: true,
+    }));
+  }, []);
+
+  const updateTrustBadges = useCallback((data) => {
+    setState(prev => ({
+      ...prev,
+      footer: { ...prev.footer, trustBadges: { ...prev.footer.trustBadges, ...data } },
+      isDirty: true,
+    }));
+  }, []);
+
   const addCouponSliderItem = useCallback((item) => {
     setState(prev => ({
       ...prev,
@@ -726,6 +745,8 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     updateEmptyCart,
     updateImageBanner,
     updateCheckoutButton,
+    updatePaymentCards,
+    updateTrustBadges,
     updateCustomCSS,
     updateWatermark,
     addCouponSliderItem,

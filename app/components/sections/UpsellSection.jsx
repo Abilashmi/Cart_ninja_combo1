@@ -438,6 +438,12 @@ export function UpsellSection() {
                 value={upsellProducts.layout}
                 onChange={(v) => updateUpsellProducts({ layout: v })}
               />
+              <Checkbox
+                label="Sticky upsell"
+                checked={upsellProducts.sticky === true}
+                onChange={(v) => updateUpsellProducts({ sticky: v })}
+                helpText="Keep the upsell pinned at the top or bottom of the cart while the cart items scroll."
+              />
             </FormLayout>
           </BlockStack>
 

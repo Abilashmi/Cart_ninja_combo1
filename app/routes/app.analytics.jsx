@@ -884,7 +884,7 @@ export default function AnalyticsPage() {
         )}
 
       </BlockStack>
-      <div style={{ height: 100 }} aria-hidden="true" />
+      <div style={{ height: "var(--brix-bar-clearance, 160px)" }} aria-hidden="true" />
     </Page>
   );
 }
