@@ -1873,15 +1873,17 @@
   var PLACEMENTS = ['replace', 'above', 'below'];
   function placementOf(cfg) { return PLACEMENTS.indexOf(cfg.drawerPlacement) !== -1 ? cfg.drawerPlacement : 'above'; }
 
-  // Drawer button sizes; the gap is on the side that faces Checkout.
-  function drawerSize(cfg, where) {
+  // Drawer button sizes; the gap (default 10px) is on the side that faces
+  // Checkout. The BRIX drawer passes its Phone layout gap on phones.
+  function drawerSize(cfg, where, gap) {
     var look = lookOf(cfg, 'drawer');
+    var g = isFinite(gap) && gap !== null ? Math.max(0, Math.min(24, Math.round(gap))) : 10;
     var r = Math.round(Number(look.radius));
     var py = Math.round(Number(look.paddingY));
     var px = Math.round(Number(look.paddingX));
     return {
-      marginTop: where === 'below' ? 10 : 0,
-      marginBottom: where === 'above' ? 10 : 0,
+      marginTop: where === 'below' ? g : 0,
+      marginBottom: where === 'above' ? g : 0,
       paddingY: isFinite(py) ? Math.max(4, Math.min(32, py)) : 14,
       paddingX: isFinite(px) ? Math.max(4, Math.min(48, px)) : 16,
       radius: isFinite(r) ? Math.max(0, Math.min(40, r)) : 12,
@@ -2131,7 +2133,7 @@
   // after `anchor`; `checkout` is what "Replace Checkout" hides. Checkout is
   // only hidden while a usable COD button shows: when COD can't be used for
   // this cart, shoppers always keep their normal Checkout.
-  function paintDrawerSlot(slot, cfg, state, place, onOpen) {
+  function paintDrawerSlot(slot, cfg, state, place, onOpen, gap) {
     var where = placementOf(cfg);
     var replace = where === 'replace' && Boolean(state && !state.reason && place);
     if (place && place.anchor && place.anchor.parentNode) {
@@ -2144,7 +2146,7 @@
       setReplaced(place && place.checkout, false);
       return;
     }
-    var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where);
+    var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where, gap);
     slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, codPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
@@ -2171,7 +2173,7 @@
       relabelBrixCheckout(checkout, cfg, state);
       paintDrawerSlot(slot, cfg, state, checkout ? { anchor: checkout, checkout: checkout } : null, function () {
         open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
-      });
+      }, opts.gap);
       // COD's Continue shopping takes the place of the Cart Editor's one.
       var cs = opts.cart && opts.cart.items && opts.cart.items.length ? continueLook(cfg) : null;
       setReplaced(opts.continueWrap, Boolean(cs));

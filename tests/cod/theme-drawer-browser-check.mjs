@@ -536,7 +536,8 @@ const done = async (page, name) => {
   const seen = (page) => page.evaluate(() => ({
     cod: document.querySelector('#cc-cod-slot [data-brix-cod-btn]')?.textContent.trim(),
     checkout: document.querySelector('#cc-checkout-wrap [data-cc-checkout-label]')?.textContent,
-    summary: [...document.querySelectorAll('#cc-drawer .bxcd-summary > span')].map((e) => e.textContent.trim()).filter(Boolean),
+    // The label text without the phone "Details" toggle (Phone layout's fold).
+    summary: [...document.querySelectorAll('#cc-drawer .bxcd-summary > span')].map((e) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim()).filter(Boolean),
     count: [...document.querySelectorAll('#cc-drawer span')].map((e) => e.textContent.trim()).find((t) => /^\d+ ITEMS?$/.test(t)),
   }));
   const openDrawer = async (page) => {

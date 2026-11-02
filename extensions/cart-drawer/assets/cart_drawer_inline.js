@@ -236,6 +236,12 @@
   // render already had the item.)
   let _ccRenderSeq = 0;
   let _ccDrawnSeq = 0;
+  // Free gift lines (by line key) already drawn on this page: their pop-in
+  // animation plays once (renderCartItemHtml).
+  const _ccGiftKeysShown = new Set();
+  // Phone footer: the price breakdown + footer note opened by the shopper
+  // (renderSummaryHtml's "Details" toggle); kept across redraws.
+  let _ccSummaryOpen = false;
   // Adds to cart still waiting for Shopify's answer: while one is, the drawer
   // isn't drawn from a cart that doesn't have the item yet (the add's own
   // answer opens it).
@@ -871,7 +877,7 @@
 
   function parseCheckoutButtonStyle(d) {
     const raw = d.checkout_button_style;
-    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard', continueShopping: ccContinueShopping(null) };
+    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard', continueShopping: ccContinueShopping(null), phoneLayout: ccDrawerLayout(null, 'phone'), desktopLayout: ccDrawerLayout(null, 'desktop') };
     const data = typeof raw === 'string' ? parseJSON(raw) : raw;
     const clampNum = (v, def, min, max) => { const n = parseInt(v, 10); return isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
     return {
@@ -883,7 +889,72 @@
       paddingY: clampNum(data.paddingY, 16, 8, 28),
       mobileButtonType: (data.mobileButtonType === 'swipe' || data.mobileButtonType === 'animated') ? data.mobileButtonType : 'standard',
       continueShopping: ccContinueShopping(data.continueShopping),
+      phoneLayout: ccDrawerLayout(data.phoneLayout, 'phone'),
+      desktopLayout: ccDrawerLayout(data.desktopLayout, 'desktop'),
     };
+  }
+
+  // Drawer width and spacing, one set per device (Cart Editor → Design →
+  // Layout). Same rules as app/utils/drawer-layout.shared.js
+  // sanitizeDrawerLayout: keep in step. Desktop values are drawn inline; the
+  // phone ones reach cart_drawer_inline.css's phone block through --cc-m-* /
+  // --bxcd-m-* properties set inline on the bars, header, body and footer.
+  const CC_SPACING_LIMITS = {
+    announcementPadding: [0, 20], countdownPadding: [0, 20], headerPadding: [4, 32],
+    bodyPadding: [0, 32], sectionGap: [0, 32],
+    progressPadding: [0, 24], progressHeadingGap: [0, 24], progressHeadingSize: [10, 22], progressLabelGap: [0, 24],
+    itemPadding: [4, 24], itemGap: [0, 24], itemImageSize: [40, 120],
+    itemTitleSize: [10, 22, 0.5], itemPriceSize: [10, 20, 0.5], itemTotalSize: [10, 24, 0.5],
+    footerPadding: [4, 32], summaryRowGap: [0, 16], summaryGap: [0, 32], buttonGap: [0, 24],
+  };
+  const CC_LAYOUT_LIMITS = {
+    phone: Object.assign({ drawerWidth: [70, 100] }, CC_SPACING_LIMITS),
+    desktop: Object.assign({ drawerWidth: [320, 640] }, CC_SPACING_LIMITS),
+  };
+  const CC_LAYOUT_FLAGS = ['foldSummary', 'showItemsHeading', 'showFooterNote'];
+  const CC_LAYOUT_DEFAULTS = {
+    phone: {
+      drawerWidth: 100, announcementPadding: 6, countdownPadding: 6, headerPadding: 10, bodyPadding: 10, sectionGap: 8,
+      progressPadding: 2, progressHeadingGap: 6, progressHeadingSize: 14, progressLabelGap: 10,
+      itemPadding: 12, itemGap: 12, itemImageSize: 64, itemTitleSize: 13.5, itemPriceSize: 13, itemTotalSize: 14,
+      footerPadding: 10, summaryRowGap: 4, summaryGap: 8, buttonGap: 10,
+      foldSummary: true, showItemsHeading: true, showFooterNote: true,
+    },
+    desktop: {
+      drawerWidth: 420, announcementPadding: 8, countdownPadding: 8, headerPadding: 16, bodyPadding: 16, sectionGap: 12,
+      progressPadding: 8, progressHeadingGap: 12, progressHeadingSize: 15, progressLabelGap: 10,
+      itemPadding: 14, itemGap: 12, itemImageSize: 76, itemTitleSize: 14, itemPriceSize: 13, itemTotalSize: 15,
+      footerPadding: 20, summaryRowGap: 8, summaryGap: 16, buttonGap: 10,
+      foldSummary: false, showItemsHeading: true, showFooterNote: true,
+    },
+  };
+  function ccDrawerLayout(raw, device) {
+    const d = raw && typeof raw === 'object' ? raw : {};
+    const defaults = CC_LAYOUT_DEFAULTS[device];
+    const limits = CC_LAYOUT_LIMITS[device];
+    const out = {};
+    Object.keys(limits).forEach((key) => {
+      const [min, max, step = 1] = limits[key];
+      const n = Math.round(Number(d[key]) / step) * step;
+      out[key] = d[key] !== null && d[key] !== '' && isFinite(n) ? Math.max(min, Math.min(max, n)) : defaults[key];
+    });
+    CC_LAYOUT_FLAGS.forEach((key) => { out[key] = typeof d[key] === 'boolean' ? d[key] : defaults[key]; });
+    return out;
+  }
+  function ccPhone() {
+    return (CONFIG && CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.phoneLayout) || ccDrawerLayout(null, 'phone');
+  }
+  function ccDesktop() {
+    return (CONFIG && CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.desktopLayout) || ccDrawerLayout(null, 'desktop');
+  }
+  // The drawer's width per device, as properties on #cc-drawer (read by
+  // cart_drawer_inline.css: px above 749px, % of the screen below).
+  function ccDrawerWidthVars() {
+    return `--cc-d-width:${ccDesktop().drawerWidth}px;--cc-m-width:${ccPhone().drawerWidth}%;`;
+  }
+  // The same width as the phone CSS block (cart_drawer_inline.css).
+  function ccIsPhone() {
+    return Boolean(window.matchMedia && window.matchMedia('(max-width: 480px)').matches);
   }
 
   // "Continue shopping" next to Checkout (Cart Editor → Checkout Button), off
@@ -2116,7 +2187,11 @@
       let lastCount = parseInt(el.textContent || el.getAttribute('data-cart-count') || el.getAttribute('data-item-count') || 0);
       new MutationObserver(function () {
         const now = parseInt(el.textContent || el.getAttribute('data-cart-count') || el.getAttribute('data-item-count') || 0);
-        if (now > lastCount) {
+        // Ours already open on an add we saw: that add's answer redraws it
+        // (this was a second redraw right after it on extrokids' upsell ADD).
+        const ours = document.getElementById('cc-overlay');
+        const seenAdd = ours && ours.classList.contains('active') && Date.now() - _ccExternalAddInFlightAt < 5000;
+        if (now > lastCount && !seenAdd) {
           scheduleOpenDrawer(200);
         }
         lastCount = now;
@@ -3062,6 +3137,8 @@
       onPayOnline: () => ccGoToCheckout(href),
       onSuccess: () => closeDrawer(),
       onContinue: () => closeDrawer(),
+      // Design → Layout → space between Checkout and COD.
+      gap: (ccIsPhone() ? ccPhone() : ccDesktop()).buttonGap,
     });
   }
 
@@ -3339,7 +3416,11 @@
       ? '<span class="bxcd-item__free">FREE</span><span class="bxcd-item__was">' + formatMoney(originalLine) + '</span>'
       : formatMoney(item.final_line_price / 100);
 
-    return '<div class="bxcd-item' + (isGift ? ' bxcd-item--gift' : '') + '" data-item-key="' + escapeHtml(key) + '"' + (isGift ? ' style="animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;"' : '') + '>' +
+    // The gift pops in only the first time it's drawn: every cart change
+    // redraws the whole drawer, and replaying it made the gift jump on each add.
+    const popIn = isGift && !_ccGiftKeysShown.has(key);
+    if (isGift) _ccGiftKeysShown.add(key);
+    return '<div class="bxcd-item' + (isGift ? ' bxcd-item--gift' : '') + '" data-item-key="' + escapeHtml(key) + '"' + (popIn ? ' style="animation:cc-pop .45s cubic-bezier(.34,1.56,.64,1) both;"' : '') + '>' +
       (isGift ? '<span class="bxcd-item__badge' + (isFreeGift ? ' bxcd-item__badge--free' : '') + '">' + CC_ICON_GIFT + escapeHtml(ccRewardBadgeText(item, isFreeGift)) + '</span>' : '') +
       '<div class="bxcd-item__media">' + (item.image
         ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
@@ -3356,19 +3437,46 @@
   // Subtotal / discounts / total: labels left, amounts right (brix_cart_ui.css .bxcd-summary).
   // cartDiscounts: Shopify's own order discounts already in the cart (e.g. the
   // BRIX prepaid discount), one named row each.
+  // Design → Layout → "Fold price details" (per device; default on for
+  // phones, off for desktop): only Total shows; the rows marked __detail (and
+  // the footer note) open with the "Details" toggle (_ccSummaryOpen), so the
+  // footer leaves room for the cart's lines. The footer's cc-fold-m /
+  // cc-fold-d classes say where it folds (cart_drawer_inline.css).
   function renderSummaryHtml(subtotal, totalDiscount, finalTotal, cartDiscounts) {
-    return '<div class="bxcd-summary">' +
-      '<span class="bxcd-summary__label">Subtotal</span><span class="bxcd-summary__value">' + formatMoney(subtotal) + '</span>' +
+    const fold = ccPhone().foldSummary || ccDesktop().foldSummary;
+    const detail = (cls, text) => '<span class="bxcd-summary__label bxcd-summary__detail' + cls + '">' + text + '</span>';
+    const value = (cls, text) => '<span class="bxcd-summary__value bxcd-summary__detail' + cls + '">' + text + '</span>';
+    return '<div class="bxcd-summary' + (_ccSummaryOpen ? ' bxcd-summary--open' : '') + '">' +
+      detail('', 'Subtotal') + value('', formatMoney(subtotal)) +
       (cartDiscounts || []).map(function (d) {
-        return '<span class="bxcd-summary__label bxcd-summary__label--saving">' + escapeHtml(d.title) + '</span><span class="bxcd-summary__value bxcd-summary__value--saving">-' + formatMoney(d.amount) + '</span>';
+        return detail(' bxcd-summary__label--saving', escapeHtml(d.title)) + value(' bxcd-summary__value--saving', '-' + formatMoney(d.amount));
       }).join('') +
       (totalDiscount > 0
-        ? '<span class="bxcd-summary__label bxcd-summary__label--saving">Discounts</span><span class="bxcd-summary__value bxcd-summary__value--saving">-' + formatMoney(totalDiscount) + '</span>'
+        ? detail(' bxcd-summary__label--saving', 'Discounts') + value(' bxcd-summary__value--saving', '-' + formatMoney(totalDiscount))
         : '') +
-      '<span class="bxcd-summary__divider" aria-hidden="true"></span>' +
-      '<span class="bxcd-summary__label bxcd-summary__label--total">Total</span><span class="bxcd-summary__value bxcd-summary__value--total">' + formatMoney(finalTotal) + '</span>' +
+      '<span class="bxcd-summary__divider bxcd-summary__detail" aria-hidden="true"></span>' +
+      '<span class="bxcd-summary__label bxcd-summary__label--total">Total' +
+      (fold
+        ? '<button type="button" class="bxcd-summary__toggle" aria-expanded="' + _ccSummaryOpen + '">Details' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
+          '</button>'
+        : '') +
+      '</span>' +
+      '<span class="bxcd-summary__value bxcd-summary__value--total">' + formatMoney(finalTotal) + '</span>' +
       '</div>';
   }
+
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest && e.target.closest('#cc-drawer .bxcd-summary__toggle');
+    if (!btn) return;
+    e.preventDefault();
+    _ccSummaryOpen = !_ccSummaryOpen;
+    btn.setAttribute('aria-expanded', String(_ccSummaryOpen));
+    const summary = btn.closest('.bxcd-summary');
+    if (summary) summary.classList.toggle('bxcd-summary--open', _ccSummaryOpen);
+    const footer = document.getElementById('cc-drawer-footer');
+    if (footer) footer.classList.toggle('cc-summary-open', _ccSummaryOpen);
+  });
 
   // opts.cart: a cart BRIX already has (Fast Add: the last cart + the add's
   // answer), drawn without reading /cart.js; it never syncs reward gifts (the
@@ -3462,7 +3570,7 @@
     const hdrTitle = hdr.title || 'Your Cart';
     const hdrBorder = hdr.borderBottom !== false ? 'border-bottom:1px solid #e5e7eb;' : '';
     drawerHtml += `
-<div class="cc-drawer-header" style="padding:16px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+<div class="cc-drawer-header" style="--cc-m-pad:${ccPhone().headerPadding}px;padding:${ccDesktop().headerPadding}px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
   <h3 style="margin:0;font-size:18px;font-weight:600;color:${hdrColor};">${escapeHtml(hdrTitle)}</h3>
   <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
     style="background:none;border:none;font-size:20px;cursor:pointer;color:${hdrColor};padding:4px;">✕</button>
@@ -3475,12 +3583,12 @@
     if (ann.enabled && annMessages.length) {
       const annStyle = `background:${ann.bgColor || '#4f46e5'};color:${ann.textColor || '#ffffff'};font-size:${ann.fontSize || 14}px;text-align:${ann.textAlign || 'center'};font-weight:${ann.bold ? 700 : 500};font-style:${ann.italic ? 'italic' : 'normal'};flex-shrink:0;`;
       if (annMessages.length < 2) {
-        drawerHtml += `<div id="cc-announcement-bar" style="padding:8px 16px;${annStyle}">${escapeHtml(annMessages[0])}</div>`;
+        drawerHtml += `<div id="cc-announcement-bar" style="--cc-m-pad:${ccPhone().announcementPadding}px;padding:${ccDesktop().announcementPadding}px 16px;${annStyle}">${escapeHtml(annMessages[0])}</div>`;
       } else {
         // One message at a time; startAnnouncementRotator() runs it.
         if (_ccAnnIndex >= annMessages.length) _ccAnnIndex = 0;
         const arrows = ann.showArrows !== false;
-        drawerHtml += `<div id="cc-announcement-bar" class="cc-ann cc-ann--rotating" role="region" aria-roledescription="carousel" aria-label="Announcements" data-cc-ann-count="${annMessages.length}" style="${annStyle}">`
+        drawerHtml += `<div id="cc-announcement-bar" class="cc-ann cc-ann--rotating" role="region" aria-roledescription="carousel" aria-label="Announcements" data-cc-ann-count="${annMessages.length}" style="--cc-m-pad:${ccPhone().announcementPadding}px;padding:${ccDesktop().announcementPadding}px 6px;${annStyle}">`
           + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-prev" aria-label="Previous announcement">&#8249;</button>` : '')
           + `<div class="cc-ann-track" aria-live="polite">`
           + annMessages.map((m, i) => `<div class="cc-ann-msg${i === _ccAnnIndex ? ' cc-ann-msg--on' : ''}"${i === _ccAnnIndex ? '' : ' aria-hidden="true"'}>${escapeHtml(m)}</div>`).join('')
@@ -3494,7 +3602,7 @@
     const countdown = CONFIG.countdown || {};
     if (countdown.enabled && !isEmpty) {
       drawerHtml += `
-<div id="cc-countdown-bar" style="padding:8px 16px;background:${countdown.bgColor};color:${countdown.textColor};font-size:13px;text-align:center;font-weight:600;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
+<div id="cc-countdown-bar" style="--cc-m-pad:${ccPhone().countdownPadding}px;padding:${ccDesktop().countdownPadding}px 16px;background:${countdown.bgColor};color:${countdown.textColor};font-size:13px;text-align:center;font-weight:600;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
   <span id="cc-countdown-label">${escapeHtml(countdown.label)}</span>
   <span id="cc-countdown-text" style="color:${countdown.accentColor};font-weight:800;letter-spacing:0.5px;"></span>
   ${countdown.couponCode ? `<span style="opacity:0.85;">· Use code <strong>${escapeHtml(countdown.couponCode)}</strong></span>` : ''}
@@ -3502,7 +3610,18 @@
     }
 
     /* -------- BODY -------- */
-    drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;--cc-gap:12px;gap:var(--cc-gap);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
+    const phone = ccPhone();
+    const desk = ccDesktop();
+    const phoneBodyVars = `--cc-m-pad:${phone.bodyPadding}px;--cc-m-gap:${phone.sectionGap}px;`
+      + `--cc-m-pb-pad:${phone.progressPadding}px;--cc-m-pb-head-gap:${phone.progressHeadingGap}px;--cc-m-pb-head-size:${phone.progressHeadingSize}px;`
+      + `--bxcd-m-item-pad:${phone.itemPadding}px;--bxcd-m-item-gap:${phone.itemGap}px;--bxcd-m-img:${phone.itemImageSize}px;`
+      + `--bxcd-m-title:${phone.itemTitleSize}px;--bxcd-m-price:${phone.itemPriceSize}px;--bxcd-m-total:${phone.itemTotalSize}px;`
+      + `--bxcd-d-item-pad:${desk.itemPadding}px;--bxcd-d-item-gap:${desk.itemGap}px;--bxcd-d-img:${desk.itemImageSize}px;`
+      + `--bxcd-d-title:${desk.itemTitleSize}px;--bxcd-d-price:${desk.itemPriceSize}px;--bxcd-d-total:${desk.itemTotalSize}px;`;
+    const bodyClasses = [phone.showItemsHeading ? '' : 'cc-m-no-items-head', desk.showItemsHeading ? '' : 'cc-d-no-items-head'].filter(Boolean).join(' ');
+    // Desktop padding inline (24px more at the bottom, as before), phones via the CSS.
+    const bp = desk.bodyPadding;
+    drawerHtml += `<div id="cc-drawer-body"${bodyClasses ? ` class="${bodyClasses}"` : ''} style="${phoneBodyVars}flex:1;padding:${bp}px ${bp}px ${bp + 24}px ${bp}px;display:flex;flex-direction:column;--cc-gap:${desk.sectionGap}px;gap:var(--cc-gap);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
 
     /* ---- PROGRESS BAR ---- */
     const progress = CONFIG.progress;
@@ -3560,9 +3679,9 @@
       const stickyCss = progress.sticky
         ? `position:sticky;${progress.placement === 'top' ? 'top' : 'bottom'}:0;z-index:6;background:#fff;box-shadow:0 ${progress.placement === 'top' ? '6px' : '-6px'} 8px -8px rgba(15,23,42,.25);`
         : 'position:relative;';
-      let pbHtml = `<div data-cc-section="progress" class="cc-progress-section${progress.sticky ? ' cc-progress-section--sticky' : ''}" style="padding:8px 16px;margin-bottom:0;${stickyCss}order:${progress.placement === 'top' ? -20 : 980};">`;
+      let pbHtml = `<div data-cc-section="progress" class="cc-progress-section${progress.sticky ? ' cc-progress-section--sticky' : ''}" style="padding:${desk.progressPadding}px 16px;margin-bottom:0;${stickyCss}order:${progress.placement === 'top' ? -20 : 980};">`;
       // Header info
-      pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
+      pbHtml += `<div class="cc-progress-head" style="text-align:center;margin-bottom:${desk.progressHeadingGap}px;">`;
       if (celebratingTier) {
         const msg = celebratingTier.completionMessage
           || `Congratulations! You've unlocked ${celebratingTier.title || celebratingTier.description || 'your reward'}!`;
@@ -3604,7 +3723,7 @@
           targetStr: pInfo.mode === 'quantity' ? String(pInfo.upcoming.target) : formatMoney(pInfo.upcoming.target),
         });
         pbHtml += `
-    <p style="margin:0;font-size:15px;font-weight:500;color:${progress.completionTextColor || '#10b981'};">
+    <p style="margin:0;font-size:${desk.progressHeadingSize}px;font-weight:500;color:${progress.completionTextColor || '#10b981'};">
       ${escapeHtml(progressMsg)}
     </p>
   `;
@@ -3796,7 +3915,7 @@
     if (hasCartItems) {
       if (bannerSlot === 'beforeProducts') drawerHtml += bannerHtml;
       drawerHtml += `
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
+  <div class="cc-items-head" style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
     <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
     <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
       <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.item_count} ${cart.item_count === 1 ? 'ITEM' : 'ITEMS'}</span>
@@ -3816,7 +3935,9 @@
       });
 
       let itemsHtml = '';
-      cart.items.forEach((item) => {
+      // Gifts first, then the lines in Shopify's order (newest first): a new
+      // product used to land above the gift and push it down on every add.
+      [...cart.items.filter(isGiftLine), ...cart.items.filter((it) => !isGiftLine(it))].forEach((item) => {
         const isGift = isGiftLine(item);
         itemsHtml += renderCartItemHtml(item, {
           isGift,
@@ -3885,7 +4006,11 @@
       const continueCfg = (CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.continueShopping) || ccContinueShopping(null);
 
       drawerHtml += `
-<div id="cc-drawer-footer" style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
+<div id="cc-drawer-footer" class="${[
+  _ccSummaryOpen ? 'cc-summary-open' : '',
+  phone.foldSummary ? 'cc-fold-m' : '', desk.foldSummary ? 'cc-fold-d' : '',
+  phone.showFooterNote ? '' : 'cc-no-note-m', desk.showFooterNote ? '' : 'cc-no-note-d',
+].filter(Boolean).join(' ')}" style="--cc-m-pad:${phone.footerPadding}px;--cc-m-sum-row:${phone.summaryRowGap}px;--cc-m-sum-gap:${phone.summaryGap}px;--cc-d-sum-row:${desk.summaryRowGap}px;--cc-d-sum-gap:${desk.summaryGap}px;padding:${desk.footerPadding}px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
   ${renderSummaryHtml(shownSubtotal, totalDiscount, finalTotal, cartLevelOff > 0 ? cartDiscounts : [])}
   ${continueCfg.enabled && continueCfg.placement === 'above' ? renderContinueShopping(continueCfg) : ''}
   <div id="cc-cod-slot"></div>
@@ -3920,7 +4045,7 @@
     if (isFirstOpen) {
       // First open: build full overlay with backdrop + drawer
       const drawerAnim = (CONFIG.design && CONFIG.design.animation) || 'slide';
-      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" class="bxcd-root" data-animation="${drawerAnim}">${drawerHtml}</div>`;
+      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" class="bxcd-root" data-animation="${drawerAnim}" style="${ccDrawerWidthVars()}">${drawerHtml}</div>`;
       root.appendChild(overlay);
       // Force a synchronous layout flush so the browser paints the closed
       // (translateX/opacity) state before we flip to .active — otherwise
@@ -3946,6 +4071,8 @@
       const drawer = document.getElementById('cc-drawer');
       if (drawer) {
         drawer.innerHTML = drawerHtml;
+        drawer.style.setProperty('--cc-d-width', ccDesktop().drawerWidth + 'px');
+        drawer.style.setProperty('--cc-m-width', ccPhone().drawerWidth + '%');
       }
       overlay.classList.add('active');
       ccMilestone('Cart Ninja drawer opened');
@@ -4028,7 +4155,9 @@
       if (shift) el.style.marginLeft = Math.round(shift) + 'px';
       bottom = Math.max(bottom, r.bottom);
     });
-    track.style.marginBottom = Math.max(48, Math.ceil(bottom - tr.bottom) + 10) + 'px';
+    // Space under the labels (Design → Layout; default 10px, at least 48 in all).
+    const labelGap = (ccIsPhone() ? ccPhone() : ccDesktop()).progressLabelGap;
+    track.style.marginBottom = Math.max(38 + labelGap, Math.ceil(bottom - tr.bottom) + labelGap) + 'px';
   }
   window.addEventListener('resize', () => { ccFitProgressLabels(); });
   // The theme's font can arrive after the drawer drew: labels then grow
@@ -4559,7 +4688,13 @@
       _ccUpsellSections[key] = entry;
     }
     if (entry.html !== null) return Promise.resolve(_ccLastUpsellHtml = entry.html);
-    return Promise.race([entry.job, new Promise((r) => setTimeout(() => r(null), 150))]).then((html) => {
+    // Opening: the drawer comes first and the picks follow. Already open (an
+    // upsell ADD, a quantity change): wait a little longer for them, so the
+    // drawer is redrawn once, not once with the old picks and again with the
+    // new ones.
+    const openNow = document.getElementById('cc-overlay');
+    const wait = openNow && openNow.classList.contains('active') ? 600 : 150;
+    return Promise.race([entry.job, new Promise((r) => setTimeout(() => r(null), wait))]).then((html) => {
       if (html !== null) return (_ccLastUpsellHtml = html);
       entry.job.then(() => {
         const overlay = document.getElementById('cc-overlay');
@@ -5096,8 +5231,10 @@
         body: JSON.stringify({ items: [{ id: numId, quantity: 1 }] }),
       }).then(function (r) {
         if (r.ok) {
-          setTimeout(function () { renderDrawer(); }, 300);
-          setTimeout(function () { renderDrawer(); }, 800);
+          // The fetch intercept (or ccWatchAddAnswers) redraws the drawer
+          // once on this answer. Two more redraws at 300 / 800 ms rebuilt it
+          // 4 times in half a second (pictures reloading, the list jumping:
+          // "the cart opens 2 times" on extrokids).
           onDone(true);
         } else {
           // 422 = Shopify won't add it (sold out / no stock left for that variant).
