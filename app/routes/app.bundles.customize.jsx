@@ -3271,7 +3271,7 @@ function CustomizeEditor({ onDiscard }) {
         <BrixBar size="md" floating />
         <ComboSetupTour page="picker" shop={shop} />
         <style>{`
-.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:120px;align-items:stretch}
+.template-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;margin-bottom:var(--brix-bar-clearance,160px);align-items:stretch}
 .tpl-pick-designs{display:flex;flex-wrap:wrap;gap:6px}
 .tpl-pick-design{background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
 .tpl-pick-pro{flex-shrink:0;background:linear-gradient(135deg,#1a9de0 0%,#2ecc71 100%);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
@@ -3445,7 +3445,7 @@ function CustomizeEditor({ onDiscard }) {
   };
 
   return (
-    <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: '120px' }}>
+    <div style={{ background: '#F4F6FA', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: 'var(--brix-bar-clearance, 160px)' }}>
 
       <Page
         fullWidth
