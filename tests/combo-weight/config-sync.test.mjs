@@ -154,30 +154,20 @@ test('sync on Pro: writes the config, creates the discount with its input variab
   assert.ok(again.state.metafields.some((m) => m.ownerId === 'gid://shopify/DiscountAutomaticNode/5' && m.key === 'combo_weight_vars'));
 });
 
-test('sync on Starter: Weight / Value Box and older Classic tiers are locked; the config is emptied', async () => {
-  db.plan = 'starter';
-  db.templates = [row(12), row(13, { layout: 'layout6' }), row(18, { layout: 'layout5' })];
-  const admin = fakeAdmin({ storedConfig: { version: 1, templates: { 12: { hash: 'x' } } } });
-  const result = await sync.syncComboWeightDiscount(admin, nextShop());
-  assert.equal(result.state, 'plan_locked');
-  assert.equal(result.verified, false);
-  assert.deepEqual(admin.state.config.templates, {});
-  assert.ok(!admin.calls.some((c) => c.op === 'ComboWeightDiscountCreate'));
-  assert.match(result.templates[12].message, /Growth plan/, 'older Classic tiers unlock on Growth');
-  assert.match(result.templates[13].message, /Value Box pricing goes live on the Growth plan/);
-  assert.match(result.templates[18].message, /Weight Box pricing goes live on the Growth plan/);
-});
-
-test('sync on Starter: the Quantity Box goes live', async () => {
-  db.plan = 'starter';
-  const qty = { ...pricing(), measure: 'quantity', max_grams: 3, tiers: [{ id: 'a', min_grams: 2, type: 'fixed_price', value: 999, label: '' }] };
-  db.templates = [row(21, { layout: 'layout7', weight: qty, extra: { col_1: 'books', tab_count: 1 } }), row(22, { layout: 'layout5' })];
-  const admin = fakeAdmin();
-  const result = await sync.syncComboWeightDiscount(admin, nextShop());
-  assert.equal(result.state, 'active');
-  assert.deepEqual(Object.keys(admin.state.config.templates), ['21']);
-  assert.equal(admin.state.config.templates[21].measure, 'quantity');
-  assert.match(result.templates[22].message, /Growth plan/);
+test('sync on Free and Lite: every plan has every box template, so all of them go live', async () => {
+  for (const plan of ['free', 'lite']) {
+    db.plan = plan;
+    const qty = { ...pricing(), measure: 'quantity', max_grams: 3, tiers: [{ id: 'a', min_grams: 2, type: 'fixed_price', value: 999, label: '' }] };
+    db.templates = [
+      row(12, { layout: 'layout1', weight: qty }),
+      row(18, { layout: 'layout5', extra: { col_1: 'books', tab_count: 1 } }),
+      row(21, { layout: 'layout7', weight: qty, extra: { col_1: 'books', tab_count: 1 } }),
+    ];
+    const admin = fakeAdmin();
+    const result = await sync.syncComboWeightDiscount(admin, nextShop());
+    assert.equal(result.state, 'active', plan);
+    assert.deepEqual(Object.keys(admin.state.config.templates).sort(), ['12', '18', '21'], plan);
+  }
 });
 
 test('sync on Growth: all three box templates and older Classic tiers go live', async () => {

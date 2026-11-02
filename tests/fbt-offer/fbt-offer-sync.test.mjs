@@ -120,13 +120,13 @@ test('AI mode uses the AI rules', async () => {
   assert.equal(db.condition[0].offer.value, 10);
 });
 
-test('plan without FBT: nothing goes live', async () => {
+test('Free plan: every plan has FBT, so the offer goes live there too', async () => {
   db.plan = 'free';
   const admin = fakeAdmin({ discount: 'ACTIVE' });
   const r = await syncFbtOfferDiscount(admin, 'shop-f.myshopify.com');
-  assert.equal(r.verified, false);
-  assert.deepEqual(JSON.parse(admin.log.metafield.value).sets, []);
-  assert.match(r.message, /plan/);
+  assert.equal(r.verified, true);
+  assert.equal(r.state, 'active');
+  assert.deepEqual(JSON.parse(admin.log.metafield.value).sets.map((s) => s.id), ['1']);
 });
 
 // "Create the discount" off: the store's own automatic discount gives the

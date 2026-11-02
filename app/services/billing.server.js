@@ -1,7 +1,7 @@
 import { getDb } from './db.server';
 import { ensurePlanTables } from './plan-schema.server';
 import { getShopPlan, getShopBillingInterval } from './plan-permissions.server';
-import { PLANS, orderCapBehavior } from '../config/plans';
+import { PLANS, orderCapBehavior, dayOverageOrders } from '../config/plans';
 import { unauthenticated } from '../shopify.server';
 
 function yesterdayDateStr() {
@@ -84,6 +84,17 @@ async function createUsageCharge(admin, { amount, description }) {
   return { success: true, usageRecordId: data.data?.appUsageRecordCreate?.appUsageRecord?.id };
 }
 
+// The month's orders (billable_order_count, every order of the store, see
+// billable-orders.server.js) from the 1st of `date`'s month through `date`.
+async function monthOrdersThrough(db, shop, date) {
+  const [rows] = await db.execute(
+    `SELECT COALESCE(SUM(billable_order_count), 0) AS total
+     FROM analytics_daily_rollup WHERE shop_domain = ? AND date >= ? AND date <= ?`,
+    [shop, date.slice(0, 7) + '-01', date]
+  );
+  return Number(rows[0]?.total || 0);
+}
+
 // Computes overage for one shop/date from analytics_daily_rollup + the plan
 // config, upserts an order_overage_charges row, and attempts to record the
 // Shopify usage charge. Idempotent — skips dates already charged.
@@ -93,12 +104,16 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
   const interval = await getShopBillingInterval(shop);
 
   // A yearly plan has no usage line item (Shopify allows none on yearly
-  // subscriptions): its storefront pauses at the cap instead.
-  if (orderCapBehavior(planKey, interval) !== 'charge' || orderCount <= plan.orderCap) {
-    // overageRate === 0 (e.g. Free) means exceeding the cap pauses
-    // storefront widgets instead of billing — see plan_order_cap_exceeded
-    // in php_backend/plan_helpers.php, the actual enforcement point.
-    return { skipped: true, reason: 'within cap, unlimited plan, or plan has no per-order charge' };
+  // subscriptions): its storefront pauses at the cap instead. overageRate
+  // === 0 (Free) pauses too — see plan_order_cap_exceeded in
+  // php_backend/plan_helpers.php, the actual enforcement point.
+  if (orderCapBehavior(planKey, interval) !== 'charge') {
+    return { skipped: true, reason: 'unlimited plan, or plan has no per-order charge' };
+  }
+  // The cap is per calendar month, not per day.
+  const overageOrders = dayOverageOrders(await monthOrdersThrough(db, shop, date), orderCount, plan.orderCap);
+  if (overageOrders <= 0) {
+    return { skipped: true, reason: 'within the monthly cap' };
   }
 
   // Free trials shouldn't incur usage charges before the merchant has even
@@ -122,7 +137,6 @@ async function chargeOverageForShopDate(db, admin, shop, date, orderCount) {
     return { skipped: true, reason: 'already charged' };
   }
 
-  const overageOrders = orderCount - plan.orderCap;
   const chargeAmount = overageOrders * plan.overageRate;
 
   await db.execute(
@@ -264,6 +278,8 @@ export async function chargeOverageForToday(admin, shop) {
   return chargeOverageForShopDate(db, admin, shop, today, orderCount);
 }
 
+// This month's orders against the plan's monthly cap, for the Billing page
+// (field names kept from when it showed one day).
 export async function getTodayUsage(shop) {
   const db = getDb();
   await ensurePlanTables(db);
@@ -273,10 +289,13 @@ export async function getTodayUsage(shop) {
   const today = new Date().toISOString().slice(0, 10);
 
   const [rows] = await db.execute(
-    'SELECT billable_order_count, fbt_order_count, combo_order_count FROM analytics_daily_rollup WHERE shop_domain = ? AND date = ? LIMIT 1',
-    [shop, today]
+    `SELECT COALESCE(SUM(billable_order_count), 0) AS total, COALESCE(SUM(fbt_order_count), 0) AS fbt,
+            COALESCE(SUM(combo_order_count), 0) AS combo,
+            COALESCE(SUM(CASE WHEN date = ? THEN billable_order_count ELSE 0 END), 0) AS today
+     FROM analytics_daily_rollup WHERE shop_domain = ? AND date >= ? AND date <= ?`,
+    [today, shop, today.slice(0, 7) + '-01', today]
   );
-  const totalOrders = rows[0]?.billable_order_count || 0;
+  const totalOrders = Number(rows[0]?.total || 0);
   const freeOrders = plan.orderCap;
   const overageOrders = freeOrders === null ? 0 : Math.max(0, totalOrders - freeOrders);
   const pendingCharge = charges ? overageOrders * plan.overageRate : 0;
@@ -286,15 +305,18 @@ export async function getTodayUsage(shop) {
   // into overage_orders/pending_charge, which stay driven by total_orders
   // alone (see webhooks.orders.paid.jsx for why sources aren't billed
   // separately).
-  const fbtOrders = rows[0]?.fbt_order_count || 0;
-  const comboOrders = rows[0]?.combo_order_count || 0;
+  const fbtOrders = Number(rows[0]?.fbt || 0);
+  const comboOrders = Number(rows[0]?.combo || 0);
 
   return {
     planKey,
+    period: 'month',
     free_orders: freeOrders,
     total_orders: totalOrders,
+    today_orders: Number(rows[0]?.today || 0),
     overage_orders: overageOrders,
     pending_charge: pendingCharge,
+    charges_overage: charges,
     unlimited: freeOrders === null,
     fbt_orders: fbtOrders,
     combo_orders: comboOrders,
@@ -303,19 +325,18 @@ export async function getTodayUsage(shop) {
 }
 
 // Node-side mirror of plan_order_cap_exceeded() in
-// php_backend/plan_helpers.php — that PHP function is what actually
-// enforces the storefront cutoff (PHP serves the widget config endpoints
-// directly). This is purely for the admin Billing dashboard to show the
-// merchant why their storefront paused, computed the same way: current
-// calendar month to date, only relevant for a capped, zero-overage-rate
-// plan (e.g. Free).
+// php_backend/plan_helpers.php — that PHP function enforces the cutoff for
+// the widgets PHP serves; this one is used by the admin Billing dashboard
+// and by isStorefrontPaused (combo pages, COD orders), computed the same
+// way: current calendar month to date, only for a plan that pauses at its
+// cap (Free, or a capped plan billed yearly).
 export async function getMonthlyOrderCapStatus(shop) {
   const db = getDb();
   await ensurePlanTables(db);
   const planKey = await getShopPlan(shop);
   const plan = PLANS[planKey];
 
-  // Capped plans that don't bill overage: Free, and Starter / Growth billed yearly.
+  // Capped plans that don't bill overage: Free, and Lite / Starter / Growth billed yearly.
   if (orderCapBehavior(planKey, await getShopBillingInterval(shop)) !== 'pause') {
     return { applies: false };
   }
@@ -334,6 +355,26 @@ export async function getMonthlyOrderCapStatus(shop) {
     orderCap: plan.orderCap,
     exceeded: totalOrders >= plan.orderCap,
   };
+}
+
+// Whether the shop's storefront features are paused for the rest of the
+// month (getMonthlyOrderCapStatus().exceeded), for what Node serves to
+// shoppers: combo pages and COD orders. Cached a minute per shop; a lookup
+// that fails never pauses a store.
+const PAUSE_CACHE_MS = 60_000;
+const pauseCache = new Map(); // shop -> { paused, expiresAt }
+
+export async function isStorefrontPaused(shop) {
+  const hit = pauseCache.get(shop);
+  if (hit && hit.expiresAt > Date.now()) return hit.paused;
+  let paused = false;
+  try {
+    paused = Boolean((await getMonthlyOrderCapStatus(shop)).exceeded);
+  } catch (err) {
+    console.error(`[billing] order cap lookup failed for ${shop}:`, err.message);
+  }
+  pauseCache.set(shop, { paused, expiresAt: Date.now() + PAUSE_CACHE_MS });
+  return paused;
 }
 
 export async function getChargeHistory(shop, limit = 30) {

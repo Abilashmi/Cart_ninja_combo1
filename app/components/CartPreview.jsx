@@ -11,6 +11,7 @@ import { AnnouncementRotator } from './AnnouncementRotator';
 import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
 import { fillPriceTags } from '../utils/price-tags.shared';
+import { sanitizeContinueShopping, continueShoppingStyle } from '../utils/continue-shopping.shared.js';
 import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 import { footerExtras } from '../utils/cart-footer-extras.shared';
@@ -783,6 +784,18 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
       swipeFont: Math.round((Math.max(12, font - 2)) * 12 / 13 * 10) / 10,
     };
   })();
+  // "Continue shopping" next to Checkout (Checkout Button section), at the
+  // preview's 13/15 scale; the gap is on the side facing Checkout.
+  const continueShopping = sanitizeContinueShopping(footer.checkoutButton.continueShopping);
+  const continueButton = (
+    <button
+      type="button"
+      onClick={(e) => e.stopPropagation()}
+      style={{ ...continueShoppingStyle(continueShopping, 13 / 15), [continueShopping.placement === 'above' ? 'marginBottom' : 'marginTop']: 8 }}
+    >
+      {continueShopping.text}
+    </button>
+  );
   const { symbol: currencySymbol, formatMoney } = useCurrency();
 
   const designTheme = settings.design?.theme;
@@ -1113,6 +1126,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                         <span className="bxcd-summary__label bxcd-summary__label--total">Total</span>
                         <span className="bxcd-summary__value bxcd-summary__value--total">{formatMoney(subtotal)}</span>
                       </div>
+                      {continueShopping.enabled && continueShopping.placement === 'above' && continueButton}
                       {/* Checkout button */}
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (
                         <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: checkoutPreview.swipeH, display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
@@ -1129,6 +1143,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       {/* Cards + trust badges: the storefront's own HTML (cart-footer-extras.shared.js) */}
                       {cardsHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('paymentCards'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: cardsHtml }} />}
                       {trustHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />}
+                      {continueShopping.enabled && continueShopping.placement !== 'above' && continueButton}
                       {/* Footer note */}
                       <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>
                     </div>

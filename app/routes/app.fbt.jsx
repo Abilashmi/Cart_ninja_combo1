@@ -32,6 +32,7 @@ import { resolveFbtInstructions } from '../services/pairing-assistant.server';
 import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
+import AppSaveBar from '../components/shared/AppSaveBar';
 import { FBT_EXTRA_COLOR_KEYS, FBT_OFFER_WEIGHTS, fbtEffectiveColors, fbtOfferCss, pickFbtExtras, pickFbtLayout, fbtLayoutSizes, fbtStartsSelected } from '../utils/fbt-style.shared.js';
 import { HEADING_FONT_OPTIONS } from '../components/customization/ContentSection';
 
@@ -492,9 +493,9 @@ const PLACEMENT_OPTIONS = [
 const PREVIEW_SLOT_COUNT = 3;
 
 const SECTION_TIPS = {
-  interaction: 'Offering "Add All to Cart" in a single click increases bundle conversion by up to 37% — lower friction means more customers complete the bundle.',
-  colors:      'Matching your FBT widget colors to your brand palette boosts trust — 71% of consumers expect a consistent visual experience across all touchpoints.',
-  styling:     'Larger product images in FBT widgets increase click-through by 23% — shoppers are 60% more likely to add a product they can clearly see.',
+  interaction: 'One "Add all to cart" button lets shoppers take the whole set in a single tap.',
+  colors:      'Use your brand colours so the widget looks like part of your store.',
+  styling:     'Clear, well-sized product images help shoppers see what they are adding.',
   offer:       'A small saving for taking the whole set gives shoppers a reason to add every recommended product, not just one.',
 };
 
@@ -819,7 +820,13 @@ function SetupTourPointer({ targetRef, stepNumber, totalSteps, title, desc, next
 }
 
 /* ─── COMPONENT ───────────────────────────────────────────────────────────── */
+// Shopify's save bar Discard rebuilds the page from its loaded settings (reloaded by React Router after every save); reloading the admin iframe isn't safe.
 export default function FBTPage() {
+  const [resetKey, setResetKey] = useState(0);
+  return <FBTEditor key={resetKey} onDiscard={() => setResetKey((k) => k + 1)} />;
+}
+
+function FBTEditor({ onDiscard }) {
   const { shop, fbtConfig, allProducts: loadedProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
   // The store's first 50 products + products picked through the modal's search.
   const [foundProducts, setFoundProducts] = useState([]);
@@ -1491,6 +1498,7 @@ export default function FBTPage() {
 
   return (
     <Frame>
+      <AppSaveBar id="fbt-save-bar" open={hasChanges} onSave={() => handleSave()} onDiscard={() => { setHasChanges(false); onDiscard(); }} saving={isSaving} />
       {toastActive && (
         <Toast
           content={fetcher.data?.success ? 'FBT settings saved!' : `Save failed: ${fetcher.data?.error || 'unknown error'}`}

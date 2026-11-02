@@ -134,7 +134,7 @@ const pv = () => page.evaluate(() => {
   const btns = [...document.querySelectorAll('.bcz-screen .bcod-dr-btns > *')];
   const cod = document.querySelector('.bcz-screen .bcod-dr-btns .cod-pv-btn');
   return {
-    order: btns.map((b) => (b.classList.contains('cod-pv-btn') ? 'cod' : 'checkout')),
+    order: btns.map((b) => (b.classList.contains('cod-pv-btn') ? 'cod' : b.classList.contains('bcod-dr-continue') ? 'continue' : 'checkout')),
     codText: cod ? cod.textContent : null,
     codBg: cod ? getComputedStyle(cod).backgroundColor : null,
     codRadius: cod ? getComputedStyle(cod).borderRadius : null,
@@ -339,6 +339,27 @@ if (scenario === 'live') {
     const co = (await page.locator('.bcz-screen .bcod-dr-checkout').textContent()).trim();
     check('Checkout button text: the drawer preview\'s Checkout says "Pay online ₹…"', /^Pay online ₹[\d,]+$/.test(co), co);
   }
+  // Continue shopping next to Pay now + COD: off, then above, then below.
+  check('Continue shopping: off by default (preview has only COD and Checkout)', !(await pv()).order.includes('continue'));
+  await page.getByLabel('Show a "Continue shopping" button').check();
+  await page.getByLabel('Button text', { exact: true }).nth(1).fill('Keep browsing');
+  await page.getByLabel('Placement').selectOption('above');
+  await page.waitForTimeout(200);
+  {
+    const v = await pv();
+    const text = (await page.locator('.bcz-screen .bcod-dr-continue').textContent()).trim();
+    check('Continue shopping above Pay now and COD: first in the preview, the merchant\'s text', v.order[0] === 'continue' && v.order.length === 3 && text === 'Keep browsing', JSON.stringify({ order: v.order, text }));
+  }
+  await page.getByLabel('Placement').selectOption('below');
+  await page.getByLabel('When tapped').selectOption('link');
+  await page.getByLabel('Page link').fill('//evil.example');
+  await page.waitForTimeout(200);
+  check('Continue shopping below: last in the preview', (await pv()).order.at(-1) === 'continue', JSON.stringify((await pv()).order));
+  check('Continue shopping link: a link off the store is flagged', (await page.getByText('Use a link starting with https:// or a page on your store').count()) >= 1);
+  await page.getByLabel('Page link').fill('/collections/new');
+  await shot('continue-shopping');
+  await page.getByLabel('Show a "Continue shopping" button').uncheck();
+  await page.waitForTimeout(150);
   await openSec('Combo page');
   check('Position in combo page: the button text is here too', await page.getByLabel('Button text', { exact: true }).inputValue() === 'Pay cash for this combo');
   await openSec('Product page');

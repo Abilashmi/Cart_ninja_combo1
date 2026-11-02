@@ -5,8 +5,10 @@ import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext'
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { announcementMessages, clampInterval } from '../utils/announcement.shared.js';
 import { footerExtras } from '../utils/cart-footer-extras.shared.js';
+import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
+import AppSaveBar from './shared/AppSaveBar';
 import '../styles/cart-editor.css';
 
 // The Progress Bar save also reports whether the free reward products are really
@@ -29,7 +31,7 @@ async function postJson(url, payload) {
 
 function CartEditorContent() {
   const navigate = useNavigate();
-  const { isDirty, resetDirty, body, footer, status, settings, header } = useCartEditor();
+  const { isDirty, resetDirty, discardChanges, body, footer, status, settings, header } = useCartEditor();
   const legacyFetcher = useFetcher();
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
   const [giftNotice, setGiftNotice] = useState('');
@@ -72,6 +74,7 @@ function CartEditorContent() {
         mobileButtonType: cb.mobileButtonType,
         paymentCards:     footerExtras.cardsConfig(footer.paymentCards),
         trustBadges:      footerExtras.trustConfig(footer.trustBadges),
+        continueShopping: sanitizeContinueShopping(cb.continueShopping),
       }),
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });
 
@@ -233,6 +236,7 @@ function CartEditorContent() {
 
   return (
     <Frame>
+      <AppSaveBar id="cart-editor-save-bar" open={isDirty} onSave={handleSave} onDiscard={discardChanges} saving={saveStatus === 'saving'} />
       {saveStatus === 'saved' && (
         <Toast content="Saved" onDismiss={() => setSaveStatus('idle')} />
       )}

@@ -1,32 +1,32 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLoaderData, useRouteError, useFetcher, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
 import {
-    BlockStack, InlineStack, Text, Button,
-    TextField, Badge, Checkbox,
-    Icon, Toast, Frame, Banner, Modal, ChoiceList,
+    Page, Card, BlockStack, InlineStack, Text, Button,
+    TextField, Badge, Checkbox, Divider, Select,
+    Icon, Collapsible, Toast, Frame, Banner, Modal, ChoiceList,
 } from "@shopify/polaris";
 import BrixBar from "../components/ai-agent/BrixBar";
 import { SliderField } from "../components/shared/SliderField";
-import { DiscountIcon, ChevronDownIcon, ThemeIcon } from "@shopify/polaris-icons";
+import {
+    DiscountIcon, ColorIcon, MagicIcon, ClockIcon,
+    ChevronDownIcon, ChevronUpIcon, XSmallIcon, ThemeIcon, PlusIcon, TextIcon, MegaphoneIcon,
+} from "@shopify/polaris-icons";
 import { ProBadge } from "../components/plan/PlanGate";
 import { usePlan } from "../components/PlanContext";
 import { COUPON_BANNER_TEMPLATE_DEFAULTS, validateCustomCouponCode } from "../config/coupon-banner";
 import { listCustomCoupons, addCustomCoupon } from "../services/coupon-banner.server";
 import { saveCouponSliderSettings } from "../services/cart-config-writes.server";
 import { getShopPlan } from "../services/plan-permissions.server";
+import { CouponStyleFields } from "../components/shared/CouponStyleFields";
 import { ColorField } from "../components/shared/ColorField";
 import { couponIconHtml, couponSubtitleStyle } from "../utils/coupon-style.shared.js";
 import { offerLadder, isLadderId, newLadderId, NEW_LADDER_STYLE, LADDER_STYLE_KEYS } from "../utils/offer-ladder.shared.js";
-import { OfferLadderPreview } from "../components/coupon-banner/OfferLadder";
-import { CouponPicker } from "../components/coupon-banner/CouponPicker";
-import { OfferEditModal } from "../components/coupon-banner/OfferEditModal";
-import { Segmented, ChoiceTiles, TemplateArt, ArrangeArt, OfferArt } from "../components/coupon-banner/ui";
-import { useScrollOpenSectionToTop } from "../utils/accordion-scroll";
-import { COUPON_BANNER_CSS } from "../components/coupon-banner/styles";
+import { OfferLadderFields, OfferLadderPreview } from "../components/coupon-banner/OfferLadder";
+import AppSaveBar from "../components/shared/AppSaveBar";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -257,6 +257,14 @@ const COUPON_COLUMN_PREFIX = { template1: "temp1", template2: "temp2", template3
 // selected list, its words in the per-coupon heading / subtext.
 const isTextOfferId = (id) => typeof id === "string" && id.indexOf("text:") === 0;
 const newTextOfferId = () => "text:" + Math.random().toString(36).slice(2, 10);
+const textOfferLabel = (heading) => `Text offer: ${heading || "(no heading yet)"}`;
+// An offer ladder ("ladder:<random>", utils/offer-ladder.shared.js): a bar of
+// quantity offers drawn above the coupon cards; its settings live in the same
+// per-coupon style map.
+const ladderLabel = (ov) => {
+    const tiers = offerLadder.normalize(ov).tiers;
+    return `Offer ladder: ${tiers.length ? tiers.map((t) => t.text).join(" | ") : "(no offers yet)"}`;
+};
 
 /** Per-coupon overrides (heading, subtext, button, colours, show-on) saved for one template. */
 function savedCouponOverrides(couponConfig, tplKey) {
@@ -280,7 +288,63 @@ const TEMPLATES = [
     { id: "bold-vibrant",   name: "Bold & Vibrant", tplKey: "template3" },
 ];
 
+const SECTION_TIPS = {
+    coupon:  "Showing the coupon on the product page lets shoppers see the deal before checkout.",
+    text:    "Say what the shopper gets, like \"Save 10% today\", not just the code.",
+    design:  "Pick colours that stand out from the page so the offer is easy to spot.",
+    timer:   "Use a countdown only for a real deadline, so the time shown is true.",
+};
+
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
+function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
+    return (
+        <div style={{
+            border: `1px solid ${isOpen ? '#b5e3d8' : '#e5e7eb'}`,
+            borderRadius: "10px", overflow: "hidden",
+            transition: "border-color 0.15s, box-shadow 0.15s",
+            boxShadow: isOpen ? "0 0 0 2px rgba(0,128,96,0.06)" : "none",
+        }}>
+            <button
+                onClick={() => onToggle(id)}
+                style={{
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "14px 18px", background: isOpen ? "#f6fffe" : "#fafafa",
+                    border: "none", cursor: "pointer", borderBottom: isOpen ? "1px solid #e5e7eb" : "none",
+                    transition: "background 0.15s",
+                }}
+                aria-expanded={isOpen}
+            >
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: "34px", height: "34px", borderRadius: "8px", flexShrink: 0, background: isOpen ? "#e6f4f1" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", transition: "background 0.15s" }}>
+                        <Icon source={icon} />
+                    </div>
+                    <span style={{ fontSize: "14px", fontWeight: 600, color: isOpen ? "#008060" : "#202223" }}>{title}</span>
+                </div>
+                <span style={{ flexShrink: 0, color: "#637381" }}>
+                    <Icon source={isOpen ? ChevronUpIcon : ChevronDownIcon} />
+                </span>
+            </button>
+            <Collapsible open={isOpen} id={`pw-section-${id}`}>
+                <div style={{ padding: "20px 18px", background: "#fff" }}>
+                    {children}
+                    {tip && (
+                        <div style={{ marginTop: "16px", background: "#eef2ff", border: "1px solid #c7d2fe", borderLeft: "3px solid #6366f1", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                            <span style={{ minWidth: "18px", width: "18px", height: "18px", borderRadius: "50%", background: "#6366f1", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "2px" }}>
+                                <Icon source={MagicIcon} />
+                            </span>
+                            <p style={{ margin: 0, fontSize: "13.5px", color: "#312e81", lineHeight: 1.65 }}>{tip}</p>
+                        </div>
+                    )}
+                </div>
+            </Collapsible>
+        </div>
+    );
+}
+
+function ColorSwatch({ label, value, onChange }) {
+    return <ColorField label={label} value={value} onChange={onChange} />;
+}
+
 function CountdownStrip({ hours, minutes, loop, label, expiredLabel, bgColor, textColor, accentColor }) {
     const total = hours * 3600 + minutes * 60;
     const [rem, setRem] = useState(total);
@@ -301,6 +365,169 @@ function CountdownStrip({ hours, minutes, loop, label, expiredLabel, bgColor, te
             <span style={{ fontSize: "13px", fontWeight: 500, color: textColor }}>{expired ? expiredLabel : label}</span>
             {!expired && <span style={{ fontSize: "15px", fontWeight: 700, color: accentColor, fontVariantNumeric: "tabular-nums" }}>{h > 0 && `${pad(h)}:`}{pad(m)}:{pad(s)}</span>}
         </div>
+    );
+}
+
+/* ─── COUPON SELECTOR ─────────────────────────────────────────────────────── */
+function CouponSelector({ discounts, selectedCouponIds, search, onSearchChange, onToggle, onClear, onAddCustom, onAddText, onAddLadder }) {
+    const filtered = (discounts || []).filter((c) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (c.code || "").toLowerCase().includes(q) || (c.title || "").toLowerCase().includes(q);
+    });
+
+    const selectedIds = selectedCouponIds || [];
+    const selectedCount = selectedIds.length;
+
+    return (
+        <BlockStack gap="300">
+            <Text as="p" variant="bodySm" tone="subdued">Choose which coupons to display in this widget — select one or more.</Text>
+
+            {selectedCount > 0 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: "8px", border: "1.5px solid #b5e3d8", background: "#f1f8f5" }}>
+                    <InlineStack gap="200" blockAlign="center">
+                        <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Icon source={DiscountIcon} />
+                        </div>
+                        <Text as="span" variant="bodySm" fontWeight="semibold">{selectedCount} coupon{selectedCount > 1 ? "s" : ""} selected</Text>
+                    </InlineStack>
+                    <button
+                        onClick={() => onClear && onClear()}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "#637381", fontSize: "13px", padding: "2px" }}
+                        title="Clear all"
+                    >
+                        Clear all
+                    </button>
+                </div>
+            )}
+
+            {onAddCustom && (
+                <button
+                    type="button"
+                    onClick={onAddCustom}
+                    aria-label="Add custom coupon code"
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: "#ffffff", border: "1.5px dashed #b5e3d8", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                    <span style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#e6f4f1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon source={PlusIcon} tone="success" />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#008060" }}>Add custom coupon code</span>
+                        <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>Made the coupon in Shopify, Shiprocket or another app? Add its code here.</span>
+                    </span>
+                </button>
+            )}
+
+            {onAddText && (
+                <button
+                    type="button"
+                    onClick={onAddText}
+                    aria-label="Add a text offer with no code"
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: "#ffffff", border: "1.5px dashed #c7d2fe", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                    <span style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon source={TextIcon} />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#4338ca" }}>Add a text offer (no code)</span>
+                        <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>Just show words, like &ldquo;Free shipping over ₹999&rdquo; or an automatic discount. No code, no Copy button.</span>
+                    </span>
+                </button>
+            )}
+
+            {onAddLadder && (
+                <button
+                    type="button"
+                    onClick={onAddLadder}
+                    aria-label="Add an offer ladder"
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", background: "#ffffff", border: "1.5px dashed #fcd34d", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                    <span style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#fef3c7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon source={MegaphoneIcon} />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#b45309" }}>Add an offer ladder</span>
+                        <span style={{ display: "block", fontSize: "11px", color: "#6d7175" }}>An announcement bar like &ldquo;Buy any 2 Get 10% Off | Buy any 3 Get 15% Off&rdquo;. Text only, with an optional Copy / Apply button.</span>
+                    </span>
+                </button>
+            )}
+
+            {!discounts || discounts.length === 0 ? (
+                <div style={{ padding: "16px", textAlign: "center", border: "1px dashed #c9cccf", borderRadius: "8px", background: "#f9fafb" }}>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                        No active discount codes found. Create coupons in the <strong>Coupon Creator</strong> section first.
+                    </Text>
+                </div>
+            ) : (
+                <BlockStack gap="200">
+                    <TextField
+                        label=""
+                        labelHidden
+                        placeholder="Search coupons…"
+                        value={search}
+                        onChange={onSearchChange}
+                        autoComplete="off"
+                        clearButton
+                        onClearButtonClick={() => onSearchChange("")}
+                    />
+                    <div style={{ maxHeight: "260px", overflowY: "auto", border: "1px solid #e1e3e5", borderRadius: "8px" }}>
+                        {filtered.length === 0 ? (
+                            <div style={{ padding: "16px", textAlign: "center" }}>
+                                <Text as="p" variant="bodySm" tone="subdued">No coupons match your search.</Text>
+                            </div>
+                        ) : (
+                            filtered.map((coupon, idx) => {
+                                const isSelected = selectedIds.includes(coupon.id);
+                                return (
+                                    <button
+                                        key={coupon.id}
+                                        onClick={() => onToggle(coupon.id)}
+                                        style={{
+                                            width: "100%",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            padding: "10px 14px",
+                                            background: isSelected ? "#f1f8f5" : "#ffffff",
+                                            border: "none",
+                                            borderBottom: idx < filtered.length - 1 ? "1px solid #f1f2f3" : "none",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                            gap: "10px",
+                                        }}
+                                    >
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                                            <div style={{ width: "28px", height: "28px", borderRadius: "6px", background: isSelected ? "#dcfce7" : "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                <Icon source={DiscountIcon} />
+                                            </div>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontSize: "13px", fontWeight: 600, color: isSelected ? "#008060" : "#202223", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    {coupon.isText || coupon.isLadder ? coupon.title : coupon.code}
+                                                </div>
+                                                {coupon.isLadder ? (
+                                                    <div style={{ fontSize: "11px", color: "#6d7175" }}>Announcement bar · text offers</div>
+                                                ) : coupon.isText ? (
+                                                    <div style={{ fontSize: "11px", color: "#6d7175" }}>Text only · no code</div>
+                                                ) : coupon.title !== coupon.code && (
+                                                    <div style={{ fontSize: "11px", color: "#6d7175", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {coupon.title}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isSelected && (
+                                            <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#008060", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                                <span style={{ color: "#fff", fontSize: "11px", lineHeight: 1 }}>✓</span>
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </BlockStack>
+            )}
+        </BlockStack>
     );
 }
 
@@ -368,6 +595,114 @@ function CustomCouponModal({ open, onClose, existingCodes, fetcher, onCreateInBr
     );
 }
 
+/* Per-coupon override editor — text, colors, and display pages for one coupon */
+function CouponOverridePanel({ coupon, override, onChange, alwaysOpen, templateDefaults, iconDefaultShow = false, codeOptions = [] }) {
+    const shopify = useAppBridge();
+    const [openState, setOpen] = useState(false);
+    const open = alwaysOpen || openState;
+    const ov = override || {};
+    const td = templateDefaults || {};
+    // Neither Browse button had any error handling — if shopify.resourcePicker
+    // ever rejects (e.g. it's called before App Bridge has fully finished
+    // initializing in the embedded iframe, a known source of an intermittent
+    // "nothing happens" click), the promise rejection was silently swallowed:
+    // no picker, no error, nothing in the UI to say why. That's indistinguishable
+    // from "not listing any products/collections" to whoever's clicking it.
+    const [pickerError, setPickerError] = useState("");
+    const openPicker = async (type, onResult) => {
+        setPickerError("");
+        try {
+            const result = await shopify.resourcePicker({ type, multiple: true });
+            if (result) onResult(result);
+        } catch (e) {
+            console.error(`[CouponOverridePanel] resourcePicker(${type}) failed:`, e);
+            setPickerError(`Couldn't open the ${type} picker (${e?.message || "unknown error"}). Try reloading the page.`);
+        }
+    };
+    // Empty = the template's own colour.
+    const colorRow = (label, key, def) => (
+        <ColorField label={label} value={ov[key] || ""} fallback={td[key] || def} allowEmpty onChange={(v) => onChange({ [key]: v })} />
+    );
+    return (
+        <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden" }}>
+            {!alwaysOpen && (
+                <button onClick={() => setOpen((o) => !o)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: open ? "#f6f6f7" : "#fff", border: "none", cursor: "pointer", textAlign: "left" }}>
+                    <Text as="span" variant="bodySm" fontWeight="semibold">{coupon.code}</Text>
+                    <span style={{ color: "#637381", fontSize: "11px" }}>{open ? "▲" : "▼"}</span>
+                </button>
+            )}
+            {open && (
+                <div style={{ padding: "12px", borderTop: "1px solid #e1e3e5" }}>
+                    <BlockStack gap="300">
+                        {coupon.isLadder ? (
+                            <>
+                                <OfferLadderFields value={ov} onChange={onChange} codeOptions={codeOptions} />
+                                <Divider />
+                            </>
+                        ) : (
+                            <>
+                                <TextField label="Heading" value={ov.headingText ?? ""} onChange={(v) => onChange({ headingText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={30} showCharacterCount />
+                                <TextField label="Subtext" value={ov.subtextText ?? ""} onChange={(v) => onChange({ subtextText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={35} showCharacterCount multiline={2} />
+                                {coupon.isText
+                                    ? <Text as="p" variant="bodySm" tone="subdued">Text offers show only the heading and subtext: no code and no Copy button.</Text>
+                                    : <TextField label="Button Text" value={ov.buttonText ?? ""} onChange={(v) => onChange({ buttonText: v })} placeholder="Uses template default if empty" autoComplete="off" maxLength={10} showCharacterCount />}
+                                {colorRow("Background", "bgColor", "#ffffff")}
+                                {colorRow("Text", "textColor", "#111827")}
+                                {colorRow("Accent", "accentColor", "#3b82f6")}
+                                {colorRow("Button", "buttonColor", "#3b82f6")}
+                                {colorRow("Button text", "buttonTextColor", "#ffffff")}
+                                <CouponStyleFields
+                                    value={ov}
+                                    onChange={onChange}
+                                    hideCopied={coupon.isText}
+                                    defaults={{ subColor: ov.textColor || td.textColor, iconColor: ov.accentColor || td.accentColor, icon: "discount", iconShow: iconDefaultShow }}
+                                />
+                            </>
+                        )}
+                        <Select label="Show on" value={ov.displayCondition || "all"} onChange={(v) => onChange({ displayCondition: v })}
+                            options={[{ label: "All product pages", value: "all" }, { label: "Specific products", value: "product_handle" }, { label: "Specific collections", value: "collection_handle" }]} />
+                        {pickerError && <Banner tone="critical" onDismiss={() => setPickerError("")}>{pickerError}</Banner>}
+                        {ov.displayCondition === "product_handle" && (
+                            <BlockStack gap="200">
+                                <Button size="slim" onClick={() => openPicker('product', (result) => onChange({ productHandles: result.map(p => p.handle) }))}>Browse Products</Button>
+                                {(ov.productHandles || []).length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                        {(ov.productHandles || []).map(h => (
+                                            <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                {h}
+                                                <button onClick={() => onChange({ productHandles: (ov.productHandles || []).filter(x => x !== h) })}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </BlockStack>
+                        )}
+                        {ov.displayCondition === "collection_handle" && (
+                            <BlockStack gap="200">
+                                <Button size="slim" onClick={() => openPicker('collection', (result) => onChange({ collectionHandles: result.map(c => c.handle) }))}>Browse Collections</Button>
+                                {(ov.collectionHandles || []).length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                        {(ov.collectionHandles || []).map(h => (
+                                            <span key={h} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f1f8f5', border: '1px solid #b5e3d8', borderRadius: 4, fontSize: 12 }}>
+                                                {h}
+                                                <button onClick={() => onChange({ collectionHandles: (ov.collectionHandles || []).filter(x => x !== h) })}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#637381', padding: 0, lineHeight: 1 }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </BlockStack>
+                        )}
+                    </BlockStack>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ─── COMPONENT ───────────────────────────────────────────────────────────── */
 // The Coupon Banner's headings, as the storefront reads them from the
 // template style ({ text, fontSize, textColor, alignment }): title = above the
 // whole banner ("Apply Coupon"), ladderTitle / cardsTitle = optional own
@@ -384,85 +719,45 @@ function readSectionTitle(tpl, key = "title", fallback = "Apply Coupon") {
     };
 }
 
-// One heading (More options → Headings): its words, then size, colour and alignment once it has words.
-function HeadingFields({ label, name, where, placeholder, note, value, onChange }) {
+// One heading's text, size, colour and alignment (Layout → Headings).
+function HeadingFields({ label, name, placeholder, helpText, value, onChange }) {
     return (
-        <div className="cbz-card">
-            <div className="cbz-card-h"><b>{label}</b><span className="cbz-where">{where}</span></div>
-            <BlockStack gap="300">
-                <TextField label={label} labelHidden value={value.text} onChange={(v) => onChange("text", v)} autoComplete="off" maxLength={60} placeholder={placeholder} helpText={note || "Leave empty to hide it."} />
-                {value.text.trim() !== "" && (
-                    <>
-                        <SliderField label={`${name} size`} value={value.fontSize} min={11} max={28} suffix="px" onChange={(v) => onChange("fontSize", v)} />
-                        <div className="cbz-grid2">
-                            <ColorField label={`${name} colour`} value={value.textColor} onChange={(v) => onChange("textColor", v)} />
-                            <Segmented
-                                label={`${name} alignment`}
-                                options={[{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }]}
-                                value={value.alignment}
-                                onChange={(v) => onChange("alignment", v)}
-                            />
-                        </div>
-                    </>
-                )}
-            </BlockStack>
-        </div>
+        <BlockStack gap="200">
+            <TextField label={label} value={value.text} onChange={(v) => onChange("text", v)} autoComplete="off" maxLength={60} placeholder={placeholder} helpText={helpText} />
+            {value.text.trim() !== "" && (
+                <>
+                    <SliderField label={`${name} size`} value={value.fontSize} min={11} max={28} suffix="px" onChange={(v) => onChange("fontSize", v)} />
+                    <ColorField label={`${name} colour`} value={value.textColor} onChange={(v) => onChange("textColor", v)} />
+                    <Select
+                        label={`${name} alignment`}
+                        options={[{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }]}
+                        value={value.alignment}
+                        onChange={(v) => onChange("alignment", v)}
+                    />
+                </>
+            )}
+        </BlockStack>
     );
 }
 
 // The storefront's heading look (coupon-slider-render.liquid headingHtml).
 const headingStyle = (h) => ({ textAlign: h.alignment, color: h.textColor, fontSize: `${h.fontSize}px`, fontWeight: 700, marginBottom: "10px", lineHeight: 1.2 });
 
-// One numbered card of the page. With onToggle it folds: closed = its title,
-// description and a one-line summary of what's set; the body only when open.
-function Step({ id, step, title, extra, description, summary, open, onToggle, children }) {
-    if (onToggle) {
-        return (
-            <section className={`cbz-sec cbz-sec--fold${open ? " is-open" : ""}`} data-section={id}>
-                <h2 className="cbz-sec-h">
-                    <button type="button" className="cbz-sec-btn" aria-expanded={!!open} aria-controls={`cbz-b-${id}`} onClick={onToggle}>
-                        {step && <span className="cbz-step">{step}</span>}
-                        <span className="cbz-sec-tt">
-                            <span className="cbz-sec-t">{title}</span>
-                            {description && <span className="cbz-sec-bd">{description}</span>}
-                        </span>
-                        {!open && summary && <span className="cbz-sum" title={summary}>{summary}</span>}
-                        <span className="cbz-chev"><Icon source={ChevronDownIcon} /></span>
-                    </button>
-                </h2>
-                {open && <div className="cbz-sec-b" id={`cbz-b-${id}`}>{children}</div>}
-            </section>
-        );
-    }
-    return (
-        <section className="cbz-sec" data-section={id} aria-labelledby={`cbz-h-${id}`}>
-            <h2 className="cbz-sec-h" id={`cbz-h-${id}`}>{step && <span className="cbz-step">{step}</span>}{title}{extra}</h2>
-            {description && <p className="cbz-sec-d">{description}</p>}
-            {children}
-        </section>
-    );
-}
-
-/* ─── COMPONENT ───────────────────────────────────────────────────────────── */
-// Discard remounts the editor, so every field goes back to the last saved
-// settings (it used to only grey out Save and keep the edits on screen).
+// Shopify's save bar Discard rebuilds the page from its loaded settings (reloaded by React Router after every save); reloading the admin iframe isn't safe.
 export default function ProductWidgetPage() {
-    const [resetKey, setResetKey] = useState(0);
-    return <CouponBannerEditor key={resetKey} onDiscard={() => setResetKey((k) => k + 1)} />;
+  const [resetKey, setResetKey] = useState(0);
+  return <ProductWidgetEditor key={resetKey} onDiscard={() => setResetKey((k) => k + 1)} />;
 }
 
-// One simple page: 1 coupons to show, 2 design, 3 where it shows, 4 timer;
-// everything else under "More options"; a coupon's own text, colours and
-// pages in its Edit popup (OfferEditModal).
-function CouponBannerEditor({ onDiscard }) {
-    const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled } = useLoaderData();
+function ProductWidgetEditor({ onDiscard }) {
+    const { couponConfig, shop, discounts, customCoupons: loadedCustomCoupons, couponEmbedEnabled, fbtEmbedEnabled } = useLoaderData();
     const fetcher = useFetcher();
     const customCouponFetcher = useFetcher();
     const navigate = useNavigate();
     const shopifyBridge = useAppBridge();
     // Custom (external) coupons first, then the store's active Shopify codes.
     const [customCoupons, setCustomCoupons] = useState(() => (loadedCustomCoupons || []).map((c) => ({ ...c, title: "Custom coupon", isCustom: true })));
-    // Text offers saved earlier come back from the selected list; new ones are added under More options.
+    // Text offers saved earlier come back from the selected list; new ones are added with "Add a text offer".
     const [textOfferIds, setTextOfferIds] = useState(() => (
         Array.isArray(couponConfig?.selectedActiveCoupons) ? couponConfig.selectedActiveCoupons.filter(isTextOfferId) : []
     ));
@@ -490,20 +785,11 @@ function CouponBannerEditor({ onDiscard }) {
         if (tKey === "template3" || tKey === "bold-vibrant")   return "bold-vibrant";
         return "classic-banner"; // safe default: first template
     });
-    // "More options" (text offers & ladders, headings, layout & size): folded until asked for,
-    // and each of its cards closed too (one open at a time, like the Cart Editor's sections).
-    const [moreOpen, setMoreOpen] = useState(false);
-    // Every card of the page (1-4 and More options' three) starts closed; one open at a time.
-    const [moreCard, setMoreCard] = useState("");
-    const toggleMoreCard = (id) => setMoreCard((c) => (c === id ? "" : id));
-    const [scrollTo, setScrollTo] = useState("");
-    const sideRef = useRef(null);
-    useScrollOpenSectionToTop(sideRef, moreCard);
-    // The offer whose Edit popup is open ('' = none).
-    const [editId, setEditId] = useState("");
+    const [openSection, setOpenSection] = useState(null);
     // The heading above the coupons ("Apply Coupon"): the storefront reads
     // tempNDefaultStyle.title (coupon-slider-render.liquid renderSlider).
     const [sectionTitle, setSectionTitle] = useState(() => readSectionTitle(activeTpl));
+    const setTitleKey = (key) => (v) => { setSectionTitle((prev) => ({ ...prev, [key]: v })); mark(); };
     // Own headings above the offer ladders and above the coupon cards (empty = none).
     const [ladderTitle, setLadderTitle] = useState(() => readSectionTitle(activeTpl, "ladderTitle", ""));
     const [cardsTitle, setCardsTitle] = useState(() => readSectionTitle(activeTpl, "cardsTitle", ""));
@@ -552,71 +838,59 @@ function CouponBannerEditor({ onDiscard }) {
     // loader never sets, so every saved per-coupon text was lost on reload and
     // the next save erased it.)
     const [couponOverrides, setCouponOverrides] = useState(() => savedCouponOverrides(couponConfig, tKey));
-    const textOffers = textOfferIds.map((id) => ({ id, code: "", title: couponOverrides[id]?.headingText || "", isText: true }));
-    const ladders = ladderIds.map((id) => ({ id, code: "", isLadder: true }));
+    const textOffers = textOfferIds.map((id) => ({ id, code: "", title: couponOverrides[id]?.headingText || "", isText: true }))
+        .map((c) => ({ ...c, title: textOfferLabel(c.title) }));
+    const ladders = ladderIds.map((id) => ({ id, code: "", title: ladderLabel(couponOverrides[id]), isLadder: true }));
     const allCoupons = [...ladders, ...textOffers, ...customCoupons, ...(discounts || [])];
     // Codes an offer ladder can apply: the store's active codes and the custom ones.
     const ladderCodeOptions = [...customCoupons, ...(discounts || [])]
         .filter((c) => c.code)
         .map((c) => ({ label: c.title && c.title !== c.code && !c.isCustom ? `${c.code} · ${c.title}` : c.code, value: c.code }));
-    // Display layout for the coupon banner: list (stacked) / carousel (slider) / grid
-    const [couponLayout, setCouponLayout] = useState(couponConfig?.layout || "list");
-    const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.position || "above_cart");
-    const [hasChanges,    setHasChanges]    = useState(false);
-    const [toastActive,   setToastActive]   = useState(false);
-
-    const isSaving = fetcher.state !== "idle";
-
-    // Unsaved changes a design switch would drop (applyTemplate reloads that
-    // design's saved coupon words / colours, headings and sizes): only these
-    // make the Design card warn.
-    const [designDirty, setDesignDirty] = useState(false);
-
-    useEffect(() => {
-        if (fetcher.data?.success) { setToastActive(true); setHasChanges(false); setDesignDirty(false); }
-    }, [fetcher.data]);
-
-    const mark = () => setHasChanges(true);
-    const markDesign = () => { setDesignDirty(true); setHasChanges(true); };
-
-    // A card of More options asked for (e.g. a heading clicked in the
-    // preview): open More options and that card, then bring it into view.
-    useEffect(() => {
-        if (!scrollTo) return;
-        const el = sideRef.current?.querySelector(`[data-section="${scrollTo}"]`);
-        if (el) el.scrollIntoView({ block: "start" });
-        setScrollTo("");
-    }, [scrollTo, moreOpen]);
-    const showMore = (section) => { setMoreOpen(true); setMoreCard(section); setScrollTo(section); };
-
-    const removeOffer = (id) => {
-        setSelectedCouponIds((prev) => prev.filter((x) => x !== id));
-        if (isTextOfferId(id)) setTextOfferIds((prev) => prev.filter((x) => x !== id));
-        if (isLadderId(id)) setLadderIds((prev) => prev.filter((x) => x !== id));
-        setEditId("");
-        setHasChanges(true);
-    };
-    // A new text offer / ladder is shown at once and opens in its popup.
     const addLadder = () => {
         const id = newLadderId();
         setLadderIds((prev) => [id, ...prev]);
         setCouponOverrides((prev) => ({ ...prev, [id]: { ...NEW_LADDER_STYLE, tiers: NEW_LADDER_STYLE.tiers.map((t) => ({ ...t })) } }));
         setSelectedCouponIds((prev) => [id, ...prev]);
-        setEditId(id);
-        markDesign();
+        setEditingCouponId(id);
+        setOpenSection("text");
+        setHasChanges(true);
     };
     const addTextOffer = () => {
         const id = newTextOfferId();
         setTextOfferIds((prev) => [id, ...prev]);
         setCouponOverrides((prev) => ({ ...prev, [id]: { headingText: "Free shipping on all orders", subtextText: "No code needed" } }));
         setSelectedCouponIds((prev) => [id, ...prev]);
-        setEditId(id);
-        markDesign();
+        setEditingCouponId(id);
+        setOpenSection("text");
+        setHasChanges(true);
     };
     const updateOverride = (cid, patch) => {
         setCouponOverrides((prev) => ({ ...prev, [cid]: { ...(prev[cid] || {}), ...patch } }));
-        markDesign();
+        setHasChanges(true);
     };
+    // Which selected coupon is currently being customized (drives the editor fields + preview)
+    const [editingCouponId, setEditingCouponId] = useState(
+        (Array.isArray(couponConfig?.selectedActiveCoupons) && couponConfig.selectedActiveCoupons[0]) || ""
+    );
+    // Display layout for the coupon banner: list (stacked) / carousel (slider) / grid
+    const [couponLayout, setCouponLayout] = useState(couponConfig?.layout || "list");
+    useEffect(() => {
+        if (selectedCouponIds.length && !selectedCouponIds.includes(editingCouponId)) {
+            setEditingCouponId(selectedCouponIds[0]);
+        }
+    }, [selectedCouponIds, editingCouponId]);
+    const [couponSearch,  setCouponSearch]  = useState("");
+    const [widgetPlacement, setWidgetPlacement] = useState(couponConfig?.position || "above_cart");
+    const [hasChanges,    setHasChanges]    = useState(false);
+    const [toastActive,   setToastActive]   = useState(false);
+
+    const isSaving = fetcher.state !== "idle";
+
+    useEffect(() => {
+        if (fetcher.data?.success) { setToastActive(true); setHasChanges(false); }
+    }, [fetcher.data]);
+
+    const mark = () => setHasChanges(true);
 
     // Custom coupon saved → add it to the list, select it, close the dialog.
     // The selection itself is saved with the page's Save, like any other coupon.
@@ -633,7 +907,7 @@ function CouponBannerEditor({ onDiscard }) {
 
     const applyTemplate = (id) => {
         const t = TEMPLATES.find(x => x.id === id);
-        if (!t || id === selectedTemplate) return;
+        if (!t) return;
         setSelectedTemplate(id);
         // Was always FAKE_COUPON_CONFIG's hardcoded marketing-copy default,
         // never this template's actual saved config — so clicking a template
@@ -662,9 +936,10 @@ function CouponBannerEditor({ onDiscard }) {
         // directly by key instead of leaving couponOverrides frozen with
         // whichever template's map happened to load first.
         setCouponOverrides(savedCouponOverrides(couponConfig, t.tplKey));
-        setDesignDirty(false);
         mark();
     };
+
+    const toggleSection = useCallback((id) => setOpenSection(p => p === id ? null : id), []);
 
     // Shared by the Save button and the instant enable/disable toggle below —
     // the toggle used to only flip local state and wait for a manual Save
@@ -719,109 +994,60 @@ function CouponBannerEditor({ onDiscard }) {
 
     const handleSave = () => submitCouponConfig();
 
-    /* offers, as "Coupons to show" lists them and the preview draws them */
-    // Offer ladders draw above the coupon cards (storefront too).
+    /* live preview */
+    // Offer ladders draw above the coupon cards (storefront too); the cards
+    // show the coupon being customized, or the first card coupon while a
+    // ladder is being edited.
     const selectedLadderIds = selectedCouponIds.filter(isLadderId);
     const cardIds = selectedCouponIds.filter((cid) => !isLadderId(cid));
-    const offerTitle = (id) => {
-        const ov = couponOverrides[id] || {};
-        if (isLadderId(id)) {
-            const tiers = offerLadder.normalize(ov).tiers;
-            return tiers.length ? tiers.map((t) => t.text).join(" | ") : "Offer ladder (no offers yet)";
-        }
-        if (isTextOfferId(id)) return ov.headingText || "Text offer (no heading yet)";
-        const c = allCoupons.find((x) => x.id === id);
-        // A selected code that is no longer an active Shopify discount: its saved code.
-        return c?.code || ov.couponCode || "Unknown code";
-    };
-    const offerKind = (id) => {
-        if (isLadderId(id)) return "ladder";
-        if (isTextOfferId(id)) return "text";
-        return allCoupons.find((x) => x.id === id)?.isCustom ? "custom" : "coupon";
-    };
-    // Every row of "Coupons to show": ladders and text offers (added under
-    // More options), custom codes, the store's codes, then any ticked code
-    // that is no longer an active Shopify discount (so it can be unticked).
-    const pickRows = [
-        ...ladderIds.map((id) => ({ id, title: offerTitle(id), sub: "Offer ladder" })),
-        ...textOfferIds.map((id) => ({ id, title: offerTitle(id), sub: "Text offer: words only, no code" })),
-        ...customCoupons.map((c) => ({ id: c.id, title: c.code, sub: "Code from another app" })),
-        ...(discounts || []).map((d) => ({ id: d.id, title: d.code, sub: d.title && d.title !== d.code ? d.title : "" })),
-        ...selectedCouponIds.filter((id) => !allCoupons.some((c) => c.id === id))
-            .map((id) => ({ id, title: offerTitle(id), sub: "No longer an active code in Shopify" })),
-    ];
+    const cardEditId = isLadderId(editingCouponId) ? (cardIds[0] || "") : editingCouponId;
     // Every ladder as wide as Add to cart (banner itself full width): headings over them take that width too.
     const laddersAtAtc = selectedLadderIds.length > 0 && bannerWidth !== "atc" && bannerWidth !== "custom"
         && selectedLadderIds.every((id) => offerLadder.normalize(couponOverrides[id] || {}).boxSize === "atc");
-
-    // What a folded card has set, in one line.
-    const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-    const timerSummary = [
-        [timerHours > 0 && `${timerHours} h`, (timerMins > 0 || !timerHours) && `${timerMins} min`].filter(Boolean).join(" "),
-        `“${timerLabel || "Offer expires in"}”`,
-        timerMode === "loop" && "starts again",
-    ].filter(Boolean).join(" · ");
-    const extrasSummary = [
-        ladderIds.length > 0 && plural(ladderIds.length, "offer ladder"),
-        textOfferIds.length > 0 && plural(textOfferIds.length, "text offer"),
-    ].filter(Boolean).join(", ") || "None added";
-    // Only the headings the banner really shows (a group with nothing in it has none).
-    const headingsSummary = [
-        sectionTitle.text,
-        selectedLadderIds.length > 0 && ladderTitle.text,
-        cardIds.length > 0 && cardsTitle.text,
-    ].map((t) => (t || "").trim()).filter(Boolean).map((t) => `“${t}”`).join(", ") || "None shown";
-    const layoutSummary = `${{ list: "List", carousel: "Carousel", grid: "Grid" }[couponLayout] || "List"} · ${
-        { full: "Full width", atc: "Add to cart width", custom: `${bannerWidthPx}px wide` }[bannerWidth] || "Full width"}`;
-
-    /* live preview */
-    // One card as the storefront draws it (coupon-slider-render.liquid buildCard):
-    // its own texts / colours over the design's. cid '' = the design's sample card.
-    const look = (cid) => {
-        const ov = couponOverrides[cid] || {};
-        const c = allCoupons.find((x) => x.id === cid);
-        return {
-            ov,
-            heading: ov.headingText || heading,
-            subtext: ov.subtextText || subtext,
-            bg: ov.bgColor || bgColor,
-            text: ov.textColor || textColor,
-            accent: ov.accentColor || accentColor,
-            button: ov.buttonColor || buttonColor,
-            btnText: ov.buttonTextColor || btnTextColor,
-            // Same per-template default as the storefront: "Copy" for Bold & Vibrant, else "Copy Code".
-            buttonLabel: ov.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code"),
-            code: c?.code || ov.couponCode || "CODE",
-            // A text offer has no code and no button, on the storefront and here.
-            textOnly: isTextOfferId(cid),
-        };
+    // Effective values for the coupon currently being customized (override → global default)
+    const editOv = couponOverrides[cardEditId] || {};
+    const editingCoupon = allCoupons.find((c) => c.id === cardEditId);
+    const editingPanelCoupon = allCoupons.find((c) => c.id === editingCouponId);
+    const pvHeading = editOv.headingText || heading;
+    const pvSubtext = editOv.subtextText || subtext;
+    const pvBg = editOv.bgColor || bgColor;
+    const pvText = editOv.textColor || textColor;
+    const pvAccent = editOv.accentColor || accentColor;
+    const pvButton = editOv.buttonColor || buttonColor;
+    const pvBtnText = editOv.buttonTextColor || btnTextColor;
+    const previewCode = editingCoupon?.code || allCoupons.find((c) => c.id === selectedCouponIds[0])?.code || "CODE";
+    const btn = { background: pvButton, color: pvBtnText, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
+    // Default button label matches what the real storefront widget falls back
+    // to per template (see buildCard() in coupon-slider-render.liquid) —
+    // "Copy" for Bold & Vibrant, "Copy Code" everywhere else.
+    const pvButtonText = editOv.buttonText || (selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code");
+    // A text offer has no code and no button, on the storefront and here.
+    const pvTextOnly = !!editingCoupon?.isText;
+    // Icon and subtitle font, like the storefront (coupon-slider-render.liquid csIcon / csSubCss).
+    const pvIcon = (size, show) => {
+        const html = couponIconHtml(editOv, { size, color: pvAccent, defaultShow: show });
+        // eslint-disable-next-line react/no-danger -- built-in SVG or a checked https image
+        return html ? <span className="pw-coupon-icon" style={{ display: "flex", lineHeight: 0, flexShrink: 0 }} dangerouslySetInnerHTML={{ __html: html }} /> : null;
     };
+    const pvSub = (base) => couponSubtitleStyle(editOv, base);
+
     const timerStrip = timerEnabled ? (
         <CountdownStrip hours={timerHours} minutes={timerMins} loop={timerMode === "loop"} label={timerLabel} expiredLabel={timerExpired} bgColor={timerBg} textColor={timerText} accentColor={timerAccent} />
     ) : null;
 
     // Long text wraps instead of being cut off (same as the storefront).
     const PW_WRAP = { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-word" };
-    const renderCard = (cid) => {
-        const L = look(cid);
-        const btn = { background: L.button, color: L.btnText, border: "none", borderRadius: `${borderRadius}px`, cursor: "pointer", fontWeight: 600 };
-        // Icon and subtitle font, like the storefront (coupon-slider-render.liquid csIcon / csSubCss).
-        const icon = (size, show) => {
-            const html = couponIconHtml(L.ov, { size, color: L.accent, defaultShow: show });
-            // eslint-disable-next-line react/no-danger -- built-in SVG or a checked https image
-            return html ? <span className="pw-coupon-icon" style={{ display: "flex", lineHeight: 0, flexShrink: 0 }} dangerouslySetInnerHTML={{ __html: html }} /> : null;
-        };
-        const sub = (base) => couponSubtitleStyle(L.ov, base);
+    const renderPreview = () => {
         if (selectedTemplate === "classic-banner") {
             return (
-                <div style={{ background: L.bg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${L.accent}` }}>
+                <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb", borderLeft: `4px solid ${pvAccent}` }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-                        {icon(22, false)}
+                        {pvIcon(22, false)}
                         <div style={{ flex: 1, minWidth: "100px", overflow: "hidden" }}>
-                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: L.text, marginBottom: "3px", ...PW_WRAP }}>{L.heading}</div>
-                            <div className="pw-sub" style={sub({ fontSize: "13px", color: L.text, opacity: 0.65, ...PW_WRAP })}>{L.subtext}</div>
+                            <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "3px", ...PW_WRAP }}>{pvHeading}</div>
+                            <div className="pw-sub" style={pvSub({ fontSize: "13px", color: pvText, opacity: 0.65, ...PW_WRAP })}>{pvSubtext}</div>
                         </div>
-                        {!L.textOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{L.buttonLabel}</button>}
+                        {!pvTextOnly && <button style={{ ...btn, padding: "8px 20px", fontSize: "14px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{pvButtonText}</button>}
                     </div>
                     {timerStrip}
                 </div>
@@ -829,40 +1055,39 @@ function CouponBannerEditor({ onDiscard }) {
         }
         if (selectedTemplate === "minimal-card") {
             return (
-                <div style={{ background: L.bg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
+                <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px`, border: "1px solid #e5e7eb" }}>
                     <div style={{ display: "flex", gap: "12px" }}>
-                        {!L.textOnly && <div style={{ background: L.accent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${L.accent}50`, boxSizing: "border-box" }}>
-                            <div style={{ fontSize: "9px", letterSpacing: "2px", color: L.accent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
-                            <div style={{ fontSize: "12px", fontWeight: 800, color: L.accent, textAlign: "center", wordBreak: "break-all", maxWidth: "100%" }}>{L.code}</div>
+                        {!pvTextOnly && <div style={{ background: pvAccent + "18", borderRadius: `${Math.max(borderRadius - 2, 4)}px`, padding: "14px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minWidth: "110px", maxWidth: "110px", border: `1px dashed ${pvAccent}50`, boxSizing: "border-box" }}>
+                            <div style={{ fontSize: "9px", letterSpacing: "2px", color: pvAccent, marginBottom: "6px", textTransform: "uppercase", fontWeight: 600 }}>YOUR CODE</div>
+                            <div style={{ fontSize: "12px", fontWeight: 800, color: pvAccent, textAlign: "center", wordBreak: "break-all", maxWidth: "100%" }}>{previewCode}</div>
                         </div>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                                {icon(20, false)}
-                                <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: L.text, marginBottom: "4px", ...PW_WRAP, minWidth: 0 }}>{L.heading}</div>
+                                {pvIcon(20, false)}
+                                <div style={{ fontSize: `${fontSize}px`, fontWeight: 700, color: pvText, marginBottom: "4px", ...PW_WRAP, minWidth: 0 }}>{pvHeading}</div>
                             </div>
-                            <div className="pw-sub" style={sub({ fontSize: "12px", color: L.text, opacity: 0.65, marginBottom: "12px", ...PW_WRAP })}>{L.subtext}</div>
-                            {!L.textOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", maxWidth: "100%", ...PW_WRAP }}>{L.buttonLabel}</button>}
+                            <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.65, marginBottom: "12px", ...PW_WRAP })}>{pvSubtext}</div>
+                            {!pvTextOnly && <button style={{ ...btn, padding: "6px 16px", fontSize: "13px", maxWidth: "100%", ...PW_WRAP }}>{pvButtonText}</button>}
                         </div>
                     </div>
                     {timerStrip}
                 </div>
             );
         }
-        const boldIcon = icon(22, true);
         return (
-            <div style={{ background: L.bg, borderRadius: `${borderRadius}px`, padding: `${padding}px` }}>
+            <div style={{ background: pvBg, borderRadius: `${borderRadius}px`, padding: `${padding}px` }}>
                 <div style={{ display: "flex", gap: "14px", alignItems: "center" }}>
-                    {boldIcon && (
-                        <div style={{ minWidth: "44px", minHeight: "44px", padding: "4px", boxSizing: "border-box", background: L.accent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            {boldIcon}
+                    {pvIcon(22, true) && (
+                        <div style={{ minWidth: "44px", minHeight: "44px", padding: "4px", boxSizing: "border-box", background: pvAccent + "28", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {pvIcon(22, true)}
                         </div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: L.text, marginBottom: "4px", ...PW_WRAP }}>{L.heading}</div>
-                        <div className="pw-sub" style={sub({ fontSize: "12px", color: L.text, opacity: 0.85, marginBottom: "10px", ...PW_WRAP })}>{L.subtext}</div>
-                        {!L.textOnly && <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                            <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${L.accent}`, borderRadius: "6px", padding: "5px 14px", color: L.accent, fontSize: "13px", fontWeight: 700, textAlign: "center", wordBreak: "break-all" }}>{L.code}</div>
-                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{L.buttonLabel}</button>
+                        <div style={{ fontSize: `${fontSize}px`, fontWeight: 800, color: pvText, marginBottom: "4px", ...PW_WRAP }}>{pvHeading}</div>
+                        <div className="pw-sub" style={pvSub({ fontSize: "12px", color: pvText, opacity: 0.85, marginBottom: "10px", ...PW_WRAP })}>{pvSubtext}</div>
+                        {!pvTextOnly && <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <div style={{ flex: 1, minWidth: 0, border: `2px dashed ${pvAccent}`, borderRadius: "6px", padding: "5px 14px", color: pvAccent, fontSize: "13px", fontWeight: 700, textAlign: "center", wordBreak: "break-all" }}>{previewCode}</div>
+                            <button style={{ ...btn, padding: "6px 18px", fontSize: "13px", flexShrink: 0, maxWidth: "45%", ...PW_WRAP }}>{pvButtonText}</button>
                         </div>}
                     </div>
                 </div>
@@ -871,69 +1096,11 @@ function CouponBannerEditor({ onDiscard }) {
         );
     };
 
-    // Click a coupon in the preview to open its popup ([data-pick] in styles.js).
-    const pick = (onPick, label) => ({ "data-pick": "", title: label, onClick: onPick });
-    const isSample = selectedCouponIds.length === 0;
-    // Up to 4 cards.
-    const shownCards = isSample ? [""] : cardIds.slice(0, 4);
-
-    const standin = <div className="pw-atc-standin cbz-standin" aria-hidden="true">Your Add to cart button</div>;
-    const banner = (
-        <div className="pw-banner" data-width={bannerWidth} style={bannerWidth === "atc" ? { width: "78%" } : bannerWidth === "custom" ? { maxWidth: `${bannerWidthPx}px` } : undefined}>
-            {sectionTitle.text.trim() !== "" && (
-                // Only ladders as wide as Add to cart: the title takes their width
-                // (the storefront fits it to the button the same way).
-                <div className="pw-section-title" {...pick(() => showMore("headings"), "Edit the banner title")} style={{ ...headingStyle(sectionTitle), ...(cardIds.length === 0 && laddersAtAtc ? { width: "78%" } : {}) }}>
-                    {sectionTitle.text}
-                </div>
-            )}
-            {selectedLadderIds.length > 0 && ladderTitle.text.trim() !== "" && (
-                <div className="pw-ladders-title" {...pick(() => showMore("headings"), "Edit the offer ladder heading")} style={{ ...headingStyle(ladderTitle), ...(laddersAtAtc ? { width: "78%" } : {}) }}>{ladderTitle.text}</div>
-            )}
-            {selectedLadderIds.length > 0 && (
-                <div className="pw-ladders" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: cardIds.length ? "12px" : 0 }}>
-                    {selectedLadderIds.map((id) => (
-                        <div key={id} {...pick(() => setEditId(id), `Edit ${offerTitle(id)}`)}>
-                            <OfferLadderPreview style={{ ...(couponOverrides[id] || {}), borderRadius }} />
-                        </div>
-                    ))}
-                </div>
-            )}
-            {(cardIds.length > 0 || selectedLadderIds.length === 0) && cardsTitle.text.trim() !== "" && (
-                <div className="pw-cards-title" {...pick(() => showMore("headings"), "Edit the coupon cards heading")} style={headingStyle(cardsTitle)}>{cardsTitle.text}</div>
-            )}
-            {(cardIds.length > 0 || selectedLadderIds.length === 0) && (() => {
-                // The banner layout (storefront: coupon-slider-render.liquid ps-slider--*).
-                const many = shownCards.length > 1;
-                const box = !many ? { display: "block" }
-                    : couponLayout === "grid" ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }
-                        : couponLayout === "list" ? { display: "flex", flexDirection: "column", gap: "12px" }
-                            // Top room for the preview's Edit tag (the row scrolls, so it would be cut off).
-                            : { display: "flex", gap: "12px", overflowX: "auto", padding: "12px 4px 4px" };
-                return (
-                    <div className="pw-layout" data-layout={many ? couponLayout : "single"} style={box}>
-                        {shownCards.map((cid, i) => (
-                            <div key={cid || i} {...(cid ? pick(() => setEditId(cid), `Edit ${offerTitle(cid)}`) : {})}
-                                style={{ width: many && couponLayout === "carousel" ? `${cardWidth}px` : "100%", maxWidth: many && couponLayout === "carousel" ? "85%" : "100%", flex: many && couponLayout === "carousel" ? "0 0 auto" : undefined, display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
-                                <div style={{ flex: 1, display: "grid" }}>{renderCard(cid)}</div>
-                            </div>
-                        ))}
-                    </div>
-                );
-            })()}
-        </div>
-    );
-    const previewNotes = [
-        cardIds.length > 4 && `The preview shows 4 of your ${cardIds.length} coupons.`,
-        widgetPlacement === "custom" && "You choose the spot: add the Coupon Banner block to your product page in the theme editor.",
-        selectedCouponIds.some((id) => (couponOverrides[id]?.displayCondition || "all") !== "all") && "Coupons set to some products or collections show only on those pages.",
-    ].filter(Boolean);
-
-    const editOffer = editId && selectedCouponIds.includes(editId) ? { id: editId, kind: offerKind(editId), title: offerTitle(editId) } : null;
+    const templateName = TEMPLATES.find(t => t.id === selectedTemplate)?.name ?? "";
 
     return (
         <Frame>
-            <style>{COUPON_BANNER_CSS}</style>
+            <AppSaveBar id="coupon-banner-save-bar" open={hasChanges} onSave={handleSave} onDiscard={() => { setHasChanges(false); onDiscard(); }} saving={isSaving} />
             {toastActive && <Toast content="Settings saved!" onDismiss={() => setToastActive(false)} />}
             <CustomCouponModal
                 open={customCouponOpen}
@@ -942,19 +1109,6 @@ function CouponBannerEditor({ onDiscard }) {
                 fetcher={customCouponFetcher}
                 hasUnsavedChanges={hasChanges}
                 onCreateInBrix={(code) => { setCustomCouponOpen(false); navigate(`/app/discounts/create?prefillCode=${encodeURIComponent(code)}`); }}
-            />
-            <OfferEditModal
-                offer={editOffer}
-                override={editOffer ? couponOverrides[editOffer.id] : undefined}
-                onChange={(patch) => updateOverride(editId, patch)}
-                onClose={() => setEditId("")}
-                onRemove={() => removeOffer(editId)}
-                preview={editOffer && (editOffer.kind === "ladder"
-                    ? <OfferLadderPreview style={{ ...(couponOverrides[editOffer.id] || {}), borderRadius }} />
-                    : <div style={{ maxWidth: 440 }}>{renderCard(editOffer.id)}</div>)}
-                templateDefaults={{ headingText: heading, subtextText: subtext, bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor, buttonText: selectedTemplate === "bold-vibrant" ? "Copy" : "Copy Code" }}
-                iconDefaultShow={selectedTemplate === "bold-vibrant"}
-                codeOptions={ladderCodeOptions}
             />
             <BrixBar size="md" floating />
             <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#f6f6f7" }}>
@@ -991,22 +1145,24 @@ function CouponBannerEditor({ onDiscard }) {
                         <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
                         <Button icon={ThemeIcon} url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim">Customize in Store</Button>
                         <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
-                        <Button onClick={onDiscard} disabled={!hasChanges || isSaving} size="slim">Discard</Button>
+                        <Button onClick={() => setHasChanges(false)} disabled={!hasChanges} size="slim">Discard</Button>
                         <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
                     </div>
                 </div>
 
-                <div className="cbz-body">
-                    {/* Left: one simple page. Bottom padding (styles.js,
-                        --brix-bar-clearance) keeps the last field clear of the
-                        floating BrixBar. */}
-                    <div ref={sideRef} className="cbz-side">
-                        {/* Theme embed status — only relevant once the plan can actually
-                            publish this; on Free the toggle above is already locked off.
-                            Once the embed is enabled, no banner is shown (matches the FBT
-                            Widget settings page behavior). */}
-                        {couponPublishable && !couponEmbedEnabled && (
-                            <div className="cbz-alert">
+
+                {/* ── Two-column body ── */}
+                <div style={{ flex: 1, display: "grid", gridTemplateColumns: "58% 42%", minHeight: 0, overflow: "hidden" }}>
+                    {/* Left column — settings (scrolls internally). Extra bottom padding
+                        keeps the last field's helpText from hiding behind the floating
+                        BrixBar (fixed at 20px from viewport bottom). */}
+                    <div style={{ overflowY: "auto", padding: "12px 12px 100px", borderRight: "1px solid #e1e3e5", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            {/* Theme embed status — only relevant once the plan can actually
+                                publish this; on Free the toggle above is already locked off,
+                                so no embed-status messaging is shown here at all. Once the
+                                embed is enabled, no banner is shown (matches the FBT Widget
+                                settings page behavior). */}
+                            {couponPublishable && !couponEmbedEnabled && (
                                 <Banner
                                     title="Coupon Banner is not visible on your store yet"
                                     tone="warning"
@@ -1014,213 +1170,266 @@ function CouponBannerEditor({ onDiscard }) {
                                 >
                                     <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>.</p>
                                 </Banner>
-                            </div>
-                        )}
-                        <div className="cbz-stack">
-                            <Step id="coupons" step="1" title="Coupons to show" description="Tick the codes shoppers should see on your product pages. Click Edit to change a coupon's words."
-                                summary={cardIds.length + selectedLadderIds.length ? `${cardIds.length + selectedLadderIds.length} shown` : "None yet"} open={moreCard === "coupons"} onToggle={() => toggleMoreCard("coupons")}>
-                                <CouponPicker
-                                    rows={pickRows}
-                                    selectedIds={selectedCouponIds}
-                                    onToggle={toggleCoupon}
-                                    onEdit={setEditId}
-                                    onAddCustom={() => setCustomCouponOpen(true)}
-                                />
-                            </Step>
-
-                            <Step id="design" step="2" title="Design" description="How each coupon looks."
-                                summary={(TEMPLATES.find((t) => t.id === selectedTemplate) || {}).name} open={moreCard === "design"} onToggle={() => toggleMoreCard("design")}>
-                                <ChoiceTiles
-                                    label="Design"
-                                    labelHidden
-                                    value={selectedTemplate}
-                                    onChange={applyTemplate}
-                                    options={TEMPLATES.map((t) => ({ value: t.id, label: t.name, art: <TemplateArt id={t.id} /> }))}
-                                    helpText={designDirty ? "Save first: switching design drops your unsaved coupon words, headings and sizes." : undefined}
-                                />
-                            </Step>
-
-                            <Step id="position" step="3" title="Where it shows"
-                                summary={{ above_cart: "Above Add to cart", below_cart: "Below Add to cart", custom: "Theme editor" }[widgetPlacement]} open={moreCard === "position"} onToggle={() => toggleMoreCard("position")}>
+                            )}
+                            <Card>
                                 <BlockStack gap="300">
-                                    <ChoiceList
-                                        title="Where it shows"
-                                        titleHidden
-                                        selected={[widgetPlacement]}
-                                        onChange={([v]) => { setWidgetPlacement(v); mark(); }}
-                                        choices={[
-                                            { label: "Above the Add to cart button", value: "above_cart" },
-                                            { label: "Below the Add to cart button", value: "below_cart" },
-                                            { label: "I'll place it myself (theme editor)", value: "custom" },
-                                        ]}
-                                    />
-                                    {widgetPlacement === "custom" && (
-                                        <Banner tone="info" action={{ content: "Open theme editor", url: `https://${shop}/admin/themes/current/editor?template=product`, target: "_blank" }}>
-                                            <p>In the theme editor, click <b>Add block</b> in the product section, pick <b>Coupon Banner</b> under Apps and drag it where you want it.</p>
-                                        </Banner>
-                                    )}
+                                    <Text as="h2" variant="headingMd">Select Template</Text>
+                                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                        {TEMPLATES.map(t => (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => applyTemplate(t.id)}
+                                                style={{ padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223", transition: "all 0.15s", outline: "none" }}
+                                            >
+                                                {t.name}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </BlockStack>
-                            </Step>
+                            </Card>
 
-                            <Step id="timer" step="4" title="Countdown timer (optional)"
-                                summary={timerEnabled ? timerSummary : "Off"} open={moreCard === "timer"} onToggle={() => toggleMoreCard("timer")}>
+                            <Card>
                                 <BlockStack gap="300">
-                                    <Checkbox label="Show a countdown timer on each coupon" checked={timerEnabled} onChange={(v) => { setTimerEnabled(v); mark(); }} />
-                                    {timerEnabled && (
-                                        <>
+                                    <Text as="h2" variant="headingMd">Customize: {templateName}</Text>
+
+                                    <AccordionSection id="coupon" icon={DiscountIcon} title="Coupon Selection" isOpen={openSection === "coupon"} onToggle={toggleSection} tip={SECTION_TIPS.coupon}>
+                                        <CouponSelector
+                                            discounts={allCoupons}
+                                            onAddCustom={() => setCustomCouponOpen(true)}
+                                            onAddText={addTextOffer}
+                                            onAddLadder={addLadder}
+                                            selectedCouponIds={selectedCouponIds}
+                                            search={couponSearch}
+                                            onSearchChange={setCouponSearch}
+                                            onToggle={toggleCoupon}
+                                            onClear={() => { setSelectedCouponIds([]); setHasChanges(true); }}
+                                        />
+                                    </AccordionSection>
+
+                                    <AccordionSection id="text" icon={MagicIcon} title="Customize Coupon" isOpen={openSection === "text"} onToggle={toggleSection} tip={SECTION_TIPS.text}>
+                                        {selectedCouponIds.length === 0 ? (
+                                            <Text as="p" variant="bodySm" tone="subdued">Select coupons in “Coupon Selection” first — then pick one here to edit its text, colors, and pages.</Text>
+                                        ) : (
                                             <BlockStack gap="300">
-                                                <div className="cbz-grid2">
-                                                    <TextField label="Hours" type="number" value={String(timerHours)} onChange={(v) => { setTimerHours(Math.min(23, Math.max(0, Number(v)))); mark(); }} autoComplete="off" />
-                                                    <TextField label="Minutes" type="number" value={String(timerMins)} onChange={(v) => { setTimerMins(Math.min(59, Math.max(0, Number(v)))); mark(); }} autoComplete="off" />
-                                                </div>
-                                                <TextField label="Timer text" value={timerLabel} onChange={(v) => { setTimerLabel(v); mark(); }} placeholder="Offer expires in" autoComplete="off" />
-                                                <ChoiceList
-                                                    title="When it reaches zero"
-                                                    selected={[timerMode]}
-                                                    onChange={([v]) => { setTimerMode(v); mark(); }}
-                                                    choices={[
-                                                        { label: "Show the expired text (starts again on the next visit)", value: "session" },
-                                                        { label: "Start again right away", value: "loop" },
-                                                    ]}
+                                                <Select
+                                                    label="Editing coupon"
+                                                    helpText="The preview on the right shows this coupon. Edit its text, colors, and pages below."
+                                                    value={editingCouponId || selectedCouponIds[0]}
+                                                    onChange={setEditingCouponId}
+                                                    options={selectedCouponIds.map((cid) => {
+                                                        const c = allCoupons.find((x) => x.id === cid);
+                                                        return { label: c?.isText || c?.isLadder ? c.title : (c?.code || cid), value: cid };
+                                                    })}
                                                 />
-                                                {timerMode !== "loop" && (
-                                                    <TextField label="Expired text" value={timerExpired} onChange={(v) => { setTimerExpired(v); mark(); }} placeholder="Offer expired!" autoComplete="off" />
-                                                )}
-                                                <div className="cbz-grid3">
-                                                    <ColorField label="Background" value={timerBg} onChange={(v) => { setTimerBg(v); mark(); }} />
-                                                    <ColorField label="Text colour" value={timerText} onChange={(v) => { setTimerText(v); mark(); }} />
-                                                    <ColorField label="Time colour" value={timerAccent} onChange={(v) => { setTimerAccent(v); mark(); }} />
-                                                </div>
+                                                <CouponOverridePanel
+                                                    key={editingCouponId}
+                                                    alwaysOpen
+                                                    codeOptions={ladderCodeOptions}
+                                                    coupon={editingPanelCoupon || { id: editingCouponId, code: editingCouponId }}
+                                                    override={couponOverrides[editingCouponId]}
+                                                    onChange={(patch) => updateOverride(editingCouponId, patch)}
+                                                    templateDefaults={{ bgColor, textColor, accentColor, buttonColor, buttonTextColor: btnTextColor }}
+                                                    iconDefaultShow={selectedTemplate === "bold-vibrant"}
+                                                />
                                             </BlockStack>
-                                        </>
-                                    )}
-                                </BlockStack>
-                            </Step>
+                                        )}
+                                    </AccordionSection>
 
-                            <button type="button" className="cbz-more" aria-expanded={moreOpen} onClick={() => setMoreOpen((o) => !o)}>
-                                More options <span className="cbz-more-d">· text offers, offer ladders, headings, size</span>
-                                <span className="cbz-chev"><Icon source={ChevronDownIcon} /></span>
-                            </button>
-
-                            {moreOpen && (
-                                <>
-                                    <Step id="other-offers" title="Text offers and offer ladders" description="Other things the banner can show besides coupon codes. They appear in 1. Coupons to show, ticked."
-                                        summary={extrasSummary} open={moreCard === "other-offers"} onToggle={() => toggleMoreCard("other-offers")}>
-                                        <div className="cbz-tiles" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-                                            <button type="button" className="cbz-tile cbz-tile--row" aria-label="Add a text offer with no code" onClick={addTextOffer}>
-                                                <span className="cbz-tile-art" aria-hidden="true"><OfferArt kind="text" /></span>
-                                                <span className="cbz-tile-txt">
-                                                    <span className="cbz-tile-l">Add a text offer</span>
-                                                    <span className="cbz-tile-d">Just words, like &ldquo;Free shipping over ₹999&rdquo;. No code, no button.</span>
-                                                </span>
-                                            </button>
-                                            <button type="button" className="cbz-tile cbz-tile--row" aria-label="Add an offer ladder" onClick={addLadder}>
-                                                <span className="cbz-tile-art" aria-hidden="true"><OfferArt kind="ladder" /></span>
-                                                <span className="cbz-tile-txt">
-                                                    <span className="cbz-tile-l">Add an offer ladder</span>
-                                                    <span className="cbz-tile-d">A bar like &ldquo;Buy 2 Get 10% Off | Buy 3 Get 15% Off&rdquo;.</span>
-                                                </span>
-                                            </button>
-                                        </div>
-                                    </Step>
-
-                                    <Step id="headings" title="Headings" description="Titles above the banner. Each one shows only when it has words."
-                                        summary={headingsSummary} open={moreCard === "headings"} onToggle={() => toggleMoreCard("headings")}>
-                                        <BlockStack gap="300">
-                                            <HeadingFields
-                                                label="Banner title"
-                                                name="Title"
-                                                where="Top of the banner"
-                                                placeholder="Apply Coupon"
-                                                value={sectionTitle}
-                                                onChange={(key, v) => { setSectionTitle((prev) => ({ ...prev, [key]: v })); markDesign(); }}
-                                            />
-                                            <HeadingFields
-                                                label="Offer ladder heading"
-                                                name="Ladder heading"
-                                                where="Above offer ladders"
-                                                placeholder="e.g. Bundle offers"
-                                                note={selectedLadderIds.length ? undefined : "Shows once you add an offer ladder. Leave empty to hide it."}
-                                                value={ladderTitle}
-                                                onChange={(key, v) => { setLadderTitle((prev) => ({ ...prev, [key]: v })); markDesign(); }}
-                                            />
-                                            <HeadingFields
-                                                label="Coupon cards heading"
-                                                name="Cards heading"
-                                                where="Above coupon cards"
-                                                placeholder="e.g. Apply a coupon"
-                                                value={cardsTitle}
-                                                onChange={(key, v) => { setCardsTitle((prev) => ({ ...prev, [key]: v })); markDesign(); }}
-                                            />
-                                        </BlockStack>
-                                    </Step>
-
-                                    <Step id="layout" title="Layout and size" description="How the coupons are arranged, the banner's width and the cards' size."
-                                        summary={layoutSummary} open={moreCard === "layout"} onToggle={() => toggleMoreCard("layout")}>
+                                    <AccordionSection id="design" icon={ColorIcon} title="Layout" isOpen={openSection === "design"} onToggle={toggleSection} tip={SECTION_TIPS.design}>
                                         <BlockStack gap="400">
-                                            <ChoiceTiles
-                                                label="How coupon cards are arranged"
-                                                value={couponLayout}
-                                                onChange={(v) => { setCouponLayout(v); mark(); }}
-                                                options={[
-                                                    { value: "list", label: "List", description: "Stacked, full width", art: <ArrangeArt layout="list" /> },
-                                                    { value: "carousel", label: "Carousel", description: "One row that slides", art: <ArrangeArt layout="carousel" /> },
-                                                    { value: "grid", label: "Grid", description: "2 columns, 1 on phones", art: <ArrangeArt layout="grid" /> },
-                                                ]}
-                                                helpText={cardIds.length < 2 ? "This matters once 2 or more coupons are shown." : undefined}
-                                            />
+                                            <BlockStack gap="300">
+                                                <Text as="h3" variant="headingSm">Headings</Text>
+                                                <HeadingFields
+                                                    label="Banner title"
+                                                    name="Title"
+                                                    placeholder="Apply Coupon"
+                                                    helpText="Above the whole banner. Leave empty to show no title."
+                                                    value={sectionTitle}
+                                                    onChange={(key, v) => setTitleKey(key)(v)}
+                                                />
+                                                <Divider />
+                                                <HeadingFields
+                                                    label="Offer ladder heading"
+                                                    name="Ladder heading"
+                                                    placeholder="e.g. Bundle offers"
+                                                    helpText={selectedLadderIds.length ? "Just above the offer ladders. Leave empty for none." : "Shows above your offer ladders once you add one in Coupon Selection. Leave empty for none."}
+                                                    value={ladderTitle}
+                                                    onChange={(key, v) => { setLadderTitle((prev) => ({ ...prev, [key]: v })); mark(); }}
+                                                />
+                                                <Divider />
+                                                <HeadingFields
+                                                    label="Coupon cards heading"
+                                                    name="Cards heading"
+                                                    placeholder="e.g. Apply a coupon"
+                                                    helpText="Just above the coupon cards. Leave empty for none."
+                                                    value={cardsTitle}
+                                                    onChange={(key, v) => { setCardsTitle((prev) => ({ ...prev, [key]: v })); mark(); }}
+                                                />
+                                            </BlockStack>
+                                            <Divider />
                                             <BlockStack gap="200">
-                                                <Segmented
+                                                <Text as="h3" variant="headingSm">Banner size</Text>
+                                                <Select
                                                     label="Banner width"
                                                     value={bannerWidth}
-                                                    onChange={(v) => { setBannerWidth(v); markDesign(); }}
+                                                    onChange={(v) => { setBannerWidth(v); mark(); }}
                                                     options={[
                                                         { label: "Full width", value: "full" },
-                                                        { label: "Add to cart width", value: "atc" },
-                                                        { label: "Custom", value: "custom" },
+                                                        { label: "Same as the Add to cart button", value: "atc" },
+                                                        { label: "Custom width", value: "custom" },
                                                     ]}
                                                     helpText={bannerWidth === "atc" ? "Lines up with your theme's Add to cart button: the title, offer ladders and coupons take its width. Pages without the button show it full width." : "The whole banner: title, offer ladders and coupons."}
                                                 />
                                                 {bannerWidth === "custom" && (
-                                                    <SliderField label="Banner width (px)" value={bannerWidthPx} min={200} max={800} step={10} suffix="px" onChange={(v) => { setBannerWidthPx(v); markDesign(); }} />
+                                                    <SliderField label="Banner width (px)" value={bannerWidthPx} min={200} max={800} step={10} suffix="px" onChange={(v) => { setBannerWidthPx(v); mark(); }} />
                                                 )}
                                             </BlockStack>
-                                            <BlockStack gap="200">
-                                                <span className="cbz-sub">Coupon cards</span>
-                                                <SliderField label="Corner roundness" value={borderRadius} min={0} max={24} suffix="px" onChange={(v) => { setBorderRadius(v); markDesign(); }} />
-                                                <SliderField label="Heading text size" value={fontSize} min={10} max={28} suffix="px" onChange={(v) => { setFontSize(v); markDesign(); }} />
-                                                <SliderField label="Space inside" value={padding} min={8} max={32} suffix="px" onChange={(v) => { setPadding(v); markDesign(); }} />
-                                                <SliderField label="Card width" value={cardWidth} min={200} max={480} step={10} suffix="px" onChange={(v) => { setCardWidth(v); markDesign(); }} />
-                                                <SliderField label="Minimum card height" value={cardMinHeight} min={0} max={300} step={10} suffix="px" onChange={(v) => { setCardMinHeight(v); markDesign(); }} />
-                                                <Text as="p" variant="bodySm" tone="subdued">Card width is for the Carousel; List and Grid cards fill the row. Cards grow taller for long text, so nothing is cut off; on phones a card is at most 85% of the screen width. Height 0 = as tall as the text. Corner roundness also applies to offer ladders.</Text>
-                                            </BlockStack>
+                                            <Divider />
+                                            <Select
+                                                label="Banner layout"
+                                                helpText="How multiple coupons are arranged on the product page."
+                                                value={couponLayout}
+                                                onChange={(v) => { setCouponLayout(v); mark(); }}
+                                                options={[
+                                                    { label: "List — stacked", value: "list" },
+                                                    { label: "Carousel — horizontal slider", value: "carousel" },
+                                                    { label: "Grid — 2 columns (1 on phones)", value: "grid" },
+                                                ]}
+                                            />
+                                            <Divider />
+                                            <SliderField label="Border Radius" value={borderRadius} min={0} max={24} suffix="px" onChange={(v) => { setBorderRadius(v); mark(); }} />
+                                            <SliderField label="Font Size" value={fontSize} min={10} max={28} suffix="px" onChange={(v) => { setFontSize(v); mark(); }} />
+                                            <SliderField label="Padding" value={padding} min={8} max={32} suffix="px" onChange={(v) => { setPadding(v); mark(); }} />
+                                            <SliderField label="Coupon width" value={cardWidth} min={200} max={480} step={10} suffix="px" onChange={(v) => { setCardWidth(v); mark(); }} />
+                                            <SliderField label="Minimum coupon height" value={cardMinHeight} min={0} max={300} step={10} suffix="px" onChange={(v) => { setCardMinHeight(v); mark(); }} />
+                                            <Text as="p" variant="bodySm" tone="subdued">Width applies when more than one coupon shows (one coupon fills the row). Coupons grow taller for long text, so nothing is cut off; on phones a coupon is at most 85% of the screen width. Height 0 = as tall as the text.</Text>
                                         </BlockStack>
-                                    </Step>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                                    </AccordionSection>
 
-                    {/* Right: live preview of a product page. */}
-                    <div className="cbz-main">
-                        <div className="cbz-pv">
-                            <div className="cbz-pv-bar"><b>Live preview</b><span>Click a coupon to edit it</span></div>
-                            <div className="cbz-pv-chrome" aria-hidden="true"><i /><i /><i /><span /></div>
-                            <div className="cbz-pv-page">
-                                <div className="cbz-skel" aria-hidden="true"><i style={{ width: "58%", height: 12 }} /><i style={{ width: "26%" }} /></div>
-                                {widgetPlacement === "below_cart" && standin}
-                                {isSample ? (
-                                    <div className="cbz-pv-sample">
-                                        {banner}
-                                        <div className="cbz-pv-cta">This is a sample. Tick a coupon in <b>1. Coupons to show</b> to see yours here.</div>
+                                    <AccordionSection id="timer" icon={ClockIcon} title="Countdown Timer" isOpen={openSection === "timer"} onToggle={toggleSection} tip={SECTION_TIPS.timer}>
+                                        <BlockStack gap="300">
+                                            <Checkbox label="Enable countdown timer" checked={timerEnabled} onChange={(v) => { setTimerEnabled(v); mark(); }} />
+                                            {timerEnabled && (
+                                                <BlockStack gap="300">
+                                                    <InlineStack gap="300">
+                                                        <div style={{ flex: 1 }}><TextField label="Hours" type="number" value={String(timerHours)} onChange={(v) => { setTimerHours(Math.min(23, Math.max(0, Number(v)))); mark(); }} autoComplete="off" /></div>
+                                                        <div style={{ flex: 1 }}><TextField label="Minutes" type="number" value={String(timerMins)} onChange={(v) => { setTimerMins(Math.min(59, Math.max(0, Number(v)))); mark(); }} autoComplete="off" /></div>
+                                                    </InlineStack>
+                                                    <Select
+                                                        label="Timer mode"
+                                                        options={[
+                                                            { label: "Per-session (resets each visit)", value: "session" },
+                                                            { label: "On loop (restarts when it ends)", value: "loop" },
+                                                        ]}
+                                                        value={timerMode}
+                                                        onChange={(v) => { setTimerMode(v); mark(); }}
+                                                        helpText={timerMode === "loop" ? "When the timer reaches zero it starts again from the full time, without end." : undefined}
+                                                    />
+                                                    <TextField label="Timer label" value={timerLabel} onChange={(v) => { setTimerLabel(v); mark(); }} placeholder="Offer expires in" autoComplete="off" />
+                                                    {timerMode !== "loop" && (
+                                                        <TextField label="Expired label" value={timerExpired} onChange={(v) => { setTimerExpired(v); mark(); }} placeholder="Offer expired!" autoComplete="off" />
+                                                    )}
+                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                                                        <ColorSwatch label="Background" value={timerBg} onChange={(v) => { setTimerBg(v); mark(); }} />
+                                                        <ColorSwatch label="Text" value={timerText} onChange={(v) => { setTimerText(v); mark(); }} />
+                                                        <ColorSwatch label="Accent" value={timerAccent} onChange={(v) => { setTimerAccent(v); mark(); }} />
+                                                    </div>
+                                                </BlockStack>
+                                            )}
+                                        </BlockStack>
+                                    </AccordionSection>
+
+                                    {/* ── Placement — separate dropdown below all accordion sections ── */}
+                                    <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "14px 16px", background: "#fafafa" }}>
+                                        <Select
+                                            label="Widget Placement"
+                                            options={[
+                                                { label: "Above the Add to Cart button", value: "above_cart" },
+                                                { label: "Below the Add to Cart button", value: "below_cart" },
+                                                { label: "Custom (place it yourself in the theme editor)", value: "custom" },
+                                            ]}
+                                            value={widgetPlacement}
+                                            onChange={(v) => { setWidgetPlacement(v); mark(); }}
+                                            helpText={
+                                                widgetPlacement === "above_cart" ? "Position locked above the Add to Cart button on storefront." :
+                                                widgetPlacement === "below_cart" ? "Position locked below the Add to Cart button on storefront." :
+                                                "Add the block yourself anywhere on the product page via the theme editor."
+                                            }
+                                        />
                                     </div>
-                                ) : banner}
-                                {widgetPlacement !== "below_cart" && (widgetPlacement !== "custom" || bannerWidth === "atc") && standin}
-                            </div>
-                            {previewNotes.length > 0 && (
-                                <div className="cbz-pv-note">{previewNotes.map((n) => <div key={n}>{n}</div>)}</div>
-                            )}
+                                </BlockStack>
+                            </Card>
                         </div>
+
+                    {/* Right column — Live Preview. Extra bottom padding keeps the
+                        preview footer from hiding behind the floating BrixBar. */}
+                    <div style={{ overflowY: "auto", padding: "12px 12px 100px" }}>
+                        <Card>
+                            <BlockStack gap="400">
+                                <Text as="h2" variant="headingMd">Preview</Text>
+                                <div style={{ background: "#f9fafb", borderRadius: "12px", padding: "18px", border: "1px solid #e5e7eb", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                                    <div style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: "14px" }}>
+                                        Product Page Widget
+                                    </div>
+                                    <div className="pw-banner" data-width={bannerWidth} style={bannerWidth === "atc" ? { width: "78%" } : bannerWidth === "custom" ? { maxWidth: `${bannerWidthPx}px` } : undefined}>
+                                    {sectionTitle.text.trim() !== "" && (
+                                        // Only ladders as wide as Add to cart: the title takes their width
+                                        // (the storefront fits it to the button the same way).
+                                        <div className="pw-section-title" style={{ ...headingStyle(sectionTitle), ...(cardIds.length === 0 && laddersAtAtc ? { width: "78%" } : {}) }}>
+                                            {sectionTitle.text}
+                                        </div>
+                                    )}
+                                    {selectedLadderIds.length > 0 && ladderTitle.text.trim() !== "" && (
+                                        <div className="pw-ladders-title" style={{ ...headingStyle(ladderTitle), ...(laddersAtAtc ? { width: "78%" } : {}) }}>{ladderTitle.text}</div>
+                                    )}
+                                    {selectedLadderIds.length > 0 && (
+                                        <div className="pw-ladders" style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: cardIds.length ? "12px" : 0 }}>
+                                            {selectedLadderIds.map((id) => (
+                                                <OfferLadderPreview key={id} style={{ ...(couponOverrides[id] || {}), borderRadius }} />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {(cardIds.length > 0 || selectedLadderIds.length === 0) && cardsTitle.text.trim() !== "" && (
+                                        <div className="pw-cards-title" style={headingStyle(cardsTitle)}>{cardsTitle.text}</div>
+                                    )}
+                                    {(cardIds.length > 0 || selectedLadderIds.length === 0) && (() => {
+                                        // The banner layout (storefront: coupon-slider-render.liquid ps-slider--*):
+                                        // one card per selected coupon, up to 4, arranged as the store will.
+                                        const count = Math.min(Math.max(cardIds.length, 1), 4);
+                                        const many = count > 1;
+                                        const card = (i) => (
+                                            <div key={i} style={{ width: many && couponLayout === "carousel" ? `${cardWidth}px` : "100%", maxWidth: many && couponLayout === "carousel" ? "85%" : "100%", flex: many && couponLayout === "carousel" ? "0 0 auto" : undefined, display: "flex", flexDirection: "column", minHeight: cardMinHeight || undefined }}>
+                                                <div style={{ flex: 1, display: "grid" }}>{renderPreview()}</div>
+                                            </div>
+                                        );
+                                        const box = !many ? { display: "block" }
+                                            : couponLayout === "grid" ? { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "12px" }
+                                                : couponLayout === "list" ? { display: "flex", flexDirection: "column", gap: "12px" }
+                                                    : { display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "4px" };
+                                        return (
+                                            <div className="pw-layout" data-layout={many ? couponLayout : "single"} style={box}>
+                                                {Array.from({ length: count }, (_, i) => card(i))}
+                                            </div>
+                                        );
+                                    })()}
+                                    {bannerWidth === "atc" && (
+                                        <div className="pw-atc-standin" aria-hidden="true" style={{ marginTop: "12px", height: "46px", borderRadius: "6px", border: "1.5px dashed #9ca3af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 600, color: "#6b7280", background: "#fff" }}>Your Add to cart button</div>
+                                    )}
+                                    </div>
+                                </div>
+                                {cardIds.length > 1 && (
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                        {`${{ list: "List", carousel: "Carousel", grid: "Grid" }[couponLayout] || "Carousel"} layout: the preview repeats the coupon picked above to show how ${Math.min(cardIds.length, 4)} coupons are arranged.${couponLayout === "grid" ? " Phones show one column." : ""}`}
+                                    </Text>
+                                )}
+                                {selectedLadderIds.length > 0 && (
+                                    <Text as="p" variant="bodySm" tone="subdued">Offer ladders show above the coupons.</Text>
+                                )}
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                    The preview updates in real-time as you change settings. This is how the widget will appear on your product pages.
+                                </Text>
+                            </BlockStack>
+                        </Card>
                     </div>
                 </div>
             </div>

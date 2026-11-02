@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
 import { syncCodOrderFromWebhook } from "../services/cod.server";
@@ -10,7 +11,12 @@ import { applyOrderDelta } from "../services/analytics-aggregator.server";
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
+  // Answer Shopify at once; the DB work runs right after (webhook-queue.server.js).
+  afterResponse(`webhook ${topic} ${shop}`, () => handle(shop, payload));
+  return new Response();
+};
 
+async function handle(shop, payload) {
   const db = getDb();
   try {
     const orderId = String(payload.id);
@@ -31,6 +37,9 @@ export const action = async ({ request }) => {
 
     if (wasCountedAsRevenue && !wasAlreadyCancelled) {
       await applyOrderDelta(shop, dateStr, -revenue, -1, wasBillable ? -1 : 0, wasFbtOrder ? -1 : 0, wasComboOrder ? -1 : 0);
+    } else if (wasBillable && !wasAlreadyCancelled) {
+      // Counted toward the plan's orders when it came in, never paid (e.g. COD).
+      await applyOrderDelta(shop, dateStr, 0, 0, -1);
     }
   } catch (error) {
     console.error("[Webhook orders/cancelled] Failed to record cancellation:", error.message);
@@ -39,6 +48,4 @@ export const action = async ({ request }) => {
   // BRIX COD orders: shipped / delivered / paid / cancelled / refunded status.
   // Not awaited (Shopify wants a reply within 5 s); never throws, safe on retries.
   syncCodOrderFromWebhook(shop, payload);
-
-  return new Response();
-};
+}

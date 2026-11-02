@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
 import { syncCodOrderFromWebhook } from "../services/cod.server";
@@ -11,7 +12,12 @@ import { syncCodOrderFromWebhook } from "../services/cod.server";
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
+  // Answer Shopify at once; the DB work runs right after (webhook-queue.server.js).
+  afterResponse(`webhook ${topic} ${shop}`, () => handle(shop, payload));
+  return new Response();
+};
 
+async function handle(shop, payload) {
   const db = getDb();
   try {
     await upsertOrderFromPayload(db, shop, payload);
@@ -22,6 +28,4 @@ export const action = async ({ request }) => {
   // BRIX COD orders: shipped / delivered / paid / cancelled / refunded status.
   // Not awaited (Shopify wants a reply within 5 s); never throws, safe on retries.
   syncCodOrderFromWebhook(shop, payload);
-
-  return new Response();
-};
+}

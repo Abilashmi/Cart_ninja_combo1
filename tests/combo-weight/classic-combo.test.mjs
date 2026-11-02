@@ -11,18 +11,16 @@ import {
 } from '../../app/utils/combo-weight.shared.js';
 import { CLASSIC_DESIGNS, isClassicLayout, designCollections, switchComboDesign } from '../../app/utils/combo-design.shared.js';
 
-test('box pricing feature per template: Quantity Box = Starter+, Weight / Value Box = Growth+, Pro unlimited', () => {
+test('box pricing feature per template; every plan publishes all of them', () => {
   assert.equal(boxPricingFeature('layout7'), 'combo_quantity_pricing');
   assert.equal(boxPricingFeature('layout5'), 'combo_weight_pricing');
   assert.equal(boxPricingFeature('layout6'), 'combo_value_pricing');
   for (const layout of ['layout1', 'layout2', 'layout4', undefined]) assert.equal(boxPricingFeature(layout), 'combo_tier_pricing', String(layout));
 
   const can = (plan, layout) => canPublishFeature(plan, boxPricingFeature(layout));
-  assert.deepEqual(['layout7', 'layout5', 'layout6'].map((l) => can('free', l)), [false, false, false]);
-  assert.deepEqual(['layout7', 'layout5', 'layout6'].map((l) => can('starter', l)), [true, false, false]);
-  assert.deepEqual(['layout7', 'layout5', 'layout6'].map((l) => can('growth', l)), [true, true, true]);
-  assert.deepEqual(['layout7', 'layout5', 'layout6'].map((l) => can('pro', l)), [true, true, true]);
-  assert.equal(can('starter', 'layout1'), false, 'older Classic tiers stay Growth+');
+  for (const plan of ['free', 'lite', 'starter', 'growth', 'pro']) {
+    assert.deepEqual(['layout7', 'layout5', 'layout6', 'layout1'].map((l) => can(plan, l)), [true, true, true, true], plan);
+  }
 });
 
 test('each box template has one measure; only the older Classic designs choose', () => {
