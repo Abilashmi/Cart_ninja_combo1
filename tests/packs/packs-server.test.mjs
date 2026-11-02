@@ -82,11 +82,9 @@ test('resolveSaveStatus: server-side plan gate (Free/Starter/Pro)', () => {
   assert.deepEqual(resolveSaveStatus({ requested: 'hacked', planState: 'enabled' }), { error: 'invalid_status' });
 });
 
-test('plans config: Free=preview, Starter/Pro=enabled', async () => {
-  const { getFeatureState } = await import('../../app/config/plans.js');
-  assert.equal(getFeatureState('free', 'packs'), 'preview');
-  assert.equal(getFeatureState('starter', 'packs'), 'enabled');
-  assert.equal(getFeatureState('pro', 'packs'), 'enabled');
+test('plans config: Packs enabled on every plan', async () => {
+  const { getFeatureState, PLAN_KEYS } = await import('../../app/config/plans.js');
+  for (const plan of PLAN_KEYS) assert.equal(getFeatureState(plan, 'packs'), 'enabled', plan);
 });
 
 test('save + read round trip; ids stored numeric; customization deep-merged with defaults', async () => {

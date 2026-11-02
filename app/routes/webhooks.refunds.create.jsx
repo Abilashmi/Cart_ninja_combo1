@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { applyOrderDelta } from "../services/analytics-aggregator.server";
 
@@ -14,18 +15,23 @@ function refundAmount(payload) {
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
+  // Answer Shopify at once; the DB work runs right after (webhook-queue.server.js).
+  afterResponse(`webhook ${topic} ${shop}`, () => handle(shop, payload));
+  return new Response();
+};
 
+async function handle(shop, payload) {
   const db = getDb();
   try {
     const orderId = String(payload.order_id);
     const amount = refundAmount(payload);
-    if (amount <= 0) return new Response();
+    if (amount <= 0) return;
 
     const [rows] = await db.execute(
       `SELECT created_at_shopify, financial_status FROM store_orders WHERE shop_domain = ? AND order_id = ?`,
       [shop, orderId]
     );
-    if (rows.length === 0) return new Response();
+    if (rows.length === 0) return;
 
     await db.execute(
       `UPDATE store_orders SET refunded_amount = refunded_amount + ? WHERE shop_domain = ? AND order_id = ?`,
@@ -39,6 +45,4 @@ export const action = async ({ request }) => {
   } catch (error) {
     console.error("[Webhook refunds/create] Failed to record refund:", error.message);
   }
-
-  return new Response();
-};
+}

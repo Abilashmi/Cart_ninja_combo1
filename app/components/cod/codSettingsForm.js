@@ -3,6 +3,7 @@
 import {
   isValidCodLogo, isValidDrawerSelector, isValidTermsUrl, DEFAULT_COD_SETTINGS, GA4_ID_RE, META_PIXEL_RE, COD_FEE_PERCENT_MAX,
 } from '../../utils/cod.shared';
+import { isValidContinueUrl, sanitizeContinueShopping } from '../../utils/continue-shopping.shared';
 import {
   DEFAULT_PRODUCT_PAYMENT, parsePrepaidPercent, parseMinSubtotal, PREPAID_PERCENT_MIN, PREPAID_PERCENT_MAX, PAY_HEX_RE,
 } from '../../utils/product-payment.shared';
@@ -117,6 +118,7 @@ export function toForm(s) {
     comboPlacement: s.comboPlacement || 'below',
     drawerSelector: s.drawerSelector || '',
     drawerCheckoutText: s.drawerCheckoutText || '',
+    drawerContinue: sanitizeContinueShopping(s.drawerContinue),
     codFeeEnabled: s.codFeeEnabled,
     codFee: numText(s.codFee),
     codFeePercent: numText(s.codFeePercent),
@@ -191,6 +193,7 @@ export function toSettings(f) {
     comboPlacement: f.comboPlacement,
     drawerSelector: f.drawerSelector.trim(),
     drawerCheckoutText: f.drawerCheckoutText,
+    drawerContinue: f.drawerContinue,
     codFeeEnabled: f.codFeeEnabled,
     codFee: Number(f.codFee) || 0,
     codFeePercent: Number(f.codFeePercent) || 0,
@@ -286,6 +289,10 @@ export function formErrors(f) {
   if (selector && !isValidDrawerSelector(selector)) e.drawerSelector = 'Use a CSS selector like #CartDrawer-Checkout.';
   else if (selector && typeof document !== 'undefined') {
     try { document.querySelector(selector); } catch { e.drawerSelector = "This isn't a valid CSS selector."; }
+  }
+  const cont = f.drawerContinue;
+  if (cont?.enabled && cont.action === 'link' && String(cont.url || '').trim() && !isValidContinueUrl(cont.url)) {
+    e.drawerContinueUrl = 'Use a link starting with https:// or a page on your store, like /collections/new.';
   }
   const limit = Number(f.dailyLimitPerPhone);
   if (!Number.isInteger(limit) || limit < 1 || limit > 50) e.dailyLimitPerPhone = 'Enter a whole number from 1 to 50.';

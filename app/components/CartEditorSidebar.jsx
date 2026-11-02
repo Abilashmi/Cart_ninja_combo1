@@ -232,7 +232,7 @@ export function CartEditorSidebar({ onDiscard }) {
           frames under ~1300px wide that bar reaches into this sidebar and hid
           the send button. */}
       <div style={{ flexShrink: 0, borderTop: '1px solid #e1e3e5', paddingBottom: 'var(--brix-sidekick-space, 80px)' }}>
-        <BrixBar size="sm" floating={false} discoveryHint />
+        <BrixBar size="sm" floating={false} />
       </div>
     </div>
   );

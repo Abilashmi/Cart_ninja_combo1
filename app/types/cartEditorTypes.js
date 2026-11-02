@@ -1,6 +1,8 @@
 // Cart Editor Type Definitions
 import { footerExtras } from '../utils/cart-footer-extras.shared';
 
+import { DEFAULT_CONTINUE_SHOPPING } from '../utils/continue-shopping.shared.js';
+
 export const defaultTier = {
   id: 'tier-1',
   minimumSpend: 500,
@@ -184,6 +186,8 @@ export const defaultCartEditorState = {
       fontSize: 15, // px, storefront size (CHECKOUT_FONT_SIZES)
       paddingY: 16, // px above and below the text (CHECKOUT_PADDING_Y)
       mobileButtonType: 'standard',
+      // "Continue shopping" next to Checkout (utils/continue-shopping.shared.js), off by default.
+      continueShopping: { ...DEFAULT_CONTINUE_SHOPPING },
     },
     // Rules and defaults: utils/cart-footer-extras.shared.js (saved in the
     // checkout_button_style blob, so no new columns).

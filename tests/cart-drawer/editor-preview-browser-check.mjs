@@ -94,6 +94,13 @@ await ctx.route('https://img.test/**', (route) => route.fulfill({ contentType: '
 await page.goto('https://admin.test/app/cartdrawer');
 await page.waitForSelector('text=Image Banner');
 await page.waitForTimeout(300);
+// Nothing is unsaved right after loading: Shopify's save bar (AppSaveBar, open = isDirty)
+// would otherwise show at once and block leaving the page.
+check('fresh editor: nothing unsaved (Save and Discard disabled, so the save bar stays hidden)', await page.evaluate(() => {
+  // Polaris marks a disabled Button with aria-disabled, not the disabled property.
+  const btn = (label) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === label);
+  return btn('Save')?.getAttribute('aria-disabled') === 'true' && btn('Discard')?.getAttribute('aria-disabled') === 'true';
+}));
 
 const preview = () => page.evaluate(() => {
   const drawer = document.querySelector('.bxcd-root');
@@ -361,11 +368,29 @@ for (const behavior of ['replace', 'hide']) {
   });
   check('checkout button preview: text size and height follow the settings (scaled like the rest of the preview)', cbPrev && cbPrev.fs === '16.5px' && cbPrev.pt === '15px', JSON.stringify(cbPrev));
 
+  // Continue shopping: off by default, then on above Checkout with its own text and style.
+  const contPrev = () => ed.evaluate(() => {
+    const all = [...document.querySelectorAll('.bxcd-root button')];
+    const cont = all.find((x) => x.textContent.trim() === 'Back to shop');
+    const co = all.find((x) => /→/.test(x.textContent));
+    return cont && co ? { above: cont.getBoundingClientRect().bottom <= co.getBoundingClientRect().top, filled: getComputedStyle(cont).backgroundColor } : null;
+  });
+  check('continue shopping: off by default in the Cart Editor preview', (await contPrev()) === null);
+  await ed.getByLabel('Show a "Continue shopping" button').check();
+  await ed.getByLabel('Button text', { exact: true }).fill('Back to shop');
+  await ed.getByLabel('Placement').selectOption('above');
+  await ed.getByLabel('Style').selectOption('filled');
+  await ed.waitForTimeout(250);
+  const cont = await contPrev();
+  check('continue shopping preview: above Checkout, filled, the merchant\'s text', cont && cont.above && cont.filled === 'rgb(17, 24, 39)', JSON.stringify(cont));
+
   await ed.getByRole('button', { name: 'Save', exact: true }).click();
   await ed.waitForTimeout(800);
   const body = (p) => saves.find((s) => s.path === p)?.body || {};
   const cbSaved = JSON.parse((await ed.evaluate(() => window.__LEGACY__))?.checkout_button_style || '{}');
   check('save: checkout button text size and padding go to the storefront blob', cbSaved.fontSize === 19 && cbSaved.paddingY === 22, JSON.stringify(cbSaved));
+  const csSaved = cbSaved.continueShopping || {};
+  check('save: Continue shopping goes to the storefront blob', csSaved.enabled === true && csSaved.text === 'Back to shop' && csSaved.placement === 'above' && csSaved.style === 'filled', JSON.stringify(csSaved));
   const c = body('/api/cart-drawer-config');
   check('save: messages, rotation and the typed colour go to /api/cart-drawer-config',
     JSON.stringify(c.announcement_messages) === '["Free shipping today","Sale ends Sunday"]' && c.announcement_text === 'Free shipping today' && c.announcement_auto_rotate === 1 && c.announcement_show_arrows === 1 && c.announcement_bg_color === '#aabbcc',
@@ -425,6 +450,36 @@ for (const behavior of ['replace', 'hide']) {
   });
   check('sidebar: opening a section scrolls its header to the top of the list', at.scrolls && Math.abs(at.gap) <= 1, JSON.stringify(at));
   await sb.close();
+}
+
+// ── Shopify's save bar (AppSaveBar): opens on an edit, its Discard puts the saved editor back ──
+// App Bridge stand-in: window.shopify.saveBar + a <ui-save-bar> with show()/hide().
+{
+  const sv = await ctx.newPage();
+  sv.on('pageerror', (e) => errors.push(e.message));
+  await sv.addInitScript(() => {
+    window.shopify = { saveBar: { show() {}, hide() {} } };
+    customElements.define('ui-save-bar', class extends HTMLElement {
+      show() { this.setAttribute('data-shown', ''); }
+      hide() { this.removeAttribute('data-shown'); }
+    });
+  });
+  await sv.goto('https://admin.test/app/cartdrawer');
+  await sv.waitForSelector('text=Image Banner');
+  await sv.waitForTimeout(300);
+  const shown = () => sv.evaluate(() => document.querySelector('ui-save-bar')?.hasAttribute('data-shown') ?? null);
+  check('save bar: there, and hidden while nothing is unsaved', (await shown()) === false);
+  await sv.locator('button', { hasText: 'Image Banner' }).first().click();
+  await sv.getByRole('switch', { name: 'Show image banner' }).click();
+  await sv.waitForTimeout(200);
+  check('save bar: an edit shows it', (await shown()) === true);
+  await sv.evaluate(() => { window.__sameDocument = true; });
+  await sv.locator('ui-save-bar button', { hasText: 'Discard' }).click();
+  await sv.waitForTimeout(300);
+  const badge = await sv.locator('button', { hasText: 'Image Banner' }).first().textContent();
+  check('save bar Discard: the edit is undone (banner Off again) and the bar hides', badge.includes('Off') && (await shown()) === false, badge);
+  check('save bar Discard: no reload (a reload of the admin iframe is not safe)', await sv.evaluate(() => window.__sameDocument === true));
+  await sv.close();
 }
 
 check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

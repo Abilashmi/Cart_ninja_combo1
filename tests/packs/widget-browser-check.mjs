@@ -39,7 +39,9 @@ const variants = [
   { id: '201', title: 'L', price: 100, availableForSale: true, maxQuantity: null },
   { id: '202', title: 'XL', price: 120, availableForSale: false, maxQuantity: null },
 ];
-const pack = (over = {}) => ({ id: 7, version: 4, variantId: '200', template: 'same_variant', productTitle: 'Tee', variantTitle: 'M', productImage: 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=', basePrice: 80, available: true, maxQuantity: null, tiers, customization: customization(), ...over });
+// Shaped like packs_storefront.php / api.packs-storefront answer today: the
+// widget picks a Pack by variantScope + allowedVariantIds (variantId alone no longer counts).
+const pack = (over = {}) => ({ id: 7, version: 4, variantId: '200', template: 'same_variant', packType: 'same_variant', variantScope: 'selected', allowedVariantIds: [String(over.variantId || '200')], productTitle: 'Tee', variantTitle: 'M', productImage: 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=', basePrice: 80, available: true, maxQuantity: null, tiers, customization: customization(), ...over });
 const apiBody = (packs, over = {}) => ({ success: true, packs, reason: packs.length ? null : 'no_active_pack', currency: { code: 'INR', locale: 'en-IN' }, checkoutDiscount: { verified: true, state: 'active', message: 'Checkout discount is active.' }, preview: false, ...over });
 
 const results = [];

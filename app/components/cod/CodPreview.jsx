@@ -6,6 +6,7 @@ import { tagMoney } from '../../utils/price-tags.shared.js';
 import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
 import { PaymentOptionsScreen } from './PaymentOptionsPreview';
 import { prepaidUsable, productPaymentPricing } from '../../utils/product-payment.shared';
+import { sanitizeContinueShopping, continueShoppingStyle } from '../../utils/continue-shopping.shared.js';
 
 const SURFACES = [
   { id: 'drawer', label: 'Cart drawer' },
@@ -165,6 +166,12 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
   ) : null;
   const checkoutLabel = settings.drawerCheckoutText ? checkoutText(settings, settings.drawerCheckoutText, cart, money) : 'Check out';
   const checkout = showCheckout ? <div key="co" className="bcod-dr-checkout">{checkoutLabel}</div> : null;
+  // Continue shopping around the Pay now + COD pair (brix_cod.js paintContinue).
+  const cont = sanitizeContinueShopping(settings.drawerContinue);
+  const contOn = cont.enabled && settings.enabled && settings.surfaces?.drawer !== false;
+  const contBtn = contOn ? (
+    <div key="cs" className="bcod-dr-continue" style={{ ...continueShoppingStyle(cont), [cont.placement === 'above' ? 'marginBottom' : 'marginTop']: 10 }}>{cont.text}</div>
+  ) : null;
   const items = sampleItems(cart);
   return (
     <div className="bcod-dr-stage" data-placement={placement}>
@@ -195,7 +202,11 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
         <div className="bcod-dr-foot">
           <div className="bcod-dr-sub"><span>Subtotal</span><b>{money(cart)}</b></div>
           <p className="bcod-dr-note">Taxes and shipping calculated at checkout</p>
-          <div className="bcod-dr-btns">{codFirst ? [cod, checkout] : [checkout, cod]}</div>
+          <div className="bcod-dr-btns">
+            {cont.placement === 'above' && contBtn}
+            {codFirst ? [cod, checkout] : [checkout, cod]}
+            {cont.placement !== 'above' && contBtn}
+          </div>
           {!codState && hiddenWhy ? <span className="bcod-dr-hidden">COD hidden · {hiddenWhy}</span> : null}
         </div>
       </div>

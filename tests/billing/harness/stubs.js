@@ -4,5 +4,6 @@ export const authenticate = null;
 export const getShopPlan = null;
 export const getShopBillingInterval = null;
 export const setPendingPlanKey = null;
+export const confirmPlanFromWebhook = null;
 export const getPromoTrialDays = null;
 export const redeemPromoCode = null;

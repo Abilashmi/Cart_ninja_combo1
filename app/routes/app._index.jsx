@@ -5,7 +5,7 @@ import { Page, Text, Icon } from '@shopify/polaris';
 import {
   CartIcon, DiscountCodeIcon, RewardIcon,
   CashDollarIcon, ChartCohortIcon, CollectionIcon,
-  ArrowRightIcon, StarIcon, SettingsIcon, MagicIcon,
+  ArrowRightIcon, StarIcon, SettingsIcon,
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
@@ -14,6 +14,8 @@ import { getAgencyStoreStatus } from "../utils/agency-dashboard.server";
 import { useCurrency } from "../components/CurrencyContext";
 import { usePlan } from "../components/PlanContext";
 import { PLANS } from "../config/plans";
+import { cartDrawerEmbedEditorUrl } from '../config/theme-extension';
+import { useAppEmbedStatus } from '../components/shared/useAppEmbedStatus';
 import { formatAmount } from '../utils/currency.shared';
 import VideoTutorialCard, { VIDEO_CARD_STYLES } from '../components/VideoTutorialCard';
 
@@ -96,6 +98,9 @@ const PLAN_BADGE_STYLE = {
   starter: { background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e' },
   growth:  { background: '#ecfdf5', border: '1px solid #6ee7b7', color: '#047857' },
   pro:    { background: '#e8f9fe', border: '1px solid #93c5fd', color: '#1a9de0' },
+  lite:      { background: '#f0f9ff', border: '1px solid #bae6fd', color: '#0369a1' },
+  scale:     { background: '#eef2ff', border: '1px solid #a5b4fc', color: '#3730a3' },
+  enterprise: { background: '#111827', border: '1px solid #111827', color: '#ffffff' },
 };
 
 const COURSE_SECTIONS = [
@@ -137,9 +142,9 @@ const COMBO_BUILDER_VIDEO_URL = 'https://www.youtube.com/embed/f7RGtknTVO4';
 const ANALYTICS_VIDEO_URL = 'https://www.youtube.com/embed/FfVLZMmE1PM';
 
 const STEPS = [
-  { id: 1, title: 'Use Brix AI',             desc: 'Write and work smarter with Brix AI — describe what you want changed and let it configure your cart drawer, upsells, and banners for you.', to: '/app/brix-ai',       color: '#667eea', icon: MagicIcon,        minPlan: 'starter', dur: '01:30', category: 'Brix AI',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
+  { id: 1, title: 'Use Brix AI',             desc: 'Write and work smarter with Brix AI — describe what you want changed and let it configure your cart drawer, upsells, and banners for you.', to: '/app/brix-ai',       color: '#1a9de0', icon: StarIcon,        minPlan: 'starter', dur: '01:30', category: 'Brix AI',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
   { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart, then preview it live before publishing to your store.',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'Cart Drawer',      difficulty: 'Beginner',     videoUrl: CART_DRAWER_VIDEO_URL, thumbnail: '/carteditor.png' },
-  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Add frequently bought together products to your cart drawer and product pages to boost average order value.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: FBT_VIDEO_URL, thumbnail: '/Fbt.png' },
+  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Show frequently bought together products in your cart drawer and on product pages.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: FBT_VIDEO_URL, thumbnail: '/Fbt.png' },
   { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner with targeting rules so the right shoppers see the right offer at the right time.',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'Coupon Banner',    difficulty: 'Beginner',     videoUrl: COUPON_BANNER_VIDEO_URL, thumbnail: '/coupon_banner.png' },
   { id: 5, title: 'Build a Combo in Minutes', desc: 'Create high-converting product bundles with Combo Builder — customise layouts, preview live, and publish in just a few clicks.', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'Combo Builder',    difficulty: 'Beginner',     videoUrl: COMBO_BUILDER_VIDEO_URL, thumbnail: '/bundle.png' },
   { id: 6, title: 'Review Your Analytics',  desc: 'Understand revenue, funnels, and conversion rates in real-time so you know what to optimise next.',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'Analytics',        difficulty: 'Intermediate', videoUrl: ANALYTICS_VIDEO_URL, thumbnail: '/Analytics.png' },
@@ -154,10 +159,10 @@ const MINI_TUTORIALS = [
 ];
 
 const TIPS = [
-  { id: 1, title: 'Use urgency copy',        body: 'Phrases like "Only 3 left" in coupon banners can lift conversions by up to 18%.', color: '#ef4444' },
+  { id: 1, title: 'Use urgency copy',        body: 'Honest urgency, like "Only 3 left" on low-stock items, helps shoppers decide.', color: '#ef4444' },
   { id: 2, title: 'Stack FBT + coupon',      body: 'Combine FBT upsells with a threshold coupon to maximise average order value.',     color: '#f59e0b' },
   { id: 3, title: 'Match brand colours',     body: 'Set your cart drawer colour to match your primary CTA button for higher trust.',   color: '#2ecc71' },
-  { id: 4, title: 'Enable all blocks',       body: 'Stores with 3+ blocks active see 2× more upsell revenue than single-block setups.', color: '#10b981' },
+  { id: 4, title: 'Enable all blocks',       body: 'Use the cart drawer, FBT and coupon blocks together so shoppers see offers at each step.', color: '#10b981' },
   { id: 5, title: 'Review analytics weekly', body: 'Checking your funnel weekly helps you spot drop-off points before they cost you.', color: '#1a9de0' },
   { id: 6, title: 'Try Brix AI rewrites',    body: 'Generate 3 coupon title variants with Brix AI — test them and keep the winner.',   color: '#06b6d4' },
 ];
@@ -524,6 +529,8 @@ function VideoTutorials({ markStep, navigate }) {
 
 export default function DashboardPage() {
   const { shop, initialAnalytics } = useLoaderData();
+  // Real app embed status from App Bridge (it used to always say "active").
+  const embedStatus = useAppEmbedStatus();
   const { symbol: currencySymbol, code: currencyCode } = useCurrency();
   const { plan, canUse } = usePlan();
   const navigate = useNavigate();
@@ -773,10 +780,12 @@ export default function DashboardPage() {
             <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Text as="p" variant="bodyMd" tone="subdued">{dateLabel}</Text>
               <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#d1d5db' }} />
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
-                <Text as="p" variant="bodyMd" tone="subdued">Store embed active</Text>
-              </span>
+              {(embedStatus === 'active' || embedStatus === 'off') && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: embedStatus === 'active' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                  <Text as="p" variant="bodyMd" tone="subdued">{embedStatus === 'active' ? 'App embed on' : 'App embed off'}</Text>
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -909,15 +918,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Theme Editor link */}
-        <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* App embed status (shopify.app.extensions()) + a link that turns it on */}
+        <div style={{ background: embedStatus === 'off' ? '#fffbeb' : '#f9fafb', border: `1px solid ${embedStatus === 'off' ? '#fcd34d' : '#e5e7eb'}`, borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <Text as="p" variant="bodySm" fontWeight="semibold">Enable App Embed</Text>
-            <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">Activate Brix in your Shopify theme editor to go live.</Text></div>
+            <Text as="p" variant="bodySm" fontWeight="semibold">
+              {embedStatus === 'active' ? 'BRIX is live on your store' : embedStatus === 'off' ? 'Turn on the BRIX app embed' : 'App embed'}
+            </Text>
+            <div style={{ marginTop: 2 }}>
+              <Text as="p" variant="bodyXs" tone="subdued">
+                {embedStatus === 'active'
+                  ? 'The "Custom Cart Drawer" app embed is on in your published theme.'
+                  : embedStatus === 'off'
+                    ? 'The cart drawer, COD, FBT, Packs and combo pages show on your store only while the "Custom Cart Drawer" app embed is on.'
+                    : 'Turn on the "Custom Cart Drawer" app embed in your theme editor so BRIX shows on your store.'}
+              </Text>
+            </div>
           </div>
-          <button onClick={() => window.open(`https://${shop}/admin/themes/current/editor?context=apps`, '_blank')}
+          <button onClick={() => window.open(embedStatus === 'active' ? `https://${shop}/admin/themes/current/editor?context=apps` : cartDrawerEmbedEditorUrl(shop), '_blank')}
             style={{ padding: '8px 18px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            Open Theme Editor →
+            {embedStatus === 'active' ? 'Open theme editor' : 'Turn on app embed'}
           </button>
         </div>
 

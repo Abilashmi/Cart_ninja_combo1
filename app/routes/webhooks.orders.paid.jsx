@@ -1,8 +1,10 @@
 import { authenticate } from "../shopify.server";
+import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
 import { syncCodOrderFromWebhook } from "../services/cod.server";
 import { applyOrderDelta } from "../services/analytics-aggregator.server";
+import { countBillableOrder } from "../services/billable-orders.server";
 
 // Stores every paid order's revenue against the local MySQL DB (same DB used
 // by db.server.js / getDb()). This is the local, dev-time source of truth for
@@ -37,9 +39,13 @@ async function ensureStoreOrderEventsTable(db) {
 // checkout redirect in app/routes/preview.$templateId.jsx.
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
-
   console.log(`Received ${topic} webhook for ${shop}`);
+  // Answer Shopify at once; the DB work runs right after (webhook-queue.server.js).
+  afterResponse(`webhook ${topic} ${shop}`, () => handle(shop, payload));
+  return new Response();
+};
 
+async function handle(shop, payload) {
   const db = getDb();
   const revenue = parseFloat(payload.current_total_price ?? payload.total_price ?? 0) || 0;
 
@@ -73,19 +79,10 @@ export const action = async ({ request }) => {
       financialStatusOverride: "paid",
     });
 
-    // Only orders placed while the cart drawer was enabled count toward the
-    // plan's order cap — stamped once here (orders/paid is the one place
-    // that also applies the rollup delta), not re-evaluated on later
-    // orders/updated webhooks for the same order.
-    const [drawerRows] = await db.execute(
-      `SELECT cartStatus FROM cart_drawer WHERE shop = ? LIMIT 1`,
-      [shop]
-    );
-    const isBillable = drawerRows.length > 0 && Number(drawerRows[0].cartStatus) === 1;
-
     // Reporting-only source tags — an order can carry both. They never
-    // change what gets charged (that's still driven solely by is_billable /
-    // billable_order_count); they just say which feature(s) touched it.
+    // change what gets charged (that's driven solely by is_billable /
+    // billable_order_count, see countBillableOrder); they just say which
+    // feature(s) touched it.
     const isFbtOrder = (Array.isArray(payload.line_items) ? payload.line_items : []).some((item) => {
       const props = item.properties;
       if (!props) return false;
@@ -95,12 +92,15 @@ export const action = async ({ request }) => {
     const isComboOrder = comboSourceFromAttrs(payload) === "ComboForge";
 
     await db.execute(
-      `UPDATE store_orders SET is_billable = ?, is_fbt_order = ?, is_combo_order = ? WHERE shop_domain = ? AND order_id = ?`,
-      [isBillable ? 1 : 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0, shop, String(payload.id)]
+      `UPDATE store_orders SET is_fbt_order = ?, is_combo_order = ? WHERE shop_domain = ? AND order_id = ?`,
+      [isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0, shop, String(payload.id)]
     );
 
+    // Counts toward the plan's monthly orders, if orders/create didn't already.
+    await countBillableOrder(db, shop, payload, dateStr);
+
     if (!alreadyCountedAsPaid) {
-      await applyOrderDelta(shop, dateStr, orderRevenue, 1, isBillable ? 1 : 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0);
+      await applyOrderDelta(shop, dateStr, orderRevenue, 1, 0, isFbtOrder ? 1 : 0, isComboOrder ? 1 : 0);
       await db.execute(
         `UPDATE store_orders SET revenue_counted = 1 WHERE shop_domain = ? AND order_id = ?`,
         [shop, String(payload.id)]
@@ -130,6 +130,4 @@ export const action = async ({ request }) => {
   // BRIX COD orders: shipped / delivered / paid / cancelled / refunded status.
   // Not awaited (Shopify wants a reply within 5 s); never throws, safe on retries.
   syncCodOrderFromWebhook(shop, payload);
-
-  return new Response();
-};
+}

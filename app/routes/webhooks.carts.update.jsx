@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { ensureAnalyticsTables } from "../services/analytics-schema.server";
 import { applyCartActivityDelta } from "../services/analytics-aggregator.server";
@@ -9,12 +10,17 @@ import { applyCartActivityDelta } from "../services/analytics-aggregator.server"
 export const action = async ({ request }) => {
   const { payload, topic, shop } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
+  // Answer Shopify at once; the DB work runs right after (webhook-queue.server.js).
+  afterResponse(`webhook ${topic} ${shop}`, () => handle(shop, payload));
+  return new Response();
+};
 
+async function handle(shop, payload) {
   const db = getDb();
   try {
     await ensureAnalyticsTables(db);
     const cartToken = String(payload.token || payload.id || "");
-    if (!cartToken) return new Response();
+    if (!cartToken) return;
 
     const items = Array.isArray(payload.line_items || payload.items) ? (payload.line_items || payload.items) : [];
     const totalPrice = parseFloat(payload.total_price) || 0;
@@ -34,6 +40,4 @@ export const action = async ({ request }) => {
   } catch (error) {
     console.error("[Webhook carts/update] Failed to record cart activity:", error.message);
   }
-
-  return new Response();
-};
+}

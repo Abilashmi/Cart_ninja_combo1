@@ -54,10 +54,11 @@ test('generating on a paid plan saves AI mode (and the rules) in the drawer reco
   assert.equal(posts[0].progress_data, RECORD.progress_data, 'other blobs written back unchanged');
 });
 
-test('never writes back a copy the plan may have trimmed: Free plan', async () => {
+test('Free plan: every plan publishes every drawer feature, so its copy is whole and AI mode is saved', async () => {
   const posts = fakePhp(RECORD);
-  assert.equal(await saveUpsellAiMode('demo.myshopify.com', 'free', RULES), false);
-  assert.equal(posts.length, 0);
+  assert.equal(await saveUpsellAiMode('demo.myshopify.com', 'free', RULES), true);
+  assert.equal(posts.length, 1);
+  assert.equal(JSON.parse(posts[0].upsell_data).useAI, true);
 });
 
 test('never writes back while the drawer reads as off (a paused order cap looks the same)', async () => {

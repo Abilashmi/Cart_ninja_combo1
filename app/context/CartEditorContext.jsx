@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { footerExtras } from '../utils/cart-footer-extras.shared.js';
+import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 
 function parseJSONSafe(v) {
   if (!v) return {};
@@ -42,6 +43,7 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.fontSize != null ? { fontSize: Number(cbStyle.fontSize) } : {}),
         ...(cbStyle.paddingY != null ? { paddingY: Number(cbStyle.paddingY) } : {}),
         ...(cbStyle.mobileButtonType ? { mobileButtonType: cbStyle.mobileButtonType } : {}),
+        ...(cbStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cbStyle.continueShopping) } : {}),
       },
       paymentCards: cbStyle.paymentCards ? footerExtras.cardsConfig(cbStyle.paymentCards) : base.footer.paymentCards,
       trustBadges: cbStyle.trustBadges ? footerExtras.trustConfig(cbStyle.trustBadges) : base.footer.trustBadges,
@@ -290,6 +292,7 @@ function mergeConfigIntoState(base, cfg) {
           borderRadius: cfg.checkoutButtonStyle.borderRadius ?? next.footer.checkoutButton.borderRadius,
           fontSize: cfg.checkoutButtonStyle.fontSize ?? next.footer.checkoutButton.fontSize,
           paddingY: cfg.checkoutButtonStyle.paddingY ?? next.footer.checkoutButton.paddingY,
+          ...(cfg.checkoutButtonStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cfg.checkoutButtonStyle.continueShopping) } : {}),
         },
       },
     };
@@ -675,6 +678,18 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     setState(prev => ({ ...prev, isDirty: false }));
   }, []);
 
+  // The editor as last loaded or saved: kept while nothing is unsaved (so
+  // hydration and AI agent updates, which don't mark it dirty, count as
+  // saved), frozen once the merchant edits. Shopify's save bar Discard puts
+  // it back (CartEditorPage); reloading the iframe isn't safe in the admin.
+  const savedStateRef = useRef(state);
+  useEffect(() => {
+    if (!state.isDirty) savedStateRef.current = state;
+  }, [state]);
+  const discardChanges = useCallback(() => {
+    setState({ ...savedStateRef.current, isDirty: false });
+  }, []);
+
   const resetAll = useCallback(() => {
     setState(defaultCartEditorState);
   }, []);
@@ -736,6 +751,7 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     removeUpsellRule,
     updateUpsellRule,
     resetDirty,
+    discardChanges,
     resetAll,
   };
 

@@ -133,12 +133,11 @@ test('bad input fails before any write: unknown/ambiguous product, unknown coupo
   assert.equal(widgetPosts, 0);
 });
 
-test('free plan: designed but honestly reported as not live', async () => {
+test('free plan: every plan has the Coupon Banner, so it goes live there too', async () => {
   const r = await run({ template: 'classic-banner', latestCouponCount: 1, showOn: 'all' }, 'free');
   assert.equal(r.success, true);
-  assert.equal(settings.is_enabled, 0);
-  assert.equal(r.liveOnStorefront, false);
-  assert.match(r.note, /not show on the storefront/);
+  assert.equal(settings.is_enabled, 1);
+  assert.equal(r.liveOnStorefront, true);
 });
 
 test('changing only the layout keeps coupons, conditions, styles and other templates', async () => {

@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment } from './product-payment.shared.js';
+import { DEFAULT_CONTINUE_SHOPPING, sanitizeContinueShopping } from './continue-shopping.shared.js';
 
 export const COD_SURFACES = ['drawer', 'product', 'combo'];
 export const COD_SOURCES = COD_SURFACES; // where an order was placed from
@@ -51,6 +52,10 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // Text for the theme cart drawer's own Checkout button; may hold price tags.
   // '' = the theme's text. (The BRIX Cart Drawer's is set in the Cart Editor.)
   drawerCheckoutText: '',
+  // "Continue shopping" above or below the drawer's Pay now + COD buttons
+  // (utils/continue-shopping.shared.js); in the BRIX Cart Drawer it takes the
+  // place of the Cart Editor's own one while on.
+  drawerContinue: DEFAULT_CONTINUE_SHOPPING,
   codFeeEnabled: false, // codFee is charged only while this is on
   codFee: 0,
   // From this order value on, the fee is codFeePercent % of the order instead
@@ -500,6 +505,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     drawerCheckoutText: has('drawerCheckoutText')
       ? (typeof p.drawerCheckoutText === 'string' ? p.drawerCheckoutText.replace(/\s+/g, ' ').trim().slice(0, 60) : '')
       : String(b.drawerCheckoutText || ''),
+    drawerContinue: sanitizeContinueShopping(has('drawerContinue') ? p.drawerContinue : null, b.drawerContinue),
     codFeeEnabled: has('codFeeEnabled') ? Boolean(p.codFeeEnabled) : has('codFee') ? codFee > 0 : baseFeeFlag ?? codFee > 0,
     codFee,
     codFeePercent: has('codFeePercent') ? feePercent(p.codFeePercent, b.codFeePercent) : feePercent(b.codFeePercent, 0),

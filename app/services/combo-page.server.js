@@ -16,103 +16,12 @@ import { createSwrCache } from './swr-cache.server';
 
 const quickShopKit = createQuickShopKit(createComboWeightCore());
 
-// ── Guaranteed combo-page theme template ────────────────────────────────────
-// Shopify Pages render page.body through whatever section layout the
-// merchant's Default Page template happens to have — and merchants can (and
-// do) remove the "page content" section from that template entirely via the
-// Theme Editor, which silently breaks the raw-body approach (confirmed live
-// on two test stores: templateSuffix was null, i.e. Default Page template,
-// and neither's default template included a content section at all — both
-// had been customized down to just banners/featured-collection sections).
-// This provisions a dedicated template+section this app fully controls, so a
-// combo page's layout never depends on what the merchant did to their
-// Default Page template.
-//
-// themeFilesUpsert requires both the write_themes scope AND a manual
-// exemption Shopify grants per-app on request — until that's approved for
-// this app, every call below fails with ACCESS_DENIED and
-// ensureComboForgeTemplate returns false, so callers transparently fall back
-// to the plain page.body approach. Nothing here needs to change once the
-// exemption lands; it just starts succeeding.
-const TEMPLATE_FILENAME = 'templates/page.combo-forge.json';
-const SECTION_FILENAME = 'sections/combo-forge-page.liquid';
-
-function comboForgeSectionLiquid() {
-  const scriptOrigin = process.env.SHOPIFY_APP_URL || 'https://cartdrawer.fly.dev';
-  return `<div data-brix-combo-root
-  data-shop="{{ shop.permanent_domain }}"
-  data-template-id="{{ page.metafields.combo_forge.template_id }}"
-></div>
-<script src="${scriptOrigin}/combo-page.js" defer></script>
-
-{% schema %}
-{
-  "name": "Combo page",
-  "settings": []
-}
-{% endschema %}
-`;
-}
-
-const TEMPLATE_JSON = JSON.stringify({
-  sections: { main: { type: 'combo-forge-page' } },
-  order: ['main'],
-});
-
-// Idempotent — checks for both files before writing, so this is cheap to
-// call on every combo-page creation/publish rather than needing a separate
-// one-time install step. Returns true if the template is available to use
-// (templateSuffix: 'combo-forge' is then safe to set on the page), false if
-// provisioning failed for any reason (caller falls back to the plain
-// page.body approach, which still works on stock/unmodified themes).
-export async function ensureComboForgeTemplate(admin) {
-  try {
-    const themeRes = await admin.graphql(`#graphql
-      query { themes(first: 1, roles: [MAIN]) { nodes { id } } }
-    `);
-    const themeJson = await themeRes.json();
-    const themeId = themeJson.data?.themes?.nodes?.[0]?.id;
-    if (!themeId) return false;
-
-    const filesRes = await admin.graphql(`#graphql
-      query CheckComboForgeFiles($themeId: ID!, $filenames: [String!]!) {
-        theme(id: $themeId) {
-          files(filenames: $filenames) { nodes { filename } }
-        }
-      }
-    `, { variables: { themeId, filenames: [TEMPLATE_FILENAME, SECTION_FILENAME] } });
-    const filesJson = await filesRes.json();
-    const existing = new Set((filesJson.data?.theme?.files?.nodes || []).map((n) => n.filename));
-    if (existing.has(TEMPLATE_FILENAME) && existing.has(SECTION_FILENAME)) return true;
-
-    const upsertRes = await admin.graphql(`#graphql
-      mutation ComboForgeThemeFilesUpsert($themeId: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) {
-        themeFilesUpsert(themeId: $themeId, files: $files) {
-          upsertedThemeFiles { filename }
-          userErrors { field message }
-        }
-      }
-    `, {
-      variables: {
-        themeId,
-        files: [
-          { filename: TEMPLATE_FILENAME, body: { type: 'TEXT', value: TEMPLATE_JSON } },
-          { filename: SECTION_FILENAME, body: { type: 'TEXT', value: comboForgeSectionLiquid() } },
-        ],
-      },
-    });
-    const upsertJson = await upsertRes.json();
-    const errors = upsertJson.data?.themeFilesUpsert?.userErrors;
-    if (errors?.length > 0) {
-      console.error('[ComboPage] themeFilesUpsert errors:', errors);
-      return false;
-    }
-    return true;
-  } catch (e) {
-    console.error('[ComboPage] ensureComboForgeTemplate failed:', e.message);
-    return false;
-  }
-}
+// Combo pages are drawn by the app embed's combo-page.js on the page's own
+// body ([data-brix-combo-root], or auto-detected by page handle). The app
+// never writes theme files (Built for Shopify 3.2.2: no Asset API writes); it
+// used to try provisioning a page.combo-forge template with themeFilesUpsert,
+// which never had the exemption it needs. Pages that already have that
+// template (templateSuffix 'combo-forge') keep working.
 
 const MIN = 60_000;
 // Shopify data behind combo pages, kept in memory so a shopper doesn't wait

@@ -27,38 +27,30 @@ function ColorRow({ label, value, fallback, onChange }) {
  * copiedBgColor, copiedTextColor, iconShow, icon, iconImage, iconColor,
  * iconSize }); onChange(patch). defaults = what the card shows when a field is
  * empty ({ subColor, iconColor, iconShow, iconSize }). hideCopied for cards
- * without a button (text offers). part = 'font' | 'colors' | 'icon' shows only
- * that group (the Coupon Banner spreads them over tabs); none = all of them.
+ * without a button (text offers).
  */
-export function CouponStyleFields({ value, onChange, defaults = {}, hideCopied = false, part }) {
+export function CouponStyleFields({ value, onChange, defaults = {}, hideCopied = false }) {
   const v = value || {};
-  const show = (p) => !part || part === p;
   const iconShow = v.iconShow === undefined || v.iconShow === null ? defaults.iconShow !== false : v.iconShow !== false;
   const imageOk = !v.iconImage || httpsOrNull(v.iconImage);
   return (
     <BlockStack gap="300">
-      {show('font') && (
-        <>
-          <Text as="h4" variant="headingSm">Subtitle font</Text>
-          <InlineStack gap="300" wrap={false}>
-            <div style={{ flex: 1 }}>
-              <TextField
-                label="Size" type="number" suffix="px" min={6} max={24} autoComplete="off" placeholder="Default"
-                value={v.subFontSize === undefined || v.subFontSize === null ? '' : String(v.subFontSize)}
-                onChange={(x) => onChange({ subFontSize: x === '' ? '' : Number(x) })}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <Select label="Weight" options={COUPON_FONT_WEIGHTS} value={String(v.subFontWeight || '')} onChange={(x) => onChange({ subFontWeight: x })} />
-            </div>
-          </InlineStack>
-        </>
-      )}
-      {show('colors') && (
-        <ColorRow label="Subtitle colour" value={v.subColor} fallback={defaults.subColor || '#6b7280'} onChange={(x) => onChange({ subColor: x })} />
-      )}
+      <Text as="h4" variant="headingSm">Subtitle font</Text>
+      <InlineStack gap="300" wrap={false}>
+        <div style={{ flex: 1 }}>
+          <TextField
+            label="Size" type="number" suffix="px" min={6} max={24} autoComplete="off" placeholder="Default"
+            value={v.subFontSize === undefined || v.subFontSize === null ? '' : String(v.subFontSize)}
+            onChange={(x) => onChange({ subFontSize: x === '' ? '' : Number(x) })}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <Select label="Weight" options={COUPON_FONT_WEIGHTS} value={String(v.subFontWeight || '')} onChange={(x) => onChange({ subFontWeight: x })} />
+        </div>
+      </InlineStack>
+      <ColorRow label="Subtitle colour" value={v.subColor} fallback={defaults.subColor || '#6b7280'} onChange={(x) => onChange({ subColor: x })} />
 
-      {show('colors') && !hideCopied && (
+      {!hideCopied && (
         <>
           <Text as="h4" variant="headingSm">After &ldquo;Copy&rdquo; is tapped</Text>
           <ColorRow label="Copied button background" value={v.copiedBgColor} fallback="#10b981" onChange={(x) => onChange({ copiedBgColor: x })} />
@@ -66,9 +58,9 @@ export function CouponStyleFields({ value, onChange, defaults = {}, hideCopied =
         </>
       )}
 
-      {show('icon') && !part && <Text as="h4" variant="headingSm">Icon</Text>}
-      {show('icon') && <Checkbox label="Show icon" checked={iconShow} onChange={(x) => onChange({ iconShow: x })} />}
-      {show('icon') && iconShow && (
+      <Text as="h4" variant="headingSm">Icon</Text>
+      <Checkbox label="Show icon" checked={iconShow} onChange={(x) => onChange({ iconShow: x })} />
+      {iconShow && (
         <>
           <div role="radiogroup" aria-label="Icon" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {COUPON_ICON_OPTIONS.map((o) => {

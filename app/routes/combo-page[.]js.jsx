@@ -3048,9 +3048,9 @@ const SCRIPT_BODY = String.raw`
     });
   }
 
-  // Explicit mount point — used when a page's own body/template already
-  // knows which combo template it is (the guaranteed-template path, pending
-  // Shopify's themeFilesUpsert exemption; see api.bundle-templates.jsx).
+  // Explicit mount point — used when a page's own body already knows which
+  // combo template it is (the page body BRIX writes, see api.bundle-templates.jsx,
+  // or an older page.combo-forge template).
   //
   // The cart-drawer app embed (extensions/cart-drawer/blocks/cart_drawer.liquid)
   // also loads a copy of this same script globally on every page, from a

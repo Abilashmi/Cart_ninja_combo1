@@ -1888,6 +1888,107 @@
     };
   }
 
+  /* --- "Continue shopping" next to Pay now + COD (COD → Customize → Cart drawer) --- */
+
+  // cfg.drawerContinue as cod_storefront.php cods_continue() sends it (same
+  // rules as app/utils/continue-shopping.shared.js), or null when it's off.
+  function continueLook(cfg) {
+    var d = cfg && cfg.drawerContinue;
+    if (!d || d.enabled !== true) return null;
+    var hex = function (v, def) { return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(v || '')) ? String(v) : def; };
+    var num = function (v, def, min, max) { var n = Math.round(Number(v)); return isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
+    var url = String(d.url || '');
+    return {
+      text: String(d.text || '') || 'Continue shopping',
+      placement: d.placement === 'above' ? 'above' : 'below',
+      style: ['outline', 'filled', 'link'].indexOf(d.style) !== -1 ? d.style : 'outline',
+      bg: hex(d.bg, '#111827'),
+      color: hex(d.color, '#ffffff'),
+      fontSize: num(d.fontSize, 14, 11, 20),
+      radius: num(d.radius, 8, 0, 40),
+      paddingY: num(d.paddingY, 12, 4, 24),
+      action: d.action === 'link' ? 'link' : 'close',
+      url: /^https:\/\/[^\s<>"'\\]+$/i.test(url) || /^\/(?!\/)[^\s<>"'\\]*$/.test(url) ? url : '',
+    };
+  }
+
+  function continueHtml(cs) {
+    var link = cs.style === 'link';
+    var paint = cs.style === 'filled'
+      ? 'background:' + cs.bg + ';color:' + cs.color + ';box-shadow:none;'
+      : 'background:transparent;color:' + cs.bg + ';box-shadow:' + (link ? 'none' : 'inset 0 0 0 1.5px ' + cs.bg) + ';';
+    return '<button type="button" data-brix-cod-continue-btn style="' + important(
+      'box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;display:block;' +
+      'margin:' + (cs.placement === 'above' ? '0 0 10px 0' : '10px 0 0 0') + ';' +
+      'padding:' + (link ? Math.max(2, Math.round(cs.paddingY / 2)) + 'px 8px' : cs.paddingY + 'px 16px') + ';' +
+      paint + 'border:none;border-radius:' + (link ? 0 : cs.radius) + 'px;text-shadow:none;appearance:none;-webkit-appearance:none;' +
+      'font-family:inherit;font-size:' + cs.fontSize + 'px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;' +
+      'text-align:center;text-decoration:' + (link ? 'underline' : 'none') + ';text-underline-offset:3px;cursor:pointer;opacity:1') + '">' +
+      esc(cs.text) + '</button>';
+  }
+
+  // Puts `el` above the first or below the last of `group` (the Checkout
+  // button and the COD slot, wherever the COD placement put them).
+  function placeContinue(el, where, group) {
+    var list = group.filter(function (n) { return n && n.parentNode; });
+    if (!list.length) return;
+    var first = list[0];
+    var last = list[0];
+    list.forEach(function (n) {
+      if (first.compareDocumentPosition(n) & 2) first = n; // n comes before
+      if (last.compareDocumentPosition(n) & 4) last = n; // n comes after
+    });
+    if (where === 'above') { if (el.nextSibling !== first) first.parentNode.insertBefore(el, first); }
+    else if (last.nextSibling !== el) last.parentNode.insertBefore(el, last.nextSibling);
+  }
+
+  // Draws (or removes, cs = null) the Continue shopping button of one drawer.
+  // holder = { cont } keeps the element between paints.
+  function paintContinue(holder, cs, group, onTap) {
+    if (!cs) {
+      if (holder.cont && holder.cont.parentNode) holder.cont.parentNode.removeChild(holder.cont);
+      holder.cont = null;
+      return;
+    }
+    if (!holder.cont) {
+      holder.cont = document.createElement('div');
+      holder.cont.setAttribute('data-brix-cod-continue', '');
+      holder.cont.style.cssText = important('display:block;width:100%;margin:0;padding:0;flex:1 0 100%');
+    }
+    holder.cont.innerHTML = continueHtml(cs);
+    placeContinue(holder.cont, cs.placement, group);
+    var btn = holder.cont.querySelector('[data-brix-cod-continue-btn]');
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (cs.action === 'link') { goTo(cs.url || '/collections/all'); return; }
+      onTap(cs);
+    });
+  }
+
+  // A store path (under the market's route root) or an https link.
+  function goTo(href) {
+    window.location.href = /^https:\/\//i.test(href) ? href : ROOT.replace(/\/$/, '') + href;
+  }
+
+  // Closes the theme's own drawer: its close button, else Escape (most
+  // drawers listen for it), else the page the link would open.
+  var THEME_CLOSE = '[data-drawer-close], [data-cart-close], .drawer__close, .cart-drawer__close, button[name="close"], ' +
+    'button[aria-label*="close" i], a[aria-label*="close" i], button[class*="close"], a[class*="close"], [role="button"][class*="close"]';
+  function closeThemeDrawer(checkout) {
+    var drawer = themeDrawerOf(checkout) || (checkout.closest && checkout.closest('[role="dialog"], dialog'));
+    var btns = drawer ? drawer.querySelectorAll(THEME_CLOSE) : [];
+    for (var i = 0; i < btns.length; i++) {
+      if (!btns[i].closest(BRIX_UI) && isShown(btns[i])) { btns[i].click(); return; }
+    }
+    var esc27 = { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true };
+    try {
+      (drawer || document).dispatchEvent(new KeyboardEvent('keydown', esc27));
+      document.dispatchEvent(new KeyboardEvent('keydown', esc27));
+    } catch (e) { /* old browser */ }
+    setTimeout(function () { if (checkout.isConnected && isShown(checkout)) goTo('/collections/all'); }, 400);
+  }
+
   /* --- excluded product tags --- */
 
   var tagCache = {};
@@ -2062,14 +2163,19 @@
   function mountDrawerButton(slot, opts) {
     if (!slot) return;
     var checkout = opts.checkout || null;
+    var held = {};
     function paint(cfg, excluded) {
       if (!slot.isConnected) return;
-      if (!cfg || cfg.surfaces.drawer === false) { slot.innerHTML = ''; setReplaced(checkout, false); return; }
+      if (!cfg || cfg.surfaces.drawer === false) { slot.innerHTML = ''; setReplaced(checkout, false); setReplaced(opts.continueWrap, false); paintContinue(held, null); return; }
       var state = drawerState(cfg, opts.cart, excluded, buttonMoney(cfg.currency));
       relabelBrixCheckout(checkout, cfg, state);
       paintDrawerSlot(slot, cfg, state, checkout ? { anchor: checkout, checkout: checkout } : null, function () {
         open({ surface: 'drawer', useCart: true, coupon: opts.coupon, onPayOnline: opts.onPayOnline, onSuccess: opts.onSuccess });
       });
+      // COD's Continue shopping takes the place of the Cart Editor's one.
+      var cs = opts.cart && opts.cart.items && opts.cart.items.length ? continueLook(cfg) : null;
+      setReplaced(opts.continueWrap, Boolean(cs));
+      paintContinue(held, cs, [slot, checkout], function () { if (opts.onContinue) opts.onContinue(); });
     }
     function run(cfg) {
       if (!cfg || cfg.surfaces.drawer === false || !excludedTags(cfg).length) { paint(cfg, false); return; }
@@ -2103,7 +2209,7 @@
   ].join(',');
   // Shop Pay / Google Pay buttons and BRIX's own UI are never a "Checkout".
   var NOT_CHECKOUT = '.additional-checkout-buttons, .dynamic-checkout__content, .shopify-payment-button, shopify-accelerated-checkout-cart, shopify-accelerated-checkout, [data-shopify-buttoncontainer]';
-  var BRIX_UI = '#cc-root, #cc-overlay, [data-cart-ninja-drawer], [data-brix-cod-sheet], [data-brix-cod-drawer]';
+  var BRIX_UI = '#cc-root, #cc-overlay, [data-cart-ninja-drawer], [data-brix-cod-sheet], [data-brix-cod-drawer], [data-brix-cod-continue]';
   var LAYOUT = /^(HTML|BODY|MAIN)$/;
 
   // The outermost drawer around `el` (page-level wrappers never count, in
@@ -2172,6 +2278,7 @@
 
   function unmountTheme(m) {
     if (m.slot.parentNode) m.slot.parentNode.removeChild(m.slot);
+    paintContinue(m, null);
     setReplaced(m.checkout, false);
   }
 
@@ -2376,6 +2483,8 @@
           onClosedAfterOrder: function () { window.location.reload(); },
         });
       });
+      var cs = themeCart && themeCart.items && themeCart.items.length ? continueLook(cfg) : null;
+      paintContinue(m, cs, [m.slot, m.anchor], function () { closeThemeDrawer(m.checkout); });
     });
   }
 

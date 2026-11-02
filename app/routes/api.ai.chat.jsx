@@ -200,11 +200,11 @@ export async function action({ request }) {
 
     const credit = await checkAndConsumeCredit(shop, admin);
     const credits = { remaining: credit.remaining, limit: credit.limit, isOverage: credit.isOverage };
-    // Yearly plans can't be billed per extra credit: they stop at the monthly credits.
+    // No plan bills extra credits: every plan stops at its monthly credits.
     if (!credit.allowed) {
       return Response.json({
         success: true,
-        message: `You've used all ${credit.limit} AI BRIX credits for this month. Yearly plans include ${credit.limit} credits a month; they renew on the 1st. Switch to monthly billing to keep going at $${PLANS[credit.planKey]?.aiBrixOverageRate.toFixed(2)} per extra credit.`,
+        message: `You've used all ${credit.limit} AI BRIX credits for this month on the ${PLANS[credit.planKey]?.label || 'current'} plan. They renew on the 1st, or upgrade your plan for more credits. There are no extra charges.`,
         credits,
         creditsExhausted: true,
       });
