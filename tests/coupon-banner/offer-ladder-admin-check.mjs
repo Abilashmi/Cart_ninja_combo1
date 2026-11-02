@@ -1,5 +1,6 @@
-// Real-browser check of the Coupon Banner "Add an offer ladder" editor:
-// text-only by default, button and auto-apply switched on by the merchant.
+// Real-browser check of the Coupon Banner offer ladder editor (More options →
+// "Add an offer ladder" → its popup): text-only by default, button and
+// auto-apply switched on by the merchant.
 //
 //   node tests/coupon-banner/offer-ladder-admin-check.mjs
 //
@@ -54,64 +55,85 @@ async function open(data = pageData()) {
     return route.fulfill({ status: 404, body: '' });
   });
   await page.goto('http://harness.test/');
-  await page.getByRole('button', { name: 'Coupon Selection' }).click();
-  await page.getByText('SAVE10').first().waitFor();
+  await page.locator('[data-section="coupons"] .cbz-sec-btn').click();
+  await page.locator('[data-section="coupons"]').getByText('SAVE10').first().waitFor();
   return { page, context, posts, errors };
 }
-const ladderText = (page) => page.locator('.pw-ladder .psl').first().textContent();
+// The page preview's ladder (the popup draws its own copy at its top).
+const ladderText = (page) => page.locator('.cbz-pv .pw-ladder .psl').first().textContent();
+const ladderClass = (page) => page.locator('.cbz-pv .pw-ladder .psl').first().getAttribute('class');
+const popup = (page) => page.getByRole('dialog');
+const tier = (page, i) => popup(page).locator('.pw-ladder-tier').nth(i);
+// A ladder's popup: offers first; Look / Size / Button folded below.
+const fold = (page, title) => popup(page).getByRole('button', { name: new RegExp(`^${title}`) }).click();
+const addLadder = async (page) => {
+  await page.getByRole('button', { name: /^More options/ }).click();
+  // Its cards start closed: open "Text offers and offer ladders".
+  await page.locator('[data-section="other-offers"] .cbz-sec-btn').click();
+  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
+  await popup(page).waitFor();
+};
+const saveAndClose = async (page) => {
+  await popup(page).getByRole('button', { name: 'Done' }).click();
+  await popup(page).waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(400);
+};
 
 console.log('\nCoupon Banner — offer ladder admin checks');
 
-await check('Add an offer ladder: editor opens with two offers (text only), preview is just the text', async () => {
+await check('Add an offer ladder: its popup opens with two offers (text only), it is ticked, preview is just the text', async () => {
   const { page, context, errors } = await open();
-  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
-  await page.getByText('Offers', { exact: true }).waitFor();
-  // (The Coupon Selection panel closes as the editor opens, so check the editor's own list.)
-  assert.deepEqual(await page.getByLabel('Editing coupon').locator('option').allTextContents(), ['Offer ladder: Buy any 2 Get 10% Off | Buy any 3 Get 15% Off']);
-  assert.equal(await page.locator('.pw-ladder-tier').count(), 2);
-  assert.equal(await page.getByLabel('Items in cart').count(), 0, 'no item counts until auto-apply is on');
-  assert.equal(await page.getByLabel('Coupon to apply').count(), 0);
+  await addLadder(page);
+  await popup(page).getByText('Edit: Buy any 2 Get 10% Off | Buy any 3 Get 15% Off').waitFor();
+  assert.equal(await popup(page).locator('.pw-ladder-tier').count(), 2);
+  assert.equal(await popup(page).getByLabel('Items in cart').count(), 0, 'no item counts until auto-apply is on');
+  assert.equal(await popup(page).getByLabel('Coupon to apply').count(), 0);
+  assert.equal(await popup(page).getByLabel('Shape').count(), 0, 'look folded away');
   assert.equal(await ladderText(page), 'Buy any 2 Get 10% Off|Buy any 3 Get 15% Off', 'just the offers');
-  assert.equal(await page.locator('.pw-ladder .psl-btn').count(), 0, 'no button by default');
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-btn').count(), 0, 'no button by default');
   assert.equal(await page.locator('.ps-card, .pw-layout').count(), 0, 'only a ladder selected: no coupon card in the preview');
+  await popup(page).getByRole('button', { name: 'Done' }).click();
+  if (await page.locator('[data-section="coupons"] .cbz-sec-btn').getAttribute('aria-expanded') !== 'true') await page.locator('[data-section="coupons"] .cbz-sec-btn').click();
+  assert.deepEqual(await page.locator('[data-section="coupons"] .cbz-crow.is-on .cbz-crow-t').allTextContents(), ['Buy any 2 Get 10% Off | Buy any 3 Get 15% Off'], 'ticked in Coupons to show');
   assert.deepEqual(errors, []);
   await context.close();
 });
 
 await check('button + auto-apply are opt-in; Save posts a clean ladder', async () => {
   const { page, context, posts, errors } = await open();
-  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
-  const tier = (i) => page.locator('.pw-ladder-tier').nth(i);
-  await tier(0).getByLabel('Offer text').fill('Buy any 2 & get 10% <off>');
-  await page.getByRole('button', { name: 'Add an offer' }).click();
-  await tier(2).getByLabel('Offer text').fill('Buy any 4 Get 20% Off');
-  await page.getByLabel('Subtext (optional)').fill('Applied at checkout');
-  await page.getByLabel('Style').selectOption('ticker');
-  assert.deepEqual(await page.getByLabel('Style').locator('option').allTextContents(), ['One line: every offer, divided', 'Scrolling ticker', 'Rotating: one offer at a time'], 'no steps look');
+  await addLadder(page);
+  await tier(page, 0).getByLabel('Offer text').fill('Buy any 2 & get 10% <off>');
+  await popup(page).getByRole('button', { name: 'Add an offer' }).click();
+  await tier(page, 2).getByLabel('Offer text').fill('Buy any 4 Get 20% Off');
+  await popup(page).getByLabel('Subtext (optional)').fill('Applied at checkout');
+  await fold(page, 'Look');
+  await popup(page).getByLabel('Style').selectOption('ticker');
+  assert.deepEqual(await popup(page).getByLabel('Style').locator('option').allTextContents(), ['One line: every offer, divided', 'Scrolling ticker', 'Rotating: one offer at a time'], 'no steps look');
   // Button: needs a code before it shows.
-  await page.getByLabel('Show a button').check();
-  await page.getByText('Pick the code the button uses').waitFor();
-  assert.equal(await page.locator('.pw-ladder .psl-btn').count(), 0);
-  await page.getByLabel('Coupon code').selectOption('SAVE10');
-  await page.getByLabel('When tapped').selectOption('apply');
-  assert.equal(await page.locator('.pw-ladder .psl-btn').textContent(), 'Apply coupon');
-  await page.getByLabel('Button text').fill('Grab SAVE10');
-  assert.equal(await page.locator('.pw-ladder .psl-btn').textContent(), 'Grab SAVE10');
+  await fold(page, 'Button');
+  await popup(page).getByLabel('Show a button').check();
+  await popup(page).getByText('Pick the code the button uses').waitFor();
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-btn').count(), 0);
+  await popup(page).getByLabel('Coupon code').selectOption('SAVE10');
+  await popup(page).getByLabel('When tapped').selectOption('apply');
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-btn').textContent(), 'Apply coupon');
+  await popup(page).getByLabel('Button text').fill('Grab SAVE10');
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-btn').textContent(), 'Grab SAVE10');
   // Auto-apply: item counts + codes appear.
-  await page.getByLabel('Apply codes automatically as the cart grows').check();
-  await tier(0).getByLabel('Coupon to apply').selectOption('BUY2');
-  await tier(1).getByLabel('Coupon to apply').selectOption('BUY3');
-  await page.getByText('Give each discount the same minimum quantity in Shopify').waitFor();
-  await tier(2).getByLabel('Items in cart').fill('3');
-  await page.getByText('Another offer needs the same number').first().waitFor();
-  await tier(2).getByLabel('Items in cart').fill('4');
-  const pv = await page.locator('.pw-ladder').evaluate((e) => ({ text: e.textContent, tags: e.querySelectorAll('off').length }));
+  await popup(page).getByLabel('Apply codes automatically as the cart grows').check();
+  await tier(page, 0).getByLabel('Coupon to apply').selectOption('BUY2');
+  await tier(page, 1).getByLabel('Coupon to apply').selectOption('BUY3');
+  await popup(page).getByText('Give each discount the same minimum quantity in Shopify').waitFor();
+  await tier(page, 2).getByLabel('Items in cart').fill('3');
+  await popup(page).getByText('Another offer needs the same number').first().waitFor();
+  await tier(page, 2).getByLabel('Items in cart').fill('4');
+  const pv = await page.locator('.cbz-pv .pw-ladder').evaluate((e) => ({ text: e.textContent }));
   assert.match(pv.text, /Buy any 2 & get 10% <off>/, 'shown as text');
   assert.doesNotMatch(pv.text, /more item|unlock/i, 'no progress line');
   assert.equal(await page.locator('.pw-ladder .psl-status, .pw-ladder .psl-bar').count(), 0);
-  await page.locator('.pw-ladders').screenshot({ path: path.join(shotDir, 'offer-ladder-preview.png') });
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await page.waitForTimeout(400);
+  await popup(page).locator('.cbz-modal-pv').screenshot({ path: path.join(shotDir, 'offer-ladder-preview.png') });
+  await saveAndClose(page);
   const save = posts.find((p) => p.couponStyles);
   const id = save.selectedActiveCoupons[0];
   assert.match(id, /^ladder:[a-z0-9]+$/);
@@ -132,13 +154,18 @@ await check('button + auto-apply are opt-in; Save posts a clean ladder', async (
 await check('a saved ladder loads back; ladder above a coupon card; editing it leaves the card\'s look alone', async () => {
   const ladder = { ladder: true, autoApply: true, tiers: [{ text: 'Buy any 2 Get 10% Off', qty: 2, code: 'BUY2' }], look: 'strip', bgColor: '#7c2d12', textColor: '#fff7ed', accentColor: '#fdba74' };
   const { page, context, errors } = await open(pageData({ selected: ['ladder:saved1', 'gid://shopify/DiscountCodeNode/3'], styles: { 'ladder:saved1': ladder, 'gid://shopify/DiscountCodeNode/3': { couponCode: 'SAVE10' } } }));
-  assert.ok(await page.getByText('Offer ladder: Buy any 2 Get 10% Off').first().isVisible(), 'listed with its offers');
-  await page.getByRole('button', { name: 'Customize Coupon' }).click();
-  assert.equal(await page.locator('.pw-ladder-tier').count(), 1, 'editing the ladder (first selected)');
-  assert.equal(await page.locator('.pw-ladder-tier').first().getByLabel('Coupon to apply').inputValue(), 'BUY2');
+  const row = page.locator('[data-offer="ladder:saved1"]');
+  assert.equal(await row.locator('.cbz-crow-t').textContent(), 'Buy any 2 Get 10% Off', 'listed with its offers');
+  assert.equal(await row.locator('.cbz-crow-s').textContent(), 'Offer ladder');
+  if (await page.locator('[data-section="coupons"] .cbz-sec-btn').getAttribute('aria-expanded') !== 'true') await page.locator('[data-section="coupons"] .cbz-sec-btn').click();
+  assert.deepEqual(await page.locator('[data-section="coupons"] .cbz-crow.is-on .cbz-crow-t').allTextContents(), ['Buy any 2 Get 10% Off', 'SAVE10']);
+  await page.getByRole('button', { name: 'Edit Buy any 2 Get 10% Off' }).click();
+  assert.equal(await popup(page).locator('.pw-ladder-tier').count(), 1, 'editing the ladder');
+  assert.equal(await tier(page, 0).getByLabel('Coupon to apply').inputValue(), 'BUY2');
   const layout = await page.evaluate(() => {
-    const l = document.querySelector('.pw-ladder').getBoundingClientRect(), c = document.querySelector('.pw-layout').getBoundingClientRect();
-    return { above: l.bottom <= c.top, ladderBg: getComputedStyle(document.querySelector('.pw-ladder .psl')).backgroundColor, cardBg: getComputedStyle(document.querySelector('.pw-layout > div > div > div')).backgroundColor, cardButton: !!document.querySelector('.pw-layout button') };
+    const pv = document.querySelector('.cbz-pv');
+    const l = pv.querySelector('.pw-ladder').getBoundingClientRect(), c = pv.querySelector('.pw-layout').getBoundingClientRect();
+    return { above: l.bottom <= c.top, ladderBg: getComputedStyle(pv.querySelector('.pw-ladder .psl')).backgroundColor, cardBg: getComputedStyle(pv.querySelector('.pw-layout > div > div > div')).backgroundColor, cardButton: !!pv.querySelector('.pw-layout button') };
   });
   assert.equal(layout.above, true);
   assert.equal(layout.ladderBg, 'rgb(124, 45, 18)');
@@ -150,25 +177,26 @@ await check('a saved ladder loads back; ladder above a coupon card; editing it l
 
 await check('offers direction, button position and box size: preview follows, Save posts them', async () => {
   const { page, context, posts, errors } = await open();
-  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
-  await page.getByLabel('Offer direction').selectOption('column');
-  assert.equal(await page.getByLabel('Divider between offers').count(), 0, 'no divider when stacked');
-  assert.match(await page.locator('.pw-ladder .psl').getAttribute('class'), /psl--col/);
-  assert.equal(await page.getByLabel('Button position').count(), 0, 'position shows with the button');
-  await page.getByLabel('Show a button').check();
-  await page.getByLabel('Coupon code').selectOption('SAVE10');
-  assert.deepEqual(await page.getByLabel('Button position').locator('option').allTextContents(), ['Right side', 'Centre, next to the text', 'Below the text, centred']);
-  await page.getByLabel('Button position').selectOption('below');
-  assert.match(await page.locator('.pw-ladder .psl').getAttribute('class'), /psl--btn-below/);
-  await page.getByLabel('Width', { exact: true }).selectOption('atc');
-  await page.getByText('Lines up with your theme').waitFor();
-  const atc = await page.evaluate(() => { const l = document.querySelector('.pw-ladder .psl').getBoundingClientRect(), b = [...document.querySelectorAll('.pw-ladder-atc > div')].pop().getBoundingClientRect(); return { same: Math.round(l.width) === Math.round(b.width), tall: l.height >= 46 }; });
+  await addLadder(page);
+  await fold(page, 'Look');
+  await popup(page).getByLabel('Offer direction').selectOption('column');
+  assert.equal(await popup(page).getByLabel('Divider between offers').count(), 0, 'no divider when stacked');
+  assert.match(await ladderClass(page), /psl--col/);
+  await fold(page, 'Button');
+  assert.equal(await popup(page).getByLabel('Button position').count(), 0, 'position shows with the button');
+  await popup(page).getByLabel('Show a button').check();
+  await popup(page).getByLabel('Coupon code').selectOption('SAVE10');
+  assert.deepEqual(await popup(page).getByLabel('Button position').locator('option').allTextContents(), ['Right side', 'Centre, next to the text', 'Below the text, centred']);
+  await popup(page).getByLabel('Button position').selectOption('below');
+  assert.match(await ladderClass(page), /psl--btn-below/);
+  await fold(page, 'Size');
+  await popup(page).getByLabel('Width', { exact: true }).selectOption('atc');
+  await popup(page).getByText('Lines up with your theme').waitFor();
+  const atc = await page.evaluate(() => { const l = document.querySelector('.cbz-pv .pw-ladder .psl').getBoundingClientRect(), b = document.querySelector('.pw-atc-standin').getBoundingClientRect(); return { same: Math.round(l.width) === Math.round(b.width), tall: l.height >= 46 }; });
   assert.deepEqual(atc, { same: true, tall: true }, 'preview: same width as the stand-in Add to cart button, at least as tall');
-  await page.locator('.pw-ladders').screenshot({ path: path.join(shotDir, 'offer-ladder-layout.png') });
-  await page.getByLabel('Width', { exact: true }).selectOption('custom');
-  assert.equal(await page.getByLabel('Box width').count() > 0, true);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await page.waitForTimeout(400);
+  await popup(page).getByLabel('Width', { exact: true }).selectOption('custom');
+  assert.equal(await popup(page).getByLabel('Box width').count() > 0, true);
+  await saveAndClose(page);
   const save = posts.find((p) => p.couponStyles);
   const st = save.couponStyles[save.selectedActiveCoupons[0]];
   assert.deepEqual([st.direction, st.buttonPlace, st.boxSize], ['column', 'below', 'custom']);
@@ -178,28 +206,29 @@ await check('offers direction, button position and box size: preview follows, Sa
 
 await check('coupon ticket: cut-out shape, a line under each offer, left text, button in the stub; Save posts them', async () => {
   const { page, context, posts, errors } = await open();
-  await page.getByRole('button', { name: 'Add an offer ladder' }).click();
-  await page.getByLabel('Shape').selectOption('ticket');
-  await page.getByLabel('Offer direction').selectOption('column');
-  const tier = (i) => page.locator('.pw-ladder-tier').nth(i);
-  await tier(0).getByLabel('Line under it (optional)').fill('(On all Orders)');
-  assert.equal(await page.getByLabel('Text alignment').inputValue(), 'left', 'a ticket starts left-aligned');
-  const cls = await page.locator('.pw-ladder .psl').getAttribute('class');
+  await addLadder(page);
+  await tier(page, 0).getByLabel('Line under it (optional)').fill('(On all Orders)');
+  await fold(page, 'Look');
+  await popup(page).getByLabel('Shape').selectOption('ticket');
+  await popup(page).getByLabel('Offer direction').selectOption('column');
+  assert.equal(await popup(page).getByLabel('Text alignment').inputValue(), 'left', 'a ticket starts left-aligned');
+  const cls = await ladderClass(page);
   assert.match(cls, /psl--ticket/);
   assert.match(cls, /psl--left/);
-  assert.equal(await page.locator('.pw-ladder .psl-tier-sub').first().textContent(), '(On all Orders)');
-  assert.equal(await page.locator('.pw-ladder .psl-stub').count(), 1, 'the stub on the right');
-  await page.getByLabel('Show a button').check();
-  await page.getByLabel('Coupon code').selectOption('SAVE10');
-  assert.equal(await page.getByLabel('Button position').count(), 0, 'a ticket\'s button always sits in the stub');
-  assert.equal(await page.locator('.pw-ladder .psl-stub .psl-btn').count(), 1);
-  await page.locator('.pw-ladders').screenshot({ path: path.join(shotDir, 'offer-ladder-ticket.png') });
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-tier-sub').first().textContent(), '(On all Orders)');
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-stub').count(), 1, 'the stub on the right');
+  await fold(page, 'Button');
+  await popup(page).getByLabel('Show a button').check();
+  await popup(page).getByLabel('Coupon code').selectOption('SAVE10');
+  assert.equal(await popup(page).getByLabel('Button position').count(), 0, 'a ticket\'s button always sits in the stub');
+  assert.equal(await page.locator('.cbz-pv .pw-ladder .psl-stub .psl-btn').count(), 1);
+  await popup(page).locator('.cbz-modal-pv').screenshot({ path: path.join(shotDir, 'offer-ladder-ticket.png') });
   // Width "Same as Add to cart" with only ladders: the title sits over them (as on the store).
-  await page.getByLabel('Width', { exact: true }).selectOption('atc');
-  const fit = await page.evaluate(() => { const t = document.querySelector('.pw-section-title'), l = document.querySelector('.pw-ladder-atc'); if (!t || !l) return null; const a = t.getBoundingClientRect(), b = l.getBoundingClientRect(); return [Math.round(a.left - b.left), Math.round(a.width - b.width)]; });
+  await fold(page, 'Size');
+  await popup(page).getByLabel('Width', { exact: true }).selectOption('atc');
+  const fit = await page.evaluate(() => { const t = document.querySelector('.pw-section-title'), l = document.querySelector('.cbz-pv .pw-ladder-atc'); if (!t || !l) return null; const a = t.getBoundingClientRect(), b = l.getBoundingClientRect(); return [Math.round(a.left - b.left), Math.round(a.width - b.width)]; });
   assert.deepEqual(fit, [0, 0], 'preview title has the ladder\'s width and left edge: ' + JSON.stringify(fit));
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await page.waitForTimeout(400);
+  await saveAndClose(page);
   const save = posts.find((p) => p.couponStyles);
   const st = save.couponStyles[save.selectedActiveCoupons[0]];
   assert.equal(st.shape, 'ticket');

@@ -1,4 +1,5 @@
 // Cart Editor Type Definitions
+import { footerExtras } from '../utils/cart-footer-extras.shared';
 
 export const defaultTier = {
   id: 'tier-1',
@@ -139,6 +140,7 @@ export const defaultCartEditorState = {
       showReviews: false,
       showIfInCart: false,
       soldOutBehavior: 'replace', // replace (Shopify related, in stock) | hide
+      sticky: false, // keep the section pinned (top / bottom of the list) while the cart scrolls
       manualRules: [],
     },
     countdownTimer: {
@@ -183,6 +185,10 @@ export const defaultCartEditorState = {
       paddingY: 16, // px above and below the text (CHECKOUT_PADDING_Y)
       mobileButtonType: 'standard',
     },
+    // Rules and defaults: utils/cart-footer-extras.shared.js (saved in the
+    // checkout_button_style blob, so no new columns).
+    paymentCards: footerExtras.defaultCards(),
+    trustBadges: footerExtras.defaultTrust(),
     customCSS: '',
     watermarkEnabled: true,
   },
@@ -217,6 +223,8 @@ export const SECTION_GROUPS = [
     title: 'Footer',
     items: [
       { id: 'checkoutButton', label: 'Checkout Button', icon: 'cash' },
+      { id: 'paymentCards', label: 'Cards', icon: 'cash' },
+      { id: 'trustBadges', label: 'Trust Badges', icon: 'product' },
       { id: 'customCSS', label: 'Custom CSS', icon: 'code' },
     ],
   },
