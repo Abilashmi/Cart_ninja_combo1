@@ -62,6 +62,10 @@ There is a **single** AI UI in this app: **BrixBar** (`app/components/ai-agent/B
 
 `BrixBar` must be mounted **once per page** — `app.bundles.customize.jsx` has historically had duplicate `<BrixBar />` instances that cause double-UI bugs. Always check for this when editing that file.
 
+**Clear of Shopify's Sidekick bar.** The Shopify admin draws a "Work with Sidekick" bar over the bottom centre of the app frame (~bottom 64px, above anything in the app). `app/global.css` `:root` holds the spacing: `--brix-sidekick-space` (80px, kept under the Cart Editor sidebar's inline BrixBar, which the Sidekick bar reached on frames under ~1300px wide), `--brix-bar-bottom` (floating BrixBar, was `bottom: 20`) and `--brix-bar-clearance` (160px end-of-page space on every page with a floating BrixBar: Coupon Banner, FBT, Discount Creator, Analytics, Account, Combo list / picker / builder). New pages use these vars (with the px fallback in inline styles), not fixed numbers. Checked against a stand-in Sidekick bar with the real BrixBar in the `tests/ai-handoff` harness.
+
+**Notifications sit at the top.** The floating BrixBar (fixed, bottom centre, z-index 9998) and Shopify's own AI bar (drawn by the admin over the bottom of the app frame, so no z-index of ours beats it) hid the "Saved" toasts. Every Polaris `<Toast>` (Cart Editor, Coupon Banner, FBT, COD Customize, discounts) shows at the top centre instead: `app/global.css` `.Polaris-Frame-ToastManager` rules (mirror Polaris's upward stacking, slide in from above); keep new pages on Polaris `<Toast>` inside their `<Frame>`. App Bridge `shopify.toast.show()` toasts (Combo builder, Packs, Account) are drawn by the admin itself and can't be moved.
+
 ### Cart Editor (app/routes/app.cartdrawer.jsx)
 
 The cart editor is a live-preview builder split into:

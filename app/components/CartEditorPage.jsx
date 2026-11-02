@@ -4,6 +4,7 @@ import { Frame, Toast } from '@shopify/polaris';
 import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { announcementMessages, clampInterval } from '../utils/announcement.shared.js';
+import { footerExtras } from '../utils/cart-footer-extras.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
@@ -72,6 +73,8 @@ function CartEditorContent() {
         fontSize:         cb.fontSize,
         paddingY:         cb.paddingY,
         mobileButtonType: cb.mobileButtonType,
+        paymentCards:     footerExtras.cardsConfig(footer.paymentCards),
+        trustBadges:      footerExtras.trustConfig(footer.trustBadges),
         continueShopping: sanitizeContinueShopping(cb.continueShopping),
         phoneLayout:      sanitizeDrawerLayout(cb.phoneLayout, 'phone'),
         desktopLayout:    sanitizeDrawerLayout(cb.desktopLayout, 'desktop'),

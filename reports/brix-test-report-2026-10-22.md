@@ -40,7 +40,8 @@ all (see §4).
 | `billing/plans-browser-check.mjs` | 20/20 | 19 s |
 | `cart-drawer/customization-browser-check.mjs` | 81/81  
  | 58 s |
-| `cart-drawer/drawer-ui-browser-check.mjs` | 134/134 | 91 s |
+| `cart-drawer/     m         
+ drawer-ui-browser-check.mjs` | 134/134 | 91 s |
 | `cart-drawer/editor-preview-browser-check.mjs` | 46/46 | 26 s |
 | `cart-drawer/money-browser-check.mjs` | 3/3 | 6 s |
 | `cart-drawer/upsell-stock-browser-check.mjs` | 26/26 | 21 s |

@@ -346,9 +346,13 @@ export default function BrixBar({
   }
 
   const outerInlineStyle = { width: '100%', maxWidth: cfg.maxWidth, margin: (center ?? false) ? '0 auto' : undefined };
+  // Floats above the strip Shopify's "Work with Sidekick" bar covers at the
+  // bottom of the app frame (--brix-bar-bottom, app/global.css); at bottom: 20
+  // that bar hid the middle of ours.
+  const floatBottom = 'var(--brix-bar-bottom, 80px)';
   const outerFloatStyle = side === 'left'
-    ? { position: 'fixed', bottom: 20, left: leftNavOffset, right: 'calc(45% + 20px)', zIndex }
-    : { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: cfg.maxWidth, zIndex };
+    ? { position: 'fixed', bottom: floatBottom, left: leftNavOffset, right: 'calc(45% + 20px)', zIndex }
+    : { position: 'fixed', bottom: floatBottom, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: cfg.maxWidth, zIndex };
   const outerStyle = floating ? outerFloatStyle : outerInlineStyle;
 
   const panelHead = (
