@@ -5,6 +5,7 @@ import { CartEditorProvider, useCartEditor } from '../context/CartEditorContext'
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { announcementMessages, clampInterval } from '../utils/announcement.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
+import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
 import AppSaveBar from './shared/AppSaveBar';
@@ -72,6 +73,8 @@ function CartEditorContent() {
         paddingY:         cb.paddingY,
         mobileButtonType: cb.mobileButtonType,
         continueShopping: sanitizeContinueShopping(cb.continueShopping),
+        phoneLayout:      sanitizeDrawerLayout(cb.phoneLayout, 'phone'),
+        desktopLayout:    sanitizeDrawerLayout(cb.desktopLayout, 'desktop'),
       }),
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });
 

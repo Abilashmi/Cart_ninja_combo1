@@ -3,6 +3,7 @@ import { defaultCartEditorState } from '../types/cartEditorTypes';
 import { clampInterval, messagesFromConfig } from '../utils/announcement.shared.js';
 import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
+import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 
 function parseJSONSafe(v) {
   if (!v) return {};
@@ -43,6 +44,8 @@ function hydrateFromRecord(record, base) {
         ...(cbStyle.paddingY != null ? { paddingY: Number(cbStyle.paddingY) } : {}),
         ...(cbStyle.mobileButtonType ? { mobileButtonType: cbStyle.mobileButtonType } : {}),
         ...(cbStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cbStyle.continueShopping) } : {}),
+        ...(cbStyle.phoneLayout ? { phoneLayout: sanitizeDrawerLayout(cbStyle.phoneLayout, 'phone') } : {}),
+        ...(cbStyle.desktopLayout ? { desktopLayout: sanitizeDrawerLayout(cbStyle.desktopLayout, 'desktop') } : {}),
       },
       customCSS: record.customCSS || base.footer.customCSS,
       watermarkEnabled: record.watermark_enabled != null ? dbFlag(record.watermark_enabled) : base.footer.watermarkEnabled,
@@ -290,6 +293,8 @@ function mergeConfigIntoState(base, cfg) {
           fontSize: cfg.checkoutButtonStyle.fontSize ?? next.footer.checkoutButton.fontSize,
           paddingY: cfg.checkoutButtonStyle.paddingY ?? next.footer.checkoutButton.paddingY,
           ...(cfg.checkoutButtonStyle.continueShopping ? { continueShopping: sanitizeContinueShopping(cfg.checkoutButtonStyle.continueShopping) } : {}),
+          ...(cfg.checkoutButtonStyle.phoneLayout ? { phoneLayout: sanitizeDrawerLayout(cfg.checkoutButtonStyle.phoneLayout, 'phone') } : {}),
+          ...(cfg.checkoutButtonStyle.desktopLayout ? { desktopLayout: sanitizeDrawerLayout(cfg.checkoutButtonStyle.desktopLayout, 'desktop') } : {}),
         },
       },
     };
