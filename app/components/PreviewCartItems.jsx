@@ -77,11 +77,12 @@ function GiftRow({ reward }) {
   );
 }
 
-export default function PreviewCartItems({ baseTotal, added, rewards, onRemove, onReset }) {
+// showHeading: Phone layout can hide the "Items included" row in the phone frame.
+export default function PreviewCartItems({ baseTotal, added, rewards, onRemove, onReset, showHeading = true }) {
   const itemCount = 1 + added.length + rewards.length;
   return (
     <div style={{ padding: '10px 10px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#6d7175', margin: '0 4px 10px' }}>
+      {showHeading && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#6d7175', margin: '0 4px 10px' }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>Items included</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {added.length > 0 && (
@@ -95,7 +96,7 @@ export default function PreviewCartItems({ baseTotal, added, rewards, onRemove, 
           )}
           <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, fontWeight: 700, color: '#64748b' }}>{itemCount} ITEMS</span>
         </span>
-      </div>
+      </div>}
 
       <div className="bxcd-items">
         <ItemRow title="Boys Charcoal Grey Cotton Joggers" variant="Grey / 8-9 Y" price={baseTotal} testId="preview-sample-line" />

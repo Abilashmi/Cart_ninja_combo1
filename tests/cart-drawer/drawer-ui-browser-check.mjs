@@ -172,14 +172,18 @@ const measure = (page) => page.evaluate(() => {
       totalNoWrap: parts.total ? parts.total.height < 40 : false,
     };
   });
-  const values = [...document.querySelectorAll('#cc-drawer .bxcd-summary__value')].map((v) => Math.round(r(v).right));
-  const labels = [...document.querySelectorAll('#cc-drawer .bxcd-summary__label')].map((v) => Math.round(r(v).left));
+  const shown = (el) => Boolean(el && el.getClientRects().length);
+  const values = [...document.querySelectorAll('#cc-drawer .bxcd-summary__value')].filter(shown).map((v) => Math.round(r(v).right));
+  const labels = [...document.querySelectorAll('#cc-drawer .bxcd-summary__label')].filter(shown).map((v) => Math.round(r(v).left));
   const img = document.querySelector('#cc-image-banner img');
   return {
     drawerOverflow: drawer.scrollWidth > drawer.clientWidth + 1,
     bodyOverflow: body.scrollWidth > body.clientWidth + 1,
     pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     items,
+    summaryRows: labels.length,
+    toggle: shown(document.querySelector('#cc-drawer .bxcd-summary__toggle')),
+    note: shown(document.querySelector('#cc-drawer .cc-footer-note')),
     valuesAligned: values.length >= 2 && Math.max(...values) - Math.min(...values) <= 1,
     labelsAligned: labels.length >= 2 && Math.max(...labels) - Math.min(...labels) <= 1,
     banner: img ? {
@@ -219,7 +223,17 @@ for (const width of [1440, 1280, 1024, 430, 390, 375]) {
   check(`${tag}: long title wraps instead of being cut on one line`, m.items[1].titleLines >= 2 && !m.items[0].titleClipped, `lines ${m.items.map((i) => i.titleLines)}`);
   check(`${tag}: ${mobile ? 'mobile' : 'desktop'} layout (image ${mobile ? 64 : 76}px, quantity control ${mobile ? 36 : 34}px tall)`, m.items.every((i) => i.media === (mobile ? 64 : 76) && i.qtyBtn === (mobile ? 36 : 34)), JSON.stringify(m.items.map((i) => [i.media, i.qtyBtn])));
   check(`${tag}: subtotal on one line`, m.items.every((i) => i.totalNoWrap));
-  check(`${tag}: pricing summary labels left-aligned, amounts right-aligned`, m.labelsAligned && m.valuesAligned);
+  if (mobile) {
+    // Phones: only Total until "Details" is tapped, so the lines get the room.
+    check(`${tag}: price breakdown and footer note folded behind Details`, m.toggle && m.summaryRows === 1 && !m.note, JSON.stringify({ toggle: m.toggle, rows: m.summaryRows, note: m.note }));
+    await page.locator('#cc-drawer .bxcd-summary__toggle').click();
+    const opened = await measure(page);
+    check(`${tag}: Details opens the breakdown and the footer note`, opened.summaryRows >= 2 && opened.note, JSON.stringify({ rows: opened.summaryRows, note: opened.note }));
+    check(`${tag}: pricing summary labels left-aligned, amounts right-aligned`, opened.labelsAligned && opened.valuesAligned);
+  } else {
+    check(`${tag}: full price breakdown and footer note, no Details toggle`, !m.toggle && m.summaryRows >= 2 && m.note, JSON.stringify({ toggle: m.toggle, rows: m.summaryRows, note: m.note }));
+    check(`${tag}: pricing summary labels left-aligned, amounts right-aligned`, m.labelsAligned && m.valuesAligned);
+  }
   check(`${tag}: banner fits the drawer, keeps its aspect ratio, ${mobile ? 'mobile' : 'desktop'} image`, Boolean(m.banner) && m.banner.w <= m.banner.bodyW && Math.abs(m.banner.w / m.banner.h - m.banner.ratio) < 0.02 && m.banner.src.endsWith(mobile ? '/mobile.svg' : '/desktop.svg'), JSON.stringify(m.banner));
   check(`${tag}: only the ${mobile ? 'mobile' : 'desktop'} banner image is downloaded`, page.net.images.includes(mobile ? '/mobile.svg' : '/desktop.svg') && !page.net.images.includes(mobile ? '/desktop.svg' : '/mobile.svg'), page.net.images.join(','));
   check(`${tag}: footer with checkout shown for a cart with items`, m.footer && m.checkout);
@@ -330,9 +344,159 @@ for (const width of [1280, 390]) {
     const cs = (el) => getComputedStyle(el);
     const body = cs(document.getElementById('cc-drawer-body'));
     const footer = cs(document.getElementById('cc-drawer-footer'));
-    return { bodyTop: body.paddingTop, bodyBottom: body.paddingBottom, gap: body.rowGap, footerTop: footer.paddingTop };
+    const header = cs(document.querySelector('#cc-drawer .cc-drawer-header'));
+    return { headerTop: header.paddingTop, bodyTop: body.paddingTop, bodyBottom: body.paddingBottom, gap: body.rowGap, footerTop: footer.paddingTop };
   });
-  check('phone: body and footer padding are tight', sp.bodyTop === '10px' && sp.bodyBottom === '12px' && sp.gap === '8px' && sp.footerTop === '12px', JSON.stringify(sp));
+  check('phone: body and footer padding are tight', sp.headerTop === '10px' && sp.bodyTop === '10px' && sp.bodyBottom === '10px' && sp.gap === '8px' && sp.footerTop === '10px', JSON.stringify(sp));
+  // An opened breakdown stays open when the drawer redraws (quantity change).
+  await page.locator('#cc-drawer .bxcd-summary__toggle').click();
+  await page.locator('#cc-drawer [data-item-key="k1"] [aria-label="Increase quantity"]').click();
+  await page.waitForTimeout(600);
+  const kept = await page.evaluate(() => ({
+    open: Boolean(document.querySelector('#cc-drawer .bxcd-summary--open')),
+    expanded: document.querySelector('#cc-drawer .bxcd-summary__toggle').getAttribute('aria-expanded'),
+    note: Boolean(document.querySelector('#cc-drawer-footer.cc-summary-open .cc-footer-note')?.getClientRects().length),
+  }));
+  check('phone: an opened breakdown stays open after a redraw', kept.open && kept.expanded === 'true' && kept.note, JSON.stringify(kept));
+  await page.context().close();
+}
+
+/* 5c-2. Phones: Cart Editor → Design → Phone layout sets the spacing and the fold */
+{
+  const cfg = config();
+  cfg.data.checkout_button_style = JSON.stringify({ phoneLayout: {
+    headerPadding: 6, bodyPadding: 4, sectionGap: 2, footerPadding: 6, foldSummary: false,
+    itemPadding: 6, itemGap: 4, itemImageSize: 52, summaryRowGap: 2, summaryGap: 3, showItemsHeading: false, showFooterNote: false,
+    itemTitleSize: 12.5, itemPriceSize: 11, itemTotalSize: 16,
+  } });
+  let page = await open({ width: 390, cfg });
+  const sp = await page.evaluate(() => {
+    const cs = (el) => getComputedStyle(el);
+    const shown = (el) => Boolean(el && el.getClientRects().length);
+    const body = cs(document.getElementById('cc-drawer-body'));
+    return {
+      header: cs(document.querySelector('#cc-drawer .cc-drawer-header')).paddingTop,
+      body: body.paddingLeft, gap: body.rowGap,
+      footer: cs(document.getElementById('cc-drawer-footer')).paddingTop,
+      toggle: shown(document.querySelector('#cc-drawer .bxcd-summary__toggle')),
+      rows: [...document.querySelectorAll('#cc-drawer .bxcd-summary__label')].filter(shown).length,
+      note: shown(document.querySelector('#cc-drawer .cc-footer-note')),
+      itemsHead: shown(document.querySelector('#cc-drawer .cc-items-head')),
+      itemPad: cs(document.querySelector('#cc-drawer .bxcd-item')).paddingLeft,
+      itemGap: cs(document.querySelector('#cc-drawer .bxcd-items')).rowGap,
+      img: Math.round(document.querySelector('#cc-drawer .bxcd-item__media').getBoundingClientRect().width),
+      sumRow: cs(document.querySelector('#cc-drawer .bxcd-summary')).rowGap,
+      sumGap: cs(document.querySelector('#cc-drawer .bxcd-summary')).marginBottom,
+      fonts: ['title', 'price', 'total'].map((k) => getComputedStyle(document.querySelector(`#cc-drawer .bxcd-item__${k}`)).fontSize).join(' '),
+    };
+  });
+  check('phone layout: product name, price and line total sizes', sp.fonts === '12.5px 11px 16px', sp.fonts);
+  check('phone layout: product rows, price rows, hidden items row', sp.itemPad === '6px' && sp.itemGap === '4px' && sp.img === 52 && sp.sumRow === '2px' && sp.sumGap === '3px' && !sp.itemsHead, JSON.stringify(sp));
+  check('phone layout: merchant spacing applied', sp.header === '6px' && sp.body === '4px' && sp.gap === '2px' && sp.footer === '6px', JSON.stringify(sp));
+  check('phone layout: fold off = full breakdown, no Details; shipping note hidden', !sp.toggle && sp.rows >= 2 && !sp.note, JSON.stringify(sp));
+  await page.context().close();
+  // Desktop ignores the phone spacing.
+  page = await open({ width: 1280, cfg });
+  const desk = await page.evaluate(() => getComputedStyle(document.getElementById('cc-drawer-footer')).paddingTop);
+  check('phone layout: desktop keeps its own spacing', desk === '20px', desk);
+  await page.context().close();
+}
+
+/* 5c-3. Phones: Phone layout's progress bar and top bar spacing */
+{
+  const cfg = config({ banner: { enabled: false }, progress: 'top' });
+  cfg.data.countdown_status = 1;
+  cfg.data.countdown_data = JSON.stringify({ enabled: true, label: 'Offer expires in', minutes: 10 });
+  cfg.data.announcement_enabled = 1;
+  cfg.data.announcement_text = 'Free shipping today';
+  cfg.data.checkout_button_style = JSON.stringify({ phoneLayout: { announcementPadding: 2, countdownPadding: 3, progressPadding: 0, progressHeadingGap: 1, progressHeadingSize: 12, progressLabelGap: 0 } });
+  const page = await open({ width: 390, cfg });
+  const sp = await page.evaluate(() => {
+    const cs = (el) => (el ? getComputedStyle(el) : null);
+    const head = document.querySelector('#cc-drawer .cc-progress-head');
+    return {
+      ann: cs(document.getElementById('cc-announcement-bar'))?.paddingTop,
+      countdown: cs(document.getElementById('cc-countdown-bar'))?.paddingTop,
+      progress: cs(document.querySelector('#cc-drawer .cc-progress-section'))?.paddingTop,
+      headGap: cs(head)?.marginBottom,
+      headSize: cs(head?.querySelector('p'))?.fontSize,
+      track: parseFloat(cs(document.querySelector('#cc-drawer .cc-ms-track'))?.marginBottom),
+    };
+  });
+  check('phone layout: top bars and progress bar spacing applied', sp.ann === '2px' && sp.countdown === '3px' && sp.progress === '0px' && sp.headGap === '1px' && sp.headSize === '12px' && sp.track >= 38 && sp.track < 48, JSON.stringify(sp));
+  await page.context().close();
+}
+
+/* 5c-4. Desktop + width: Design → Layout's desktop set and both drawer widths */
+{
+  const cfg = config({ banner: { enabled: false } });
+  cfg.data.checkout_button_style = JSON.stringify({
+    desktopLayout: { drawerWidth: 520, headerPadding: 8, bodyPadding: 6, sectionGap: 4, footerPadding: 9, itemPadding: 7, itemGap: 5, itemImageSize: 60,
+      summaryRowGap: 3, summaryGap: 5, foldSummary: true, showItemsHeading: false, showFooterNote: false,
+      itemTitleSize: 17, itemPriceSize: 15, itemTotalSize: 20 },
+    phoneLayout: { drawerWidth: 85 },
+  });
+  let page = await open({ width: 1280, cfg });
+  const shown = 'el && el.getClientRects().length';
+  const d = await page.evaluate((shownExpr) => {
+    const shown = new Function('el', `return Boolean(${shownExpr});`);
+    const cs = (el) => getComputedStyle(el);
+    const body = cs(document.getElementById('cc-drawer-body'));
+    return {
+      width: Math.round(document.getElementById('cc-drawer').getBoundingClientRect().width),
+      header: cs(document.querySelector('#cc-drawer .cc-drawer-header')).paddingTop,
+      body: body.paddingLeft, bodyBottom: body.paddingBottom, gap: body.rowGap,
+      footer: cs(document.getElementById('cc-drawer-footer')).paddingTop,
+      itemPad: cs(document.querySelector('#cc-drawer .bxcd-item')).paddingLeft,
+      itemGap: cs(document.querySelector('#cc-drawer .bxcd-items')).rowGap,
+      img: Math.round(document.querySelector('#cc-drawer .bxcd-item__media').getBoundingClientRect().width),
+      sumRow: cs(document.querySelector('#cc-drawer .bxcd-summary')).rowGap,
+      sumGap: cs(document.querySelector('#cc-drawer .bxcd-summary')).marginBottom,
+      itemsHead: shown(document.querySelector('#cc-drawer .cc-items-head')),
+      toggle: shown(document.querySelector('#cc-drawer .bxcd-summary__toggle')),
+      rows: [...document.querySelectorAll('#cc-drawer .bxcd-summary__label')].filter(shown).length,
+      fonts: ['title', 'price', 'total'].map((k) => getComputedStyle(document.querySelector(`#cc-drawer .bxcd-item__${k}`)).fontSize).join(' '),
+    };
+  }, shown);
+  check('desktop layout: product name, price and line total sizes', d.fonts === '17px 15px 20px', d.fonts);
+  check('desktop layout: width, header, body, footer spacing', d.width === 520 && d.header === '8px' && d.body === '6px' && d.bodyBottom === '30px' && d.gap === '4px' && d.footer === '9px', JSON.stringify(d));
+  check('desktop layout: product rows, price rows, hidden items row', d.itemPad === '7px' && d.itemGap === '5px' && d.img === 60 && d.sumRow === '3px' && d.sumGap === '5px' && !d.itemsHead, JSON.stringify(d));
+  await page.locator('#cc-drawer .bxcd-summary__toggle').click();
+  const opened = await page.evaluate(() => ({
+    rows: [...document.querySelectorAll('#cc-drawer .bxcd-summary__label')].filter((el) => el.getClientRects().length).length,
+    note: Boolean(document.querySelector('#cc-drawer .cc-footer-note')?.getClientRects().length),
+  }));
+  check('desktop layout: folded price details open on Details, note stays hidden', d.toggle && d.rows === 1 && opened.rows >= 2 && !opened.note, JSON.stringify({ d: { toggle: d.toggle, rows: d.rows }, opened }));
+  await page.context().close();
+  page = await open({ width: 390, cfg });
+  const w = await page.evaluate(() => ({
+    w: Math.round(document.getElementById('cc-drawer').getBoundingClientRect().width),
+    right: Math.round(document.getElementById('cc-drawer').getBoundingClientRect().right),
+    toggle: Boolean(document.querySelector('#cc-drawer .bxcd-summary__toggle')?.getClientRects().length),
+    headerPad: getComputedStyle(document.querySelector('#cc-drawer .cc-drawer-header')).paddingTop,
+    fonts: ['title', 'price', 'total'].map((k) => getComputedStyle(document.querySelector(`#cc-drawer .bxcd-item__${k}`)).fontSize).join(' '),
+  }));
+  check('phone layout: default product text sizes as before (13.5 / 13 / 14)', w.fonts === '13.5px 13px 14px', w.fonts);
+  check('phone layout: drawer width 85% of the screen on the right; phone keeps its own spacing', w.w === Math.round(390 * 0.85) && w.right === 390 && w.toggle && w.headerPad === '10px', JSON.stringify(w));
+  await page.context().close();
+}
+
+/* 5c-5. Free gift: pops in once, stays on top, no jump when the cart changes */
+{
+  const gift = { ...line('g1', 'Rubik Key Chain', null, 1, 0, 135, 9), properties: { _brixReward: 'true' }, original_price: 13500, original_line_price: 13500 };
+  // Shopify lists the newest line first: the gift sits between the products.
+  const page = await open({ width: 390, cart: [CART[0], gift, CART[1]], cfg: config({ banner: { enabled: false } }) });
+  const look = () => page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#cc-drawer .bxcd-item')];
+    const g = document.querySelector('#cc-drawer .bxcd-item--gift');
+    return { first: rows[0] === g, anim: g ? g.style.animationName || '' : null };
+  });
+  const before = await look();
+  await page.locator('#cc-drawer [data-item-key="k1"] [aria-label="Increase quantity"]').click();
+  await page.waitForTimeout(600);
+  const after = await look();
+  check('free gift: pops in on first draw, drawn first', before.first && before.anim === 'cc-pop', JSON.stringify(before));
+  check('free gift: no pop again and still first after a cart change', after.first && after.anim === '', JSON.stringify(after));
   await page.context().close();
 }
 

@@ -16,12 +16,16 @@
  *            [ - 1 + ]            [ total ]
  * The remove button sits in the top-right corner on its own; the title takes
  * the full width up to it, so long names wrap instead of being squeezed. */
-.bxcd-root .bxcd-items { display: flex; flex-direction: column; gap: 12px; }
+/* Desktop row sizes come from Cart Editor → Design → Layout (desktop set):
+   --bxcd-d-item-pad / --bxcd-d-item-gap / --bxcd-d-img and the text sizes
+  --bxcd-d-title / --bxcd-d-price / --bxcd-d-total on the drawer body
+   (storefront) or the preview's drawer; phones use the --bxcd-m-* ones below. */
+.bxcd-root .bxcd-items { display: flex; flex-direction: column; gap: var(--bxcd-d-item-gap, 12px); }
 .bxcd-root .bxcd-item {
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) auto;
+  grid-template-columns: var(--bxcd-d-img, 76px) minmax(0, 1fr) auto;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   grid-template-areas:
     "media title   title"
@@ -30,7 +34,7 @@
     "media qty     total";
   column-gap: 14px;
   row-gap: 0;
-  padding: 14px;
+  padding: var(--bxcd-d-item-pad, 14px);
   border-radius: 16px;
   background: #fff;
   border: 1px solid #f1f5f9;
@@ -41,7 +45,7 @@
 }
 .bxcd-root .bxcd-item--gift {
   margin-top: 8px;
-  padding-top: 16px;
+  padding-top: calc(var(--bxcd-d-item-pad, 14px) + 2px);
   background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 60%, #ffffff 100%);
   border: 1.5px dashed #34d399;
   box-shadow: 0 6px 16px rgba(5, 150, 105, 0.14);
@@ -66,8 +70,8 @@
 .bxcd-root .bxcd-item__media {
   grid-area: media;
   align-self: start;
-  width: 76px;
-  height: 76px;
+  width: var(--bxcd-d-img, 76px);
+  height: var(--bxcd-d-img, 76px);
   border-radius: 12px;
   border: 1px solid #f1f5f9;
   background: #fff center / contain no-repeat;
@@ -83,7 +87,7 @@
   align-self: start;
   margin: 0;
   padding: 2px 30px 0 0; /* room for the remove button */
-  font-size: 14px;
+  font-size: var(--bxcd-d-title, 14px);
   font-weight: 700;
   line-height: 1.35;
   color: #0f172a;
@@ -116,7 +120,7 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px 8px;
-  font-size: 13px;
+  font-size: var(--bxcd-d-price, 13px);
 }
 .bxcd-root .bxcd-item__unit { font-weight: 600; color: #334155; font-variant-numeric: tabular-nums; }
 .bxcd-root .bxcd-item__compare { color: #94a3b8; font-size: 12px; text-decoration: line-through; font-variant-numeric: tabular-nums; }
@@ -135,7 +139,7 @@
   justify-content: center;
   text-align: right;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: var(--bxcd-d-total, 15px);
   font-weight: 800;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
@@ -236,17 +240,22 @@
 .bxcd-root .bxcd-banner img { display: block; width: 100%; max-width: 100%; height: auto; margin: 0; border: 0; }
 
 /* ---------- mobile ---------- */
+/* Phone row sizes come from Cart Editor → Design → Phone layout:
+   --bxcd-m-item-pad / --bxcd-m-item-gap / --bxcd-m-img and --bxcd-m-title /
+   --bxcd-m-price / --bxcd-m-total, set on the drawer
+   body (storefront) or the preview's drawer; the fallbacks are the defaults. */
 @media (max-width: 480px) {
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-items { gap: var(--bxcd-m-item-gap, 12px); }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-item {
-    grid-template-columns: 64px minmax(0, 1fr) auto;
+    grid-template-columns: var(--bxcd-m-img, 64px) minmax(0, 1fr) auto;
     column-gap: 12px;
-    padding: 12px;
+    padding: var(--bxcd-m-item-pad, 12px);
     border-radius: 14px;
   }
-  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item--gift { padding-top: 16px; }
-  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__media { width: 64px; height: 64px; border-radius: 10px; }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item--gift { padding-top: calc(var(--bxcd-m-item-pad, 12px) + 4px); }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__media { width: var(--bxcd-m-img, 64px); height: var(--bxcd-m-img, 64px); border-radius: 10px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__title {
-    font-size: 13.5px;
+    font-size: var(--bxcd-m-title, 13.5px);
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
@@ -254,7 +263,8 @@
   }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-qty { height: 36px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-qty__btn { width: 36px; }
-  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__total { min-width: 56px; min-height: 36px; font-size: 14px; }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__price { font-size: var(--bxcd-m-price, 13px); }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-item__total { min-width: 56px; min-height: 36px; font-size: var(--bxcd-m-total, 14px); }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-summary__label { font-size: 13.5px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-summary__value { font-size: 13.5px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-summary__label--total { font-size: 15px; }
@@ -262,16 +272,17 @@
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-banner { border-radius: 10px; }
 }
 /* the same, for the Cart Editor preview's phone frame */
+.bxcd-root.bxcd-root--mobile .bxcd-items { gap: var(--bxcd-m-item-gap, 12px); }
 .bxcd-root.bxcd-root--mobile .bxcd-item {
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: var(--bxcd-m-img, 64px) minmax(0, 1fr) auto;
   column-gap: 12px;
-  padding: 12px;
+  padding: var(--bxcd-m-item-pad, 12px);
   border-radius: 14px;
 }
-.bxcd-root.bxcd-root--mobile .bxcd-item--gift { padding-top: 16px; }
-.bxcd-root.bxcd-root--mobile .bxcd-item__media { width: 64px; height: 64px; border-radius: 10px; }
+.bxcd-root.bxcd-root--mobile .bxcd-item--gift { padding-top: calc(var(--bxcd-m-item-pad, 12px) + 4px); }
+.bxcd-root.bxcd-root--mobile .bxcd-item__media { width: var(--bxcd-m-img, 64px); height: var(--bxcd-m-img, 64px); border-radius: 10px; }
 .bxcd-root.bxcd-root--mobile .bxcd-item__title {
-  font-size: 13.5px;
+  font-size: var(--bxcd-m-title, 13.5px);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -279,7 +290,8 @@
 }
 .bxcd-root.bxcd-root--mobile .bxcd-qty { height: 36px; }
 .bxcd-root.bxcd-root--mobile .bxcd-qty__btn { width: 36px; }
-.bxcd-root.bxcd-root--mobile .bxcd-item__total { min-width: 56px; min-height: 36px; font-size: 14px; }
+.bxcd-root.bxcd-root--mobile .bxcd-item__price { font-size: var(--bxcd-m-price, 13px); }
+.bxcd-root.bxcd-root--mobile .bxcd-item__total { min-width: 56px; min-height: 36px; font-size: var(--bxcd-m-total, 14px); }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__label { font-size: 13.5px; }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__value { font-size: 13.5px; }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__label--total { font-size: 15px; }
