@@ -1,0 +1,98 @@
+{
+  "admin.common.discard": {
+    "status": "ai",
+    "srcHash": "1e706c21"
+  },
+  "admin.common.save": {
+    "status": "ai",
+    "srcHash": "4d2d5d68"
+  },
+  "admin.common.saved": {
+    "status": "ai",
+    "srcHash": "8a6979e4"
+  },
+  "error.admin.save_failed": {
+    "status": "ai",
+    "srcHash": "c4c2661f"
+  },
+  "error.cart.low_stock": {
+    "status": "ai",
+    "srcHash": "d1ba7f6a"
+  },
+  "error.cart.sold_out": {
+    "status": "ai",
+    "srcHash": "0fe973c7"
+  },
+  "error.cod.checkout_only": {
+    "status": "ai",
+    "srcHash": "44e84ab5"
+  },
+  "error.cod.in_progress": {
+    "status": "ai",
+    "srcHash": "8100c59e"
+  },
+  "error.cod.invalid_phone": {
+    "status": "ai",
+    "srcHash": "baf70fa8"
+  },
+  "error.cod.invalid_pincode": {
+    "status": "ai",
+    "srcHash": "b8121dc4"
+  },
+  "error.cod.item_sold_out": {
+    "status": "ai",
+    "srcHash": "59a349c5"
+  },
+  "error.cod.item_unavailable": {
+    "status": "ai",
+    "srcHash": "439a01b1"
+  },
+  "error.cod.otp_expired": {
+    "status": "ai",
+    "srcHash": "38c245d6"
+  },
+  "error.cod.otp_invalid": {
+    "status": "ai",
+    "srcHash": "eaf83e17"
+  },
+  "error.cod.otp_locked": {
+    "status": "ai",
+    "srcHash": "349a0804"
+  },
+  "error.cod.unavailable": {
+    "status": "ai",
+    "srcHash": "417018e8"
+  },
+  "error.generic": {
+    "status": "ai",
+    "srcHash": "c951164f"
+  },
+  "storefront.cod.button": {
+    "status": "ai",
+    "srcHash": "0d900ddd"
+  },
+  "storefront.drawer.add": {
+    "status": "ai",
+    "srcHash": "9dc3aa14"
+  },
+  "storefront.drawer.checkout": {
+    "status": "ai",
+    "srcHash": "4a06ab59"
+  },
+  "storefront.drawer.empty": {
+    "status": "ai",
+    "srcHash": "2b0952f5"
+  },
+  "storefront.drawer.items": {
+    "status": "ai",
+    "srcHash": "2a903e37"
+  },
+  "storefront.drawer.subtotal": {
+    "status": "ai",
+    "srcHash": "d361488d"
+  },
+  "storefront.drawer.title": {
+    "status": "ai",
+    "srcHash": "185551af"
+  }
+}

@@ -20,6 +20,9 @@
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
+    "i18n:validate": "node scripts/i18n-tools.mjs validate",
+    "i18n:meta": "node scripts/i18n-tools.mjs meta",
+    "i18n:build": "node scripts/i18n-tools.mjs build",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },
