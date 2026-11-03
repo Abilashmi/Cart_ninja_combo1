@@ -5,6 +5,7 @@ node_modules
 
 /.cache
 /build
+/i18n-dist
 /app/build
 /public/build/
 /public/_dev
