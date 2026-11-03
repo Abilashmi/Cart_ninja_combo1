@@ -5,6 +5,8 @@
   {{ 'brix_cart_ui.css' | asset_url | stylesheet_tag }}
   {%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
   <script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
+  {%- comment -%} Shopper's language for the scripts below (snippets/brix-i18n.liquid; English pages load nothing). {%- endcomment -%}
+  {% render 'brix-i18n' %}
   <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
   {%- comment -%} BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
        product pages and combo pages. Shows nothing unless the merchant turned

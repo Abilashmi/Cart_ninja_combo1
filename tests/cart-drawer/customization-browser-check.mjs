@@ -309,7 +309,7 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
 /* 6. FBT widget colours and states */
 {
   const fbt = snippet('fbt-widget-render.liquid')
-    .replace('{{ product.id }}', '100').replace('{{ shop.permanent_domain }}', 'demo.myshopify.com').replace('{{ shop.currency }}', 'INR')
+    .replace("{% render 'brix-i18n' %}", '').replace('{{ product.id }}', '100').replace('{{ shop.permanent_domain }}', 'demo.myshopify.com').replace('{{ shop.currency }}', 'INR')
     .replace("{{ block.settings.placement | default: 'below_atc' }}", 'below_cart').replace('{{ request.design_mode }}', 'false');
   const temp1 = {
     layout: 'carousel', interactionType: 'classic', showPrices: true, showAddAllButton: true, widgetPlacement: 'below_cart',
