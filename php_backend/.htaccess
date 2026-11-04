@@ -7,4 +7,16 @@
   # Login password for promo_admin.php — change this to your own value,
   # then log out and back in with the new password.
   SetEnv PROMO_ADMIN_PASSWORD "HjLoiP781g5yrsRcpFmE"
+
+  # Agency Dashboard (agencydashboard_c) server-to-server integration.
+  # install_shop.php / uninstall_shop.php notify it of real Shopify
+  # installs/uninstalls, and store_install_status.php answers its
+  # install-state checks. Without these, all of that silently no-ops —
+  # which is why an already-installed store was still bounced to the
+  # App Store.
+  #   - AGENCY_DASHBOARD_INTERNAL_SECRET must be byte-identical to the
+  #     value set on the Agency Dashboard (Fly secret of the same name).
+  #   - AGENCY_DASHBOARD_URL is that app's public base URL, no trailing slash.
+  SetEnv AGENCY_DASHBOARD_INTERNAL_SECRET "REPLACE_WITH_SHARED_SECRET"
+  SetEnv AGENCY_DASHBOARD_URL "https://REPLACE_WITH_AGENCY_DASHBOARD_HOST"
 </IfModule>
