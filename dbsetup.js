@@ -19,7 +19,7 @@ const newDb = !fs.existsSync(target)
 // ✅ SAFE restore (no crash)
 if (newDb && process.env.BUCKET_NAME) {
   try {
-    await exec(`npx litestream restore -config litestream.yml -if-replica-exists ${target}`)
+    await exec(`litestream restore -config litestream.yml -if-replica-exists ${target}`)
   } catch (e) {
     console.log("⚠️ Litestream restore failed, continuing:", e.message)
   }
@@ -41,7 +41,7 @@ try {
 // 🚀 launch app (CRITICAL PART)
 if (process.env.BUCKET_NAME) {
   try {
-    await exec(`npx litestream replicate -config litestream.yml -exec ${JSON.stringify(process.argv.slice(2).join(' '))}`)
+    await exec(`litestream replicate -config litestream.yml -exec ${JSON.stringify(process.argv.slice(2).join(' '))}`)
   } catch (e) {
     console.log("⚠️ Litestream replicate failed, running app normally:", e.message)
     await exec(process.argv.slice(2).join(' '))

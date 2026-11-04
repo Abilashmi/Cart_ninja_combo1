@@ -8,6 +8,7 @@ dbs:
       - type: s3
         endpoint: $AWS_ENDPOINT_URL_S3
         bucket: $BUCKET_NAME
+        region: $AWS_REGION
         path: litestream/dev.sqlite
         access-key-id: $AWS_ACCESS_KEY_ID
         secret-access-key: $AWS_SECRET_ACCESS_KEY
