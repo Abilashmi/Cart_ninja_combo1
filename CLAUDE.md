@@ -208,6 +208,9 @@ React Router v7 file-based routing. Patterns:
 - `api.*.jsx` — JSON API endpoints used by the frontend fetchers
 - `webhooks.*.jsx` — Shopify webhook handlers. The order, refund and cart ones answer 200 as soon as `authenticate.webhook` passes and do their DB work after (`services/webhook-queue.server.js` `afterResponse`, at most 4 at once): every DB statement is an HTTPS round trip to `db_proxy.php`, and awaiting them missed Shopify's 5 s limit ("No response from app" in the Partner Dashboard). An order's line items are one multi-row INSERT. Tests: `tests/webhooks/`.
 - `*.php.jsx` — PHP-compatible endpoint proxies (e.g., `save_cart_drawer[.]php.jsx` accepts POST from the storefront extension)
+- `internal.*.jsx` — BRIX team pages outside the Shopify admin, behind one shared password (`REPORTS_PASSWORD`, 12+ characters, else closed; `utils/internal-auth.server.js`: signed cookie on `/internal` holding a hash of the password, so changing it signs everyone out). Resource routes returning plain HTML (`utils/internal-page.js`), never `root.jsx`: its Clarity recording and Zingbot widget must not see client data.
+
+**Client reports** (`/internal/reports`, view `internal.reports_.view.jsx`, `?download=1` = the same page as a file to send the merchant): pick a store (every offline session whose token still works, named by Shopify, cached 6 h, `?fresh=1` reloads) and up to 31 days within the last 60 (the app has `read_orders`, not `read_all_orders`; older orders silently come back empty). Shows COD vs paid orders by day and against the same number of days just before (dropped when those reach past 60 days), BRIX COD by entry point, which checkout took the other COD, and combo pages. Rules in `utils/client-report.js` (pure): BRIX COD = tag `brix-cod` or `_brixCod`; other COD = a gateway named "cash on delivery" / "cod"; staff = the Draft Orders app, left out; not cancelled = no `cancelledAt` and not voided; days in the store's zone; combo orders = order attributes `combo_template_id` / `combo_source` or a `BX…` box code (Fastrr-style checkouts drop `_brix_combo_id` line properties); combo views / button presses from `combo_analytics` (`view` = page opened, no sessions recorded; `click` = the combo page's Checkout or COD button). Data: `services/client-report.server.js` (`unauthenticated.admin`). Page: `utils/client-report-html.js`, self-contained, no scripts. Upsell ADD presses are not recorded anywhere yet, so the report has none. Tests: `tests/reports/client-report.test.mjs`.
 
 ### Shopify Extension
 
@@ -225,6 +228,7 @@ Storefront widgets (cart drawer, FBT, coupon slider) fetch their config via the 
 | `OPENAI_API_KEY` | Holds the NVIDIA NIM key (`nvapi-...`) for all AI features |
 | `SHOPIFY_APP_URL` | Public tunnel URL for embedded app |
 | `PHP_BASE_URL` | Override for PHP backend base URL (default: `http://localhost/cartdrawerv2_ui/php_backend`) |
+| `REPORTS_PASSWORD` | Shared password for `/internal/reports` (12+ characters; unset = the pages stay closed). Fly secret |
 
 ### PHP Backend
 
