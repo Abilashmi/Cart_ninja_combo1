@@ -1,6 +1,76 @@
 (function () {
   console.log('[CartDrawer] Script loaded ✓');
 
+  /* i18n-shim:begin (copy of app/i18n/storefront.shared.js I18N_SHIM) */
+  // Shopper-language text: window.BrixI18n comes from brix_i18n_<lang>.js,
+  // which the app embed loads first on a page in a language BRIX has. Without
+  // it the English written at the call site shows (it equals app/i18n/en.json).
+  function bxFill(en, vars) {
+    var v = vars || {};
+    return String(en).replace(/\{(\w+), plural,((?:[^{}]|\{[^{}]*\})*)\}/g, function (m, name, body) {
+      var n = Number(v[name]);
+      var pick = body.match(new RegExp('=' + n + '\\s*\\{([^{}]*)\\}')) || (n === 1 && body.match(/\bone\s*\{([^{}]*)\}/)) || body.match(/\bother\s*\{([^{}]*)\}/);
+      return pick ? pick[1].replace(/#/g, String(n)) : '';
+    }).replace(/\{(\w+)\}/g, function (m, name) {
+      return v[name] === undefined || v[name] === null ? '' : String(v[name]);
+    });
+  }
+  function bxT(key, en, vars) {
+    var i18n = window.BrixI18n;
+    return i18n ? i18n.t(key, en, vars) : bxFill(en, vars);
+  }
+  // Text the merchant can edit: their own words stay; blank or still the
+  // English default shows in the shopper's language.
+  function bxText(saved, key, en, vars) {
+    var i18n = window.BrixI18n;
+    if (i18n) return i18n.text(saved, key, en, vars);
+    var s = saved === undefined || saved === null ? '' : String(saved);
+    return s.replace(/^\s+|\s+$/g, '') ? s : bxFill(en, vars);
+  }
+  function bxDir() {
+    return window.BrixI18n && window.BrixI18n.dir === 'rtl' ? 'rtl' : 'ltr';
+  }
+  /* i18n-shim:end */
+
+  // Merchant texts saved with an English default (the Cart Editor's or the
+  // drawer's own) show in the shopper's language; their own words stay.
+  function ccCheckoutName(saved, fallbackEn) {
+    return bxText(bxText(saved || fallbackEn, 'storefront.drawer.checkout_now', 'Checkout Now'), 'storefront.drawer.checkout', 'Checkout');
+  }
+  function ccUpsellButtonText(saved) {
+    return bxText(bxText(saved, 'storefront.upsell.add_to_cart', 'Add to cart'), 'storefront.drawer.add', 'Add');
+  }
+  function ccUpsellTitle(saved) {
+    return bxText(bxText(saved, 'storefront.upsell.title', 'Recommended for you'), 'storefront.upsell.title_alt', 'Product Recommendations');
+  }
+  function ccAllUnlockedText(saved) {
+    var s = String(saved || '').trim();
+    if (s === '\ud83c\udf89 All Rewards Unlocked!') return '\ud83c\udf89 ' + bxT('storefront.progress.all_unlocked', 'All Rewards Unlocked!');
+    return bxText(s, 'storefront.progress.all_unlocked', 'All Rewards Unlocked!');
+  }
+  // Footer trust badges: the built-in titles follow the shopper's language.
+  var CC_TRUST_TEXT = {
+    'free shipping': ['storefront.trust.free_shipping', 'Free Shipping'],
+    'no extra costs': ['storefront.trust.no_extra_costs', 'No Extra Costs'],
+    'easy returns': ['storefront.trust.easy_returns', 'Easy Returns'],
+    'return with ease': ['storefront.trust.return_with_ease', 'Return with Ease'],
+    'secure checkout': ['storefront.trust.secure_checkout', 'Secure Checkout'],
+    'secure payment': ['storefront.trust.secure_payment', 'Secure Payment']
+  };
+  function ccTrustText(text) {
+    var hit = CC_TRUST_TEXT[String(text || '').trim().toLowerCase()];
+    return hit ? bxT(hit[0], hit[1]) : text;
+  }
+  function ccTrustBadges(cfg) {
+    if (!cfg || !Array.isArray(cfg.items)) return cfg;
+    return Object.assign({}, cfg, { items: cfg.items.map(function (it) { return Object.assign({}, it, { title: ccTrustText(it.title), subtitle: ccTrustText(it.subtitle) }); }) });
+  }
+  // A coupon card's button: the default "Apply" copies the code.
+  function ccCouponButtonLabel(coupon, copied, bang) {
+    if (copied) return bang ? bxT('storefront.coupon.copied_bang', 'Copied!') : bxT('storefront.common.copied', 'Copied');
+    return !coupon.buttonText || coupon.buttonText === 'Apply' ? bxT('storefront.common.copy', 'Copy') : coupon.buttonText;
+  }
+
   // Debug logging behind an explicit flag — enable via
   // window.__CC_DEBUG__ = true, window.CartNinjaDebug = true, or
   // ?cc_debug=1 in the URL. Silent by default so this never spams
@@ -518,8 +588,8 @@
           coupon: parseCouponData(d),
           upsell: parseUpsellData(d),
           checkoutButtonStyle: parseCheckoutButtonStyle(d),
-          checkoutName: d.checkoutName || 'Checkout Now',
-          checkoutFooterText: d.checkoutFooterText || 'Shipping and taxes calculated at checkout',
+          checkoutName: ccCheckoutName(d.checkoutName, 'Checkout Now'),
+          checkoutFooterText: bxText(d.checkoutFooterText, 'storefront.drawer.footer_note', 'Shipping and taxes calculated at checkout'),
           // Internal per-shop switch (php_backend/integrations_admin.php),
           // off unless we've turned it on for this shop — see ccGoToCheckout.
           shiprocketEnabled: isEnabled(d.shiprocket_enabled),
@@ -680,7 +750,7 @@
   // that product belongs to, else FREE GIFT / REWARD. A text that says
   // "free" is only used on a line that really costs nothing.
   function ccRewardBadgeText(item, isFreeGift) {
-    const fallback = isFreeGift ? 'FREE GIFT' : 'REWARD';
+    const fallback = isFreeGift ? bxT('storefront.reward.free_gift', 'FREE GIFT') : bxT('storefront.reward.reward', 'REWARD');
     const tiers = (CONFIG && CONFIG.progress && CONFIG.progress.tiers) || [];
     const pid = String(item.product_id);
     const tier = tiers.find((t) => t.badgeLabel && (t.products || []).some((p) => ccExtractNumericId(p) === pid));
@@ -695,7 +765,7 @@
     const tiers = (CONFIG && CONFIG.progress && CONFIG.progress.tiers) || [];
     const pid = String(item.product_id);
     const tier = tiers.find((t) => t.noteLabel && (t.products || []).some((p) => ccExtractNumericId(p) === pid));
-    return tier ? tier.noteLabel : 'Added for reaching your milestone';
+    return tier ? tier.noteLabel : bxT('storefront.reward.note', 'Added for reaching your milestone');
   }
 
   // Gifts the shopper took out with ✕: never put back in this cart (the
@@ -765,7 +835,7 @@
           id: t.id,
           target: target,
           title: t.title || '',
-          rewardText: t.description || 'Reward',
+          rewardText: t.description || bxT('storefront.reward.reward_word', 'Reward'),
           // Raw, undefaulted description — used for the persistent per-tier
           // label (shown before AND after the tier is reached), so a tier
           // with no title/description never permanently shows the generic
@@ -837,7 +907,7 @@
       barForegroundColor: data.colors?.fill || data.barForegroundColor || data.fill_color || '#10b981',
       iconColor: data.colors?.icon || data.iconColor || data.icon_color || data.colors?.fill || data.barForegroundColor || data.fill_color || '#2563eb',
       borderRadius: data.borderRadius || 8,
-      completionText: data.completionText || data.completionMessage || '🎉 All Rewards Unlocked!',
+      completionText: ccAllUnlockedText(data.completionText || data.completionMessage || '🎉 All Rewards Unlocked!'),
       completionTextColor: data.colors?.message || data.completionTextColor || '#10b981',
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
@@ -866,8 +936,8 @@
       mode: data.mode === 'fixed' || data.mode === 'loop' ? data.mode : 'session',
       hours: parseInt(data.hours || 0, 10),
       minutes: parseInt(data.minutes || 15, 10),
-      label: data.label || 'Offer expires in',
-      expiredLabel: data.expiredLabel || 'Offer expired!',
+      label: bxText(data.label, 'storefront.timer.label', 'Offer expires in'),
+      expiredLabel: bxText(data.expiredLabel, 'storefront.timer.expired', 'Offer expired!'),
       bgColor: data.bgColor || '#fef2f2',
       textColor: data.textColor || '#991b1b',
       accentColor: data.accentColor || '#dc2626',
@@ -1257,7 +1327,7 @@
     const paint = cs.style === 'filled'
       ? 'background:' + cs.bg + ';color:' + cs.color + ';box-shadow:none;'
       : 'background:transparent;color:' + cs.bg + ';box-shadow:' + (link ? 'none' : 'inset 0 0 0 1.5px ' + cs.bg) + ';';
-    return `<div id="cc-continue-wrap" style="${gap}"><button type="button" id="cc-continue-btn" data-action="${cs.action}" data-href="${escapeHtml(cs.url || '/collections/all')}" style="box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;display:block;margin:0;padding:${pad};${paint}border:none;border-radius:${link ? 0 : cs.radius}px;font-family:inherit;font-size:${cs.fontSize}px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;text-shadow:none;text-align:center;text-decoration:${link ? 'underline' : 'none'};text-underline-offset:3px;cursor:pointer;">${escapeHtml(cs.text)}</button></div>`;
+    return `<div id="cc-continue-wrap" style="${gap}"><button type="button" id="cc-continue-btn" data-action="${cs.action}" data-href="${escapeHtml(cs.url || '/collections/all')}" style="box-sizing:border-box;width:100%;max-width:100%;min-width:0;height:auto;min-height:0;display:block;margin:0;padding:${pad};${paint}border:none;border-radius:${link ? 0 : cs.radius}px;font-family:inherit;font-size:${cs.fontSize}px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;text-shadow:none;text-align:center;text-decoration:${link ? 'underline' : 'none'};text-underline-offset:3px;cursor:pointer;">${escapeHtml(bxText(cs.text, 'storefront.drawer.continue_shopping', 'Continue shopping'))}</button></div>`;
   }
 
   // Close = the drawer closes; link = a store path (under the market's
@@ -1329,7 +1399,7 @@
         iconKey: c.icon || 'discount',
         ...ccCouponStyleFields(c),
         button: {
-          text: c.buttonText || 'Apply',
+          text: c.buttonText || 'Apply', // 'Apply' = copy (ccCouponButtonLabel)
           backgroundColor: c.buttonBgColor || c.buttonBackgroundColor || '#000000',
           textColor: c.buttonTextColor || '#ffffff',
         },
@@ -1342,8 +1412,8 @@
         timerEnabled: c.timerEnabled === true,
         timerHours: Number(c.timerHours) || 0,
         timerMinutes: c.timerMinutes != null ? Number(c.timerMinutes) : 15,
-        timerLabel: c.timerLabel || 'Offer expires in',
-        timerExpiredLabel: c.timerExpiredLabel || 'Offer expired!',
+        timerLabel: bxText(c.timerLabel, 'storefront.timer.label', 'Offer expires in'),
+        timerExpiredLabel: bxText(c.timerExpiredLabel, 'storefront.timer.expired', 'Offer expired!'),
         timerBgColor: c.timerBgColor || '#fef2f2',
         timerTextColor: c.timerTextColor || '#991b1b',
         timerAccentColor: c.timerAccentColor || '#dc2626',
@@ -1362,7 +1432,7 @@
       cardMinHeight: ccClampInt(data.cardMinHeight, 0, 200, 0),
       title: {
         // Cart Editor saves sectionTitle; legacy saves titleText; structured saves title.text
-        text: title.text || data.sectionTitle || data.titleText || 'Apply Coupon',
+        text: bxText(title.text || data.sectionTitle || data.titleText, 'storefront.coupon.title', 'Apply Coupon'),
         fontSize: parseInt(title.fontSize ?? data.titleFontSize ?? 14, 10) || 14,
         // Cart Editor saves titleColor; legacy saves titleTextColor; structured saves title.textColor
         textColor: title.textColor || data.titleColor || data.titleTextColor || '#1e293b',
@@ -1395,11 +1465,11 @@
       direction,
       // Admin saves this as `showWhenEmpty` (see progress bar note above).
       showOnEmptyCart: coerceBoolean(data.showWhenEmpty ?? data.showOnEmptyCart ?? data.show_on_empty_cart, true),
-      buttonText: data.buttonText || 'Add to cart',
+      buttonText: ccUpsellButtonText(data.buttonText),
       // The Cart Editor saves the title flat (title / titleColor / titleAlign);
       // upsellTitle.* is the older shape.
       upsellTitle: {
-        text: data.title || data.upsellTitle?.text || 'Recommended for you',
+        text: ccUpsellTitle(data.title || data.upsellTitle?.text),
         color: data.titleColor || data.upsellTitle?.color || '#111827',
         align: ['left', 'center', 'right'].includes(data.titleAlign) ? data.titleAlign : 'left',
         bold: data.upsellTitle?.formatting?.bold || false,
@@ -2186,8 +2256,8 @@
       const wanted = Math.max(1, parseInt((form.querySelector('[name="quantity"]') || {}).value, 10) || 1);
       if (inCart + wanted > cap) {
         ccToast(inCart >= cap
-          ? 'You can\'t add more of this item. You already have ' + inCart + ' in your cart.'
-          : 'Only ' + (cap - inCart) + ' more of this item can be added.');
+          ? bxT('storefront.drawer.stock_cap_reached', 'You can\'t add more of this item. You already have {count} in your cart.', { count: inCart })
+          : bxT('storefront.drawer.stock_cap_left', 'Only {count} more of this item can be added.', { count: cap - inCart }));
         return;
       }
     }
@@ -2226,7 +2296,7 @@
           } else {
             // Drawn at the tap but refused: back to the real cart.
             if (pendingCart && drawerOpen()) renderDrawer({ cart: _ccLastCart }).then(function () { return renderDrawer(); }).catch(function () {});
-            ccToast(json.description || json.message || 'This item could not be added to your cart.');
+            ccToast(json.description || json.message || bxT('storefront.drawer.add_failed', 'This item could not be added to your cart.'));
           }
         });
       })
@@ -3293,7 +3363,7 @@
       return `
   <button type="button" id="cc-animated-checkout-btn" class="cc-anim-btn" data-href="${href}" style="position:relative;overflow:hidden;width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
     <span id="cc-animated-checkout-spinner" style="display:none;width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);border-top-color:${fg};animation:cc-anim-spin 0.6s linear infinite;flex-shrink:0;"></span>
-    <span id="cc-animated-checkout-label" data-cc-checkout-label aria-live="polite">${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout', _ccCheckoutPrice))}</span>
+    <span id="cc-animated-checkout-label" data-cc-checkout-label aria-live="polite">${escapeHtml(ccCheckoutText(ccCheckoutName(CONFIG.checkoutName, 'Checkout'), _ccCheckoutPrice))}</span>
   </button>`;
     }
 
@@ -3305,14 +3375,14 @@
     if (ccCheckoutVia() !== 'shopify') {
       return `
   <button type="button" id="cc-standard-checkout-btn" data-href="${href}" style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-    <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout Now', _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
+    <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(ccCheckoutName(CONFIG.checkoutName, 'Checkout Now'), _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
   </button>`;
     }
 
     return `
   <a href="${href}" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
     <button style="width:100%;padding:${padY}px 16px;background:${bg};color:${fg};border:none;border-radius:${radius}px;font-size:${fontSize}px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(CONFIG.checkoutName || 'Checkout Now', _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
+      <span data-cc-checkout-label>${escapeHtml(ccCheckoutText(ccCheckoutName(CONFIG.checkoutName, 'Checkout Now'), _ccCheckoutPrice))}</span> <span style="font-size:18px;">→</span>
     </button>
   </a>`;
   }
@@ -3328,7 +3398,7 @@
   // A tap on Checkout shows at once that it's on its way (the hand-off to
   // Shiprocket can take a moment); the next drawer render draws it afresh.
   function ccCheckoutBusy() {
-    document.querySelectorAll('#cc-drawer [data-cc-checkout-label]').forEach((el) => { el.textContent = 'Opening checkout…'; });
+    document.querySelectorAll('#cc-drawer [data-cc-checkout-label]').forEach((el) => { el.textContent = bxT('storefront.drawer.opening_checkout', 'Opening checkout\u2026'); });
     document.querySelectorAll('#cc-standard-checkout-btn, #cc-animated-checkout-btn').forEach((b) => { b.style.opacity = '0.75'; b.style.cursor = 'progress'; });
   }
 
@@ -3535,7 +3605,7 @@
         // Processing state starts immediately alongside the press animation
         // — there's no real async call to wait for (standard/swipe also
         // navigate with zero network round-trip before /checkout).
-        if (label) label.textContent = 'Processing...';
+        if (label) label.textContent = bxT('storefront.drawer.processing', 'Processing...');
         if (spinner) spinner.style.display = 'inline-block';
 
         const pressMs = reducedMotion ? 60 : 280;
@@ -3667,19 +3737,19 @@
 
     var qty;
     if (opts.packLine) {
-      qty = '<span class="bxcd-item__pack">Pack' + (opts.packLine._brix_pack_quantity ? ' of ' + escapeHtml(opts.packLine._brix_pack_quantity) : '') + '</span>';
+      qty = '<span class="bxcd-item__pack">' + escapeHtml(opts.packLine._brix_pack_quantity ? bxT('storefront.drawer.pack_of', 'Pack of {count}', { count: opts.packLine._brix_pack_quantity }) : bxT('storefront.drawer.pack', 'Pack')) + '</span>';
     } else if (noStepper) {
       qty = '';
     } else {
-      qty = '<div class="bxcd-qty" role="group" aria-label="Quantity">' +
-        '<button type="button" class="bxcd-qty__btn" aria-label="Decrease quantity"' + (item.quantity <= 1 ? ' disabled' : '') + ' onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity - 1) + ')">' + CC_ICON_MINUS + '</button>' +
+      qty = '<div class="bxcd-qty" role="group" aria-label="' + escapeHtml(bxT('storefront.common.quantity', 'Quantity')) + '">' +
+        '<button type="button" class="bxcd-qty__btn" aria-label="' + escapeHtml(bxT('storefront.drawer.decrease', 'Decrease quantity')) + '"' + (item.quantity <= 1 ? ' disabled' : '') + ' onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity - 1) + ')">' + CC_ICON_MINUS + '</button>' +
         '<span class="bxcd-qty__val" aria-live="polite">' + item.quantity + '</span>' +
-        '<button type="button" class="bxcd-qty__btn" aria-label="Increase quantity" onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity + 1) + ')">' + CC_ICON_PLUS + '</button>' +
+        '<button type="button" class="bxcd-qty__btn" aria-label="' + escapeHtml(bxT('storefront.drawer.increase', 'Increase quantity')) + '" onclick="ccUpdateQty(\'' + key + '\',' + (item.quantity + 1) + ')">' + CC_ICON_PLUS + '</button>' +
         '</div>';
     }
 
     var total = isFreeGift
-      ? '<span class="bxcd-item__free">FREE</span><span class="bxcd-item__was">' + formatMoney(originalLine) + '</span>'
+      ? '<span class="bxcd-item__free">' + escapeHtml(bxT('storefront.drawer.free_caps', 'FREE')) + '</span><span class="bxcd-item__was">' + formatMoney(originalLine) + '</span>'
       : formatMoney(item.final_line_price / 100);
 
     // The gift pops in only the first time it's drawn: every cart change
@@ -3692,7 +3762,7 @@
         ? '<img src="' + escapeHtml(item.image) + '" alt="' + title + '" loading="lazy">'
         : '<span style="font-size:28px;" aria-hidden="true">📦</span>') + '</div>' +
       '<p class="bxcd-item__title">' + title + '</p>' +
-      (pending ? '' : '<button type="button" class="bxcd-item__remove" aria-label="Remove product" title="Remove" onclick="ccRemoveItem(\'' + key + '\'' + (isGift ? ', \'' + String(item.product_id).replace(/\D/g, '') + '\'' : '') + ')">' + CC_ICON_X + '</button>') +
+      (pending ? '' : '<button type="button" class="bxcd-item__remove" aria-label="' + escapeHtml(bxT('storefront.drawer.remove_product', 'Remove product')) + '" title="' + escapeHtml(bxT('storefront.common.remove', 'Remove')) + '" onclick="ccRemoveItem(\'' + key + '\'' + (isGift ? ', \'' + String(item.product_id).replace(/\D/g, '') + '\'' : '') + ')">' + CC_ICON_X + '</button>') +
       (variant ? '<p class="bxcd-item__variant">' + variant + '</p>' : '') +
       '<div class="bxcd-item__price">' + price + '</div>' +
       (qty ? '<div class="bxcd-item__qty">' + qty + '</div>' : '') +
@@ -3713,17 +3783,17 @@
     const detail = (cls, text) => '<span class="bxcd-summary__label bxcd-summary__detail' + cls + '">' + text + '</span>';
     const value = (cls, text) => '<span class="bxcd-summary__value bxcd-summary__detail' + cls + '">' + text + '</span>';
     return '<div class="bxcd-summary' + (_ccSummaryOpen ? ' bxcd-summary--open' : '') + '">' +
-      detail('', 'Subtotal') + value('', formatMoney(subtotal)) +
+      detail('', escapeHtml(bxT('storefront.drawer.subtotal', 'Subtotal'))) + value('', formatMoney(subtotal)) +
       (cartDiscounts || []).map(function (d) {
         return detail(' bxcd-summary__label--saving', escapeHtml(d.title)) + value(' bxcd-summary__value--saving', '-' + formatMoney(d.amount));
       }).join('') +
       (totalDiscount > 0
-        ? detail(' bxcd-summary__label--saving', 'Discounts') + value(' bxcd-summary__value--saving', '-' + formatMoney(totalDiscount))
+        ? detail(' bxcd-summary__label--saving', escapeHtml(bxT('storefront.drawer.discounts', 'Discounts'))) + value(' bxcd-summary__value--saving', '-' + formatMoney(totalDiscount))
         : '') +
       '<span class="bxcd-summary__divider bxcd-summary__detail" aria-hidden="true"></span>' +
-      '<span class="bxcd-summary__label bxcd-summary__label--total">Total' +
+      '<span class="bxcd-summary__label bxcd-summary__label--total">' + escapeHtml(bxT('storefront.drawer.total', 'Total')) +
       (fold
-        ? '<button type="button" class="bxcd-summary__toggle" aria-expanded="' + _ccSummaryOpen + '">Details' +
+        ? '<button type="button" class="bxcd-summary__toggle" aria-expanded="' + _ccSummaryOpen + '">' + escapeHtml(bxT('storefront.drawer.details', 'Details')) +
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
           '</button>'
         : '') +
@@ -3833,7 +3903,7 @@
     const hdr = CONFIG.header || {};
     const hdrBg = hdr.bgColor || '#f9fafb';
     const hdrColor = hdr.textColor || '#000000';
-    const hdrTitle = hdr.title || 'Your Cart';
+    const hdrTitle = bxText(hdr.title, 'storefront.drawer.your_cart', 'Your Cart');
     const hdrBorder = hdr.borderBottom !== false ? 'border-bottom:1px solid #e5e7eb;' : '';
     drawerHtml += `
 <div class="cc-drawer-header" style="--cc-m-pad:${ccPhone().headerPadding}px;padding:${ccDesktop().headerPadding}px 20px;${hdrBorder}background:${hdrBg};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
@@ -3854,12 +3924,12 @@
         // One message at a time; startAnnouncementRotator() runs it.
         if (_ccAnnIndex >= annMessages.length) _ccAnnIndex = 0;
         const arrows = ann.showArrows !== false;
-        drawerHtml += `<div id="cc-announcement-bar" class="cc-ann cc-ann--rotating" role="region" aria-roledescription="carousel" aria-label="Announcements" data-cc-ann-count="${annMessages.length}" style="--cc-m-pad:${ccPhone().announcementPadding}px;padding:${ccDesktop().announcementPadding}px 6px;${annStyle}">`
-          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-prev" aria-label="Previous announcement">&#8249;</button>` : '')
+        drawerHtml += `<div id="cc-announcement-bar" class="cc-ann cc-ann--rotating" role="region" aria-roledescription="carousel" aria-label="${escapeHtml(bxT('storefront.drawer.announcements', 'Announcements'))}" data-cc-ann-count="${annMessages.length}" style="--cc-m-pad:${ccPhone().announcementPadding}px;padding:${ccDesktop().announcementPadding}px 6px;${annStyle}">`
+          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-prev" aria-label="${escapeHtml(bxT('storefront.drawer.prev_announcement', 'Previous announcement'))}">&#8249;</button>` : '')
           + `<div class="cc-ann-track" aria-live="polite">`
           + annMessages.map((m, i) => `<div class="cc-ann-msg${i === _ccAnnIndex ? ' cc-ann-msg--on' : ''}"${i === _ccAnnIndex ? '' : ' aria-hidden="true"'}>${escapeHtml(m)}</div>`).join('')
           + `</div>`
-          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-next" aria-label="Next announcement">&#8250;</button>` : '')
+          + (arrows ? `<button type="button" class="cc-ann-arrow cc-ann-next" aria-label="${escapeHtml(bxT('storefront.drawer.next_announcement', 'Next announcement'))}">&#8250;</button>` : '')
           + `</div>`;
       }
     }
@@ -3871,7 +3941,7 @@
 <div id="cc-countdown-bar" style="--cc-m-pad:${ccPhone().countdownPadding}px;padding:${ccDesktop().countdownPadding}px 16px;background:${countdown.bgColor};color:${countdown.textColor};font-size:13px;text-align:center;font-weight:600;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
   <span id="cc-countdown-label">${escapeHtml(countdown.label)}</span>
   <span id="cc-countdown-text" style="color:${countdown.accentColor};font-weight:800;letter-spacing:0.5px;"></span>
-  ${countdown.couponCode ? `<span style="opacity:0.85;">· Use code <strong>${escapeHtml(countdown.couponCode)}</strong></span>` : ''}
+  ${countdown.couponCode ? `<span style="opacity:0.85;">· ${escapeHtml(bxT('storefront.timer.use_code', 'Use code'))} <strong>${escapeHtml(countdown.couponCode)}</strong></span>` : ''}
 </div>`;
     }
 
@@ -3950,7 +4020,7 @@
       pbHtml += `<div class="cc-progress-head" style="text-align:center;margin-bottom:${desk.progressHeadingGap}px;">`;
       if (celebratingTier) {
         const msg = celebratingTier.completionMessage
-          || `Congratulations! You've unlocked ${celebratingTier.title || celebratingTier.description || 'your reward'}!`;
+          || bxT('storefront.progress.unlocked', 'Congratulations! You\'ve unlocked {reward}!', { reward: celebratingTier.title || celebratingTier.description || bxT('storefront.progress.your_reward', 'your reward') });
         pbHtml += `
     <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
       <span style="font-size:15px;font-weight:700;">${escapeHtml(msg)}</span>
@@ -3974,7 +4044,7 @@
         // still guards a fractional remainder like 0.4 from ever displaying
         // as "0 left"/"0 away".
         const remaining = Math.max(1, Math.ceil(pInfo.nextAmount));
-        const nextLabel = pInfo.upcoming.title || pInfo.upcoming.description || 'your next reward';
+        const nextLabel = pInfo.upcoming.title || pInfo.upcoming.description || bxT('storefront.progress.next_reward', 'your next reward');
         // {amount} and {items} both resolve to the same remaining value
         // (currency-formatted vs. a bare number respectively — the
         // merchant's own text supplies the unit word for {items}, e.g.
@@ -3982,7 +4052,8 @@
         // configured progress mode still shows a real number, never breaks.
         // {target} is the tier's full configured threshold, not the
         // remaining amount.
-        const progressTemplate = pInfo.upcoming.progressMessage || `You're {amount} away from unlocking ${nextLabel}!`;
+        // The default keeps {amount} for fillProgressMessageTemplate below.
+        const progressTemplate = pInfo.upcoming.progressMessage || bxT('storefront.progress.away', 'You\'re {amount} away from unlocking {reward}!', { amount: '{amount}', reward: nextLabel });
         const progressMsg = fillProgressMessageTemplate(progressTemplate, {
           amountStr: pInfo.mode === 'quantity' ? String(remaining) : formatMoney(pInfo.nextAmount),
           itemsStr: String(remaining),
@@ -3997,7 +4068,7 @@
         // Every milestone was already reached (e.g. on an earlier page): show
         // the last tier's own message, as the live celebration would have.
         const lastTier = pInfo.tiers[pInfo.tiers.length - 1];
-        const doneText = lastTier && lastTier.completionMessage ? escapeHtml(lastTier.completionMessage) : progress.completionText;
+        const doneText = escapeHtml(lastTier && lastTier.completionMessage ? lastTier.completionMessage : progress.completionText);
         pbHtml += `
     <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
       <span style="font-size:16px;font-weight:800;">${doneText}</span>
@@ -4082,7 +4153,7 @@
         // back over the track/badge instead of sitting cleanly below the node.
         pbHtml += `<div class="cc-ms-label" style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:6px;width:${labelWidthPx}px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;">`;
         if (isCompleted) {
-          pbHtml += `<div style="font-size:7px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0.3px;">REACHED</div>`;
+          pbHtml += `<div style="font-size:7px;font-weight:700;color:#059669;background:#d1fae5;padding:1px 5px;border-radius:3px;white-space:nowrap;letter-spacing:0.3px;">${escapeHtml(bxT('storefront.progress.reached', 'REACHED'))}</div>`;
         } else if (!progress.hideMilestoneAmount) {
           // "Hide milestone amount" only affects this locked-state pill —
           // the title/description label below is unaffected.
@@ -4147,9 +4218,9 @@
       drawerHtml += `
   <div style="padding:40px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9cccf" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-    <p style="margin:0;font-size:16px;font-weight:600;color:#111;">${escapeHtml(ec.message || 'Your cart is empty')}</p>
-    <p style="margin:0;font-size:13px;color:#6b7280;">Add items to unlock rewards</p>
-    ${ec.showContinueShopping !== false ? `<button onclick="window.location.href=((window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/')+'collections/all';" style="margin-top:4px;padding:8px 18px;border:1px solid #c9cccf;border-radius:7px;background:#fff;font-size:13px;cursor:pointer;color:#202223;">Continue shopping</button>` : ''}
+    <p style="margin:0;font-size:16px;font-weight:600;color:#111;">${escapeHtml(bxText(ec.message, 'storefront.drawer.empty', 'Your cart is empty'))}</p>
+    <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(bxT('storefront.drawer.empty_hint', 'Add items to unlock rewards'))}</p>
+    ${ec.showContinueShopping !== false ? `<button onclick="window.location.href=((window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/')+'collections/all';" style="margin-top:4px;padding:8px 18px;border:1px solid #c9cccf;border-radius:7px;background:#fff;font-size:13px;cursor:pointer;color:#202223;">${escapeHtml(bxT('storefront.drawer.continue_shopping', 'Continue shopping'))}</button>` : ''}
   </div>
 `;
       if (bannerSlot === 'afterProducts') drawerHtml += bannerHtml;
@@ -4182,9 +4253,9 @@
       if (bannerSlot === 'beforeProducts') drawerHtml += bannerHtml;
       drawerHtml += `
   <div class="cc-items-head" style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
-    <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
+    <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">${escapeHtml(bxT('storefront.drawer.items_included', 'Items included'))}</p>
     <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
-      <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.item_count} ${cart.item_count === 1 ? 'ITEM' : 'ITEMS'}</span>
+      <span style="font-size:11px;font-weight:700;color:#64748b;">${escapeHtml(bxT('storefront.drawer.items_caps', '{count, plural, one {# ITEM} other {# ITEMS}}', { count: cart.item_count }))}</span>
     </div>
   </div>
 `;
@@ -4234,7 +4305,7 @@
       const cartTotalNow = cart.total_price / 100;
       const cartDiscounts = (cart.cart_level_discount_applications || [])
         .filter((d) => Number(d.total_allocated_amount) > 0)
-        .map((d) => ({ title: d.title || 'Discount', amount: Number(d.total_allocated_amount) / 100 }));
+        .map((d) => ({ title: d.title || bxT('storefront.drawer.discount', 'Discount'), amount: Number(d.total_allocated_amount) / 100 }));
       const cartLevelOff = cartDiscounts.reduce((sum, d) => sum + d.amount, 0);
       const itemsSubtotal = Number(cart.items_subtotal_price);
       const shownSubtotal = Number.isFinite(itemsSubtotal) && cartLevelOff > 0 ? itemsSubtotal / 100 : cartTotalNow;
@@ -4282,14 +4353,14 @@
   <div id="cc-cod-slot"></div>
   <div id="cc-checkout-wrap">${(_ccCheckoutPrice = { cart: cart, total: finalTotal }, renderCheckoutButton(appliedCouponCodes))}</div>
   ${ccFooterExtras.cardsHtml((CONFIG.checkoutButtonStyle || {}).paymentCards)}
-  ${ccFooterExtras.trustHtml((CONFIG.checkoutButtonStyle || {}).trustBadges)}
+  ${ccFooterExtras.trustHtml(ccTrustBadges((CONFIG.checkoutButtonStyle || {}).trustBadges))}
   ${continueCfg.enabled && continueCfg.placement !== 'above' ? renderContinueShopping(continueCfg) : ''}
   <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
-    ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
+    ${escapeHtml(bxText(CONFIG.checkoutFooterText, 'storefront.drawer.footer_note', 'Shipping and taxes calculated at checkout'))}
   </p>
   ${CONFIG.showWatermark !== false ? `
   <p style="margin:8px 0 0 0;text-align:center;font-size:10px;color:#cbd5e1;font-weight:600;letter-spacing:0.2px;">
-    Powered by BRIX
+    ${escapeHtml(bxT('storefront.drawer.powered', 'Powered by BRIX'))}
   </p>` : ''}
 </div>
 `;
@@ -4313,7 +4384,7 @@
     if (isFirstOpen) {
       // First open: build full overlay with backdrop + drawer
       const drawerAnim = (CONFIG.design && CONFIG.design.animation) || 'slide';
-      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" class="bxcd-root" data-animation="${drawerAnim}" style="${ccDrawerWidthVars()}">${drawerHtml}</div>`;
+      overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer" class="bxcd-root" dir="${bxDir()}" data-animation="${drawerAnim}" style="${ccDrawerWidthVars()}">${drawerHtml}</div>`;
       root.appendChild(overlay);
       // Force a synchronous layout flush so the browser paints the closed
       // (translateX/opacity) state before we flip to .active — otherwise
@@ -4613,8 +4684,8 @@
       el,
       labelEl: el.querySelector('.cc-coupon-timer-label'),
       textEl: el.querySelector('.cc-coupon-timer-text'),
-      label: el.dataset.label || 'Offer expires in',
-      expiredLabel: el.dataset.expiredLabel || 'Offer expired!',
+      label: bxText(el.dataset.label, 'storefront.timer.label', 'Offer expires in'),
+      expiredLabel: bxText(el.dataset.expiredLabel, 'storefront.timer.expired', 'Offer expired!'),
       deadline: getCouponCardTimerDeadline(el.dataset.couponId, Number(el.dataset.hours), Number(el.dataset.mins)),
     })).filter((e) => e.textEl && e.deadline);
     if (!entries.length) return;
@@ -4657,7 +4728,7 @@
     const alignment = couponConfig.alignment || 'horizontal';
 
     const title = couponConfig.title || {};
-    const titleText = title.text || 'Apply Coupon';
+    const titleText = bxText(title.text, 'storefront.coupon.title', 'Apply Coupon');
     const titleFontSize = parseInt(title.fontSize ?? 14, 10) || 14;
     const titleTextColor = title.textColor || '#1e293b';
     const titleAlign = title.alignment === 'center' || title.alignment === 'right' || title.alignment === 'left' ? title.alignment : 'left';
@@ -4677,7 +4748,7 @@
             id,
             textOnly,
             code: resolvedCode,
-            label: saved.label || saved.code || 'Coupon',
+            label: saved.label || saved.code || bxT('storefront.coupon.coupon', 'Coupon'),
             description: saved.description || '',
             discountType: saved.discountType || 'percentage',
             discountValue: parseFloat(saved.discountValue || 0),
@@ -4692,8 +4763,8 @@
             timerEnabled: saved.timerEnabled === true,
             timerHours: saved.timerHours || 0,
             timerMinutes: saved.timerMinutes != null ? saved.timerMinutes : 15,
-            timerLabel: saved.timerLabel || 'Offer expires in',
-            timerExpiredLabel: saved.timerExpiredLabel || 'Offer expired!',
+            timerLabel: bxText(saved.timerLabel, 'storefront.timer.label', 'Offer expires in'),
+            timerExpiredLabel: bxText(saved.timerExpiredLabel, 'storefront.timer.expired', 'Offer expired!'),
             timerBgColor: saved.timerBgColor || '#fef2f2',
             timerTextColor: saved.timerTextColor || '#991b1b',
             timerAccentColor: saved.timerAccentColor || '#dc2626',
@@ -4707,13 +4778,13 @@
           return {
             id,
             code: override.code || apiCoupon.code || 'CODE',
-            label: override.label || apiCoupon.title || apiCoupon.code || 'Coupon',
+            label: override.label || apiCoupon.title || apiCoupon.code || bxT('storefront.coupon.coupon', 'Coupon'),
             description:
               override.description ||
               apiCoupon.discount_config?.description ||
               (apiCoupon.type === 'amount_off_order' || apiCoupon.discount_config?.type === 'amount_off_order'
-                ? 'Order Discount'
-                : 'Product Discount'),
+                ? bxT('storefront.coupon.order_discount', 'Order Discount')
+                : bxT('storefront.coupon.product_discount', 'Product Discount')),
             discountType: apiCoupon.valueType === 'percentage' ? 'percentage' : 'fixed',
             discountValue: parseFloat(override.discountValue || apiCoupon.value || 0),
             backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#6366f1',
@@ -4746,8 +4817,8 @@
         return {
           id,
           code: override.code || 'CODE',
-          label: override.label || override.headingText || 'Coupon',
-          description: override.description || override.subtextText || 'Discount',
+          label: override.label || override.headingText || bxT('storefront.coupon.coupon', 'Coupon'),
+          description: override.description || override.subtextText || bxT('storefront.drawer.discount', 'Discount'),
           discountType: 'percentage',
           discountValue: parseFloat(override.discountValue || 0),
           backgroundColor: override.backgroundColor || '#6366f1',
@@ -4780,8 +4851,8 @@
     const wrapText = 'white-space:normal;overflow-wrap:anywhere;word-break:break-word;';
     const couponNavHtml = isSingleCoupon ? '' : `
     <div style="display:flex;gap:6px;">
-      <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="Previous coupon">←</button>
-      <button class="cc-nav-btn" onclick="ccCouponNav('right')" title="Next coupon">→</button>
+      <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="${escapeHtml(bxT('storefront.coupon.previous', 'Previous coupon'))}">←</button>
+      <button class="cc-nav-btn" onclick="ccCouponNav('right')" title="${escapeHtml(bxT('storefront.coupon.next', 'Next coupon'))}">→</button>
     </div>`;
 
     let html = `
@@ -4820,7 +4891,7 @@
       const tc = isMinimal ? '#111827' : (coupon.textColor || '#ffffff');
       const accent = isMinimal ? bg : tc;
       const borderR = coupon.borderRadius || 8;
-      const btnLabel = copied ? 'Copied!' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+      const btnLabel = ccCouponButtonLabel(coupon, copied, true);
       const cBg = coupon.copiedBgColor || '#10b981';
       const cTc = coupon.copiedTextColor || '#fff';
       const btnStyle = isMinimal
@@ -4855,7 +4926,7 @@
         // minimal-card: white bg, colored left border, small svg icon, outline button
         const baseColor = coupon.backgroundColor || '#4f46e5';
         const borderR = coupon.borderRadius || 8;
-        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const btnLabel = ccCouponButtonLabel(coupon, coupon.code === _lastCopiedCode, false);
         const iconSvg = ccCouponIcon(coupon, 14, baseColor);
         const isCopied = coupon.code === _lastCopiedCode;
         const cBg = coupon.copiedBgColor || '#10b981';
@@ -4879,7 +4950,7 @@
         const tc = coupon.textColor || '#ffffff';
         const btnBg = coupon.code === _lastCopiedCode ? (coupon.copiedBgColor || '#10b981') : (coupon.buttonBackgroundColor || '#000000');
         const btnTc = coupon.code === _lastCopiedCode ? (coupon.copiedTextColor || '#fff') : (coupon.buttonTextColor || '#ffffff');
-        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied!' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const btnLabel = ccCouponButtonLabel(coupon, coupon.code === _lastCopiedCode, true);
         const borderR = coupon.borderRadius || 8;
         const iconSvg = ccCouponIcon(coupon, 20, tc);
         html += `
@@ -4899,7 +4970,7 @@
         const tc = coupon.textColor || '#ffffff';
         const btnBg = coupon.code === _lastCopiedCode ? (coupon.copiedBgColor || '#10b981') : (coupon.buttonBackgroundColor || '#000000');
         const btnTc = coupon.code === _lastCopiedCode ? (coupon.copiedTextColor || '#fff') : (coupon.buttonTextColor || '#ffffff');
-        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (!coupon.buttonText || coupon.buttonText === 'Apply' ? 'Copy' : coupon.buttonText);
+        const btnLabel = ccCouponButtonLabel(coupon, coupon.code === _lastCopiedCode, false);
         const borderR = coupon.borderRadius || 8;
         const iconSvg = ccCouponIcon(coupon, 14, tc);
         html += `
@@ -4938,11 +5009,11 @@
     const options = variants.map((v) => {
       const price = v.price ? formatMoney(parseFloat(v.price)) : '';
       const compare = v.compareAtPrice && parseFloat(v.compareAtPrice) > parseFloat(v.price || 0) ? formatMoney(parseFloat(v.compareAtPrice)) : '';
-      const label = v.title + (v.available ? '' : ' (Sold out)');
+      const label = v.title + (v.available ? '' : ' (' + bxT('storefront.drawer.sold_out', 'Sold out') + ')');
       return `<option value="${escapeHtml(String(ccExtractNumericId(v.id) || v.id))}"${v.available ? '' : ' disabled'}${String(v.id) === String(detail.variantId) ? ' selected' : ''}`
         + ` data-price="${escapeHtml(price)}" data-compare="${escapeHtml(compare)}" data-image="${escapeHtml(v.image || '')}">${escapeHtml(label)}</option>`;
     }).join('');
-    return `<select class="cc-upsell-variant" aria-label="${escapeHtml('Choose an option for ' + (detail.title || 'this product'))}">${options}</select>`;
+    return `<select class="cc-upsell-variant" aria-label="${escapeHtml(bxT('storefront.upsell.choose_option', 'Choose an option for {title}', { title: detail.title || bxT('storefront.upsell.this_product', 'this product') }))}">${options}</select>`;
   }
 
   // Upsells never hold the drawer back. A new product in the cart can need
@@ -5147,8 +5218,8 @@
 
     const navPrevSymbol = '←';
     const navNextSymbol = '→';
-    const navPrevTitle = 'Scroll left';
-    const navNextTitle = 'Scroll right';
+    const navPrevTitle = escapeHtml(bxT('storefront.upsell.scroll_left', 'Scroll left'));
+    const navNextTitle = escapeHtml(bxT('storefront.upsell.scroll_right', 'Scroll right'));
 
     // --- Container Styles based on Layout AND Direction ---
     let listStyle = `display: ${isGrid ? 'grid' : 'flex'}; gap: ${isCarousel && isVertical ? '14px' : '12px'}; scroll-behavior: smooth;`;
@@ -5180,7 +5251,7 @@
 <div class="cc-upsell-section${upsellConfig.sticky ? ' cc-upsell-section--sticky' : ''}" data-cc-section="upsell" style="padding:16px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellAtTop ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
       }flex-shrink:0;${stickyCss}">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <p style="margin:0;flex:1;min-width:0;text-align:${upsellConfig.upsellTitle.align || 'left'};${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text || 'Product Recommendations')}</p>
+    <p style="margin:0;flex:1;min-width:0;text-align:${upsellConfig.upsellTitle.align || 'left'};${titleStyle}">${escapeHtml(ccUpsellTitle(upsellConfig.upsellTitle.text))}</p>
   </div>
   <div class="cc-upsell-track" style="position:relative;">
   ${showUpsellNav
@@ -5308,7 +5379,7 @@
         // Keyboard navigation — the list itself is the focusable, scrollable region.
         list.setAttribute('tabindex', '0');
         list.setAttribute('role', 'region');
-        list.setAttribute('aria-label', (upsellConfig.upsellTitle.text || 'Recommended products') + ', scroll for more');
+        list.setAttribute('aria-label', bxT('storefront.upsell.list_label', '{title}, scroll for more', { title: ccUpsellTitle(upsellConfig.upsellTitle.text) }));
         list.addEventListener('keydown', (e) => {
           if (e.target && e.target.closest && e.target.closest('select')) return; // the variant dropdown uses arrow keys
           if (e.key === 'ArrowRight') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'right'); }
@@ -5448,7 +5519,8 @@
       var current = select.options[select.selectedIndex];
       if (current && !current.disabled) {
         current.disabled = true;
-        if (current.textContent.indexOf('(Sold out)') === -1) current.textContent += ' (Sold out)';
+        var soldOut = ' (' + bxT('storefront.drawer.sold_out', 'Sold out') + ')';
+        if (current.textContent.indexOf(soldOut) === -1) current.textContent += soldOut;
       }
       for (var i = 0; i < select.options.length; i++) {
         if (!select.options[i].disabled) {
@@ -5474,19 +5546,19 @@
     var origBg = btn.style.background;
 
     btn.disabled = true;
-    btn.textContent = 'Adding...';
+    btn.textContent = bxT('storefront.upsell.adding', 'Adding...');
 
     function onDone(success, soldOut) {
       if (!success && soldOut) {
         var another = ccMarkUpsellSoldOut(btn);
-        btn.textContent = 'Sold out';
+        btn.textContent = bxT('storefront.drawer.sold_out', 'Sold out');
         setTimeout(function () {
           if (another) { btn.textContent = origText; btn.disabled = false; }
         }, 1500);
         return;
       }
       if (success) {
-        btn.textContent = 'Added!';
+        btn.textContent = bxT('storefront.upsell.added', 'Added!');
         btn.style.background = '#10b981';
         setTimeout(function () {
           btn.textContent = origText;

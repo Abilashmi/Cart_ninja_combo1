@@ -56,6 +56,82 @@
     });
   }
   function store(kind) { try { return window[kind]; } catch (e) { return null; } }
+
+  /* i18n-shim:begin (copy of app/i18n/storefront.shared.js I18N_SHIM) */
+  // Shopper-language text: window.BrixI18n comes from brix_i18n_<lang>.js,
+  // which the app embed loads first on a page in a language BRIX has. Without
+  // it the English written at the call site shows (it equals app/i18n/en.json).
+  function bxFill(en, vars) {
+    var v = vars || {};
+    return String(en).replace(/\{(\w+), plural,((?:[^{}]|\{[^{}]*\})*)\}/g, function (m, name, body) {
+      var n = Number(v[name]);
+      var pick = body.match(new RegExp('=' + n + '\\s*\\{([^{}]*)\\}')) || (n === 1 && body.match(/\bone\s*\{([^{}]*)\}/)) || body.match(/\bother\s*\{([^{}]*)\}/);
+      return pick ? pick[1].replace(/#/g, String(n)) : '';
+    }).replace(/\{(\w+)\}/g, function (m, name) {
+      return v[name] === undefined || v[name] === null ? '' : String(v[name]);
+    });
+  }
+  function bxT(key, en, vars) {
+    var i18n = window.BrixI18n;
+    return i18n ? i18n.t(key, en, vars) : bxFill(en, vars);
+  }
+  // Text the merchant can edit: their own words stay; blank or still the
+  // English default shows in the shopper's language.
+  function bxText(saved, key, en, vars) {
+    var i18n = window.BrixI18n;
+    if (i18n) return i18n.text(saved, key, en, vars);
+    var s = saved === undefined || saved === null ? '' : String(saved);
+    return s.replace(/^\s+|\s+$/g, '') ? s : bxFill(en, vars);
+  }
+  function bxDir() {
+    return window.BrixI18n && window.BrixI18n.dir === 'rtl' ? 'rtl' : 'ltr';
+  }
+  /* i18n-shim:end */
+
+  // Server refusals the shopper can see, by code, in their language (the
+  // server's English when BRIX has no text for the code; values the message
+  // needs come in res.details).
+  var COD_ERRORS = {
+    invalid_phone: ['error.cod.invalid_phone', 'Enter a valid 10-digit mobile number.'],
+    invalid_pincode: ['error.cod.invalid_pincode', 'Enter a valid 6-digit PIN code.'],
+    otp_invalid: ['error.cod.otp_invalid', 'Enter the 4-digit code from the SMS.'],
+    otp_locked: ['error.cod.otp_locked', 'Too many wrong tries. Ask for a new code.'],
+    otp_expired: ['error.cod.otp_expired', 'This code has expired. Ask for a new one.'],
+    otp_wrong: ['error.cod.otp_wrong', 'That code doesn\'t match. {attemptsLeft, plural, one {# try left.} other {# tries left.}}'],
+    otp_required: ['error.cod.otp_required', 'Please verify your phone number again.'],
+    otp_send_failed: ['error.cod.otp_send_failed', 'We couldn\'t send the code to this number. Check it and try again, or pay online.'],
+    item_unavailable: ['error.cod.item_unavailable', 'One of the items in your cart is no longer available. Refresh the page and try again.'],
+    item_sold_out: ['error.cod.item_sold_out', '{title} is sold out.'],
+    checkout_only: ['error.cod.checkout_only', 'This cart has a Pack or free gift that is only available with online payment.'],
+    in_progress: ['error.cod.in_progress', 'Your order is already being placed. Please wait a moment.'],
+    database_error: ['error.cod.unavailable', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.'],
+    storage_missing: ['error.cod.unavailable', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.'],
+    cod_disabled: ['error.cod.disabled', 'Cash on Delivery is not available right now. Please pay online.'],
+    rate_limited: ['error.cod.rate_limited', 'Too many attempts. Please wait a few minutes and try again.'],
+    shopify_error: ['error.cod.shopify_error', 'We couldn\'t reach the store right now. Please try again, or pay online.'],
+    calculate_failed: ['error.cod.calculate_failed', 'We couldn\'t price this order. Please try again, or pay online.'],
+    draft_not_ready: ['error.cod.draft_not_ready', 'The store took too long to confirm your order. Please try again.'],
+    combo_price_mismatch: ['error.cod.combo_price_mismatch', 'Cash on Delivery can\'t be used for this box right now. Please pay online.'],
+    no_delivery_option: ['error.cod.no_delivery_option', 'No delivery option is available for this address and cart right now. Please try another address, or pay online.'],
+    daily_limit: ['error.cod.daily_limit', 'This number has reached today\'s limit of {limit, plural, one {# Cash on Delivery order} other {# Cash on Delivery orders}}. Please pay online to order again.'],
+    invalid_request: ['error.cod.invalid_request', 'Refresh the page and try again.'],
+    network: ['error.network', 'We couldn\'t connect. Check your internet and try again.'],
+    internal_error: ['error.generic', 'Something went wrong. Please try again.']
+  };
+  // A translated sentence holding one piece of HTML (a link, a bold price):
+  // the message has {name} where it goes, so each language can place it.
+  function bxHtml(key, en, name, html, vars) {
+    var v = Object.assign({}, vars);
+    v[name] = '\u0001';
+    return esc(bxT(key, en, v)).replace('\u0001', html);
+  }
+  function errorText(res) {
+    var known = res && res.code && Object.prototype.hasOwnProperty.call(COD_ERRORS, res.code) ? COD_ERRORS[res.code] : null;
+    var vars = res && res.details && res.details.vars;
+    // A message with values only when the server sent them.
+    if (known && (!/\{/.test(known[1]) || vars)) return bxT(known[0], known[1], vars);
+    return (res && res.error) || bxT('error.generic', 'Something went wrong. Please try again.');
+  }
   function readStore(kind, key) {
     try { var s = store(kind); var raw = s && s.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
@@ -126,6 +202,9 @@
     if (!pct || price == null || !isFinite(value) || value < (Number(cfg.codFeePercentFrom) || 0)) return fixed;
     return Math.round(value * pct) / 100;
   }
+  // The merchant's COD button texts; left at the English default = the shopper's language.
+  function drawerText(cfg) { return bxText(cfg.buttons && cfg.buttons.drawerText, 'storefront.cod.button', 'Cash on Delivery'); }
+  function productText(cfg) { return bxText(cfg.buttons && cfg.buttons.productText, 'storefront.cod.product_button', 'Buy with Cash on Delivery'); }
   function hasCodFee(cfg) { return Boolean(cfg && (cfg.codFee > 0 || cfg.codFeePercent > 0)); }
 
   // A COD button's text for this price (null = not known yet).
@@ -142,9 +221,9 @@
   function api(endpoint, body) {
     var init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ endpoint: endpoint, shop: SHOP }, body)) };
     return window.fetch(PHP_API + '/cod_checkout.php', init).then(function (res) {
-      return res.json().catch(function () { return { success: false, error: 'Something went wrong. Please try again.' }; });
+      return res.json().catch(function () { return { success: false, code: 'internal_error', error: bxT('error.generic', 'Something went wrong. Please try again.') }; });
     }, function () {
-      return { success: false, code: 'network', error: "We couldn't connect. Check your internet and try again." };
+      return { success: false, code: 'network', error: bxT('error.network', 'We couldn\'t connect. Check your internet and try again.') };
     });
   }
 
@@ -758,11 +837,12 @@
     // rules like Dawn's `div:empty{display:none}` would otherwise hide it.
     host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:block !important;';
     var shadow = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
-    shadow.innerHTML = '<style>' + CSS + '</style><div class="ov" part="overlay"><div class="sh" role="dialog" aria-modal="true" aria-label="Cash on Delivery checkout"></div></div>';
+    shadow.innerHTML = '<style>' + CSS + '</style><div class="ov" part="overlay"><div class="sh" role="dialog" aria-modal="true" aria-label="' + esc(bxT('storefront.cod.sheet_label', 'Cash on Delivery checkout')) + '"></div></div>';
     this.host = host;
     this.shadow = shadow;
     this.ov = shadow.querySelector('.ov');
     this.sh = shadow.querySelector('.sh');
+    this.sh.setAttribute('dir', bxDir());
     this.sh.style.setProperty('--cod-bg', this.cfg.buttons.bg);
     this.sh.style.setProperty('--cod-fg', this.cfg.buttons.color);
     var look = Object.assign({}, LOOK_DEFAULTS, this.cfg.sheet || {});
@@ -843,7 +923,11 @@
 
   Sheet.prototype.otpFlow = function () { return Boolean(this.cfg.otpRequired); };
 
-  var STAGE_LABEL = { phone: 'Phone', address: 'Address', review: 'Review' };
+  function stageLabel(stage) {
+    if (stage === 'phone') return bxT('storefront.cod.step_phone', 'Phone');
+    if (stage === 'address') return bxT('storefront.cod.step_address', 'Address');
+    return bxT('storefront.cod.step_review', 'Review');
+  }
   var VIEW_ORDER = { phone: 0, otp: 1, address: 2, review: 3 };
 
   Sheet.prototype.stages = function () { return this.otpFlow() ? ['phone', 'address', 'review'] : ['address', 'review']; };
@@ -852,20 +936,20 @@
   Sheet.prototype.head = function (title, back) {
     var logo = this.look.logo;
     return '<div class="grab" aria-hidden="true"></div><div class="hd">' +
-      (back ? '<button type="button" class="ib" data-go="' + back + '" aria-label="Back">' + icon('back', 20) + '</button>' : '') +
-      '<div class="t">' + (logo ? '<img class="lg ' + esc(this.look.logoSize) + '" src="' + esc(logo) + '" alt="Store logo">' : esc(title)) + '</div>' +
-      '<span class="tag">' + icon('cash', 13) + 'COD</span>' +
-      '<button type="button" class="ib" data-act="close" aria-label="Close">' + icon('close', 20) + '</button></div>';
+      (back ? '<button type="button" class="ib" data-go="' + back + '" aria-label="' + esc(bxT('storefront.common.back', 'Back')) + '">' + icon('back', 20) + '</button>' : '') +
+      '<div class="t">' + (logo ? '<img class="lg ' + esc(this.look.logoSize) + '" src="' + esc(logo) + '" alt="' + esc(bxT('storefront.cod.store_logo', 'Store logo')) + '">' : esc(title)) + '</div>' +
+      '<span class="tag">' + icon('cash', 13) + esc(bxT('storefront.cod.tag', 'COD')) + '</span>' +
+      '<button type="button" class="ib" data-act="close" aria-label="' + esc(bxT('storefront.common.close', 'Close')) + '">' + icon('close', 20) + '</button></div>';
   };
 
   // stage: 'phone' | 'address' | 'review' (labelled stepper), or null for none.
   Sheet.prototype.frame = function (title, back, stage, body, foot) {
     var stages = this.stages(), idx = stages.indexOf(stage), bar = '';
     if (idx !== -1) {
-      bar = '<div class="stp" role="img" aria-label="Step ' + (idx + 1) + ' of ' + stages.length + ': ' + STAGE_LABEL[stage] + '">';
+      bar = '<div class="stp" role="img" aria-label="' + esc(bxT('storefront.cod.step_of', 'Step {step} of {total}: {name}', { step: idx + 1, total: stages.length, name: stageLabel(stage) })) + '">';
       for (var i = 0; i < stages.length; i++) {
         if (i) bar += '<span class="ln' + (i <= idx ? ' on' : '') + '"></span>';
-        bar += '<span class="s' + (i < idx ? ' dn' : i === idx ? ' cur' : '') + '"><b>' + (i < idx ? icon('check', 14) : i + 1) + '</b>' + STAGE_LABEL[stages[i]] + '</span>';
+        bar += '<span class="s' + (i < idx ? ' dn' : i === idx ? ' cur' : '') + '"><b>' + (i < idx ? icon('check', 14) : i + 1) + '</b>' + esc(stageLabel(stages[i])) + '</span>';
       }
       bar += '</div>';
     }
@@ -885,15 +969,15 @@
   }
 
   Sheet.prototype.powered = function () {
-    return '<div class="pw">' + icon('shield', 12) + '<span>Secured &amp; powered by</span>' + brixMark() + '</div>';
+    return '<div class="pw">' + icon('shield', 12) + '<span>' + esc(bxT('storefront.cod.powered', 'Secured & powered by')) + '</span>' + brixMark() + '</div>';
   };
 
   // BRIX-branded loader, shown first while COD is checked for this cart.
   Sheet.prototype.loading = function (text) {
     if (!this.loadingSince) this.loadingSince = Date.now();
-    this.sh.innerHTML = this.head('Cash on Delivery') +
+    this.sh.innerHTML = this.head(bxT('storefront.cod.title', 'Cash on Delivery')) +
       '<div class="bl" role="status" aria-live="polite"><div class="bl-m">' + brixMark() + '</div>' +
-      '<div class="bl-bar" aria-hidden="true"><i></i></div><div class="bl-t">' + esc(text || 'Loading\u2026') + '</div></div>';
+      '<div class="bl-bar" aria-hidden="true"><i></i></div><div class="bl-t">' + esc(text || bxT('storefront.common.loading', 'Loading\u2026')) + '</div></div>';
   };
 
   // Keeps the BRIX loader up long enough to be seen, never longer than needed.
@@ -904,15 +988,15 @@
 
   Sheet.prototype.payOnlineButton = function (label) {
     return typeof this.opts.onPayOnline === 'function'
-      ? '<button type="button" class="b s" data-act="online">' + icon('card', 18) + esc(label || 'Pay online instead') + '</button>'
+      ? '<button type="button" class="b s" data-act="online">' + icon('card', 18) + esc(label || bxT('storefront.cod.pay_online_instead', 'Pay online instead')) + '</button>'
       : '';
   };
 
   Sheet.prototype.fail = function (message) {
-    this.frame('Cash on Delivery', null, null,
+    this.frame(bxT('storefront.cod.title', 'Cash on Delivery'), null, null,
       '<div class="fail"><div class="ic">' + icon('alert', 28) + '</div>' +
-      '<div class="n er" role="alert">' + esc(message || 'Something went wrong. Please try again.') + '</div></div>',
-      this.payOnlineButton('Pay online') + '<button type="button" class="b s" data-act="close">Close</button>');
+      '<div class="n er" role="alert">' + esc(message || bxT('error.generic', 'Something went wrong. Please try again.')) + '</div></div>',
+      this.payOnlineButton(bxT('storefront.cod.pay_online', 'Pay online')) + '<button type="button" class="b s" data-act="close">' + esc(bxT('storefront.common.close', 'Close')) + '</button>');
   };
 
   Sheet.prototype.setError = function (message) {
@@ -924,7 +1008,7 @@
     this.busy = busy;
     var btn = this.sh.querySelector('button[type="submit"]');
     if (btn) {
-      if (busy) { btn.setAttribute('data-label', btn.innerHTML); btn.innerHTML = '<span class="sp" style="width:18px;height:18px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:currentColor"></span> ' + esc(label || 'Please wait\u2026'); }
+      if (busy) { btn.setAttribute('data-label', btn.innerHTML); btn.innerHTML = '<span class="sp" style="width:18px;height:18px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:currentColor"></span> ' + esc(label || bxT('storefront.common.please_wait', 'Please wait\u2026')); }
       else if (btn.getAttribute('data-label')) btn.innerHTML = btn.getAttribute('data-label');
       btn.disabled = busy;
     }
@@ -937,8 +1021,8 @@
     return q.lines.map(function (li) {
       var price = li.total < li.originalTotal ? '<span class="st">' + fmt(li.originalTotal) + '</span>' + fmt(li.total) : fmt(li.total);
       return '<div class="li"><div class="im">' + (li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<div class="ph"></div>') +
-        '<span class="q" aria-label="Quantity ' + li.quantity + '">' + li.quantity + '</span></div>' +
-        '<div><div class="nm">' + esc(li.title) + '</div><div class="mu">' + (li.variantTitle ? esc(li.variantTitle) + ' \u00b7 ' : '') + 'Qty ' + li.quantity + '</div></div>' +
+        '<span class="q" aria-label="' + esc(bxT('storefront.common.quantity_n', 'Quantity {count}', { count: li.quantity })) + '">' + li.quantity + '</span></div>' +
+        '<div><div class="nm">' + esc(li.title) + '</div><div class="mu">' + (li.variantTitle ? esc(li.variantTitle) + ' \u00b7 ' : '') + esc(bxT('storefront.cod.qty_n', 'Qty {count}', { count: li.quantity })) + '</div></div>' +
         '<div class="num" style="font-weight:650">' + price + '</div></div>';
     }).join('');
   };
@@ -950,27 +1034,27 @@
     var count = q.lines.reduce(function (n, li) { return n + (Number(li.quantity) || 0); }, 0);
     var thumbs = q.lines.slice(0, 3).map(function (li) { return li.image ? '<img src="' + esc(li.image) + '" alt="">' : '<span class="ph"></span>'; }).join('');
     var open = Boolean(this.summaryOpen);
-    var extra = !hasCodFee(this.cfg) ? 'Shipping is added at review.'
-      : this.cfg.showCodFee === false ? 'Delivery charges are added at review.'
-        : 'Shipping and the ' + feeLabel(this.cfg) + ' are added at review.';
+    var extra = !hasCodFee(this.cfg) ? bxT('storefront.cod.shipping_at_review', 'Shipping is added at review.')
+      : this.cfg.showCodFee === false ? bxT('storefront.cod.delivery_at_review', 'Delivery charges are added at review.')
+        : bxT('storefront.cod.fee_at_review', 'Shipping and the {fee} are added at review.', { fee: feeLabel(this.cfg) });
     return '<div class="sum' + (open ? ' open' : '') + '"><button type="button" class="sum-h" data-act="summary" aria-expanded="' + open + '">' +
-      '<span class="thumbs">' + thumbs + '</span><span class="sum-t"><b>' + count + (count === 1 ? ' item' : ' items') + '</b><span class="mu">Order summary</span></span>' +
+      '<span class="thumbs">' + thumbs + '</span><span class="sum-t"><b>' + esc(bxT('storefront.drawer.items', '{count, plural, one {# item} other {# items}}', { count: count })) + '</b><span class="mu">' + esc(bxT('storefront.cod.order_summary', 'Order summary')) + '</span></span>' +
       '<span class="num sum-p">' + this.fmt(q.subtotal) + '</span>' + icon('chevron', 18, ' class="chev"') + '</button>' +
-      '<div class="sum-b"><div><div class="in">' + this.lineList(q) + '<div class="mu">' + extra + '</div></div></div></div></div>';
+      '<div class="sum-b"><div><div class="in">' + this.lineList(q) + '<div class="mu">' + esc(extra) + '</div></div></div></div></div>';
   };
 
   Sheet.prototype.phoneInput = function (id, autofocus) {
     return '<div class="pre' + (normalizePhone(this.phone) ? ' valid' : '') + '"><span>' + icon('phone', 16) + '+91</span>' +
-      '<input id="' + id + '" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="' + esc(this.phone) + '"' + (autofocus ? ' data-autofocus' : '') + '>' +
+      '<input id="' + id + '" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="' + esc(bxT('storefront.cod.phone_placeholder', '10-digit mobile number')) + '" value="' + esc(this.phone) + '"' + (autofocus ? ' data-autofocus' : '') + '>' +
       icon('checkCircle', 20, ' class="okc"') + '</div>';
   };
 
   Sheet.prototype.trust = function () {
     if (!this.look.showTrust) return '';
     return '<div class="trust">' +
-      '<div>' + icon('cash', 20) + 'No advance payment</div>' +
-      '<div>' + icon('truck', 20) + 'Pay at your doorstep</div>' +
-      '<div>' + icon('shield', 20) + (this.otpFlow() ? 'Verified by OTP' : 'Secure checkout') + '</div></div>';
+      '<div>' + icon('cash', 20) + esc(bxT('storefront.cod.trust_no_advance', 'No advance payment')) + '</div>' +
+      '<div>' + icon('truck', 20) + esc(bxT('storefront.cod.trust_doorstep', 'Pay at your doorstep')) + '</div>' +
+      '<div>' + icon('shield', 20) + esc(this.otpFlow() ? bxT('storefront.cod.trust_otp', 'Verified by OTP') : bxT('storefront.cod.trust_secure', 'Secure checkout')) + '</div></div>';
   };
 
   // A quote request. With the address it also carries city and state (dynamic
@@ -990,10 +1074,10 @@
   /* --- start: a first quote without address fails fast on min/max, sold out, excluded products --- */
   Sheet.prototype.start = function () {
     var self = this;
-    this.loading('Checking Cash on Delivery\u2026');
+    this.loading(bxT('storefront.cod.checking', 'Checking Cash on Delivery\u2026'));
     api('quote', this.quoteBody(this.coupon, false)).then(function (json) {
       self.afterLoader(function () {
-        if (!json.success) { self.fail(json.error); return; }
+        if (!json.success) { self.fail(errorText(json)); return; }
         self.quote = json.quote;
         self.track('begin_checkout');
         self.go(self.otpFlow() && !self.validToken() ? 'phone' : 'address');
@@ -1014,22 +1098,22 @@
   };
 
   Sheet.prototype.viewPhone = function () {
-    this.frame('Confirm your phone', null, 'phone',
+    this.frame(bxT('storefront.cod.confirm_phone', 'Confirm your phone'), null, 'phone',
       this.summary() +
-      '<div class="f"><label for="cod-phone">Mobile number</label>' + this.phoneInput('cod-phone', true) + '</div>' +
-      '<p class="mu" style="margin:-6px 0 0">We\'ll text you a 4-digit code to confirm this Cash on Delivery order.</p>' +
+      '<div class="f"><label for="cod-phone">' + esc(bxT('storefront.cod.mobile_number', 'Mobile number')) + '</label>' + this.phoneInput('cod-phone', true) + '</div>' +
+      '<p class="mu" style="margin:-6px 0 0">' + esc(bxT('storefront.cod.otp_intro', 'We\'ll text you a 4-digit code to confirm this Cash on Delivery order.')) + '</p>' +
       '<div data-err></div>' + this.trust(),
-      '<button type="submit" class="b p">Send code</button>' + this.payOnlineButton());
+      '<button type="submit" class="b p">' + esc(bxT('storefront.cod.send_code', 'Send code')) + '</button>' + this.payOnlineButton());
     this.submitAction = 'send';
   };
 
   Sheet.prototype.viewOtp = function () {
-    this.frame('Enter the code', 'phone', 'phone',
-      '<p style="margin:4px 0 0;text-align:center">Enter the 4-digit code sent to<br><b>+91 ' + esc(prettyPhone(this.phone)) + '</b> <button type="button" class="lk" data-go="phone">Change</button></p>' +
-      '<div class="otpw" data-otp><input id="cod-otp" name="code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="4" aria-label="4-digit code" data-autofocus>' +
+    this.frame(bxT('storefront.cod.enter_code', 'Enter the code'), 'phone', 'phone',
+      '<p style="margin:4px 0 0;text-align:center">' + esc(bxT('storefront.cod.code_sent_to', 'Enter the 4-digit code sent to')) + '<br><b dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</b> <button type="button" class="lk" data-go="phone">' + esc(bxT('storefront.common.change', 'Change')) + '</button></p>' +
+      '<div class="otpw" data-otp><input id="cod-otp" name="code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="4" aria-label="' + esc(bxT('storefront.cod.code_label', '4-digit code')) + '" data-autofocus>' +
       '<i></i><i></i><i></i><i></i></div>' +
       '<div data-err></div><div class="rs" data-resend aria-live="polite"></div>',
-      '<button type="submit" class="b p">Verify</button>');
+      '<button type="submit" class="b p">' + esc(bxT('storefront.cod.verify', 'Verify')) + '</button>');
     this.submitAction = 'verify';
     this.paintOtp(false);
     this.startResendTimer();
@@ -1059,8 +1143,8 @@
       var dash = 44, off = dash * (1 - left / total);
       el.innerHTML = left > 0
         ? '<svg class="ring" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" stroke="#e5e7eb"/><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-dasharray="' + dash + '" stroke-dashoffset="' + off.toFixed(1) + '" style="transition:stroke-dashoffset 1s linear"/></svg>' +
-          '<span>Resend code in 0:' + (left < 10 ? '0' : '') + left + '</span>'
-        : '<span>Didn\'t get it?</span> <button type="button" class="lk" data-act="resend">Send a new code</button>';
+          '<span>' + esc(bxT('storefront.cod.resend_in', 'Resend code in {time}', { time: '0:' + (left < 10 ? '0' : '') + left })) + '</span>'
+        : '<span>' + esc(bxT('storefront.cod.didnt_get', 'Didn\'t get it?')) + '</span> <button type="button" class="lk" data-act="resend">' + esc(bxT('storefront.cod.send_new_code', 'Send a new code')) + '</button>';
     }
     paint();
     this.resendTimer = setInterval(function () { left -= 1; paint(); if (left <= 0) clearInterval(self.resendTimer); }, 1000);
@@ -1076,32 +1160,32 @@
     // in the DOM (hidden) so it's what we read and submit either way.
     if (this.editAddr == null) this.editAddr = !this.addrComplete(a);
     var editing = this.editAddr;
-    var stateOptions = '<option value="">Select state</option>' + STATES.map(function (s) {
+    var stateOptions = '<option value="">' + esc(bxT('storefront.cod.select_state', 'Select state')) + '</option>' + STATES.map(function (s) {
       return '<option' + (a.state === s ? ' selected' : '') + '>' + esc(s) + '</option>';
     }).join('');
     var phoneBlock = this.otpFlow()
-      ? '<div class="n ok">' + icon('checkCircle', 16) + '<span style="flex:1">Phone verified \u00b7 +91 ' + esc(prettyPhone(this.phone)) + '</span><button type="button" class="lk" data-go="phone">Change</button></div>'
-      : '<div class="f"><label for="cod-phone2">Mobile number</label>' + this.phoneInput('cod-phone2', false) + '</div>';
+      ? '<div class="n ok">' + icon('checkCircle', 16) + '<span style="flex:1">' + esc(bxT('storefront.cod.phone_verified', 'Phone verified')) + ' \u00b7 <span dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</span></span><button type="button" class="lk" data-go="phone">' + esc(bxT('storefront.common.change', 'Change')) + '</button></div>'
+      : '<div class="f"><label for="cod-phone2">' + esc(bxT('storefront.cod.mobile_number', 'Mobile number')) + '</label>' + this.phoneInput('cod-phone2', false) + '</div>';
     var card = editing ? '' :
       '<div class="card" data-card>' + icon('home', 20, ' class="ic"') + '<div class="cb"><b>' + esc(a.name) + '</b>' +
       esc(a.address1) + (a.address2 ? ', ' + esc(a.address2) : '') + '<br>' + esc(a.city) + ', ' + esc(a.state) + ' ' + esc(a.pincode) +
       (this.otpFlow() ? '' : '<br>+91 ' + esc(prettyPhone(this.phone))) + '</div>' +
-      '<button type="button" class="lk" data-act="edit-addr">Change</button></div>';
+      '<button type="button" class="lk" data-act="edit-addr">' + esc(bxT('storefront.common.change', 'Change')) + '</button></div>';
     var pinSlot = '<div data-pin></div>';
-    this.frame('Delivery address', this.otpFlow() ? 'phone' : null, 'address',
+    this.frame(bxT('storefront.cod.delivery_address', 'Delivery address'), this.otpFlow() ? 'phone' : null, 'address',
       this.summary() + (this.otpFlow() ? phoneBlock : '') +
-      '<div class="ttl">Deliver to</div>' + card + (editing ? '' : pinSlot) +
+      '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + card + (editing ? '' : pinSlot) +
       '<div class="fm"' + (editing ? '' : ' hidden') + '>' + (this.otpFlow() ? '' : phoneBlock) +
-      '<div class="f"><label for="cod-name">Full name</label><input id="cod-name" name="name" autocomplete="name" value="' + esc(a.name || '') + '"' + (editing ? ' data-autofocus' : '') + '></div>' +
-      '<div class="f"><label for="cod-a1">House no., building, street, area</label><input id="cod-a1" name="address1" autocomplete="address-line1" value="' + esc(a.address1 || '') + '"></div>' +
-      '<div class="f"><label for="cod-a2">Landmark (optional)</label><input id="cod-a2" name="address2" autocomplete="address-line2" placeholder="e.g. Near City Mall" value="' + esc(a.address2 || '') + '"></div>' +
-      '<div class="two" data-pinrow><div class="f"><label for="cod-pin">PIN code</label><input id="cod-pin" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" placeholder="6 digits" value="' + esc(a.pincode || '') + '"></div>' +
-      '<div class="f"><label for="cod-city">City</label><input id="cod-city" name="city" autocomplete="address-level2" value="' + esc(a.city || '') + '"></div></div>' +
+      '<div class="f"><label for="cod-name">' + esc(bxT('storefront.cod.full_name', 'Full name')) + '</label><input id="cod-name" name="name" autocomplete="name" value="' + esc(a.name || '') + '"' + (editing ? ' data-autofocus' : '') + '></div>' +
+      '<div class="f"><label for="cod-a1">' + esc(bxT('storefront.cod.address1', 'House no., building, street, area')) + '</label><input id="cod-a1" name="address1" autocomplete="address-line1" value="' + esc(a.address1 || '') + '"></div>' +
+      '<div class="f"><label for="cod-a2">' + esc(bxT('storefront.cod.address2', 'Landmark (optional)')) + '</label><input id="cod-a2" name="address2" autocomplete="address-line2" placeholder="' + esc(bxT('storefront.cod.address2_placeholder', 'e.g. Near City Mall')) + '" value="' + esc(a.address2 || '') + '"></div>' +
+      '<div class="two" data-pinrow><div class="f"><label for="cod-pin">' + esc(bxT('storefront.cod.pincode', 'PIN code')) + '</label><input id="cod-pin" name="pincode" inputmode="numeric" autocomplete="postal-code" maxlength="6" placeholder="' + esc(bxT('storefront.cod.pincode_placeholder', '6 digits')) + '" value="' + esc(a.pincode || '') + '"></div>' +
+      '<div class="f"><label for="cod-city">' + esc(bxT('storefront.cod.city', 'City')) + '</label><input id="cod-city" name="city" autocomplete="address-level2" value="' + esc(a.city || '') + '"></div></div>' +
       (editing ? pinSlot : '') +
-      '<div class="f"><label for="cod-state">State</label><select id="cod-state" name="state" autocomplete="address-level1">' + stateOptions + '</select></div>' +
-      '<div class="f"><label for="cod-email">Email (optional, for order updates)</label><input id="cod-email" name="email" type="email" autocomplete="email" value="' + esc(a.email || '') + '"></div>' +
+      '<div class="f"><label for="cod-state">' + esc(bxT('storefront.cod.state', 'State')) + '</label><select id="cod-state" name="state" autocomplete="address-level1">' + stateOptions + '</select></div>' +
+      '<div class="f"><label for="cod-email">' + esc(bxT('storefront.cod.email', 'Email (optional, for order updates)')) + '</label><input id="cod-email" name="email" type="email" autocomplete="email" value="' + esc(a.email || '') + '"></div>' +
       '</div><div data-err></div>',
-      '<button type="submit" class="b p">' + (editing ? 'Continue' : 'Deliver here') + '</button>' + '<span data-alt hidden>' + this.payOnlineButton() + '</span>');
+      '<button type="submit" class="b p">' + esc(editing ? bxT('storefront.common.continue', 'Continue') : bxT('storefront.cod.deliver_here', 'Deliver here')) + '</button>' + '<span data-alt hidden>' + this.payOnlineButton() + '</span>');
     this.submitAction = 'address';
     if (a.pincode && /^[1-9]\d{5}$/.test(a.pincode)) this.lookupPin(a.pincode, true);
   };
@@ -1117,7 +1201,7 @@
     if (slot && row) row.parentNode.insertBefore(slot, row.nextSibling);
     if (fm) fm.hidden = false;
     var btn = this.sh.querySelector('button[type="submit"]');
-    if (btn && !this.busy) btn.textContent = 'Continue';
+    if (btn && !this.busy) btn.textContent = bxT('storefront.common.continue', 'Continue');
     var name = this.sh.querySelector('#cod-name');
     if (name) { try { name.focus(); } catch (e) { /* ignore */ } }
   };
@@ -1126,7 +1210,7 @@
     var self = this;
     var note = this.sh.querySelector('[data-pin]');
     if ((this.cfg.blockedPincodes || []).indexOf(pin) !== -1) { this.showPinBlocked(pin); return; }
-    if (note) note.innerHTML = '<div class="pst"><span class="sp" style="width:14px;height:14px;border-width:2px"></span>Checking PIN code\u2026</div>';
+    if (note) note.innerHTML = '<div class="pst"><span class="sp" style="width:14px;height:14px;border-width:2px"></span>' + esc(bxT('storefront.cod.checking_pin', 'Checking PIN code\u2026')) + '</div>';
     phpGet('pincode', '&pin=' + encodeURIComponent(pin)).then(function (json) {
       if (self.view !== 'address') return;
       var pinInput = self.sh.querySelector('#cod-pin');
@@ -1144,14 +1228,14 @@
           if (match) { state.value = match; state.removeAttribute('aria-invalid'); }
         }
         // In card mode the card already shows the place; only confirm it while editing.
-        if (slot) slot.innerHTML = self.editAddr ? '<div class="pst ok">' + icon('checkCircle', 16) + 'Delivering to ' + esc(json.city) + ', ' + esc(json.state) + '</div>' : '';
+        if (slot) slot.innerHTML = self.editAddr ? '<div class="pst ok">' + icon('checkCircle', 16) + esc(bxT('storefront.cod.delivering_to', 'Delivering to {city}, {state}', { city: json.city, state: json.state })) + '</div>' : '';
       } else if (slot) slot.innerHTML = '';
     });
   };
 
   Sheet.prototype.showPinBlocked = function (pin) {
     var note = this.sh.querySelector('[data-pin]');
-    if (note) note.innerHTML = '<div class="n er" role="alert">' + icon('alert', 16) + '<span>Cash on Delivery isn\'t available for PIN code ' + esc(pin) + '. You can still pay online.</span></div>';
+    if (note) note.innerHTML = '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(bxT('storefront.cod.pin_blocked', 'Cash on Delivery isn\'t available for PIN code {pin}. You can still pay online.', { pin: pin })) + '</span></div>';
     this.togglePinBlocked(true);
   };
 
@@ -1180,25 +1264,25 @@
 
   Sheet.prototype.viewReview = function () {
     var self = this;
-    this.frame('Review your order', 'address', 'review',
-      '<div class="sk" role="status" aria-label="Getting your total" style="padding:6px 0"><i class="bx"></i><i style="width:70%"></i><i style="width:45%"></i><i class="bx" style="height:96px"></i><i class="bx" style="height:72px"></i></div>', '');
+    this.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review',
+      '<div class="sk" role="status" aria-label="' + esc(bxT('storefront.cod.getting_total', 'Getting your total')) + '" style="padding:6px 0"><i class="bx"></i><i style="width:70%"></i><i style="width:45%"></i><i class="bx" style="height:96px"></i><i class="bx" style="height:72px"></i></div>', '');
     var asked = this.delivery && this.delivery.option;
     api('quote', this.quoteBody(this.coupon, true)).then(function (json) {
       if (self.view !== 'review') return;
       if (!json.success) {
-        self.frame('Review your order', 'address', 'review', '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(json.error) + '</span></div>', self.payOnlineButton('Pay online') + '<button type="button" class="b s" data-go="address">Change address</button>');
+        self.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review', '<div class="n er" role="alert">' + icon('alert', 16) + '<span>' + esc(errorText(json)) + '</span></div>', self.payOnlineButton(bxT('storefront.cod.pay_online', 'Pay online')) + '<button type="button" class="b s" data-go="address">' + esc(bxT('storefront.cod.change_address', 'Change address')) + '</button>');
         return;
       }
       self.quote = json.quote;
       self.syncDelivery();
       // The option picked earlier isn't offered for this address or cart any more.
       if (asked && self.delivery && self.delivery.option !== asked && !self.reviewNotice) {
-        self.reviewNotice = 'Your earlier delivery choice isn\'t available for this address, so we picked ' + self.deliveryName() + '.';
+        self.reviewNotice = bxT('storefront.cod.delivery_repicked', 'Your earlier delivery choice isn\'t available for this address, so we picked {option}.', { option: self.deliveryName() });
       }
       self.track('add_payment_info');
       if (json.quote.coupon && !json.quote.coupon.applied) {
         self.couponDraft = json.quote.coupon.code;
-        self.couponError = json.quote.coupon.message || (json.quote.coupon.code + ' can\'t be used on this order, so it was left off.');
+        self.couponError = json.quote.coupon.message || bxT('storefront.cod.coupon_left_off', '{code} can\'t be used on this order, so it was left off.', { code: json.quote.coupon.code });
         self.coupon = null;
       }
       self.renderReview();
@@ -1214,18 +1298,18 @@
     if (!applied && !this.look.showCoupon && !this.couponError) return '';
     if (applied) {
       return '<div class="cpn ok' + (this.couponJustApplied ? ' pop' : '') + '" role="status">' + icon('tag', 18) +
-        '<div class="cb"><b>' + esc(q.coupon.code) + ' applied</b><span>You save ' + this.fmt(q.discounts) + ' on this order</span></div>' +
-        '<button type="button" class="lk" data-act="coupon-remove">Remove</button></div>';
+        '<div class="cb"><b>' + esc(bxT('storefront.cod.coupon_applied', '{code} applied', { code: q.coupon.code })) + '</b><span>' + esc(bxT('storefront.cod.you_save_order', 'You save {amount} on this order', { amount: this.fmt(q.discounts) })) + '</span></div>' +
+        '<button type="button" class="lk" data-act="coupon-remove">' + esc(bxT('storefront.common.remove', 'Remove')) + '</button></div>';
     }
     var offers = this.look.showCoupon ? this.offersList() : '';
     if (!this.couponOpen && !this.couponError) {
-      return '<button type="button" class="cpn-add" data-act="coupon-open">' + icon('tag', 16) + '<span>' + esc(this.look.couponLabel || 'Have a coupon code?') + '</span><b>Add</b></button>' + offers;
+      return '<button type="button" class="cpn-add" data-act="coupon-open">' + icon('tag', 16) + '<span>' + esc(bxText(this.look.couponLabel, 'storefront.cod.coupon_prompt', 'Have a coupon code?')) + '</span><b>' + esc(bxT('storefront.drawer.add', 'Add')) + '</b></button>' + offers;
     }
     var canPaste = Boolean(navigator.clipboard && navigator.clipboard.readText);
     return '<div class="cpn-form' + (this.couponError ? ' bad' : '') + '"><div class="cpn-in">' + icon('tag', 16) +
-      '<input name="coupon" aria-label="Coupon code" placeholder="Enter coupon code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="60" value="' + esc(this.couponDraft || '') + '">' +
-      (canPaste ? '<button type="button" class="cpn-paste" data-act="coupon-paste">Paste</button>' : '') +
-      '<button type="button" class="cpn-go" data-act="coupon-apply">APPLY</button></div></div>' +
+      '<input name="coupon" aria-label="' + esc(bxT('storefront.cod.coupon_code', 'Coupon code')) + '" placeholder="' + esc(bxT('storefront.cod.coupon_placeholder', 'Enter coupon code')) + '" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="60" value="' + esc(this.couponDraft || '') + '">' +
+      (canPaste ? '<button type="button" class="cpn-paste" data-act="coupon-paste">' + esc(bxT('storefront.cod.paste', 'Paste')) + '</button>' : '') +
+      '<button type="button" class="cpn-go" data-act="coupon-apply">' + esc(bxT('storefront.cod.apply_caps', 'APPLY')) + '</button></div></div>' +
       (this.couponError ? '<div class="cpn-err" role="alert">' + icon('alert', 14) + '<span>' + esc(this.couponError) + '</span></div>' : '') + offers;
   };
 
@@ -1233,10 +1317,10 @@
   Sheet.prototype.offersList = function () {
     var offers = this.look.offers || [];
     if (!offers.length) return '';
-    return '<div class="ofrs"><div class="ofrs-t">Available offers<span>' + offers.length + '</span></div>' + offers.map(function (o) {
+    return '<div class="ofrs"><div class="ofrs-t">' + esc(bxT('storefront.cod.available_offers', 'Available offers')) + '<span>' + offers.length + '</span></div>' + offers.map(function (o) {
       return '<div class="ofr"><div class="ofr-l" aria-hidden="true"><span>' + esc(offerBadge(o.text)) + '</span></div>' +
         '<div class="ofr-r"><div class="ofr-h"><b class="ofr-c">' + esc(o.code) + '</b>' +
-        '<button type="button" class="ofr-b" data-act="coupon-offer" data-code="' + esc(o.code) + '" aria-label="Apply ' + esc(o.code) + '">APPLY</button></div>' +
+        '<button type="button" class="ofr-b" data-act="coupon-offer" data-code="' + esc(o.code) + '" aria-label="' + esc(bxT('storefront.cod.apply_code', 'Apply {code}', { code: o.code })) + '">' + esc(bxT('storefront.cod.apply_caps', 'APPLY')) + '</button></div>' +
         (o.text ? '<div class="ofr-t">' + esc(o.text) + '</div>' : '') + '</div></div>';
     }).join('') + '</div>';
   };
@@ -1245,11 +1329,11 @@
   function offerBadge(text) {
     var t = String(text || '');
     var m = /(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
-    if (m) return m[1] + '% OFF';
+    if (m) return bxT('storefront.cod.badge_off', '{amount} OFF', { amount: m[1] + '%' });
     m = /(\u20b9|rs\.?|inr|\$|\u20ac|\u00a3)\s?([\d,]+(?:\.\d+)?)/i.exec(t);
-    if (m) return (/^(rs|inr)/i.test(m[1]) ? '\u20b9' : m[1]) + m[2].replace(/\.0+$/, '') + ' OFF';
-    if (/free\s*ship/i.test(t)) return 'FREE SHIP';
-    return 'OFFER';
+    if (m) return bxT('storefront.cod.badge_off', '{amount} OFF', { amount: (/^(rs|inr)/i.test(m[1]) ? '\u20b9' : m[1]) + m[2].replace(/\.0+$/, '') });
+    if (/free\s*ship/i.test(t)) return bxT('storefront.cod.badge_free_ship', 'FREE SHIP');
+    return bxT('storefront.cod.badge_offer', 'OFFER');
   }
 
   // Re-prices the order with a coupon (code) or without one (null).
@@ -1268,13 +1352,13 @@
     var input = this.sh.querySelector('[name="coupon"]');
     var code = String(raw != null ? raw : (input ? input.value : '')).trim();
     this.couponDraft = code;
-    var bad = !code ? 'Enter a coupon code.' : !/^[\w-]{1,60}$/.test(code) ? 'Coupon codes only use letters, numbers, - and _.' : '';
+    var bad = !code ? bxT('storefront.cod.coupon_empty', 'Enter a coupon code.') : !/^[\w-]{1,60}$/.test(code) ? bxT('storefront.cod.coupon_chars', 'Coupon codes only use letters, numbers, - and _.') : '';
     if (bad) { this.couponError = bad; this.renderReview(true); return; }
     var btn = this.sh.querySelector('[data-act="coupon-apply"]');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="sp" style="width:16px;height:16px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:currentColor"></span>'; }
     this.requote(code, function (json) {
       if (!json.success) {
-        self.couponError = json.error || 'We couldn\'t check that code. Please try again.';
+        self.couponError = json.error ? errorText(json) : bxT('storefront.cod.coupon_check_failed', 'We couldn\'t check that code. Please try again.');
       } else if (json.quote.coupon && json.quote.coupon.applied) {
         self.quote = json.quote;
         self.syncDelivery();
@@ -1285,7 +1369,7 @@
         self.couponJustApplied = true;
       } else {
         // Keep the current prices (and any code already applied).
-        self.couponError = (json.quote.coupon && json.quote.coupon.message) || (code + ' isn\'t valid for this order. Check the code, or the order may not meet its conditions.');
+        self.couponError = (json.quote.coupon && json.quote.coupon.message) || bxT('storefront.cod.coupon_invalid', '{code} isn\'t valid for this order. Check the code, or the order may not meet its conditions.', { code: code });
       }
       self.renderReview(Boolean(self.couponError));
       self.couponJustApplied = false;
@@ -1295,7 +1379,7 @@
   Sheet.prototype.removeCoupon = function () {
     var self = this;
     var btn = this.sh.querySelector('[data-act="coupon-remove"]');
-    if (btn) btn.textContent = 'Removing\u2026';
+    if (btn) btn.textContent = bxT('storefront.cod.removing', 'Removing\u2026');
     this.requote(null, function (json) {
       if (json.success) { self.quote = json.quote; self.syncDelivery(); self.coupon = null; self.couponOpen = false; }
       self.renderReview();
@@ -1319,12 +1403,14 @@
 
   Sheet.prototype.deliveryName = function () {
     var o = this.selectedOption();
-    return o ? o.name : 'another option';
+    return o ? o.name : bxT('storefront.cod.another_option', 'another option');
   };
 
   function arrivesText(eta) {
     if (!eta) return '';
-    return 'Arrives ' + (eta.label === 'Today' || eta.label === 'Tomorrow' ? eta.label.toLowerCase() : eta.label);
+    if (eta.label === 'Today') return bxT('storefront.cod.arrives_today', 'Arrives today');
+    if (eta.label === 'Tomorrow') return bxT('storefront.cod.arrives_tomorrow', 'Arrives tomorrow');
+    return bxT('storefront.cod.arrives', 'Arrives {date}', { date: eta.label });
   }
 
   // "Standard delivery · Arrives 28–30 Oct" / "Scheduled delivery · Tue, 28 Oct, 10 AM – 1 PM" (done screen).
@@ -1343,32 +1429,32 @@
     var d = this.quote && this.quote.delivery;
     if (!d || !d.options || !d.options.length) return '';
     var fmt = this.fmt, sel = this.selectedOption(), many = d.options.length > 1;
-    var html = '<div class="ttl">Delivery</div><div class="dlv"' + (many ? ' role="radiogroup" aria-label="Delivery options"' : '') + '>';
+    var html = '<div class="ttl">' + esc(bxT('storefront.cod.delivery', 'Delivery')) + '</div><div class="dlv"' + (many ? ' role="radiogroup" aria-label="' + esc(bxT('storefront.cod.delivery_options', 'Delivery options')) + '"' : '') + '>';
     d.options.forEach(function (o) {
       var on = many && o.id === d.selected;
       // Scheduled delivery: its days are the chips below.
-      var sub = [o.description, o.dates ? (o.description ? '' : 'Pick a delivery day') : arrivesText(o.eta)].filter(Boolean).join(' \u00b7 ');
+      var sub = [o.description, o.dates ? (o.description ? '' : bxT('storefront.cod.pick_day', 'Pick a delivery day')) : arrivesText(o.eta)].filter(Boolean).join(' \u00b7 ');
       var inner = (many ? '<span class="rd" aria-hidden="true"></span>' : icon('truck', 20)) +
         '<span class="cb"><b>' + esc(o.name) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>' +
-        '<span class="pr' + (o.price > 0 ? '' : ' fr') + '">' + (o.price > 0 ? fmt(o.price) : 'Free') + '</span>';
+        '<span class="pr' + (o.price > 0 ? '' : ' fr') + '">' + (o.price > 0 ? fmt(o.price) : esc(bxT('storefront.common.free', 'Free'))) + '</span>';
       html += many
         ? '<button type="button" class="dlo' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv" data-id="' + esc(o.id) + '">' + inner + '</button>'
         : '<div class="dlo">' + inner + '</div>';
     });
     html += '</div>';
     if (sel && sel.dates && sel.dates.length) {
-      html += '<div class="dts" role="radiogroup" aria-label="Delivery day">' + sel.dates.map(function (x) {
+      html += '<div class="dts" role="radiogroup" aria-label="' + esc(bxT('storefront.cod.delivery_day', 'Delivery day')) + '">' + sel.dates.map(function (x) {
         var on = x.date === d.date;
         return '<button type="button" class="dt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv-date" data-date="' + esc(x.date) + '">' + esc(x.label) + '</button>';
       }).join('') + '</div>';
       if (sel.slots && sel.slots.length) {
-        html += '<div class="dts" role="radiogroup" aria-label="Delivery time">' + sel.slots.map(function (s) {
+        html += '<div class="dts" role="radiogroup" aria-label="' + esc(bxT('storefront.cod.delivery_time', 'Delivery time')) + '">' + sel.slots.map(function (s) {
           var on = s.id === d.slot;
           return '<button type="button" class="dt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" data-act="dlv-slot" data-slot="' + esc(s.id) + '">' + esc(s.label) + '</button>';
         }).join('') + '</div>';
       }
     }
-    if (sel && sel.freeIn > 0) html += '<div class="fsh">' + icon('truck', 16) + '<span>Add ' + fmt(sel.freeIn) + ' more for free shipping</span></div>';
+    if (sel && sel.freeIn > 0) html += '<div class="fsh">' + icon('truck', 16) + '<span>' + esc(bxT('storefront.cod.free_shipping_in', 'Add {amount} more for free shipping', { amount: fmt(sel.freeIn) })) + '</span></div>';
     return html;
   };
 
@@ -1402,7 +1488,7 @@
       if (!json.success) {
         self.delivery = prev;
         self.renderReview();
-        self.setError(json.error);
+        self.setError(errorText(json));
         return;
       }
       self.quote = json.quote;
@@ -1411,16 +1497,16 @@
     });
   };
 
-  function feeLabel(cfg) { return cfg.codFeeLabel || 'Cash on Delivery Fee'; }
+  function feeLabel(cfg) { return bxText(cfg.codFeeLabel, 'storefront.cod.fee_label', 'Cash on Delivery Fee'); }
 
   // Shipping and the COD fee on the review step. With "Show fee to customers"
   // off the fee is still charged, shown inside one "Delivery charges" line.
   function chargeRows(cfg, q, fmt) {
-    var free = '<b style="color:#067647">Free</b>';
+    var free = '<b style="color:#067647">' + esc(bxT('storefront.common.free', 'Free')) + '</b>';
     if (cfg.showCodFee === false && q.codFee > 0) {
-      return '<div><span>Delivery charges</span><span class="num">' + fmt((q.shipping || 0) + q.codFee) + '</span></div>';
+      return '<div><span>' + esc(bxT('storefront.cod.delivery_charges', 'Delivery charges')) + '</span><span class="num">' + fmt((q.shipping || 0) + q.codFee) + '</span></div>';
     }
-    return '<div><span>Shipping</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : free) + '</span></div>' +
+    return '<div><span>' + esc(bxT('storefront.cod.shipping', 'Shipping')) + '</span><span class="num">' + (q.shipping > 0 ? fmt(q.shipping) : free) + '</span></div>' +
       (q.codFee > 0 ? '<div><span>' + esc(feeLabel(cfg)) + '</span><span class="num">' + fmt(q.codFee) + '</span></div>' : '');
   }
 
@@ -1437,12 +1523,12 @@
       });
       // Anything Shopify took off that isn't itemised (rounding, older APIs).
       var rest = Math.round((q.discounts - listed) * 100) / 100;
-      if (rest > 0.009) html += '<div style="color:#067647"><span>Other discounts</span><span class="num">\u2212' + fmt(rest) + '</span></div>';
+      if (rest > 0.009) html += '<div style="color:#067647"><span>' + esc(bxT('storefront.cod.other_discounts', 'Other discounts')) + '</span><span class="num">\u2212' + fmt(rest) + '</span></div>';
     } else if (q.discounts > 0) {
-      html += '<div style="color:#067647"><span>Discounts' + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + (q.coupon.capped ? ', max ' + fmt(q.coupon.amount) : '') + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>';
+      html += '<div style="color:#067647"><span>' + esc(bxT('storefront.drawer.discounts', 'Discounts')) + (q.coupon && q.coupon.applied ? ' (' + esc(q.coupon.code) + (q.coupon.capped ? ', ' + esc(bxT('storefront.cod.max_amount', 'max {amount}', { amount: fmt(q.coupon.amount) })) : '') + ')' : '') + '</span><span class="num">\u2212' + fmt(q.discounts) + '</span></div>';
     }
     (q.cartCodes || []).forEach(function (c) {
-      if (!c.applied) html += '<div class="mu"><span>' + esc(c.code) + ' doesn\'t apply to this order</span></div>';
+      if (!c.applied) html += '<div class="mu"><span>' + esc(bxT('storefront.cod.code_not_applied', '{code} doesn\'t apply to this order', { code: c.code })) + '</span></div>';
     });
     return html;
   }
@@ -1452,32 +1538,32 @@
     var prevBody = this.sh.querySelector('.bd');
     var scrollTop = prevBody ? prevBody.scrollTop : 0;
     var rows = '<div class="rows">' +
-      '<div><span>Items</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
+      '<div><span>' + esc(bxT('storefront.cod.items', 'Items')) + '</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       // Weight combo box price: the same discount Shopify checkout gives (cod.server.js).
-      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>Combo box discount</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
+      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>' + esc(bxT('storefront.cod.combo_discount', 'Combo box discount')) + '</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
       discountRows(q, fmt) +
       chargeRows(this.cfg, q, fmt) +
-      (q.tax > 0 && !q.taxesIncluded ? '<div><span>Taxes</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
-      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>Pay on delivery</span><span class="num">' + fmt(q.total) + '</span></div>' +
-      (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>Includes ' + fmt(q.tax) + ' in taxes</span></div>' : '') +
+      (q.tax > 0 && !q.taxesIncluded ? '<div><span>' + esc(bxT('storefront.cod.taxes', 'Taxes')) + '</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
+      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(q.total) + '</span></div>' +
+      (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>' + esc(bxT('storefront.cod.includes_tax', 'Includes {amount} in taxes', { amount: fmt(q.tax) })) + '</span></div>' : '') +
       '</div>';
     // The coupon card already shows its saving; this banner is for automatic discounts.
     var autoSaving = (q.comboDiscount || 0) + (q.coupon && q.coupon.applied ? 0 : q.discounts);
-    var save = autoSaving > 0 ? '<div class="save">' + icon('tag', 16) + 'You\'re saving ' + fmt(autoSaving) + ' on this order</div>' : '';
+    var save = autoSaving > 0 ? '<div class="save">' + icon('tag', 16) + esc(bxT('storefront.cod.saving_order', 'You\'re saving {amount} on this order', { amount: fmt(autoSaving) })) + '</div>' : '';
     var nudge = this.cfg.prepaidNudgeText && typeof this.opts.onPayOnline === 'function'
-      ? '<div class="nud">' + icon('card', 22) + '<div class="cb">' + esc(this.cfg.prepaidNudgeText) + '</div><button type="button" class="b" data-act="online">Pay online</button></div>' : '';
+      ? '<div class="nud">' + icon('card', 22) + '<div class="cb">' + esc(this.cfg.prepaidNudgeText) + '</div><button type="button" class="b" data-act="online">' + esc(bxT('storefront.cod.pay_online', 'Pay online')) + '</button></div>' : '';
     var ship = '<div class="card plain">' + icon('pin', 20, ' class="ic"') + '<div class="cb"><b>' + esc(a.name) + '</b>' +
       esc(a.address1) + (a.address2 ? ', ' + esc(a.address2) : '') + '<br>' + esc(a.city) + ', ' + esc(a.state) + ' ' + esc(a.pincode) +
-      '<br>+91 ' + esc(prettyPhone(this.phone)) + '</div><button type="button" class="lk" data-go="address">Edit</button></div>';
-    var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>Cash on Delivery</b>Pay ' + fmt(q.total) + ' when your order arrives</div>' +
+      '<br><span dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</span></div><button type="button" class="lk" data-go="address">' + esc(bxT('storefront.common.edit', 'Edit')) + '</button></div>';
+    var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div>' +
       icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
-    this.frame('Review your order', 'address', 'review',
+    this.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review',
       this.lineList(q) + this.couponBlock() + save + rows +
-      '<div class="ttl">Deliver to</div>' + ship + this.deliveryBlock() +
-      '<div class="ttl">Payment</div>' + pay + nudge + '<div data-err></div>',
+      '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + ship + this.deliveryBlock() +
+      '<div class="ttl">' + esc(bxT('storefront.cod.payment', 'Payment')) + '</div>' + pay + nudge + '<div data-err></div>',
       '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
-      '<span>I agree to the <a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">Terms and conditions</a></span></label>' +
-      '<button type="submit" class="b p">Place COD order \u00b7 ' + fmt(q.total) + '</button>');
+      '<span>' + bxHtml('storefront.cod.agree', 'I agree to the {terms}', 'terms', '<a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">' + esc(bxT('storefront.cod.terms', 'Terms and conditions')) + '</a>') + '</span></label>' +
+      '<button type="submit" class="b p">' + esc(bxT('storefront.cod.place_order', 'Place COD order')) + ' \u00b7 ' + fmt(q.total) + '</button>');
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
     if (body) body.scrollTop = scrollTop;
@@ -1498,20 +1584,20 @@
       confetti += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;background:' + esc(colors[i % colors.length]) +
         ';animation-delay:' + (Math.random() * 0.5).toFixed(2) + 's;width:' + (6 + Math.round(Math.random() * 5)) + 'px"></i>';
     }
-    this.sh.innerHTML = this.head('Order placed') +
+    this.sh.innerHTML = this.head(bxT('storefront.cod.order_placed', 'Order placed')) +
       '<div class="bd done"><div class="cf" aria-hidden="true">' + confetti + '</div>' +
       '<div class="tick" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>' +
-      '<div style="font-weight:800;font-size:21px;margin-top:8px">Order confirmed!</div>' +
+      '<div style="font-weight:800;font-size:21px;margin-top:8px">' + esc(bxT('storefront.cod.order_confirmed', 'Order confirmed!')) + '</div>' +
       (this.look.thankYouText ? '<p class="mu" style="margin:-6px 0 0;font-size:14px">' + esc(this.look.thankYouText) + '</p>' : '') +
-      '<div class="oid">Order ' + esc(order.orderName) + ' <button type="button" data-act="copy" data-copy="' + esc(order.orderName) + '">' + icon('copy', 12) + '<span>Copy</span></button></div>' +
-      '<div class="amt"><div class="mu">Keep this amount ready at delivery</div><div class="big">' + fmt(order.total) + '</div></div>' +
+      '<div class="oid">' + esc(bxT('storefront.cod.order_name', 'Order {name}', { name: order.orderName })) + ' <button type="button" data-act="copy" data-copy="' + esc(order.orderName) + '">' + icon('copy', 12) + '<span>' + esc(bxT('storefront.common.copy', 'Copy')) + '</span></button></div>' +
+      '<div class="amt"><div class="mu">' + esc(bxT('storefront.cod.keep_amount', 'Keep this amount ready at delivery')) + '</div><div class="big">' + fmt(order.total) + '</div></div>' +
       '<div class="tl">' +
-      '<div class="on"><i>' + icon('check', 14) + '</i><span><b>Order placed</b><span class="mu">The store has your order.</span></span></div>' +
-      '<div><i>' + icon('box', 14) + '</i><span><b>Packed and shipped</b><span class="mu">' + esc(this.deliveryText() || 'The store prepares and sends it to you.') + '</span></span></div>' +
-      '<div><i>' + icon('cash', 14) + '</i><span><b>Pay on delivery</b><span class="mu">Pay ' + fmt(order.total) + ' when it arrives.</span></span></div>' +
+      '<div class="on"><i>' + icon('check', 14) + '</i><span><b>' + esc(bxT('storefront.cod.order_placed', 'Order placed')) + '</b><span class="mu">' + esc(bxT('storefront.cod.store_has_order', 'The store has your order.')) + '</span></span></div>' +
+      '<div><i>' + icon('box', 14) + '</i><span><b>' + esc(bxT('storefront.cod.packed_shipped', 'Packed and shipped')) + '</b><span class="mu">' + esc(this.deliveryText() || bxT('storefront.cod.store_sends', 'The store prepares and sends it to you.')) + '</span></span></div>' +
+      '<div><i>' + icon('cash', 14) + '</i><span><b>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</b><span class="mu">' + esc(bxT('storefront.cod.pay_when_it_arrives', 'Pay {amount} when it arrives.', { amount: fmt(order.total) })) + '</span></span></div>' +
       '</div></div><div class="ft">' +
-      (order.statusPageUrl ? '<a href="' + esc(order.statusPageUrl) + '" class="b s">View order status</a>' : '') +
-      '<button type="button" class="b p" data-act="close">Continue shopping</button></div>' + this.powered();
+      (order.statusPageUrl ? '<a href="' + esc(order.statusPageUrl) + '" class="b s">' + esc(bxT('storefront.cod.order_status', 'View order status')) + '</a>' : '') +
+      '<button type="button" class="b p" data-act="close">' + esc(bxT('storefront.drawer.continue_shopping', 'Continue shopping')) + '</button></div>' + this.powered();
   };
 
   /* --- events --- */
@@ -1576,7 +1662,7 @@
     if (act === 'copy') {
       var label = t.querySelector('span');
       var text = t.getAttribute('data-copy');
-      var done = function () { if (label) label.textContent = 'Copied'; };
+      var done = function () { if (label) label.textContent = bxT('storefront.common.copied', 'Copied'); };
       try { navigator.clipboard.writeText(text).then(done, function () { /* blocked */ }); } catch (err) { /* no clipboard */ }
     }
   };
@@ -1627,15 +1713,15 @@
     if (!isResend) {
       var input = this.sh.querySelector('[name="phone"]');
       var phone = normalizePhone(input && input.value);
-      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); this.markInvalid('phone'); return; }
+      if (!phone) { this.setError(bxT('error.cod.invalid_phone', 'Enter a valid 10-digit mobile number.')); this.markInvalid('phone'); return; }
       this.phone = phone;
     }
     this.setError('');
-    this.setBusy(true, 'Sending\u2026');
+    this.setBusy(true, bxT('storefront.cod.sending', 'Sending\u2026'));
     api('otp', { step: 'send', phone: this.phone }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
-        if (isResend) { self.setError(json.error); self.startResendTimer(); } else self.setError(json.error);
+        if (isResend) { self.setError(errorText(json)); self.startResendTimer(); } else self.setError(errorText(json));
         return;
       }
       self.resendAfter = json.resendAfter || 30;
@@ -1645,14 +1731,14 @@
 
   Sheet.prototype.verifyCode = function (code) {
     var self = this;
-    if (!/^\d{4}$/.test(code || '')) { this.setError('Enter the 4-digit code from the SMS.'); return; }
+    if (!/^\d{4}$/.test(code || '')) { this.setError(bxT('error.cod.otp_invalid', 'Enter the 4-digit code from the SMS.')); return; }
     this.setError('');
-    this.setBusy(true, 'Checking\u2026');
+    this.setBusy(true, bxT('storefront.cod.checking_short', 'Checking\u2026'));
     api('otp', { step: 'verify', phone: this.phone, code: code }).then(function (json) {
       self.setBusy(false);
       var w = self.sh.querySelector('[data-otp]');
       if (!json.success) {
-        self.setError(json.error);
+        self.setError(errorText(json));
         vibrate(60);
         if (w) { w.classList.remove('shake'); void w.offsetWidth; w.classList.add('bad', 'shake'); }
         // Leave the wrong digits on screen while the boxes shake, then clear them.
@@ -1679,17 +1765,17 @@
     var a = this.readAddress();
     if (!this.otpFlow()) {
       var phone = normalizePhone(a.phone);
-      if (!phone) { this.setError('Enter a valid 10-digit mobile number.'); this.markInvalid('phone'); return; }
+      if (!phone) { this.setError(bxT('error.cod.invalid_phone', 'Enter a valid 10-digit mobile number.')); this.markInvalid('phone'); return; }
       this.phone = phone;
     }
     var err = null, field = null;
-    if (a.name.length < 2) { err = 'Enter your full name.'; field = 'name'; }
-    else if (a.address1.length < 5) { err = 'Enter your house number, street and area.'; field = 'address1'; }
-    else if (!/^[1-9]\d{5}$/.test(a.pincode)) { err = 'Enter a valid 6-digit PIN code.'; field = 'pincode'; }
-    else if (a.city.length < 2) { err = 'Enter your city.'; field = 'city'; }
-    else if (!a.state) { err = 'Choose your state.'; field = 'state'; }
-    else if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) { err = 'Enter a valid email address, or leave it empty.'; field = 'email'; }
-    else if ((this.cfg.blockedPincodes || []).indexOf(a.pincode) !== -1 || (this.pin && this.pin.pincode === a.pincode && this.pin.blocked)) { err = 'Cash on Delivery isn\'t available for PIN code ' + a.pincode + '.'; field = 'pincode'; }
+    if (a.name.length < 2) { err = bxT('storefront.cod.need_name', 'Enter your full name.'); field = 'name'; }
+    else if (a.address1.length < 5) { err = bxT('storefront.cod.need_address', 'Enter your house number, street and area.'); field = 'address1'; }
+    else if (!/^[1-9]\d{5}$/.test(a.pincode)) { err = bxT('error.cod.invalid_pincode', 'Enter a valid 6-digit PIN code.'); field = 'pincode'; }
+    else if (a.city.length < 2) { err = bxT('storefront.cod.need_city', 'Enter your city.'); field = 'city'; }
+    else if (!a.state) { err = bxT('storefront.cod.need_state', 'Choose your state.'); field = 'state'; }
+    else if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) { err = bxT('storefront.cod.need_email', 'Enter a valid email address, or leave it empty.'); field = 'email'; }
+    else if ((this.cfg.blockedPincodes || []).indexOf(a.pincode) !== -1 || (this.pin && this.pin.pincode === a.pincode && this.pin.blocked)) { err = bxT('storefront.cod.pin_blocked_short', 'Cash on Delivery isn\'t available for PIN code {pin}.', { pin: a.pincode }); field = 'pincode'; }
     if (err) { this.setError(err); this.markInvalid(field); return; }
     delete a.phone;
     this.addr = a;
@@ -1702,13 +1788,13 @@
     var self = this;
     var policy = this.sh.querySelector('[name="policy"]');
     if (policy && !policy.checked) {
-      this.setError('Please agree to the Terms and conditions to place your order.');
+      this.setError(bxT('storefront.cod.need_terms', 'Please agree to the Terms and conditions to place your order.'));
       policy.parentNode.classList.add('bad');
       vibrate(50);
       return;
     }
     this.setError('');
-    this.setBusy(true, 'Placing your order\u2026');
+    this.setBusy(true, bxT('storefront.cod.placing', 'Placing your order\u2026'));
     api('order', {
       surface: this.opts.surface,
       items: this.items,
@@ -1725,11 +1811,11 @@
     }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
-        if (json.code === 'otp_required') { writeStore('sessionStorage', TOKEN_KEY, null); self.token = null; self.go('phone'); self.setError(json.error); return; }
+        if (json.code === 'otp_required') { writeStore('sessionStorage', TOKEN_KEY, null); self.token = null; self.go('phone'); self.setError(errorText(json)); return; }
         // The delivery option, day or time is gone (cut-off passed): show the fresh choices.
         if (json.code === 'delivery_changed') { self.idem = idemKey(); self.reviewNotice = json.error; self.go('review'); return; }
         if (json.code !== 'in_progress') self.idem = idemKey();
-        self.setError(json.error);
+        self.setError(errorText(json));
         return;
       }
       self.placed = json.order;
@@ -1765,16 +1851,16 @@
         })
         : Promise.resolve({ items: opts.items || [] });
       sheet = new Sheet(opts, cfg);
-      sheet.loading('Checking Cash on Delivery\u2026');
+      sheet.loading(bxT('storefront.cod.checking', 'Checking Cash on Delivery\u2026'));
       itemsPromise.then(function (res) {
         if (!sheet) return;
-        if (res.checkoutOnly) { sheet.fail('This cart has a Pack or free gift that is only available with online payment.'); return; }
-        if (!res.items.length) { sheet.fail('Your cart is empty.'); return; }
+        if (res.checkoutOnly) { sheet.fail(bxT('error.cod.checkout_only', 'This cart has a Pack or free gift that is only available with online payment.')); return; }
+        if (!res.items.length) { sheet.fail(bxT('storefront.cod.cart_empty', 'Your cart is empty.')); return; }
         sheet.items = res.items;
         sheet.cartCodes = res.cartCodes || [];
         sheet.cartAttributes = res.cartAttributes || null;
         sheet.start();
-      }, function () { if (sheet) sheet.fail("We couldn't read your cart. Refresh the page and try again."); });
+      }, function () { if (sheet) sheet.fail(bxT('storefront.cod.cart_read_failed', 'We couldn\'t read your cart. Refresh the page and try again.')); });
     });
   }
 
@@ -1847,7 +1933,7 @@
       if (!cfg || !cfg.enabled || cfg.surfaces.combo === false) return null;
       var look = lookOf(cfg, 'combo');
       var r = Math.max(0, Math.min(40, Math.round(Number(look.radius)) || 0));
-      var text = (cfg.buttons && cfg.buttons.comboText) || 'Cash on Delivery';
+      var text = bxText(cfg.buttons && cfg.buttons.comboText, 'storefront.cod.button', 'Cash on Delivery');
       return {
         text: text,
         // The text for the combo's price, with its price tags filled in.
@@ -1926,7 +2012,7 @@
       paint + 'border:none;border-radius:' + (link ? 0 : cs.radius) + 'px;text-shadow:none;appearance:none;-webkit-appearance:none;' +
       'font-family:inherit;font-size:' + cs.fontSize + 'px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;' +
       'text-align:center;text-decoration:' + (link ? 'underline' : 'none') + ';text-underline-offset:3px;cursor:pointer;opacity:1') + '">' +
-      esc(cs.text) + '</button>';
+      esc(bxText(cs.text, 'storefront.drawer.continue_shopping', 'Continue shopping')) + '</button>';
   }
 
   // Puts `el` above the first or below the last of `group` (the Checkout
@@ -2032,15 +2118,15 @@
   function drawerState(cfg, cart, excluded, fmt) {
     var items = (cart && cart.items) || [];
     if (!items.length) return null;
-    if (excluded) return cfg.excludedBehavior === 'hide' ? null : { reason: 'Not available for some items in your cart' };
+    if (excluded) return cfg.excludedBehavior === 'hide' ? null : { reason: bxT('storefront.cod.not_for_some_items', 'Not available for some items in your cart') };
     var subtotal = items.reduce(function (sum, it) {
       var p = it.properties || {};
       return p._brixReward === 'true' ? sum : sum + (Number(it.final_line_price) || 0);
     }, 0) / 100;
     var reason = '';
-    if (cartHasCheckoutOnlyLines(cart)) reason = 'Not available with Packs or free gifts';
-    else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = 'Available on orders from ' + fmt(cfg.minOrder);
-    else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = 'Available on orders up to ' + fmt(cfg.maxOrder);
+    if (cartHasCheckoutOnlyLines(cart)) reason = bxT('storefront.cod.not_with_packs', 'Not available with Packs or free gifts');
+    else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = bxT('storefront.cod.min_order', 'Available on orders from {amount}', { amount: fmt(cfg.minOrder) });
+    else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = bxT('storefront.cod.max_order', 'Available on orders up to {amount}', { amount: fmt(cfg.maxOrder) });
     // total: what the cart costs after its discounts (shown in price tags).
     // codTotal: the same without the prepaid discount, which COD never gets.
     var total = isFinite(Number(cart.total_price)) ? Number(cart.total_price) / 100 : subtotal;
@@ -2147,7 +2233,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where, gap);
-    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, cfg.buttons.drawerText, codPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
+    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, drawerText(cfg), codPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -2894,9 +2980,9 @@
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
     var fmt = buttonMoney(cfg.currency);
-    var text = cfg.buttons.productText;
+    var text = productText(cfg);
     var label = codLabel(cfg, text, productPrice(form, info));
-    var sub = excluded ? 'Not available for this product' : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info));
+    var sub = excluded ? bxT('storefront.cod.not_for_product', 'Not available for this product') : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info));
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     var keepsBuyNow = !replacing;
@@ -2997,14 +3083,14 @@
     // a suffix can never stack ("Save 10% · Save 10%"). Text with price tags is
     // filled in and gets no suffix.
     function onlineLabel(base, pr, prepaid) {
-      var b = String(base || 'Buy it now').trim();
+      var b = String(bxText(base, 'storefront.cod.buy_it_now', 'Buy it now')).trim();
       if (hasPriceTags(b)) {
         var values = pr && pr.subtotal != null
           ? { price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal }
           : {};
         return priceTags(b, values, st ? st.fmt : shopperMoney());
       }
-      return pr && pr.qualifies && prepaid && prepaid.showBadge ? b + ' ' + DOT + ' Save ' + Number(pr.percent) + '%' : b;
+      return pr && pr.qualifies && prepaid && prepaid.showBadge ? b + ' ' + DOT + ' ' + bxT('storefront.cod.save_percent', 'Save {percent}%', { percent: Number(pr.percent) }) : b;
     }
 
     function hex(value, fallback) { return HEX.test(value || '') ? value : fallback; }
@@ -3193,9 +3279,9 @@
     function codState(subtotal) {
       var cfg = st.cfg;
       if (!st.pp.cod.enabled || !cfg || st.codOff) return { shown: false };
-      if (st.excluded) return cfg.excludedBehavior === 'hide' ? { shown: false } : { shown: true, reason: 'Not available for this product' };
-      if (subtotal != null && cfg.minOrder > 0 && subtotal < cfg.minOrder) return { shown: true, reason: 'Available on orders from ' + st.fmt(cfg.minOrder) };
-      if (subtotal != null && cfg.maxOrder > 0 && subtotal > cfg.maxOrder) return { shown: true, reason: 'Available on orders up to ' + st.fmt(cfg.maxOrder) };
+      if (st.excluded) return cfg.excludedBehavior === 'hide' ? { shown: false } : { shown: true, reason: bxT('storefront.cod.not_for_product', 'Not available for this product') };
+      if (subtotal != null && cfg.minOrder > 0 && subtotal < cfg.minOrder) return { shown: true, reason: bxT('storefront.cod.min_order', 'Available on orders from {amount}', { amount: st.fmt(cfg.minOrder) }) };
+      if (subtotal != null && cfg.maxOrder > 0 && subtotal > cfg.maxOrder) return { shown: true, reason: bxT('storefront.cod.max_order', 'Available on orders up to {amount}', { amount: st.fmt(cfg.maxOrder) }) };
       return { shown: true };
     }
 
@@ -3237,13 +3323,14 @@
       if (!p || !st.pp.layout.showBanner) return null;
       // The minimum is in the shop currency (what the discount Function compares).
       var vars = { percent: v.pr.percent, amount: v.pr.savings > 0 ? st.fmt(v.pr.savings) : '', min: shortMoney(p.currency || CURRENCY)(p.minSubtotal), price: v.pr.online != null ? st.fmt(v.pr.online) : '' };
+      // Texts left at BRIX's English default show in the shopper's language ('' = none).
       if (v.pr.qualifies) {
-        var title = fill(p.offerTitle, vars);
+        var title = p.offerTitle ? fill(bxText(p.offerTitle, 'storefront.pay.offer_title', '{percent}% off when you pay online', vars), vars) : '';
         // {amount} needs a real price: without one, the description isn't shown.
-        var sub = p.offerDescription && (v.pr.savings > 0 || !/\{amount\}|\{price\}/.test(p.offerDescription)) ? fill(p.offerDescription, vars) : '';
+        var sub = p.offerDescription && (v.pr.savings > 0 || !/\{amount\}|\{price\}/.test(p.offerDescription)) ? fill(bxText(p.offerDescription, 'storefront.pay.offer_description', 'Pay online and save {amount}', vars), vars) : '';
         return title ? { title: title, sub: sub } : null;
       }
-      if (v.pr.minMissing && p.minNotMetText) return { title: fill(p.minNotMetText, vars), sub: '' };
+      if (v.pr.minMissing && p.minNotMetText) return { title: fill(bxText(p.minNotMetText, 'storefront.pay.min_not_met', 'Get {percent}% off on orders above {min}', vars), vars), sub: '' };
       return null;
     }
 
@@ -3258,28 +3345,31 @@
       var conf = isOnline ? pp.online : pp.cod;
       var disabled = !isOnline && Boolean(v.cod.reason);
       var color = isOnline ? st.colors.online : st.colors.cod;
-      var top = '<b class="bxpay-l">' + esc(conf.label) + '</b>';
+      var label = isOnline ? bxText(conf.label, 'storefront.pay.online_label', 'Pay Online') : bxText(conf.label, 'storefront.cod.title', 'Cash on Delivery');
+      var description = !conf.description ? '' : isOnline ? bxText(conf.description, 'storefront.pay.online_description', 'Get instant savings')
+        : bxText(conf.description, 'storefront.pay.cod_description', 'Pay when your order arrives');
+      var top = '<b class="bxpay-l">' + esc(label) + '</b>';
       var rest = '';
       var sr = '';
       if (isOnline) {
-        if (v.pr.qualifies && v.prepaid && v.prepaid.showBadge) top += '<span class="bxpay-badge">Save ' + esc(Number(v.pr.percent)) + '%</span>';
-        if (conf.description) rest += '<span class="bxpay-d">' + esc(conf.description) + '</span>';
+        if (v.pr.qualifies && v.prepaid && v.prepaid.showBadge) top += '<span class="bxpay-badge">' + esc(bxT('storefront.cod.save_percent', 'Save {percent}%', { percent: Number(v.pr.percent) })) + '</span>';
+        if (description) rest += '<span class="bxpay-d">' + esc(description) + '</span>';
         if (line && pp.layout.bannerPlacement === 'in_online_card') rest += '<span class="bxpay-o">' + esc(line.title) + '</span>';
         if (v.pr.online != null) {
           if (v.pr.qualifies && v.pr.savings > 0) {
-            rest += '<span class="bxpay-p">Get it for <b>' + esc(st.fmt(v.pr.online)) + '</b><s>' + esc(st.fmt(v.pr.subtotal)) + '</s>' +
-              (v.prepaid.showSavingsAmount ? ' <span class="bxpay-save">(save ' + esc(st.fmt(v.pr.savings)) + ')</span>' : '') + '</span>';
-            sr = 'Pay online: ' + st.fmt(v.pr.online) + ' instead of ' + st.fmt(v.pr.subtotal) + '.';
+            rest += '<span class="bxpay-p">' + bxHtml('storefront.pay.get_it_for', 'Get it for {price}', 'price', '<b>' + esc(st.fmt(v.pr.online)) + '</b>') + '<s>' + esc(st.fmt(v.pr.subtotal)) + '</s>' +
+              (v.prepaid.showSavingsAmount ? ' <span class="bxpay-save">' + esc(bxT('storefront.pay.save_amount', '(save {amount})', { amount: st.fmt(v.pr.savings) })) + '</span>' : '') + '</span>';
+            sr = bxT('storefront.pay.online_instead_of', 'Pay online: {price} instead of {was}.', { price: st.fmt(v.pr.online), was: st.fmt(v.pr.subtotal) });
           } else {
-            rest += '<span class="bxpay-p">Pay <b>' + esc(st.fmt(v.pr.subtotal)) + '</b></span>';
+            rest += '<span class="bxpay-p">' + bxHtml('storefront.pay.pay', 'Pay {price}', 'price', '<b>' + esc(st.fmt(v.pr.subtotal)) + '</b>') + '</span>';
           }
         }
       } else {
-        if (conf.description) rest += '<span class="bxpay-d">' + esc(conf.description) + '</span>';
+        if (description) rest += '<span class="bxpay-d">' + esc(description) + '</span>';
         if (disabled) rest += '<span class="bxpay-why">' + esc(v.cod.reason) + '</span>';
         else if (v.pr.cod != null) {
           var fee = v.pr.codFee > 0 && st.cfg.showCodFee !== false ? ' + ' + st.fmt(v.pr.codFee) + ' ' + feeLabel(st.cfg) : '';
-          rest += '<span class="bxpay-p">Pay <b>' + esc(st.fmt(v.pr.cod)) + '</b>' + esc(fee) + '</span>';
+          rest += '<span class="bxpay-p">' + bxHtml('storefront.pay.pay', 'Pay {price}', 'price', '<b>' + esc(st.fmt(v.pr.cod)) + '</b>') + esc(fee) + '</span>';
         }
       }
       var showIcon = pp.layout.showIcons && conf.showIcon;
@@ -3307,11 +3397,11 @@
       var layout = pp.layout;
       var classes = 'bxpay cs-' + layout.cardStyle + ' ss-' + (layout.selectedStyle === 'background' ? 'background' : 'border') + (layout.showRadio ? '' : ' no-radio');
       var headId = 'bxpay-h-' + st.id;
-      var html = '<div class="' + classes + '" style="' + st.vars + '">' +
+      var html = '<div class="' + classes + '" dir="' + bxDir() + '" style="' + st.vars + '">' +
         (line && where === 'above_selector' ? bannerHtml(line) : '') +
-        (pp.heading ? '<span class="bxpay-h" id="' + headId + '">' + esc(pp.heading) + '</span>' : '') +
+        (pp.heading ? '<span class="bxpay-h" id="' + headId + '">' + esc(bxText(pp.heading, 'storefront.pay.heading', 'Choose payment method')) + '</span>' : '') +
         '<div class="bxpay-cards' + (layout.cardLayout === 'horizontal' ? ' is-h' : '') + '" role="radiogroup" ' +
-        (pp.heading ? 'aria-labelledby="' + headId + '"' : 'aria-label="Payment method"') + '>' +
+        (pp.heading ? 'aria-labelledby="' + headId + '"' : 'aria-label="' + esc(bxT('storefront.pay.method', 'Payment method')) + '"') + '>' +
         (v.shown.online ? cardHtml('online', v, line) : '') + (v.shown.cod ? cardHtml('cod', v, line) : '') +
         '</div></div>';
       box.innerHTML = html;
@@ -3320,7 +3410,7 @@
       // The purchase button for the chosen method.
       var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, (st.cfg && st.cfg.productButton) || {});
       if (v.method === 'cod') {
-        st.cta.innerHTML = buttonHtml(st.cfg, codLabel(st.cfg, st.cfg.buttons.productText, v.pr.subtotal), v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
+        st.cta.innerHTML = buttonHtml(st.cfg, codLabel(st.cfg, productText(st.cfg), v.pr.subtotal), v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
       } else if (v.method === 'online' && !st.buyNow) {
         var bg = st.colors.online;
         st.cta.innerHTML = buttonHtml(st.cfg, onlineLabel(pp.online.buttonText, v.pr, v.prepaid), '', v.soldOut, look, {

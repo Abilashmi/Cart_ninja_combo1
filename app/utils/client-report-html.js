@@ -72,7 +72,8 @@ const bad = (v, shown) => ({ v: shown, cls: v ? 'bad' : 'zero' });
 
 /**
  * @param report buildClientReport() result
- * @param opts { toolbar?: { backHref, downloadHref } } — the toolbar is left out of the downloaded file
+ * @param opts { toolbar?: { backHref, downloadHref, csvHref?, share?: { action, fields, days, defaultDays } } } — the toolbar
+ *   is left out of the downloaded file and shared links; share = a form that saves a share link
  */
 export function renderClientReportHtml(report, opts = {}) {
   const f = formatters(report.currency);
@@ -128,7 +129,11 @@ export function renderClientReportHtml(report, opts = {}) {
   });
 
   const generated = new Date(report.generatedAt).toLocaleString('en-GB', { timeZone: report.timeZone, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const toolbar = opts.toolbar ? `<nav class="toolbar"><a href="${esc(opts.toolbar.backHref)}">Back to reports</a><a class="primary" href="${esc(opts.toolbar.downloadHref)}">Download HTML file</a></nav>` : '';
+  const share = opts.toolbar && opts.toolbar.share;
+  const shareForm = share ? `<form class="share" method="post" action="${esc(share.action)}">${Object.entries(share.fields).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('')}`
+    + `<label>Link works for <select name="days">${share.days.map((d) => `<option value="${d}"${d === share.defaultDays ? ' selected' : ''}>${d} days</option>`).join('')}</select></label>`
+    + '<button type="submit">Create share link</button></form>' : '';
+  const toolbar = opts.toolbar ? `<nav class="toolbar"><a href="${esc(opts.toolbar.backHref)}">Back to reports</a><span class="actions">${shareForm}${opts.toolbar.csvHref ? `<a href="${esc(opts.toolbar.csvHref)}">Download CSV</a>` : ''}<a class="primary" href="${esc(opts.toolbar.downloadHref)}">Download HTML file</a></span></nav>` : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -148,6 +153,10 @@ export function renderClientReportHtml(report, opts = {}) {
   .toolbar { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
   .toolbar a { color: var(--accent); text-decoration: none; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
   .toolbar a.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar .actions, .toolbar .share { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .toolbar .share label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  .toolbar select { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; }
+  .toolbar button { font: inherit; font-weight: 600; color: var(--accent); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
   .eyebrow { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
   h1 { margin: 4px 0 8px; font: 400 34px/1.15 Georgia, "Times New Roman", serif; text-wrap: balance; }
   header p { margin: 6px 0 0; max-width: 62rem; color: var(--muted); }

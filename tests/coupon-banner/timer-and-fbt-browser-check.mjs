@@ -68,6 +68,7 @@ await page.close();
 
 /* ── FBT widget ── */
 const fbt = read('fbt-widget-render.liquid')
+  .replace("{% render 'brix-i18n' %}", '') // shopper language: English here
   .replace('{{ product.id }}', '100')
   .replace('{{ shop.permanent_domain }}', 'demo.myshopify.com')
   .replace('{{ shop.currency }}', 'INR')

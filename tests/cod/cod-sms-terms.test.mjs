@@ -91,7 +91,8 @@ test('Buy it now selector and the theme drawer\'s Checkout text', () => {
 
 test('storefront and PHP: "Terms and conditions", no data policy; PHP passes buyNowText and termsUrl', () => {
   const js = fs.readFileSync(new URL('../../extensions/cart-drawer/assets/brix_cod.js', import.meta.url), 'utf8');
-  assert.match(js, /Terms and conditions<\/a>/);
+  // The link text is the shopper-language "Terms and conditions" (app/i18n storefront.cod.terms).
+  assert.match(js, /'storefront\.cod\.terms', 'Terms and conditions'\)\) \+ '<\/a>/);
   assert.doesNotMatch(js, /data policy|cod-data-policy/i);
   assert.match(js, /policies\/terms-of-service/);
   const php = fs.readFileSync(new URL('../../php_backend/cod_storefront.php', import.meta.url), 'utf8');

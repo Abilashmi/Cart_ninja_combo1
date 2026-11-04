@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useFetcher, useLoaderData, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 import {
-  Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon, Checkbox,
+  Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon, Checkbox, Select,
 } from '@shopify/polaris';
 import { getPriceDisplay, savePriceDisplay } from '../services/price-display.server';
+import { ADMIN_LANGUAGE_CHOICES, LANGUAGE_NAMES, getAdminLanguage, saveAdminLanguage } from '../i18n/admin.server';
+import { useAdminLocale, useT } from '../i18n/admin';
 import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
 import BrixBar from '../components/ai-agent/BrixBar';
 import { ExternalIcon, CheckCircleIcon, LockIcon } from '@shopify/polaris-icons';
@@ -16,7 +18,7 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [planKey, subscriptionId, shopInfo, priceDisplay] = await Promise.all([
+  const [planKey, subscriptionId, shopInfo, priceDisplay, language] = await Promise.all([
     getShopPlan(shop),
     (async () => {
       try {
@@ -55,26 +57,79 @@ export const loader = async ({ request }) => {
       }
     })(),
     getPriceDisplay(admin),
+    getAdminLanguage(admin),
   ]);
 
-  return { shop, shopInfo, planKey, subscriptionId, priceDisplay };
+  return {
+    shop, shopInfo, planKey, subscriptionId, priceDisplay,
+    language: { value: language, choices: ADMIN_LANGUAGE_CHOICES.map((v) => ({ value: v, name: LANGUAGE_NAMES[v] || '' })) },
+  };
 };
 
 // Price display (services/price-display.server.js): saved when the box is ticked.
+// Language (i18n/admin.server.js): saved when picked; app.jsx reloads the admin texts.
 export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
   const form = await request.formData();
-  if (form.get('intent') !== 'price-display') return { ok: false, error: 'Unknown request.' };
+  const intent = form.get('intent');
+  if (intent === 'language') {
+    try {
+      return { ok: true, language: await saveAdminLanguage(admin, String(form.get('language') || '')) };
+    } catch (e) {
+      console.error('[Account] language save failed:', e);
+      return { ok: false, error: 'error.admin.save_failed' };
+    }
+  }
+  if (intent !== 'price-display') return { ok: false, error: 'admin.common.unknown_request' };
   try {
     const saved = await savePriceDisplay(admin, { wholePrices: form.get('wholePrices') === 'true' });
     return { ok: true, priceDisplay: saved };
   } catch (e) {
     console.error('[Account] price display save failed:', e);
-    return { ok: false, error: 'Could not save. Please try again.' };
+    return { ok: false, error: 'error.admin.save_failed' };
   }
 };
 
+// Account → Language: the BRIX admin's language. "Same as Shopify admin"
+// follows Shopify's own language setting when BRIX has that language.
+function LanguageCard({ initial: { value: saved, choices } }) { // eslint-disable-line react/prop-types
+  const t = useT();
+  const fetcher = useFetcher();
+  const [value, setValue] = useState(saved);
+  const saving = fetcher.state !== 'idle';
+  useEffect(() => {
+    if (fetcher.state !== 'idle' || !fetcher.data) return;
+    if (fetcher.data.ok) {
+      if (typeof shopify !== 'undefined') shopify.toast.show(t('admin.language.saved'));
+    } else {
+      setValue(saved);
+      if (typeof shopify !== 'undefined') shopify.toast.show(t(fetcher.data.error || 'error.admin.save_failed'), { isError: true });
+    }
+  }, [fetcher.state, fetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const options = choices.map((c) => ({ value: c.value, label: c.value === 'auto' ? t('admin.language.auto') : c.name })); // eslint-disable-line react/prop-types
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">{t('admin.language.title')}</Text>
+        <Divider />
+        <Select
+          label={t('admin.language.label')}
+          options={options}
+          value={value}
+          disabled={saving}
+          helpText={t('admin.language.help')}
+          onChange={(v) => {
+            setValue(v);
+            fetcher.submit({ intent: 'language', language: v }, { method: 'post' });
+          }}
+        />
+      </BlockStack>
+    </Card>
+  );
+}
+
 function PriceDisplayCard({ initial }) {
+  const t = useT();
   const fetcher = useFetcher();
   const [whole, setWhole] = useState(Boolean(initial?.wholePrices));
   const saving = fetcher.state !== 'idle';
@@ -82,19 +137,19 @@ function PriceDisplayCard({ initial }) {
     if (fetcher.state !== 'idle' || !fetcher.data) return;
     if (fetcher.data.ok) {
       setWhole(Boolean(fetcher.data.priceDisplay?.wholePrices));
-      if (typeof shopify !== 'undefined') shopify.toast.show('Price display saved');
+      if (typeof shopify !== 'undefined') shopify.toast.show(t('admin.account.price_saved'));
     } else if (typeof shopify !== 'undefined') {
-      shopify.toast.show(fetcher.data.error || 'Could not save', { isError: true });
+      shopify.toast.show(t(fetcher.data.error || 'error.admin.save_failed'), { isError: true });
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [fetcher.state, fetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Card>
       <BlockStack gap="400">
-        <Text as="h2" variant="headingMd">Price display</Text>
+        <Text as="h2" variant="headingMd">{t('admin.account.price_title')}</Text>
         <Divider />
         <Checkbox
-          label="Hide decimals in prices"
-          helpText="Everywhere BRIX shows a price on your store: cart drawer, upsells, COD buttons and payment options, Frequently Bought Together, Packs and combo pages (₹595 instead of ₹594.70). Display only: checkout charges the exact price, and the COD checkout's bill keeps the exact amount to pay."
+          label={t('admin.account.price_label')}
+          helpText={t('admin.account.price_help')}
           checked={whole}
           disabled={saving}
           onChange={(v) => {
@@ -121,36 +176,38 @@ function InfoRow({ label, value }) {
 }
 
 export default function AccountPage() {
-  const { shop, shopInfo, planKey, subscriptionId, priceDisplay } = useLoaderData();
+  const { shop, shopInfo, planKey, subscriptionId, priceDisplay, language } = useLoaderData();
   const navigate = useNavigate();
   const { canAccessFeature } = usePlan();
+  const t = useT();
+  const adminLocale = useAdminLocale();
 
   const plan = PLANS[planKey] || PLANS.free;
   const isPro = planKey === 'pro' || planKey === 'scale' || planKey === 'enterprise';
   const planName = plan.label;
-  const planPrice = plan.price.monthly > 0 ? `$${plan.price.monthly}/mo` : 'Free';
+  const planPrice = plan.price.monthly > 0 ? t('admin.account.per_month', { price: `$${plan.price.monthly}` }) : t('admin.account.free');
 
   const installedDate = shopInfo?.createdAt
-    ? new Date(shopInfo.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : 'N/A';
+    ? new Date(shopInfo.createdAt).toLocaleDateString(adminLocale === 'en' ? 'en-US' : adminLocale, { month: 'long', day: 'numeric', year: 'numeric' })
+    : t('admin.account.not_available');
 
   return (
     <Page
-      title="Account"
-      subtitle="Manage your store settings, billing, and usage"
+      title={t('admin.nav.account')}
+      subtitle={t('admin.account.subtitle')}
     >
       <BlockStack gap="500">
-        <FeatureHeaderBar feature="account" title="Account" subtitle="Manage your store settings, billing, and usage." />
+        <FeatureHeaderBar feature="account" title={t('admin.nav.account')} subtitle={t('admin.account.subtitle_full')} />
         <BrixBar size="md" floating />
 
         {/* Store Information */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Store Information</Text>
+            <Text as="h2" variant="headingMd">{t('admin.account.store_info')}</Text>
             <Divider />
-            <InfoRow label="Store Name" value={shopInfo?.name || shop} />
-            <InfoRow label="Store URL" value={shopInfo?.myshopifyDomain || shop} />
-            <InfoRow label="App Installed" value={installedDate} />
+            <InfoRow label={t('admin.account.store_name')} value={shopInfo?.name || shop} />
+            <InfoRow label={t('admin.account.store_url')} value={shopInfo?.myshopifyDomain || shop} />
+            <InfoRow label={t('admin.account.installed')} value={installedDate} />
           </BlockStack>
         </Card>
 
@@ -158,14 +215,14 @@ export default function AccountPage() {
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Current Plan & Billing</Text>
+              <Text as="h2" variant="headingMd">{t('admin.account.plan_billing')}</Text>
               <Button variant="plain" onClick={() => navigate('/app/subscribe')}>
-                Change Plan
+                {t('admin.account.change_plan')}
               </Button>
             </InlineStack>
             <Divider />
             <InfoRow
-              label="Plan"
+              label={t('admin.account.plan')}
               value={
                 <InlineStack gap="200" blockAlign="center">
                   <Badge tone={isPro ? 'success' : undefined}>{planName}</Badge>
@@ -173,10 +230,10 @@ export default function AccountPage() {
                 </InlineStack>
               }
             />
-            <InfoRow label="Billing" value="Through Shopify billing" />
+            <InfoRow label={t('admin.nav.billing')} value={t('admin.account.billing_via')} />
             {plan.orderCap !== null && (
               <Banner tone="info">
-                <p>Every plan has every feature. Your plan includes {plan.orderCap.toLocaleString('en-US')} orders a month; upgrade for more orders and AI BRIX credits.</p>
+                <p>{t('admin.account.plan_note', { orders: plan.orderCap.toLocaleString('en-US') })}</p>
               </Banner>
             )}
           </BlockStack>
@@ -185,49 +242,51 @@ export default function AccountPage() {
         {/* App Embed Status */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">App Embed Status</Text>
+            <Text as="h2" variant="headingMd">{t('admin.account.embed_title')}</Text>
             <Divider />
             <InlineStack align="space-between" blockAlign="center">
               <BlockStack gap="100">
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodyMd">Status:</Text>
-                  <Badge tone="attention">Manual Activation Required</Badge>
+                  <Text as="span" variant="bodyMd">{t('admin.account.status')}</Text>
+                  <Badge tone="attention">{t('admin.account.manual_activation')}</Badge>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Enable the Cart Ninja app embed in your Shopify theme to activate all features.
+                  {t('admin.account.embed_help')}
                 </Text>
               </BlockStack>
               <Button
                 icon={ExternalIcon}
                 onClick={() => window.open(`https://${shop}/admin/themes/current/editor?context=apps`, '_blank')}
               >
-                Open Theme Editor
+                {t('admin.account.open_theme_editor')}
               </Button>
             </InlineStack>
           </BlockStack>
         </Card>
+
+        <LanguageCard initial={language} />
 
         <PriceDisplayCard initial={priceDisplay} />
 
         {/* Support */}
         <Card>
           <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Support</Text>
+            <Text as="h2" variant="headingMd">{t('admin.account.support')}</Text>
             <Divider />
             <Text as="p" variant="bodyMd" tone="subdued">
-              Need help? Our team is ready to assist you with setup, configuration, or any issues.
+              {t('admin.account.support_help')}
             </Text>
             <InlineStack gap="400" align="end" blockAlign="center" wrap>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon source={canAccessFeature('priority_email_support') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('priority_email_support') ? 'success' : 'subdued'} />
                 <Text as="span" variant="bodySm" tone={canAccessFeature('priority_email_support') ? undefined : 'subdued'}>
-                  Priority Email Support{!canAccessFeature('priority_email_support') ? ' — requires Starter' : ''}
+                  {canAccessFeature('priority_email_support') ? t('admin.account.priority_email') : t('admin.account.priority_email_locked')}
                 </Text>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon source={canAccessFeature('ai_support_247') ? CheckCircleIcon : LockIcon} tone={canAccessFeature('ai_support_247') ? 'success' : 'subdued'} />
                 <Text as="span" variant="bodySm" tone={canAccessFeature('ai_support_247') ? undefined : 'subdued'}>
-                  24/7 AI Support{!canAccessFeature('ai_support_247') ? ' — requires Starter' : ''}
+                  {canAccessFeature('ai_support_247') ? t('admin.account.ai_support') : t('admin.account.ai_support_locked')}
                 </Text>
               </div>
             </InlineStack>
@@ -235,15 +294,15 @@ export default function AccountPage() {
               <Button
                 onClick={() => window.open('mailto:support@thecartninja.com', '_blank')}
               >
-                Contact Support
+                {t('admin.account.contact_support')}
               </Button>
               <Button
                 onClick={() => window.open('https://thebrix.io/how-to.html', '_blank')}
               >
-                Documentation
+                {t('admin.account.documentation')}
               </Button>
               <Button onClick={() => navigate('/app/subscribe')}>
-                Upgrade Plan
+                {t('admin.account.upgrade_plan')}
               </Button>
             </InlineStack>
           </BlockStack>

@@ -1,0 +1,1862 @@
+{
+  "admin.account.ai_support": {
+    "status": "ai",
+    "srcHash": "114c667a"
+  },
+  "admin.account.ai_support_locked": {
+    "status": "ai",
+    "srcHash": "c16c5a91"
+  },
+  "admin.account.billing_via": {
+    "status": "ai",
+    "srcHash": "566a1537"
+  },
+  "admin.account.change_plan": {
+    "status": "ai",
+    "srcHash": "a4aa0a20"
+  },
+  "admin.account.contact_support": {
+    "status": "ai",
+    "srcHash": "abccb14c"
+  },
+  "admin.account.documentation": {
+    "status": "ai",
+    "srcHash": "12f8f721"
+  },
+  "admin.account.embed_help": {
+    "status": "ai",
+    "srcHash": "37d51d64"
+  },
+  "admin.account.embed_title": {
+    "status": "ai",
+    "srcHash": "2a981fbd"
+  },
+  "admin.account.free": {
+    "status": "ai",
+    "srcHash": "1c5c36fb"
+  },
+  "admin.account.installed": {
+    "status": "ai",
+    "srcHash": "c3af06be"
+  },
+  "admin.account.manual_activation": {
+    "status": "ai",
+    "srcHash": "f760c3b6"
+  },
+  "admin.account.not_available": {
+    "status": "ai",
+    "srcHash": "79db7a01"
+  },
+  "admin.account.open_theme_editor": {
+    "status": "ai",
+    "srcHash": "e1061475"
+  },
+  "admin.account.per_month": {
+    "status": "ai",
+    "srcHash": "30522643"
+  },
+  "admin.account.plan": {
+    "status": "ai",
+    "srcHash": "1eab5e32"
+  },
+  "admin.account.plan_billing": {
+    "status": "ai",
+    "srcHash": "e23ce610"
+  },
+  "admin.account.plan_note": {
+    "status": "ai",
+    "srcHash": "7fe6a268"
+  },
+  "admin.account.price_help": {
+    "status": "ai",
+    "srcHash": "2d5b6bcf"
+  },
+  "admin.account.price_label": {
+    "status": "ai",
+    "srcHash": "62209d80"
+  },
+  "admin.account.price_saved": {
+    "status": "ai",
+    "srcHash": "777a71df"
+  },
+  "admin.account.price_title": {
+    "status": "ai",
+    "srcHash": "0092e50c"
+  },
+  "admin.account.priority_email": {
+    "status": "ai",
+    "srcHash": "358b32d6"
+  },
+  "admin.account.priority_email_locked": {
+    "status": "ai",
+    "srcHash": "4eb102dd"
+  },
+  "admin.account.status": {
+    "status": "ai",
+    "srcHash": "ca77496f"
+  },
+  "admin.account.store_info": {
+    "status": "ai",
+    "srcHash": "932f505c"
+  },
+  "admin.account.store_name": {
+    "status": "ai",
+    "srcHash": "6fcdab51"
+  },
+  "admin.account.store_url": {
+    "status": "ai",
+    "srcHash": "f73379b3"
+  },
+  "admin.account.subtitle": {
+    "status": "ai",
+    "srcHash": "2d41cdfe"
+  },
+  "admin.account.subtitle_full": {
+    "status": "ai",
+    "srcHash": "0e96fe70"
+  },
+  "admin.account.support": {
+    "status": "ai",
+    "srcHash": "6be6f488"
+  },
+  "admin.account.support_help": {
+    "status": "ai",
+    "srcHash": "16e28cf4"
+  },
+  "admin.account.upgrade_plan": {
+    "status": "ai",
+    "srcHash": "07aa9fe2"
+  },
+  "admin.common.close": {
+    "status": "ai",
+    "srcHash": "cd86acc3"
+  },
+  "admin.common.discard": {
+    "status": "ai",
+    "srcHash": "1e706c21"
+  },
+  "admin.common.generic_error": {
+    "status": "ai",
+    "srcHash": "c951164f"
+  },
+  "admin.common.loading": {
+    "status": "ai",
+    "srcHash": "53af8357"
+  },
+  "admin.common.save": {
+    "status": "ai",
+    "srcHash": "4d2d5d68"
+  },
+  "admin.common.saved": {
+    "status": "ai",
+    "srcHash": "8a6979e4"
+  },
+  "admin.common.unknown_request": {
+    "status": "ai",
+    "srcHash": "5527d07e"
+  },
+  "admin.home.academy": {
+    "status": "ai",
+    "srcHash": "d201e866"
+  },
+  "admin.home.academy_sub": {
+    "status": "ai",
+    "srcHash": "01f2289a"
+  },
+  "admin.home.beginner": {
+    "status": "ai",
+    "srcHash": "d08ad5a7"
+  },
+  "admin.home.embed": {
+    "status": "ai",
+    "srcHash": "0c5cc8c9"
+  },
+  "admin.home.embed_help": {
+    "status": "ai",
+    "srcHash": "693c3584"
+  },
+  "admin.home.embed_live": {
+    "status": "ai",
+    "srcHash": "ba2212a3"
+  },
+  "admin.home.embed_live_help": {
+    "status": "ai",
+    "srcHash": "913620c8"
+  },
+  "admin.home.embed_off": {
+    "status": "ai",
+    "srcHash": "78cb15c8"
+  },
+  "admin.home.embed_off_help": {
+    "status": "ai",
+    "srcHash": "657b10c1"
+  },
+  "admin.home.embed_on": {
+    "status": "ai",
+    "srcHash": "ba9f43e6"
+  },
+  "admin.home.embed_turn_on_title": {
+    "status": "ai",
+    "srcHash": "b72e95e7"
+  },
+  "admin.home.feedback": {
+    "status": "ai",
+    "srcHash": "3055fe22"
+  },
+  "admin.home.feedback_failed": {
+    "status": "ai",
+    "srcHash": "57b5d8f5"
+  },
+  "admin.home.feedback_helps": {
+    "status": "ai",
+    "srcHash": "1047edd2"
+  },
+  "admin.home.feedback_placeholder": {
+    "status": "ai",
+    "srcHash": "e50acd5a"
+  },
+  "admin.home.feedback_sub": {
+    "status": "ai",
+    "srcHash": "0da7fe55"
+  },
+  "admin.home.feedback_thanks": {
+    "status": "ai",
+    "srcHash": "7ca509ee"
+  },
+  "admin.home.getting_started": {
+    "status": "ai",
+    "srcHash": "d7ac78be"
+  },
+  "admin.home.go_dashboard": {
+    "status": "ai",
+    "srcHash": "19212a24"
+  },
+  "admin.home.go_to_step": {
+    "status": "ai",
+    "srcHash": "d1632f3e"
+  },
+  "admin.home.intermediate": {
+    "status": "ai",
+    "srcHash": "75fece84"
+  },
+  "admin.home.kpi_aov": {
+    "status": "ai",
+    "srcHash": "b168debd"
+  },
+  "admin.home.kpi_conversion": {
+    "status": "ai",
+    "srcHash": "312d3185"
+  },
+  "admin.home.kpi_revenue": {
+    "status": "ai",
+    "srcHash": "0004fb3b"
+  },
+  "admin.home.kpi_upsell": {
+    "status": "ai",
+    "srcHash": "157e378c"
+  },
+  "admin.home.link_fbt": {
+    "status": "ai",
+    "srcHash": "33dad1af"
+  },
+  "admin.home.open_theme_editor": {
+    "status": "ai",
+    "srcHash": "e10a0435"
+  },
+  "admin.home.plan_badge": {
+    "status": "ai",
+    "srcHash": "231c61ef"
+  },
+  "admin.home.play_video": {
+    "status": "ai",
+    "srcHash": "f8573392"
+  },
+  "admin.home.quick_links": {
+    "status": "ai",
+    "srcHash": "922c9915"
+  },
+  "admin.home.rate_again": {
+    "status": "ai",
+    "srcHash": "3806f9ef"
+  },
+  "admin.home.send_feedback": {
+    "status": "ai",
+    "srcHash": "03b46f8a"
+  },
+  "admin.home.sending": {
+    "status": "ai",
+    "srcHash": "967aa5dd"
+  },
+  "admin.home.setup_progress": {
+    "status": "ai",
+    "srcHash": "7425bf9d"
+  },
+  "admin.home.step1_category": {
+    "status": "ai",
+    "srcHash": "9041de5a"
+  },
+  "admin.home.step1_desc": {
+    "status": "ai",
+    "srcHash": "6ff8ce7e"
+  },
+  "admin.home.step1_title": {
+    "status": "ai",
+    "srcHash": "eeedd9ad"
+  },
+  "admin.home.step2_category": {
+    "status": "ai",
+    "srcHash": "c8295dc8"
+  },
+  "admin.home.step2_desc": {
+    "status": "ai",
+    "srcHash": "341bf261"
+  },
+  "admin.home.step2_title": {
+    "status": "ai",
+    "srcHash": "aa4e85f2"
+  },
+  "admin.home.step3_category": {
+    "status": "ai",
+    "srcHash": "d9887245"
+  },
+  "admin.home.step3_desc": {
+    "status": "ai",
+    "srcHash": "c7d900fa"
+  },
+  "admin.home.step3_title": {
+    "status": "ai",
+    "srcHash": "12720332"
+  },
+  "admin.home.step4_category": {
+    "status": "ai",
+    "srcHash": "20229533"
+  },
+  "admin.home.step4_desc": {
+    "status": "ai",
+    "srcHash": "ea1e3329"
+  },
+  "admin.home.step4_title": {
+    "status": "ai",
+    "srcHash": "68ece5e6"
+  },
+  "admin.home.step5_category": {
+    "status": "ai",
+    "srcHash": "54c60752"
+  },
+  "admin.home.step5_desc": {
+    "status": "ai",
+    "srcHash": "7fa6652a"
+  },
+  "admin.home.step5_title": {
+    "status": "ai",
+    "srcHash": "1b7f7e94"
+  },
+  "admin.home.step6_category": {
+    "status": "ai",
+    "srcHash": "bcade02b"
+  },
+  "admin.home.step6_desc": {
+    "status": "ai",
+    "srcHash": "0fa14e21"
+  },
+  "admin.home.step6_title": {
+    "status": "ai",
+    "srcHash": "77a04288"
+  },
+  "admin.home.steps_done": {
+    "status": "ai",
+    "srcHash": "ec6b671f"
+  },
+  "admin.home.tip1_body": {
+    "status": "ai",
+    "srcHash": "21141814"
+  },
+  "admin.home.tip1_title": {
+    "status": "ai",
+    "srcHash": "27a1f16c"
+  },
+  "admin.home.tip2_body": {
+    "status": "ai",
+    "srcHash": "07dfcc82"
+  },
+  "admin.home.tip2_title": {
+    "status": "ai",
+    "srcHash": "e6d76d70"
+  },
+  "admin.home.tip3_body": {
+    "status": "ai",
+    "srcHash": "5e7d4f86"
+  },
+  "admin.home.tip3_title": {
+    "status": "ai",
+    "srcHash": "ffea3f72"
+  },
+  "admin.home.tip4_body": {
+    "status": "ai",
+    "srcHash": "eefe639d"
+  },
+  "admin.home.tip4_title": {
+    "status": "ai",
+    "srcHash": "13f4bbbd"
+  },
+  "admin.home.tip5_body": {
+    "status": "ai",
+    "srcHash": "e89cd527"
+  },
+  "admin.home.tip5_title": {
+    "status": "ai",
+    "srcHash": "1ea10d2c"
+  },
+  "admin.home.tip6_body": {
+    "status": "ai",
+    "srcHash": "3637f5ee"
+  },
+  "admin.home.tip6_title": {
+    "status": "ai",
+    "srcHash": "54ee2b2c"
+  },
+  "admin.home.tips": {
+    "status": "ai",
+    "srcHash": "d96fe00f"
+  },
+  "admin.home.tips_sub": {
+    "status": "ai",
+    "srcHash": "f029412a"
+  },
+  "admin.home.turn_on_embed": {
+    "status": "ai",
+    "srcHash": "e27a7fe9"
+  },
+  "admin.home.video_soon": {
+    "status": "ai",
+    "srcHash": "174fef82"
+  },
+  "admin.home.videos": {
+    "status": "ai",
+    "srcHash": "ea70b9b7"
+  },
+  "admin.home.videos_sub": {
+    "status": "ai",
+    "srcHash": "37f02d73"
+  },
+  "admin.home.view_analytics": {
+    "status": "ai",
+    "srcHash": "9a59fcc5"
+  },
+  "admin.home.view_dashboard": {
+    "status": "ai",
+    "srcHash": "450c00cc"
+  },
+  "admin.home.view_getting_started": {
+    "status": "ai",
+    "srcHash": "991ea855"
+  },
+  "admin.home.watch_video": {
+    "status": "ai",
+    "srcHash": "bf60eb2b"
+  },
+  "admin.home.watched": {
+    "status": "ai",
+    "srcHash": "93db9e49"
+  },
+  "admin.home.welcome": {
+    "status": "ai",
+    "srcHash": "4ce7e6dd"
+  },
+  "admin.home.welcome_back": {
+    "status": "ai",
+    "srcHash": "48e13026"
+  },
+  "admin.home.welcome_sub": {
+    "status": "ai",
+    "srcHash": "07a7de73"
+  },
+  "admin.language.auto": {
+    "status": "ai",
+    "srcHash": "6cd0d864"
+  },
+  "admin.language.help": {
+    "status": "ai",
+    "srcHash": "462c03aa"
+  },
+  "admin.language.label": {
+    "status": "ai",
+    "srcHash": "f65c0fcf"
+  },
+  "admin.language.saved": {
+    "status": "ai",
+    "srcHash": "01d08330"
+  },
+  "admin.language.title": {
+    "status": "ai",
+    "srcHash": "9a73db9b"
+  },
+  "admin.nav.account": {
+    "status": "ai",
+    "srcHash": "59f8a2fc"
+  },
+  "admin.nav.analytics": {
+    "status": "ai",
+    "srcHash": "bcade02b"
+  },
+  "admin.nav.billing": {
+    "status": "ai",
+    "srcHash": "6f58987c"
+  },
+  "admin.nav.brix_ai": {
+    "status": "ai",
+    "srcHash": "9041de5a"
+  },
+  "admin.nav.build_combo": {
+    "status": "ai",
+    "srcHash": "2ef2bd7e"
+  },
+  "admin.nav.cart_editor": {
+    "status": "ai",
+    "srcHash": "30e692d0"
+  },
+  "admin.nav.cod": {
+    "status": "ai",
+    "srcHash": "8359c907"
+  },
+  "admin.nav.coupon_banner": {
+    "status": "ai",
+    "srcHash": "20229533"
+  },
+  "admin.nav.discount_creator": {
+    "status": "ai",
+    "srcHash": "bf90c1c6"
+  },
+  "admin.nav.fbt": {
+    "status": "ai",
+    "srcHash": "506d29a7"
+  },
+  "admin.nav.home": {
+    "status": "ai",
+    "srcHash": "52f50eae"
+  },
+  "admin.nav.packs": {
+    "status": "ai",
+    "srcHash": "c1060409"
+  },
+  "admin.nav.plans": {
+    "status": "ai",
+    "srcHash": "88c56053"
+  },
+  "error.admin.save_failed": {
+    "status": "ai",
+    "srcHash": "c4c2661f"
+  },
+  "error.cod.calculate_failed": {
+    "status": "ai",
+    "srcHash": "f23f7ca1"
+  },
+  "error.cod.checkout_only": {
+    "status": "ai",
+    "srcHash": "44e84ab5"
+  },
+  "error.cod.combo_price_mismatch": {
+    "status": "ai",
+    "srcHash": "e9a22b71"
+  },
+  "error.cod.daily_limit": {
+    "status": "ai",
+    "srcHash": "c54ec73d"
+  },
+  "error.cod.disabled": {
+    "status": "ai",
+    "srcHash": "4234a8c6"
+  },
+  "error.cod.draft_not_ready": {
+    "status": "ai",
+    "srcHash": "0bd6be1d"
+  },
+  "error.cod.in_progress": {
+    "status": "ai",
+    "srcHash": "8100c59e"
+  },
+  "error.cod.invalid_phone": {
+    "status": "ai",
+    "srcHash": "baf70fa8"
+  },
+  "error.cod.invalid_pincode": {
+    "status": "ai",
+    "srcHash": "b8121dc4"
+  },
+  "error.cod.invalid_request": {
+    "status": "ai",
+    "srcHash": "dc4f0398"
+  },
+  "error.cod.item_sold_out": {
+    "status": "ai",
+    "srcHash": "59a349c5"
+  },
+  "error.cod.item_unavailable": {
+    "status": "ai",
+    "srcHash": "439a01b1"
+  },
+  "error.cod.no_delivery_option": {
+    "status": "ai",
+    "srcHash": "fe73acc0"
+  },
+  "error.cod.otp_expired": {
+    "status": "ai",
+    "srcHash": "38c245d6"
+  },
+  "error.cod.otp_invalid": {
+    "status": "ai",
+    "srcHash": "eaf83e17"
+  },
+  "error.cod.otp_locked": {
+    "status": "ai",
+    "srcHash": "349a0804"
+  },
+  "error.cod.otp_required": {
+    "status": "ai",
+    "srcHash": "f1eb1742"
+  },
+  "error.cod.otp_send_failed": {
+    "status": "ai",
+    "srcHash": "bf185a6a"
+  },
+  "error.cod.otp_wrong": {
+    "status": "ai",
+    "srcHash": "fd52b035"
+  },
+  "error.cod.rate_limited": {
+    "status": "ai",
+    "srcHash": "9d31d0f7"
+  },
+  "error.cod.shopify_error": {
+    "status": "ai",
+    "srcHash": "2b8c22cb"
+  },
+  "error.cod.unavailable": {
+    "status": "ai",
+    "srcHash": "417018e8"
+  },
+  "error.generic": {
+    "status": "ai",
+    "srcHash": "c951164f"
+  },
+  "error.network": {
+    "status": "ai",
+    "srcHash": "a301974b"
+  },
+  "storefront.cod.address1": {
+    "status": "ai",
+    "srcHash": "5fb4a23e"
+  },
+  "storefront.cod.address2": {
+    "status": "ai",
+    "srcHash": "83925670"
+  },
+  "storefront.cod.address2_placeholder": {
+    "status": "ai",
+    "srcHash": "c4c8476c"
+  },
+  "storefront.cod.agree": {
+    "status": "ai",
+    "srcHash": "1deeb00d"
+  },
+  "storefront.cod.another_option": {
+    "status": "ai",
+    "srcHash": "1e5f2be5"
+  },
+  "storefront.cod.apply_caps": {
+    "status": "ai",
+    "srcHash": "760e025b"
+  },
+  "storefront.cod.apply_code": {
+    "status": "ai",
+    "srcHash": "8069374a"
+  },
+  "storefront.cod.arrives": {
+    "status": "ai",
+    "srcHash": "1784fe69"
+  },
+  "storefront.cod.arrives_today": {
+    "status": "ai",
+    "srcHash": "de37fd4e"
+  },
+  "storefront.cod.arrives_tomorrow": {
+    "status": "ai",
+    "srcHash": "74f46216"
+  },
+  "storefront.cod.available_offers": {
+    "status": "ai",
+    "srcHash": "832e8b77"
+  },
+  "storefront.cod.badge_free_ship": {
+    "status": "ai",
+    "srcHash": "2550bd7b"
+  },
+  "storefront.cod.badge_off": {
+    "status": "ai",
+    "srcHash": "bbb88900"
+  },
+  "storefront.cod.badge_offer": {
+    "status": "ai",
+    "srcHash": "a2b23ffd"
+  },
+  "storefront.cod.button": {
+    "status": "ai",
+    "srcHash": "0d900ddd"
+  },
+  "storefront.cod.buy_it_now": {
+    "status": "ai",
+    "srcHash": "3039af24"
+  },
+  "storefront.cod.cart_empty": {
+    "status": "ai",
+    "srcHash": "9aad6ec1"
+  },
+  "storefront.cod.cart_read_failed": {
+    "status": "ai",
+    "srcHash": "e801f7f1"
+  },
+  "storefront.cod.change_address": {
+    "status": "ai",
+    "srcHash": "10d2a6d5"
+  },
+  "storefront.cod.checking": {
+    "status": "ai",
+    "srcHash": "7c4b3f97"
+  },
+  "storefront.cod.checking_pin": {
+    "status": "ai",
+    "srcHash": "882476df"
+  },
+  "storefront.cod.checking_short": {
+    "status": "ai",
+    "srcHash": "732bdad5"
+  },
+  "storefront.cod.city": {
+    "status": "ai",
+    "srcHash": "906b3662"
+  },
+  "storefront.cod.code_label": {
+    "status": "ai",
+    "srcHash": "a6e15ab4"
+  },
+  "storefront.cod.code_not_applied": {
+    "status": "ai",
+    "srcHash": "f29ad52f"
+  },
+  "storefront.cod.code_sent_to": {
+    "status": "ai",
+    "srcHash": "75370438"
+  },
+  "storefront.cod.combo_discount": {
+    "status": "ai",
+    "srcHash": "8e42166f"
+  },
+  "storefront.cod.confirm_phone": {
+    "status": "ai",
+    "srcHash": "27bb14f6"
+  },
+  "storefront.cod.coupon_applied": {
+    "status": "ai",
+    "srcHash": "677189f3"
+  },
+  "storefront.cod.coupon_chars": {
+    "status": "ai",
+    "srcHash": "7179a9a4"
+  },
+  "storefront.cod.coupon_check_failed": {
+    "status": "ai",
+    "srcHash": "46749e54"
+  },
+  "storefront.cod.coupon_code": {
+    "status": "ai",
+    "srcHash": "3ca74378"
+  },
+  "storefront.cod.coupon_empty": {
+    "status": "ai",
+    "srcHash": "5c069129"
+  },
+  "storefront.cod.coupon_invalid": {
+    "status": "ai",
+    "srcHash": "8202f29f"
+  },
+  "storefront.cod.coupon_left_off": {
+    "status": "ai",
+    "srcHash": "b270e39e"
+  },
+  "storefront.cod.coupon_placeholder": {
+    "status": "ai",
+    "srcHash": "0691a29e"
+  },
+  "storefront.cod.coupon_prompt": {
+    "status": "ai",
+    "srcHash": "dd86e004"
+  },
+  "storefront.cod.deliver_here": {
+    "status": "ai",
+    "srcHash": "47da86fc"
+  },
+  "storefront.cod.deliver_to": {
+    "status": "ai",
+    "srcHash": "9a8ee3ef"
+  },
+  "storefront.cod.delivering_to": {
+    "status": "ai",
+    "srcHash": "4ead076d"
+  },
+  "storefront.cod.delivery": {
+    "status": "ai",
+    "srcHash": "48f38d75"
+  },
+  "storefront.cod.delivery_address": {
+    "status": "ai",
+    "srcHash": "bd351b4d"
+  },
+  "storefront.cod.delivery_at_review": {
+    "status": "ai",
+    "srcHash": "8e774953"
+  },
+  "storefront.cod.delivery_charges": {
+    "status": "ai",
+    "srcHash": "4a223a34"
+  },
+  "storefront.cod.delivery_day": {
+    "status": "ai",
+    "srcHash": "fd6b47ab"
+  },
+  "storefront.cod.delivery_options": {
+    "status": "ai",
+    "srcHash": "42604aab"
+  },
+  "storefront.cod.delivery_repicked": {
+    "status": "ai",
+    "srcHash": "db12cec5"
+  },
+  "storefront.cod.delivery_time": {
+    "status": "ai",
+    "srcHash": "56679afe"
+  },
+  "storefront.cod.didnt_get": {
+    "status": "ai",
+    "srcHash": "7f9f7bb1"
+  },
+  "storefront.cod.email": {
+    "status": "ai",
+    "srcHash": "6d68db97"
+  },
+  "storefront.cod.enter_code": {
+    "status": "ai",
+    "srcHash": "df3e3c8b"
+  },
+  "storefront.cod.fee_at_review": {
+    "status": "ai",
+    "srcHash": "808fe8ae"
+  },
+  "storefront.cod.fee_label": {
+    "status": "ai",
+    "srcHash": "365e5665"
+  },
+  "storefront.cod.free_shipping_in": {
+    "status": "ai",
+    "srcHash": "1c0b52be"
+  },
+  "storefront.cod.full_name": {
+    "status": "ai",
+    "srcHash": "9010932f"
+  },
+  "storefront.cod.getting_total": {
+    "status": "ai",
+    "srcHash": "48632650"
+  },
+  "storefront.cod.includes_tax": {
+    "status": "ai",
+    "srcHash": "e0d48546"
+  },
+  "storefront.cod.items": {
+    "status": "ai",
+    "srcHash": "e036382f"
+  },
+  "storefront.cod.keep_amount": {
+    "status": "ai",
+    "srcHash": "1ab5fc68"
+  },
+  "storefront.cod.max_amount": {
+    "status": "ai",
+    "srcHash": "9de7c793"
+  },
+  "storefront.cod.max_order": {
+    "status": "ai",
+    "srcHash": "66f7ecf0"
+  },
+  "storefront.cod.min_order": {
+    "status": "ai",
+    "srcHash": "e20e201a"
+  },
+  "storefront.cod.mobile_number": {
+    "status": "ai",
+    "srcHash": "0bb78ab0"
+  },
+  "storefront.cod.need_address": {
+    "status": "ai",
+    "srcHash": "ad19cd32"
+  },
+  "storefront.cod.need_city": {
+    "status": "ai",
+    "srcHash": "063fd127"
+  },
+  "storefront.cod.need_email": {
+    "status": "ai",
+    "srcHash": "926774a8"
+  },
+  "storefront.cod.need_name": {
+    "status": "ai",
+    "srcHash": "1dfbedb2"
+  },
+  "storefront.cod.need_state": {
+    "status": "ai",
+    "srcHash": "53e44134"
+  },
+  "storefront.cod.need_terms": {
+    "status": "ai",
+    "srcHash": "5afc6b9e"
+  },
+  "storefront.cod.not_for_product": {
+    "status": "ai",
+    "srcHash": "dc2e36c1"
+  },
+  "storefront.cod.not_for_some_items": {
+    "status": "ai",
+    "srcHash": "56206962"
+  },
+  "storefront.cod.not_with_packs": {
+    "status": "ai",
+    "srcHash": "e9137bf3"
+  },
+  "storefront.cod.order_confirmed": {
+    "status": "ai",
+    "srcHash": "2e3d0ccd"
+  },
+  "storefront.cod.order_name": {
+    "status": "ai",
+    "srcHash": "3b777284"
+  },
+  "storefront.cod.order_placed": {
+    "status": "ai",
+    "srcHash": "975114d8"
+  },
+  "storefront.cod.order_status": {
+    "status": "ai",
+    "srcHash": "1e2b5402"
+  },
+  "storefront.cod.order_summary": {
+    "status": "ai",
+    "srcHash": "848d7a63"
+  },
+  "storefront.cod.other_discounts": {
+    "status": "ai",
+    "srcHash": "d3b00d91"
+  },
+  "storefront.cod.otp_intro": {
+    "status": "ai",
+    "srcHash": "473ffdef"
+  },
+  "storefront.cod.packed_shipped": {
+    "status": "ai",
+    "srcHash": "ace22ac3"
+  },
+  "storefront.cod.paste": {
+    "status": "ai",
+    "srcHash": "b34a0288"
+  },
+  "storefront.cod.pay_on_delivery": {
+    "status": "ai",
+    "srcHash": "7bdf8c5a"
+  },
+  "storefront.cod.pay_online": {
+    "status": "ai",
+    "srcHash": "ab77e2cc"
+  },
+  "storefront.cod.pay_online_instead": {
+    "status": "ai",
+    "srcHash": "c07ddf76"
+  },
+  "storefront.cod.pay_when_arrives": {
+    "status": "ai",
+    "srcHash": "8ea433d8"
+  },
+  "storefront.cod.pay_when_it_arrives": {
+    "status": "ai",
+    "srcHash": "afab6170"
+  },
+  "storefront.cod.payment": {
+    "status": "ai",
+    "srcHash": "20f64111"
+  },
+  "storefront.cod.phone_placeholder": {
+    "status": "ai",
+    "srcHash": "3ebb67bf"
+  },
+  "storefront.cod.phone_verified": {
+    "status": "ai",
+    "srcHash": "b8a4281d"
+  },
+  "storefront.cod.pick_day": {
+    "status": "ai",
+    "srcHash": "46e34be7"
+  },
+  "storefront.cod.pin_blocked": {
+    "status": "ai",
+    "srcHash": "5421b919"
+  },
+  "storefront.cod.pin_blocked_short": {
+    "status": "ai",
+    "srcHash": "dc76066f"
+  },
+  "storefront.cod.pincode": {
+    "status": "ai",
+    "srcHash": "48f80a99"
+  },
+  "storefront.cod.pincode_placeholder": {
+    "status": "ai",
+    "srcHash": "13707bb5"
+  },
+  "storefront.cod.place_order": {
+    "status": "ai",
+    "srcHash": "734dfb12"
+  },
+  "storefront.cod.placing": {
+    "status": "ai",
+    "srcHash": "97e75248"
+  },
+  "storefront.cod.powered": {
+    "status": "ai",
+    "srcHash": "e146b6bf"
+  },
+  "storefront.cod.product_button": {
+    "status": "ai",
+    "srcHash": "1c307cff"
+  },
+  "storefront.cod.qty_n": {
+    "status": "ai",
+    "srcHash": "78aa9dc8"
+  },
+  "storefront.cod.removing": {
+    "status": "ai",
+    "srcHash": "2386bfd0"
+  },
+  "storefront.cod.resend_in": {
+    "status": "ai",
+    "srcHash": "7d86eac5"
+  },
+  "storefront.cod.review_title": {
+    "status": "ai",
+    "srcHash": "5fbc4508"
+  },
+  "storefront.cod.save_percent": {
+    "status": "ai",
+    "srcHash": "b3314f8c"
+  },
+  "storefront.cod.saving_order": {
+    "status": "ai",
+    "srcHash": "040cc1fd"
+  },
+  "storefront.cod.select_state": {
+    "status": "ai",
+    "srcHash": "0b7d6e98"
+  },
+  "storefront.cod.send_code": {
+    "status": "ai",
+    "srcHash": "fc840afc"
+  },
+  "storefront.cod.send_new_code": {
+    "status": "ai",
+    "srcHash": "22698473"
+  },
+  "storefront.cod.sending": {
+    "status": "ai",
+    "srcHash": "967aa5dd"
+  },
+  "storefront.cod.sheet_label": {
+    "status": "ai",
+    "srcHash": "30bb4b63"
+  },
+  "storefront.cod.shipping": {
+    "status": "ai",
+    "srcHash": "dbfa1de3"
+  },
+  "storefront.cod.shipping_at_review": {
+    "status": "ai",
+    "srcHash": "db02a98e"
+  },
+  "storefront.cod.state": {
+    "status": "ai",
+    "srcHash": "1deca496"
+  },
+  "storefront.cod.step_address": {
+    "status": "ai",
+    "srcHash": "700560f3"
+  },
+  "storefront.cod.step_of": {
+    "status": "ai",
+    "srcHash": "973a3e0b"
+  },
+  "storefront.cod.step_phone": {
+    "status": "ai",
+    "srcHash": "4930944f"
+  },
+  "storefront.cod.step_review": {
+    "status": "ai",
+    "srcHash": "6ae55601"
+  },
+  "storefront.cod.store_has_order": {
+    "status": "ai",
+    "srcHash": "c60ada0e"
+  },
+  "storefront.cod.store_logo": {
+    "status": "ai",
+    "srcHash": "48e3703d"
+  },
+  "storefront.cod.store_sends": {
+    "status": "ai",
+    "srcHash": "c11f713a"
+  },
+  "storefront.cod.tag": {
+    "status": "ai",
+    "srcHash": "2d67def9"
+  },
+  "storefront.cod.taxes": {
+    "status": "ai",
+    "srcHash": "0d438a7a"
+  },
+  "storefront.cod.terms": {
+    "status": "ai",
+    "srcHash": "ac8b3961"
+  },
+  "storefront.cod.title": {
+    "status": "ai",
+    "srcHash": "0d900ddd"
+  },
+  "storefront.cod.trust_doorstep": {
+    "status": "ai",
+    "srcHash": "3d26b625"
+  },
+  "storefront.cod.trust_no_advance": {
+    "status": "ai",
+    "srcHash": "06e252ae"
+  },
+  "storefront.cod.trust_otp": {
+    "status": "ai",
+    "srcHash": "050df60f"
+  },
+  "storefront.cod.trust_secure": {
+    "status": "ai",
+    "srcHash": "bab7af8c"
+  },
+  "storefront.cod.verify": {
+    "status": "ai",
+    "srcHash": "2d5c0c44"
+  },
+  "storefront.cod.you_save_order": {
+    "status": "ai",
+    "srcHash": "62d15d28"
+  },
+  "storefront.common.back": {
+    "status": "ai",
+    "srcHash": "c2954bc2"
+  },
+  "storefront.common.change": {
+    "status": "ai",
+    "srcHash": "a1de2fdd"
+  },
+  "storefront.common.close": {
+    "status": "ai",
+    "srcHash": "cd86acc3"
+  },
+  "storefront.common.continue": {
+    "status": "ai",
+    "srcHash": "ab43d664"
+  },
+  "storefront.common.copied": {
+    "status": "ai",
+    "srcHash": "8dc21305"
+  },
+  "storefront.common.copy": {
+    "status": "ai",
+    "srcHash": "658f3664"
+  },
+  "storefront.common.edit": {
+    "status": "ai",
+    "srcHash": "c2c76cb1"
+  },
+  "storefront.common.free": {
+    "status": "ai",
+    "srcHash": "1c5c36fb"
+  },
+  "storefront.common.loading": {
+    "status": "ai",
+    "srcHash": "2e7e4ae3"
+  },
+  "storefront.common.please_wait": {
+    "status": "ai",
+    "srcHash": "b2990eb6"
+  },
+  "storefront.common.quantity": {
+    "status": "ai",
+    "srcHash": "2bf732f8"
+  },
+  "storefront.common.quantity_n": {
+    "status": "ai",
+    "srcHash": "aeed4337"
+  },
+  "storefront.common.remove": {
+    "status": "ai",
+    "srcHash": "21a5901d"
+  },
+  "storefront.coupon.copied_bang": {
+    "status": "ai",
+    "srcHash": "4c8421ac"
+  },
+  "storefront.coupon.coupon": {
+    "status": "ai",
+    "srcHash": "d554478b"
+  },
+  "storefront.coupon.next": {
+    "status": "ai",
+    "srcHash": "33e2d022"
+  },
+  "storefront.coupon.order_discount": {
+    "status": "ai",
+    "srcHash": "199a314e"
+  },
+  "storefront.coupon.previous": {
+    "status": "ai",
+    "srcHash": "a6a854e2"
+  },
+  "storefront.coupon.product_discount": {
+    "status": "ai",
+    "srcHash": "be0524e7"
+  },
+  "storefront.coupon.title": {
+    "status": "ai",
+    "srcHash": "37973777"
+  },
+  "storefront.drawer.add": {
+    "status": "ai",
+    "srcHash": "9dc3aa14"
+  },
+  "storefront.drawer.add_failed": {
+    "status": "ai",
+    "srcHash": "90fac5af"
+  },
+  "storefront.drawer.announcements": {
+    "status": "ai",
+    "srcHash": "3f2266eb"
+  },
+  "storefront.drawer.checkout": {
+    "status": "ai",
+    "srcHash": "4a06ab59"
+  },
+  "storefront.drawer.checkout_now": {
+    "status": "ai",
+    "srcHash": "a048cb55"
+  },
+  "storefront.drawer.continue_shopping": {
+    "status": "ai",
+    "srcHash": "864b5598"
+  },
+  "storefront.drawer.decrease": {
+    "status": "ai",
+    "srcHash": "329bfc72"
+  },
+  "storefront.drawer.details": {
+    "status": "ai",
+    "srcHash": "0ec24245"
+  },
+  "storefront.drawer.discount": {
+    "status": "ai",
+    "srcHash": "b7a4a87e"
+  },
+  "storefront.drawer.discounts": {
+    "status": "ai",
+    "srcHash": "25348c77"
+  },
+  "storefront.drawer.empty": {
+    "status": "ai",
+    "srcHash": "2b0952f5"
+  },
+  "storefront.drawer.empty_hint": {
+    "status": "ai",
+    "srcHash": "c3d71edf"
+  },
+  "storefront.drawer.footer_note": {
+    "status": "ai",
+    "srcHash": "df09a72e"
+  },
+  "storefront.drawer.free_caps": {
+    "status": "ai",
+    "srcHash": "97a522db"
+  },
+  "storefront.drawer.increase": {
+    "status": "ai",
+    "srcHash": "57c8b726"
+  },
+  "storefront.drawer.items": {
+    "status": "ai",
+    "srcHash": "2a903e37"
+  },
+  "storefront.drawer.items_caps": {
+    "status": "ai",
+    "srcHash": "f78eced7"
+  },
+  "storefront.drawer.items_included": {
+    "status": "ai",
+    "srcHash": "7cb594e1"
+  },
+  "storefront.drawer.next_announcement": {
+    "status": "ai",
+    "srcHash": "0d5a892f"
+  },
+  "storefront.drawer.opening_checkout": {
+    "status": "ai",
+    "srcHash": "3df85c1d"
+  },
+  "storefront.drawer.pack": {
+    "status": "ai",
+    "srcHash": "ca32d500"
+  },
+  "storefront.drawer.pack_of": {
+    "status": "ai",
+    "srcHash": "58de63de"
+  },
+  "storefront.drawer.powered": {
+    "status": "ai",
+    "srcHash": "91135be1"
+  },
+  "storefront.drawer.prev_announcement": {
+    "status": "ai",
+    "srcHash": "4e0a1cef"
+  },
+  "storefront.drawer.processing": {
+    "status": "ai",
+    "srcHash": "0b398004"
+  },
+  "storefront.drawer.remove_product": {
+    "status": "ai",
+    "srcHash": "ac8318f6"
+  },
+  "storefront.drawer.sold_out": {
+    "status": "ai",
+    "srcHash": "0fe973c7"
+  },
+  "storefront.drawer.stock_cap_left": {
+    "status": "ai",
+    "srcHash": "8c1f92b4"
+  },
+  "storefront.drawer.stock_cap_reached": {
+    "status": "ai",
+    "srcHash": "7c485803"
+  },
+  "storefront.drawer.subtotal": {
+    "status": "ai",
+    "srcHash": "d361488d"
+  },
+  "storefront.drawer.total": {
+    "status": "ai",
+    "srcHash": "ad066d9d"
+  },
+  "storefront.drawer.your_cart": {
+    "status": "ai",
+    "srcHash": "513820dc"
+  },
+  "storefront.fbt.add_all_n": {
+    "status": "ai",
+    "srcHash": "1a639049"
+  },
+  "storefront.fbt.add_n": {
+    "status": "ai",
+    "srcHash": "37f3475e"
+  },
+  "storefront.fbt.add_to_cart": {
+    "status": "ai",
+    "srcHash": "584d5359"
+  },
+  "storefront.fbt.added_n": {
+    "status": "ai",
+    "srcHash": "a2dde44a"
+  },
+  "storefront.fbt.bundle_total": {
+    "status": "ai",
+    "srcHash": "1a552f01"
+  },
+  "storefront.fbt.choose_option": {
+    "status": "ai",
+    "srcHash": "a720e354"
+  },
+  "storefront.fbt.loading": {
+    "status": "ai",
+    "srcHash": "416656aa"
+  },
+  "storefront.fbt.next_picture": {
+    "status": "ai",
+    "srcHash": "1178db7a"
+  },
+  "storefront.fbt.no_image": {
+    "status": "ai",
+    "srcHash": "502b3963"
+  },
+  "storefront.fbt.not_in_size": {
+    "status": "ai",
+    "srcHash": "e5fa613c"
+  },
+  "storefront.fbt.offer_all": {
+    "status": "ai",
+    "srcHash": "98201ff0"
+  },
+  "storefront.fbt.offer_any": {
+    "status": "ai",
+    "srcHash": "0a2de86b"
+  },
+  "storefront.fbt.picture_n": {
+    "status": "ai",
+    "srcHash": "800f1b45"
+  },
+  "storefront.fbt.prev_picture": {
+    "status": "ai",
+    "srcHash": "befc843a"
+  },
+  "storefront.fbt.product": {
+    "status": "ai",
+    "srcHash": "529c60cc"
+  },
+  "storefront.fbt.required": {
+    "status": "ai",
+    "srcHash": "4a045f20"
+  },
+  "storefront.fbt.select_items": {
+    "status": "ai",
+    "srcHash": "53011e19"
+  },
+  "storefront.fbt.show_more": {
+    "status": "ai",
+    "srcHash": "4c86839f"
+  },
+  "storefront.fbt.show_previous": {
+    "status": "ai",
+    "srcHash": "42392843"
+  },
+  "storefront.fbt.title": {
+    "status": "ai",
+    "srcHash": "506d29a7"
+  },
+  "storefront.fbt.total_n": {
+    "status": "ai",
+    "srcHash": "6dd88f19"
+  },
+  "storefront.fbt.view_details": {
+    "status": "ai",
+    "srcHash": "a1bd2c9f"
+  },
+  "storefront.fbt.view_pictures": {
+    "status": "ai",
+    "srcHash": "cbc8d8cc"
+  },
+  "storefront.fbt.you_save": {
+    "status": "ai",
+    "srcHash": "e89a010b"
+  },
+  "storefront.packs.add_another": {
+    "status": "ai",
+    "srcHash": "b497fa64"
+  },
+  "storefront.packs.add_failed": {
+    "status": "ai",
+    "srcHash": "29e9457f"
+  },
+  "storefront.packs.add_to_pack": {
+    "status": "ai",
+    "srcHash": "2fe8b43a"
+  },
+  "storefront.packs.added": {
+    "status": "ai",
+    "srcHash": "b35c3185"
+  },
+  "storefront.packs.added_to_cart": {
+    "status": "ai",
+    "srcHash": "9d197e19"
+  },
+  "storefront.packs.adding": {
+    "status": "ai",
+    "srcHash": "24890386"
+  },
+  "storefront.packs.all_n_items": {
+    "status": "ai",
+    "srcHash": "0b28206b"
+  },
+  "storefront.packs.buy_n": {
+    "status": "ai",
+    "srcHash": "e0196760"
+  },
+  "storefront.packs.buy_now": {
+    "status": "ai",
+    "srcHash": "c5ba4a83"
+  },
+  "storefront.packs.checkout_failed": {
+    "status": "ai",
+    "srcHash": "d94c7ce1"
+  },
+  "storefront.packs.choose_for_all": {
+    "status": "ai",
+    "srcHash": "73bdc392"
+  },
+  "storefront.packs.choose_item_to_add": {
+    "status": "ai",
+    "srcHash": "f2c51fa9"
+  },
+  "storefront.packs.choose_items": {
+    "status": "ai",
+    "srcHash": "73f07ad4"
+  },
+  "storefront.packs.choose_more": {
+    "status": "ai",
+    "srcHash": "ced1efa3"
+  },
+  "storefront.packs.choose_pack": {
+    "status": "ai",
+    "srcHash": "9536c234"
+  },
+  "storefront.packs.choose_pack_first": {
+    "status": "ai",
+    "srcHash": "0468d1b1"
+  },
+  "storefront.packs.choose_x": {
+    "status": "ai",
+    "srcHash": "e129dce5"
+  },
+  "storefront.packs.choose_your_item": {
+    "status": "ai",
+    "srcHash": "39115aba"
+  },
+  "storefront.packs.choose_your_items": {
+    "status": "ai",
+    "srcHash": "9f51ea6b"
+  },
+  "storefront.packs.combo_unavailable": {
+    "status": "ai",
+    "srcHash": "c65bfb3c"
+  },
+  "storefront.packs.cta": {
+    "status": "ai",
+    "srcHash": "ee9d5964"
+  },
+  "storefront.packs.duplicate": {
+    "status": "ai",
+    "srcHash": "941a4bfa"
+  },
+  "storefront.packs.each": {
+    "status": "ai",
+    "srcHash": "86c1b14b"
+  },
+  "storefront.packs.full": {
+    "status": "ai",
+    "srcHash": "dd0008e8"
+  },
+  "storefront.packs.going_checkout": {
+    "status": "ai",
+    "srcHash": "11f90de4"
+  },
+  "storefront.packs.heading": {
+    "status": "ai",
+    "srcHash": "e5148b7c"
+  },
+  "storefront.packs.in_pack": {
+    "status": "ai",
+    "srcHash": "32670a23"
+  },
+  "storefront.packs.item_n": {
+    "status": "ai",
+    "srcHash": "84a969a6"
+  },
+  "storefront.packs.items": {
+    "status": "ai",
+    "srcHash": "2a903e37"
+  },
+  "storefront.packs.items_selected": {
+    "status": "ai",
+    "srcHash": "b281fe1c"
+  },
+  "storefront.packs.low_stock": {
+    "status": "ai",
+    "srcHash": "edf7880f"
+  },
+  "storefront.packs.n_of_total_selected": {
+    "status": "ai",
+    "srcHash": "ecb4c50d"
+  },
+  "storefront.packs.n_same": {
+    "status": "ai",
+    "srcHash": "195ce19f"
+  },
+  "storefront.packs.needs_change": {
+    "status": "ai",
+    "srcHash": "8f7a00c3"
+  },
+  "storefront.packs.needs_option": {
+    "status": "ai",
+    "srcHash": "485c332e"
+  },
+  "storefront.packs.not_chosen": {
+    "status": "ai",
+    "srcHash": "45d3ede0"
+  },
+  "storefront.packs.not_chosen_lower": {
+    "status": "ai",
+    "srcHash": "cdb855c0"
+  },
+  "storefront.packs.not_enough_stock": {
+    "status": "ai",
+    "srcHash": "63157752"
+  },
+  "storefront.packs.not_in_quantity": {
+    "status": "ai",
+    "srcHash": "a4cf9f33"
+  },
+  "storefront.packs.nothing_chosen": {
+    "status": "ai",
+    "srcHash": "cf390b0a"
+  },
+  "storefront.packs.offline": {
+    "status": "ai",
+    "srcHash": "efea7f41"
+  },
+  "storefront.packs.only_n_left": {
+    "status": "ai",
+    "srcHash": "ada0cbcd"
+  },
+  "storefront.packs.option": {
+    "status": "ai",
+    "srcHash": "e7e19b94"
+  },
+  "storefront.packs.packs": {
+    "status": "ai",
+    "srcHash": "c1060409"
+  },
+  "storefront.packs.remove_from_pack": {
+    "status": "ai",
+    "srcHash": "086f54d2"
+  },
+  "storefront.packs.remove_item_n": {
+    "status": "ai",
+    "srcHash": "2c6f0f51"
+  },
+  "storefront.packs.remove_one": {
+    "status": "ai",
+    "srcHash": "2604c7ce"
+  },
+  "storefront.packs.save": {
+    "status": "ai",
+    "srcHash": "4d2d5d68"
+  },
+  "storefront.packs.select_x": {
+    "status": "ai",
+    "srcHash": "10fc7466"
+  },
+  "storefront.packs.selected_n": {
+    "status": "ai",
+    "srcHash": "6f598777"
+  },
+  "storefront.packs.sold_out_choose": {
+    "status": "ai",
+    "srcHash": "c57d79cf"
+  },
+  "storefront.packs.stock": {
+    "status": "ai",
+    "srcHash": "1130d12e"
+  },
+  "storefront.packs.stock_other": {
+    "status": "ai",
+    "srcHash": "7324fc8d"
+  },
+  "storefront.packs.stock_smaller": {
+    "status": "ai",
+    "srcHash": "fca8a2f8"
+  },
+  "storefront.packs.subheading": {
+    "status": "ai",
+    "srcHash": "4c025e4b"
+  },
+  "storefront.packs.unavailable": {
+    "status": "ai",
+    "srcHash": "da4baaa9"
+  },
+  "storefront.packs.your_item": {
+    "status": "ai",
+    "srcHash": "5b77a79d"
+  },
+  "storefront.packs.your_pack": {
+    "status": "ai",
+    "srcHash": "332cdde7"
+  },
+  "storefront.pay.cod_description": {
+    "status": "ai",
+    "srcHash": "d3d68922"
+  },
+  "storefront.pay.get_it_for": {
+    "status": "ai",
+    "srcHash": "3157ac6a"
+  },
+  "storefront.pay.heading": {
+    "status": "ai",
+    "srcHash": "80d18177"
+  },
+  "storefront.pay.method": {
+    "status": "ai",
+    "srcHash": "5b8fb9b2"
+  },
+  "storefront.pay.min_not_met": {
+    "status": "ai",
+    "srcHash": "4ba3f365"
+  },
+  "storefront.pay.offer_description": {
+    "status": "ai",
+    "srcHash": "a8378162"
+  },
+  "storefront.pay.offer_title": {
+    "status": "ai",
+    "srcHash": "40485304"
+  },
+  "storefront.pay.online_description": {
+    "status": "ai",
+    "srcHash": "b97b4b15"
+  },
+  "storefront.pay.online_instead_of": {
+    "status": "ai",
+    "srcHash": "3e58bd1f"
+  },
+  "storefront.pay.online_label": {
+    "status": "ai",
+    "srcHash": "d7695aac"
+  },
+  "storefront.pay.pay": {
+    "status": "ai",
+    "srcHash": "6a1ee8a0"
+  },
+  "storefront.pay.save_amount": {
+    "status": "ai",
+    "srcHash": "cab7ac29"
+  },
+  "storefront.progress.all_unlocked": {
+    "status": "ai",
+    "srcHash": "488629dc"
+  },
+  "storefront.progress.away": {
+    "status": "ai",
+    "srcHash": "3b2fc4f2"
+  },
+  "storefront.progress.next_reward": {
+    "status": "ai",
+    "srcHash": "533474b6"
+  },
+  "storefront.progress.reached": {
+    "status": "ai",
+    "srcHash": "d2355859"
+  },
+  "storefront.progress.unlocked": {
+    "status": "ai",
+    "srcHash": "c8b82e09"
+  },
+  "storefront.progress.your_reward": {
+    "status": "ai",
+    "srcHash": "b4451d21"
+  },
+  "storefront.reward.free_gift": {
+    "status": "ai",
+    "srcHash": "fe611e03"
+  },
+  "storefront.reward.note": {
+    "status": "ai",
+    "srcHash": "9657a574"
+  },
+  "storefront.reward.reward": {
+    "status": "ai",
+    "srcHash": "ff857d9a"
+  },
+  "storefront.reward.reward_word": {
+    "status": "ai",
+    "srcHash": "a05f21fa"
+  },
+  "storefront.timer.expired": {
+    "status": "ai",
+    "srcHash": "f918ab57"
+  },
+  "storefront.timer.label": {
+    "status": "ai",
+    "srcHash": "f3b05418"
+  },
+  "storefront.timer.use_code": {
+    "status": "ai",
+    "srcHash": "aaae75f9"
+  },
+  "storefront.trust.easy_returns": {
+    "status": "ai",
+    "srcHash": "652a99d8"
+  },
+  "storefront.trust.free_shipping": {
+    "status": "ai",
+    "srcHash": "b2dd33cf"
+  },
+  "storefront.trust.no_extra_costs": {
+    "status": "ai",
+    "srcHash": "743cae46"
+  },
+  "storefront.trust.return_with_ease": {
+    "status": "ai",
+    "srcHash": "ad7782b1"
+  },
+  "storefront.trust.secure_checkout": {
+    "status": "ai",
+    "srcHash": "6aee5e6c"
+  },
+  "storefront.trust.secure_payment": {
+    "status": "ai",
+    "srcHash": "c9e3d8de"
+  },
+  "storefront.upsell.add_to_cart": {
+    "status": "ai",
+    "srcHash": "d5a50b39"
+  },
+  "storefront.upsell.added": {
+    "status": "ai",
+    "srcHash": "fe22252c"
+  },
+  "storefront.upsell.adding": {
+    "status": "ai",
+    "srcHash": "2de56c1a"
+  },
+  "storefront.upsell.choose_option": {
+    "status": "ai",
+    "srcHash": "09680607"
+  },
+  "storefront.upsell.list_label": {
+    "status": "ai",
+    "srcHash": "783f6b56"
+  },
+  "storefront.upsell.scroll_left": {
+    "status": "ai",
+    "srcHash": "120b4025"
+  },
+  "storefront.upsell.scroll_right": {
+    "status": "ai",
+    "srcHash": "49164cfe"
+  },
+  "storefront.upsell.this_product": {
+    "status": "ai",
+    "srcHash": "34d0f50a"
+  },
+  "storefront.upsell.title": {
+    "status": "ai",
+    "srcHash": "6efbc890"
+  },
+  "storefront.upsell.title_alt": {
+    "status": "ai",
+    "srcHash": "cacf5884"
+  }
+}
