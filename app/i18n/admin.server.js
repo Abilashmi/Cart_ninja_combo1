@@ -38,6 +38,18 @@ async function gql(admin, query, variables) {
   return json.data;
 }
 
+// Shopify adds `locale` only when it loads the app page; in-app requests
+// (the `.data` reload after a save) carry no query string. Remember the
+// last one per shop so those keep the admin's language.
+const shopifyLocales = new Map();
+
+/** The Shopify admin language for this request: from its URL, else the shop's last one. */
+export function shopifyLocaleFor(shop, request) {
+  const fromUrl = new URL(request.url).searchParams.get('locale');
+  if (fromUrl) shopifyLocales.set(shop, fromUrl);
+  return fromUrl || shopifyLocales.get(shop) || '';
+}
+
 /** The saved choice ('auto' when never set or unreadable). */
 export async function getAdminLanguage(admin) {
   try {

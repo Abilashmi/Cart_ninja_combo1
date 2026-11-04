@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientReport, classifyOrder, localDay, resolveRange, zoneOffsetMinutes } from '../../app/utils/client-report.js';
 import { renderClientReportHtml } from '../../app/utils/client-report-html.js';
+import { renderClientReportCsv } from '../../app/utils/client-report-csv.js';
 
 const IST = 'Asia/Kolkata';
 
@@ -154,4 +155,79 @@ test('share links: the toolbar offers them, the shared copy has no toolbar or fo
   assert.ok(page.includes('Create share link'));
   const shared = renderClientReportHtml(r);
   assert.ok(!/<form|Create share link|Back to reports/.test(shared));
+});
+
+// Splits CSV text into rows of cells (quoted cells may hold commas and quotes).
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cur += '"'; i += 1; } else if (c === '"') q = false; else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\r' && text[i + 1] === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; i += 1; }
+    else cur += c;
+  }
+  return rows;
+}
+const section = (rows, title) => {
+  const at = rows.findIndex((r) => r.length === 1 && r[0] === title);
+  if (at < 0) return null;
+  const end = rows.findIndex((r, i) => i > at && r.length === 1 && r[0] === '');
+  return rows.slice(at + 1, end < 0 ? rows.length : end);
+};
+
+test('CSV: every table with raw numbers, BOM, CRLF', () => {
+  const r = sample();
+  const csv = renderClientReportCsv(r);
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.ok(csv.endsWith('\r\n'));
+  const rows = parseCsv(csv.slice(1));
+  const meta = Object.fromEntries(section(rows, 'Report').slice(1));
+  assert.equal(meta.Store, 'Demo <Kids>');
+  assert.equal(meta['Store domain'], 'demo.myshopify.com');
+  assert.equal(meta.From, '2026-10-19');
+  assert.equal(meta['Staff orders left out'], '1');
+  assert.equal(meta.Currency, 'INR');
+
+  const [head, ...sum] = section(rows, 'Summary, this period');
+  assert.deepEqual(head, ['Payment', 'Orders', 'Not cancelled', 'Cancelled', 'Not cancelled (%)', 'Order value (INR)', 'Avg order (INR)', 'Share of orders (%)', 'Orders a day']);
+  assert.deepEqual(sum.map((x) => x[0]), ['Paid online', 'Other COD', 'BRIX COD', 'All COD']);
+  assert.deepEqual(sum[0], ['Paid online', '3', '3', '0', '100', '2000', '667', '42.86', '1']);
+  assert.deepEqual(sum[2].slice(1, 5), ['2', '1', '1', '50']);
+  assert.equal(section(rows, 'Summary, previous period').length, 5);
+
+  assert.deepEqual(section(rows, 'BRIX COD by where it was placed').slice(1).map((x) => x.slice(0, 3)), [['Cart drawer', '1', '0'], ['Product page', '1', '1']]);
+  assert.deepEqual(section(rows, 'Other COD by checkout or app').slice(1), [['FASTERR', '2']]);
+
+  const combo = section(rows, 'Combo pages').slice(1);
+  assert.deepEqual(combo.map((x) => x.slice(0, 5)), [['Buy any 5', '7', '50', '4', '2'], ['Books', '8', '5', '0', '0'], ['All combo pages', '', '55', '4', '2']]);
+
+  const [dHead, ...days] = section(rows, 'Day by day');
+  assert.equal(dHead.length, 14);
+  assert.deepEqual(days.map((d) => d[0]), ['2026-10-19', '2026-10-20', '2026-10-21']);
+  assert.deepEqual(days[1], ['2026-10-20', 'Tue', '0', '0', '2', '1', '1', '0', '1200', '3', '100', '40', '3', '0']);
+});
+
+test('CSV: merchant text is quoted and never runs as a formula; no previous period or combo data', () => {
+  const r = sample();
+  const csv = renderClientReportCsv({ ...r, shopName: '=HYPERLINK("x"), "Shop"', previousSummary: null, comboTracked: false, combo: [],
+    otherCodVia: [{ app: '+Evil, app', orders: 1 }] });
+  const rows = parseCsv(csv.slice(1));
+  assert.equal(Object.fromEntries(section(rows, 'Report').slice(1)).Store, "'=HYPERLINK(\"x\"), \"Shop\"");
+  assert.deepEqual(section(rows, 'Other COD by checkout or app').slice(1), [["'+Evil, app", '1']]);
+  assert.equal(section(rows, 'Summary, previous period'), null);
+  assert.equal(section(rows, 'Combo pages'), null);
+  const nulls = renderClientReportCsv({ ...r, summary: r.summary.map((x) => ({ ...x, keptRate: null, avgOrder: null })) });
+  assert.ok(parseCsv(nulls.slice(1)).some((x) => x[0] === 'Paid online' && x[4] === '' && x[6] === ''), 'missing values are empty cells');
+});
+
+test('CSV: the toolbar links it only when given', () => {
+  const r = sample();
+  const page = renderClientReportHtml(r, { toolbar: { backHref: '/internal/reports', downloadHref: '/v?download=1', csvHref: '/v?download=csv&a=1' } });
+  assert.ok(page.includes('href="/v?download=csv&amp;a=1">Download CSV</a>'));
+  assert.ok(!renderClientReportHtml(r, { toolbar: { backHref: '/', downloadHref: '/d' } }).includes('Download CSV'));
+  assert.ok(!renderClientReportHtml(r).includes('Download CSV'));
 });

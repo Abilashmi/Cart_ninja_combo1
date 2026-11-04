@@ -1,8 +1,10 @@
 // Internal → Reports → one client report, as a self-contained HTML page.
-// ?download=1 sends the same page as a file to forward to the merchant.
+// ?download=1 sends the same page as a file to forward to the merchant;
+// ?download=csv sends every number in it as a CSV (utils/client-report-csv.js).
 import { loadClientReport } from '../services/client-report.server';
 import { INTERNAL_HEADERS, internalEnabled, isSignedIn } from '../utils/internal-auth.server';
 import { renderClientReportHtml } from '../utils/client-report-html.js';
+import { renderClientReportCsv } from '../utils/client-report-csv.js';
 import { escHtml, internalPage } from '../utils/internal-page';
 import { DEFAULT_SHARE_DAYS, SHARE_DAYS } from '../services/report-shares.server';
 
@@ -33,15 +35,26 @@ export async function loader({ request }) {
   }
 
   const { report } = result;
+  const fileName = `${slug(report.shopName)}-cod-vs-paid-${report.from}-to-${report.to}`;
+  if (url.searchParams.get('download') === 'csv') {
+    return new Response(renderClientReportCsv(report), {
+      headers: {
+        ...INTERNAL_HEADERS,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${fileName}.csv"`,
+      },
+    });
+  }
   if (url.searchParams.get('download') === '1') {
     return new Response(renderClientReportHtml(report), {
       headers: {
         ...INTERNAL_HEADERS,
-        'Content-Disposition': `attachment; filename="${slug(report.shopName)}-cod-vs-paid-${report.from}-to-${report.to}.html"`,
+        'Content-Disposition': `attachment; filename="${fileName}.html"`,
       },
     });
   }
   const download = `/internal/reports/view?${new URLSearchParams({ shop, from, to, download: '1' })}`;
+  const csv = `/internal/reports/view?${new URLSearchParams({ shop, from, to, download: 'csv' })}`;
   const share = { action: '/internal/reports/share', fields: { intent: 'create', shop, from, to }, days: SHARE_DAYS, defaultDays: DEFAULT_SHARE_DAYS };
-  return new Response(renderClientReportHtml(report, { toolbar: { backHref: back, downloadHref: download, share } }), { headers: INTERNAL_HEADERS });
+  return new Response(renderClientReportHtml(report, { toolbar: { backHref: back, downloadHref: download, csvHref: csv, share } }), { headers: INTERNAL_HEADERS });
 }

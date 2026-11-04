@@ -72,7 +72,7 @@ const bad = (v, shown) => ({ v: shown, cls: v ? 'bad' : 'zero' });
 
 /**
  * @param report buildClientReport() result
- * @param opts { toolbar?: { backHref, downloadHref, share?: { action, fields, days, defaultDays } } } — the toolbar
+ * @param opts { toolbar?: { backHref, downloadHref, csvHref?, share?: { action, fields, days, defaultDays } } } — the toolbar
  *   is left out of the downloaded file and shared links; share = a form that saves a share link
  */
 export function renderClientReportHtml(report, opts = {}) {
@@ -133,7 +133,7 @@ export function renderClientReportHtml(report, opts = {}) {
   const shareForm = share ? `<form class="share" method="post" action="${esc(share.action)}">${Object.entries(share.fields).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('')}`
     + `<label>Link works for <select name="days">${share.days.map((d) => `<option value="${d}"${d === share.defaultDays ? ' selected' : ''}>${d} days</option>`).join('')}</select></label>`
     + '<button type="submit">Create share link</button></form>' : '';
-  const toolbar = opts.toolbar ? `<nav class="toolbar"><a href="${esc(opts.toolbar.backHref)}">Back to reports</a><span class="actions">${shareForm}<a class="primary" href="${esc(opts.toolbar.downloadHref)}">Download HTML file</a></span></nav>` : '';
+  const toolbar = opts.toolbar ? `<nav class="toolbar"><a href="${esc(opts.toolbar.backHref)}">Back to reports</a><span class="actions">${shareForm}${opts.toolbar.csvHref ? `<a href="${esc(opts.toolbar.csvHref)}">Download CSV</a>` : ''}<a class="primary" href="${esc(opts.toolbar.downloadHref)}">Download HTML file</a></span></nav>` : '';
 
   return `<!doctype html>
 <html lang="en">

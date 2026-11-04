@@ -10,7 +10,7 @@ import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
 import { getShopPlan } from "../services/plan-permissions.server";
 import { getFeatureState } from "../config/plans";
-import { adminMessages, getAdminLanguage, resolveAdminLocale } from "../i18n/admin.server";
+import { adminMessages, getAdminLanguage, resolveAdminLocale, shopifyLocaleFor } from "../i18n/admin.server";
 import { I18nProvider, useT } from "../i18n/admin";
 
 // Polaris's own texts (date pickers, pagination, …) where Polaris has the language.
@@ -30,7 +30,7 @@ export const loader = async ({ request }) => {
         getAdminLanguage(admin),
     ]);
     // Account → Language, else the language Shopify's admin is in (`locale` on the app's URL).
-    const locale = resolveAdminLocale({ saved: savedLanguage, shopifyLocale: new URL(request.url).searchParams.get("locale") });
+    const locale = resolveAdminLocale({ saved: savedLanguage, shopifyLocale: shopifyLocaleFor(session.shop, request) });
 
     return {
         // eslint-disable-next-line no-undef
