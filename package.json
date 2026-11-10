@@ -23,6 +23,7 @@
     "i18n:validate": "node scripts/i18n-tools.mjs validate",
     "i18n:meta": "node scripts/i18n-tools.mjs meta",
     "i18n:build": "node scripts/i18n-tools.mjs build",
+    "i18n:storefront": "node scripts/i18n-tools.mjs storefront",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

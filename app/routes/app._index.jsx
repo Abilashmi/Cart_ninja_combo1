@@ -18,6 +18,7 @@ import { cartDrawerEmbedEditorUrl } from '../config/theme-extension';
 import { useAppEmbedStatus } from '../components/shared/useAppEmbedStatus';
 import { formatAmount } from '../utils/currency.shared';
 import VideoTutorialCard, { VIDEO_CARD_STYLES } from '../components/VideoTutorialCard';
+import { useAdminLocale, useT } from '../i18n/admin';
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
 
@@ -142,12 +143,12 @@ const COMBO_BUILDER_VIDEO_URL = 'https://www.youtube.com/embed/f7RGtknTVO4';
 const ANALYTICS_VIDEO_URL = 'https://www.youtube.com/embed/FfVLZMmE1PM';
 
 const STEPS = [
-  { id: 1, title: 'Use Brix AI',             desc: 'Write and work smarter with Brix AI — describe what you want changed and let it configure your cart drawer, upsells, and banners for you.', to: '/app/brix-ai',       color: '#1a9de0', icon: StarIcon,        minPlan: 'starter', dur: '01:30', category: 'Brix AI',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
-  { id: 2, title: 'Customise Cart Drawer',  desc: 'Set colours, layout, and header for your slide-out cart, then preview it live before publishing to your store.',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'Cart Drawer',      difficulty: 'Beginner',     videoUrl: CART_DRAWER_VIDEO_URL, thumbnail: '/carteditor.png' },
-  { id: 3, title: 'Set Up FBT Upsells',     desc: 'Show frequently bought together products in your cart drawer and on product pages.',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'FBT Upsells',      difficulty: 'Intermediate', videoUrl: FBT_VIDEO_URL, thumbnail: '/Fbt.png' },
-  { id: 4, title: 'Create a Coupon Banner', desc: 'Build a discount banner with targeting rules so the right shoppers see the right offer at the right time.',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'Coupon Banner',    difficulty: 'Beginner',     videoUrl: COUPON_BANNER_VIDEO_URL, thumbnail: '/coupon_banner.png' },
-  { id: 5, title: 'Build a Combo in Minutes', desc: 'Create high-converting product bundles with Combo Builder — customise layouts, preview live, and publish in just a few clicks.', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'Combo Builder',    difficulty: 'Beginner',     videoUrl: COMBO_BUILDER_VIDEO_URL, thumbnail: '/bundle.png' },
-  { id: 6, title: 'Review Your Analytics',  desc: 'Understand revenue, funnels, and conversion rates in real-time so you know what to optimise next.',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'Analytics',        difficulty: 'Intermediate', videoUrl: ANALYTICS_VIDEO_URL, thumbnail: '/Analytics.png' },
+  { id: 1, title: 'admin.home.step1_title',             desc: 'admin.home.step1_desc', to: '/app/brix-ai',       color: '#1a9de0', icon: StarIcon,        minPlan: 'starter', dur: '01:30', category: 'admin.home.step1_category',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
+  { id: 2, title: 'admin.home.step2_title',  desc: 'admin.home.step2_desc',      to: '/app/cartdrawer',    color: '#10b981', icon: CartIcon,         minPlan: 'starter', dur: '02:10', category: 'admin.home.step2_category',      difficulty: 'Beginner',     videoUrl: CART_DRAWER_VIDEO_URL, thumbnail: '/carteditor.png' },
+  { id: 3, title: 'admin.home.step3_title',     desc: 'admin.home.step3_desc',        to: '/app/fbt',           color: '#f59e0b', icon: RewardIcon,       minPlan: 'starter', dur: '01:55', category: 'admin.home.step3_category',      difficulty: 'Intermediate', videoUrl: FBT_VIDEO_URL, thumbnail: '/Fbt.png' },
+  { id: 4, title: 'admin.home.step4_title', desc: 'admin.home.step4_desc',           to: '/app/productwidget', color: '#ec4899', icon: DiscountCodeIcon, minPlan: 'starter', dur: '01:40', category: 'admin.home.step4_category',    difficulty: 'Beginner',     videoUrl: COUPON_BANNER_VIDEO_URL, thumbnail: '/coupon_banner.png' },
+  { id: 5, title: 'admin.home.step5_title', desc: 'admin.home.step5_desc', to: '/app/bundles', color: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter', dur: '03:45', category: 'admin.home.step5_category',    difficulty: 'Beginner',     videoUrl: COMBO_BUILDER_VIDEO_URL, thumbnail: '/bundle.png' },
+  { id: 6, title: 'admin.home.step6_title',  desc: 'admin.home.step6_desc',                   to: '/app/analytics',    color: '#06b6d4', icon: ChartCohortIcon,  minPlan: 'starter', dur: '02:05', category: 'admin.home.step6_category',        difficulty: 'Intermediate', videoUrl: ANALYTICS_VIDEO_URL, thumbnail: '/Analytics.png' },
 ];
 
 const MINI_TUTORIALS = [
@@ -159,12 +160,12 @@ const MINI_TUTORIALS = [
 ];
 
 const TIPS = [
-  { id: 1, title: 'Use urgency copy',        body: 'Honest urgency, like "Only 3 left" on low-stock items, helps shoppers decide.', color: '#ef4444' },
-  { id: 2, title: 'Stack FBT + coupon',      body: 'Combine FBT upsells with a threshold coupon to maximise average order value.',     color: '#f59e0b' },
-  { id: 3, title: 'Match brand colours',     body: 'Set your cart drawer colour to match your primary CTA button for higher trust.',   color: '#2ecc71' },
-  { id: 4, title: 'Enable all blocks',       body: 'Use the cart drawer, FBT and coupon blocks together so shoppers see offers at each step.', color: '#10b981' },
-  { id: 5, title: 'Review analytics weekly', body: 'Checking your funnel weekly helps you spot drop-off points before they cost you.', color: '#1a9de0' },
-  { id: 6, title: 'Try Brix AI rewrites',    body: 'Generate 3 coupon title variants with Brix AI — test them and keep the winner.',   color: '#06b6d4' },
+  { id: 1, title: 'admin.home.tip1_title',        body: 'admin.home.tip1_body', color: '#ef4444' },
+  { id: 2, title: 'admin.home.tip2_title',      body: 'admin.home.tip2_body',     color: '#f59e0b' },
+  { id: 3, title: 'admin.home.tip3_title',     body: 'admin.home.tip3_body',   color: '#2ecc71' },
+  { id: 4, title: 'admin.home.tip4_title',       body: 'admin.home.tip4_body', color: '#10b981' },
+  { id: 5, title: 'admin.home.tip5_title', body: 'admin.home.tip5_body', color: '#1a9de0' },
+  { id: 6, title: 'admin.home.tip6_title',    body: 'admin.home.tip6_body',   color: '#06b6d4' },
 ];
 
 const STORAGE_KEY = 'cn_first_visit_date';
@@ -403,6 +404,7 @@ function CoursePlayer({ selected, onSelect, watchedTimes, onWatch }) {
 /* ─── StepVideoModal — the modal overlay used by the Setup Checklist thumbnails ─── */
 
 function StepVideoModal({ step, onClose, onGoToStep }) {
+  const t = useT();
   if (!step) return null;
   return (
     <div
@@ -412,33 +414,33 @@ function StepVideoModal({ step, onClose, onGoToStep }) {
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 720, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '14px 18px', borderBottom: '1px solid #e5e7eb' }}>
           <div>
-            <Text as="p" variant="bodySm" fontWeight="semibold">{step.title}</Text>
-            <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">{step.desc}</Text></div>
+            <Text as="p" variant="bodySm" fontWeight="semibold">{t(step.title)}</Text>
+            <div style={{ marginTop: 2 }}><Text as="p" variant="bodyXs" tone="subdued">{t(step.desc)}</Text></div>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: '#6b7280', padding: 4, flexShrink: 0 }}>×</button>
+          <button onClick={onClose} aria-label={t('admin.common.close')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: '#6b7280', padding: 4, flexShrink: 0 }}>×</button>
         </div>
 
         <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, background: '#000' }}>
           {step.videoUrl ? (
             <iframe
               src={step.videoUrl}
-              title={step.title}
+              title={t(step.title)}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
             />
           ) : (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: '#9ca3af', fontSize: 12 }}>Video coming soon</span>
+              <span style={{ color: '#9ca3af', fontSize: 12 }}>{t('admin.home.video_soon')}</span>
             </div>
           )}
         </div>
 
         <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>Close</button>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>{t('admin.common.close')}</button>
           {step.to && (
             <button onClick={onGoToStep} style={{ padding: '8px 16px', background: step.color, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              Go to this step →
+              {t('admin.home.go_to_step')} →
             </button>
           )}
         </div>
@@ -454,6 +456,7 @@ function StepVideoModal({ step, onClose, onGoToStep }) {
  */
 
 function VideoTutorials({ markStep, navigate }) {
+  const t = useT();
   const [activeStepId, setActiveStepId] = useState(null);
   const activeStep = STEPS.find(s => s.id === activeStepId) || null;
 
@@ -505,10 +508,11 @@ function VideoTutorials({ markStep, navigate }) {
           return (
             <VideoTutorialCard
               key={step.id}
-              title={step.title}
-              description={step.desc}
-              category={step.category}
+              title={t(step.title)}
+              description={t(step.desc)}
+              category={t(step.category)}
               difficulty={step.difficulty}
+              difficultyLabel={step.difficulty === 'Intermediate' ? t('admin.home.intermediate') : t('admin.home.beginner')}
               duration={step.dur}
               accent={step.color}
               watched={progressPct >= 90}
@@ -534,6 +538,8 @@ export default function DashboardPage() {
   const { symbol: currencySymbol, code: currencyCode } = useCurrency();
   const { plan, canUse } = usePlan();
   const navigate = useNavigate();
+  const t = useT();
+  const adminLocale = useAdminLocale();
 
   const analytics = normalizeAnalytics(initialAnalytics);
 
@@ -566,10 +572,10 @@ export default function DashboardPage() {
         body: JSON.stringify({ rating: fbkRating, note: fbkNote }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save feedback');
+      if (!res.ok || !data.success) throw new Error(data.error || t('admin.home.feedback_failed'));
       setFbkSubmitted(true);
     } catch (e) {
-      setFbkError(e.message || 'Something went wrong — please try again.');
+      setFbkError(e.message || t('admin.common.generic_error'));
     } finally {
       setFbkSubmitting(false);
     }
@@ -614,27 +620,27 @@ export default function DashboardPage() {
 
   const doneCount = completedSteps.length;
   const progressPct = Math.round((doneCount / STEPS.length) * 100);
-  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const dateLabel = new Date().toLocaleDateString(adminLocale === 'en' ? 'en-US' : adminLocale, { weekday: 'long', month: 'long', day: 'numeric' });
 
   const kpis = [
-    { label: 'Revenue',          value: formatAmount(analytics.cartdrawer_total_revenue,  currencySymbol, currencyCode), accent: '#008060', icon: CashDollarIcon  },
-    { label: 'AOV',              value: formatAmount(analytics.avg_order_value,            currencySymbol, currencyCode), accent: '#1a9de0', icon: CartIcon        },
-    { label: 'Conversion Rate',  value: `${analytics.conversion_rate}%`,                                                  accent: '#10b981', icon: ChartCohortIcon },
-    { label: 'Upsell Revenue',   value: formatAmount(analytics.upsell_revenue_generated,  currencySymbol, currencyCode), accent: '#2ecc71', icon: RewardIcon      },
+    { label: t('admin.home.kpi_revenue'), value: formatAmount(analytics.cartdrawer_total_revenue,  currencySymbol, currencyCode), accent: '#008060', icon: CashDollarIcon  },
+    { label: t('admin.home.kpi_aov'), value: formatAmount(analytics.avg_order_value,            currencySymbol, currencyCode), accent: '#1a9de0', icon: CartIcon        },
+    { label: t('admin.home.kpi_conversion'), value: `${analytics.conversion_rate}%`,                                                  accent: '#10b981', icon: ChartCohortIcon },
+    { label: t('admin.home.kpi_upsell'), value: formatAmount(analytics.upsell_revenue_generated,  currencySymbol, currencyCode), accent: '#2ecc71', icon: RewardIcon      },
   ];
 
   const quickActions = [
-    { label: 'Cart Editor',   to: '/app/cartdrawer',    accent: '#008060', icon: CartIcon,         minPlan: 'starter' },
-    { label: 'Analytics',     to: '/app/analytics',     accent: '#1a9de0', icon: ChartCohortIcon,  minPlan: 'starter' },
-    { label: 'FBT',           to: '/app/fbt',           accent: '#10b981', icon: RewardIcon,       minPlan: 'starter' },
-    { label: 'Coupon Banner', to: '/app/productwidget', accent: '#f59e0b', icon: DiscountCodeIcon, minPlan: 'starter' },
-    { label: 'Build a Combo', to: '/app/bundles',       accent: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter' },
-    { label: 'Brix AI',       to: '/app/brix-ai',       accent: '#1a9de0', icon: StarIcon,         minPlan: 'starter' },
+    { label: t('admin.nav.cart_editor'), to: '/app/cartdrawer',    accent: '#008060', icon: CartIcon,         minPlan: 'starter' },
+    { label: t('admin.nav.analytics'), to: '/app/analytics',     accent: '#1a9de0', icon: ChartCohortIcon,  minPlan: 'starter' },
+    { label: t('admin.home.link_fbt'), to: '/app/fbt',           accent: '#10b981', icon: RewardIcon,       minPlan: 'starter' },
+    { label: t('admin.nav.coupon_banner'), to: '/app/productwidget', accent: '#f59e0b', icon: DiscountCodeIcon, minPlan: 'starter' },
+    { label: t('admin.nav.build_combo'), to: '/app/bundles',       accent: '#2ecc71', icon: CollectionIcon,   minPlan: 'starter' },
+    { label: t('admin.nav.brix_ai'), to: '/app/brix-ai',       accent: '#1a9de0', icon: StarIcon,         minPlan: 'starter' },
   ];
 
   const ModeToggle = () => (
     <button onClick={toggleMode} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#6b7280', cursor: 'pointer' }}>
-      {mode === 'tutorial' ? 'Go to Dashboard' : 'Getting Started'}
+      {mode === 'tutorial' ? t('admin.home.go_dashboard') : t('admin.home.getting_started')}
     </button>
   );
 
@@ -647,16 +653,16 @@ export default function DashboardPage() {
           {/* Welcome hero */}
           <div style={{ background: '#ffffff', border: '1px solid #e3e5e8', borderRadius: 16, padding: '28px 32px', boxShadow: '0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
             <div style={{ minWidth: 0 }}>
-              <span style={{ display: 'inline-block', marginBottom: 10, padding: '3px 10px', borderRadius: 999, background: '#f3f3f3', color: '#4a4f55', fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Getting started</span>
-              <Text as="h1" variant="headingXl" fontWeight="bold">Welcome to Brix</Text>
+              <span style={{ display: 'inline-block', marginBottom: 10, padding: '3px 10px', borderRadius: 999, background: '#f3f3f3', color: '#4a4f55', fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>{t('admin.home.getting_started')}</span>
+              <Text as="h1" variant="headingXl" fontWeight="bold">{t('admin.home.welcome')}</Text>
               <div style={{ marginTop: 6 }}>
-                <Text as="p" variant="bodyMd" tone="subdued">Let's get your store set up. Complete the steps below to go live and start earning.</Text>
+                <Text as="p" variant="bodyMd" tone="subdued">{t('admin.home.welcome_sub')}</Text>
               </div>
               <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div role="progressbar" aria-label="Setup progress" aria-valuemin={0} aria-valuemax={STEPS.length} aria-valuenow={doneCount} style={{ width: 220, height: 6, background: '#ececec', borderRadius: 999, overflow: 'hidden' }}>
+                <div role="progressbar" aria-label={t('admin.home.setup_progress')} aria-valuemin={0} aria-valuemax={STEPS.length} aria-valuenow={doneCount} style={{ width: 220, height: 6, background: '#ececec', borderRadius: 999, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${progressPct}%`, background: '#111111', borderRadius: 999, transition: 'width 0.3s' }} />
                 </div>
-                <Text as="p" variant="bodySm" fontWeight="semibold">{doneCount} of {STEPS.length} steps done</Text>
+                <Text as="p" variant="bodySm" fontWeight="semibold">{t('admin.home.steps_done', { done: doneCount, total: STEPS.length })}</Text>
               </div>
             </div>
             <ModeToggle />
@@ -675,15 +681,15 @@ export default function DashboardPage() {
           {/* Brix Academy — intro video */}
           <div>
             <div style={{ marginBottom: 14, textAlign: 'center' }}>
-              <Text as="h2" variant="headingMd" fontWeight="semibold">Brix Academy</Text>
-              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Watch the intro video to get started</Text></div>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">{t('admin.home.academy')}</Text>
+              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.academy_sub')}</Text></div>
             </div>
             <div style={{ width: '100%' }}>
               {WELCOME_VIDEO_URL ? (
                 <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #e1e3e5' }}>
                   <iframe
                     src={WELCOME_VIDEO_URL}
-                    title="Welcome to Brix"
+                    title={t('admin.home.welcome')}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
@@ -695,8 +701,8 @@ export default function DashboardPage() {
                     <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fff', border: '2px solid #667eea', boxShadow: '0 4px 16px #667eea30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <div style={{ width: 0, height: 0, borderTop: '12px solid transparent', borderBottom: '12px solid transparent', borderLeft: '20px solid #667eea', marginLeft: 4 }} />
                     </div>
-                    <Text as="p" variant="bodySm" fontWeight="semibold">Welcome to Brix</Text>
-                    <Text as="p" variant="bodyXs" tone="subdued">Video coming soon</Text>
+                    <Text as="p" variant="bodySm" fontWeight="semibold">{t('admin.home.welcome')}</Text>
+                    <Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.video_soon')}</Text>
                   </div>
                 </div>
               )}
@@ -707,10 +713,10 @@ export default function DashboardPage() {
           <div>
             <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <Text as="h2" variant="headingMd" fontWeight="semibold">Video Tutorials</Text>
-                <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Short walkthroughs for setting up each feature</Text></div>
+                <Text as="h2" variant="headingMd" fontWeight="semibold">{t('admin.home.videos')}</Text>
+                <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.videos_sub')}</Text></div>
               </div>
-              <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>View dashboard →</button>
+              <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>{t('admin.home.view_dashboard')} →</button>
             </div>
             <VideoTutorials markStep={markStep} navigate={navigate} />
           </div>
@@ -746,16 +752,16 @@ export default function DashboardPage() {
           {/* Tips & Tricks */}
           <div>
             <div style={{ marginBottom: 14 }}>
-              <Text as="h2" variant="headingMd" fontWeight="semibold">Tips & Tricks</Text>
-              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Pro tips to get more out of Brix</Text></div>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">{t('admin.home.tips')}</Text>
+              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.tips_sub')}</Text></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               {TIPS.map(tip => (
                 <div key={tip.id} style={{ background: '#fff', border: '1px solid #f3f4f6', borderRadius: 12, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: tip.color, flexShrink: 0, marginTop: 5 }} />
                   <div>
-                    <Text as="p" variant="bodySm" fontWeight="semibold">{tip.title}</Text>
-                    <div style={{ marginTop: 4 }}><Text as="p" variant="bodyXs" tone="subdued">{tip.body}</Text></div>
+                    <Text as="p" variant="bodySm" fontWeight="semibold">{t(tip.title)}</Text>
+                    <div style={{ marginTop: 4 }}><Text as="p" variant="bodyXs" tone="subdued">{t(tip.body)}</Text></div>
                   </div>
                 </div>
               ))}
@@ -776,21 +782,21 @@ export default function DashboardPage() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <Text as="h1" variant="headingXl" fontWeight="bold">Welcome back</Text>
+            <Text as="h1" variant="headingXl" fontWeight="bold">{t('admin.home.welcome_back')}</Text>
             <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Text as="p" variant="bodyMd" tone="subdued">{dateLabel}</Text>
               <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#d1d5db' }} />
               {(embedStatus === 'active' || embedStatus === 'off') && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: embedStatus === 'active' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
-                  <Text as="p" variant="bodyMd" tone="subdued">{embedStatus === 'active' ? 'App embed on' : 'App embed off'}</Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">{embedStatus === 'active' ? t('admin.home.embed_on') : t('admin.home.embed_off')}</Text>
                 </span>
               )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ padding: '5px 13px', borderRadius: 999, fontSize: 12, fontWeight: 700, ...PLAN_BADGE_STYLE[plan] }}>
-              {PLANS[plan]?.label || 'Free'} Plan
+              {t('admin.home.plan_badge', { plan: PLANS[plan]?.label || t('admin.account.free') })}
             </span>
             <ModeToggle />
           </div>
@@ -798,7 +804,7 @@ export default function DashboardPage() {
 
         {/* KPI tiles */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <button onClick={() => navigate('/app/analytics')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600, padding: 0 }}>View full analytics →</button>
+          <button onClick={() => navigate('/app/analytics')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600, padding: 0 }}>{t('admin.home.view_analytics')} →</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
           {kpis.map(k => (
@@ -818,10 +824,10 @@ export default function DashboardPage() {
         <div>
           <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <Text as="h2" variant="headingMd" fontWeight="semibold">Video Tutorials</Text>
-              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">Short walkthroughs for setting up each feature</Text></div>
+              <Text as="h2" variant="headingMd" fontWeight="semibold">{t('admin.home.videos')}</Text>
+              <div style={{ marginTop: 3 }}><Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.videos_sub')}</Text></div>
             </div>
-            <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>View getting started →</button>
+            <button onClick={toggleMode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a9de0', fontSize: 12, fontWeight: 600 }}>{t('admin.home.view_getting_started')} →</button>
           </div>
           <VideoTutorials markStep={markStep} navigate={navigate} />
         </div>
@@ -833,17 +839,17 @@ export default function DashboardPage() {
               <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#f0fdf4', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
               </div>
-              <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">Thanks for sharing!</Text>
-              <Text as="p" variant="bodyXs" tone="subdued" alignment="center">Your feedback helps us improve Brix.</Text>
-              <button onClick={() => { setFbkSubmitted(false); setFbkRating(0); setFbkNote(''); setFbkError(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 12 }}>Rate again</button>
+              <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">{t('admin.home.feedback_thanks')}</Text>
+              <Text as="p" variant="bodyXs" tone="subdued" alignment="center">{t('admin.home.feedback_helps')}</Text>
+              <button onClick={() => { setFbkSubmitted(false); setFbkRating(0); setFbkNote(''); setFbkError(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 12 }}>{t('admin.home.rate_again')}</button>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'start', gap: 24 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text as="p" variant="headingSm" fontWeight="bold">Feedback</Text>
+                  <Text as="p" variant="headingSm" fontWeight="bold">{t('admin.home.feedback')}</Text>
                 </div>
-                <div style={{ marginTop: 4 }}><Text as="p" variant="bodyXs" tone="subdued">Share feedback and help us improve. Takes 10 seconds.</Text></div>
+                <div style={{ marginTop: 4 }}><Text as="p" variant="bodyXs" tone="subdued">{t('admin.home.feedback_sub')}</Text></div>
                 <div style={{ display: 'flex', gap: 4, marginTop: 12 }}>
                   {[1,2,3,4,5].map(s => (
                     <button key={s} onClick={() => setFbkRating(s)} onMouseEnter={() => setFbkHovered(s)} onMouseLeave={() => setFbkHovered(0)}
@@ -856,7 +862,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignSelf: 'stretch' }}>
-                <textarea value={fbkNote} onChange={e => setFbkNote(e.target.value)} placeholder="What's working, what could be better…" rows={3}
+                <textarea value={fbkNote} onChange={e => setFbkNote(e.target.value)} placeholder={t('admin.home.feedback_placeholder')} rows={3}
                   style={{ width: '100%', padding: '10px 13px', border: '1px solid #e5e7eb', borderRadius: 9, fontSize: 12, color: '#1a1a1a', background: '#fafafa', resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
                   onFocus={e => { e.target.style.borderColor = '#9ca3af'; e.target.style.background = '#fff'; }}
                   onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#fafafa'; }}
@@ -865,7 +871,7 @@ export default function DashboardPage() {
               </div>
               <button onClick={submitFeedback} disabled={!fbkRating || fbkSubmitting}
                 style={{ padding: '10px 22px', background: fbkRating ? '#1a1a1a' : '#f3f4f6', color: fbkRating ? '#fff' : '#9ca3af', border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: fbkRating && !fbkSubmitting ? 'pointer' : 'default', whiteSpace: 'nowrap', alignSelf: 'stretch', opacity: fbkSubmitting ? 0.7 : 1 }}>
-                {fbkSubmitting ? 'Sending…' : 'Send Feedback'}
+                {fbkSubmitting ? t('admin.home.sending') : t('admin.home.send_feedback')}
               </button>
             </div>
           )}
@@ -901,7 +907,7 @@ export default function DashboardPage() {
 
         {/* Quick Links */}
         <div>
-          <div style={{ marginBottom: 12 }}><Text as="h2" variant="headingMd" fontWeight="semibold">Quick Links</Text></div>
+          <div style={{ marginBottom: 12 }}><Text as="h2" variant="headingMd" fontWeight="semibold">{t('admin.home.quick_links')}</Text></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
             {quickActions.map(a => (
               <button key={a.label} onClick={() => navigate(a.to)}
@@ -922,21 +928,21 @@ export default function DashboardPage() {
         <div style={{ background: embedStatus === 'off' ? '#fffbeb' : '#f9fafb', border: `1px solid ${embedStatus === 'off' ? '#fcd34d' : '#e5e7eb'}`, borderRadius: 12, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
             <Text as="p" variant="bodySm" fontWeight="semibold">
-              {embedStatus === 'active' ? 'BRIX is live on your store' : embedStatus === 'off' ? 'Turn on the BRIX app embed' : 'App embed'}
+              {embedStatus === 'active' ? t('admin.home.embed_live') : embedStatus === 'off' ? t('admin.home.embed_turn_on_title') : t('admin.home.embed')}
             </Text>
             <div style={{ marginTop: 2 }}>
               <Text as="p" variant="bodyXs" tone="subdued">
                 {embedStatus === 'active'
-                  ? 'The "Custom Cart Drawer" app embed is on in your published theme.'
+                  ? t('admin.home.embed_live_help')
                   : embedStatus === 'off'
-                    ? 'The cart drawer, COD, FBT, Packs and combo pages show on your store only while the "Custom Cart Drawer" app embed is on.'
-                    : 'Turn on the "Custom Cart Drawer" app embed in your theme editor so BRIX shows on your store.'}
+                    ? t('admin.home.embed_off_help')
+                    : t('admin.home.embed_help')}
               </Text>
             </div>
           </div>
           <button onClick={() => window.open(embedStatus === 'active' ? `https://${shop}/admin/themes/current/editor?context=apps` : cartDrawerEmbedEditorUrl(shop), '_blank')}
             style={{ padding: '8px 18px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            {embedStatus === 'active' ? 'Open theme editor' : 'Turn on app embed'}
+            {embedStatus === 'active' ? t('admin.home.open_theme_editor') : t('admin.home.turn_on_embed')}
           </button>
         </div>
 

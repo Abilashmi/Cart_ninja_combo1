@@ -21,7 +21,10 @@ export function internalPage(title, body) {
   .eyebrow { font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
   h1 { margin: 2px 0 0; font: 400 30px/1.2 Georgia, "Times New Roman", serif; }
   p { margin: 0; color: var(--muted); }
-  form.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .card ul.shares { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .card ul.shares li { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 14px; }
+  .card ul.shares small { color: var(--muted); }
+  section.card, form.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
   label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
   label small { font-weight: 400; color: var(--muted); }
   input, select { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; }

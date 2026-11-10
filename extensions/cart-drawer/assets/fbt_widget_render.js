@@ -5,6 +5,38 @@
 (function(){
   if(customElements.get('ps-fbt-widget'))return;
 
+  /* i18n-shim:begin (copy of app/i18n/storefront.shared.js I18N_SHIM) */
+  // Shopper-language text: window.BrixI18n comes from brix_i18n_<lang>.js,
+  // which the app embed loads first on a page in a language BRIX has. Without
+  // it the English written at the call site shows (it equals app/i18n/en.json).
+  function bxFill(en, vars) {
+    var v = vars || {};
+    return String(en).replace(/\{(\w+), plural,((?:[^{}]|\{[^{}]*\})*)\}/g, function (m, name, body) {
+      var n = Number(v[name]);
+      var pick = body.match(new RegExp('=' + n + '\\s*\\{([^{}]*)\\}')) || (n === 1 && body.match(/\bone\s*\{([^{}]*)\}/)) || body.match(/\bother\s*\{([^{}]*)\}/);
+      return pick ? pick[1].replace(/#/g, String(n)) : '';
+    }).replace(/\{(\w+)\}/g, function (m, name) {
+      return v[name] === undefined || v[name] === null ? '' : String(v[name]);
+    });
+  }
+  function bxT(key, en, vars) {
+    var i18n = window.BrixI18n;
+    return i18n ? i18n.t(key, en, vars) : bxFill(en, vars);
+  }
+  // Text the merchant can edit: their own words stay; blank or still the
+  // English default shows in the shopper's language.
+  function bxText(saved, key, en, vars) {
+    var i18n = window.BrixI18n;
+    if (i18n) return i18n.text(saved, key, en, vars);
+    var s = saved === undefined || saved === null ? '' : String(saved);
+    return s.replace(/^\s+|\s+$/g, '') ? s : bxFill(en, vars);
+  }
+  function bxDir() {
+    return window.BrixI18n && window.BrixI18n.dir === 'rtl' ? 'rtl' : 'ltr';
+  }
+  /* i18n-shim:end */
+  function fbtEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
   /* Downloads shared by every copy of the widget for this page visit. Themes
      that re-render the product section on a size change (Dawn and its kin)
      throw the widget away and create a new one; with these it draws again at
@@ -48,8 +80,8 @@
           +bar('height:13px;width:40%;margin-top:2px;')
           +bar('height:26px;width:60%;margin-top:4px;')+'</span>';
     }
-    el.innerHTML='<div class="ps-fbt-wrapper" aria-busy="true" aria-label="Loading suggestions" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';padding:var(--ps-fbt-pad,'+config.widgetPadding+'px);">'
-      +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:16px;">Frequently Bought Together</div>'
+    el.innerHTML='<div class="ps-fbt-wrapper" aria-busy="true" aria-label="'+fbtEsc(bxT('storefront.fbt.loading', 'Loading suggestions'))+'" style="background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;border:1px solid '+config.borderColor+';padding:var(--ps-fbt-pad,'+config.widgetPadding+'px);">'
+      +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:16px;">'+fbtEsc(bxT('storefront.fbt.title', 'Frequently Bought Together'))+'</div>'
       +'<span style="display:flex!important;'+(isList?'flex-direction:column;gap:'+config.rowGap+'px;':'gap:'+config.gap+'px;overflow:hidden;')+'">'+cards+'</span>'
       +'<span style="display:flex!important;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid '+config.borderColor+';">'
         +'<span style="display:block!important;">'+bar('height:10px;width:70px;')+bar('height:18px;width:90px;margin-top:6px;')+'</span>'
@@ -98,7 +130,9 @@
   function fbtOfferText(offer,symbol){
     var v=Number(offer.value);
     var discount=offer.type==='percentage'?v+'%':symbol+(v%1===0?String(v):window.__brixWholePrices===true?String(Math.round(v)):v.toFixed(2));
-    return String(offer.text||'Buy all {count} together and save {discount}').replace(/\{\{?\s*count\s*\}?\}/g,String(offer.count)).replace(/\{\{?\s*discount\s*\}?\}/g,discount);
+    // Left at BRIX's English default (either wording) = the shopper's language; {count} / {discount} stay for the fill below.
+    var text=bxText(bxText(offer.text,'storefront.fbt.offer_all','Buy all {count} together and save {discount}',{count:'{count}',discount:'{discount}'}),'storefront.fbt.offer_any','Buy any {count} together and save {discount}',{count:'{count}',discount:'{discount}'});
+    return String(text).replace(/\{\{?\s*count\s*\}?\}/g,String(offer.count)).replace(/\{\{?\s*discount\s*\}?\}/g,discount);
   }
 
   /* Image and spacing settings (app/utils/fbt-style.shared.js pickFbtLayout): bad or missing = what the widget always drew. */
@@ -219,23 +253,23 @@
     var pop=document.createElement('div');pop.id='ps-fbt-pop';
     pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');
     pop.innerHTML='<div class="ps-fbt-pop-panel" style="background:'+config.bgColor+';color:'+config.textColor+';">'
-      +'<button type="button" class="ps-fbt-pop-close" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
+      +'<button type="button" class="ps-fbt-pop-close" aria-label="'+fbtEsc(bxT('storefront.common.close', 'Close'))+'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
       +'<div class="ps-fbt-pop-main" style="background:'+(config.imageBg||config.borderColor+'22')+';"></div>'
       +'<div class="ps-fbt-pop-thumbs"></div>'
       +'<div class="ps-fbt-pop-title" style="color:'+config.titleColor+';">'+(o.title||'')+'</div>'
       +(o.priceHtml?'<div class="ps-fbt-pop-price" style="color:'+config.priceColor+';">'+o.priceHtml+'</div>':'')
-      +(o.handle?'<a class="ps-fbt-pop-link" style="color:'+config.textColor+';" href="'+root.replace(/\/?$/,'/')+'products/'+encodeURIComponent(o.handle)+'">View full details</a>':'')
+      +(o.handle?'<a class="ps-fbt-pop-link" style="color:'+config.textColor+';" href="'+root.replace(/\/?$/,'/')+'products/'+encodeURIComponent(o.handle)+'">'+fbtEsc(bxT('storefront.fbt.view_details', 'View full details'))+'</a>':'')
       +'</div>';
     var main=pop.querySelector('.ps-fbt-pop-main'),thumbs=pop.querySelector('.ps-fbt-pop-thumbs');
     pop.setAttribute('aria-label',pop.querySelector('.ps-fbt-pop-title').textContent||'Product pictures');
     function draw(){
-      if(!images.length){main.innerHTML='<span style="font-size:12px;color:#9ca3af;">No image</span>';thumbs.style.display='none';return;}
+      if(!images.length){main.innerHTML='<span style="font-size:12px;color:#9ca3af;">'+fbtEsc(bxT('storefront.fbt.no_image', 'No image'))+'</span>';thumbs.style.display='none';return;}
       idx=(idx+images.length)%images.length;
       var many=images.length>1;
       main.innerHTML='<img src="'+escapeHtml(fbtImgUrl(images[idx],1000))+'" alt="'+(idx+1)+' of '+images.length+'">'
-        +(many?'<button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-prev" aria-label="Previous picture">'+arrow(-1)+'</button><button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-next" aria-label="Next picture">'+arrow(1)+'</button><span class="ps-fbt-pop-count">'+(idx+1)+' / '+images.length+'</span>':'');
+        +(many?'<button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-prev" aria-label="'+fbtEsc(bxT('storefront.fbt.prev_picture', 'Previous picture'))+'">'+arrow(-1)+'</button><button type="button" class="ps-fbt-pop-arrow ps-fbt-pop-next" aria-label="'+fbtEsc(bxT('storefront.fbt.next_picture', 'Next picture'))+'">'+arrow(1)+'</button><span class="ps-fbt-pop-count">'+(idx+1)+' / '+images.length+'</span>':'');
       thumbs.style.setProperty('display',many?'flex':'none','important');
-      thumbs.innerHTML=many?images.map(function(u,i){return '<button type="button" class="ps-fbt-pop-thumb" data-i="'+i+'" aria-label="Picture '+(i+1)+'" style="border-color:'+(i===idx?config.checkboxColor:config.borderColor)+';"><img src="'+escapeHtml(fbtImgUrl(u,160))+'" alt="" loading="lazy"></button>';}).join(''):'';
+      thumbs.innerHTML=many?images.map(function(u,i){return '<button type="button" class="ps-fbt-pop-thumb" data-i="'+i+'" aria-label="'+fbtEsc(bxT('storefront.fbt.picture_n', 'Picture {n}', {n:i+1}))+'" style="border-color:'+(i===idx?config.checkboxColor:config.borderColor)+';"><img src="'+escapeHtml(fbtImgUrl(u,160))+'" alt="" loading="lazy"></button>';}).join(''):'';
       var cur=thumbs.querySelector('[data-i="'+idx+'"]');if(cur&&thumbs.scrollWidth>thumbs.clientWidth)thumbs.scrollLeft=Math.max(0,cur.offsetLeft-thumbs.clientWidth/2+28);
     }
     function go(d){if(images.length>1){idx+=d;draw();}}
@@ -714,21 +748,21 @@
     var isModernStyle=templateStyle==='modern-cards';
     var showPlusSeparators=templateStyle==='classic-grid'&&isCarouselLayout;
     container.innerHTML=
-      '<div class="ps-fbt-wrapper" style="--ps-fbt-hover:'+config.buttonHoverColor+';--ps-fbt-pad:'+config.widgetPadding+'px;--ps-fbt-pad-m:'+Math.round(config.widgetPadding*0.7)+'px;background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;'+(isModernStyle?'border:none;box-shadow:0 4px 20px rgba(0,0,0,0.08);':'border:1px solid '+config.borderColor+';')+'">'
+      '<div class="ps-fbt-wrapper" dir="'+bxDir()+'" style="--ps-fbt-hover:'+config.buttonHoverColor+';--ps-fbt-pad:'+config.widgetPadding+'px;--ps-fbt-pad-m:'+Math.round(config.widgetPadding*0.7)+'px;background:'+config.bgColor+';border-radius:'+config.borderRadius+'px;'+(isModernStyle?'border:none;box-shadow:0 4px 20px rgba(0,0,0,0.08);':'border:1px solid '+config.borderColor+';')+'">'
         +'<div class="ps-fbt-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">'
-          +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:0;">Frequently Bought Together</div>'
+          +'<div class="ps-fbt-title" style="color:'+config.headingColor+';letter-spacing:-0.5px;margin-bottom:0;">'+fbtEsc(bxT('storefront.fbt.title', 'Frequently Bought Together'))+'</div>'
           +(isCarouselLayout?(
             '<div class="ps-fbt-nav-group" style="display:flex;gap:6px;flex-shrink:0;">'
-              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-prev" aria-label="Show previous products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8249;</button>'
-              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-next" aria-label="Show more products" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8250;</button>'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-prev" aria-label="'+fbtEsc(bxT('storefront.fbt.show_previous', 'Show previous products'))+'" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8249;</button>'
+              +'<button type="button" class="ps-fbt-nav ps-fbt-nav-next" aria-label="'+fbtEsc(bxT('storefront.fbt.show_more', 'Show more products'))+'" style="background:'+config.bgColor+';color:'+config.textColor+';border:1px solid '+config.borderColor+';">&#8250;</button>'
             +'</div>'
           ):'')
         +'</div>'
         +'<div class="ps-fbt-products"></div>'
         +(config.offer?'<div class="ps-fbt-offer" style="margin-top:14px;padding:9px 12px;border-radius:'+Math.min(config.borderRadius,12)+'px;'+fbtOfferCss(config)+'">'+escapeHtml(fbtOfferText(config.offer,currencySymbol))+(config.offerShowSavings?'<div class="ps-fbt-savings" style="display:none;margin-top:3px;font-size:'+Math.max(10,config.offerFontSize-1)+'px;font-weight:800;"></div>':'')+'</div>':'')
         +'<div class="ps-fbt-footer" style="border-color:'+config.borderColor+';justify-content:'+(config.showPrices?'space-between':'flex-end')+';">'
-          +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">Select items</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
-          +(config.showAddAllButton?'<button class="ps-fbt-addall" style="background:'+config.buttonColor+';color:'+config.buttonTextColor+';display:none;">Add to Cart</button>':'')
+          +(config.showPrices?'<div><div class="ps-total-label" style="font-size:13px;opacity:.6;color:'+config.textColor+'">'+fbtEsc(bxT('storefront.fbt.select_items', 'Select items'))+'</div><div class="ps-total-price" style="font-size:22px;font-weight:900;color:'+config.priceColor+'">'+currencySymbol+'0</div></div>':'')
+          +(config.showAddAllButton?'<button class="ps-fbt-addall" style="background:'+config.buttonColor+';color:'+config.buttonTextColor+';display:none;">'+fbtEsc(bxT('storefront.fbt.add_to_cart', 'Add to Cart'))+'</button>':'')
         +'</div>'
       +'</div>';
 
@@ -839,14 +873,14 @@
       actionSlot.innerHTML='';
       if(entry.requiredBadge){entry.requiredBadge.remove();entry.requiredBadge=null;}
       if(missingIds.has(pid)){
-        actionSlot.innerHTML='<span class="ps-fbt-nosize" style="font-size:11px;font-weight:600;opacity:.75;color:'+config.textColor+';">Not in '+escapeHtml(product.sizeMissing)+'</span>';
+        actionSlot.innerHTML='<span class="ps-fbt-nosize" style="font-size:11px;font-weight:600;opacity:.75;color:'+config.textColor+';">'+escapeHtml(bxT('storefront.fbt.not_in_size', 'Not in {size}', {size:product.sizeMissing}))+'</span>';
         entry.card.style.opacity='0.55';
         return;
       }
 
       if(config.interactionType==='classic'){
         var btn=document.createElement('button');btn.className='ps-classic-btn'+(isSelected?' is-selected':'');
-        btn.textContent=isSelected?'Added':'Add';
+        btn.textContent=isSelected?bxT('storefront.packs.added', 'Added'):bxT('storefront.drawer.add', 'Add');
         btn.style.cssText='padding:6px 14px;border-radius:6px;border:none;background:'+(isSelected?config.selectedBgColor:config.buttonColor)+';color:'+(isSelected?config.selectedTextColor:config.buttonTextColor)+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;white-space:nowrap;';
         btn.onclick=function(){if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
         actionSlot.appendChild(btn);return;
@@ -858,7 +892,7 @@
         check.style.cssText='width:20px;height:20px;border-radius:4px;border:2px solid '+(isRequired?config.checkboxColor+'66':config.checkboxColor)+';background:'+(isSelected?config.checkboxColor:'transparent')+';display:flex;align-items:center;justify-content:center;cursor:'+(isRequired?'not-allowed':'pointer')+';transition:all 0.2s;opacity:'+(isRequired?'0.7':'1')+';color:'+(isSelected?config.buttonTextColor:config.checkboxColor)+';';
         check.innerHTML=isSelected?checkIcon(13):'';
         check.onclick=function(){if(isRequired)return;if(selectedProductIds.has(pid))selectedProductIds.delete(pid);else selectedProductIds.add(pid);updateUI();};
-        if(isRequired){var badge=document.createElement('div');badge.className='ps-required';badge.textContent='REQUIRED';badge.style.cssText='position:absolute;top:-8px;right:-4px;padding:2px 6px;border-radius:4px;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:9px;font-weight:700;letter-spacing:0.5px;';entry.card.appendChild(badge);entry.requiredBadge=badge;}
+        if(isRequired){var badge=document.createElement('div');badge.className='ps-required';badge.textContent=bxT('storefront.fbt.required', 'REQUIRED');badge.style.cssText='position:absolute;top:-8px;right:-4px;padding:2px 6px;border-radius:4px;background:'+config.buttonColor+';color:'+config.buttonTextColor+';font-size:9px;font-weight:700;letter-spacing:0.5px;';entry.card.appendChild(badge);entry.requiredBadge=badge;}
         actionSlot.appendChild(check);return;
       }
 
@@ -886,7 +920,7 @@
 
       var currentQty=productQuantities.get(pid)||0;
       if(currentQty<=0){
-        var addButton=document.createElement('button');addButton.className='ps-classic-btn ps-outline-btn';addButton.textContent='Add';
+        var addButton=document.createElement('button');addButton.className='ps-classic-btn ps-outline-btn';addButton.textContent=bxT('storefront.drawer.add', 'Add');
         addButton.style.cssText='padding:5px 14px;border-radius:6px;border:1px solid '+config.buttonColor+';background:transparent;color:'+config.buttonColor+';font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;';
         addButton.onclick=function(){productQuantities.set(pid,1);updateUI();};
         actionSlot.appendChild(addButton);return;
@@ -914,15 +948,15 @@
         if(saving&&config.offerStrikeTotal){var before=total+(config.viewedPrice||0);totalEl.innerHTML=priceHtml(round2(before-saving.total),before,15);}
         else totalEl.innerHTML=priceHtml(total,compareTotal,15);
       }
-      if(savingsEl){savingsEl.style.display=saving?'block':'none';savingsEl.textContent=saving?'You save '+money(saving.total):'';}
+      if(savingsEl){savingsEl.style.display=saving?'block':'none';savingsEl.textContent=saving?bxT('storefront.fbt.you_save', 'You save {amount}', {amount:money(saving.total)}):'';}
       cardEntries.forEach(function(entry){
         if(!entry.priceEl)return;
         var p=entry.product,price=unitPrice(p),off=saving&&config.offerProductPrices?saving.per[String(p.id)]||0:0;
         entry.priceEl.innerHTML=off>0?priceHtml(round2(price-off),price):priceHtml(price,unitCompare(p));
       });
       var selectedCount=getSelectedCount();
-      if(totalLabelEl)totalLabelEl.textContent=saving&&config.offerStrikeTotal?'Bundle total ('+(saving.count||config.offer.count)+' items)':selectedCount>0?'Total ('+selectedCount+' item'+(selectedCount>1?'s':'')+')'  :'Select items';
-      if(addBtn){addBtn.classList.remove('is-done');addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';var fullSet=config.offer&&!config.offer.min&&config.offer.productIds.every(function(id){return products.some(function(p){return extractNumericId(p.id)===id&&getProductQuantity(p.id)>0;});});addBtn.textContent=fullSet?'Add all '+config.offer.count+' to Cart':'Add '+selectedCount+' to Cart';}else{addBtn.style.display='none';}}
+      if(totalLabelEl)totalLabelEl.textContent=saving&&config.offerStrikeTotal?bxT('storefront.fbt.bundle_total', 'Bundle total ({count} items)', {count:saving.count||config.offer.count}):selectedCount>0?bxT('storefront.fbt.total_n', '{count, plural, one {Total (# item)} other {Total (# items)}}', {count:selectedCount}):bxT('storefront.fbt.select_items', 'Select items');
+      if(addBtn){addBtn.classList.remove('is-done');addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;if(selectedCount>0){addBtn.style.display='inline-flex';addBtn.style.alignItems='center';addBtn.style.justifyContent='center';var fullSet=config.offer&&!config.offer.min&&config.offer.productIds.every(function(id){return products.some(function(p){return extractNumericId(p.id)===id&&getProductQuantity(p.id)>0;});});addBtn.textContent=fullSet?bxT('storefront.fbt.add_all_n', 'Add all {count} to Cart', {count:config.offer.count}):bxT('storefront.fbt.add_n', 'Add {count} to Cart', {count:selectedCount});}else{addBtn.style.display='none';}}
     }
 
     function updateUI(){cardEntries.forEach(function(entry){updateCardStyle(entry);renderControl(entry);});updateFooter();}
@@ -934,12 +968,13 @@
       if(!config.showVariantPicker||list.length<2||product.sizeMissing)return '';
       var current=product.liveVariantId||'';
       var opts=list.map(function(v){return '<option value="'+escapeHtml(v.id)+'"'+(v.id===current?' selected':'')+(v.available?'':' disabled')+'>'+escapeHtml(v.title+(v.available?'':' - Sold out'))+'</option>';}).join('');
-      return '<select class="ps-fbt-variant" aria-label="Choose an option" style="display:block;width:100%;max-width:100%;margin-top:'+fbtGap(config.textGap,4)+'px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';
+      return '<select class="ps-fbt-variant" aria-label="'+fbtEsc(bxT('storefront.fbt.choose_option', 'Choose an option'))+'" style="display:block;width:100%;max-width:100%;margin-top:'+fbtGap(config.textGap,4)+'px;padding:3px 6px;font-size:11px;border:1px solid '+config.borderColor+';border-radius:6px;background:'+config.bgColor+';color:'+config.textColor+';">'+opts+'</select>';
     }
 
     products.forEach(function(product,idx){
       var handleFallback=String((product&&product.handle)||'').replace(/[-_]+/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
-      var safeTitle=escapeHtml((product&&(product.title||product.name||product.productTitle||product.product_title))||handleFallback||'Product');
+      var rawTitle=(product&&(product.title||product.name||product.productTitle||product.product_title))||handleFallback||bxT('storefront.fbt.product', 'Product');
+      var safeTitle=escapeHtml(rawTitle);
       var imageUrl=String((product&&product.image)||'').replace(/'/g,'%27');
       var price=toPriceNumber(product&&product.price);
       var compareAt=toPriceNumber(product&&product.compareAt);
@@ -948,7 +983,7 @@
         card.className='ps-product-row';
         card.innerHTML=
           (useCheckboxLeft?'<div class="ps-product-checkbox-slot" style="display:flex;align-items:center;justify-content:center;"></div>':'')
-          +'<div class="ps-product-row-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="View pictures of '+safeTitle+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;border-radius:'+config.imageRadius+'px;background:'+(config.imageBg||config.borderColor+'22')+';overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
+          +'<div class="ps-product-row-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="'+fbtEsc(bxT('storefront.fbt.view_pictures', 'View pictures of {title}', {title:rawTitle}))+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:'+Math.round(config.imageSize*0.75)+'px;height:'+Math.round(config.imageSize*0.75)+'px;border-radius:'+config.imageRadius+'px;background:'+(config.imageBg||config.borderColor+'22')+';overflow:hidden;display:flex;align-items:center;justify-content:center;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:8px;color:#9ca3af;">No image</span>')+'</div>'
           /* NOTE: intentionally NOT reusing the .ps-product-title/.ps-product-price
              classes here — those carry -webkit-line-clamp:2 + display:-webkit-box
              from the grid-card style below, which conflicts with this row's
@@ -967,7 +1002,7 @@
       }else{
         card.className='ps-product-card';
         card.innerHTML=
-          '<div class="ps-product-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="View pictures of '+safeTitle+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:100%;height:'+config.imageSize+'px;background:'+(config.imageBg||config.borderColor+'22')+';border-radius:'+config.imageRadius+'px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
+          '<div class="ps-product-image"'+(config.imagePopup?' data-fbt-zoom role="button" tabindex="0" aria-label="'+fbtEsc(bxT('storefront.fbt.view_pictures', 'View pictures of {title}', {title:rawTitle}))+'"':'')+' style="'+(config.imagePopup?'cursor:zoom-in;':'')+'width:100%;height:'+config.imageSize+'px;background:'+(config.imageBg||config.borderColor+'22')+';border-radius:'+config.imageRadius+'px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(imageUrl?'<img src="'+imageUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:'+config.imageFit+';display:block;">':'<span style="font-size:9px;color:#9ca3af;">No image</span>')+'</div>'
           +'<div class="ps-product-meta" style="width:100%;min-width:0;text-align:center;">'
             +'<div class="ps-product-title" style="color:'+config.titleColor+';font-size:12px;font-weight:600;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">'+safeTitle+'</div>'
             +variantPicker(product)
@@ -1011,8 +1046,8 @@
 
     if(addBtn){
       addBtn.onclick=async function(){
-        var defaultLabel=addBtn.textContent||'Add to Cart';
-        addBtn.disabled=true;addBtn.textContent='Adding...';addBtn.style.background=config.loadingBgColor;
+        var defaultLabel=addBtn.textContent||bxT('storefront.fbt.add_to_cart', 'Add to Cart');
+        addBtn.disabled=true;addBtn.textContent=bxT('storefront.upsell.adding', 'Adding...');addBtn.style.background=config.loadingBgColor;
         try{
           var variantLookup=await buildVariantLookup(products);
           var items=[];var skipped=[];
@@ -1050,7 +1085,7 @@
           if(!result.addedItems.length)throw new Error('Failed to add selected products to cart.');
           openCartDrawerFast({source:'fbt',items:result.addedItems});
           var totalQty=result.addedItems.reduce(function(s,item){return s+(Number(item.quantity)||0);},0);
-          addBtn.textContent=totalQty>1?'Added '+totalQty:'Added';
+          addBtn.textContent=totalQty>1?bxT('storefront.fbt.added_n', 'Added {count}', {count:totalQty}):bxT('storefront.packs.added', 'Added');
           addBtn.classList.add('is-done');addBtn.style.background=config.successBgColor;addBtn.style.color=config.successTextColor;
           setTimeout(function(){updateFooter();},1200);
         }catch(err){addBtn.textContent=defaultLabel;addBtn.style.background=config.buttonColor;addBtn.style.color=config.buttonTextColor;}

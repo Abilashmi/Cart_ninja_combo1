@@ -4,6 +4,7 @@
  * heading, clamped description, and a footer with category/difficulty
  * badges plus a "Watch Video" button. The whole card is clickable.
  */
+import { useT } from '../i18n/admin';
 
 export const VIDEO_CARD_STYLES = `
 .brix-vt-card {
@@ -197,6 +198,7 @@ export default function VideoTutorialCard({
   description,
   category,
   difficulty = 'Beginner',
+  difficultyLabel, // eslint-disable-line react/prop-types -- shown text when it isn't the English difficulty (admin language)
   duration,
   accent = '#1a9de0',
   watched = false,
@@ -205,6 +207,7 @@ export default function VideoTutorialCard({
   onPlay,
 }) {
   const diff = DIFFICULTY_STYLES[difficulty] || DIFFICULTY_STYLES.Beginner;
+  const t = useT();
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -231,10 +234,10 @@ export default function VideoTutorialCard({
         {watched && (
           <div className="brix-vt-watched">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>Watched</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>{t('admin.home.watched')}</span>
           </div>
         )}
-        <div className="brix-vt-play" aria-label={`Play video: ${title}`}>
+        <div className="brix-vt-play" aria-label={t('admin.home.play_video', { title })}>
           <div style={{ width: 0, height: 0, borderTop: '11px solid transparent', borderBottom: '11px solid transparent', borderLeft: '18px solid #fff', marginLeft: 4 }} />
         </div>
         <span className="brix-vt-duration">{duration}</span>
@@ -251,14 +254,14 @@ export default function VideoTutorialCard({
       <div className="brix-vt-footer">
         <div className="brix-vt-badges">
           {category && <span className="brix-vt-badge" style={{ background: `${accent}18`, color: accent }}>{category}</span>}
-          <span className="brix-vt-badge" style={{ background: diff.bg, color: diff.color }}>{difficulty}</span>
+          <span className="brix-vt-badge" style={{ background: diff.bg, color: diff.color }}>{difficultyLabel || difficulty}</span>
         </div>
         <button
           type="button"
           className="brix-vt-watch-btn"
           onClick={(e) => { e.stopPropagation(); onPlay?.(); }}
         >
-          Watch Video
+          {t('admin.home.watch_video')}
         </button>
       </div>
     </div>

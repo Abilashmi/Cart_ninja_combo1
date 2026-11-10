@@ -439,7 +439,8 @@ export async function verifyCodOtp(shop, phone, code) {
     action: 'verify', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
   });
   if (result === 'ok') return { token: issuePhoneToken(shop, phone) };
-  if (result === 'wrong') throw new CodError('otp_wrong', `That code doesn't match. ${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left.`);
+  // details.vars: the values the storefront fills into its own translation (brix_cod.js errorText).
+  if (result === 'wrong') throw new CodError('otp_wrong', `That code doesn't match. ${attemptsLeft} ${attemptsLeft === 1 ? 'try' : 'tries'} left.`, { details: { vars: { attemptsLeft } } });
   if (result === 'locked') throw new CodError('otp_locked', 'Too many wrong tries. Ask for a new code.');
   throw new CodError('otp_expired', 'This code has expired. Ask for a new one.');
 }
@@ -512,7 +513,7 @@ async function loadVariants(admin, lines, { shipping = null, collections = [] } 
       throw new CodError('item_unavailable', 'One of the items in your cart is no longer available. Refresh the page and try again.', { status: 409 });
     }
     if (!node.availableForSale) {
-      throw new CodError('item_sold_out', `${node.product?.title || 'An item'} is sold out.`, { status: 409, details: { variantId: lines[i].variantId } });
+      throw new CodError('item_sold_out', `${node.product?.title || 'An item'} is sold out.`, { status: 409, details: { variantId: lines[i].variantId, vars: { title: node.product?.title || 'An item' } } });
     }
     tags.push(...(node.product?.tags || []));
     const weight = node.inventoryItem?.measurement?.weight;
@@ -1192,7 +1193,7 @@ export async function placeCodOrder(admin, {
 
   const { count: placedToday } = await php('cod_orders.php', { action: 'count_recent', shop, phone_hash: hash });
   if (placedToday >= settings.dailyLimitPerPhone) {
-    throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429 });
+    throw new CodError('daily_limit', `This number has reached today's limit of ${settings.dailyLimitPerPhone} Cash on Delivery ${settings.dailyLimitPerPhone === 1 ? 'order' : 'orders'}. Please pay online to order again.`, { status: 429, details: { vars: { limit: settings.dailyLimitPerPhone } } });
   }
 
   const { quote, input, shipping: ship } = await quoteCod(admin, {
