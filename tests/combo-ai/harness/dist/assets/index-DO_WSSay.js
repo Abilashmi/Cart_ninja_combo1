@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-BCogkTGI.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-DQ-S4hZr.js","assets/index-Dkp5DWBQ.js","assets/index-DjYGdUn3.js"])))=>i.map(i=>d[i]);
 function _mergeNamespaces(n, m) {
   for (var i = 0; i < m.length; i++) {
     const e = m[i];
@@ -26412,6 +26412,16 @@ function useAppBridge() {
     resourcePicker: async () => []
   };
 }
+function SaveBar({ open, children, ...rest }) {
+  const ref = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof el.show !== "function") return;
+    if (open) el.show();
+    else el.hide();
+  }, [open]);
+  return reactExports.createElement("ui-save-bar", { ...rest, ref }, children);
+}
 const PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
 function fillPriceTags(template, values2, format) {
   return String(template || "").replace(PRICE_TAG, (all, key) => {
@@ -27450,11 +27460,26 @@ function GeneralSectionComponent({
   if (layout === "layout2" || layout === "layout5" || layout === "layout6" || layout === "layout7") {
     const isQuickShop = layout === "layout5" || layout === "layout6" || layout === "layout7";
     const tabCount = Number(config2.tab_count || 1);
-    const addTab = () => updateConfig("tab_count", tabCount + 1);
-    const removeTab = (i) => {
-      updateConfig("tab_count", Math.max(1, tabCount - 1));
-      updateConfig(`col_${i}`, "");
+    const cols = [...Array(tabCount)].map((_, k) => config2[`col_${k + 1}`] || "");
+    const setCols = (list) => {
+      const count = Math.max(1, list.length);
+      for (let k = 1; k <= Math.max(count, tabCount); k++) updateConfig(`col_${k}`, k <= list.length ? list[k - 1] : "");
+      updateConfig("tab_count", count);
     };
+    const addTab = () => updateConfig("tab_count", tabCount + 1);
+    const removeTab = (index) => setCols(cols.filter((_, k) => k !== index));
+    const moveTab = (index, by) => {
+      const list = [...cols];
+      [list[index], list[index + by]] = [list[index + by], list[index]];
+      setCols(list);
+    };
+    const titles = config2.qs_col_titles && typeof config2.qs_col_titles === "object" ? config2.qs_col_titles : {};
+    const titleOf = (handle) => {
+      var _a;
+      return ((_a = (collections || []).find((c) => c.handle === handle)) == null ? void 0 : _a.title) || handle;
+    };
+    const grouped = !!config2.qs_group_by_collection;
+    const arrowStyle = (off) => ({ background: "none", border: "1px solid #c9cccf", borderRadius: 6, width: 28, height: 28, cursor: off ? "default" : "pointer", opacity: off ? 0.35 : 1, fontSize: 14, lineHeight: 1, marginBottom: 4 });
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       SectionCard,
       {
@@ -27502,31 +27527,51 @@ function GeneralSectionComponent({
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-row cst-row--vertical", style: { marginTop: 12, gap: 10 }, children: [...Array(tabCount)].map((_, index) => {
             const i = index + 1;
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "flex-end", gap: 8 }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Select,
+            const handle = config2[`col_${i}`] || "";
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "flex-end", gap: 8 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Select,
+                  {
+                    label: `Collection ${i}`,
+                    options: [
+                      { label: "+ Choose a collection", value: "" },
+                      ...(collections || []).map((col) => ({
+                        label: col.title,
+                        value: col.handle
+                      }))
+                    ],
+                    value: config2[`col_${i}`] || "",
+                    onChange: (v) => updateConfig(`col_${i}`, v)
+                  }
+                ) }),
+                tabCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", "aria-label": `Move collection ${i} up`, disabled: index === 0, onClick: () => moveTab(index, -1), style: arrowStyle(index === 0), children: "↑" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", "aria-label": `Move collection ${i} down`, disabled: index === tabCount - 1, onClick: () => moveTab(index, 1), style: arrowStyle(index === tabCount - 1), children: "↓" })
+                ] }),
+                tabCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    "aria-label": `Remove collection ${i}`,
+                    onClick: () => removeTab(index),
+                    style: { background: "none", border: "none", cursor: "pointer", color: "#d72c0d", fontSize: 13, fontWeight: 600, padding: "8px 4px", marginBottom: 4 },
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(CloseGlyph, {})
+                  }
+                )
+              ] }),
+              isQuickShop && handle && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                TextField$1,
                 {
-                  label: `Collection ${i}`,
-                  options: [
-                    { label: "+ Choose a collection", value: "" },
-                    ...(collections || []).map((col) => ({
-                      label: col.title,
-                      value: col.handle
-                    }))
-                  ],
-                  value: config2[`col_${i}`] || "",
-                  onChange: (v) => updateConfig(`col_${i}`, v)
+                  label: `Name on the page for collection ${i}`,
+                  labelHidden: true,
+                  value: titles[handle] || "",
+                  placeholder: `Name on the page (optional): ${titleOf(handle)}`,
+                  onChange: (v) => updateConfig("qs_col_titles", { ...titles, [handle]: v }),
+                  autoComplete: "off",
+                  maxLength: 60
                 }
-              ) }),
-              tabCount > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  type: "button",
-                  onClick: () => removeTab(i),
-                  style: { background: "none", border: "none", cursor: "pointer", color: "#d72c0d", fontSize: 13, fontWeight: 600, padding: "8px 4px", marginBottom: 4 },
-                  children: /* @__PURE__ */ jsxRuntimeExports.jsx(CloseGlyph, {})
-                }
-              )
+              ) })
             ] }, i);
           }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -27554,7 +27599,69 @@ function GeneralSectionComponent({
                 " Add Collection"
               ]
             }
-          )
+          ),
+          isQuickShop && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "The order here is the order of the filter chips (and of the sections below). A name on the page replaces the collection's Shopify name on the page only; empty = the Shopify name." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Checkbox,
+              {
+                label: "Show products by collection",
+                helpText: "One section per collection, in this order, under its name. A product in two collections shows in the first. Off = one grid, as now.",
+                checked: grouped,
+                onChange: (v) => updateConfig("qs_group_by_collection", v)
+              }
+            ),
+            grouped && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                Select,
+                {
+                  label: "Section title alignment",
+                  options: [{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }],
+                  value: config2.qs_group_title_align || "left",
+                  onChange: (v) => updateConfig("qs_group_title_align", v)
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  TextField$1,
+                  {
+                    label: "Title size (px)",
+                    type: "number",
+                    min: 10,
+                    max: 40,
+                    placeholder: "20",
+                    autoComplete: "off",
+                    value: config2.qs_group_title_size ? String(config2.qs_group_title_size) : "",
+                    onChange: (v) => updateConfig("qs_group_title_size", v === "" ? null : Number(v))
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  TextField$1,
+                  {
+                    label: "On phones (px)",
+                    type: "number",
+                    min: 10,
+                    max: 40,
+                    placeholder: "17",
+                    autoComplete: "off",
+                    value: config2.qs_group_title_size_m ? String(config2.qs_group_title_size_m) : "",
+                    onChange: (v) => updateConfig("qs_group_title_size_m", v === "" ? null : Number(v))
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                TextField$1,
+                {
+                  label: "Title for products you added yourself",
+                  autoComplete: "off",
+                  maxLength: 60,
+                  value: config2.qs_extra_title || "",
+                  onChange: (v) => updateConfig("qs_extra_title", v),
+                  helpText: "Products added under Products on the page come last. Empty = no title."
+                }
+              )
+            ] })
+          ] })
         ] })
       }
     );
@@ -27779,7 +27886,7 @@ function createComboWeightCore() {
   };
   var ZERO_DECIMAL = ["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF", "XPF", "PYG", "RWF", "KMF", "DJF", "GNF", "VUV", "BIF"];
   var THREE_DECIMAL = ["BHD", "KWD", "OMR", "JOD", "TND"];
-  var TIER_TYPES2 = ["percentage", "fixed_amount", "fixed_price"];
+  var TIER_TYPES2 = ["percentage", "fixed_amount", "fixed_price", "unit_price"];
   var MEASURES2 = ["weight", "quantity", "value"];
   var QUICK_SHOP_LAYOUT2 = "layout6";
   var WEIGHT_BOX_LAYOUT2 = "layout5";
@@ -27891,6 +27998,7 @@ function createComboWeightCore() {
     if (tier.label) return tier.label;
     if (tier.type === "percentage") return tier.value + "% OFF";
     if (tier.type === "fixed_amount") return formatMoney2(tier.value, symbol) + " OFF";
+    if (tier.type === "unit_price") return formatMoney2(tier.value, symbol) + (measure === "quantity" ? " each" : "/kg");
     if (measure === "quantity") return "Any " + tier.min_grams + " for " + formatMoney2(tier.value, symbol);
     return "Box at " + formatMoney2(tier.value, symbol);
   }
@@ -27921,7 +28029,11 @@ function createComboWeightCore() {
       (q.collection_ids || []).slice().sort(),
       (q.product_ids || []).slice().sort(),
       tiers
-    ]));
+    ].concat(
+      // Extra / no-offer products only when set, so every box saved before
+      // they existed keeps its exact hash.
+      q.extra_product_ids && q.extra_product_ids.length || q.exclude_product_ids && q.exclude_product_ids.length ? [["x", (q.extra_product_ids || []).slice().sort(), (q.exclude_product_ids || []).slice().sort()]] : []
+    )));
     return fnv1a(canonical, 2166136261) + fnv1a(canonical, 374761393);
   }
   function toGid(type, value) {
@@ -28003,7 +28115,7 @@ function createComboWeightCore() {
       if (!type) {
         errors.push({ field: field + ".type", message: "Tier " + (i + 1) + ": choose percentage off, amount off or box price." });
         type = "percentage";
-      } else if (isValue && type === "fixed_price") {
+      } else if (isValue && (type === "fixed_price" || type === "unit_price")) {
         errors.push({ field: field + ".type", message: "Tier " + (i + 1) + ": a spend-based offer can be percentage off or amount off, not a box price." });
       }
       var value = Number(t.value);
@@ -28041,6 +28153,10 @@ function createComboWeightCore() {
       collectionIds = [];
       productIds = [];
     }
+    var extraIds = uniqueGids("Product", q.extra_product_ids);
+    var excludeIds = uniqueGids("Product", q.exclude_product_ids);
+    if (extraIds.length > LIMITS2.products) errors.push({ field: "qualify.extra_product_ids", message: "Add at most " + LIMITS2.products + " extra products." });
+    if (excludeIds.length > LIMITS2.products) errors.push({ field: "qualify.exclude_product_ids", message: "Leave out at most " + LIMITS2.products + " products." });
     var msgs = src.messages && typeof src.messages === "object" ? src.messages : {};
     var messages = {
       locked: cleanText(msgs.locked, LIMITS2.message, DEFAULT_MESSAGES2.locked),
@@ -28059,6 +28175,8 @@ function createComboWeightCore() {
       tiers,
       messages
     };
+    if (extraIds.length) value2.qualify.extra_product_ids = extraIds.slice(0, LIMITS2.products);
+    if (excludeIds.length) value2.qualify.exclude_product_ids = excludeIds.slice(0, LIMITS2.products);
     if (!isWeight) value2.measure = measure;
     value2.hash = pricingHash2(value2);
     return { value: value2, errors, warnings };
@@ -28113,6 +28231,9 @@ function createComboWeightCore() {
         parts = allocateMinor2(Math.min(toMinor2(tier.value * rate, decimals), subtotal), subtotals);
       } else if (tier.type === "fixed_price") {
         parts = allocateMinor2(Math.max(0, subtotal - toMinor2(tier.value * rate, decimals)), subtotals);
+      } else if (tier.type === "unit_price") {
+        var units = measure === "quantity" ? items : grams / 1e3;
+        parts = allocateMinor2(Math.max(0, subtotal - toMinor2(tier.value * rate * units, decimals)), subtotals);
       }
     }
     var discountMinor = 0;
@@ -28350,6 +28471,23 @@ function createQuickShopKit(core2) {
     // circle | rounded | square
     qs_chip_images: null,
     // { [collection handle]: 'https://…' }
+    // The merchant's own name for a collection on the page (chips, picture
+    // bar, section headings); missing / empty = the Shopify collection name.
+    qs_col_titles: null,
+    // { [collection handle]: 'Tees' }
+    qs_chips_align: "left",
+    // left | center | right: the chip row and the picture bar
+    // Products in one section per collection (in the Box Collections order)
+    // under its name, instead of one mixed grid. A product in two collections
+    // shows in the first. Products added under "Products on the page" come
+    // last, under qs_extra_title (empty = no heading).
+    qs_group_by_collection: false,
+    qs_group_title_align: "left",
+    // left | center | right
+    qs_group_title_size: null,
+    // px; null = 20 (phones 17)
+    qs_group_title_size_m: null,
+    qs_extra_title: "",
     qs_filter_type: true,
     qs_filter_type_label: "Type",
     qs_filter_brand: true,
@@ -28361,23 +28499,83 @@ function createQuickShopKit(core2) {
     qs_filter_sort_label: "Sort By",
     qs_filter_instock: false,
     qs_filter_instock_label: "In stock",
+    // Collection filter groups: each group is one filter ("Weight", "Years")
+    // whose options are store collections (any collection, not only the
+    // page's), shown as a dropdown or a chip row; one option per group.
+    // [{ id, label, style: 'dropdown' | 'chips', options: [{ handle, label }] }]
+    // (option label '' = the collection's title). See filterGroups().
+    qs_filter_groups: null,
+    // Weight filter, from the products' own Shopify variant weights (no
+    // collections needed). auto = one option per weight on the page (250 g,
+    // 500 g, 1 kg); ranges = qs_filter_weight_ranges [{ min, max, label }] in
+    // grams, min included, max not (null = and above); slider = the shopper
+    // drags from–to between the lightest and heaviest. See weightFilter().
+    qs_filter_weight: false,
+    qs_filter_weight_label: "Weight",
+    qs_filter_weight_mode: "auto",
+    // auto | ranges | slider
+    qs_filter_weight_ranges: null,
+    qs_filter_weight_style: "dropdown",
+    // dropdown | chips (auto and ranges)
+    // Price slider: from–to between the cheapest and dearest variant on the page.
+    qs_filter_price: false,
+    qs_filter_price_label: "Price",
+    // Sliders as their own row, or behind a chip like the dropdowns.
+    qs_slider_look: "row",
+    // row | dropdown
+    // Desktop: filters above the products, or in a column on the left
+    // (phones always above).
+    qs_filter_position: "top",
+    // top | left
+    qs_filter_font_size: null,
+    // px; null = as before (15, phones 13.5)
+    qs_filter_font_size_m: null,
     // Cards
     // quick_add = + button on the image that turns into a stepper; normal =
     // a full-width Add button under the price (stepper there once added).
     qs_card_layout: "quick_add",
     // quick_add | normal
     qs_add_label: "Add",
+    // Prices as whole amounts (₹1,708 not ₹1,708.20): display only, checkout
+    // charges the exact price.
+    qs_hide_decimals: false,
+    // A tap on a card's picture or name opens the product in a popup: its
+    // pictures with thumbnails, full description, options and Add.
+    qs_product_popup: true,
+    // Card text sizes (px); null = as before. Phones have their own.
+    qs_card_title_size: null,
+    // 17, phones 14
+    qs_card_title_size_m: null,
+    qs_card_text_size: null,
+    // subtitle, option / weight, % OFF (14-15, phones 12.5-15)
+    qs_card_text_size_m: null,
+    qs_card_price_size: null,
+    // 19, phones 16
+    qs_card_price_size_m: null,
     qs_columns_desktop: 4,
     qs_columns_mobile: 2,
     qs_card_eyebrow: "",
     qs_show_subtitle: true,
     qs_show_compare: true,
+    qs_show_price: true,
+    // the card's selling price (the popup always shows it)
+    // Most of one product a shopper can put in the box, all its variants
+    // together (null / 0 = no limit); + stops there and the text says why.
+    qs_max_per_product: null,
+    qs_max_per_product_text: "You can add up to {{max}} of each product.",
+    // Cards drawn at once; "Show more" adds the next lot. Filters always
+    // search every product of the page, not just the cards drawn.
+    qs_page_size: 40,
+    qs_more_text: "Show more",
     qs_show_off: true,
     qs_show_weight: true,
     qs_badge_tag: "bestseller",
     qs_badge_text: "Bestseller",
     qs_image_ratio: "square",
-    // square | portrait | landscape
+    // square | portrait (4:5) | tall (2:3) | landscape
+    // contain = the whole picture (bands where its shape differs from the
+    // frame); cover = fills the frame, trimming the edges.
+    qs_image_fit: "contain",
     qs_card_radius: 14,
     qs_card_bg: "#ffffff",
     qs_page_bg: "#f4f5f7",
@@ -28393,8 +28591,23 @@ function createQuickShopKit(core2) {
     qs_top_sticky: true,
     qs_top_offset: 0,
     qs_top_show_labels: true,
+    // What the text under the bar shows and how big (bar, steps, milestones).
+    qs_top_show_name: true,
+    // the offer name ("10% OFF")
+    qs_top_show_amount: true,
+    // what's needed for it ("₹999", "2 kg", "3 items")
+    qs_top_label_size: 12,
+    // px
+    qs_top_label_size_m: null,
+    // phones; null = as before (milestones 1px smaller)
+    qs_top_sub_size: 11,
+    // the amount line, px
     qs_top_height: 8,
     qs_top_radius: 999,
+    // Milestone icon size (px); its circle is 16px bigger. Phones: null = the
+    // desktop size. Many tiers on a narrow page shrink both (mileSizes).
+    qs_mile_icon_size: 18,
+    qs_mile_icon_size_m: null,
     qs_top_bg: "#ffffff",
     qs_top_text: "#111827",
     qs_top_track: "#e5e7eb",
@@ -28404,7 +28617,7 @@ function createQuickShopKit(core2) {
     // built-in SVG icon names (ICONS) or https:// image links
     // Bottom bar
     qs_bar_style: "full",
-    // full | slim | ring | compact
+    // full | slim | ring | compact | slots (quantity boxes: one box per item of the next offer)
     qs_bar_bg: "#ffffff",
     qs_bar_text: "#111827",
     qs_bar_save: "#16a34a",
@@ -28412,6 +28625,8 @@ function createQuickShopKit(core2) {
     qs_bar_show_message: true,
     qs_bar_show_thumbs: true,
     qs_bar_show_saved: true,
+    qs_sheet_show_price: true,
+    // each line's price in the box list the bottom bar opens
     qs_bar_celebrate: true,
     qs_bar_icon_done: "party",
     qs_bar_icon_locked: "gift",
@@ -28467,10 +28682,65 @@ function createQuickShopKit(core2) {
     if (!isFinite(n)) n = fallback;
     return Math.max(min, Math.min(max, n));
   }
+  function collectionTitle(config2, handle, collectionNames) {
+    var own = opt(config2, "qs_col_titles");
+    var mine = own && typeof own === "object" ? String(own[handle] || "").trim().slice(0, 60) : "";
+    return mine || collectionNames && collectionNames[handle] || handle;
+  }
+  function sideOf(config2, key) {
+    var a = opt(config2, key);
+    return a === "center" || a === "right" ? a : "left";
+  }
+  function maxPerProduct(config2) {
+    var n = Math.floor(Number(opt(config2, "qs_max_per_product")));
+    return isFinite(n) && n > 0 ? Math.min(n, 99) : 0;
+  }
+  function pageSize(config2) {
+    var n = Math.floor(Number(opt(config2, "qs_page_size")));
+    return isFinite(n) && n > 0 ? Math.max(12, Math.min(n, 200)) : DEFAULTS2.qs_page_size;
+  }
+  function filterKey(ui) {
+    var dd = ui && ui.dd ? ui.dd : {};
+    var keys = [];
+    for (var k in dd) if (Object.prototype.hasOwnProperty.call(dd, k) && dd[k]) keys.push(k + "=" + dd[k]);
+    keys.sort();
+    return String(ui && ui.chip || "all") + "|" + (ui && ui.instock ? 1 : 0) + "|" + keys.join("&");
+  }
+  function productQty(selection, productId) {
+    var total = 0;
+    for (var vid in selection) {
+      if (!Object.prototype.hasOwnProperty.call(selection, vid)) continue;
+      var sel = selection[vid];
+      if (sel && String(sel.productId) === String(productId)) total += Number(sel.qty) || 0;
+    }
+    return total;
+  }
+  function productLimitMessage(config2, selection, next) {
+    var max = maxPerProduct(config2);
+    if (!max) return "";
+    var seen2 = {};
+    for (var vid in next) {
+      if (!Object.prototype.hasOwnProperty.call(next, vid)) continue;
+      var pid = String(next[vid] && next[vid].productId);
+      if (seen2[pid]) continue;
+      seen2[pid] = true;
+      var after = productQty(next, pid);
+      if (after > max && after > productQty(selection || {}, pid)) {
+        return String(opt(config2, "qs_max_per_product_text") || DEFAULTS2.qs_max_per_product_text).replace(/\{\{\s*max\s*\}\}/g, String(max));
+      }
+    }
+    return "";
+  }
+  var wholeMoney = false;
   function money(amount, symbol) {
     var n = Math.max(0, Number(amount) || 0);
-    var text = Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
+    var text = wholeMoney || Math.round(n * 100) % 100 === 0 ? String(Math.round(n)) : n.toFixed(2);
     return (symbol || "") + text;
+  }
+  function wholeMinor(view, amount, decimals, roundUp) {
+    if (!wholeMoney || !view || view.measure !== "value") return amount;
+    var unit = Math.pow(10, decimals === void 0 ? 2 : decimals);
+    return (roundUp ? Math.ceil(Number(amount) / unit - 1e-9) : Math.round(Number(amount) / unit)) * unit;
   }
   function list(text) {
     var out = [];
@@ -28500,6 +28770,7 @@ function createQuickShopKit(core2) {
     if (tier.label) return tier.label;
     if (tier.type === "percentage") return tier.value + "% OFF";
     if (tier.type === "fixed_amount") return money(tier.value, symbol) + " OFF";
+    if (tier.type === "unit_price") return money(tier.value, symbol) + (measure === "quantity" ? " EACH" : "/KG");
     if (measure === "quantity") return "Any " + tier.min_grams + " for " + money(tier.value, symbol);
     return "Box at " + money(tier.value, symbol);
   }
@@ -28549,11 +28820,14 @@ function createQuickShopKit(core2) {
     if (isIconUrl(icon)) return '<img class="' + cls + '" src="' + esc(icon) + '" alt="" />';
     return '<span class="' + cls + '" aria-hidden="true">' + svgIcon(iconName(icon, i)) + "</span>";
   }
-  function activeVariant(product2, pending) {
+  function activeVariant(product2, pending, prefer) {
     var variants = product2.variants || [];
     var id = pending && pending[product2.id];
     var i;
     for (i = 0; i < variants.length; i++) if (id && String(variants[i].id) === String(id)) return variants[i];
+    if (prefer) {
+      for (i = 0; i < variants.length; i++) if (variants[i].available !== false && prefer(variants[i], product2)) return variants[i];
+    }
     for (i = 0; i < variants.length; i++) if (variants[i].available !== false) return variants[i];
     return variants[0] || null;
   }
@@ -28602,14 +28876,279 @@ function createQuickShopKit(core2) {
     }
     return "";
   }
-  function filterRow(config2, products, handles, collectionNames, ui, collectionImages, productsByHandle) {
+  var GROUP_MAX2 = 5;
+  var GROUP_OPTION_MAX2 = 15;
+  function cleanText(value, max) {
+    return String(value === null || value === void 0 ? "" : value).replace(/\s+/g, " ").trim().slice(0, max);
+  }
+  function cleanHandle(value) {
+    var s = String(value === null || value === void 0 ? "" : value).trim();
+    return /^[^\s"'<>&\\]{1,255}$/.test(s) ? s : "";
+  }
+  function filterGroups(config2) {
+    var raw = opt(config2, "qs_filter_groups");
+    var out = [];
+    if (!raw || typeof raw.length !== "number") return out;
+    var ids = {};
+    for (var g = 0; g < raw.length && out.length < GROUP_MAX2; g++) {
+      var group = raw[g];
+      if (!group || typeof group !== "object") continue;
+      var label = cleanText(group.label, 40);
+      var options = [];
+      var seen2 = {};
+      var rawOptions = group.options && typeof group.options.length === "number" ? group.options : [];
+      for (var o = 0; o < rawOptions.length && options.length < GROUP_OPTION_MAX2; o++) {
+        var handle = cleanHandle(rawOptions[o] && rawOptions[o].handle);
+        if (!handle || seen2[handle]) continue;
+        seen2[handle] = true;
+        options.push({ handle, label: cleanText(rawOptions[o].label, 40) });
+      }
+      if (!label || !options.length) continue;
+      var id = /^[A-Za-z0-9_-]{1,32}$/.test(String(group.id || "")) && !ids["g" + group.id] ? String(group.id) : "g" + g;
+      ids["g" + id] = true;
+      out.push({ id, label, style: group.style === "chips" ? "chips" : "dropdown", options });
+    }
+    return out;
+  }
+  var WEIGHT_RANGE_MAX2 = 8;
+  var WEIGHT_AUTO_MAX = 20;
+  function weightText(grams) {
+    return core2.formatWeight(grams, grams < 1e3 ? "g" : "kg");
+  }
+  function weightRanges(config2) {
+    var raw = opt(config2, "qs_filter_weight_ranges");
+    var out = [];
+    if (!raw || typeof raw.length !== "number") return out;
+    for (var i = 0; i < raw.length && out.length < WEIGHT_RANGE_MAX2; i++) {
+      var r = raw[i];
+      if (!r || typeof r !== "object") continue;
+      var min = Number(r.min);
+      if (!isFinite(min) || min < 0) min = 0;
+      var max = r.max === null || r.max === void 0 || r.max === "" ? null : Number(r.max);
+      if (max !== null && (!isFinite(max) || max <= min)) continue;
+      if (min === 0 && max === null) continue;
+      var label = cleanText(r.label, 40) || (max === null ? weightText(min) + "+" : min === 0 ? "Under " + weightText(max) : weightText(min) + " – " + weightText(max));
+      out.push({ min, max, label });
+    }
+    return out;
+  }
+  function weightFilter(config2) {
+    if (!on(config2, "qs_filter_weight")) return null;
+    var mode = opt(config2, "qs_filter_weight_mode");
+    if (mode !== "ranges" && mode !== "slider") mode = "auto";
+    var spec = {
+      label: cleanText(opt(config2, "qs_filter_weight_label"), 40) || "Weight",
+      style: opt(config2, "qs_filter_weight_style") === "chips" ? "chips" : "dropdown",
+      mode,
+      ranges: mode === "ranges" ? weightRanges(config2) : []
+    };
+    return mode === "ranges" && !spec.ranges.length ? null : spec;
+  }
+  function parseSpan(value) {
+    var m = /^s:(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(String(value || ""));
+    return m ? { lo: Number(m[1]), hi: Number(m[2]) } : null;
+  }
+  function inSpan(value, n) {
+    var span = parseSpan(value);
+    return !!span && n >= span.lo && n <= span.hi;
+  }
+  function niceStep(span) {
+    var steps = [1, 5, 10, 25, 50, 100, 250, 500, 1e3, 5e3];
+    for (var i = 0; i < steps.length; i++) if (span / steps[i] <= 100) return steps[i];
+    return 1e4;
+  }
+  function sliderGroup(id, label, kind, values2, picked, symbol) {
+    var lowest = Infinity;
+    var highest = -Infinity;
+    for (var i = 0; i < values2.length; i++) {
+      if (values2[i] < lowest) lowest = values2[i];
+      if (values2[i] > highest) highest = values2[i];
+    }
+    if (!(highest > lowest)) return null;
+    var step = niceStep(highest - lowest);
+    var min = Math.floor(lowest / step) * step;
+    var max = Math.ceil(highest / step) * step;
+    var span = parseSpan(picked);
+    var lo = span ? Math.max(min, Math.min(max, span.lo)) : min;
+    var hi = span ? Math.max(lo, Math.min(max, span.hi)) : max;
+    return {
+      id,
+      kind: "slider",
+      unit: kind,
+      label,
+      style: "slider",
+      value: picked || "",
+      min,
+      max,
+      step,
+      lo,
+      hi,
+      text: spanText(kind, lo, hi, symbol),
+      symbol: symbol || ""
+    };
+  }
+  function spanText(kind, lo, hi, symbol) {
+    var f = function(n) {
+      return kind === "price" ? money(n, symbol) : weightText(n);
+    };
+    return f(lo) + " – " + f(hi);
+  }
+  function productFitsPrice(value, product2) {
+    var variants = product2.variants || [];
+    if (!variants.length) return inSpan(value, priceOf(product2, null));
+    for (var i = 0; i < variants.length; i++) if (inSpan(value, priceOf(product2, variants[i]))) return true;
+    return false;
+  }
+  function priceGroup(label, products, ui, symbol) {
+    var prices = [];
+    for (var p = 0; p < products.length; p++) {
+      var variants = products[p].variants || [];
+      if (!variants.length) prices.push(priceOf(products[p], null));
+      for (var i = 0; i < variants.length; i++) prices.push(priceOf(products[p], variants[i]));
+    }
+    return sliderGroup("price", label, "price", prices, ui.dd && ui.dd.price || "", symbol);
+  }
+  function weightFits(spec, value, grams) {
+    if (!value || !(grams > 0)) return false;
+    if (value.indexOf("s:") === 0) return inSpan(value, grams);
+    if (value.indexOf("w:") === 0) return Math.round(grams) === Number(value.slice(2));
+    if (value.indexOf("r:") === 0) {
+      var r = spec.ranges[Number(value.slice(2))];
+      return !!r && grams >= r.min && (r.max === null || grams < r.max);
+    }
+    return false;
+  }
+  function weightValueOk(spec, value) {
+    if (/^w:\d+$/.test(value)) return true;
+    if (/^r:\d+$/.test(value)) return !!spec.ranges[Number(value.slice(2))];
+    return !!parseSpan(value);
+  }
+  function productFitsWeight(spec, value, product2) {
+    var variants = product2.variants || [];
+    for (var i = 0; i < variants.length; i++) if (weightFits(spec, value, variants[i].grams)) return true;
+    return false;
+  }
+  function weightGroup(spec, products, ui) {
+    var value = ui.dd && ui.dd.weight || "";
+    var options = [];
+    var i;
+    var p;
+    if (spec.mode === "slider") {
+      var all = [];
+      for (p = 0; p < products.length; p++) {
+        for (i = 0; i < (products[p].variants || []).length; i++) {
+          var grams = Number(products[p].variants[i].grams);
+          if (grams > 0) all.push(grams);
+        }
+      }
+      return sliderGroup("weight", spec.label, "weight", all, value);
+    }
+    if (spec.mode === "auto") {
+      var weights = [];
+      for (p = 0; p < products.length; p++) {
+        var variants = products[p].variants || [];
+        for (i = 0; i < variants.length; i++) {
+          var g = Math.round(Number(variants[i].grams));
+          if (g > 0 && weights.indexOf(g) === -1) weights.push(g);
+        }
+      }
+      weights.sort(function(a, b) {
+        return a - b;
+      });
+      weights = weights.slice(0, WEIGHT_AUTO_MAX);
+      var picked = value.indexOf("w:") === 0 ? Number(value.slice(2)) : 0;
+      if (picked > 0 && weights.indexOf(picked) === -1) {
+        weights.push(picked);
+        weights.sort(function(a, b) {
+          return a - b;
+        });
+      }
+      if (weights.length < 2) return null;
+      for (i = 0; i < weights.length; i++) options.push({ value: "w:" + weights[i], label: weightText(weights[i]), on: value === "w:" + weights[i] });
+    } else {
+      for (i = 0; i < spec.ranges.length; i++) {
+        var key = "r:" + i;
+        var present = value === key;
+        for (p = 0; !present && p < products.length; p++) if (productFitsWeight(spec, key, products[p])) present = true;
+        if (present) options.push({ value: key, label: spec.ranges[i].label, on: value === key });
+      }
+      if (!options.length) return null;
+    }
+    return { id: "weight", label: spec.label, style: spec.style, value, options, open: ui.menu === "weight" };
+  }
+  var EXTRA_HANDLE = "__brix_extra";
+  function pageExclusions(config2) {
+    var ids = {};
+    var raw = config2 && config2.box_hide_product_ids || [];
+    for (var i = 0; i < raw.length && i < 200; i++) if (typeof raw[i] === "string") ids[raw[i]] = true;
+    var handles = [];
+    var cols = config2 && config2.box_hide_collections || [];
+    for (var c = 0; c < cols.length && c < 20; c++) {
+      var h = cleanHandle(cols[c] && cols[c].handle);
+      if (h && handles.indexOf(h) === -1) handles.push(h);
+    }
+    return { productIds: ids, collectionHandles: handles };
+  }
+  function memberHandles(config2) {
+    var out = filterGroupHandles(config2);
+    var hidden = pageExclusions(config2).collectionHandles;
+    for (var i = 0; i < hidden.length; i++) if (out.indexOf(hidden[i]) === -1) out.push(hidden[i]);
+    return out;
+  }
+  function filterGroupHandles(config2) {
+    var groups = filterGroups(config2);
+    var out = [];
+    for (var g = 0; g < groups.length; g++) {
+      for (var o = 0; o < groups[g].options.length; o++) if (out.indexOf(groups[g].options[o].handle) === -1) out.push(groups[g].options[o].handle);
+    }
+    return out;
+  }
+  function groupMembers(groups, collectionMembers, productsByHandle) {
+    var out = {};
+    for (var g = 0; g < groups.length; g++) {
+      for (var o = 0; o < groups[g].options.length; o++) {
+        var h = groups[g].options[o].handle;
+        if (out[h]) continue;
+        var ids = collectionMembers && collectionMembers[h];
+        var page = productsByHandle && productsByHandle[h];
+        if (!ids && !page) continue;
+        var set2 = {};
+        var i;
+        for (i = 0; ids && i < ids.length; i++) set2[ids[i]] = true;
+        for (i = 0; page && i < page.length; i++) set2[page[i].id] = true;
+        out[h] = set2;
+      }
+    }
+    return out;
+  }
+  function groupFilters(groups, members, products, collectionNames, ui) {
+    var dd = ui.dd || {};
+    var out = [];
+    for (var g = 0; g < groups.length; g++) {
+      var key = "g:" + groups[g].id;
+      var value = dd[key] || "";
+      var options = [];
+      for (var o = 0; o < groups[g].options.length; o++) {
+        var opt0 = groups[g].options[o];
+        var set2 = members[opt0.handle];
+        var present = !set2 || value === opt0.handle;
+        for (var p = 0; !present && p < products.length; p++) if (set2[products[p].id]) present = true;
+        if (!present) continue;
+        options.push({ value: opt0.handle, label: opt0.label || collectionNames && collectionNames[opt0.handle] || opt0.handle, on: value === opt0.handle });
+      }
+      if (!options.length) continue;
+      out.push({ id: key, label: groups[g].label, style: groups[g].style, value, options, open: ui.menu === key });
+    }
+    return out;
+  }
+  function filterRow(config2, products, handles, collectionNames, ui, collectionImages, productsByHandle, groupInfo) {
     var chips = [];
     var source = opt(config2, "qs_chips_source");
     var chipValues = [];
     var pictures = opt(config2, "qs_chip_style") === "images";
     if (source === "collections" && handles.length > 1) {
       for (var h = 0; h < handles.length; h++) {
-        var chip = { value: "c:" + handles[h], label: collectionNames[handles[h]] || handles[h] };
+        var chip = { value: "c:" + handles[h], label: collectionTitle(config2, handles[h], collectionNames) };
         if (pictures) {
           chip.picture = true;
           chip.image = collectionImage(config2, handles[h], collectionImages, productsByHandle);
@@ -28636,6 +29175,28 @@ function createQuickShopKit(core2) {
       for (var i = 0; i < values2.length; i++) options.push({ value: values2[i], label: values2[i] });
       menus.push({ id, label, value: dd[id] || "", options, open: ui.menu === id });
     }
+    var groups = groupInfo ? groupFilters(groupInfo.groups, groupInfo.members, products, collectionNames, ui) : [];
+    var byWeight = groupInfo && groupInfo.weight ? weightGroup(groupInfo.weight, products, ui) : null;
+    if (byWeight) groups.push(byWeight);
+    var byPrice = groupInfo && groupInfo.price ? priceGroup(groupInfo.price, products, ui, groupInfo.symbol) : null;
+    if (byPrice) groups.push(byPrice);
+    var chipGroups = [];
+    var sliders = [];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var grp = groups[gi];
+      if (grp.style === "chips") {
+        chipGroups.push(grp);
+        continue;
+      }
+      if (grp.kind === "slider") {
+        if (opt(config2, "qs_slider_look") === "dropdown") menus.push({ id: grp.id, label: grp.label, value: grp.value, options: [], open: ui.menu === grp.id, slider: grp });
+        else sliders.push(grp);
+        continue;
+      }
+      var groupOptions = [{ value: "", label: "All" }];
+      for (var go = 0; go < grp.options.length; go++) groupOptions.push({ value: grp.options[go].value, label: grp.options[go].label });
+      menus.push({ id: grp.id, label: grp.label, value: grp.value, options: groupOptions, open: grp.open });
+    }
     if (on(config2, "qs_filter_type")) addMenu("type", opt(config2, "qs_filter_type_label"), uniqueValues(products, "productType"));
     if (on(config2, "qs_filter_brand")) addMenu("brand", opt(config2, "qs_filter_brand_label"), uniqueValues(products, "vendor"));
     if (on(config2, "qs_filter_custom")) {
@@ -28653,9 +29214,10 @@ function createQuickShopKit(core2) {
       menus.push({ id: "sort", label: opt(config2, "qs_filter_sort_label"), value: dd.sort && dd.sort !== "featured" ? dd.sort : "", options: SORTS, open: ui.menu === "sort", isSort: true });
     }
     var active = ui.chip && ui.chip !== "all" || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || dd.sort && dd.sort !== "featured";
-    return { chips, menus, active: !!active };
+    for (var ga = 0; ga < groups.length; ga++) if (groups[ga].value) active = true;
+    return { chips, menus, groups: chipGroups, sliders, active: !!active };
   }
-  function filterProducts(products, productsByHandle, ui, pending) {
+  function filterProducts(products, productsByHandle, ui, pending, groupInfo) {
     var dd = ui.dd || {};
     var inChip = null;
     if (ui.chip && ui.chip.indexOf("c:") === 0) {
@@ -28663,10 +29225,24 @@ function createQuickShopKit(core2) {
       var prods = productsByHandle[ui.chip.slice(2)] || [];
       for (var i = 0; i < prods.length; i++) inChip[prods[i].id] = true;
     }
+    var inGroups = [];
+    if (groupInfo) {
+      for (var g = 0; g < groupInfo.groups.length; g++) {
+        var picked = dd["g:" + groupInfo.groups[g].id];
+        if (picked && groupInfo.members[picked]) inGroups.push(groupInfo.members[picked]);
+      }
+    }
+    var weightPick = groupInfo && groupInfo.weight && dd.weight && weightValueOk(groupInfo.weight, dd.weight) ? dd.weight : "";
+    var pricePick = groupInfo && groupInfo.price && parseSpan(dd.price) ? dd.price : "";
     var out = [];
     for (var j = 0; j < products.length; j++) {
       var p = products[j];
       if (inChip && !inChip[p.id]) continue;
+      var outOfGroup = false;
+      for (var ig = 0; ig < inGroups.length; ig++) if (!inGroups[ig][p.id]) outOfGroup = true;
+      if (outOfGroup) continue;
+      if (weightPick && !productFitsWeight(groupInfo.weight, weightPick, p)) continue;
+      if (pricePick && !productFitsPrice(pricePick, p)) continue;
       if (ui.chip && ui.chip.indexOf("t:") === 0 && !hasTag(p, ui.chip.slice(2))) continue;
       if (dd.type && String(p.productType || "") !== dd.type) continue;
       if (dd.brand && String(p.vendor || "") !== dd.brand) continue;
@@ -28682,7 +29258,7 @@ function createQuickShopKit(core2) {
     if (sort !== "featured") {
       var keyed = [];
       for (var k = 0; k < out.length; k++) {
-        var variant = activeVariant(out[k], pending);
+        var variant = activeVariant(out[k], pending, groupInfo ? groupInfo.prefer : null);
         var price = priceOf(out[k], variant);
         var cmp = compareOf(variant, price);
         keyed.push({ p: out[k], i: k, price, off: cmp ? (cmp - price) / cmp : 0, name: lower(out[k].title) });
@@ -28722,10 +29298,10 @@ function createQuickShopKit(core2) {
       return {
         tone: "muted",
         text: core2.fillMessage(msgs.locked || core2.DEFAULT_MESSAGES.locked, {
-          remaining: core2.formatAmount(view, box.remaining, box.decimals, true),
+          remaining: core2.formatAmount(view, wholeMinor(view, box.remaining, box.decimals, true), box.decimals, true),
           tier: box.nextTier.label,
-          weight: core2.formatAmount(view, box.amount, box.decimals),
-          amount: core2.formatAmount(view, box.amount, box.decimals)
+          weight: core2.formatAmount(view, wholeMinor(view, box.amount, box.decimals), box.decimals),
+          amount: core2.formatAmount(view, wholeMinor(view, box.amount, box.decimals), box.decimals)
         }),
         tier: box.nextTier.label
       };
@@ -28734,6 +29310,7 @@ function createQuickShopKit(core2) {
   }
   function buildModel(input) {
     var config2 = input.config || {};
+    wholeMoney = on(config2, "qs_hide_decimals");
     var ui = input.ui || {};
     var symbol = input.symbol || "";
     var decimals = input.decimals === void 0 ? 2 : input.decimals;
@@ -28749,8 +29326,23 @@ function createQuickShopKit(core2) {
       currencySymbol: symbol
     };
     var handles = input.handles || [];
-    var all = allProducts(input.productsByHandle || {}, handles);
-    if (!all.length && input.fallbackProducts) all = input.fallbackProducts;
+    var pageHandles2 = handles.indexOf(EXTRA_HANDLE) === -1 && input.productsByHandle && input.productsByHandle[EXTRA_HANDLE] ? handles.concat([EXTRA_HANDLE]) : handles;
+    var all = allProducts(input.productsByHandle || {}, pageHandles2);
+    var hide = pageExclusions(config2);
+    var hadProducts = all.length > 0;
+    if (all.length) {
+      var kept = [];
+      for (var k = 0; k < all.length; k++) {
+        var gone = !!hide.productIds[all[k].id];
+        for (var hc = 0; !gone && hc < hide.collectionHandles.length; hc++) {
+          var hm = input.collectionMembers && input.collectionMembers[hide.collectionHandles[hc]];
+          if (hm && hm.indexOf(all[k].id) !== -1) gone = true;
+        }
+        if (!gone) kept.push(all[k]);
+      }
+      all = kept;
+    }
+    if (!hadProducts && input.fallbackProducts) all = input.fallbackProducts;
     var byId = {};
     for (var a = 0; a < all.length; a++) byId[all[a].id] = all[a];
     var extra = input.extraProducts || [];
@@ -28761,6 +29353,7 @@ function createQuickShopKit(core2) {
     var total = 0;
     var compareSavings = 0;
     var thumbs = [];
+    var units = [];
     var sheet = [];
     var qtyByVariant = {};
     for (var vid in selection) {
@@ -28781,6 +29374,7 @@ function createQuickShopKit(core2) {
       if (cmp) compareSavings += (cmp - price) * qty;
       var image = variant && variant.image && (variant.image.url || variant.image.src) || product2 && product2.image && (product2.image.url || product2.image.src) || "";
       if (image && thumbs.length < 3) thumbs.push(image);
+      for (var un = 0; un < qty && units.length < 40; un++) units.push({ variantId: vid, image, title: product2 ? product2.title : "" });
       sheet.push({
         variantId: vid,
         productId: sel.productId,
@@ -28788,7 +29382,8 @@ function createQuickShopKit(core2) {
         image,
         title: product2 ? product2.title : "",
         variantTitle: variant && variant.title !== "Default Title" ? variant.title : "",
-        price: money(price * qty, symbol)
+        price: money(price * qty, symbol),
+        stock: variant && typeof variant.stock === "number" ? variant.stock : null
       });
       lines.push({
         key: vid,
@@ -28811,13 +29406,34 @@ function createQuickShopKit(core2) {
       mark.icon = icons.length ? icons[m] || TIER_ICON_ORDER[m % TIER_ICON_ORDER.length] : "";
       mark.iconIndex = m;
     }
-    var row = filterRow(config2, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {});
-    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending);
+    var groups = filterGroups(config2);
+    var weightSpec = weightFilter(config2);
+    var priceLabel = on(config2, "qs_filter_price") ? cleanText(opt(config2, "qs_filter_price_label"), 40) || "Price" : "";
+    var pickedWeight = weightSpec && ui.dd && ui.dd.weight && weightValueOk(weightSpec, ui.dd.weight) ? ui.dd.weight : "";
+    var pickedPrice = priceLabel && ui.dd && parseSpan(ui.dd.price) ? ui.dd.price : "";
+    var groupInfo = groups.length || weightSpec || priceLabel ? {
+      groups,
+      members: groups.length ? groupMembers(groups, input.collectionMembers, input.productsByHandle) : {},
+      weight: weightSpec,
+      price: priceLabel,
+      symbol,
+      // A filtered card shows (and adds) its variant that fits the filters.
+      prefer: pickedWeight || pickedPrice ? function(variant2, product3) {
+        return (!pickedWeight || weightFits(weightSpec, pickedWeight, variant2.grams)) && (!pickedPrice || inSpan(pickedPrice, priceOf(product3, variant2)));
+      } : null
+    } : null;
+    var row = filterRow(config2, all, handles, input.collectionNames || {}, ui, input.collectionImages || {}, input.productsByHandle || {}, groupInfo);
+    var shown = filterProducts(all, input.productsByHandle || {}, ui, input.pending, groupInfo);
+    var step = pageSize(config2);
+    var pages = ui.pagesFor === filterKey(ui) ? Math.max(1, Math.floor(Number(ui.pages)) || 1) : 1;
+    var more = Math.max(0, shown.length - step * pages);
+    if (more) shown = shown.slice(0, step * pages);
     var cards = [];
+    var perProduct = maxPerProduct(config2);
     var badgeTag = String(opt(config2, "qs_badge_tag") || "").trim();
     for (var c = 0; c < shown.length; c++) {
       var p = shown[c];
-      var v = activeVariant(p, input.pending);
+      var v = activeVariant(p, input.pending, groupInfo ? groupInfo.prefer : null);
       var pr = priceOf(p, v);
       var cp = compareOf(v, pr);
       var options = [];
@@ -28825,36 +29441,77 @@ function createQuickShopKit(core2) {
         var pv = p.variants[o];
         options.push({ id: pv.id, title: pv.title, on: v && String(pv.id) === String(v.id), available: pv.available !== false });
       }
-      var weightText = "";
-      if (v && v.grams > 0) weightText = core2.formatWeight(v.grams, v.grams < 1e3 ? "g" : "kg");
+      var weightText2 = "";
+      if (v && v.grams > 0) weightText2 = core2.formatWeight(v.grams, v.grams < 1e3 ? "g" : "kg");
       var img2 = v && v.image && (v.image.url || v.image.src) || p.image && (p.image.url || p.image.src) || p.images && p.images[0] && p.images[0].url || "";
       cards.push({
         id: p.id,
         title: p.title,
         summary: p.summary || "",
         image: img2,
+        images: productImages(p, img2),
         badge: badgeTag && hasTag(p, badgeTag) ? opt(config2, "qs_badge_text") || badgeTag : "",
         variants: options.length > 1 && !(options.length === 1 && options[0].title === "Default Title") ? options : [],
-        weightText,
+        weightText: weightText2,
         price: money(pr, symbol),
         compare: cp ? money(cp, symbol) : "",
         off: cp ? Math.round((cp - pr) / cp * 100) : 0,
-        available: !v || v.available !== false,
+        available: !v || v.available !== false && v.stock !== 0,
+        // How many Shopify will sell (null = no limit): + stops there.
+        stock: v && typeof v.stock === "number" ? v.stock : null,
         variantId: v ? v.id : "",
         qty: v ? qtyByVariant[v.id] || 0 : 0,
+        // The box already holds the most of this product allowed (any variant).
+        full: perProduct > 0 && productQty(selection, p.id) >= perProduct,
         counts: input.qualifies ? !!input.qualifies(p.id) : true
       });
+    }
+    var sections = null;
+    if (on(config2, "qs_group_by_collection") && cards.length) {
+      var home = {};
+      var picked = ui.chip && ui.chip.indexOf("c:") === 0 ? ui.chip.slice(2) : "";
+      if (picked) for (var pk = 0; pk < cards.length; pk++) home[cards[pk].id] = picked;
+      for (var ph = 0; ph < pageHandles2.length; ph++) {
+        var inCol = (input.productsByHandle || {})[pageHandles2[ph]] || [];
+        for (var pi = 0; pi < inCol.length; pi++) if (!home[inCol[pi].id]) home[inCol[pi].id] = pageHandles2[ph];
+      }
+      sections = [];
+      for (var sh = 0; sh < pageHandles2.length; sh++) {
+        var handle = pageHandles2[sh];
+        var inSection = [];
+        for (var sc = 0; sc < cards.length; sc++) if (home[cards[sc].id] === handle) inSection.push(cards[sc]);
+        if (!inSection.length) continue;
+        sections.push({
+          handle,
+          title: handle === EXTRA_HANDLE ? String(opt(config2, "qs_extra_title") || "").trim() : collectionTitle(config2, handle, input.collectionNames || {}),
+          cards: inSection
+        });
+      }
+    }
+    var popup = null;
+    if (ui.popup && on(config2, "qs_product_popup")) {
+      for (var pc = 0; pc < cards.length; pc++) {
+        if (String(cards[pc].id) !== String(ui.popup)) continue;
+        var count = cards[pc].images.length;
+        var at = Math.max(0, Math.min(count - 1, Math.round(Number(ui.popupImage) || 0)));
+        popup = { card: cards[pc], index: count ? at : 0 };
+        break;
+      }
     }
     var bar = barMessage(view, box);
     var savedTemplate = box.nextTier && view.enabled ? opt(config2, "qs_saved_text") : opt(config2, "qs_saved_done_text");
     return {
       config: config2,
+      selection,
       isMobile: !!input.isMobile,
       symbol,
       title: config2.collection_title || input.templateName || "",
       description: config2.collection_description || "",
       row,
       cards,
+      sections,
+      // Products left after the cards drawn ("Show more").
+      more,
       empty: !all.length ? "No products yet. Choose collections for this combo." : !cards.length ? "Nothing matches these filters." : "",
       view,
       box,
@@ -28863,25 +29520,49 @@ function createQuickShopKit(core2) {
       bar: {
         items,
         thumbs,
+        units,
         sheet,
         message: bar,
         saved: saved > 4e-3 ? core2.fillMessage(savedTemplate, { saved: money(saved, symbol) }) : "",
         total: money(finalPrice, symbol),
         canCheckout: canCheckout(config2, box, items, tiers) && !ui.checkingOut,
+        // Why checkout is locked (first offer required, or over the max), shown
+        // when the shopper taps the dimmed button instead of nothing happening.
+        lockedWhy: items > 0 && !ui.checkingOut && !canCheckout(config2, box, items, tiers) ? bar.text || "Add more items to check out." : "",
         checkingOut: !!ui.checkingOut,
         sheetOpen: !!ui.sheetOpen,
         celebrate: !!ui.celebrate
       },
       totals: { total, discount: boxDiscount, finalPrice, saved, items },
       cod: input.cod || { shown: false },
-      toast: ui.toast || ""
+      toast: ui.toast || "",
+      popup
     };
+  }
+  function productImages(p, first) {
+    var list2 = [];
+    var push = function(url, alt) {
+      url = String(url || "");
+      if (!/^https:\/\//i.test(url) && !/^data:image\//i.test(url)) return;
+      for (var k = 0; k < list2.length; k++) if (list2[k].url === url) return;
+      if (list2.length < 10) list2.push({ url, alt: alt || p.title || "" });
+    };
+    push(first, p.title);
+    var imgs = p.images || [];
+    for (var n = 0; n < imgs.length; n++) push(imgs[n] && (imgs[n].url || imgs[n].src), imgs[n] && imgs[n].altText);
+    if (p.image) push(p.image.url || p.image.src, p.image.altText);
+    return list2;
   }
   var ICON_PLUS = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   var ICON_DOWN = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   var ICON_UP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg>';
   var ICON_GRID = '<svg viewBox="0 0 24 24" width="40%" height="40%" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>';
   var ICON_FILTER = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>';
+  function sizePx(config2, key) {
+    var v = opt(config2, key);
+    if (v === null || v === void 0 || v === "" || !isFinite(Number(v))) return null;
+    return num(v, 14, 6, 40);
+  }
   function vars(config2) {
     var pairs = [
       ["--bxq-page", safeCss(opt(config2, "qs_page_bg"), DEFAULTS2.qs_page_bg)],
@@ -28891,7 +29572,8 @@ function createQuickShopKit(core2) {
       ["--bxq-off", safeCss(opt(config2, "qs_off_color"), DEFAULTS2.qs_off_color)],
       ["--bxq-badge", safeCss(opt(config2, "qs_badge_bg"), DEFAULTS2.qs_badge_bg)],
       ["--bxq-radius", num(opt(config2, "qs_card_radius"), 14, 0, 40) + "px"],
-      ["--bxq-ratio", { portrait: "4/5", landscape: "4/3" }[opt(config2, "qs_image_ratio")] || "1/1"],
+      ["--bxq-ratio", { portrait: "4/5", tall: "2/3", landscape: "4/3" }[opt(config2, "qs_image_ratio")] || "1/1"],
+      ["--bxq-fit", opt(config2, "qs_image_fit") === "cover" ? "cover" : "contain"],
       ["--bxq-cols", String(num(opt(config2, "qs_columns_desktop"), 4, 2, 6))],
       ["--bxq-cols-m", String(num(opt(config2, "qs_columns_mobile"), 2, 1, 3))],
       ["--bxq-top-bg", safeCss(opt(config2, "qs_top_bg"), DEFAULTS2.qs_top_bg)],
@@ -28902,6 +29584,8 @@ function createQuickShopKit(core2) {
       ["--bxq-top-h", num(opt(config2, "qs_top_height"), 8, 2, 24) + "px"],
       ["--bxq-top-r", num(opt(config2, "qs_top_radius"), 999, 0, 999) + "px"],
       ["--bxq-top-offset", num(opt(config2, "qs_top_offset"), 0, 0, 300) + "px"],
+      ["--bxq-lbl-fs", num(opt(config2, "qs_top_label_size"), 12, 6, 22) + "px"],
+      ["--bxq-lbl-sub", num(opt(config2, "qs_top_sub_size"), 11, 6, 20) + "px"],
       ["--bxq-bar-bg", safeCss(opt(config2, "qs_bar_bg"), DEFAULTS2.qs_bar_bg)],
       ["--bxq-bar-text", safeCss(opt(config2, "qs_bar_text"), DEFAULTS2.qs_bar_text)],
       ["--bxq-save", safeCss(opt(config2, "qs_bar_save"), DEFAULTS2.qs_bar_save)],
@@ -28921,6 +29605,32 @@ function createQuickShopKit(core2) {
     ];
     var btnFs = opt(config2, "qs_btn_font_size");
     if (btnFs !== null && btnFs !== "" && isFinite(Number(btnFs))) pairs.push(["--bxq-btn-fs", num(btnFs, 16, 12, 24) + "px"]);
+    var lblPhone = opt(config2, "qs_top_label_size_m");
+    if (lblPhone !== null && lblPhone !== "" && isFinite(Number(lblPhone))) {
+      pairs.push(["--bxq-lbl-fs-m", num(lblPhone, 12, 6, 22) + "px"]);
+      pairs.push(["--bxq-lbl-fs-mile-m", num(lblPhone, 12, 6, 22) + "px"]);
+    } else {
+      pairs.push(["--bxq-lbl-fs-mile-m", Math.max(6, num(opt(config2, "qs_top_label_size"), 12, 6, 22) - 1) + "px"]);
+    }
+    var sizes = [
+      ["qs_card_title_size", "--bxq-title-fs"],
+      ["qs_card_title_size_m", "--bxq-title-fs-m"],
+      ["qs_card_text_size", "--bxq-ctext-fs"],
+      ["qs_card_text_size_m", "--bxq-ctext-fs-m"],
+      ["qs_card_price_size", "--bxq-price-fs"],
+      ["qs_card_price_size_m", "--bxq-price-fs-m"],
+      ["qs_filter_font_size", "--bxq-chip-fs"],
+      ["qs_filter_font_size_m", "--bxq-chip-fs-m"],
+      ["qs_group_title_size", "--bxq-sec-fs"],
+      ["qs_group_title_size_m", "--bxq-sec-fs-m"]
+    ];
+    for (var sz = 0; sz < sizes.length; sz++) {
+      var px = sizePx(config2, sizes[sz][0]);
+      if (px === null) continue;
+      pairs.push([sizes[sz][1], px + "px"]);
+      if (sizes[sz][1] === "--bxq-price-fs") pairs.push(["--bxq-cmp-fs", Math.max(6, Math.round(px * 0.74)) + "px"]);
+      if (sizes[sz][1] === "--bxq-price-fs-m") pairs.push(["--bxq-cmp-fs-m", Math.max(6, Math.round(px * 0.74)) + "px"]);
+    }
     var out = "";
     for (var i = 0; i < pairs.length; i++) out += pairs[i][0] + ":" + pairs[i][1] + ";";
     return out;
@@ -28932,22 +29642,157 @@ function createQuickShopKit(core2) {
     var at = html.indexOf(t);
     return at === -1 ? html : html.slice(0, at) + "<b>" + t + "</b>" + html.slice(at + t.length);
   }
-  function renderCollectionBar(chips) {
-    var html = '<div class="bxq-colbar" role="tablist" aria-label="Collections">';
+  function alignClass(config2) {
+    var a = sideOf(config2, "qs_chips_align");
+    return a === "left" ? "" : " bxq-al-" + a;
+  }
+  function renderCollectionBar(chips, config2) {
+    var html = '<div class="bxq-colbar' + alignClass(config2) + '" role="tablist" aria-label="Collections">';
     for (var i = 0; i < chips.length; i++) {
       var chip = chips[i];
       html += '<button type="button" role="tab" class="bxq-col' + (chip.on ? " is-on" : "") + '" aria-selected="' + (chip.on ? "true" : "false") + '" data-combo-action="qs-chip" data-value="' + esc(chip.value) + '"><span class="bxq-col-img">' + (chip.image ? '<img src="' + esc(chip.image) + '" alt="" loading="lazy" />' : chip.value === "all" ? ICON_GRID : '<span class="bxq-col-letter">' + esc(String(chip.label || "?").charAt(0).toUpperCase()) + "</span>") + '</span><span class="bxq-col-name">' + esc(chip.label) + "</span></button>";
     }
     return html + "</div>";
   }
+  function renderChipGroups(groups) {
+    var html = "";
+    for (var g = 0; g < groups.length; g++) {
+      var group = groups[g];
+      html += '<div class="bxq-filters bxq-gchips" role="group" aria-label="' + esc(group.label) + '"><span class="bxq-gchips-label">' + esc(group.label) + "</span>";
+      for (var o = 0; o < group.options.length; o++) {
+        var option = group.options[o];
+        html += '<button type="button" class="bxq-chip' + (option.on ? " is-on" : "") + '" aria-pressed="' + (option.on ? "true" : "false") + '" data-combo-action="qs-group" data-menu="' + esc(group.id) + '" data-value="' + esc(option.value) + '">' + esc(option.label) + "</button>";
+      }
+      html += "</div>";
+    }
+    return html;
+  }
+  function renderSliders(sliders) {
+    var html = "";
+    for (var i = 0; i < sliders.length; i++) {
+      var sl = sliders[i];
+      var span = sl.max - sl.min;
+      var left = (sl.lo - sl.min) / span * 100;
+      var right = (sl.max - sl.hi) / span * 100;
+      var attrs = ' min="' + sl.min + '" max="' + sl.max + '" step="' + sl.step + '" data-combo-range="' + esc(sl.id) + '"';
+      html += '<div class="bxq-filters bxq-gchips bxq-range" role="group" aria-label="' + esc(sl.label) + '" data-unit="' + esc(sl.unit) + '" data-symbol="' + esc(sl.symbol) + '"><span class="bxq-gchips-label">' + esc(sl.label) + '</span><div class="bxq-range-box"><div class="bxq-range-track"><div class="bxq-range-fill" style="left:' + left.toFixed(2) + "%;right:" + right.toFixed(2) + '%"></div></div><input type="range" class="bxq-range-in"' + attrs + ' value="' + sl.lo + '" aria-label="' + esc(sl.label) + ' from" /><input type="range" class="bxq-range-in"' + attrs + ' value="' + sl.hi + '" aria-label="' + esc(sl.label) + ' to" /></div><span class="bxq-range-val' + (sl.value ? " is-on" : "") + '">' + esc(sl.text) + "</span></div>";
+    }
+    return html;
+  }
+  function rangeParts(input) {
+    var box = input.closest ? input.closest(".bxq-range") : null;
+    if (!box) return null;
+    var ins = box.querySelectorAll("input[data-combo-range]");
+    if (ins.length !== 2) return null;
+    var a = Number(ins[0].value);
+    var b = Number(ins[1].value);
+    return { box, ins, lo: Math.min(a, b), hi: Math.max(a, b), min: Number(ins[0].min), max: Number(ins[0].max) };
+  }
+  function rangeInput(input) {
+    var r = rangeParts(input);
+    if (!r) return;
+    if (Number(r.ins[0].value) > Number(r.ins[1].value)) {
+      if (input === r.ins[0]) r.ins[0].value = r.ins[1].value;
+      else r.ins[1].value = r.ins[0].value;
+      r = rangeParts(input);
+    }
+    var span = r.max - r.min || 1;
+    var fill2 = r.box.querySelector(".bxq-range-fill");
+    if (fill2) {
+      fill2.style.left = ((r.lo - r.min) / span * 100).toFixed(2) + "%";
+      fill2.style.right = ((r.max - r.hi) / span * 100).toFixed(2) + "%";
+    }
+    var text = r.box.querySelector(".bxq-range-val");
+    if (text) text.textContent = spanText(r.box.getAttribute("data-unit"), r.lo, r.hi, r.box.getAttribute("data-symbol"));
+  }
+  function placeMenus(scope) {
+    if (!scope || !scope.querySelectorAll || typeof window === "undefined") return;
+    var open = scope.querySelectorAll(".bxq-dd.is-open");
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    for (var i = 0; i < open.length; i++) {
+      var chip = open[i].querySelector('[data-combo-action="qs-menu"]');
+      var menu = open[i].querySelector(".bxq-menu");
+      if (!chip || !menu) continue;
+      var r = chip.getBoundingClientRect();
+      menu.style.margin = "0";
+      menu.style.top = "0px";
+      menu.style.left = "0px";
+      var at = menu.getBoundingClientRect();
+      var left = Math.max(8, Math.min(r.left, vw - at.width - 8));
+      var top = r.bottom + 6;
+      if (top + at.height > vh - 8 && r.top - 6 - at.height >= 8) top = r.top - 6 - at.height;
+      menu.style.left = Math.round(left - at.left) + "px";
+      menu.style.top = Math.round(top - at.top) + "px";
+    }
+  }
+  function applyRange(ui, input) {
+    var key = input && input.getAttribute ? input.getAttribute("data-combo-range") : null;
+    var r = key ? rangeParts(input) : null;
+    if (!r) return false;
+    if (!ui.dd) ui.dd = {};
+    ui.dd[key] = r.lo <= r.min && r.hi >= r.max ? "" : "s:" + r.lo + "-" + r.hi;
+    return true;
+  }
+  function filtersOnLeft(model) {
+    var row = model.row;
+    if (model.isMobile || opt(model.config, "qs_filter_position") !== "left") return false;
+    for (var i = 0; i < row.chips.length; i++) if (!row.chips[i].picture) return true;
+    return row.menus.length > 0 || (row.groups || []).length > 0 || (row.sliders || []).length > 0;
+  }
+  function sideOption(action, menu, value, label, on2) {
+    return '<button type="button" class="bxq-side-opt' + (on2 ? " is-on" : "") + '" aria-pressed="' + (on2 ? "true" : "false") + '" data-combo-action="' + action + '"' + (menu ? ' data-menu="' + esc(menu) + '"' : "") + ' data-value="' + esc(value) + '"><span class="bxq-side-radio" aria-hidden="true"></span>' + esc(label) + "</button>";
+  }
+  function renderSideFilters(model) {
+    var row = model.row;
+    var html = '<div class="bxq-side-head"><span>Filters</span>' + (row.active ? '<button type="button" class="bxq-side-clear" data-combo-action="qs-clear">Clear all</button>' : "") + "</div>";
+    var chips = [];
+    var toggles = [];
+    for (var c = 0; c < row.chips.length; c++) {
+      if (row.chips[c].picture) continue;
+      (row.chips[c].toggle ? toggles : chips).push(row.chips[c]);
+    }
+    var i;
+    if (chips.length) {
+      html += '<div class="bxq-side-sec" role="group">';
+      for (i = 0; i < chips.length; i++) html += sideOption("qs-chip", "", chips[i].value, chips[i].label, chips[i].on);
+      html += "</div>";
+    }
+    for (var m = 0; m < row.menus.length; m++) {
+      var menu = row.menus[m];
+      html += '<div class="bxq-side-sec" role="group" aria-label="' + esc(menu.label) + '"><p class="bxq-side-title">' + esc(menu.label) + "</p>";
+      if (menu.slider) html += renderSliders([menu.slider]);
+      for (i = 0; i < menu.options.length; i++) {
+        var option = menu.options[i];
+        var on2 = (option.value || "") === (menu.value || "") || menu.isSort && !menu.value && option.value === "featured";
+        html += sideOption("qs-pick", menu.id, option.value, option.label, on2);
+      }
+      html += "</div>";
+    }
+    var groups = row.groups || [];
+    for (var g = 0; g < groups.length; g++) {
+      html += '<div class="bxq-side-sec" role="group" aria-label="' + esc(groups[g].label) + '"><p class="bxq-side-title">' + esc(groups[g].label) + "</p>";
+      for (i = 0; i < groups[g].options.length; i++) html += sideOption("qs-group", groups[g].id, groups[g].options[i].value, groups[g].options[i].label, groups[g].options[i].on);
+      html += "</div>";
+    }
+    var sliders = row.sliders || [];
+    for (var sl = 0; sl < sliders.length; sl++) {
+      html += '<div class="bxq-side-sec"><p class="bxq-side-title">' + esc(sliders[sl].label) + "</p>" + renderSliders([sliders[sl]]) + "</div>";
+    }
+    for (i = 0; i < toggles.length; i++) {
+      html += '<div class="bxq-side-sec"><button type="button" class="bxq-side-opt bxq-side-check' + (toggles[i].on ? " is-on" : "") + '" aria-pressed="' + (toggles[i].on ? "true" : "false") + '" data-combo-action="qs-instock" data-value="instock"><span class="bxq-side-radio" aria-hidden="true"></span>' + esc(toggles[i].label) + "</button></div>";
+    }
+    return html;
+  }
   function renderFilters(model) {
     var row = model.row;
     var pictureChips = [];
     var chips = [];
     for (var p = 0; p < row.chips.length; p++) (row.chips[p].picture ? pictureChips : chips).push(row.chips[p]);
-    var bar = pictureChips.length ? renderCollectionBar(pictureChips) : "";
-    if (!chips.length && !row.menus.length) return bar;
-    var html = bar + '<div class="bxq-filters">';
+    var bar = pictureChips.length ? renderCollectionBar(pictureChips, model.config) : "";
+    var groupRows = renderChipGroups(row.groups || []) + renderSliders(row.sliders || []);
+    if (!chips.length && !row.menus.length) return bar + groupRows;
+    var html = bar + '<div class="bxq-filters' + alignClass(model.config) + '">';
     html += '<button type="button" class="bxq-chip bxq-chip--icon' + (row.active ? " is-active" : "") + '" data-combo-action="qs-clear" aria-label="Clear filters" title="Clear filters">' + ICON_FILTER + "</button>";
     for (var i = 0; i < chips.length; i++) {
       var chip = chips[i];
@@ -28958,8 +29803,11 @@ function createQuickShopKit(core2) {
       var current = "";
       for (var o = 0; o < menu.options.length; o++) if (menu.value && menu.options[o].value === menu.value) current = menu.options[o].label;
       html += '<div class="bxq-dd' + (menu.open ? " is-open" : "") + '">';
+      if (menu.slider) current = menu.value ? menu.slider.text : "";
       html += '<button type="button" class="bxq-chip' + (menu.value ? " is-on" : "") + '" aria-expanded="' + (menu.open ? "true" : "false") + '" data-combo-action="qs-menu" data-menu="' + esc(menu.id) + '">' + esc(menu.isSort || !current ? menu.label : current) + ICON_DOWN + "</button>";
-      if (menu.open) {
+      if (menu.open && menu.slider) {
+        html += '<div class="bxq-menu bxq-menu--range">' + renderSliders([menu.slider]) + "</div>";
+      } else if (menu.open) {
         html += '<div class="bxq-menu" role="listbox">';
         for (var k = 0; k < menu.options.length; k++) {
           var option = menu.options[k];
@@ -28971,7 +29819,40 @@ function createQuickShopKit(core2) {
       html += "</div>";
     }
     html += "</div>";
-    return html;
+    return html + groupRows;
+  }
+  function labelLook(config2, isMobile) {
+    var size = num(opt(config2, "qs_top_label_size"), 12, 6, 22);
+    var phone = opt(config2, "qs_top_label_size_m");
+    var phoneSet = phone !== null && phone !== "" && isFinite(Number(phone));
+    var look = {
+      labels: on(config2, "qs_top_show_labels"),
+      name: on(config2, "qs_top_show_name"),
+      amount: on(config2, "qs_top_show_amount"),
+      size,
+      sub: num(opt(config2, "qs_top_sub_size"), 11, 6, 20),
+      phone: phoneSet ? num(phone, size, 6, 22) : null
+    };
+    look.any = look.labels && (look.name || look.amount);
+    look.mileSize = isMobile ? look.phone !== null ? look.phone : Math.max(6, size - 1) : size;
+    look.barSize = isMobile && look.phone !== null ? look.phone : size;
+    return look;
+  }
+  function labelText(mark, look) {
+    return (look.name ? "<b>" + esc(mark.label) + "</b>" : "") + (look.amount ? "<small>" + esc(mark.at) + "</small>" : "");
+  }
+  function mileSizes(config2, isMobile, count) {
+    var icon = num(opt(config2, "qs_mile_icon_size"), 18, 12, 48);
+    var phone = opt(config2, "qs_mile_icon_size_m");
+    if (isMobile && phone !== null && phone !== "" && isFinite(Number(phone))) icon = num(phone, icon, 12, 48);
+    var dot2 = icon + 16;
+    var room = Math.floor((isMobile ? 260 : 640) / Math.max(1, count)) - 8;
+    if (dot2 > room) {
+      var fit = Math.max(22, room);
+      icon = Math.max(10, Math.round(icon * fit / dot2));
+      dot2 = fit;
+    }
+    return { icon, dot: dot2 };
   }
   function renderTop(model) {
     var config2 = model.config;
@@ -28979,7 +29860,8 @@ function createQuickShopKit(core2) {
     if (style === "none" || !model.view.enabled || !model.view.tiers.length) return "";
     var progress = model.progress;
     var msg = model.topMessage;
-    var labels = on(config2, "qs_top_show_labels");
+    var look = labelLook(config2, model.isMobile);
+    var labels = look.any;
     var html = '<section class="bxq-top bxq-top--' + esc(style) + (on(config2, "qs_top_sticky") ? " is-sticky" : "") + '" aria-label="Offer progress">';
     var title = opt(config2, "qs_top_title");
     if (title) html += '<div class="bxq-top-title">' + esc(title) + "</div>";
@@ -28992,10 +29874,11 @@ function createQuickShopKit(core2) {
       }
       html += "</div>";
       if (labels) {
-        html += '<div class="bxq-ticks">';
+        var ticksH = Math.round((look.name ? look.barSize * 1.3 : 0) + (look.amount ? look.sub * 1.3 : 0)) + 8;
+        html += '<div class="bxq-ticks" style="height:' + ticksH + 'px">';
         for (i = 0; i < progress.marks.length; i++) {
           var mk = progress.marks[i];
-          html += '<span class="bxq-tick-label' + (mk.hit ? " is-hit" : "") + '" style="left:' + mk.percent.toFixed(1) + '%"><b>' + esc(mk.label) + "</b><small>" + esc(mk.at) + "</small></span>";
+          html += '<span class="bxq-tick-label' + (mk.hit ? " is-hit" : "") + '" style="left:' + mk.percent.toFixed(1) + '%">' + labelText(mk, look) + "</span>";
         }
         html += "</div>";
       }
@@ -29006,15 +29889,34 @@ function createQuickShopKit(core2) {
         var step = progress.marks[i];
         var span = Math.max(1e-4, step.percent - prev);
         var fill2 = Math.max(0, Math.min(100, (progress.percent - prev) / span * 100));
-        html += '<div class="bxq-step' + (step.hit ? " is-hit" : "") + (step.next ? " is-next" : "") + '"><div class="bxq-step-track"><div class="bxq-step-fill" style="width:' + fill2.toFixed(1) + '%"></div></div>' + (labels ? '<div class="bxq-step-label"><b>' + esc(step.label) + "</b><small>" + esc(step.at) + "</small></div>" : "") + "</div>";
+        html += '<div class="bxq-step' + (step.hit ? " is-hit" : "") + (step.next ? " is-next" : "") + '"><div class="bxq-step-track"><div class="bxq-step-fill" style="width:' + fill2.toFixed(1) + '%"></div></div>' + (labels ? '<div class="bxq-step-label">' + labelText(step, look) + "</div>" : "") + "</div>";
         prev = step.percent;
       }
       html += "</div>";
     } else if (style === "milestones") {
-      html += '<div class="bxq-miles"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
-      for (i = 0; i < progress.marks.length; i++) {
+      var count = progress.marks.length;
+      var evenAt = function(k) {
+        return (k + 1) / count * 100;
+      };
+      var milesFill = 100;
+      var fromAt = 0;
+      var fromEven = 0;
+      for (i = 0; i < count; i++) {
+        var markAt = progress.marks[i].percent;
+        if (progress.percent <= markAt) {
+          milesFill = fromEven + (progress.percent - fromAt) / Math.max(1e-4, markAt - fromAt) * (evenAt(i) - fromEven);
+          break;
+        }
+        fromAt = markAt;
+        fromEven = evenAt(i);
+      }
+      milesFill = Math.max(0, Math.min(100, milesFill));
+      var mile = mileSizes(config2, model.isMobile, count);
+      var below = labels ? Math.round(4 + (look.name ? look.mileSize * 1.85 : 0) + (look.amount ? look.sub * 1.25 : 0)) : 4;
+      html += '<div class="bxq-miles" style="--bxq-mile-share:' + (100 / Math.max(1, count)).toFixed(2) + "%;--bxq-mile-dot:" + mile.dot + "px;--bxq-mile-icon:" + mile.icon + "px;height:" + (mile.dot + below) + 'px"><div class="bxq-miles-line"><div class="bxq-miles-fill" style="width:' + milesFill.toFixed(1) + '%"></div></div>';
+      for (i = 0; i < count; i++) {
         var ms = progress.marks[i];
-        html += '<div class="bxq-mile' + (ms.hit ? " is-hit" : "") + (ms.next ? " is-next" : "") + '" style="left:' + ms.percent.toFixed(1) + '%"><span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, "bxq-mile-icon", ms.iconIndex) : "") + "</span>" + (labels ? '<span class="bxq-mile-label"><b>' + esc(ms.label) + "</b><small>" + esc(ms.at) + "</small></span>" : "") + "</div>";
+        html += '<div class="bxq-mile' + (ms.hit ? " is-hit" : "") + (ms.next ? " is-next" : "") + '" style="left:' + evenAt(i).toFixed(1) + '%"><span class="bxq-mile-dot">' + (ms.icon ? iconHtml(ms.icon, "bxq-mile-icon", ms.iconIndex) : "") + "</span>" + (labels ? '<span class="bxq-mile-label">' + labelText(ms, look) + "</span>" : "") + "</div>";
       }
       html += "</div>";
     }
@@ -29025,30 +29927,39 @@ function createQuickShopKit(core2) {
     var config2 = model.config;
     if (!card.available) return '<button type="button" class="bxq-cta is-out" disabled>Out of stock</button>';
     if (card.qty > 0) {
-      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+      return '<div class="bxq-cta bxq-cta--stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + ">+</button></div>";
     }
-    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + esc(opt(config2, "qs_add_label") || "Add") + "</button>";
+    return '<button type="button" class="bxq-cta" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '"' + (card.full ? " disabled" : "") + ">" + esc(opt(config2, "qs_add_label") || "Add") + "</button>";
+  }
+  function atStock(card) {
+    return card.full || card.stock !== null && card.stock !== void 0 && card.qty >= card.stock ? " disabled" : "";
+  }
+  function lineFull(model, line) {
+    var max = maxPerProduct(model.config);
+    if (max && productQty(model.selection || {}, line.productId) >= max) return true;
+    return line.stock !== null && line.stock !== void 0 && line.qty >= line.stock;
   }
   function renderCard(model, card) {
     var config2 = model.config;
     var normal = opt(config2, "qs_card_layout") === "normal";
     var html = '<article class="bxq-card' + (normal ? " bxq-card--normal" : "") + (card.qty ? " is-in" : "") + (card.available ? "" : " is-out") + '" data-product-id="' + esc(card.id) + '">';
     html += '<div class="bxq-media">';
-    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy" />' : '<span class="bxq-noimg"></span>';
+    var opens = on(config2, "qs_product_popup") ? ' data-combo-action="qs-view" data-product-id="' + esc(card.id) + '" role="button" tabindex="0"' : "";
+    html += card.image ? '<img src="' + esc(card.image) + '" alt="' + esc(card.title) + '" loading="lazy"' + opens + " />" : '<span class="bxq-noimg"' + opens + "></span>";
     if (card.badge) html += '<span class="bxq-badge">' + esc(card.badge) + "</span>";
     if (normal) {
       if (!card.available) html += '<span class="bxq-soldout">Out of stock</span>';
     } else if (!card.available) {
       html += '<span class="bxq-soldout">Out of stock</span>';
     } else if (card.qty > 0) {
-      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add one">+</button></div>';
+      html += '<div class="bxq-stepper"><button type="button" data-combo-action="qty-dec" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Remove one">−</button><span aria-live="polite">' + card.qty + '</span><button type="button" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add one"' + atStock(card) + ">+</button></div>";
     } else {
-      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" aria-label="Add ' + esc(card.title) + '">' + ICON_PLUS + "</button>";
+      html += '<button type="button" class="bxq-add" data-combo-action="qty-inc" data-product-id="' + esc(card.id) + '" data-variant-id="' + esc(card.variantId) + '" aria-label="Add ' + esc(card.title) + '"' + (card.full ? " disabled" : "") + ">" + ICON_PLUS + "</button>";
     }
     html += '</div><div class="bxq-info">';
     var eyebrow = opt(config2, "qs_card_eyebrow");
     if (eyebrow) html += '<div class="bxq-eyebrow">' + esc(eyebrow) + "</div>";
-    html += '<h3 class="bxq-name">' + esc(card.title) + "</h3>";
+    html += '<h3 class="bxq-name"' + opens + ">" + esc(card.title) + "</h3>";
     if (on(config2, "qs_show_subtitle") && card.summary) html += '<p class="bxq-sub">' + esc(card.summary) + "</p>";
     if (card.variants.length) {
       html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
@@ -29061,32 +29972,56 @@ function createQuickShopKit(core2) {
       html += '<div class="bxq-variant is-static">' + esc(card.weightText) + "</div>";
     }
     if (card.off && on(config2, "qs_show_off")) html += '<div class="bxq-off"><span>' + card.off + "% OFF</span></div>";
-    html += '<div class="bxq-price"><b>' + esc(card.price) + "</b>" + (card.compare && on(config2, "qs_show_compare") ? "<s>" + esc(card.compare) + "</s>" : "") + "</div>";
+    var priceHtml = (on(config2, "qs_show_price") ? "<b>" + esc(card.price) + "</b>" : "") + (card.compare && on(config2, "qs_show_compare") ? "<s>" + esc(card.compare) + "</s>" : "");
+    if (priceHtml) html += '<div class="bxq-price">' + priceHtml + "</div>";
     if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
     if (normal) html += renderCardCta(model, card);
     html += "</div></article>";
     return html;
   }
+  function renderSlots(model) {
+    var bar = model.bar;
+    var tiers = model.view.tiers;
+    var next = model.box.nextTier;
+    var target = Math.max(next ? next.min_grams : tiers[tiers.length - 1].min_grams, bar.items);
+    var cap = model.isMobile ? 5 : 8;
+    var count = Math.min(target, cap);
+    var html = '<div class="bxq-slots" role="list" aria-label="' + bar.items + " of " + target + ' items">';
+    for (var i = 0; i < count; i++) {
+      if (target > cap && i === count - 1) {
+        html += '<span class="bxq-slot is-more" role="listitem">' + bar.items + "/" + target + "</span>";
+        continue;
+      }
+      var unit = bar.units[i];
+      html += unit ? '<button type="button" role="listitem" class="bxq-slot is-filled" data-combo-action="box-dec" data-variant-id="' + esc(unit.variantId) + '" aria-label="Remove ' + esc(unit.title) + '">' + (unit.image ? '<img src="' + esc(unit.image) + '" alt="" loading="lazy" />' : '<span class="bxq-noimg"></span>') + '<span class="bxq-slot-x" aria-hidden="true">&times;</span></button>' : '<span class="bxq-slot" role="listitem" aria-label="Empty">' + ICON_PLUS + "</span>";
+    }
+    return html + "</div>";
+  }
   function renderBar(model) {
     var config2 = model.config;
     var bar = model.bar;
-    if (!bar.items) return "";
     var style = opt(config2, "qs_bar_style");
-    var cod = model.cod || {};
-    var codPlacement = cod.placement === "replace" || cod.placement === "above" ? cod.placement : "below";
-    var disabled = !bar.canCheckout;
+    var slots = style === "slots" && model.view.enabled && model.view.measure === "quantity" && model.view.tiers.length > 0;
+    if (style === "slots" && !slots) style = "full";
+    if (!bar.items && !slots) return "";
     var html = '<div class="bxq-bar bxq-bar--' + esc(style) + (bar.celebrate ? " is-celebrate" : "") + '" role="region" aria-label="Your box">';
     if (bar.sheetOpen) {
       html += '<div class="bxq-sheet">';
       for (var s = 0; s < bar.sheet.length; s++) {
         var line = bar.sheet[s];
-        html += '<div class="bxq-line">' + (line.image ? '<img src="' + esc(line.image) + '" alt="" />' : '<span class="bxq-noimg"></span>') + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + "</div>" + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + "</div>" : "") + '</div><div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span><button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one">+</button></div><div class="bxq-line-price">' + esc(line.price) + "</div></div>";
+        html += '<div class="bxq-line">' + (line.image ? '<img src="' + esc(line.image) + '" alt="" />' : '<span class="bxq-noimg"></span>') + '<div class="bxq-line-main"><div class="bxq-line-name">' + esc(line.title) + "</div>" + (line.variantTitle ? '<div class="bxq-line-sub">' + esc(line.variantTitle) + "</div>" : "") + '</div><div class="bxq-mini"><button type="button" data-combo-action="box-dec" data-variant-id="' + esc(line.variantId) + '" aria-label="Remove one">−</button><span>' + line.qty + '</span><button type="button" data-combo-action="box-inc" data-variant-id="' + esc(line.variantId) + '" aria-label="Add one"' + (lineFull(model, line) ? " disabled" : "") + ">+</button></div>" + (on(config2, "qs_sheet_show_price") ? '<div class="bxq-line-price">' + esc(line.price) + "</div>" : "") + "</div>";
       }
       html += '<button type="button" class="bxq-clear" data-combo-action="reset">Remove all</button></div>';
     }
     var msg = bar.message;
     var showMessage = on(config2, "qs_bar_show_message") && msg.text;
     var progress = model.progress;
+    if (slots) {
+      if (showMessage) html += '<div class="bxq-slots-msg is-' + esc(msg.tone) + '" aria-live="polite">' + boldTier(msg.text, msg.tier) + "</div>";
+      html += '<div class="bxq-row">' + renderSlots(model);
+      if (bar.items) html += barActions(model);
+      return html + "</div></div>";
+    }
     if (style === "slim" && model.view.enabled && model.view.tiers.length) {
       html += '<div class="bxq-slim"><div class="bxq-slim-fill' + (model.box.tier ? " is-done" : "") + '" style="width:' + progress.percent.toFixed(1) + '%"></div></div>';
     }
@@ -29111,12 +30046,23 @@ function createQuickShopKit(core2) {
     if (on(config2, "qs_bar_show_saved") && bar.saved && style !== "compact") html += '<span class="bxq-saved">' + esc(bar.saved) + "</span>";
     else if (style !== "compact") html += '<span class="bxq-total">' + esc(bar.total) + "</span>";
     html += "</button>";
-    var label = bar.checkingOut ? "Adding…" : opt(config2, "qs_btn_label");
-    var checkoutBtn = cod.shown && codPlacement === "replace" ? "" : '<button type="button" class="bxq-go" data-combo-action="checkout"' + (disabled ? " disabled" : "") + ">" + esc(label) + "</button>";
-    var codBtn = cod.shown ? '<button type="button" class="bxq-cod" data-combo-action="cod"' + (disabled ? " disabled" : "") + (cod.css ? ' style="' + esc(cod.css) + '"' : "") + ">" + (cod.icon || "") + esc(cod.text || "Cash on Delivery") + "</button>" : "";
-    html += '<span class="bxq-actions' + (cod.shown ? " has-cod" : "") + '">' + (codPlacement === "below" ? checkoutBtn + codBtn : codBtn + checkoutBtn) + "</span>";
+    html += barActions(model);
     html += "</div></div>";
     return html;
+  }
+  function barActions(model) {
+    var config2 = model.config;
+    var bar = model.bar;
+    var cod = model.cod || {};
+    var codPlacement = cod.placement === "replace" || cod.placement === "above" ? cod.placement : "below";
+    var disabled = !bar.canCheckout;
+    var label = bar.checkingOut ? "Adding…" : opt(config2, "qs_btn_label");
+    var lockAttrs = bar.lockedWhy ? ' aria-disabled="true" data-value="' + esc(bar.lockedWhy) + '"' : disabled ? " disabled" : "";
+    var goAction = bar.lockedWhy ? "checkout-locked" : "checkout";
+    var codAction = bar.lockedWhy ? "checkout-locked" : "cod";
+    var checkoutBtn = cod.shown && codPlacement === "replace" ? "" : '<button type="button" class="bxq-go' + (bar.lockedWhy ? " is-locked" : "") + '" data-combo-action="' + goAction + '"' + lockAttrs + ">" + esc(label) + "</button>";
+    var codBtn = cod.shown ? '<button type="button" class="bxq-cod' + (bar.lockedWhy ? " is-locked" : "") + '" data-combo-action="' + codAction + '"' + lockAttrs + (cod.css ? ' style="' + esc(cod.css) + '"' : "") + ">" + (cod.icon || "") + esc(cod.text || "Cash on Delivery") + "</button>" : "";
+    return '<span class="bxq-actions' + (cod.shown ? " has-cod" : "") + '">' + (codPlacement === "below" ? checkoutBtn + codBtn : codBtn + checkoutBtn) + "</span>";
   }
   function pick(config2, key, isMobile) {
     if (isMobile) {
@@ -29137,9 +30083,19 @@ function createQuickShopKit(core2) {
     }
     return css;
   }
+  function alignOf(config2, prefix, isMobile) {
+    var valid = function(v) {
+      return v === "left" || v === "center" || v === "right";
+    };
+    var desktop = valid(config2[prefix + "_align"]) ? config2[prefix + "_align"] : "left";
+    if (!isMobile) return desktop;
+    var phone = config2[prefix + "_align_mobile"];
+    if (valid(phone) && (config2[prefix + "_align_mobile_set"] === true || phone !== "left")) return phone;
+    return desktop;
+  }
   function textCss(config2, prefix, isMobile, defaults) {
     var css = "";
-    var align = pick(config2, prefix + "_align", isMobile);
+    var align = alignOf(config2, prefix, isMobile);
     css += "text-align:" + (align === "center" || align === "right" ? align : "left") + ";";
     var size = pick(config2, prefix + "_size", isMobile);
     if (isSet(size)) css += "font-size:" + num(size, defaults.size, 10, 96) + "px;";
@@ -29165,7 +30121,7 @@ function createQuickShopKit(core2) {
       if (transform === "uppercase" || transform === "lowercase" || transform === "capitalize") titleCss += "text-transform:" + transform + ";";
       var wrapCss = boxCss(config2, "title_container", m);
       if (config2.title_max_width_mode === "custom" && !m) {
-        var align = pick(config2, "heading_align", m);
+        var align = alignOf(config2, "heading", m);
         wrapCss += "max-width:" + num(config2.title_max_width_custom, 400, 100, 2e3) + "px;" + (align === "center" ? "margin-left:auto;margin-right:auto;" : align === "right" ? "margin-left:auto;" : "");
       }
       html += '<div class="bxq-title-wrap" style="' + wrapCss + '"><h2 class="bxq-title" style="' + titleCss + '">' + esc(model.title) + "</h2></div>";
@@ -29188,23 +30144,97 @@ function createQuickShopKit(core2) {
     var imgCss = fit === "adapt" ? "height:auto;" : "height:100%;object-fit:" + (fit === "contain" ? "contain" : "cover") + ";";
     return '<div class="bxq-banner' + (config2.banner_full_width ? " is-full" : "") + '" style="' + boxCssText + '"><img src="' + esc(url) + '" alt="' + esc(model.title || "Banner") + '" style="' + imgCss + '" /></div>';
   }
+  var ICON_X = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  var ICON_PREV = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>';
+  var ICON_NEXT = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  function renderPopup(model) {
+    var pop = model.popup;
+    if (!pop) return "";
+    var config2 = model.config;
+    var card = pop.card;
+    var imgs = card.images;
+    var n = imgs.length;
+    var html = '<div class="bxq-pop" role="dialog" aria-modal="true" aria-label="' + esc(card.title) + '"><div class="bxq-pop-scrim" data-combo-action="qs-view-close"></div><div class="bxq-pop-box"><button type="button" class="bxq-pop-close" data-combo-action="qs-view-close" aria-label="Close">' + ICON_X + '</button><div class="bxq-pop-gallery"><div class="bxq-pop-main">';
+    if (n) {
+      html += '<img src="' + esc(imgs[pop.index].url) + '" alt="' + esc(imgs[pop.index].alt) + '" />';
+      if (n > 1) {
+        html += '<button type="button" class="bxq-pop-nav is-prev" data-combo-action="qs-view-img" data-value="' + (pop.index - 1 + n) % n + '" aria-label="Previous picture">' + ICON_PREV + '</button><button type="button" class="bxq-pop-nav is-next" data-combo-action="qs-view-img" data-value="' + (pop.index + 1) % n + '" aria-label="Next picture">' + ICON_NEXT + '</button><span class="bxq-pop-count">' + (pop.index + 1) + " / " + n + "</span>";
+      }
+    } else {
+      html += '<span class="bxq-noimg"></span>';
+    }
+    html += "</div>";
+    if (n > 1) {
+      html += '<div class="bxq-pop-thumbs">';
+      for (var i = 0; i < n; i++) {
+        html += '<button type="button" class="bxq-pop-thumb' + (i === pop.index ? " is-on" : "") + '" data-combo-action="qs-view-img" data-value="' + i + '" aria-label="Picture ' + (i + 1) + '"' + (i === pop.index ? ' aria-current="true"' : "") + '><img src="' + esc(imgs[i].url) + '" alt="" /></button>';
+      }
+      html += "</div>";
+    }
+    html += '</div><div class="bxq-pop-info">';
+    if (card.badge) html += '<span class="bxq-pop-badge">' + esc(card.badge) + "</span>";
+    html += '<h3 class="bxq-pop-name">' + esc(card.title) + "</h3>";
+    html += '<div class="bxq-price"><b>' + esc(card.price) + "</b>" + (card.compare && on(config2, "qs_show_compare") ? "<s>" + esc(card.compare) + "</s>" : "") + "</div>";
+    if (card.off && on(config2, "qs_show_off")) html += '<div class="bxq-off"><span>' + card.off + "% OFF</span></div>";
+    if (card.variants.length) {
+      html += '<label class="bxq-variant"><select data-combo-action="variant-select" data-product-id="' + esc(card.id) + '" aria-label="Choose an option">';
+      for (var j = 0; j < card.variants.length; j++) {
+        var v = card.variants[j];
+        html += '<option value="' + esc(v.id) + '"' + (v.on ? " selected" : "") + (v.available ? "" : " disabled") + ">" + esc(v.title) + (v.available ? "" : " (sold out)") + "</option>";
+      }
+      html += "</select>" + ICON_DOWN + "</label>";
+    } else if (card.weightText && on(config2, "qs_show_weight")) {
+      html += '<div class="bxq-variant is-static">' + esc(card.weightText) + "</div>";
+    }
+    if (!card.counts && model.view.enabled) html += '<div class="bxq-nocount">Not part of the box offer</div>';
+    var cta = renderCardCta(model, card);
+    if (card.available && !card.qty) cta = cta.replace('<button type="button" class="bxq-cta"', '<button type="button" class="bxq-cta" data-close-popup="1"');
+    html += '<div class="bxq-pop-cta">' + cta + "</div>";
+    if (card.summary) html += '<p class="bxq-pop-desc">' + esc(card.summary) + "</p>";
+    html += "</div></div></div>";
+    return html;
+  }
   function render(model) {
     var config2 = model.config;
+    wholeMoney = on(config2, "qs_hide_decimals");
     var html = '<div class="bxq' + (model.isMobile ? " bxq--m" : "") + '" style="' + vars(config2) + '">';
     html += renderBanner(model);
     html += renderHead(model);
     html += renderTop(model);
-    html += renderFilters(model);
-    if (model.row.menus.length) {
-      for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
+    var left = filtersOnLeft(model);
+    if (left) {
+      var pictures = [];
+      for (var pc = 0; pc < model.row.chips.length; pc++) if (model.row.chips[pc].picture) pictures.push(model.row.chips[pc]);
+      if (pictures.length) html += renderCollectionBar(pictures, config2);
+      html += '<div class="bxq-layout"><aside class="bxq-side" aria-label="Filters">' + renderSideFilters(model) + '</aside><div class="bxq-main">';
+    } else {
+      html += renderFilters(model);
+      if (model.row.menus.length) {
+        for (var i = 0; i < model.row.menus.length; i++) if (model.row.menus[i].open) html += '<div class="bxq-scrim" data-combo-action="qs-menu-close"></div>';
+      }
     }
     if (model.empty) html += '<div class="bxq-empty">' + esc(model.empty) + "</div>";
-    else {
+    else if (model.sections) {
+      var titleAlign = sideOf(config2, "qs_group_title_align");
+      for (var sx = 0; sx < model.sections.length; sx++) {
+        var section = model.sections[sx];
+        html += '<section class="bxq-section" data-collection="' + esc(section.handle) + '">';
+        if (section.title) html += '<h2 class="bxq-section-title" style="text-align:' + titleAlign + '">' + esc(section.title) + "</h2>";
+        html += '<div class="bxq-grid">';
+        for (var sk = 0; sk < section.cards.length; sk++) html += renderCard(model, section.cards[sk]);
+        html += "</div></section>";
+      }
+    } else {
       html += '<div class="bxq-grid">';
       for (var c = 0; c < model.cards.length; c++) html += renderCard(model, model.cards[c]);
       html += "</div>";
     }
+    if (!model.empty && model.more > 0) {
+      html += '<div class="bxq-more-wrap"><button type="button" class="bxq-more" data-combo-action="qs-more">' + esc(cleanText(opt(config2, "qs_more_text"), 40) || DEFAULTS2.qs_more_text) + ' <span class="bxq-more-n">(' + model.more + ")</span></button></div>";
+    }
+    if (left) html += "</div></div>";
     html += renderBar(model);
+    html += renderPopup(model);
     if (model.toast) html += '<div class="bxq-toast" role="status">' + esc(model.toast) + "</div>";
     html += "</div>";
     return html;
@@ -29236,11 +30266,38 @@ function createQuickShopKit(core2) {
       ui.menu = null;
       return true;
     }
+    if (action === "qs-group") {
+      ui.dd[menu] = value && ui.dd[menu] !== value ? value : "";
+      ui.menu = null;
+      return true;
+    }
     if (action === "qs-clear") {
       ui.chip = "all";
       ui.instock = false;
       ui.dd = {};
       ui.menu = null;
+      return true;
+    }
+    if (action === "qs-more") {
+      var key = filterKey(ui);
+      ui.pages = (ui.pagesFor === key ? Math.max(1, Math.floor(Number(ui.pages)) || 1) : 1) + 1;
+      ui.pagesFor = key;
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-view") {
+      ui.popup = el && el.getAttribute ? el.getAttribute("data-product-id") : null;
+      ui.popupImage = 0;
+      ui.menu = null;
+      return true;
+    }
+    if (action === "qs-view-close") {
+      ui.popup = null;
+      ui.popupImage = 0;
+      return true;
+    }
+    if (action === "qs-view-img") {
+      ui.popupImage = Math.max(0, Math.round(Number(value)) || 0);
       return true;
     }
     if (action === "box-open") {
@@ -29262,17 +30319,35 @@ function createQuickShopKit(core2) {
     labelledTiers,
     filterRow,
     filterProducts,
+    filterGroups,
+    filterGroupHandles,
+    memberHandles,
+    pageExclusions,
+    EXTRA_HANDLE,
+    groupMembers,
+    mileSizes,
+    weightFilter,
+    rangeInput,
+    placeMenus,
+    applyRange,
+    weightRanges,
+    labelLook,
     canCheckout,
     barMessage,
     buildModel,
     render,
+    maxPerProduct,
+    pageSize,
+    productQty,
+    productLimitMessage,
     applyUiAction,
     ICON_NAMES,
     TIER_ICON_ORDER,
     iconName,
     svgIcon,
     httpsUrl,
-    collectionImage
+    collectionImage,
+    alignOf
   };
 }
 const QUICK_SHOP_CSS = `
@@ -29288,7 +30363,7 @@ const QUICK_SHOP_CSS = `
 .bxq-banner img{display:block;width:100%;}
 .bxq-desc{margin:6px 0 0;font-size:15px;line-height:1.5;opacity:.72;max-width:70ch;}
 .bxq-top{background:var(--bxq-top-bg);color:var(--bxq-top-text);border-radius:16px;padding:14px 18px 16px;margin:0 0 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
-.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;}
+.bxq-top.is-sticky{position:sticky;top:var(--bxq-top-offset);z-index:998;transition:top .2s ease;}
 .bxq--m .bxq-top{padding:10px 12px 8px;border-radius:14px;}
 .bxq--m .bxq-top.is-sticky .bxq-top-title{display:none;}
 .bxq--m .bxq-top-msg{font-size:13.5px;margin:0 0 8px;}
@@ -29299,47 +30374,71 @@ const QUICK_SHOP_CSS = `
 .bxq-top--text .bxq-top-msg{margin-bottom:0;}
 .bxq-track{position:relative;height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
 /* Fills and the scrim are empty divs: themes like Dawn hide div:empty, so force them on. */
-.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim{display:block!important;}
+.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-scrim,.bxq-pop-scrim{display:block!important;}
 .bxq-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
 .bxq-fill.is-done{background:var(--bxq-done);}
 .bxq-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);}
 .bxq-tick.is-hit{border-color:var(--bxq-done);background:var(--bxq-done);}
 .bxq-ticks{position:relative;height:38px;margin-top:6px;}
-.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:12px;line-height:1.3;}
+.bxq--m .bxq-tick-label,.bxq--m .bxq-step-label{font-size:var(--bxq-lbl-fs-m,var(--bxq-lbl-fs,12px));}
+.bxq-tick-label{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;white-space:nowrap;font-size:var(--bxq-lbl-fs,12px);line-height:1.3;}
 .bxq-tick-label:last-child{transform:translateX(-100%);align-items:flex-end;}
-.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:11px;}
+.bxq-tick-label small,.bxq-step-label small,.bxq-mile-label small{opacity:.6;font-size:var(--bxq-lbl-sub,11px);}
 .bxq-tick-label.is-hit b,.bxq-step.is-hit b,.bxq-mile.is-hit b{color:var(--bxq-done);}
 .bxq-steps{display:flex;gap:6px;}
 .bxq-step{flex:1;min-width:0;}
 .bxq-step-track{height:var(--bxq-top-h);background:var(--bxq-track);border-radius:var(--bxq-top-r);overflow:hidden;}
 .bxq-step-fill{height:100%;background:var(--bxq-fill);transition:width .35s ease;}
 .bxq-step.is-hit .bxq-step-fill{background:var(--bxq-done);}
-.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:12px;line-height:1.3;}
-.bxq-miles{position:relative;height:74px;margin:0 50px;}
-.bxq--m .bxq-miles{margin:0 38px;}
-.bxq-miles-line{position:absolute;left:0;right:0;top:17px;height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
+.bxq-step-label{display:flex;flex-direction:column;margin-top:6px;font-size:var(--bxq-lbl-fs,12px);line-height:1.3;}
+.bxq-miles{position:relative;height:calc(var(--bxq-mile-dot,34px) + 40px);margin:0 max(50px,calc(var(--bxq-mile-dot,34px) / 2 + 4px));}
+.bxq--m .bxq-miles{margin:0 max(38px,calc(var(--bxq-mile-dot,34px) / 2 + 4px));}
+.bxq-miles-line{position:absolute;left:0;right:0;top:calc(var(--bxq-mile-dot,34px) / 2);height:var(--bxq-top-h);margin-top:calc(var(--bxq-top-h) / -2);background:var(--bxq-track);border-radius:var(--bxq-top-r);}
 .bxq-miles-fill{height:100%;background:var(--bxq-fill);border-radius:var(--bxq-top-r);transition:width .35s ease;}
-.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:110px;text-align:center;}
-.bxq-mile-dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
+.bxq-mile{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;width:max(var(--bxq-mile-dot,34px),min(110px,calc(var(--bxq-mile-share,100%) - 6px)));text-align:center;}
+.bxq-mile-dot{width:var(--bxq-mile-dot,34px);height:var(--bxq-mile-dot,34px);flex:0 0 auto;border-radius:50%;background:#fff;border:2px solid var(--bxq-track);display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .25s ease;}
 .bxq-mile.is-next .bxq-mile-dot{border-color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{background:var(--bxq-done);border-color:var(--bxq-done);}
-.bxq-mile-icon{width:18px;height:18px;object-fit:contain;display:block;}
+.bxq-mile-icon{width:var(--bxq-mile-icon,18px);height:var(--bxq-mile-icon,18px);object-fit:contain;display:block;}
 .bxq-mile-dot{color:#6b7280;}
 .bxq-mile.is-next .bxq-mile-dot{color:var(--bxq-fill);}
 .bxq-mile.is-hit .bxq-mile-dot{color:#fff;}
 .bxq-msg-icon{color:#fff;}
 .bxq-msg-glyph{width:22px;height:22px;display:block;object-fit:contain;}
-.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:12px;line-height:1.25;}
-.bxq--m .bxq-mile{width:84px;}
-.bxq--m .bxq-mile-label{font-size:11px;}
+.bxq-mile-label{display:flex;flex-direction:column;margin-top:4px;font-size:var(--bxq-lbl-fs,12px);line-height:1.25;}
+.bxq--m .bxq-mile{width:max(var(--bxq-mile-dot,34px),min(84px,calc(var(--bxq-mile-share,100%) - 4px)));}
+.bxq-mile-label b{overflow-wrap:anywhere;}
+.bxq--m .bxq-mile-label{font-size:var(--bxq-lbl-fs-mile-m,11px);}
 .bxq-filters{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 14px;scrollbar-width:none;align-items:center;}
 .bxq-filters::-webkit-scrollbar{display:none;}
+.bxq-filters + .bxq-gchips{margin-top:-8px;}
+.bxq-gchips-label{flex:0 0 auto;font-size:13px;font-weight:700;opacity:.7;}
+.bxq--m .bxq-gchips-label{font-size:12px;}
+.bxq-range{gap:12px;overflow:visible;}
+.bxq-range-box{position:relative;flex:1 1 220px;min-width:140px;max-width:420px;height:28px;}
+.bxq-range-track{position:absolute;left:10px;right:10px;top:12px;height:4px;border-radius:4px;background:rgba(0,0,0,.12);}
+.bxq-range-fill{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--bxq-accent);display:block!important;}
+.bxq-range-in{position:absolute;left:0;top:0;width:100%;height:28px;margin:0;padding:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none;}
+.bxq-range-in:focus{outline:none;}
+.bxq-range-in::-webkit-slider-runnable-track{height:28px;background:none;border:none;}
+.bxq-range-in::-moz-range-track{background:none;border:none;}
+.bxq-range-in::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:20px;height:20px;margin-top:4px;border-radius:50%;background:#fff;border:2px solid var(--bxq-accent);box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;}
+.bxq-range-in::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--bxq-accent);box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;}
+.bxq-range-in:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px color-mix(in srgb,var(--bxq-accent) 30%,transparent);}
+.bxq-range-val{flex:0 0 auto;font-size:13px;font-weight:700;white-space:nowrap;opacity:.75;}
+.bxq-range-val.is-on{opacity:1;color:var(--bxq-accent);}
 .bxq-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;border:1.5px solid rgba(0,0,0,.12);background:#fff;border-radius:999px;padding:9px 18px;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--bxq-text) !important;}
 .bxq--m .bxq-chip{padding:7px 13px;font-size:13.5px;}
 .bxq-chip.is-on{border-color:var(--bxq-accent);background:color-mix(in srgb,var(--bxq-accent) 10%,#fff);color:var(--bxq-accent) !important;}
 .bxq-chip--icon{padding:9px 14px;position:relative;}
 .bxq-colbar{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 12px;margin-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 .bxq-colbar::-webkit-scrollbar{display:none;}
+.bxq-al-center>:first-child,.bxq-al-right>:first-child{margin-left:auto;}
+.bxq-al-center>:last-child{margin-right:auto;}
+.bxq-section{margin:0 0 26px;}
+.bxq-section-title{margin:6px 0 14px;font-size:var(--bxq-sec-fs,20px);line-height:1.25;font-weight:800;color:var(--bxq-text);}
+.bxq--m .bxq-section{margin-bottom:20px;}
+.bxq--m .bxq-section-title{font-size:var(--bxq-sec-fs-m,17px);margin:4px 0 10px;}
 .bxq-col{flex:0 0 auto;width:calc(var(--bxq-col-size) + 16px);display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;margin:0;border:0;background:none;cursor:pointer;font:inherit;color:var(--bxq-text) !important;}
 .bxq-col-img{width:var(--bxq-col-size);height:var(--bxq-col-size);border-radius:var(--bxq-col-r);overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;color:var(--bxq-accent);transition:box-shadow .15s;}
 .bxq-col-img img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -29365,7 +30464,7 @@ const QUICK_SHOP_CSS = `
 .bxq--m .bxq-card{padding:8px;}
 .bxq-card.is-out .bxq-media img{opacity:.5;}
 .bxq-media{position:relative;aspect-ratio:var(--bxq-ratio);border-radius:calc(var(--bxq-radius) - 2px);overflow:hidden;background:#fff;}
-.bxq-media img{width:100%;height:100%;object-fit:contain;display:block;}
+.bxq-media img{width:100%;height:100%;object-fit:var(--bxq-fit,contain);display:block;}
 .bxq-noimg{display:block;width:100%;height:100%;background:#eef0f3;}
 .bxq-badge{position:absolute;left:0;right:0;bottom:0;padding:16px 10px 6px;font-size:13px;font-weight:800;color:#fff;background:linear-gradient(180deg,transparent,var(--bxq-badge) 70%);}
 .bxq-add{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:12px;border:2px solid var(--bxq-accent);background:#fff;color:var(--bxq-accent) !important;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
@@ -29375,15 +30474,16 @@ const QUICK_SHOP_CSS = `
 .bxq-stepper button{border:0;background:transparent;color:#fff !important;width:36px;height:40px;font-size:20px;font-weight:700;cursor:pointer;}
 .bxq-stepper span{min-width:22px;text-align:center;font-weight:800;}
 .bxq--m .bxq-stepper button{width:30px;height:34px;}
+.bxq-card button[data-combo-action="qty-inc"]:disabled{opacity:.4;cursor:not-allowed;}
 .bxq-soldout{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.8);color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:5px 8px;}
-.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;}
+.bxq-info{display:flex;flex-direction:column;gap:6px;padding:10px 2px 2px;flex:1;min-width:0;}
 .bxq-eyebrow{font-size:12px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;opacity:.6;}
 .bxq-name{margin:0;font-size:17px;line-height:1.3;font-weight:600;color:var(--bxq-text);}
 .bxq--m .bxq-name{font-size:14px;}
 .bxq-sub{margin:0;font-size:14px;line-height:1.4;opacity:.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .bxq--m .bxq-sub{font-size:12.5px;}
-.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;}
-.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;max-width:100%;}
+.bxq-variant{position:relative;display:inline-flex;align-items:center;gap:4px;color:var(--bxq-accent);font-size:15px;align-self:flex-start;margin-top:4px;max-width:100%;min-width:0;}
+.bxq-variant select{appearance:none;-webkit-appearance:none;border:0;background:transparent;font:inherit;color:var(--bxq-text);padding:2px 20px 2px 0;cursor:pointer;flex:0 1 auto;width:auto !important;min-width:0 !important;max-width:100% !important;height:auto;margin:0;box-shadow:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bxq-variant svg{position:absolute;right:0;pointer-events:none;}
 .bxq-variant.is-static{color:var(--bxq-text);opacity:.75;}
 .bxq-off{display:flex;align-items:center;gap:8px;color:var(--bxq-off);font-size:15px;font-weight:800;}
@@ -29402,6 +30502,10 @@ const QUICK_SHOP_CSS = `
 .bxq-cta--stepper span{font-weight:800;}
 .bxq--m .bxq-cta{min-height:36px;font-size:14px;}
 .bxq--m .bxq-cta--stepper button{height:36px;width:34px;}
+.bxq-more-wrap{display:flex;justify-content:center;margin:22px 0 8px;}
+.bxq-more{border:1.5px solid var(--bxq-btn);background:var(--bxq-card);color:var(--bxq-btn);border-radius:999px;padding:11px 26px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+.bxq-more:hover{background:var(--bxq-btn);color:var(--bxq-btn-text);}
+.bxq-more-n{font-weight:500;opacity:.75;}
 .bxq-empty{padding:40px 16px;text-align:center;opacity:.65;font-size:15px;background:var(--bxq-card);border-radius:var(--bxq-radius);}
 .bxq-bar{position:sticky;bottom:12px;z-index:999;margin:18px auto 0;max-width:980px;background:var(--bxq-bar-bg);color:var(--bxq-bar-text);border-radius:var(--bxq-bar-r);box-shadow:0 -2px 24px rgba(0,0,0,.14);padding:12px 16px;overflow:hidden;}
 .bxq--m .bxq-bar{bottom:8px;padding:10px 12px;}
@@ -29440,7 +30544,7 @@ const QUICK_SHOP_CSS = `
 .bxq--m .bxq-actions.has-cod{flex:1 1 100%;}
 .bxq--m .bxq-actions.has-cod button{flex:1;}
 .bxq--m .bxq-go,.bxq--m .bxq-cod{padding:var(--bxq-btn-py-m,12px) var(--bxq-btn-px-m,16px);font-size:var(--bxq-btn-fs-m,15px);}
-.bxq-go:disabled,.bxq-cod:disabled{opacity:.45;cursor:not-allowed;}
+.bxq-go:disabled,.bxq-cod:disabled,.bxq-go.is-locked,.bxq-cod.is-locked{opacity:.45;cursor:not-allowed;}
 .bxq-ring{position:relative;width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
 .bxq-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}
 .bxq-ring-bg{fill:none;stroke:rgba(0,0,0,.1);stroke-width:4;}
@@ -29459,6 +30563,101 @@ const QUICK_SHOP_CSS = `
 .bxq-mini span{min-width:18px;text-align:center;font-size:13px;font-weight:800;}
 .bxq-clear{align-self:flex-start;border:0;background:transparent;padding:0;font-size:13px;text-decoration:underline;opacity:.6;cursor:pointer;}
 .bxq-toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:10000;background:#111827;color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:90vw;}
+.bxq-media img[data-combo-action],.bxq-media .bxq-noimg[data-combo-action],.bxq-name[data-combo-action]{cursor:pointer;}
+.bxq-name[data-combo-action]:hover{text-decoration:underline;text-underline-offset:3px;}
+.bxq-pop{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;}
+.bxq-pop-scrim{position:absolute;inset:0;background:rgba(17,24,39,.55);animation:bxq-pop-fade .2s ease;}
+.bxq-pop-box{position:relative;width:100%;max-width:900px;max-height:calc(100vh - 48px);overflow:auto;overscroll-behavior:contain;background:var(--bxq-card);color:var(--bxq-text);border-radius:var(--bxq-radius);box-shadow:0 20px 50px rgba(0,0,0,.25);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;padding:22px;animation:bxq-pop-in .22s ease;}
+.bxq-pop-close{position:absolute;top:10px;right:10px;z-index:2;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.94);color:#111827 !important;box-shadow:0 1px 4px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.bxq-pop-main{position:relative;aspect-ratio:var(--bxq-ratio);background:#f3f4f6;border-radius:calc(var(--bxq-radius) - 4px);overflow:hidden;}
+.bxq-pop-main img{display:block;width:100%;height:100%;object-fit:contain;}
+.bxq-pop-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#111827 !important;box-shadow:0 1px 4px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.bxq-pop-nav.is-prev{left:10px;}
+.bxq-pop-nav.is-next{right:10px;}
+.bxq-pop-count{position:absolute;bottom:10px;right:10px;background:rgba(17,24,39,.65);color:#fff;font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;}
+.bxq-pop-gallery,.bxq-pop-info{min-width:0;}
+.bxq-pop-thumbs{display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;}
+.bxq-pop-thumb{flex:none;width:64px;height:64px;padding:0;border-radius:8px;border:2px solid transparent;background:#f3f4f6;overflow:hidden;cursor:pointer;opacity:.75;}
+.bxq-pop-thumb.is-on{border-color:var(--bxq-accent);opacity:1;}
+.bxq-pop-thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+.bxq-pop-info{display:flex;flex-direction:column;gap:10px;min-width:0;padding-top:4px;}
+.bxq-pop-badge{align-self:flex-start;background:var(--bxq-badge);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;}
+.bxq-pop-name{margin:0;padding-right:40px;font-size:22px;line-height:1.3;font-weight:700;color:var(--bxq-text);}
+.bxq-pop-info .bxq-price b{font-size:22px;}
+.bxq-pop-cta{margin-top:4px;}
+.bxq-pop-cta .bxq-cta{min-height:46px;}
+.bxq-pop-desc{margin:4px 0 0;font-size:14.5px;line-height:1.6;opacity:.8;white-space:pre-line;overflow-wrap:anywhere;}
+.bxq--m .bxq-pop{align-items:flex-end;padding:0;}
+.bxq--m .bxq-pop-box{grid-template-columns:minmax(0,1fr);gap:14px;max-height:92vh;border-radius:18px 18px 0 0;padding:14px 14px 20px;animation:bxq-pop-up .25s ease;}
+.bxq--m .bxq-pop-name{font-size:18px;}
+.bxq--m .bxq-pop-thumb{width:54px;height:54px;}
+@keyframes bxq-pop-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes bxq-pop-in{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:none;}}
+@keyframes bxq-pop-up{from{transform:translateY(40px);opacity:.6;}to{transform:none;opacity:1;}}
+@media (prefers-reduced-motion: reduce){.bxq-pop-scrim,.bxq-pop-box{animation:none !important;}}
+[data-brix-combo-popup] .bxq-bar{position:fixed;left:12px;right:12px;bottom:12px;margin:0 auto;z-index:2147483646;}
+.bxq--m[data-brix-combo-popup] .bxq-bar{left:8px;right:8px;bottom:8px;}
+/* Icons keep their size on every theme. Themes often size every svg
+   (svg{width:1em}) or anything with "icon" in its class, which shrank the
+   milestone icons to a few px inside their circles. */
+.bxq-mile-icon{width:var(--bxq-mile-icon,18px) !important;height:var(--bxq-mile-icon,18px) !important;min-width:0 !important;max-width:none !important;flex:0 0 auto;}
+.bxq-msg-glyph{width:26px !important;height:26px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-mile-icon > svg,.bxq-msg-glyph > svg{display:block !important;width:100% !important;height:100% !important;min-width:0 !important;max-width:none !important;max-height:none !important;}
+.bxq-add > svg{width:22px !important;height:22px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-chip > svg{width:16px !important;height:16px !important;max-width:none !important;flex:0 0 auto;}
+.bxq-chip--icon > svg{width:20px !important;height:20px !important;}
+/* Slots bar (quantity boxes). */
+.bxq-bar--slots{padding-top:0;}
+.bxq-slots-msg{margin:0 -16px 12px;padding:11px 14px;text-align:center;font-weight:700;font-size:15px;line-height:1.35;background:color-mix(in srgb,var(--bxq-bar-text) 4%,var(--bxq-bar-bg));border-bottom:1px solid rgba(0,0,0,.08);}
+.bxq--m .bxq-slots-msg{margin:0 -12px 10px;padding:10px 12px;font-size:14px;}
+.bxq-slots-msg.is-success{color:var(--bxq-save);}
+.bxq-slots{display:flex;gap:10px;flex:1 1 auto;justify-content:center;min-width:0;}
+.bxq--m .bxq-slots{gap:8px;flex:1 1 100%;}
+.bxq-slot{position:relative;flex:0 0 auto;width:64px;height:64px;box-sizing:border-box;border-radius:12px;border:1.5px solid rgba(0,0,0,.14);background:#fff;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.35);padding:0;overflow:hidden;}
+.bxq--m .bxq-slot{width:56px;height:56px;}
+.bxq-slot > svg{width:22px !important;height:22px !important;max-width:none !important;}
+.bxq-slot.is-filled{border-color:var(--bxq-accent);cursor:pointer;}
+.bxq-slot img{width:100%;height:100%;object-fit:contain;display:block;}
+.bxq-slot-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(17,24,39,.65);color:#fff;font-size:14px;line-height:18px;text-align:center;}
+.bxq-slot.is-more{font-weight:800;font-size:13px;color:var(--bxq-bar-text);}
+.bxq--m .bxq-bar--slots .bxq-actions{flex:1 1 100%;}
+.bxq--m .bxq-bar--slots .bxq-actions > *{flex:1 1 0;}
+/* Card and filter text sizes (merchant settings; unset = the sizes above). */
+.bxq-card .bxq-name{font-size:var(--bxq-title-fs,17px);}
+.bxq--m .bxq-card .bxq-name{font-size:var(--bxq-title-fs-m,14px);}
+.bxq-card .bxq-sub{font-size:var(--bxq-ctext-fs,14px);}
+.bxq--m .bxq-card .bxq-sub{font-size:var(--bxq-ctext-fs-m,12.5px);}
+.bxq-card .bxq-variant,.bxq-card .bxq-off{font-size:var(--bxq-ctext-fs,15px);}
+.bxq--m .bxq-card .bxq-variant,.bxq--m .bxq-card .bxq-off{font-size:var(--bxq-ctext-fs-m,15px);}
+.bxq-card .bxq-price b{font-size:var(--bxq-price-fs,19px);}
+.bxq--m .bxq-card .bxq-price b{font-size:var(--bxq-price-fs-m,16px);}
+.bxq-card .bxq-price s{font-size:var(--bxq-cmp-fs,14px);}
+.bxq--m .bxq-card .bxq-price s{font-size:var(--bxq-cmp-fs-m,14px);}
+.bxq-chip{font-size:var(--bxq-chip-fs,15px);}
+.bxq--m .bxq-chip{font-size:var(--bxq-chip-fs-m,13.5px);}
+.bxq-opt{font-size:var(--bxq-chip-fs,14px);}
+.bxq--m .bxq-opt{font-size:var(--bxq-chip-fs-m,14px);}
+/* A slider behind a chip. */
+.bxq-menu--range{min-width:280px;padding:10px 14px;overflow:visible;}
+.bxq-menu--range .bxq-range{padding:0;flex-wrap:wrap;gap:6px 12px;}
+.bxq-menu--range .bxq-gchips-label{display:none;}
+.bxq-menu--range .bxq-range-box{flex:1 1 100%;max-width:none;}
+/* Filters in a left column (desktop). */
+.bxq-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:20px;align-items:start;}
+.bxq-side{background:var(--bxq-card);border-radius:var(--bxq-radius);padding:14px 14px 8px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.bxq-side-head{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;margin:0 0 8px;}
+.bxq-side-clear{border:0;background:none;padding:0;color:var(--bxq-accent) !important;font-weight:700;font-size:13px;cursor:pointer;}
+.bxq-side-sec{border-top:1px solid rgba(0,0,0,.08);padding:10px 0 8px;}
+.bxq-side-title{margin:0 0 6px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.6;}
+.bxq-side-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:6px 4px;border-radius:8px;font-size:var(--bxq-chip-fs,14px);cursor:pointer;color:var(--bxq-text) !important;}
+.bxq-side-opt:hover{background:rgba(0,0,0,.04);}
+.bxq-side-radio{flex:0 0 auto;width:16px;height:16px;border-radius:50%;border:2px solid rgba(0,0,0,.25);background:#fff;}
+.bxq-side-check .bxq-side-radio{border-radius:4px;}
+.bxq-side-opt.is-on{font-weight:700;color:var(--bxq-accent) !important;}
+.bxq-side-opt.is-on .bxq-side-radio{border-color:var(--bxq-accent);background:var(--bxq-accent);box-shadow:inset 0 0 0 3px #fff;}
+.bxq-side .bxq-range{padding:0;flex-wrap:wrap;gap:4px 10px;}
+.bxq-side .bxq-range .bxq-gchips-label{display:none;}
+.bxq-side .bxq-range-box{flex:1 1 100%;max-width:none;min-width:0;}
 @media (prefers-reduced-motion: reduce){.bxq-fill,.bxq-step-fill,.bxq-miles-fill,.bxq-slim-fill,.bxq-ring-fg{transition:none;}.bxq-bar.is-celebrate .bxq-msg-icon,.bxq-bar.is-celebrate .bxq-msg{animation:none;}}
 `;
 const kit$1 = createQuickShopKit(createComboWeightCore());
@@ -29613,6 +30812,11 @@ const BAR_STYLES = [
   { value: "compact", label: "Compact", preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: 9 }, children: "5 · ₹999" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { background: "#2563eb", borderRadius: 4, width: 26, height: 10 } })
+  ] }) },
+  // Quantity boxes only: one box per item of the next offer.
+  { value: "slots", label: "Slots", quantityOnly: true, preview: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 8, fontWeight: 700, textAlign: "center", marginBottom: 3 }, children: "Add 2 more" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", gap: 3, justifyContent: "center" }, children: [1, 0, 0].map((f, i) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { width: 12, height: 12, borderRadius: 3, border: `1.5px solid ${f ? "#2563eb" : "#cbd5e1"}`, background: f ? "#dbeafe" : "#fff", fontSize: 9, lineHeight: "10px", color: "#94a3b8", textAlign: "center" }, children: f ? "" : "+" }, i)) })
   ] }) }
 ];
 function Colors({ config: config2, updateConfig, ColorPickerField: ColorPickerField2, fields }) {
@@ -29673,6 +30877,271 @@ function CollectionPictures({ config: config2, updateConfig, collections = [], P
     })
   ] });
 }
+const GROUP_STYLES = [{ label: "Dropdown", value: "dropdown" }, { label: "Row of chips", value: "chips" }];
+const GROUP_MAX = 5;
+const GROUP_OPTION_MAX = 15;
+function CollectionSearch({ collections, onPick, placeholder }) {
+  const [query, setQuery] = reactExports.useState("");
+  const q = query.trim().toLowerCase();
+  const matches2 = (q ? collections.filter((c) => String(c.title || "").toLowerCase().includes(q) || String(c.handle || "").includes(q)) : collections).slice(0, 50);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Combobox,
+    {
+      activator: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Combobox.TextField,
+        {
+          prefix: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { source: SvgSearchIcon, tone: "subdued" }),
+          label: "Add a collection",
+          labelHidden: true,
+          placeholder,
+          value: query,
+          onChange: setQuery,
+          autoComplete: "off"
+        }
+      ),
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(Listbox, { onSelect: (handle) => {
+        if (handle) {
+          onPick(handle);
+          setQuery("");
+        }
+      }, children: matches2.length ? matches2.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(Listbox.Option, { value: c.handle, accessibilityLabel: c.title || c.handle, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Listbox.TextOption, { children: c.title || c.handle }) }, c.handle)) : /* @__PURE__ */ jsxRuntimeExports.jsx(Listbox.Option, { value: "", disabled: true, children: /* @__PURE__ */ jsxRuntimeExports.jsx(Listbox.TextOption, { disabled: true, children: q ? "No collection matches" : "No more collections" }) }) })
+    }
+  );
+}
+function CollectionFilterGroups({ config: config2, updateConfig, collections = [] }) {
+  const groups = Array.isArray(config2.qs_filter_groups) ? config2.qs_filter_groups : [];
+  const save2 = (next) => updateConfig("qs_filter_groups", next);
+  const setGroup = (i, patch) => save2(groups.map((g, j) => j === i ? { ...g, ...patch } : g));
+  const titleOf = (handle) => {
+    var _a;
+    return ((_a = collections.find((c) => c.handle === handle)) == null ? void 0 : _a.title) || handle;
+  };
+  const addGroup = () => save2([...groups, { id: `g${Date.now().toString(36)}`, label: "", style: "dropdown", options: [] }]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "300", children: [
+    groups.map((group, i) => {
+      const options = Array.isArray(group.options) ? group.options : [];
+      const setOptions = (next) => setGroup(i, { options: next });
+      const move = (k, by) => {
+        const next = [...options];
+        const [item] = next.splice(k, 1);
+        next.splice(k + by, 0, item);
+        setOptions(next);
+      };
+      const unused = collections.filter((c) => !options.some((o) => o.handle === c.handle));
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { border: "1px solid #e5e7eb", borderRadius: 10, padding: 12 }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TextField$1,
+            {
+              label: "Filter name",
+              value: group.label || "",
+              onChange: (v) => setGroup(i, { label: v }),
+              placeholder: "e.g. Weight",
+              autoComplete: "off",
+              maxLength: 40,
+              error: !String(group.label || "").trim() ? "Name it, e.g. Weight or Age" : void 0
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Shown as", options: GROUP_STYLES, value: group.style === "chips" ? "chips" : "dropdown", onChange: (v) => setGroup(i, { style: v }) })
+        ] }),
+        options.map((option, k) => /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "150", blockAlign: "end", wrap: false, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1, minWidth: 0 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TextField$1,
+            {
+              label: titleOf(option.handle),
+              value: option.label || "",
+              placeholder: `Shown as: ${titleOf(option.handle)}`,
+              autoComplete: "off",
+              maxLength: 40,
+              onChange: (v) => setOptions(options.map((o, m) => m === k ? { ...o, label: v } : o))
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", disabled: k === 0, onClick: () => move(k, -1), accessibilityLabel: `Move ${titleOf(option.handle)} up`, children: "↑" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", tone: "critical", onClick: () => setOptions(options.filter((_, m) => m !== k)), children: "Remove" })
+        ] }, option.handle)),
+        options.length < GROUP_OPTION_MAX && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CollectionSearch,
+          {
+            collections: unused,
+            placeholder: options.length ? "Search to add another collection…" : "Search collections to add…",
+            onPick: (handle) => setOptions([...options, { handle, label: "" }])
+          }
+        ),
+        !options.length && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "critical", children: "Add at least one collection, or this filter won't show." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(InlineStack, { align: "end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", tone: "critical", onClick: () => save2(groups.filter((_, j) => j !== i)), children: "Delete this filter" }) })
+      ] }) }, group.id || i);
+    }),
+    groups.length < GROUP_MAX && /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: addGroup, children: "Add a collection filter" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Each filter lists collections you pick, e.g. Weight: 250 g, 500 g, 1 kg, 2 kg. Shoppers pick one per filter; picking in two filters shows products in both. An option shows only when products on this page are in that collection." })
+  ] });
+}
+const PICK_MAX = 50;
+function PickedList({ title, help, items, type, onChange, shopify: shopify2, max = PICK_MAX }) {
+  const pick = async () => {
+    try {
+      const selected = await shopify2.resourcePicker({ type, multiple: true, selectionIds: items.map((x) => ({ id: x.id })) });
+      if (!selected) return;
+      onChange(selected.slice(0, max).map((r) => ({ id: r.id, title: r.title, handle: r.handle })));
+    } catch {
+      shopify2.toast.show("Could not open the picker. Please try again.", { isError: true });
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "150", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { align: "space-between", blockAlign: "center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "h6", variant: "headingSm", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { size: "slim", onClick: pick, children: items.length ? "Change" : type === "collection" ? "Choose collections" : "Choose products" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: help }),
+    items.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(InlineStack, { gap: "100", children: items.map((x) => /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { onRemove: () => onChange(items.filter((y) => y.id !== x.id)), children: x.title || x.handle || x.id }, x.id)) })
+  ] });
+}
+function ProductsSectionComponent$1({ config: config2, updateConfig, expanded, onToggle }) {
+  const shopify2 = useAppBridge();
+  const titles = config2.weight_qualify_titles || {};
+  const named = (ids) => (ids || []).map((id) => ({ id, title: titles[id] || "" }));
+  const pricing = config2.weight_pricing || defaultWeightPricing(fixedMeasureFor(config2.layout) || "weight");
+  const qualify = pricing.qualify || {};
+  const remember = (list) => updateConfig("weight_qualify_titles", { ...titles, ...Object.fromEntries(list.map((x) => [x.id, x.title])) });
+  const setQualify = (key, list) => {
+    updateConfig("weight_pricing", { ...pricing, qualify: { ...qualify, [key]: list.map((x) => x.id) } });
+    remember(list);
+  };
+  const extra = named(qualify.extra_product_ids);
+  const noOffer = named(qualify.exclude_product_ids);
+  const hidden = named(config2.box_hide_product_ids);
+  const hiddenCols = Array.isArray(config2.box_hide_collections) ? config2.box_hide_collections : [];
+  const count = extra.length + noOffer.length + hidden.length + hiddenCols.length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Products on the page", expanded, onToggle, badge: count ? String(count) : void 0, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "400", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PickedList,
+      {
+        title: "Add more products",
+        type: "product",
+        items: extra,
+        shopify: shopify2,
+        help: "Shown on the page beyond its collections, and they count toward the box offer.",
+        onChange: (list) => setQualify("extra_product_ids", list)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PickedList,
+      {
+        title: "Hide products",
+        type: "product",
+        items: hidden,
+        shopify: shopify2,
+        max: 200,
+        help: "Left off the page even though they're in its collections.",
+        onChange: (list) => {
+          updateConfig("box_hide_product_ids", list.map((x) => x.id));
+          remember(list);
+        }
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PickedList,
+      {
+        title: "Hide collections",
+        type: "collection",
+        items: hiddenCols,
+        shopify: shopify2,
+        max: 20,
+        help: "Every product that's also in one of these collections is left off the page (e.g. a Damaged or Gift card collection).",
+        onChange: (list) => updateConfig("box_hide_collections", list.map((x) => ({ id: x.id, handle: x.handle, title: x.title })))
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PickedList,
+      {
+        title: "Not part of the box offer",
+        type: "product",
+        items: noOffer,
+        shopify: shopify2,
+        help: "Still on the page and can be added, but never count toward the box price (cards say “Not part of the box offer”).",
+        onChange: (list) => setQualify("exclude_product_ids", list)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Changes to “Add more products” and “Not part of the box offer” update the checkout discount when you save." })
+  ] }) });
+}
+const WEIGHT_RANGE_MAX = 8;
+const STARTER_RANGES = [{ min: 0, max: 500, label: "" }, { min: 500, max: 1e3, label: "" }, { min: 1e3, max: null, label: "" }];
+function WeightFilterOptions({ config: config2, updateConfig }) {
+  const mode = val$1(config2, "qs_filter_weight_mode");
+  const ranges = Array.isArray(config2.qs_filter_weight_ranges) ? config2.qs_filter_weight_ranges : [];
+  const setRanges = (next) => updateConfig("qs_filter_weight_ranges", next);
+  const setRange = (i, patch) => setRanges(ranges.map((r, j) => j === i ? { ...r, ...patch } : r));
+  const grams = (v) => v === "" ? "" : Math.max(0, Math.round(Number(v)) || 0);
+  const named = kit$1.weightRanges(config2);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Select,
+        {
+          label: "Options",
+          options: [
+            { label: "Each weight on the page", value: "auto" },
+            { label: "Weight ranges I set", value: "ranges" },
+            { label: "Slider (from – to)", value: "slider" }
+          ],
+          value: mode,
+          onChange: (v) => {
+            updateConfig("qs_filter_weight_mode", v);
+            if (v === "ranges" && !ranges.length) setRanges(STARTER_RANGES);
+          }
+        }
+      ),
+      mode !== "slider" && /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Shown as", options: GROUP_STYLES, value: val$1(config2, "qs_filter_weight_style"), onChange: (v) => updateConfig("qs_filter_weight_style", v) })
+    ] }),
+    mode === "slider" && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Shoppers drag two handles between the lightest and heaviest variant on the page (e.g. 500 g – 2 kg). Each product shows its variant in that span." }),
+    mode === "auto" && /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Lists every variant weight of the products on the page (e.g. 250 g, 500 g, 1 kg). Picking one shows each product's variant of that weight." }),
+    mode === "ranges" && /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+      ranges.map((r, i) => {
+        var _a;
+        const bad = r.max !== null && r.max !== "" && r.max !== void 0 && Number(r.max) <= Number(r.min || 0);
+        return (
+          // eslint-disable-next-line react/no-array-index-key -- ranges have no ids; rows only change at the end or by Remove
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(InlineStack, { gap: "150", blockAlign: "end", wrap: false, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 84 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "From (g)", type: "number", min: 0, value: String(r.min ?? 0), onChange: (v) => setRange(i, { min: grams(v) || 0 }), autoComplete: "off" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 84 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              TextField$1,
+              {
+                label: "To (g)",
+                type: "number",
+                min: 0,
+                placeholder: "and up",
+                value: r.max === null || r.max === void 0 ? "" : String(r.max),
+                onChange: (v) => setRange(i, { max: v === "" ? null : grams(v) }),
+                autoComplete: "off",
+                error: bad ? "Above From" : void 0
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1, minWidth: 0 }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              TextField$1,
+              {
+                label: "Shown as",
+                value: r.label || "",
+                maxLength: 40,
+                autoComplete: "off",
+                placeholder: ((_a = named.find((n) => n.min === Number(r.min || 0) && n.max === (r.max === "" || r.max === void 0 ? null : r.max))) == null ? void 0 : _a.label) || "",
+                onChange: (v) => setRange(i, { label: v })
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "plain", tone: "critical", onClick: () => setRanges(ranges.filter((_, j) => j !== i)), children: "Remove" })
+          ] }, i)
+        );
+      }),
+      ranges.length < WEIGHT_RANGE_MAX && /* @__PURE__ */ jsxRuntimeExports.jsx(InlineStack, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: () => setRanges([...ranges, { min: 0, max: null, label: "" }]), children: "Add a range" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "In grams (1 kg = 1000 g). From is included, To is not, so 500–1000 holds 500 g but not 1 kg. Empty To = and above. A range shows only when products on the page have a variant in it." })
+    ] })
+  ] });
+}
+function SizeField({ PxField: PxField2, config: config2, updateConfig, keyName, label, fallback, min = 6, max = 40 }) {
+  if (!PxField2) return null;
+  const v = config2[keyName];
+  const value = v === null || v === void 0 || v === "" ? fallback : Number(v);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label, value, min, max, onChange: (n) => updateConfig(keyName, n) });
+}
 function FiltersSectionComponent({ config: config2, updateConfig, expanded, onToggle, collections, PxField: PxField2 }) {
   const source = val$1(config2, "qs_chips_source");
   const toggleWithLabel = (key, labelKey, title, help) => /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "100", children: [
@@ -29706,6 +31175,16 @@ function FiltersSectionComponent({ config: config2, updateConfig, expanded, onTo
       }
     ),
     source === "collections" && val$1(config2, "qs_chip_style") === "images" && /* @__PURE__ */ jsxRuntimeExports.jsx(CollectionPictures, { config: config2, updateConfig, collections, PxField: PxField2 }),
+    source !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Chips alignment",
+        options: [{ label: "Left", value: "left" }, { label: "Centre", value: "center" }, { label: "Right", value: "right" }],
+        value: val$1(config2, "qs_chips_align"),
+        onChange: (v) => updateConfig("qs_chips_align", v),
+        helpText: "The chip row (and the picture bar). When there are more chips than fit, the row scrolls from the start."
+      }
+    ),
     source === "tags" && /* @__PURE__ */ jsxRuntimeExports.jsx(
       TextField$1,
       {
@@ -29721,6 +31200,8 @@ function FiltersSectionComponent({ config: config2, updateConfig, expanded, onTo
       /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“All” chip first", checked: isOn(config2, "qs_show_all_chip"), onChange: (v) => updateConfig("qs_show_all_chip", v) }),
       isOn(config2, "qs_show_all_chip") && /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "All chip label", labelHidden: true, value: val$1(config2, "qs_all_label"), onChange: (v) => updateConfig("qs_all_label", v), autoComplete: "off" })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Collection filters" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CollectionFilterGroups, { config: config2, updateConfig, collections }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Dropdown filters" }) }),
     toggleWithLabel("qs_filter_type", "qs_filter_type_label", "Product type", "Lists the Shopify product types on the page."),
     toggleWithLabel("qs_filter_brand", "qs_filter_brand_label", "Brand (vendor)", "Lists the vendors on the page."),
@@ -29736,9 +31217,36 @@ function FiltersSectionComponent({ config: config2, updateConfig, expanded, onTo
         autoComplete: "off"
       }
     ),
+    toggleWithLabel("qs_filter_weight", "qs_filter_weight_label", "Weight", "From your products' Shopify variant weights, e.g. 250 g, 500 g, 1 kg."),
+    isOn(config2, "qs_filter_weight") && /* @__PURE__ */ jsxRuntimeExports.jsx(WeightFilterOptions, { config: config2, updateConfig }),
+    toggleWithLabel("qs_filter_price", "qs_filter_price_label", "Price slider", "Shoppers drag from – to between the cheapest and dearest product on the page."),
     toggleWithLabel("qs_filter_sort", "qs_filter_sort_label", "Sort", "Price, biggest discount, name."),
     toggleWithLabel("qs_filter_instock", "qs_filter_instock_label", "“In stock” chip", "Hides sold-out products when on."),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "A dropdown only shows when the products on the page have at least two values for it." })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "A dropdown only shows when the products on the page have at least two values for it." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Filter look" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Where filters show on desktop",
+        options: [{ label: "Above the products", value: "top" }, { label: "In a column on the left", value: "left" }],
+        value: val$1(config2, "qs_filter_position"),
+        onChange: (v) => updateConfig("qs_filter_position", v),
+        helpText: "Phones always show them above the products."
+      }
+    ),
+    (isOn(config2, "qs_filter_price") || isOn(config2, "qs_filter_weight") && val$1(config2, "qs_filter_weight_mode") === "slider") && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Sliders shown as",
+        options: [{ label: "Their own row", value: "row" }, { label: "A dropdown with the slider inside", value: "dropdown" }],
+        value: val$1(config2, "qs_slider_look"),
+        onChange: (v) => updateConfig("qs_slider_look", v)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_filter_font_size", label: "Filter text size", fallback: 15, max: 24 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_filter_font_size_m", label: "On phones", fallback: 14, max: 24 })
+    ] })
   ] }) });
 }
 const cardThumb = (children) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 34, height: 30, border: "1px solid #d1d5db", borderRadius: 5, position: "relative", background: "#fff", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 2, boxSizing: "border-box" }, children });
@@ -29759,9 +31267,20 @@ function CardsSectionComponent({ config: config2, updateConfig, expanded, onTogg
       Select,
       {
         label: "Image shape",
-        options: [{ label: "Square", value: "square" }, { label: "Portrait (4:5)", value: "portrait" }, { label: "Landscape (4:3)", value: "landscape" }],
+        options: [{ label: "Square", value: "square" }, { label: "Portrait (4:5)", value: "portrait" }, { label: "Tall (2:3)", value: "tall" }, { label: "Landscape (4:3)", value: "landscape" }],
         value: val$1(config2, "qs_image_ratio"),
-        onChange: (v) => updateConfig("qs_image_ratio", v)
+        onChange: (v) => updateConfig("qs_image_ratio", v),
+        helpText: "Pick the shape of your product photos so they fill the card. Most clothing photos are Tall (2:3)."
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Select,
+      {
+        label: "Picture fit",
+        options: [{ label: "Show the whole picture", value: "contain" }, { label: "Fill the frame (trims the edges)", value: "cover" }],
+        value: val$1(config2, "qs_image_fit"),
+        onChange: (v) => updateConfig("qs_image_fit", v),
+        helpText: "Whole picture leaves empty bands when the photo's shape differs from the card's."
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -29776,7 +31295,26 @@ function CardsSectionComponent({ config: config2, updateConfig, expanded, onTogg
         maxLength: 40
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Checkbox,
+      {
+        label: "Open a product popup on tap",
+        helpText: "Tapping a card's picture or name shows the product's pictures with thumbnails, full description, options and Add.",
+        checked: isOn(config2, "qs_product_popup"),
+        onChange: (v) => updateConfig("qs_product_popup", v)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Checkbox,
+      {
+        label: "Hide decimals in prices",
+        helpText: "₹1708 instead of ₹1708.20 on cards, the popup, the bottom bar and offer messages. Display only: checkout charges the exact price.",
+        checked: isOn(config2, "qs_hide_decimals"),
+        onChange: (v) => updateConfig("qs_hide_decimals", v)
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Short description under the title", checked: isOn(config2, "qs_show_subtitle"), onChange: (v) => updateConfig("qs_show_subtitle", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Selling price", helpText: "Untick to hide the price on the cards (the product popup still shows it).", checked: isOn(config2, "qs_show_price"), onChange: (v) => updateConfig("qs_show_price", v) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "“% OFF” from the compare-at price", checked: isOn(config2, "qs_show_off"), onChange: (v) => updateConfig("qs_show_off", v) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Struck-through compare-at price", checked: isOn(config2, "qs_show_compare"), onChange: (v) => updateConfig("qs_show_compare", v) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Weight when a product has one variant", checked: isOn(config2, "qs_show_weight"), onChange: (v) => updateConfig("qs_show_weight", v) }),
@@ -29784,8 +31322,97 @@ function CardsSectionComponent({ config: config2, updateConfig, expanded, onTogg
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge for products tagged", value: val$1(config2, "qs_badge_tag"), onChange: (v) => updateConfig("qs_badge_tag", v), autoComplete: "off", helpText: "A Shopify tag. Empty = no badge." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Badge text", value: val$1(config2, "qs_badge_text"), onChange: (v) => updateConfig("qs_badge_text", v), autoComplete: "off" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_radius", label: "Card corners" })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TextField$1,
+        {
+          label: "Max of each product",
+          type: "number",
+          min: 1,
+          max: 99,
+          placeholder: "No limit",
+          autoComplete: "off",
+          value: config2.qs_max_per_product ? String(config2.qs_max_per_product) : "",
+          onChange: (v) => {
+            const n = Math.floor(Number(v));
+            updateConfig("qs_max_per_product", v === "" || !Number.isFinite(n) || n < 1 ? null : Math.min(n, 99));
+          },
+          helpText: "All its sizes / variants together. Empty = no limit."
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TextField$1,
+        {
+          label: "Products shown at first",
+          type: "number",
+          min: 12,
+          max: 200,
+          placeholder: "40",
+          autoComplete: "off",
+          value: config2.qs_page_size ? String(config2.qs_page_size) : "",
+          onChange: (v) => {
+            const n = Math.floor(Number(v));
+            updateConfig("qs_page_size", v === "" || !Number.isFinite(n) || n < 1 ? null : Math.min(n, 200));
+          },
+          helpText: "A “Show more” button adds the next lot. Filters always search every product."
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "“Show more” button text",
+        autoComplete: "off",
+        maxLength: 40,
+        value: config2.qs_more_text ?? val$1(config2, "qs_more_text"),
+        onChange: (v) => updateConfig("qs_more_text", v)
+      }
+    ),
+    Number(config2.qs_max_per_product) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      TextField$1,
+      {
+        label: "Message when a shopper reaches it",
+        autoComplete: "off",
+        maxLength: 120,
+        value: config2.qs_max_per_product_text ?? val$1(config2, "qs_max_per_product_text"),
+        onChange: (v) => updateConfig("qs_max_per_product_text", v),
+        helpText: "{{max}} = your number."
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_radius", label: "Card corners" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cst-section-divider", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Text sizes" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_title_size", label: "Title", fallback: 17 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_title_size_m", label: "Title on phones", fallback: 14 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_price_size", label: "Price", fallback: 19 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_price_size_m", label: "Price on phones", fallback: 16 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_text_size", label: "Other text", fallback: 14 }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SizeField, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_card_text_size_m", label: "Other text on phones", fallback: 13 })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Other text = the short description, option / weight and % OFF. The struck-through price follows the price size." })
   ] }) });
+}
+function LabelOptions({ config: config2, updateConfig, PxField: PxField2 }) {
+  const name = isOn(config2, "qs_top_show_name");
+  const amount = isOn(config2, "qs_top_show_amount");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(BlockStack, { gap: "200", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Offer name (e.g. 10% OFF)", checked: name, onChange: (v) => updateConfig("qs_top_show_name", v) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Amount needed (e.g. ₹999, 2 kg, 3 items)", checked: amount, onChange: (v) => updateConfig("qs_top_show_amount", v) }),
+    (name || amount) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+      name && /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_label_size", label: "Name text size", min: 6, max: 22 }),
+      name && PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        PxField2,
+        {
+          label: "Name text size on phones",
+          min: 6,
+          max: 22,
+          value: Number(config2.qs_top_label_size_m) || Number(val$1(config2, "qs_top_label_size")),
+          onChange: (v) => updateConfig("qs_top_label_size_m", v)
+        }
+      ),
+      amount && /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_sub_size", label: "Amount text size", min: 6, max: 20 })
+    ] })
+  ] });
 }
 function ProgressSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2 }) {
   var _a;
@@ -29795,10 +31422,21 @@ function ProgressSectionComponent({ config: config2, updateConfig, expanded, onT
     style !== "none" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Heading", value: val$1(config2, "qs_top_title"), onChange: (v) => updateConfig("qs_top_title", v), autoComplete: "off", helpText: "Empty = no heading. The message under it comes from Advanced → Offer." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Stays at the top while scrolling", checked: isOn(config2, "qs_top_sticky"), onChange: (v) => updateConfig("qs_top_sticky", v) }),
-      isOn(config2, "qs_top_sticky") && /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_offset", label: "Space below your theme's sticky header", max: 300 }),
+      isOn(config2, "qs_top_sticky") && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_offset", label: "Space from the top of the screen", max: 300 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "On your store it stays just below your theme's sticky header by itself (also when the header hides while scrolling). This is the least space it keeps; leave 0 unless something still covers it." })
+      ] }),
       style !== "text" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Tier names under the bar", checked: isOn(config2, "qs_top_show_labels"), onChange: (v) => updateConfig("qs_top_show_labels", v) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Text under the bar", checked: isOn(config2, "qs_top_show_labels"), onChange: (v) => updateConfig("qs_top_show_labels", v) }),
+        isOn(config2, "qs_top_show_labels") && /* @__PURE__ */ jsxRuntimeExports.jsx(LabelOptions, { config: config2, updateConfig, PxField: PxField2 }),
         style === "milestones" && /* @__PURE__ */ jsxRuntimeExports.jsx(TierIcons, { config: config2, updateConfig }),
+        style === "milestones" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_mile_icon_size", label: "Icon size", min: 12, max: 48 }),
+            PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Icon size on phones", value: Number(config2.qs_mile_icon_size_m) || Number(val$1(config2, "qs_mile_icon_size")), min: 12, max: 48, onChange: (v) => updateConfig("qs_mile_icon_size_m", v) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "The circle is 16px bigger than the icon. With many tiers on a small screen, circles shrink so they never overlap." })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_height", label: "Bar thickness", min: 2, max: 24 }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Px, { PxField: PxField2, config: config2, updateConfig, keyName: "qs_top_radius", label: "Bar corners", max: 999 })
@@ -29817,16 +31455,26 @@ function ProgressSectionComponent({ config: config2, updateConfig, expanded, onT
   ] }) });
 }
 function BarSectionComponent({ config: config2, updateConfig, expanded, onToggle, ColorPickerField: ColorPickerField2, PxField: PxField2, shiprocketEnabled = false }) {
-  var _a;
-  const style = val$1(config2, "qs_bar_style");
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Bottom bar", expanded, onToggle, badge: (_a = BAR_STYLES.find((s) => s.value === style)) == null ? void 0 : _a.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: BAR_STYLES, onChange: (v) => updateConfig("qs_bar_style", v) }),
+  var _a, _b;
+  const measure = fixedMeasureFor(config2.layout) || ((_a = config2.weight_pricing) == null ? void 0 : _a.measure) || "weight";
+  const styles2 = BAR_STYLES.filter((s) => !s.quantityOnly || measure === "quantity");
+  const style = val$1(config2, "qs_bar_style") === "slots" && measure !== "quantity" ? "full" : val$1(config2, "qs_bar_style");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Bottom bar", expanded, onToggle, badge: (_b = BAR_STYLES.find((s) => s.value === style)) == null ? void 0 : _b.label, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(StylePicker, { label: "Style", value: style, options: styles2, onChange: (v) => updateConfig("qs_bar_style", v) }),
+    style === "slots" && /* @__PURE__ */ jsxRuntimeExports.jsxs(Text, { as: "p", variant: "bodySm", tone: "subdued", children: [
+      'One box per item the next offer needs: added items show their picture (tap to take one out), the rest a +. Shown before anything is added. The message on top is the one under Advanced → Offer (e.g. "Select ',
+      "{{remaining}}",
+      " more to get ",
+      "{{tier}}",
+      '").'
+    ] }),
     style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Unlock message", checked: isOn(config2, "qs_bar_show_message"), onChange: (v) => updateConfig("qs_bar_show_message", v) }),
-      style !== "ring" && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Item pictures", checked: isOn(config2, "qs_bar_show_thumbs"), onChange: (v) => updateConfig("qs_bar_show_thumbs", v) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Savings line", checked: isOn(config2, "qs_bar_show_saved"), onChange: (v) => updateConfig("qs_bar_show_saved", v), helpText: "Compare-at savings plus the box discount (only while the box discount is live)." })
+      style !== "ring" && style !== "slots" && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Item pictures", checked: isOn(config2, "qs_bar_show_thumbs"), onChange: (v) => updateConfig("qs_bar_show_thumbs", v) }),
+      style !== "slots" && /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Savings line", checked: isOn(config2, "qs_bar_show_saved"), onChange: (v) => updateConfig("qs_bar_show_saved", v), helpText: "Compare-at savings plus the box discount (only while the box discount is live)." })
     ] }),
-    isOn(config2, "qs_bar_show_saved") && style !== "compact" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Checkbox, { label: "Prices in the box list", helpText: "The list that opens from the bottom bar, one line per product in the box. Untick to show only names, sizes and quantities.", checked: isOn(config2, "qs_sheet_show_price"), onChange: (v) => updateConfig("qs_sheet_show_price", v) }),
+    isOn(config2, "qs_bar_show_saved") && style !== "compact" && style !== "slots" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-grid-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, more tiers to go", value: val$1(config2, "qs_saved_text"), onChange: (v) => updateConfig("qs_saved_text", v), autoComplete: "off", helpText: "{{saved}} = amount saved" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(TextField$1, { label: "Savings, all unlocked", value: val$1(config2, "qs_saved_done_text"), onChange: (v) => updateConfig("qs_saved_done_text", v), autoComplete: "off" })
     ] }),
@@ -29902,6 +31550,7 @@ function ColorsSectionComponent({ config: config2, updateConfig, expanded, onTog
     }
   ) }) });
 }
+const QuickShopProductsSection = reactExports.memo(ProductsSectionComponent$1);
 const QuickShopFiltersSection = reactExports.memo(FiltersSectionComponent);
 const QuickShopCardsSection = reactExports.memo(CardsSectionComponent);
 const QuickShopProgressSection = reactExports.memo(ProgressSectionComponent);
@@ -30311,6 +31960,15 @@ function ProductsSectionComponent({
   ] }) });
 }
 const ProductsSection = reactExports.memo(ProductsSectionComponent);
+function comboAlign(config2, prefix, isMobile) {
+  const c = config2 || {};
+  const valid = (v) => v === "left" || v === "center" || v === "right";
+  const desktop = valid(c[`${prefix}_align`]) ? c[`${prefix}_align`] : "left";
+  if (!isMobile) return desktop;
+  const phone = c[`${prefix}_align_mobile`];
+  if (valid(phone) && (c[`${prefix}_align_mobile_set`] === true || phone !== "left")) return phone;
+  return desktop;
+}
 const HEADING_FONT_OPTIONS = [
   { label: "Theme Font", value: "inherit" },
   { label: "Inter", value: "Inter" },
@@ -30330,6 +31988,12 @@ function ContentSectionComponent({
   PxField: PxField2,
   ColorPickerField: ColorPickerField2
 }) {
+  const phoneView = getStyleKey("heading_align") !== "heading_align";
+  const alignShown = (prefix) => comboAlign(config2, prefix, phoneView);
+  const setAlign = (prefix, value) => {
+    updateConfig(getStyleKey(`${prefix}_align`), value);
+    if (phoneView) updateConfig(`${prefix}_align_mobile_set`, true);
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsx(SectionCard, { title: "Title & Description", expanded, onToggle, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(FormLayout, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       Checkbox,
@@ -30350,15 +32014,15 @@ function ContentSectionComponent({
           { value: "center", icon: SvgTextAlignCenterIcon, label: "Center" },
           { value: "right", icon: SvgTextAlignRightIcon, label: "Right" }
         ].map(({ value, icon: Ico, label }) => {
-          const active = (config2[getStyleKey("heading_align")] || config2.heading_align || "left") === value;
+          const active = alignShown("heading") === value;
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
               title: label,
               onClick: () => {
-                updateConfig(getStyleKey("heading_align"), value);
-                updateConfig(getStyleKey("description_align"), value);
+                setAlign("heading", value);
+                setAlign("description", value);
                 updateConfig("tab_alignment", value);
               },
               style: {
@@ -30405,7 +32069,7 @@ function ContentSectionComponent({
       ) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cst-section-divider", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Text, { variant: "headingSm", as: "h6", children: "Title Styling" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Alignment", options: [{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }], value: config2[getStyleKey("heading_align")] || "left", onChange: (v) => updateConfig(getStyleKey("heading_align"), v) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Alignment", options: [{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }], value: alignShown("heading"), onChange: (v) => setAlign("heading", v) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Font Family", options: HEADING_FONT_OPTIONS, value: config2.heading_font_family || "inherit", onChange: (v) => updateConfig("heading_font_family", v) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Font Weight", options: [{ label: "Light (300)", value: "300" }, { label: "Normal (400)", value: "400" }, { label: "Medium (500)", value: "500" }, { label: "Semi-Bold (600)", value: "600" }, { label: "Bold (700)", value: "700" }, { label: "Extra Bold (800)", value: "800" }], value: String(config2[getStyleKey("heading_font_weight")] || config2.heading_font_weight || "700"), onChange: (v) => updateConfig(getStyleKey("heading_font_weight"), v) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Text Transform", options: [{ label: "None", value: "none" }, { label: "Uppercase", value: "uppercase" }, { label: "Lowercase", value: "lowercase" }, { label: "Capitalize", value: "capitalize" }], value: config2.heading_text_transform || "none", onChange: (v) => updateConfig("heading_text_transform", v) }),
@@ -30467,7 +32131,7 @@ function ContentSectionComponent({
             ) })
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Alignment", options: [{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }], value: config2[getStyleKey("description_align")] || "left", onChange: (v) => updateConfig(getStyleKey("description_align"), v) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Alignment", options: [{ label: "Left", value: "left" }, { label: "Center", value: "center" }, { label: "Right", value: "right" }], value: alignShown("description"), onChange: (v) => setAlign("description", v) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Select, { label: "Font Weight", options: [{ label: "Normal (400)", value: "400" }, { label: "Medium (500)", value: "500" }, { label: "Semi-Bold (600)", value: "600" }], value: String(config2[getStyleKey("description_font_weight")] || config2.description_font_weight || "400"), onChange: (v) => updateConfig(getStyleKey("description_font_weight"), v) }),
         PxField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(PxField2, { label: "Size", value: config2[getStyleKey("description_size")] ?? config2.description_size, onChange: (v) => updateConfig(getStyleKey("description_size"), v) }),
         ColorPickerField2 && /* @__PURE__ */ jsxRuntimeExports.jsx(ColorPickerField2, { label: "Color", value: config2[getStyleKey("description_color")] || config2.description_color, onChange: (v) => updateConfig(getStyleKey("description_color"), v) })
@@ -30742,7 +32406,7 @@ function BehaviorSectionComponent({
   ] });
 }
 const BehaviorSection = reactExports.memo(BehaviorSectionComponent);
-const PLAN_KEYS = ["free", "starter", "growth", "pro"];
+const PLAN_KEYS = ["free", "lite", "starter", "growth", "pro"];
 const PLANS = {
   free: {
     key: "free",
@@ -30750,40 +32414,54 @@ const PLANS = {
     tagline: "Launch & learn",
     price: { monthly: 0, annual: 0 },
     rank: 0,
-    // Free has no order cap — unlimited orders, same as Pro (see
-    // plan_order_cap_exceeded in php_backend/plan_helpers.php, which
-    // already treats a null orderCap as never-exceeded).
-    orderCap: null,
+    ordersUpTo: 50,
+    orderCap: 50,
     overageRate: 0,
     aiBrixCredits: 10,
-    aiBrixOverageRate: 0.1,
-    comboTemplateLimit: 0,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
     watermarkRemovable: false
+  },
+  lite: {
+    key: "lite",
+    label: "Lite",
+    tagline: "Your first sales",
+    price: { monthly: 9, annual: 90 },
+    rank: 1,
+    ordersUpTo: 200,
+    orderCap: 200,
+    overageRate: 0,
+    aiBrixCredits: 20,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
+    watermarkRemovable: true
   },
   starter: {
     key: "starter",
     label: "Starter",
     tagline: "Grow your AOV",
     price: { monthly: 29, annual: 290 },
-    rank: 1,
+    rank: 2,
+    ordersUpTo: 500,
     orderCap: 500,
-    overageRate: 0.03,
+    overageRate: 0,
     aiBrixCredits: 30,
-    aiBrixOverageRate: 0.03,
-    comboTemplateLimit: 3,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
     watermarkRemovable: true
   },
   growth: {
     key: "growth",
     label: "Growth",
-    tagline: "Weight & value boxes",
+    tagline: "Scaling stores",
     price: { monthly: 59, annual: 590 },
-    rank: 2,
-    orderCap: 2e3,
-    overageRate: 0.02,
+    rank: 3,
+    ordersUpTo: 1e3,
+    orderCap: 1e3,
+    overageRate: 0,
     aiBrixCredits: 60,
-    aiBrixOverageRate: 0.02,
-    comboTemplateLimit: 10,
+    aiBrixOverageRate: 0,
+    comboTemplateLimit: null,
     watermarkRemovable: true
   },
   pro: {
@@ -30791,44 +32469,46 @@ const PLANS = {
     label: "Pro",
     tagline: "High-volume brands",
     price: { monthly: 79, annual: 790 },
-    rank: 3,
-    orderCap: null,
+    rank: 4,
+    ordersUpTo: 2e3,
+    orderCap: 2e3,
     overageRate: 0,
     aiBrixCredits: 90,
-    aiBrixOverageRate: 0.01,
+    aiBrixOverageRate: 0,
     comboTemplateLimit: null,
     watermarkRemovable: true
   }
 };
+const EVERY_PLAN = Object.freeze(Object.fromEntries(PLAN_KEYS.map((key) => [key, "enabled"])));
 const FEATURES = {
-  cart_drawer: { label: "Cart Drawer", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  announcement_bar: { label: "Announcement Bar", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  empty_cart_customization: { label: "Empty Cart Customization", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  ai_brix: { label: "AI BRIX", states: { free: "enabled", starter: "enabled", growth: "enabled", pro: "enabled" } },
+  cart_drawer: { label: "Cart Drawer", states: EVERY_PLAN },
+  announcement_bar: { label: "Announcement Bar", states: EVERY_PLAN },
+  empty_cart_customization: { label: "Empty Cart Customization", states: EVERY_PLAN },
+  ai_brix: { label: "AI BRIX", states: EVERY_PLAN },
   // credit-limited, see aiBrixCredits; pay-as-you-go past the cap, see aiBrixOverageRate
-  fbt: { label: "Frequently Bought Together", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  packs: { label: "Packs", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  cod_checkout: { label: "COD Checkout", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  coupon_lock_pro: { label: "Coupon Banner", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  progress_bar: { label: "Progress Bar", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  ai_cart_upsell: { label: "AI Cart Upsell", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  full_analytics: { label: "Full Analytics", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  confetti: { label: "Confetti", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  mobile_swipe_checkout: { label: "Mobile Swipe Checkout", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  build_a_combo: { label: "Build a Combo", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  // count-limited, see comboTemplateLimit
-  open_countdown: { label: "Open Countdown", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  custom_css: { label: "Custom CSS", states: { free: "preview", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  priority_email_support: { label: "Priority Email Support", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  ai_support_247: { label: "24/7 AI Support", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  ai_analytics: { label: "AI Analytics", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
-  advanced_ai_analytics: { label: "Advanced AI Analytics", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
-  unlimited_ai_agents: { label: "Unlimited AI Agents", states: { free: "locked", starter: "locked", growth: "locked", pro: "enabled" } },
+  fbt: { label: "Frequently Bought Together", states: EVERY_PLAN },
+  packs: { label: "Packs", states: EVERY_PLAN },
+  cod_checkout: { label: "COD Checkout", states: EVERY_PLAN },
+  coupon_lock_pro: { label: "Coupon Banner", states: EVERY_PLAN },
+  progress_bar: { label: "Progress Bar", states: EVERY_PLAN },
+  ai_cart_upsell: { label: "AI Cart Upsell", states: EVERY_PLAN },
+  full_analytics: { label: "Full Analytics", states: EVERY_PLAN },
+  confetti: { label: "Confetti", states: EVERY_PLAN },
+  mobile_swipe_checkout: { label: "Mobile Swipe Checkout", states: EVERY_PLAN },
+  build_a_combo: { label: "Build a Combo", states: EVERY_PLAN },
+  // count-limited, see comboTemplateLimit (null = unlimited)
+  open_countdown: { label: "Open Countdown", states: EVERY_PLAN },
+  custom_css: { label: "Custom CSS", states: EVERY_PLAN },
+  priority_email_support: { label: "Priority Email Support", states: EVERY_PLAN },
+  ai_support_247: { label: "24/7 AI Support", states: EVERY_PLAN },
+  ai_analytics: { label: "AI Analytics", states: EVERY_PLAN },
+  advanced_ai_analytics: { label: "Advanced AI Analytics", states: EVERY_PLAN },
+  unlimited_ai_agents: { label: "Unlimited AI Agents", states: EVERY_PLAN },
   // The three box combo templates (Build a Combo picker), see boxPricingFeature in combo-weight.shared.js.
-  combo_quantity_pricing: { label: "Quantity Box combos", states: { free: "locked", starter: "enabled", growth: "enabled", pro: "enabled" } },
-  combo_weight_pricing: { label: "Weight Box combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } },
-  combo_value_pricing: { label: "Value Box combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } },
-  combo_tier_pricing: { label: "Tiered pricing on older Classic combos", states: { free: "locked", starter: "locked", growth: "enabled", pro: "enabled" } }
+  combo_quantity_pricing: { label: "Quantity Box combos", states: EVERY_PLAN },
+  combo_weight_pricing: { label: "Weight Box combos", states: EVERY_PLAN },
+  combo_value_pricing: { label: "Value Box combos", states: EVERY_PLAN },
+  combo_tier_pricing: { label: "Tiered pricing on older Classic combos", states: EVERY_PLAN }
   // Guided / Velocity / Editorial combos made before the box templates
 };
 function getFeatureState(planKey, featureKey) {
@@ -31000,7 +32680,8 @@ const MEASURE_WORDS = { quantity: "the number of items in the box", weight: "the
 const TYPE_OPTIONS = [
   { label: "Percentage off", value: "percentage" },
   { label: "Amount off", value: "fixed_amount" },
-  { label: "Box price", value: "fixed_price" }
+  { label: "Box price", value: "fixed_price" },
+  { label: "Price per kg", value: "unit_price" }
 ];
 const MEASURE_CHOICES = [
   { label: "Weight", value: "weight", helpText: "e.g. 1 kg → 10% off. Uses each variant's Shopify weight." },
@@ -31074,9 +32755,10 @@ function WeightField({ label, grams, unit, onCommit, error, helpText, placeholde
     }
   );
 }
-function offerText(tier, symbol) {
+function offerText(tier, symbol, measure) {
   if (tier.type === "percentage") return `${tier.value}% off`;
   if (tier.type === "fixed_amount") return `${symbol}${tier.value} off`;
+  if (tier.type === "unit_price") return `${symbol}${tier.value}${measure === "quantity" ? " per item" : " per kg"}`;
   return `box for ${symbol}${tier.value}`;
 }
 function statusTone(status) {
@@ -31181,7 +32863,7 @@ function OfferSectionComponent({
     });
   };
   const audit = auditFetcher.data;
-  const summary = value.tiers.length && !errors.length ? value.tiers.map((t) => `${shownAmount(t.min_grams)}+: ${offerText(t, symbol)}`).join(" · ") + (value.max_grams != null ? ` (max ${shownAmount(value.max_grams)})` : "") : null;
+  const summary = value.tiers.length && !errors.length ? value.tiers.map((t) => `${shownAmount(t.min_grams)}+: ${offerText(t, symbol, measure)}`).join(" · ") + (value.max_grams != null ? ` (max ${shownAmount(value.max_grams)})` : "") : null;
   const unsaved = isWeight && savedWeightHash && savedWeightHash !== value.hash;
   const couponOptions = (localActiveDiscounts || []).map((d) => ({
     label: `${d.title || d.code || "Untitled"} (${d.code || ""})`,
@@ -31371,7 +33053,7 @@ function OfferSectionComponent({
             Select,
             {
               label: "Shopper gets",
-              options: byValue ? TYPE_OPTIONS.filter((o) => o.value !== "fixed_price") : TYPE_OPTIONS,
+              options: byValue ? TYPE_OPTIONS.filter((o) => o.value !== "fixed_price" && o.value !== "unit_price") : TYPE_OPTIONS.map((o) => o.value === "unit_price" && measure === "quantity" ? { ...o, label: "Price per item" } : o),
               value: tier.type || "percentage",
               onChange: (v) => setTier(index, { type: v }),
               error: errorFor(`tiers.${index}.type`)
@@ -31381,7 +33063,8 @@ function OfferSectionComponent({
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           TextField$1,
           {
-            label: tier.type === "percentage" ? "Percentage off" : tier.type === "fixed_amount" ? "Amount off the box" : "Price of the whole box",
+            label: tier.type === "percentage" ? "Percentage off" : tier.type === "fixed_amount" ? "Amount off the box" : tier.type === "unit_price" ? measure === "quantity" ? "Price per item" : "Price per kg" : "Price of the whole box",
+            helpText: tier.type === "unit_price" ? measure === "quantity" ? "The box costs this × the number of items." : "The box costs this × its exact weight, e.g. 1.5 kg = 1.5 × this." : void 0,
             type: "number",
             autoComplete: "off",
             value: tier.value === "" || tier.value == null ? "" : String(tier.value),
@@ -31398,7 +33081,7 @@ function OfferSectionComponent({
             autoComplete: "off",
             maxLength: LIMITS.label,
             value: tier.label || "",
-            placeholder: qsDesign ? tier.type === "percentage" ? `${tier.value}% OFF` : tier.type === "fixed_amount" ? `${symbol}${tier.value} OFF` : `Box at ${symbol}${tier.value}` : tierLabel({ ...tier, label: "" }, unit, measure),
+            placeholder: qsDesign ? tier.type === "percentage" ? `${tier.value}% OFF` : tier.type === "fixed_amount" ? `${symbol}${tier.value} OFF` : tier.type === "unit_price" ? `${symbol}${tier.value}${measure === "quantity" ? " EACH" : "/KG"}` : `Box at ${symbol}${tier.value}` : tierLabel({ ...tier, label: "" }, unit, measure),
             helpText: qsDesign ? "e.g. FREE DELIVERY. Shoppers see it in the progress bars." : void 0,
             onChange: (v) => setTier(index, { label: v })
           }
@@ -31968,6 +33651,7 @@ function BuilderSidebarComponent({
                 ColorPickerField: ColorPickerField2
               }
             ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopProductsSection, { config: config2, updateConfig, expanded: expandedSections.qsProducts, onToggle: () => toggleSection("qsProducts") }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopFiltersSection, { config: config2, updateConfig, expanded: expandedSections.qsFilters, onToggle: () => toggleSection("qsFilters"), collections, PxField: PxField2 }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(QuickShopCardsSection, { config: config2, updateConfig, expanded: expandedSections.qsCards, onToggle: () => toggleSection("qsCards"), PxField: PxField2 })
           ] }),
@@ -32731,7 +34415,7 @@ function BrixSwatch({ hex, children }) {
 }
 const LazyMarkdown = reactExports.lazy(async () => {
   const [{ default: ReactMarkdown }, { default: remarkGfm }] = await Promise.all([
-    __vitePreload(() => import("./index-BCogkTGI.js"), true ? __vite__mapDeps([0,1]) : void 0),
+    __vitePreload(() => import("./index-DQ-S4hZr.js"), true ? __vite__mapDeps([0,1]) : void 0),
     __vitePreload(() => import("./index-DjYGdUn3.js"), true ? __vite__mapDeps([2,1]) : void 0)
   ]);
   return {
@@ -34768,6 +36452,12 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
   const [pending, setPending] = reactExports.useState({});
   const [ui, setUi] = reactExports.useState({ chip: "all", dd: {}, instock: false, menu: null, sheetOpen: false });
   const lastTier = reactExports.useRef(null);
+  const frame = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    var _a, _b;
+    if (!ui.popup) return;
+    (_b = (_a = frame.current) == null ? void 0 : _a.querySelector(".bxq-pop-box")) == null ? void 0 : _b.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [ui.popup]);
   const isMobile = device === "mobile";
   const handles = reactExports.useMemo(() => {
     const out = [];
@@ -34777,24 +36467,63 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     }
     return out;
   }, [config2]);
+  const extraIds = reactExports.useMemo(() => normalizeWeightPricing(config2.weight_pricing).value.qualify.extra_product_ids || [], [config2.weight_pricing]);
+  const [extraProducts, setExtraProducts] = reactExports.useState([]);
+  reactExports.useEffect(() => {
+    if (!extraIds.length) {
+      setExtraProducts([]);
+      return void 0;
+    }
+    let live = true;
+    fetch(`/api/products?ids=${encodeURIComponent(extraIds.join(","))}`).then((res) => res.ok ? res.json() : []).then((list) => {
+      if (live && Array.isArray(list)) setExtraProducts(list);
+    }).catch(() => {
+    });
+    return () => {
+      live = false;
+    };
+  }, [extraIds]);
   const productsByHandle = reactExports.useMemo(() => {
     const map = {};
     handles.forEach((h) => {
       const fetched = allStepProducts[h];
       map[h] = fetched && fetched.length ? fetched : (products || []).filter((p) => (p.collections || []).some((c) => c.handle === h));
     });
+    if (extraProducts.length) map[kit.EXTRA_HANDLE] = extraProducts;
     return map;
-  }, [handles, allStepProducts, products]);
+  }, [handles, allStepProducts, products, extraProducts]);
   const hasProducts = handles.some((h) => {
     var _a;
     return (_a = productsByHandle[h]) == null ? void 0 : _a.length;
-  });
+  }) || extraProducts.length > 0;
   const fallbackProducts = hasProducts ? null : SAMPLE_PRODUCTS;
   const collectionNames = reactExports.useMemo(() => Object.fromEntries((collections || []).map((c) => [c.handle, c.title])), [collections]);
   const collectionImages = reactExports.useMemo(() => Object.fromEntries((collections || []).filter((c) => c.image).map((c) => [c.handle, c.image])), [collections]);
+  const [collectionMembers, setCollectionMembers] = reactExports.useState({});
+  const membersKey = reactExports.useMemo(() => {
+    const filterHandles = kit.memberHandles(config2);
+    const ids = [...new Set(Object.values(productsByHandle).flat().map((p) => String(p.id)))].filter((id) => id.startsWith("gid://shopify/Product/"));
+    return filterHandles.length && ids.length ? JSON.stringify({ handles: filterHandles, productIds: ids }) : "";
+  }, [config2, productsByHandle]);
+  reactExports.useEffect(() => {
+    if (!membersKey) return void 0;
+    let live = true;
+    const timer = setTimeout(() => {
+      fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: membersKey }).then((res) => res.ok ? res.json() : null).then((data) => {
+        if (live && (data == null ? void 0 : data.members)) setCollectionMembers(data.members);
+      }).catch(() => {
+      });
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [membersKey]);
   const pricing = reactExports.useMemo(() => {
     const { value } = normalizeWeightPricing(config2.weight_pricing);
-    const qualifies = (productId) => value.qualify.mode !== "selected" || value.qualify.product_ids.includes(productId) || value.qualify.collection_ids.length > 0;
+    const extra = value.qualify.extra_product_ids || [];
+    const noOffer = value.qualify.exclude_product_ids || [];
+    const qualifies = (productId) => !noOffer.includes(productId) && (value.qualify.mode !== "selected" || value.qualify.product_ids.includes(productId) || extra.includes(productId) || value.qualify.collection_ids.length > 0);
     return {
       view: { measure: value.measure || "weight", unit: value.unit, tiers: value.tiers, maxGrams: value.max_grams, messages: value.messages, enabled: true },
       qualifies
@@ -34807,6 +36536,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     handles,
     collectionNames,
     collectionImages,
+    collectionMembers,
     fallbackProducts,
     selection: sel,
     pending,
@@ -34816,7 +36546,7 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     symbol,
     decimals,
     isMobile
-  }), [config2, productsByHandle, handles, collectionNames, collectionImages, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
+  }), [config2, productsByHandle, handles, collectionNames, collectionImages, collectionMembers, fallbackProducts, pending, ui, pricing, symbol, decimals, isMobile]);
   const model = buildFor(selection);
   const codShown = !!codEnabled && config2.show_cod_button !== false;
   model.cod = {
@@ -34839,11 +36569,16 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     return map;
   }, [productsByHandle, fallbackProducts]);
   const setQty = (variantId, productId, qty) => {
-    var _a;
+    var _a, _b;
     const next = { ...selection };
     if (qty <= 0) delete next[variantId];
     else next[variantId] = { productId, qty };
-    if (qty > (((_a = selection[variantId]) == null ? void 0 : _a.qty) || 0) && buildFor(next).box.overMax) {
+    const limitMsg = qty > (((_a = selection[variantId]) == null ? void 0 : _a.qty) || 0) ? kit.productLimitMessage(config2, selection, next) : "";
+    if (limitMsg) {
+      shopify2.toast.show(limitMsg, { isError: true });
+      return;
+    }
+    if (qty > (((_b = selection[variantId]) == null ? void 0 : _b.qty) || 0) && buildFor(next).box.overMax) {
       const view = pricing.view;
       shopify2.toast.show(core.fillMessage(view.messages.over_max, {
         max: view.measure === "quantity" ? core.formatItems(view.maxGrams) : core.formatWeight(view.maxGrams, view.unit)
@@ -34871,13 +36606,16 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
     }
     const action = el.getAttribute("data-combo-action");
     const nextUi = { ...ui, dd: { ...ui.dd || {} } };
+    if (action === "qs-view") onRequestSection("qsCards");
     if (kit.applyUiAction(nextUi, action, el)) {
       setUi(nextUi);
       return;
     }
     const product2 = productById.get(String(el.getAttribute("data-product-id")));
     if ((action === "qty-inc" || action === "qty-dec") && product2) {
-      const vid = activeVariantId(product2);
+      if (el.hasAttribute("data-close-popup")) setUi({ ...ui, popup: null, popupImage: 0 });
+      const vid = el.getAttribute("data-variant-id") || activeVariantId(product2);
+      if (String(pending[product2.id] || "") !== String(vid)) setPending({ ...pending, [product2.id]: vid });
       setQty(vid, product2.id, (((_a = selection[vid]) == null ? void 0 : _a.qty) || 0) + (action === "qty-inc" ? 1 : -1));
       return;
     }
@@ -34892,16 +36630,76 @@ function QuickShopPreview({ config: config2, device, products = [], collections 
       setUi({ ...ui, sheetOpen: false });
       return;
     }
+    if (action === "checkout-locked") {
+      shopify2.toast.show(el.getAttribute("data-value") || "Add more items to check out.");
+      return;
+    }
     if (action === "checkout" || action === "cod") shopify2.toast.show("Checkout works on your live combo page.");
   };
   const onChange = (e) => {
     const el = e.target.closest('[data-combo-action="variant-select"]');
     if (el) setPending((prev) => ({ ...prev, [el.getAttribute("data-product-id")]: el.value }));
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { background: "#eef1f5", padding: isMobile ? 0 : 12, minHeight: "100%" }, children: [
+  const pageRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const node = pageRef.current;
+    kit.placeMenus(node);
+    if (!ui.menu || !node) return void 0;
+    let queued = false;
+    const onMove = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        kit.placeMenus(node);
+      });
+    };
+    window.addEventListener("scroll", onMove, { passive: true, capture: true });
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, { capture: true });
+      window.removeEventListener("resize", onMove);
+    };
+  });
+  reactExports.useEffect(() => {
+    const node = pageRef.current;
+    if (!node) return void 0;
+    const isRange = (e) => {
+      var _a, _b;
+      return (_b = (_a = e.target) == null ? void 0 : _a.getAttribute) == null ? void 0 : _b.call(_a, "data-combo-range");
+    };
+    const onInput = (e) => {
+      if (isRange(e)) kit.rangeInput(e.target);
+    };
+    const onRangeChange = (e) => {
+      if (!isRange(e)) return;
+      const picked = { dd: {} };
+      if (!kit.applyRange(picked, e.target)) return;
+      setUi((prev) => ({ ...prev, dd: { ...prev.dd || {}, ...picked.dd } }));
+    };
+    node.addEventListener("input", onInput);
+    node.addEventListener("change", onRangeChange);
+    return () => {
+      node.removeEventListener("input", onInput);
+      node.removeEventListener("change", onRangeChange);
+    };
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: frame, style: { background: "#eef1f5", padding: isMobile ? 0 : 12, minHeight: "100%", transform: "translateZ(0)" }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("style", { children: QUICK_SHOP_CSS }),
     !hasProducts && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { background: "#fff7ed", color: "#9a3412", fontSize: 13, padding: "8px 12px", borderRadius: 8, margin: isMobile ? 8 : "0 0 10px" }, children: "Sample products. Choose collections under Layout → Box Collections to see yours." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "presentation", onClick, onChange, dangerouslySetInnerHTML: { __html: html } })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: pageRef, role: "presentation", onClick, onChange, dangerouslySetInnerHTML: { __html: html } })
+  ] });
+}
+function AppSaveBar({ id, open, onSave, onDiscard, saving = false }) {
+  const [hasAppBridge, setHasAppBridge] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    var _a;
+    setHasAppBridge(typeof window !== "undefined" && Boolean((_a = window.shopify) == null ? void 0 : _a.saveBar));
+  }, []);
+  if (!hasAppBridge) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(SaveBar, { id, open: Boolean(open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { variant: "primary", onClick: onSave, loading: saving ? "" : void 0, disabled: saving, children: "Save" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: onDiscard, disabled: saving, children: "Discard" })
   ] });
 }
 function IconCheck() {
@@ -34928,14 +36726,19 @@ function PxField({
   step = 1,
   suffix = "px"
 }) {
+  const [draft, setDraft] = reactExports.useState(null);
   const handle = (v) => {
+    setDraft(v);
     const num = Number(v);
-    if (Number.isNaN(num)) {
-      onChange(0);
-      return;
-    }
+    if (v !== "" && !Number.isNaN(num) && num >= min && num <= max) onChange(num);
+  };
+  const commit = () => {
+    if (draft === null) return;
+    const num = Number(draft);
+    setDraft(null);
+    if (draft === "" || Number.isNaN(num)) return;
     const clamped = Math.max(min, Math.min(max, num));
-    onChange(clamped);
+    if (clamped !== value) onChange(clamped);
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "compact-field", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -34954,8 +36757,9 @@ function PxField({
       TextField$1,
       {
         type: "number",
-        value: String(value ?? 0),
+        value: draft !== null ? draft : String(value ?? 0),
         onChange: handle,
+        onBlur: commit,
         suffix,
         autoComplete: "off",
         inputMode: "numeric",
@@ -35466,8 +37270,9 @@ const DEFAULT_COMBO_CONFIG = {
   // Responsive Typography Overrides
   heading_size_mobile: 22,
   description_size_mobile: 13,
-  heading_align_mobile: "left",
-  description_align_mobile: "left",
+  heading_align_mobile: "",
+  // '' = same as desktop (comboAlign)
+  description_align_mobile: "",
   product_title_size_desktop: 16,
   product_title_size_mobile: 14,
   product_price_size_desktop: 16,
@@ -35678,6 +37483,10 @@ const TEMPLATE_CATALOGUE = [
   }
 ];
 function Customize() {
+  const [resetKey, setResetKey] = reactExports.useState(0);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(CustomizeEditor, { onDiscard: () => setResetKey((k) => k + 1) }, resetKey);
+}
+function CustomizeEditor({ onDiscard }) {
   var _a;
   const shopify2 = useAppBridge();
   const { symbol: currencySymbol } = useCurrency();
@@ -36915,7 +38724,7 @@ function Customize() {
                   tpl.featureKey && (() => {
                     const plan = PLANS[getMinPlanForFeature(tpl.featureKey)];
                     const open = canPublishFeature2(tpl.featureKey);
-                    return plan && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `tpl-pick-pro${open ? "" : " is-locked"}`, children: [
+                    return plan && plan.price.monthly > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `tpl-pick-pro${open ? "" : " is-locked"}`, children: [
                       open ? "" : "🔒 ",
                       plan.label,
                       " · $",
@@ -37146,6 +38955,10 @@ function Customize() {
             ] }) })
           }
         ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AppSaveBar, { id: "combo-builder-save-bar", open: saveStatus === "unsaved" && !saveModalOpen, onSave: handleSaveClick, onDiscard: () => {
+          setSaveStatus("saved");
+          onDiscard();
+        } }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           CartDrawerEmbedModal,
           {
@@ -38319,8 +40132,8 @@ function ComboPreview({
   const descriptionColor = isMobile ? config2.description_color_mobile || config2.description_color : config2.description_color;
   const headingFontWeight = isMobile ? config2.heading_font_weight_mobile || config2.heading_font_weight || 700 : config2.heading_font_weight || 700;
   const descriptionFontWeight = isMobile ? config2.description_font_weight_mobile || config2.description_font_weight || 400 : config2.description_font_weight || 400;
-  const headingAlign = isMobile ? config2.heading_align_mobile || config2.heading_align || "left" : config2.heading_align || "left";
-  const descriptionAlign = isMobile ? config2.description_align_mobile || config2.description_align || "left" : config2.description_align || "left";
+  const headingAlign = comboAlign(config2, "heading", isMobile);
+  const descriptionAlign = comboAlign(config2, "description", isMobile);
   const headingFontFamily = config2.heading_font_family && config2.heading_font_family !== "inherit" ? `'${config2.heading_font_family}', sans-serif` : "inherit";
   const headingLetterSpacing = `${config2.heading_letter_spacing ?? 0}px`;
   const headingLineHeight = config2.heading_line_height ?? 1.2;

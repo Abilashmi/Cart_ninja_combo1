@@ -12,6 +12,7 @@ import { getUnlockedRewards, getPreviewTotals } from '../utils/preview-cart';
 import { useCurrency } from './CurrencyContext';
 import { fillPriceTags } from '../utils/price-tags.shared';
 import { sanitizeContinueShopping, continueShoppingStyle } from '../utils/continue-shopping.shared.js';
+import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 import { footerExtras } from '../utils/cart-footer-extras.shared';
@@ -196,7 +197,8 @@ function CouponTimerDisplay({ coupon }) {
 // #cc-countdown-bar + startCountdownTicker(): a fixed bar below the
 // announcement, showing hours only once nonzero, ticking down every second.
 // 'loop' mode starts again from the full duration each time it hits zero.
-function CountdownTimerPreview({ countdown }) {
+// padY: Phone layout's countdown padding in the phone frame.
+function CountdownTimerPreview({ countdown, padY = 8 }) {
   const totalSeconds = (countdown.hours ?? 0) * 3600 + (countdown.minutes ?? 15) * 60;
   const isLoop = countdown.mode === 'loop';
   const [remaining, setRemaining] = useState(totalSeconds);
@@ -216,7 +218,7 @@ function CountdownTimerPreview({ countdown }) {
   const expired = remaining <= 0;
 
   return (
-    <div style={{ padding: '8px 16px', backgroundColor: countdown.bgColor, color: countdown.textColor, fontSize: '13px', textAlign: 'center', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+    <div style={{ padding: `${padY}px 16px`, backgroundColor: countdown.bgColor, color: countdown.textColor, fontSize: '13px', textAlign: 'center', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
       <span>{expired ? countdown.expiredLabel : countdown.label}</span>
       {!expired && (
         <span style={{ color: countdown.accentColor, fontWeight: 800, letterSpacing: '0.5px', fontVariantNumeric: 'tabular-nums' }}>
@@ -249,7 +251,10 @@ function fillProgressMessageTemplate(template, { amountStr, itemsStr, targetStr 
     .replace(/\{items\}/g, itemsStr);
 }
 
-function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
+// phone: Design → Layout for the device shown; the message is drawn at the
+// preview's text scale (13px for the storefront's 14 on phones, 15 on desktop).
+function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount, phone = null, headBase = 14 }) {
+  const headSize = phone ? `${Math.round(phone.progressHeadingSize * 13 / headBase)}px` : '13px';
   const { symbol: currencySymbol, formatMoney } = useCurrency();
   const isCount = pb.mode === 'count';
   // A tier with no (or zero/negative) minimum spend can't be placed on the
@@ -373,29 +378,29 @@ function ProgressBarPreview({ pb, lockBadge, cartTotal, cartCount }) {
   // the track's bottom padding to whichever is actually needed avoids
   // reserving dead space for a second line that isn't there.
   const hasTwoLineLabel = tiers.some((t) => t.title || t.description);
-  const trackBottomPadding = hasTwoLineLabel ? 38 : 26;
+  const trackBottomPadding = Math.max(0, (hasTwoLineLabel ? 38 : 26) + (phone ? phone.progressLabelGap - 10 : 0));
 
   const celebratingTier = celebratingTierId ? tiers.find((t) => t.id === celebratingTierId) : null;
 
   return (
-    <div className="cart-preview-progress" style={pb.sticky ? { position: 'sticky', [pb.position === 'bottom' ? 'bottom' : 'top']: 0, zIndex: 5, background: '#fff' } : undefined}>
+    <div className="cart-preview-progress" style={{ ...(pb.sticky ? { position: 'sticky', [pb.position === 'bottom' ? 'bottom' : 'top']: 0, zIndex: 5, background: '#fff' } : {}), ...(phone ? { paddingTop: phone.progressPadding, paddingBottom: phone.progressPadding } : {}) }}>
       {/* Badge sits in its own flex row above the message (a sibling in
           normal flow, not an overlay) so it can never render on top of the
           centered message text below it. */}
       {lockBadge && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>{lockBadge}</div>
       )}
-      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+      <div style={{ textAlign: 'center', marginBottom: phone ? phone.progressHeadingGap : 8 }}>
         {celebratingTier ? (
-          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor, lineHeight: 1.5 }}>
+          <div style={{ fontSize: headSize, fontWeight: 700, color: msgColor, lineHeight: 1.5 }}>
             {celebratingTier.completionMessage || `Congratulations! You've unlocked ${celebratingTier.title || celebratingTier.description || 'your reward'}!`}
           </div>
         ) : nextTier ? (
-          <div style={{ fontSize: '13px', fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>
+          <div style={{ fontSize: headSize, fontWeight: 500, color: msgColor, lineHeight: 1.5 }}>
             {progressMessageText}
           </div>
         ) : (
-          <div style={{ fontSize: '13px', fontWeight: 700, color: msgColor }}>{pb.completionMessage || "🎉 You've unlocked free shipping!"}</div>
+          <div style={{ fontSize: headSize, fontWeight: 700, color: msgColor }}>{pb.completionMessage || "🎉 You've unlocked free shipping!"}</div>
         )}
       </div>
 
@@ -805,6 +810,13 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
+  // Design → Layout for the device shown (drawer-layout.shared.js), drawn
+  // like the storefront; folded price details open on Details. The desktop
+  // frame is too narrow for the drawer's px width, so only the phone width (%)
+  // is drawn.
+  const lay = sanitizeDrawerLayout(isDesktop ? footer.checkoutButton.desktopLayout : footer.checkoutButton.phoneLayout, isDesktop ? 'desktop' : 'phone');
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const showDetails = !lay.foldSummary || summaryOpen;
   const activeSectionLabel = getSectionLabel(activeSection, body);
 
   // Replay animation each time the animation setting changes
@@ -959,7 +971,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
               <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px)', opacity: 0.4 }} />
 
               {/* Cart Drawer */}
-              <div key={animKey} className={`${animClass} bxcd-root ${isDesktop ? 'bxcd-root--desktop' : 'bxcd-root--mobile'}`} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+              <div key={animKey} className={`${animClass} bxcd-root ${isDesktop ? 'bxcd-root--desktop' : 'bxcd-root--mobile'}`} style={{ [isDesktop ? '--bxcd-d-item-pad' : '--bxcd-m-item-pad']: `${lay.itemPadding}px`, [isDesktop ? '--bxcd-d-item-gap' : '--bxcd-m-item-gap']: `${lay.itemGap}px`, [isDesktop ? '--bxcd-d-img' : '--bxcd-m-img']: `${lay.itemImageSize}px`, [isDesktop ? '--bxcd-d-title' : '--bxcd-m-title']: `${lay.itemTitleSize}px`, [isDesktop ? '--bxcd-d-price' : '--bxcd-m-price']: `${lay.itemPriceSize}px`, [isDesktop ? '--bxcd-d-total' : '--bxcd-m-total']: `${lay.itemTotalSize}px`, position: 'absolute', top: 0, right: 0, bottom: 0, width: isDesktop ? '100%' : `${lay.drawerWidth}%`, display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
 
                 {/* Design/CSS global overlay */}
                 {['design', 'customCSS'].includes(activeSection) && (
@@ -970,7 +982,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
                 {/* ── HEADER ── */}
                 <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 18px', backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${lay.headerPadding}px ${isDesktop ? 18 : 14}px`, backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? `(${itemCount})` : '(0)'}</h3>
                     <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: header.textColor, padding: 0, lineHeight: 1 }}>
                       {header.closeStyle === 'icon' ? '×' : 'Close'}
@@ -979,7 +991,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                 </HighlightZone>
 
                 {/* ── BODY (scrollable) ── */}
-                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 8px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: lay.bodyPadding, display: 'flex', flexDirection: 'column', gap: lay.sectionGap }}>
 
                   {/* Announcements — show when enabled, or show muted placeholder when section is active */}
                   {(body.announcements.enabled || activeSection === 'announcements') && (
@@ -988,7 +1000,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                         ann={body.announcements}
                         placeholder="Your announcement text here…"
                         className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
-                        style={{ backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
+                        style={{ paddingTop: lay.announcementPadding, paddingBottom: lay.announcementPadding, backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
                       />
                     </HighlightZone>
                   )}
@@ -1001,7 +1013,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       the merchant has actually enabled the toggle. */}
                   {body.countdownTimer.enabled && !isEmpty && (
                     <HighlightZone sectionId="countdownTimer" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <CountdownTimerPreview countdown={body.countdownTimer} />
+                      <CountdownTimerPreview countdown={body.countdownTimer} padY={lay.countdownPadding} />
                     </HighlightZone>
                   )}
 
@@ -1010,7 +1022,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — TOP */}
                   {showProgressBar && pb.position === 'top' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
+                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} phone={lay} headBase={isDesktop ? 15 : 14} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 
@@ -1046,6 +1058,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                     </HighlightZone>
                   ) : (
                     <PreviewCartItems
+                      showHeading={lay.showItemsHeading}
                       baseTotal={CART_TOTAL}
                       added={added}
                       rewards={rewards}
@@ -1092,7 +1105,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Progress Bar — BOTTOM */}
                   {showProgressBar && pb.position === 'bottom' && (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
+                      <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} phone={lay} headBase={isDesktop ? 15 : 14} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
                   )}
 
@@ -1111,19 +1124,37 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                 {/* ── FOOTER ── */}
                 {!isEmpty && (
                   <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                    <div style={{ padding: '12px 18px', borderTop: '1px solid #e1e3e5', flexShrink: 0, background: drawerBg }}>
+                    <div style={{ padding: `${lay.footerPadding}px ${isDesktop ? 18 : 12}px`, borderTop: '1px solid #e1e3e5', flexShrink: 0, background: drawerBg }}>
                       {/* Pricing summary: labels left, amounts right (brix_cart_ui.css, same as the storefront) */}
-                      <div className="bxcd-summary" style={{ marginBottom: 12 }}>
-                        <span className="bxcd-summary__label">Subtotal</span>
-                        <span className="bxcd-summary__value">{formatMoney(subtotal)}</span>
-                        {rewards.some((r) => r.pricing === 'free' && r.product) && (
+                      <div className="bxcd-summary" style={{ marginBottom: lay.summaryGap, rowGap: lay.summaryRowGap }}>
+                        {showDetails && (
                           <>
-                            <span className="bxcd-summary__label bxcd-summary__label--saving">Free gift savings</span>
-                            <span className="bxcd-summary__value bxcd-summary__value--saving">{formatMoney(rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0))} saved</span>
+                            <span className="bxcd-summary__label">Subtotal</span>
+                            <span className="bxcd-summary__value">{formatMoney(subtotal)}</span>
+                            {rewards.some((r) => r.pricing === 'free' && r.product) && (
+                              <>
+                                <span className="bxcd-summary__label bxcd-summary__label--saving">Free gift savings</span>
+                                <span className="bxcd-summary__value bxcd-summary__value--saving">{formatMoney(rewards.filter((r) => r.pricing === 'free').reduce((sum, r) => sum + (Number(r.product?.price) || 0), 0))} saved</span>
+                              </>
+                            )}
+                            <span className="bxcd-summary__divider" aria-hidden="true" />
                           </>
                         )}
-                        <span className="bxcd-summary__divider" aria-hidden="true" />
-                        <span className="bxcd-summary__label bxcd-summary__label--total">Total</span>
+                        <span className="bxcd-summary__label bxcd-summary__label--total">
+                          Total
+                          {lay.foldSummary && (
+                            <button
+                              type="button"
+                              className="bxcd-summary__toggle"
+                              aria-expanded={summaryOpen}
+                              onClick={(e) => { e.stopPropagation(); setSummaryOpen((v) => !v); }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 8, padding: '2px 8px', border: '1px solid #e2e8f0', borderRadius: 999, background: '#f8fafc', color: '#475569', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, lineHeight: 1.4, verticalAlign: 'middle', cursor: 'pointer' }}
+                            >
+                              Details
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: summaryOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}><path d="m6 9 6 6 6-6" /></svg>
+                            </button>
+                          )}
+                        </span>
                         <span className="bxcd-summary__value bxcd-summary__value--total">{formatMoney(subtotal)}</span>
                       </div>
                       {continueShopping.enabled && continueShopping.placement === 'above' && continueButton}
@@ -1145,7 +1176,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       {trustHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />}
                       {continueShopping.enabled && continueShopping.placement !== 'above' && continueButton}
                       {/* Footer note */}
-                      <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>
+                      {showDetails && lay.showFooterNote && <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>}
                     </div>
                   </HighlightZone>
                 )}

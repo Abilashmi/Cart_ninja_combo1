@@ -2,6 +2,7 @@
 import { footerExtras } from '../utils/cart-footer-extras.shared';
 
 import { DEFAULT_CONTINUE_SHOPPING } from '../utils/continue-shopping.shared.js';
+import { DEFAULT_LAYOUT } from '../utils/drawer-layout.shared.js';
 
 export const defaultTier = {
   id: 'tier-1',
@@ -188,6 +189,9 @@ export const defaultCartEditorState = {
       mobileButtonType: 'standard',
       // "Continue shopping" next to Checkout (utils/continue-shopping.shared.js), off by default.
       continueShopping: { ...DEFAULT_CONTINUE_SHOPPING },
+      // Drawer width + spacing per device (utils/drawer-layout.shared.js), Design → Layout.
+      phoneLayout: { ...DEFAULT_LAYOUT.phone },
+      desktopLayout: { ...DEFAULT_LAYOUT.desktop },
     },
     // Rules and defaults: utils/cart-footer-extras.shared.js (saved in the
     // checkout_button_style blob, so no new columns).

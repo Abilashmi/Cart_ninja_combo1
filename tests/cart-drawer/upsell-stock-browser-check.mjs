@@ -147,11 +147,19 @@ const card = (page, title) => page.locator('.cc-upsell-card', { hasText: title }
   const box = await select.boundingBox();
   check('dropdown fits the card (theme select styles overridden)', box && box.height <= 32, JSON.stringify(box));
 
+  // Count full drawer redraws from the tap on (extrokids: 4 in half a second
+  // looked like the cart opening twice).
+  await page.evaluate(() => {
+    window.__redraws = 0;
+    new MutationObserver(() => { window.__redraws++; }).observe(document.getElementById('cc-drawer'), { childList: true });
+  });
   await jeans.locator('.cc-add-btn').click();
   await page.waitForTimeout(300);
   check('Add adds the in-stock size, not the sold-out first variant', page.net.adds[0] === 1012, JSON.stringify(page.net.adds));
 
   await page.waitForTimeout(1700);
+  const redraws = await page.evaluate(() => window.__redraws);
+  check('an upsell Add redraws the open drawer once, not again on timers', redraws === 1, `${redraws} redraws`);
   const jeans2 = card(page, 'Girls Grey Denim Jeans');
   await jeans2.locator('select.cc-upsell-variant').selectOption('1013');
   check('picking a size updates the price', (await jeans2.locator('.cc-upsell-price').textContent()).includes('949'), await jeans2.locator('.cc-upsell-price').textContent());
