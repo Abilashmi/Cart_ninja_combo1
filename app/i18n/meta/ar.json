@@ -1543,6 +1543,14 @@
     "status": "ai",
     "srcHash": "9f51ea6b"
   },
+  "storefront.packs.cod": {
+    "status": "ai",
+    "srcHash": "127534ff"
+  },
+  "storefront.packs.cod_unavailable": {
+    "status": "ai",
+    "srcHash": "21639a6b"
+  },
   "storefront.packs.combo_unavailable": {
     "status": "ai",
     "srcHash": "c65bfb3c"
@@ -1634,6 +1642,10 @@
   "storefront.packs.only_n_left": {
     "status": "ai",
     "srcHash": "ada0cbcd"
+  },
+  "storefront.packs.opening_cod": {
+    "status": "ai",
+    "srcHash": "ae90c343"
   },
   "storefront.packs.option": {
     "status": "ai",

@@ -260,6 +260,20 @@
         if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
         return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
       },
+      // The number without the currency sign (customization.price.symbol = 'hide').
+      plain: function (value) {
+        var amount = Number(value) * rate;
+        var whole_ = window.__brixWholePrices === true;
+        var f = whole_ ? whole : fmt;
+        try {
+          if (f && f.formatToParts) {
+            return f.formatToParts(whole_ ? Math.round(amount) : amount)
+              .filter(function (part) { return part.type !== 'currency' && !(part.type === 'literal' && /^\s*$/.test(part.value)); })
+              .map(function (part) { return part.value; }).join('').trim();
+          }
+        } catch (e) { /* fall through to the full format */ }
+        return whole_ ? String(Math.round(amount)) : amount.toFixed(shopDecimals);
+      },
     };
   }
 
@@ -280,6 +294,89 @@
   function buyNowOn(pack) {
     var content = (pack && pack.customization && pack.customization.content) || {};
     return Boolean(pack) && content.showBuyNow !== false;
+  }
+
+  // content.matchThemeButtons: the Pack's buttons copy the look of the theme's own buttons
+  // (Add to cart = the form's add button; Buy Now = the theme's Buy it now / payment button):
+  // colors, border, corner radius, text size, weight, case and font. Read with getComputedStyle,
+  // which also works while the theme's buttons are hidden. A look that can't be read (the
+  // theme has no such button) leaves the merchant's own settings in place.
+  function matchThemeButtons(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return Boolean(pack) && content.matchThemeButtons === true;
+  }
+
+  function readButtonLook(node) {
+    if (!node || !window.getComputedStyle) return null;
+    var s = window.getComputedStyle(node);
+    function color(value) { return !value || value === 'rgba(0, 0, 0, 0)' || value === 'transparent' ? 'transparent' : value; }
+    var border = parseFloat(s.borderTopWidth) || 0;
+    return {
+      bg: color(s.backgroundColor), text: s.color, border: border > 0 ? color(s.borderTopColor) : color(s.backgroundColor), borderWidth: border,
+      radius: s.borderTopLeftRadius, size: s.fontSize, weight: s.fontWeight, transform: s.textTransform, spacing: s.letterSpacing, family: s.fontFamily,
+      padY: parseFloat(s.paddingTop) || 0,
+    };
+  }
+
+  function applyThemeButtonLook(section) {
+    var form = productForm();
+    if (!form) return;
+    var formId = form.getAttribute('id');
+    var candidates = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
+    if (formId) candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    var addButton = null;
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (candidates[i].closest('.shopify-payment-button, [data-shopify="payment-button"]') || section.contains(candidates[i])) continue;
+      addButton = candidates[i];
+      break;
+    }
+    var buyButton = form.querySelector('.shopify-payment-button__button, .shopify-payment-button button, [data-shopify="payment-button"] button');
+    var add = readButtonLook(addButton);
+    var buy = readButtonLook(buyButton);
+    var base = add || buy;
+    if (!base) return;
+    function set(name, value) { if (value !== undefined && value !== null && value !== '') section.style.setProperty(name, value); }
+    // Shared shape and type come from the Add to cart button (else the Buy it now button).
+    set('--brix-packs-btn-radius', base.radius);
+    set('--brix-packs-btn-bw', base.borderWidth + 'px');
+    set('--brix-packs-btn-size', base.size);
+    set('--brix-packs-btn-weight', base.weight);
+    set('--brix-packs-btn-case', base.transform);
+    set('--brix-packs-btn-spacing', base.spacing);
+    set('--brix-packs-btn-font', base.family);
+    if (base.padY) set('--brix-packs-btn-py', base.padY + 'px');
+    if (add) {
+      set('--brix-packs-button', add.bg); set('--brix-packs-button-text', add.text); set('--brix-packs-add-border', add.border);
+      // COD follows the Add to cart look.
+      set('--brix-packs-cod-bg', add.bg); set('--brix-packs-cod-text', add.text); set('--brix-packs-cod-border', add.border);
+    }
+    var b = buy || add;
+    set('--brix-packs-buy-bg', b.bg); set('--brix-packs-buy-text', b.text); set('--brix-packs-buy-border', b.border);
+  }
+
+  // Keep the theme's own buy buttons (Add to cart, Buy it now, Shiprocket / GoKwik buttons,
+  // quantity, variant picker) visible beside the Pack instead of hiding them.
+  function themeButtonsOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return Boolean(pack) && content.showThemeButtons === true;
+  }
+
+  // With the theme's buttons kept, its Add to cart adds the Pack the shopper selected
+  // (its quantity, variants and discount) instead of one plain item; off = a plain add.
+  function themeAddsPackOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return themeButtonsOn(pack) && content.themeAddsPack !== false;
+  }
+
+  function hideVariantsOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return Boolean(pack) && content.hideVariants === true;
+  }
+
+  // The widget's own Buy with COD button (off unless the merchant turned it on).
+  function codOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    return Boolean(pack) && content.showCod === true;
   }
 
   // ── item selection (mirrors app/utils/packs.shared.js — keep in sync) ───────
@@ -414,9 +511,25 @@
     '.brix-packs-heading{margin:0 0 4px;font-size:var(--brix-packs-h);font-weight:var(--brix-packs-weight);color:var(--brix-packs-text);line-height:1.2}',
     '.brix-packs-sub{margin:0 0 6px;font-size:var(--brix-packs-desc);opacity:.75}',
     '.brix-packs-preview{margin:6px 0 10px;padding:8px 10px;background:#fff4d6;color:#5c4400;border:1px solid #e1b955;border-radius:6px;font-size:12px}',
-    '.brix-packs-badge{display:inline-block;padding:2px 8px;background:var(--brix-packs-badge);color:var(--brix-packs-text);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;line-height:1.4}',
+    '.brix-packs-badge{display:inline-block;padding:2px 8px;background:var(--brix-packs-badge);color:var(--brix-packs-badge-text,var(--brix-packs-text));border-radius:999px;font-size:var(--brix-packs-badge-size,11px);font-weight:var(--brix-packs-badge-weight,700);letter-spacing:.2px;text-transform:var(--brix-packs-badge-case,uppercase);line-height:1.4}',
+    /* ── Badge styles (customization.badge.style) and corner (badge.position). */
+    '.brix-packs-widget[data-badge-style="square"] .brix-packs-badge{border-radius:3px}',
+    '.brix-packs-widget[data-badge-style="outline"] .brix-packs-badge{background:transparent;border:1.5px solid currentColor}',
+    '.brix-packs-widget[data-badge-style="ribbon"] .brix-packs-badge{border-radius:0;padding:3px 16px 3px 9px;clip-path:polygon(0 0,100% 0,calc(100% - 8px) 50%,100% 100%,0 100%)}',
+    '.brix-packs-widget[data-badge-style="tag"] .brix-packs-badge{border-radius:3px 0 0 3px;padding:3px 14px 3px 9px;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%)}',
+    '.brix-packs-widget[data-badge-style="seal"] .brix-packs-badge{padding:5px 14px;border-radius:999px;transform:rotate(-6deg);box-shadow:0 2px 6px rgba(0,0,0,.25);white-space:nowrap}',
+    '.brix-packs-widget[data-badge-style="seal"] .brix-packs-badge::before{content:"\\2726";margin-right:5px;font-size:.85em}',
+    '.brix-packs-widget[data-badge-style="seal"] .brix-packs-badge::after{content:"\\2726";margin-left:5px;font-size:.7em}',
+    '.brix-packs-widget[data-badge-pos="top_right"] .brix-packs-card .brix-packs-badge{left:auto;right:34px}',
+    '.brix-packs-widget[data-badge-pos="inline"] .brix-packs-card .brix-packs-badge{position:static;align-self:flex-start;margin-bottom:2px}',
+    '.brix-packs-widget[data-badge-pos="top_left"] .brix-packs-tier .brix-packs-badge,.brix-packs-widget[data-badge-pos="top_right"] .brix-packs-tier .brix-packs-badge{position:absolute;top:-9px;z-index:1}',
+    '.brix-packs-widget[data-badge-pos="top_left"] .brix-packs-tier .brix-packs-badge{left:14px}',
+    '.brix-packs-widget[data-badge-pos="top_right"] .brix-packs-tier .brix-packs-badge{right:14px}',
     '.brix-packs-save{display:block;font-size:var(--brix-packs-desc);font-weight:600;color:var(--brix-packs-discount)}',
-    '.brix-packs-was{font-size:var(--brix-packs-desc);opacity:.55;text-decoration:line-through}',
+    /* ── Savings as a filled chip (customization.savings.style). */
+    '.brix-packs-widget[data-save-style="chip"] .brix-packs-save{display:inline-block;align-self:flex-start;width:fit-content;padding:2px 9px;border-radius:999px;background:var(--brix-packs-chip-bg);color:var(--brix-packs-chip-text);font-size:calc(var(--brix-packs-desc) - 1px);font-weight:700;text-transform:uppercase;letter-spacing:.02em}',
+    '.brix-packs-was{font-size:var(--brix-packs-desc);opacity:var(--brix-packs-was-opacity,.55);color:var(--brix-packs-was-color,inherit);text-decoration:line-through}',
+    '.brix-packs-widget .brix-packs-card-price strong,.brix-packs-widget .brix-packs-price strong,.brix-packs-widget .brix-packs-total-price strong{font-weight:var(--brix-packs-price-weight,600)}',
     /* ── Pack cards: always one horizontal row; scrolls sideways when there isn't room. */
     // Cards share the row and wrap when it is too narrow — never a scrollbar.
     '.brix-packs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:var(--brix-packs-gap);margin:4px 0 0;padding:12px 0 4px}',
@@ -425,7 +538,7 @@
     '.brix-packs-card:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
     '.brix-packs-card[aria-checked="true"]{background:var(--brix-packs-selected);border-color:var(--brix-packs-primary);box-shadow:inset 0 0 0 1px var(--brix-packs-primary)}',
     '.brix-packs-card[disabled]{opacity:.5;cursor:not-allowed}',
-    '.brix-packs-card .brix-packs-badge{position:absolute;top:-10px;left:10px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}',
+    '.brix-packs-card .brix-packs-badge{position:absolute;top:-10px;left:10px;max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--brix-packs-badge-size,10px)}',
     '.brix-packs-card-check{position:absolute;top:10px;right:10px;width:18px;height:18px;border:2px solid var(--brix-packs-border);border-radius:50%;background:var(--brix-packs-card)}',
     '.brix-packs-card[aria-checked="true"] .brix-packs-card-check{border-color:var(--brix-packs-primary);background:var(--brix-packs-primary)}',
     '.brix-packs-card[aria-checked="true"] .brix-packs-card-check::after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid var(--brix-packs-button-text);border-width:0 2px 2px 0;transform:rotate(45deg)}',
@@ -555,14 +668,20 @@
     '.brix-packs-msg[data-type="error"]{background:#fde7e7;color:#8a1f1f;border:1px solid #f0b3b3}',
     '.brix-packs-msg[data-type="success"]{background:#e3f5ea;color:#14532d;border:1px solid #a7d7b8}',
     '.brix-packs-msg[data-type="info"]{background:#eef3fb;color:#1f3b6e;border:1px solid #c5d3ec}',
-    '.brix-packs-add,.brix-packs-buy{display:block;width:100%;padding:var(--brix-packs-btn-py) 16px;border-radius:var(--brix-packs-btn-radius);font:inherit;font-size:var(--brix-packs-btn-size);font-weight:var(--brix-packs-btn-weight);text-transform:var(--brix-packs-btn-case);letter-spacing:var(--brix-packs-btn-spacing);cursor:pointer;transition:filter .15s}',
+    '.brix-packs-add,.brix-packs-buy,.brix-packs-cod{display:block;width:100%;padding:var(--brix-packs-btn-py) 16px;border-radius:var(--brix-packs-btn-radius);font:inherit;font-size:var(--brix-packs-btn-size);font-weight:var(--brix-packs-btn-weight);text-transform:var(--brix-packs-btn-case);letter-spacing:var(--brix-packs-btn-spacing);cursor:pointer;transition:filter .15s}',
     '.brix-packs-add{margin-top:var(--brix-packs-btn-gap);background:var(--brix-packs-button);color:var(--brix-packs-button-text);border:var(--brix-packs-btn-bw) solid var(--brix-packs-add-border)}',
     '.brix-packs-buy{background:var(--brix-packs-buy-bg);color:var(--brix-packs-buy-text);border:var(--brix-packs-btn-bw) solid var(--brix-packs-buy-border)}',
-    '.brix-packs-add:hover:not([disabled]),.brix-packs-buy:hover:not([disabled]){filter:brightness(.92)}',
-    '.brix-packs-add:focus-visible,.brix-packs-buy:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
-    '.brix-packs-add[disabled],.brix-packs-buy[disabled]{opacity:.55;cursor:not-allowed}',
+    '.brix-packs-add,.brix-packs-buy,.brix-packs-cod{font-family:var(--brix-packs-btn-font,inherit)}',
+    '.brix-packs-cod{background:var(--brix-packs-cod-bg);color:var(--brix-packs-cod-text);border:var(--brix-packs-btn-bw) solid var(--brix-packs-cod-border)}',
+    '.brix-packs-add:hover:not([disabled]),.brix-packs-buy:hover:not([disabled]),.brix-packs-cod:hover:not([disabled]){filter:brightness(.92)}',
+    '.brix-packs-add:focus-visible,.brix-packs-buy:focus-visible,.brix-packs-cod:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    '.brix-packs-add[disabled],.brix-packs-buy[disabled],.brix-packs-cod[disabled]{opacity:.55;cursor:not-allowed}',
     '.brix-packs-actions{display:flex;flex-direction:var(--brix-packs-btn-dir);gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
+    // The button area: Add to Cart / Buy Now (side by side or stacked), COD in its own full-width row below.
+    'html[data-brix-pack-cod] [data-brix-cod-slot]{display:none !important}',
+    '.brix-packs-actions-col{display:flex;flex-direction:column;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
+    '.brix-packs-actions-col>.brix-packs-add,.brix-packs-actions-col>.brix-packs-buy,.brix-packs-actions-col>.brix-packs-actions{margin-top:0}',
     '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}.brix-packs-islot{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px 10px;padding:10px}.brix-packs-islot .brix-packs-slot-main{display:contents}.brix-packs-islot .brix-packs-fields,.brix-packs-islot .brix-packs-problem,.brix-packs-islot-name{grid-column:1/-1}.brix-packs-islot .brix-packs-fields{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}.brix-packs-islot-photo{width:36px;height:36px}}',
   ].join('\n');
 
@@ -598,6 +717,30 @@
     Object.keys(buttonVars).forEach(function (name) { vars[name] = buttonVars[name]; });
     Object.keys(vars).forEach(function (name) { section.style.setProperty(name, vars[name]); });
     if (borders.shadow) section.classList.add('is-shadow');
+
+    // Badge: style, corner, text color, size, case, weight (customization.badge).
+    var badge = custom.badge || {};
+    var badgeStyles = ['pill', 'square', 'outline', 'ribbon', 'tag', 'seal'];
+    var badgePositions = ['top_left', 'top_right', 'inline'];
+    section.setAttribute('data-badge-style', badgeStyles.indexOf(badge.style) >= 0 ? badge.style : 'pill');
+    if (badgePositions.indexOf(badge.position) >= 0) section.setAttribute('data-badge-pos', badge.position);
+    if (HEX.test(badge.textColor || '')) section.style.setProperty('--brix-packs-badge-text', badge.textColor);
+    if (Number(badge.size) > 0) section.style.setProperty('--brix-packs-badge-size', Number(badge.size) + 'px');
+    if ([400, 500, 600, 700, 800].indexOf(Number(badge.fontWeight)) >= 0) section.style.setProperty('--brix-packs-badge-weight', String(Number(badge.fontWeight)));
+    if (badge.uppercase === false) section.style.setProperty('--brix-packs-badge-case', 'none');
+
+    // Savings drawn as a filled chip.
+    var savings = custom.savings || {};
+    if (savings.style === 'chip') {
+      section.setAttribute('data-save-style', 'chip');
+      section.style.setProperty('--brix-packs-chip-bg', HEX.test(savings.chipBackground || '') ? savings.chipBackground : '#008060');
+      section.style.setProperty('--brix-packs-chip-text', HEX.test(savings.chipText || '') ? savings.chipText : '#ffffff');
+    }
+
+    // Amounts: weight, and a color for the struck-through price.
+    var price = custom.price || {};
+    section.style.setProperty('--brix-packs-price-weight', [400, 500, 600, 700, 800].indexOf(Number(price.weight)) >= 0 ? String(Number(price.weight)) : 'var(--brix-packs-weight)');
+    if (HEX.test(price.wasColor || '')) { section.style.setProperty('--brix-packs-was-color', price.wasColor); section.style.setProperty('--brix-packs-was-opacity', '1'); }
   }
 
   // Add to Cart + Buy Now styling (customization.buttons). Packs saved before
@@ -616,6 +759,9 @@
       '--brix-packs-buy-bg': bColor('buyNowBackground', color('cardBackground', '#ffffff')),
       '--brix-packs-buy-text': bColor('buyNowText', button),
       '--brix-packs-buy-border': bColor('buyNowBorder', button),
+      '--brix-packs-cod-bg': bColor('codBackground', color('cardBackground', '#ffffff')),
+      '--brix-packs-cod-text': bColor('codText', button),
+      '--brix-packs-cod-border': bColor('codBorder', button),
       '--brix-packs-btn-radius': px(b.radius, Number((custom.borders || {}).radius) >= 0 ? Number(custom.borders.radius) : 8),
       '--brix-packs-btn-bw': px(b.borderWidth, 2),
       '--brix-packs-btn-py': px(b.paddingY, 13),
@@ -643,7 +789,26 @@
     // picks: variant ids chosen in the Quick Add Picker, one per item.
     // open: a pack card was chosen; the Quick Add Picker shows its grid only then.
     // openPicker: '<slot>-<option index>' of the open Image Variant Select photo dropdown, or null.
-    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null };
+    // cod: null = not checked yet, true = BRIX COD is live for product pages on this store.
+    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0 };
+
+    // The COD button shows only where BRIX COD Checkout is on for product pages. Its script
+    // comes from the Custom Cart Drawer app embed, which can load well after this widget, so
+    // keep looking for it (every 0.5 s, for up to 15 s) and then ask it if COD is available.
+    function probeCod() {
+      if (state.cod !== null || state.codProbing) return;
+      var cod = window.BrixCod;
+      if (!cod || typeof cod.isAvailable !== 'function') {
+        if (state.codTries < 30) { state.codTries += 1; setTimeout(function () { if (state.pack) probeCod(); }, 500); }
+        return;
+      }
+      state.codProbing = true;
+      cod.isAvailable('product').then(function (ok) {
+        state.cod = Boolean(ok);
+        state.codProbing = false;
+        if (state.cod && state.pack) render();
+      }, function () { state.cod = false; state.codProbing = false; });
+    }
     // A click anywhere outside the open dropdown closes it.
     function onDocumentClick(event) {
       if (state.openPicker === null) return;
@@ -744,11 +909,23 @@
 
     // One entry per item in the chosen Pack: { variant, problem } where problem
     // is null | 'incomplete' | 'unavailable' | 'sold_out' | 'stock'.
+    // content.hideVariants: no item / option pickers, for every Pack type. Every item of the
+    // Pack is the variant selected on the product page (a Mix & Match Pack then holds the
+    // same variant in each slot, since the shopper can no longer pick different ones).
+    function hideVariantsFor(pack) {
+      var content = (pack.customization && pack.customization.content) || {};
+      return content.hideVariants === true;
+    }
+
     function itemsFor(pack, tier) {
       var m = model(pack);
       var items = [];
       var i;
-      if (layoutFor(pack) === 'quick_add') {
+      if (hideVariantsFor(pack)) {
+        var chosen = defaultVariant(m);
+        var hiddenStatus = chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
+        for (i = 0; i < tier.quantity; i += 1) items.push(hiddenStatus);
+      } else if (layoutFor(pack) === 'quick_add') {
         for (i = 0; i < tier.quantity; i += 1) {
           var picked = state.picks[i] ? variantById(m, state.picks[i]) : null;
           items.push(picked ? { variant: picked, problem: forSale(picked) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] });
@@ -1152,8 +1329,18 @@
       if (!pack || !state.data) return;
       var custom = pack.customization || {};
       var content = custom.content || {};
+      if (codOn(pack) && !adminPreview) probeCod();
       var savingsCfg = custom.savings || {};
       var saveWord = bxText(savingsCfg.label && String(savingsCfg.label).trim(), 'storefront.packs.save', 'Save');
+      // Amount style (customization.price): the merchant's own words around the price,
+      // an optional number without the currency sign, and the struck-through price on/off.
+      var priceCfg = custom.price || {};
+      var hideSymbol = priceCfg.symbol === 'hide' && typeof money.plain === 'function';
+      var pricePrefix = typeof priceCfg.prefix === 'string' ? priceCfg.prefix : '';
+      var priceSuffix = typeof priceCfg.suffix === 'string' ? priceCfg.suffix : '';
+      var showWas = priceCfg.showWas !== false;
+      function numberText(value) { return hideSymbol ? money.plain(value) : money.format(value); }
+      function priceText(value) { return (pricePrefix ? pricePrefix + ' ' : '') + numberText(value) + (priceSuffix ? ' ' + priceSuffix : ''); }
       // Texts left at the Pack's English defaults follow the shopper's language ('' = none).
       var heading = content.heading ? bxText(content.heading, 'storefront.packs.heading', 'Choose Your Pack') : '';
       var subheading = content.subheading ? bxText(content.subheading, 'storefront.packs.subheading', 'Buy more and save more.') : '';
@@ -1164,6 +1351,7 @@
 
       var section = el('section', { class: 'brix-packs-widget', dir: bxDir(), 'data-template': pack.template, 'data-design': design, 'data-layout': layout, 'data-mode': m.rules.sameVariant ? 'same' : 'mix', 'aria-label': heading || bxT('storefront.packs.packs', 'Packs') });
       applyCustomization(section, custom);
+      if (!adminPreview && matchThemeButtons(pack)) applyThemeButtonLook(section);
 
       section.appendChild(el('div', { class: 'brix-packs-head' }, [
         heading ? el('h2', { class: 'brix-packs-heading', text: heading }) : null,
@@ -1186,7 +1374,11 @@
       var rows = layout === 'image_slots';
       var cards = el('div', { class: rows ? 'brix-packs-stack' : 'brix-packs-cards', role: 'radiogroup', 'aria-label': heading || bxT('storefront.packs.choose_pack', 'Choose a pack') });
       // Quick Add Picker: nothing is chosen (and no grid shown) until the shopper picks a pack.
-      var closed = layout === 'quick_add' && !state.open;
+      // content.hideVariants: a Same Variant Pack shows just its offer cards; every item is
+      // the variant selected on the product page (no item / option pickers). Mix & Match
+      // Packs always need their pickers.
+      var hideVars = hideVariantsFor(pack);
+      var closed = layout === 'quick_add' && !state.open && !hideVars;
       var images = custom.images || {};
       var rowImage = rows && images.enabled !== false && pack.productImage ? pack.productImage : '';
       pack.tiers.forEach(function (t, index) {
@@ -1211,13 +1403,13 @@
                 el('span', { class: 'brix-packs-meta', text: disabled ? (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock')) : meta }),
               ]),
               el('span', { class: 'brix-packs-price' }, [
-                !money.hidden && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shown.subtotal) }) : null,
-                money.hidden ? null : el('strong', { text: money.format(shown.price) }),
+                !money.hidden && showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
+                money.hidden ? null : el('strong', { text: priceText(shown.price) }),
                 save ? el('span', { class: 'brix-packs-save', text: save }) : null,
               ]),
             ]),
           ]);
-          if (selected) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
+          if (selected && !hideVars) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
           cards.appendChild(row);
           return;
         }
@@ -1227,8 +1419,8 @@
           el('span', { class: 'brix-packs-card-name', text: tierName(t) }),
           el('span', { class: 'brix-packs-card-count', text: itemsText(t.quantity) }),
           money.hidden ? null : el('span', { class: 'brix-packs-card-price' }, [
-            el('strong', { text: money.format(shown.price) }),
-            shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shown.subtotal) }) : null,
+            el('strong', { text: priceText(shown.price) }),
+            showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
           ]),
           save ? el('span', { class: 'brix-packs-save', text: save }) : null,
           disabled ? el('span', { class: 'brix-packs-card-note', text: pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock') }) : null,
@@ -1241,6 +1433,9 @@
       var ready = !closed && Boolean(tier) && items.length > 0 && done === items.length;
       if (tier && closed) {
         section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: bxT('storefront.packs.choose_pack_first', 'Choose a pack to pick your items.') }));
+      } else if (tier && hideVars) {
+        // Offer cards only; a hint appears just when the page's variant can't be bought.
+        if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier && rows) {
         // The chosen row already shows the price and the item dropdowns.
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
@@ -1259,8 +1454,8 @@
         section.appendChild(el('div', { class: 'brix-packs-total' }, [
           el('span', { class: 'brix-packs-total-label', text: tierName(tier) + ' \u00b7 ' + itemsText(tier.quantity) }),
           money.hidden ? null : el('span', { class: 'brix-packs-total-price' }, [
-            shownCurrent.savings > 0 ? el('span', { class: 'brix-packs-was', text: money.format(shownCurrent.subtotal) }) : null,
-            el('strong', { text: money.format(shownCurrent.price) }),
+            showWas && shownCurrent.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shownCurrent.subtotal) }) : null,
+            el('strong', { text: priceText(shownCurrent.price) }),
           ]),
         ]));
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
@@ -1271,15 +1466,27 @@
 
       var addDisabled = Boolean(state.busy) || !tier || tierDisabled(pack, tier) || !ready;
       var addButton = el('button', { type: 'button', class: 'brix-packs-add', 'data-fk': 'add-to-cart', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding\u2026') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart')) });
-      // Buy Now checks out only this Pack; the shopper's cart is left as it was.
-      if (buyNowOn(pack) && pack.available !== false) {
-        section.appendChild(el('div', { class: 'brix-packs-actions' }, [
-          addButton,
-          el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now') }),
-        ]));
-      } else {
-        section.appendChild(addButton);
+      // Which buttons show (content.showAddToCart / showBuyNow / showCod). Buy Now checks out
+      // only this Pack; the shopper's cart is left as it was. COD opens the BRIX COD popup
+      // for just this Pack. With every button switched off, Add to Cart stays so a Pack is
+      // never unbuyable.
+      var available = pack.available !== false;
+      var wantBuy = buyNowOn(pack) && available;
+      var wantCod = codOn(pack) && available && (adminPreview || state.cod === true);
+      var wantAdd = content.showAddToCart !== false || (!wantBuy && !wantCod);
+      // The Pack's own COD button replaces BRIX COD's product-page button (which would order
+      // a single item at the full price instead of the Pack).
+      if (!adminPreview) {
+        if (wantCod) document.documentElement.setAttribute('data-brix-pack-cod', '1');
+        else document.documentElement.removeAttribute('data-brix-pack-cod');
       }
+      var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now') }) : null;
+      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : bxText(content.codText, 'storefront.packs.cod', 'Buy with COD') }) : null;
+      var mainButtons = [wantAdd ? addButton : null, buyButton].filter(Boolean);
+      section.appendChild(el('div', { class: 'brix-packs-actions-col' }, [
+        mainButtons.length > 1 ? el('div', { class: 'brix-packs-actions' }, mainButtons) : mainButtons[0] || null,
+        codButton,
+      ]));
       root.appendChild(section);
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
@@ -1483,6 +1690,40 @@
         .then(function () { if (state.redirecting) return; state.busy = false; render(); });
     }
 
+    // Buy with COD: the BRIX COD popup for just this Pack (the shopper's cart is untouched).
+    // The lines carry the same _brix_pack_* properties as Add to Cart so COD can price the
+    // tier like checkout does. "Pay online" inside the popup goes to the Buy Now checkout.
+    function codOrder() {
+      var pack = state.pack;
+      var tier = pack && pack.tiers[state.tierIndex];
+      if (!tier || state.busy) return;
+      var items = itemsFor(pack, tier);
+      if (readyCount(items) !== items.length) {
+        state.message = { type: 'error', text: hintText(model(pack), tier, items) };
+        render();
+        return;
+      }
+      var lines = buildItems(pack, tier);
+      if (adminPreview) {
+        var m = model(pack);
+        var summary = lines.map(function (line) { return variantName(pack, variantById(m, line.id)) + ' × ' + line.quantity; }).join(', ');
+        state.message = { type: 'info', text: 'Preview only — on your store this opens Cash on Delivery for just this pack: ' + summary + '.' };
+        render();
+        return;
+      }
+      if (!window.BrixCod || typeof window.BrixCod.open !== 'function') {
+        state.message = { type: 'error', text: bxT('storefront.packs.cod_unavailable', 'Cash on Delivery is not available right now.') };
+        render();
+        return;
+      }
+      state.message = null;
+      window.BrixCod.open({
+        surface: 'product',
+        items: lines.map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }),
+        onPayOnline: function () { addToCart(true); },
+      });
+    }
+
     // ── instance API ─────────────────────────────────────────────────────────
 
     function firstEnabledTier(pack) {
@@ -1535,6 +1776,8 @@
         }
         render();
       },
+      // The theme's own Add to cart adds the selected Pack (content.themeAddsPack).
+      addPack: function () { addToCart(false); },
       destroy: function () { document.removeEventListener('click', onDocumentClick); root.textContent = ''; state.pack = null; },
     };
   }
@@ -1699,7 +1942,10 @@
   // and Add to cart button are hidden (and restored when no Pack applies).
   // The theme's variant picker goes too when the Pack offers every variant
   // (hidePicker) — the shopper picks their variants inside the Pack.
-  function setThemeControlsHidden(hidden, hidePayment, hidePicker) {
+  function setThemeControlsHidden(hidden, hidePayment, hidePicker, keepTheme) {
+    // content.showThemeButtons: the merchant keeps the theme's own Add to cart, Buy it now,
+    // quantity box and variant picker next to the Pack (they add a single variant as usual).
+    if (keepTheme) hidden = false;
     var form = productForm();
     if (!form) return;
     var info = productInfo(form);
@@ -1744,7 +1990,7 @@
 
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
-    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next));
+    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), themeButtonsOn(next));
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
@@ -1781,13 +2027,34 @@
       injectStyle();
       widget = createWidget(root, {});
       widget.setData(data);
+      // The theme's Add to cart (a click, or Enter in the form) adds the selected Pack when
+      // the merchant kept the theme's buttons. Capture phase, so it runs before the theme's
+      // own handler. Buy it now / Shiprocket / GoKwik buttons are other apps' and aren't touched.
+      function themeAdd(event) {
+        if (!current || !themeAddsPackOn(current)) return false;
+        var form = productForm();
+        if (!form) return false;
+        if (event.type === 'submit') {
+          if (event.target !== form) return false;
+        } else {
+          var button = event.target && event.target.closest ? event.target.closest('[name="add"], button[type="submit"], input[type="submit"]') : null;
+          if (!button || root.contains(button) || !(form.contains(button) || button.form === form)) return false;
+          if (button.closest('.shopify-payment-button, [data-shopify="payment-button"]')) return false;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        widget.addPack();
+        return true;
+      }
+      document.addEventListener('click', themeAdd, true);
+      document.addEventListener('submit', themeAdd, true);
       lastVariant = currentVariantId();
       showFor(lastVariant);
       setInterval(function () {
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
-          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current)); // a theme re-render can bring them back
+          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), themeButtonsOn(current)); // a theme re-render can bring them back
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);

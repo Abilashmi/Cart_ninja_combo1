@@ -464,5 +464,8 @@
   "storefront.upsell.scroll_right": "வலப்புறம் ஸ்க்ரோல் செய்",
   "storefront.upsell.this_product": "இந்தப் பொருள்",
   "storefront.upsell.title": "உங்களுக்குப் பரிந்துரைக்கப்பட்டவை",
-  "storefront.upsell.title_alt": "பரிந்துரைக்கப்பட்ட பொருட்கள்"
+  "storefront.upsell.title_alt": "பரிந்துரைக்கப்பட்ட பொருட்கள்",
+  "storefront.packs.cod": "COD மூலம் வாங்கவும்",
+  "storefront.packs.cod_unavailable": "கேஷ் ஆன் டெலிவரி இப்போது கிடைக்கவில்லை.",
+  "storefront.packs.opening_cod": "திறக்கிறது…"
 }

@@ -464,5 +464,8 @@
   "storefront.upsell.scroll_right": "दाएँ स्क्रॉल करें",
   "storefront.upsell.this_product": "यह प्रोडक्ट",
   "storefront.upsell.title": "आपके लिए सुझाए गए",
-  "storefront.upsell.title_alt": "सुझाए गए प्रोडक्ट"
+  "storefront.upsell.title_alt": "सुझाए गए प्रोडक्ट",
+  "storefront.packs.cod": "COD से खरीदें",
+  "storefront.packs.cod_unavailable": "कैश ऑन डिलीवरी अभी उपलब्ध नहीं है।",
+  "storefront.packs.opening_cod": "खुल रहा है…"
 }

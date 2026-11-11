@@ -464,5 +464,8 @@
   "storefront.upsell.scroll_right": "Desplazar a la derecha",
   "storefront.upsell.this_product": "este producto",
   "storefront.upsell.title": "Recomendado para ti",
-  "storefront.upsell.title_alt": "Productos recomendados"
+  "storefront.upsell.title_alt": "Productos recomendados",
+  "storefront.packs.cod": "Comprar con pago contra entrega",
+  "storefront.packs.cod_unavailable": "El pago contra entrega no está disponible en este momento.",
+  "storefront.packs.opening_cod": "Abriendo…"
 }

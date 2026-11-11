@@ -265,3 +265,40 @@ test('cart lines: one per real variant with the units picked', () => {
   assert.deepEqual(groupCartItems(['2', '3', '2']), [{ id: '2', quantity: 2 }, { id: '3', quantity: 1 }]);
   assert.deepEqual(groupCartItems(['2', '2']), [{ id: '2', quantity: 2 }]);
 });
+
+test('badge, savings chip, amount style, COD and button toggles: defaults and validation', () => {
+  const d = defaultCustomization();
+  assert.equal(d.badge.style, 'pill');
+  assert.equal(d.savings.style, 'text');
+  assert.equal(d.price.symbol, 'show');
+  assert.equal(d.content.showAddToCart, true);
+  assert.equal(d.content.showCod, false);
+  assert.equal(d.content.codText, 'Buy with COD');
+
+  const ok = sanitizeCustomization({
+    badge: { style: 'seal', position: 'top_right', textColor: '', size: 12, uppercase: false, fontWeight: 800 },
+    savings: { style: 'chip', chipBackground: '#7a1f2b', chipText: '#ffffff' },
+    price: { weight: 800, wasColor: '#999999', showWas: false, prefix: 'Rs.', suffix: '/ pack', symbol: 'hide' },
+    content: { showAddToCart: false, showCod: true, codText: 'Pay on delivery' },
+    buttons: { codBackground: '#ffffff', codText: '#7a1f2b', codBorder: '#7a1f2b' },
+  });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.value.badge.style, 'seal');
+  assert.equal(ok.value.badge.textColor, '');
+  assert.equal(ok.value.price.prefix, 'Rs.');
+  assert.equal(ok.value.content.showCod, true);
+
+  const bad = sanitizeCustomization({
+    badge: { style: 'sparkle', size: 99, textColor: 'red' },
+    price: { prefix: 'x'.repeat(13), symbol: 'both' },
+    savings: { chipBackground: '' },
+    content: { showCod: 'yes' },
+  });
+  assert.equal(bad.errors.length, 7);
+
+  // Packs saved before these groups existed keep their look.
+  const merged = mergeCustomization({ colors: { badge: '#112233' } });
+  assert.equal(merged.badge.style, 'pill');
+  assert.equal(merged.price.showWas, true);
+  assert.equal(merged.content.showAddToCart, true);
+});
